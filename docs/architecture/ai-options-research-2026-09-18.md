@@ -48,7 +48,7 @@ Giữ YOLO11 làm baseline so sánh nếu có weights/dataset sẵn. Chỉ đổ
 
 ## Cách chốt bằng bằng chứng
 
-Chưa có thông tin phần cứng/camera hoặc ngân sách xác nhận. Kế hoạch đề xuất:
+Người dùng xác nhận dự kiến khoảng 1–3 camera, GPU NVIDIA RTX 4060. Chưa xác định desktop/laptop, VRAM, CPU, độ phân giải, FPS và ngân sách. Ưu tiên thử local GPU; chưa khẳng định đáp ứng đồng thời 3 camera. Kế hoạch đề xuất:
 
 - Dùng clip cùng điều kiện, đủ ca đủ/thiếu mũ/áo, che khuất, xa/gần và người ngoài vùng; giữ tập test độc lập theo clip/camera, không chia ngẫu nhiên frame gần nhau gây rò rỉ.
 - Fine-tune các detector trên cùng tập train, đánh giá cả gán PPE đúng người và kết luận thiếu/unknown, không chỉ mAP bbox.
