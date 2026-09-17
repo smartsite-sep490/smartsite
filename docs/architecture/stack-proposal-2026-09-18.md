@@ -14,7 +14,7 @@ Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa p
 | Mobile | React Native + Expo development build + Expo Router | Tận dụng TypeScript, quản lý native dependencies theo SDK |
 | Backend | NestJS + TypeScript; modular monolith | Module theo nghiệp vụ, triển khai một API trước |
 | Database | Neon PostgreSQL; Prisma stable là ORM đề xuất | Database host tại Neon; auth/storage là quyết định riêng |
-| AI | Python + FastAPI + YOLO11/ArcFace theo docs; OpenAI API bổ sung | PPE/identity cần kiểm chứng; vai trò OpenAI chưa chốt |
+| AI | Ứng viên mới: YOLO26 hoặc RF-DETR + Supervision; Roboflow Inference/Workflows là lựa chọn runtime; FastAPI cho API/control khi cần | Model/identity chưa chốt; xem research AI riêng; OpenAI vẫn chờ use case |
 | Monorepo | pnpm workspaces + Turborepo | Quản lý workspace và thứ tự build/cache |
 | API | REST + OpenAPI, client sinh từ contract | Giữ Web/Mobile/AI tương thích Backend |
 | Chất lượng | ESLint, Prettier, Vitest/Testing Library cho Web; Jest/Supertest cho BE; pytest cho AI; Playwright cho Web E2E | Kiểm tra tự động theo từng nền tảng |
@@ -75,3 +75,7 @@ Nguồn bổ sung: https://redux.js.org/introduction/why-rtk-is-redux-today ; ht
 ## Quyết định query library — 18/09/2026
 
 Người dùng đã chốt TanStack Query. Dùng làm lớp server-state/cache duy nhất cho Web và Mobile, tổ chức query keys/hooks theo feature. Redux Toolkit có thể giữ client state dùng chung khi có nhu cầu; không sao chép dữ liệu query vào Redux slice. RTK Query không thuộc phương án triển khai. Chưa cài dependency hoặc khóa patch version; sẽ kiểm tra tương thích trong bước scaffold ứng dụng.
+
+## AI được mở lại để chọn theo thực nghiệm
+
+Người dùng xác nhận không bắt buộc theo YOLO11/ArcFace trong docs. Xem [nghiên cứu lựa chọn AI](ai-options-research-2026-09-18.md), ưu tiên hơn các mô tả baseline AI trước đó. Chưa thay model bằng code hoặc chạy benchmark.
