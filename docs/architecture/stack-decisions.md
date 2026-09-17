@@ -8,7 +8,7 @@ Cập nhật 2026-09-18: **đã chốt Mobile dùng React Native**, bỏ Flutter
 | Backend | Report 2: NestJS | Xác nhận framework, truy cập dữ liệu, migration, auth |
 | Mobile | **React Native — đã chốt 18/09/2026** | Chốt Expo, thư viện và bộ phiên bản tương thích |
 | AI | NFR: Python/FastAPI, YOLO11/ArcFace | Kiểm chứng khả thi, model/license, cách định danh, hardware |
-| Dữ liệu | Report 2: PostgreSQL/Supabase | Dùng phần nào, schema, backup, cách kết nối |
+| Dữ liệu | **Supabase PostgreSQL — đã chốt 18/09/2026** | ORM, schema, backup, cách kết nối; Auth/Storage riêng |
 | Bằng chứng | Report 2: Cloudflare R2 | Quyền truy cập, retention, upload/download |
 | Deploy | Report 2: Google Cloud/Cloud Run | Tách nền tảng web/API với nơi chạy video/GPU |
 
@@ -17,3 +17,5 @@ Nguồn đã đối chiếu: bản xuất Report 2 và tab Chức Năng ngày 17
 Không tự thay stack thành .NET hoặc Flutter chỉ vì ví dụ so sánh repo. Quyết định mới cần ghi lý do ngắn, người chốt và cập nhật Report 2/3.
 
 Yêu cầu chất lượng mới: code có ranh giới module, phân quyền theo phạm vi dữ liệu, kiểm thử, log, migration và CI/CD rõ ràng. Chọn stable tương thích và được duy trì; không tự động dùng beta/RC chỉ vì nhãn latest. Xem [đề xuất stack](stack-proposal-2026-09-18.md).
+
+Người dùng xác nhận OpenAI API chạy trong sản phẩm, vai trò cụ thể chưa chốt. Redux được ưu tiên; đề xuất Redux Toolkit + RTK Query. AI camera đối chiếu FR83/84 và NFR12: YOLO11/ArcFace + FastAPI, không tự thay bằng OpenAI.

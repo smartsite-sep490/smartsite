@@ -1,6 +1,6 @@
 # Stack và tiêu chuẩn code — đề xuất 18/09/2026
 
-Đã chốt: React Native, hai repo smartsite/smartsite-ai, giữ nhánh sau merge.
+Đã chốt: React Native, database PostgreSQL tại Supabase, có OpenAI API chạy trong SmartSite, hai repo smartsite/smartsite-ai, giữ nhánh sau merge. Người dùng ưu tiên Redux; đề xuất cụ thể Redux Toolkit + RTK Query. Vai trò/use case OpenAI chưa chốt.
 Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa phải phần mềm đã cài hoặc kiểm chứng tích hợp.
 
 ## Phương án đề xuất
@@ -9,11 +9,11 @@ Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa p
 |---|---|---|
 | Web | React + TypeScript + Vite | Dashboard nghiệp vụ gọi Backend riêng |
 | Web UI | Tailwind CSS + shadcn/ui | Component và token giao diện có thể tùy chỉnh |
-| Dữ liệu/form Web | TanStack Query, React Hook Form, Zod; React Router | Quản lý server state, form, validation và routing |
+| Dữ liệu/form Web | Redux Toolkit + RTK Query, React Hook Form, Zod; React Router | Quản lý server state, form, validation và routing |
 | Mobile | React Native + Expo development build + Expo Router | Tận dụng TypeScript, quản lý native dependencies theo SDK |
 | Backend | NestJS + TypeScript; modular monolith | Module theo nghiệp vụ, triển khai một API trước |
-| Database | PostgreSQL + Prisma stable | Quan hệ, transaction, migration; có thể host PostgreSQL tại Supabase |
-| AI | Python + FastAPI + PyTorch/OpenCV | API kỹ thuật và worker video riêng; model PPE/identity phải benchmark |
+| Database | Supabase PostgreSQL; Prisma stable là ORM đề xuất | Database host tại Supabase; auth/storage là quyết định riêng |
+| AI | Python + FastAPI + YOLO11/ArcFace theo docs; OpenAI API bổ sung | PPE/identity cần kiểm chứng; vai trò OpenAI chưa chốt |
 | Monorepo | pnpm workspaces + Turborepo | Quản lý workspace và thứ tự build/cache |
 | API | REST + OpenAPI, client sinh từ contract | Giữ Web/Mobile/AI tương thích Backend |
 | Chất lượng | ESLint, Prettier, Vitest/Testing Library cho Web; Jest/Supertest cho BE; pytest cho AI; Playwright cho Web E2E | Kiểm tra tự động theo từng nền tảng |
@@ -56,3 +56,17 @@ Không có chứng nhận enterprise chỉ từ cấu trúc thư mục. Phải �
 - [Vite](https://vite.dev/guide/), [TanStack Query](https://tanstack.com/query/latest/docs/framework/react/overview), [shadcn/ui](https://ui.shadcn.com/docs)
 - [FastAPI](https://fastapi.tiangolo.com/), [Ultralytics](https://docs.ultralytics.com/), [Playwright](https://playwright.dev/docs/intro)
 - npm registry endpoints `https://registry.npmjs.org/<package>/latest` cho snapshot phiên bản; dữ liệu chưa chứng minh toàn bộ stack tương thích hoặc thị phần sử dụng.
+
+## Đối chiếu AI và cập nhật 18/09/2026
+
+Nguồn: bản xuất Report2 và ChucNang ngày 17/09/2026 trong workspace tham khảo, không phải lần đọc Drive trực tiếp mới.
+
+- Report2 phần training ghi YOLO11, ArcFace và evaluation; mục 6.3 ghi ReactJS, ReactNative, NestJS; Supabase/PostgreSQL và R2.
+- FR83 ghi YOLO11 phát hiện thiếu mũ/áo phản quang. FR81–82 ghi face embedding và nhận diện; FR84 ghi người vào Zone, nhận diện và Backend đối soát quyền. NFR12 ghi FastAPI + YOLO11/ArcFace chạy container riêng với NestJS + PostgreSQL.
+- Bản đề xuất trước chỉ ghi PyTorch/OpenCV nên chưa diễn đạt đủ lựa chọn model trong docs. Đây vẫn là scaffold, chưa triển khai pipeline AI.
+- OpenAI API chạy trong sản phẩm là yêu cầu mới do người dùng xác nhận. Đề xuất kết hợp: pipeline camera tạo sự kiện; OpenAI hỗ trợ mô tả/tóm tắt sự kiện hoặc báo cáo khi nhóm chốt use case. Không coi model ngôn ngữ là nguồn quyết định danh tính/quyền Zone.
+- Nếu muốn OpenAI thay YOLO/ArcFace, đó là thay đổi kiến trúc cần sửa FR/NFR và đo độ trễ, chi phí, chất lượng trước khi chốt.
+- Supabase là PostgreSQL được quản lý, không loại bỏ NestJS. Đề xuất thao tác nghiệp vụ đi qua Backend; secrets/service role không đưa vào Web/Mobile. Chưa chốt Supabase Auth/Storage hay thay Cloudflare R2.
+- Redux Toolkit cho shared client state, RTK Query cho API/cache; state cục bộ ở component/form. Bỏ TanStack Query khỏi đề xuất mặc định để tránh hai lớp cache cùng trách nhiệm.
+
+Nguồn bổ sung: https://redux.js.org/introduction/why-rtk-is-redux-today ; https://redux-toolkit.js.org/rtk-query/overview ; https://supabase.com/docs/guides/database/overview ; https://developers.openai.com/api/docs/guides/images-vision .
