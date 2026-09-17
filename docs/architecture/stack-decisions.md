@@ -18,7 +18,7 @@ Không tự thay stack thành .NET hoặc Flutter chỉ vì ví dụ so sánh re
 
 Yêu cầu chất lượng mới: code có ranh giới module, phân quyền theo phạm vi dữ liệu, kiểm thử, log, migration và CI/CD rõ ràng. Chọn stable tương thích và được duy trì; không tự động dùng beta/RC chỉ vì nhãn latest. Xem [đề xuất stack](stack-proposal-2026-09-18.md).
 
-Người dùng xác nhận OpenAI API chạy trong sản phẩm, vai trò cụ thể chưa chốt. Đã chốt TanStack Query cho server state/API cache trên Web và React Native. Redux Toolkit chỉ dùng cho shared client state khi cần; không dùng RTK Query. AI camera đối chiếu FR83/84 và NFR12: YOLO11/ArcFace + FastAPI, không tự thay bằng OpenAI.
+Người dùng đã chốt OpenAI API để phân tích bằng chứng và hỗ trợ xử lý sự cố; ưu tiên ảnh cảnh báo PPE MF05. Đã có ngân sách, model cụ thể chưa chốt; xem [quyết định OpenAI](openai-decision-2026-09-18.md). Đã chốt TanStack Query cho server state/API cache trên Web và React Native. Redux Toolkit chỉ dùng cho shared client state khi cần; không dùng RTK Query. OpenAI không thay detector/tracking hoặc quyết định danh tính/quyền Zone.
 
 Database hiện hành là Neon PostgreSQL; chưa tạo Neon project hoặc di chuyển dữ liệu. TanStack Query đã được người dùng chốt ngày 18/09/2026; thay đề xuất RTK Query trước đây. Chưa cài dependency hoặc chốt patch version.
 
