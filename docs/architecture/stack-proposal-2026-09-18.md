@@ -1,6 +1,6 @@
 # Stack và tiêu chuẩn code — đề xuất 18/09/2026
 
-Đã chốt: React Native, database PostgreSQL tại Neon, có OpenAI API chạy trong SmartSite, hai repo smartsite/smartsite-ai, giữ nhánh sau merge. Người dùng ưu tiên Redux; đề xuất cụ thể Redux Toolkit + RTK Query. Vai trò/use case OpenAI chưa chốt.
+Đã chốt: React Native, database PostgreSQL tại Neon, có OpenAI API chạy trong SmartSite, hai repo smartsite/smartsite-ai, giữ nhánh sau merge. Đã chốt TanStack Query cho API/cache Web và Mobile; Redux Toolkit chỉ dành cho shared client state khi cần. Vai trò/use case OpenAI chưa chốt.
 Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa phải phần mềm đã cài hoặc kiểm chứng tích hợp.
 
 ## Phương án đề xuất
@@ -9,7 +9,8 @@ Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa p
 |---|---|---|
 | Web | React + TypeScript + Vite | Dashboard nghiệp vụ gọi Backend riêng |
 | Web UI | Tailwind CSS + shadcn/ui | Component và token giao diện có thể tùy chỉnh |
-| Dữ liệu/form Web | Redux Toolkit + RTK Query, React Hook Form, Zod; React Router | Quản lý server state, form, validation và routing |
+| Dữ liệu API Web/Mobile | **TanStack Query — đã chốt** | Server state, API cache, mutation và invalidation |
+| Client state/form | Redux Toolkit khi cần; React Hook Form, Zod; React Router cho Web | Trạng thái ứng dụng, form, validation và routing; thư viện bổ trợ vẫn là đề xuất |
 | Mobile | React Native + Expo development build + Expo Router | Tận dụng TypeScript, quản lý native dependencies theo SDK |
 | Backend | NestJS + TypeScript; modular monolith | Module theo nghiệp vụ, triển khai một API trước |
 | Database | Neon PostgreSQL; Prisma stable là ORM đề xuất | Database host tại Neon; auth/storage là quyết định riêng |
@@ -67,10 +68,10 @@ Nguồn: bản xuất Report2 và ChucNang ngày 17/09/2026 trong workspace tham
 - OpenAI API chạy trong sản phẩm là yêu cầu mới do người dùng xác nhận. Đề xuất kết hợp: pipeline camera tạo sự kiện; OpenAI hỗ trợ mô tả/tóm tắt sự kiện hoặc báo cáo khi nhóm chốt use case. Không coi model ngôn ngữ là nguồn quyết định danh tính/quyền Zone.
 - Nếu muốn OpenAI thay YOLO/ArcFace, đó là thay đổi kiến trúc cần sửa FR/NFR và đo độ trễ, chi phí, chất lượng trước khi chốt.
 - Quyết định mới nhất thay Supabase bằng Neon PostgreSQL. Thao tác nghiệp vụ vẫn đề xuất đi qua NestJS; database credentials chỉ ở server. Auth và object storage được chốt riêng; chưa tạo Neon project, chưa có dữ liệu để migrate.
-- Redux Toolkit cho shared client state, RTK Query cho API/cache; state cục bộ ở component/form. Bỏ TanStack Query khỏi đề xuất mặc định để tránh hai lớp cache cùng trách nhiệm.
+- Quyết định mới nhất: TanStack Query cho API/cache; Redux Toolkit cho shared client state khi cần; state cục bộ ở component/form. Không dùng RTK Query hoặc sao chép query data vào Redux slice.
 
 Nguồn bổ sung: https://redux.js.org/introduction/why-rtk-is-redux-today ; https://redux-toolkit.js.org/rtk-query/overview ; https://supabase.com/docs/guides/database/overview ; https://developers.openai.com/api/docs/guides/images-vision .
 
-## Câu hỏi lựa chọn query library
+## Quyết định query library — 18/09/2026
 
-Người dùng đang so sánh TanStack Query và RTK Query, chưa chốt thay đổi. Cả hai phục vụ server state/cache. RTK Query tích hợp Redux; TanStack Query độc lập với Redux. Nếu chọn TanStack Query, Redux Toolkit vẫn có thể giữ client state; không sao chép dữ liệu query vào Redux slice hoặc dùng hai query cache cho cùng dữ liệu. Đánh giá dễ dùng phụ thuộc kinh nghiệm nhóm, không xem RTK Query là lỗi thời.
+Người dùng đã chốt TanStack Query. Dùng làm lớp server-state/cache duy nhất cho Web và Mobile, tổ chức query keys/hooks theo feature. Redux Toolkit có thể giữ client state dùng chung khi có nhu cầu; không sao chép dữ liệu query vào Redux slice. RTK Query không thuộc phương án triển khai. Chưa cài dependency hoặc khóa patch version; sẽ kiểm tra tương thích trong bước scaffold ứng dụng.
