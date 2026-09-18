@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { DataSource } from 'typeorm';
 import { buildTypeOrmOptions } from '../src/database/typeorm.options.js';
-import AppDataSource from '../src/database/data-source.js';
+import AppDataSource from '../src/database/typeorm.data-source.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { resolveCliEnvironment } from '../src/config/cli-environment.js';
 
@@ -37,6 +37,26 @@ test('AppDataSource is a configured TypeORM DataSource instance ready for CLI', 
   assert.ok(AppDataSource instanceof DataSource);
   assert.equal(AppDataSource.options.type, 'postgres');
   assert.equal(AppDataSource.options.synchronize, false);
+  assert.equal(AppDataSource.isInitialized, false, 'AppDataSource must not initialize connection on import');
+
+  // Assert canonical typeorm.data-source.ts source file exists
+  const backendRoot = path.resolve(
+    import.meta.dirname,
+    import.meta.dirname.includes('.test-build') ? '../..' : '..',
+  );
+  const expectedSourceFile = path.resolve(backendRoot, 'src/database/typeorm.data-source.ts');
+  assert.ok(fs.existsSync(expectedSourceFile), 'Canonical typeorm.data-source.ts source file must exist');
+
+  // Assert package.json migration scripts target dist/database/typeorm.data-source.js
+  const pkgJsonPath = path.resolve(backendRoot, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+  for (const scriptName of ['db:migrate:run', 'db:migrate:revert', 'db:migrate:show']) {
+    const script = pkg.scripts?.[scriptName] ?? '';
+    assert.ok(
+      script.includes('dist/database/typeorm.data-source.js'),
+      `${scriptName} must target dist/database/typeorm.data-source.js`,
+    );
+  }
 });
 
 test('DatabaseService.isReachable checks connectivity via TypeORM DataSource without leaking credentials', async () => {
