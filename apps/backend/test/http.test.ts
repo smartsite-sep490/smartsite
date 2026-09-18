@@ -153,51 +153,55 @@ test('application shutdown closes its PostgreSQL connection', async (t) => {
   assert.equal(dataSource.destroyed, true);
 });
 
-test('1 MB body boundary: JSON payload <=1MB is accepted and >1MB is rejected with 413', async (t) => {
+test('1 MB body boundary: JSON payload exact 1048576 bytes is accepted (200) and 1048577 bytes is rejected (413)', async (t) => {
   const { url } = await startApplication(t);
 
-  // <= 1MB is accepted
-  const smallPayload = JSON.stringify({ data: 'x'.repeat(10_000) });
-  const smallRes = await fetch(`${url}/api/v1/test-payload/json`, {
+  // Exactly 1,048,576 bytes (1 MB) -> 200 OK
+  const exact1MbJson = '{"d":"' + 'a'.repeat(1_048_576 - 8) + '"}';
+  assert.equal(Buffer.byteLength(exact1MbJson, 'utf8'), 1_048_576);
+  const exactRes = await fetch(`${url}/api/v1/test-payload/json`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: smallPayload,
+    body: exact1MbJson,
   });
-  assert.equal(smallRes.status, 200);
-  const smallBody = (await smallRes.json()) as { ok: boolean };
-  assert.equal(smallBody.ok, true);
+  assert.equal(exactRes.status, 200);
+  const exactBody = (await exactRes.json()) as { ok: boolean };
+  assert.equal(exactBody.ok, true);
 
-  // > 1MB is rejected with 413 Payload Too Large
-  const largePayload = JSON.stringify({ data: 'x'.repeat(1_100_000) });
-  const largeRes = await fetch(`${url}/api/v1/test-payload/json`, {
+  // Exactly 1,048,577 bytes (1 MB + 1 byte) -> 413 Payload Too Large
+  const over1MbJson = '{"d":"' + 'a'.repeat(1_048_577 - 8) + '"}';
+  assert.equal(Buffer.byteLength(over1MbJson, 'utf8'), 1_048_577);
+  const overRes = await fetch(`${url}/api/v1/test-payload/json`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: largePayload,
+    body: over1MbJson,
   });
-  assert.equal(largeRes.status, 413);
+  assert.equal(overRes.status, 413);
 });
 
-test('1 MB body boundary: urlencoded payload <=1MB is accepted and >1MB is rejected with 413', async (t) => {
+test('1 MB body boundary: urlencoded payload exact 1048576 bytes is accepted (200) and 1048577 bytes is rejected (413)', async (t) => {
   const { url } = await startApplication(t);
 
-  // <= 1MB is accepted
-  const smallPayload = 'field=' + encodeURIComponent('x'.repeat(10_000));
-  const smallRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
+  // Exactly 1,048,576 bytes (1 MB) -> 200 OK
+  const exact1MbUrl = 'd=' + 'a'.repeat(1_048_576 - 2);
+  assert.equal(Buffer.byteLength(exact1MbUrl, 'utf8'), 1_048_576);
+  const exactRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: smallPayload,
+    body: exact1MbUrl,
   });
-  assert.equal(smallRes.status, 200);
-  const smallBody = (await smallRes.json()) as { ok: boolean; keys: string[] };
-  assert.equal(smallBody.ok, true);
-  assert.deepEqual(smallBody.keys, ['field']);
+  assert.equal(exactRes.status, 200);
+  const exactBody = (await exactRes.json()) as { ok: boolean; keys: string[] };
+  assert.equal(exactBody.ok, true);
+  assert.deepEqual(exactBody.keys, ['d']);
 
-  // > 1MB is rejected with 413 Payload Too Large
-  const largePayload = 'field=' + encodeURIComponent('x'.repeat(1_100_000));
-  const largeRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
+  // Exactly 1,048,577 bytes (1 MB + 1 byte) -> 413 Payload Too Large
+  const over1MbUrl = 'd=' + 'a'.repeat(1_048_577 - 2);
+  assert.equal(Buffer.byteLength(over1MbUrl, 'utf8'), 1_048_577);
+  const overRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: largePayload,
+    body: over1MbUrl,
   });
-  assert.equal(largeRes.status, 413);
+  assert.equal(overRes.status, 413);
 });

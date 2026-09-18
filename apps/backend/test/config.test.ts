@@ -133,6 +133,48 @@ test('production requires an explicit non-empty SMARTSITE_AI_SERVICE_TOKEN and n
     },
   );
 
+  // Local development fallback token explicitly passed in production throws and does not leak value
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...validBase,
+        SMARTSITE_AI_SERVICE_TOKEN: 'smartsite_local_dev_service_token_only',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /SMARTSITE_AI_SERVICE_TOKEN/);
+      assert.doesNotMatch(error.message, /smartsite_local_dev_service_token_only/);
+      return true;
+    },
+  );
+
+  // Whitespace-bearing explicit token throws in production and does not leak value
+  for (const whitespaceToken of [' prod-token ', 'prod token', 'prod-token\t', '\nprod-token']) {
+    assert.throws(
+      () =>
+        validateEnvironment({
+          ...validBase,
+          SMARTSITE_AI_SERVICE_TOKEN: whitespaceToken,
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /SMARTSITE_AI_SERVICE_TOKEN/);
+        assert.doesNotMatch(error.message, /prod-token/);
+        return true;
+      },
+    );
+  }
+
+  // Whitespace-bearing explicit token throws in development as well
+  assert.throws(
+    () =>
+      validateEnvironment({
+        NODE_ENV: 'development',
+        SMARTSITE_AI_SERVICE_TOKEN: ' dev-token ',
+      }),
+    /SMARTSITE_AI_SERVICE_TOKEN/,
+  );
+
   // Non-string token throws
   assert.throws(
     () => validateEnvironment({ ...validBase, SMARTSITE_AI_SERVICE_TOKEN: 12345 }),
@@ -152,7 +194,7 @@ test('production requires an explicit non-empty SMARTSITE_AI_SERVICE_TOKEN and n
   assert.equal(valid.SMARTSITE_AI_SERVICE_TOKEN, 'prod-secret-token-xyz');
 });
 
-test('timing variables reject non-positive, non-integer, or out-of-range values', () => {
+test('timing variables reject non-positive, non-integer, or out-of-range values and accept values above 86400', () => {
   for (const invalid of ['0', '-1', '1.5', 'sixty', '']) {
     assert.throws(
       () => validateEnvironment({ ALERT_COOLDOWN_SECONDS: invalid }),
@@ -167,6 +209,16 @@ test('timing variables reject non-positive, non-integer, or out-of-range values'
       /MAX_FUTURE_CLOCK_SKEW_SECONDS/,
     );
   }
+
+  // Values above 86400 (one day) must be accepted when within safe integer/millisecond arithmetic
+  const aboveDay = validateEnvironment({
+    ALERT_COOLDOWN_SECONDS: '100000',
+    MAX_PAST_EVENT_AGE_SECONDS: '259200',
+    MAX_FUTURE_CLOCK_SKEW_SECONDS: '90000',
+  });
+  assert.equal(aboveDay.ALERT_COOLDOWN_SECONDS, 100000);
+  assert.equal(aboveDay.MAX_PAST_EVENT_AGE_SECONDS, 259200);
+  assert.equal(aboveDay.MAX_FUTURE_CLOCK_SKEW_SECONDS, 90000);
 
   const custom = validateEnvironment({
     ALERT_COOLDOWN_SECONDS: '120',

@@ -75,7 +75,7 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
     }
   }
 
-  // SMARTSITE_AI_SERVICE_TOKEN rules
+  const LOCAL_DEV_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
   let serviceToken: string;
   if (environment === 'production') {
     if (input.SMARTSITE_AI_SERVICE_TOKEN === undefined) {
@@ -89,17 +89,34 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
         'SMARTSITE_AI_SERVICE_TOKEN must be an explicitly configured non-empty string in production',
       );
     }
+    if (input.SMARTSITE_AI_SERVICE_TOKEN === LOCAL_DEV_SERVICE_TOKEN) {
+      throw new Error(
+        'SMARTSITE_AI_SERVICE_TOKEN cannot use the default development token in production',
+      );
+    }
+    if (/\s/.test(input.SMARTSITE_AI_SERVICE_TOKEN)) {
+      throw new Error('SMARTSITE_AI_SERVICE_TOKEN must not contain whitespace');
+    }
     serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
   } else {
-    if (
-      typeof input.SMARTSITE_AI_SERVICE_TOKEN === 'string' &&
-      input.SMARTSITE_AI_SERVICE_TOKEN.trim().length > 0
-    ) {
-      serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
+    if (input.SMARTSITE_AI_SERVICE_TOKEN !== undefined) {
+      if (typeof input.SMARTSITE_AI_SERVICE_TOKEN !== 'string') {
+        throw new Error('SMARTSITE_AI_SERVICE_TOKEN must be a string');
+      }
+      if (input.SMARTSITE_AI_SERVICE_TOKEN.trim().length === 0) {
+        serviceToken = LOCAL_DEV_SERVICE_TOKEN;
+      } else {
+        if (/\s/.test(input.SMARTSITE_AI_SERVICE_TOKEN)) {
+          throw new Error('SMARTSITE_AI_SERVICE_TOKEN must not contain whitespace');
+        }
+        serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
+      }
     } else {
-      serviceToken = 'smartsite_local_dev_service_token_only';
+      serviceToken = LOCAL_DEV_SERVICE_TOKEN;
     }
   }
+
+  const MAX_SAFE_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
 
   return {
     NODE_ENV: environment,
@@ -119,21 +136,21 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
       'ALERT_COOLDOWN_SECONDS',
       60,
       1,
-      86400,
+      MAX_SAFE_SECONDS,
     ),
     MAX_PAST_EVENT_AGE_SECONDS: integer(
       input.MAX_PAST_EVENT_AGE_SECONDS,
       'MAX_PAST_EVENT_AGE_SECONDS',
       300,
       1,
-      86400,
+      MAX_SAFE_SECONDS,
     ),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(
       input.MAX_FUTURE_CLOCK_SKEW_SECONDS,
       'MAX_FUTURE_CLOCK_SKEW_SECONDS',
       30,
       1,
-      86400,
+      MAX_SAFE_SECONDS,
     ),
   };
 }

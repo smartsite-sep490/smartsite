@@ -18,23 +18,31 @@ export class ServiceAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
+      rawHeaders?: string[];
     }>();
+
+    if (Array.isArray(request.rawHeaders)) {
+      let authHeaderCount = 0;
+      for (let i = 0; i < request.rawHeaders.length; i += 2) {
+        if (request.rawHeaders[i]?.toLowerCase() === 'authorization') {
+          authHeaderCount++;
+          if (authHeaderCount > 1) {
+            throw new UnauthorizedException();
+          }
+        }
+      }
+    }
 
     const authHeader = request.headers['authorization'];
     if (!authHeader || typeof authHeader !== 'string') {
       throw new UnauthorizedException();
     }
 
-    const trimmed = authHeader.trim();
-    if (!trimmed.startsWith('Bearer ')) {
+    const match = /^Bearer ([^\s]+)$/.exec(authHeader);
+    const tokenPart = match?.[1];
+    if (!tokenPart) {
       throw new UnauthorizedException();
     }
-
-    const tokenPart = trimmed.slice(7).trim();
-    if (!tokenPart || tokenPart.includes(' ')) {
-      throw new UnauthorizedException();
-    }
-
     const expectedToken = this.configService.getOrThrow<string>('SMARTSITE_AI_SERVICE_TOKEN');
 
     const expectedDigest = digest(expectedToken);
