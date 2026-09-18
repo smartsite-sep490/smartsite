@@ -917,3 +917,126 @@ test('DurableGroupingService: handles maximum safe integer ALERT_COOLDOWN_SECOND
     }
   });
 });
+
+test('DurableGroupingService: locks only top ordered eligible alert with LIMIT 1 FOR UPDATE, completing without blocking when older still-eligible alert row lock is held', async () => {
+  await withDataSource(async (source) => {
+    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const service = new DurableGroupingService(configService);
+
+    const siteId = randomUUID();
+    let humanRunner: QueryRunner | undefined;
+    try {
+      await source.getRepository(SiteEntity).save({
+        id: siteId,
+        code: `SITE-LIMIT-LOCK-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Limit Lock Test Site',
+      });
+
+      const groupingKey = `PPE_HARD_HAT_MISSING:cam-limit:sess-limit:none:${Date.now()}`;
+      const olderAlertId = randomUUID();
+      const newerAlertId = randomUUID();
+
+      // Older open alert at t=0s
+      const t0 = new Date('2026-09-19T10:00:00.000Z');
+      // Newer open alert at t=100s
+      const t100 = new Date('2026-09-19T10:01:40.000Z');
+      // Delayed candidate captured at t=50s:
+      // With cooldown = 60s:
+      // - Older alert (t=0s): capturedAt (50s) - cooldown (60s) = -10s <= lastDetectedAt (0s), and capturedAt (50s) + cooldown (60s) = 110s >= firstDetectedAt (0s) -> TIME-ELIGIBLE!
+      // - Newer alert (t=100s): capturedAt (50s) - cooldown (60s) = -10s <= lastDetectedAt (100s), and capturedAt (50s) + cooldown (60s) = 110s >= firstDetectedAt (100s) -> TIME-ELIGIBLE!
+      const t50Candidate = new Date('2026-09-19T10:00:50.000Z');
+
+      // Pre-seed older alert at t=0s
+      await source.getRepository(SafetyAlertEntity).save({
+        id: olderAlertId,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-OLDER',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: t0,
+        lastDetectedAt: t0,
+        detectionCount: 1,
+      });
+
+      // Pre-seed newer alert at t=100s
+      await source.getRepository(SafetyAlertEntity).save({
+        id: newerAlertId,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-NEWER',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: t100,
+        lastDetectedAt: t100,
+        detectionCount: 1,
+      });
+
+      // 1. Human transaction holds exclusive row lock on the older, still-eligible alert
+      humanRunner = source.createQueryRunner();
+      await humanRunner.connect();
+      await humanRunner.startTransaction();
+      await humanRunner.query('SELECT id FROM safety_alert WHERE id = $1 FOR UPDATE', [
+        olderAlertId,
+      ]);
+
+      const candidate: AlertCandidate = {
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        cameraId: randomUUID(),
+        streamSessionId: randomUUID(),
+        trackId: 1013,
+        groupingKey,
+        details: {},
+      };
+
+      // 2. Candidate grouping runs on another connection while humanRunner holds olderAlertId lock.
+      // Under ORDER BY alert.lastDetectedAt DESC, the newer alert (t=100s) is ordered first.
+      // With LIMIT 1 FOR UPDATE, PostgreSQL only locks the top ordered row (newerAlertId).
+      // If LIMIT 1 is omitted from FOR UPDATE, PostgreSQL attempts to lock ALL eligible rows (including olderAlertId),
+      // blocking indefinitely or until statement timeout.
+      // We enforce a timeout race to fail fast if blocking occurs.
+      const updatedAlert = await Promise.race([
+        source.transaction(async (manager) => {
+          return await service.groupCandidate(manager, siteId, candidate, t50Candidate);
+        }),
+        new Promise<never>((_, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(
+              new Error(
+                'DurableGroupingService was blocked on older alert row lock! Expected LIMIT 1 FOR UPDATE.',
+              ),
+            );
+          }, 3000);
+          timeoutId.unref?.();
+        }),
+      ]);
+
+      // Assert newer alert was chosen and updated without waiting for older alert's lock
+      assert.equal(updatedAlert.id, newerAlertId);
+      assert.equal(updatedAlert.detectionCount, 2);
+      assert.equal(updatedAlert.lastDetectedAt.toISOString(), '2026-09-19T10:01:40.000Z');
+
+      // Assert older alert remained untouched
+      const olderAlert = await source
+        .getRepository(SafetyAlertEntity)
+        .findOneBy({ id: olderAlertId });
+      assert.ok(olderAlert);
+      assert.equal(olderAlert.detectionCount, 1);
+      assert.equal(olderAlert.lastDetectedAt.toISOString(), '2026-09-19T10:00:00.000Z');
+    } finally {
+      if (humanRunner) {
+        if (humanRunner.isTransactionActive) {
+          await humanRunner.rollbackTransaction();
+        }
+        await humanRunner.release();
+      }
+      await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(SiteEntity).delete({ id: siteId });
+    }
+  });
+});

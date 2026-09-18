@@ -49,8 +49,9 @@ export class DurableGroupingService {
     const maxFirstDetectedAt = new Date(maxFirstDetectedMs);
 
     // 2. Query open alerts matching time-window eligibility directly in SQL before FOR UPDATE.
-    // Filtering by time-window in SQL ensures PostgreSQL locks ONLY eligible rows within cooldown,
-    // preventing blocking or statement timeout on unrelated stale open alert rows held by concurrent human transactions.
+    // Filtering by time-window in SQL ensures PostgreSQL locks ONLY eligible rows within cooldown.
+    // Explicit limit(1) emits LIMIT 1 with FOR UPDATE so PostgreSQL locks ONLY the top ordered eligible
+    // row, preventing blocking on other still-eligible rows held by concurrent human transactions.
     // Preserves out-of-order semantics: firstDetectedAt <= capturedAt+cooldown AND lastDetectedAt >= capturedAt-cooldown.
     const matchingAlerts = await manager
       .createQueryBuilder(SafetyAlertEntity, 'alert')
@@ -62,6 +63,7 @@ export class DurableGroupingService {
       .andWhere('alert.lastDetectedAt >= :minLastDetectedAt', { minLastDetectedAt })
       .orderBy('alert.lastDetectedAt', 'DESC')
       .addOrderBy('alert.createdAt', 'DESC')
+      .limit(1)
       .getMany();
 
     const matchedAlert = matchingAlerts[0];
