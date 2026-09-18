@@ -13,7 +13,7 @@ This repository contains the main SmartSite application platform:
 - **Mobile** — React Native / Expo application for worker-facing workflows.
 - **Contracts** — shared API and cross-service contracts.
 - **Infrastructure** — Docker and local service orchestration.
-- **Documentation** — architecture decisions and engineering plans.
+- **Documentation** — architecture decisions and repository guides.
 
 Computer-vision and AI workloads live in the companion repository: [smartsite-sep490/smartsite-ai](https://github.com/smartsite-sep490/smartsite-ai).
 
@@ -66,7 +66,7 @@ packages/
   api-client/       Shared API client for Web and Mobile
 
 contracts/          Cross-service contracts
-docs/               Architecture and engineering documentation
+docs/               Architecture decisions and repository guides
 infra/              Dockerfiles and local Compose configuration
 ```
 
@@ -234,7 +234,9 @@ These capabilities are intentionally developed through dedicated feature pull re
 
 ## Documentation
 
-Architecture and technical decisions are maintained under [docs/architecture](docs/architecture).
+Architecture decisions and technical baselines are maintained under [docs/architecture](docs/architecture).
+
+Per repository policy, generated task plans, execution specs, and working documentation are local-only artifacts and are not committed to Git.
 
 Contribution conventions are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
