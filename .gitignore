@@ -57,3 +57,6 @@ runs/
 .idea/
 .DS_Store
 Thumbs.db
+.turbo/
+.superpowers/
+*.tsbuildinfo

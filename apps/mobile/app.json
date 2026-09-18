@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "SmartSite",
+    "slug": "smartsite",
+    "version": "0.1.0",
+    "scheme": "smartsite",
+    "platforms": ["ios", "android"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.smartsite.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connect to your local SmartSite development server."
+      }
+    },
+    "android": {
+      "package": "com.smartsite.app"
+    },
+    "plugins": ["expo-router", "expo-dev-client"]
+  }
+}
