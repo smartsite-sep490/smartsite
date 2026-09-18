@@ -10,12 +10,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src test",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js",
-    "db:validate": "tsc -p tsconfig.test.json && node --test .test-build/test/database.test.js",
+    "test:integration": "tsc -p tsconfig.test.json && node --test .test-build/test/integration/*.test.js",
     "typeorm": "typeorm",
-    "migration:show": "pnpm build && typeorm migration:show -d dist/database/data-source.js",
-    "migration:run": "pnpm build && typeorm migration:run -d dist/database/data-source.js",
-    "migration:revert": "pnpm build && typeorm migration:revert -d dist/database/data-source.js",
-    "migration:generate": "pnpm build && typeorm migration:generate -d dist/database/data-source.js"
+    "db:migrate:run": "pnpm build && typeorm migration:run -d dist/database/typeorm.data-source.js",
+    "db:migrate:revert": "pnpm build && typeorm migration:revert -d dist/database/typeorm.data-source.js",
+    "db:migrate:show": "pnpm build && typeorm migration:show -d dist/database/typeorm.data-source.js"
   },
   "dependencies": {
     "@nestjs/common": "12.0.3",
@@ -28,7 +27,7 @@
     "pg": "8.23.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "typeorm": "0.3.31"
+    "typeorm": "1.1.1"
   },
   "devDependencies": {
     "@nestjs/cli": "12.0.3",

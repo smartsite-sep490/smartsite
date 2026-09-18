@@ -162,7 +162,6 @@ Additional validation used before pull requests:
 ```sh
 pnpm peers check
 pnpm --filter @smartsite/mobile check:dependencies
-pnpm --filter @smartsite/backend db:validate
 ```
 
 ## Testing and Quality Gates

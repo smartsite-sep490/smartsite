@@ -17,11 +17,9 @@ Không tự động sync schema hay chạy migration lúc server boot. Mọi tha
 Mỗi script migration tự động kích hoạt `pnpm build` trước khi chạy TypeORM CLI để đảm bảo DataSource luôn là bản biên dịch mới nhất, tránh lỗi thiếu file trên fresh checkout.
 
 ```sh
-pnpm --filter @smartsite/backend db:validate
-pnpm --filter @smartsite/backend migration:show
-pnpm --filter @smartsite/backend migration:run
-pnpm --filter @smartsite/backend migration:revert
-pnpm --filter @smartsite/backend migration:generate src/migrations/<migration-name>
+pnpm --filter @smartsite/backend db:migrate:show
+pnpm --filter @smartsite/backend db:migrate:run
+pnpm --filter @smartsite/backend db:migrate:revert
 ```
 
 Chưa có migration/domain schema và chưa thực hiện migration remote.
