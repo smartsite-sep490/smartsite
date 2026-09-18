@@ -1,31 +1,37 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { DataSourceOptions } from 'typeorm';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { ENTITIES } from './entities/index.js';
+import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
-  DATABASE_TIMEOUT_MS: number;
+  DATABASE_TIMEOUT_MS?: number;
 }
 
 export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourceOptions {
+  const timeoutMs = config.DATABASE_TIMEOUT_MS ?? 2000;
   return {
     type: 'postgres',
     url: config.DATABASE_URL,
     synchronize: false,
-    connectTimeoutMS: config.DATABASE_TIMEOUT_MS,
-    entities: [path.join(__dirname, '../**/*.entity.{js,ts}')],
-    migrations: [path.join(__dirname, '../migrations/*.{js,ts}')],
     migrationsRun: false,
+    connectTimeoutMS: timeoutMs,
+    entities: [...ENTITIES],
+    migrations: [Mf05Mf06Foundation1789689600000],
+    logging: false,
     extra: {
       max: 5,
-      connectionTimeoutMillis: config.DATABASE_TIMEOUT_MS,
-      query_timeout: config.DATABASE_TIMEOUT_MS,
-      statement_timeout: config.DATABASE_TIMEOUT_MS,
+      connectionTimeoutMillis: timeoutMs,
+      query_timeout: timeoutMs,
+      statement_timeout: timeoutMs,
       idleTimeoutMillis: 30000,
       application_name: 'smartsite-backend',
     },
   };
+}
+
+export function createTypeOrmOptions(databaseUrl: string, timeoutMs = 2000): DataSourceOptions {
+  return buildTypeOrmOptions({
+    DATABASE_URL: databaseUrl,
+    DATABASE_TIMEOUT_MS: timeoutMs,
+  });
 }
