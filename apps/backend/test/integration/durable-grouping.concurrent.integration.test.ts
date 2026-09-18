@@ -578,7 +578,7 @@ test('DurableGroupingService: delayed candidate at t=30s groups into matching op
   });
 });
 
-test('DurableGroupingService: deterministic interleaving - human updates identity concurrently and row lock serializes mutation preserving human identity', async () => {
+test('DurableGroupingService: human concurrent identity update is preserved and not overwritten by grouping update', async () => {
   await withDataSource(async (source) => {
     const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
     const service = new DurableGroupingService(configService);
@@ -639,7 +639,6 @@ test('DurableGroupingService: deterministic interleaving - human updates identit
       };
 
       // 2. Concurrently, grouping transaction starts on another connection.
-      // Its SELECT ... FOR UPDATE will wait for humanRunner's lock.
       const groupingTask = source.transaction(async (manager) => {
         return await service.groupCandidate(
           manager,
@@ -677,7 +676,7 @@ test('DurableGroupingService: deterministic interleaving - human updates identit
   });
 });
 
-test('DurableGroupingService: deterministic interleaving - human closes alert concurrently and grouping creates new alert without reopening', async () => {
+test('DurableGroupingService: human concurrent alert closure is respected and grouping creates new alert without reopening', async () => {
   await withDataSource(async (source) => {
     const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
     const service = new DurableGroupingService(configService);
@@ -731,7 +730,6 @@ test('DurableGroupingService: deterministic interleaving - human closes alert co
       };
 
       // 2. Concurrently, grouping transaction starts on another connection.
-      // Its SELECT ... FOR UPDATE will wait for humanRunner's lock.
       const groupingTask = source.transaction(async (manager) => {
         return await service.groupCandidate(
           manager,
@@ -747,7 +745,6 @@ test('DurableGroupingService: deterministic interleaving - human closes alert co
       humanRunner = undefined;
 
       // 4. Grouping transaction unblocks. Row is now CLOSED so it is excluded from openAlerts.
-      // A new PENDING_REVIEW alert must be created, and the CLOSED alert must never be reopened.
       const createdAlert = await groupingTask;
 
       assert.notEqual(createdAlert.id, alertId);
@@ -768,6 +765,153 @@ test('DurableGroupingService: deterministic interleaving - human closes alert co
         }
         await humanRunner.release();
       }
+      await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(SiteEntity).delete({ id: siteId });
+    }
+  });
+});
+
+test('DurableGroupingService: candidate matching newer alert completes without blocking when unrelated stale open alert row lock is held by another transaction', async () => {
+  await withDataSource(async (source) => {
+    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const service = new DurableGroupingService(configService);
+
+    const siteId = randomUUID();
+    let humanRunner: QueryRunner | undefined;
+    try {
+      await source.getRepository(SiteEntity).save({
+        id: siteId,
+        code: `SITE-STALE-LOCK-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Stale Lock Test Site',
+      });
+
+      const groupingKey = `PPE_HARD_HAT_MISSING:cam-stale:sess-stale:none:${Date.now()}`;
+      const oldAlertId = randomUUID();
+      const newerAlertId = randomUUID();
+
+      const tOld = new Date('2026-09-19T10:00:00.000Z');
+      const tNewer = new Date('2026-09-19T10:10:00.000Z'); // 10 minutes later (beyond 60s cooldown)
+      const tCandidate = new Date('2026-09-19T10:10:20.000Z'); // 20s after newer alert (matches newer alert)
+
+      // Pre-seed stale open alert at t=0
+      await source.getRepository(SafetyAlertEntity).save({
+        id: oldAlertId,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-OLD',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: tOld,
+        lastDetectedAt: tOld,
+        detectionCount: 1,
+      });
+
+      // Pre-seed newer open alert at t=10m
+      await source.getRepository(SafetyAlertEntity).save({
+        id: newerAlertId,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-NEWER',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: tNewer,
+        lastDetectedAt: tNewer,
+        detectionCount: 1,
+      });
+
+      // 1. Human transaction acquires and HOLDS an exclusive row lock on the old stale alert
+      humanRunner = source.createQueryRunner();
+      await humanRunner.connect();
+      await humanRunner.startTransaction();
+      await humanRunner.query('SELECT id FROM safety_alert WHERE id = $1 FOR UPDATE', [oldAlertId]);
+
+      const candidate: AlertCandidate = {
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        cameraId: randomUUID(),
+        streamSessionId: randomUUID(),
+        trackId: 1011,
+        groupingKey,
+        details: {},
+      };
+
+      // 2. Group candidate matching only the newer alert while humanRunner continues to hold lock on oldAlertId.
+      // If the grouping query attempts to lock all open alerts before cooldown filtering, it will block on oldAlertId.
+      // Pushing time-window eligibility into SQL ensures only newerAlertId is locked, so this completes without blocking.
+      const updatedAlert = await source.transaction(async (manager) => {
+        return await service.groupCandidate(manager, siteId, candidate, tCandidate);
+      });
+
+      // Assert newer alert was updated and completed without blocking on old row
+      assert.equal(updatedAlert.id, newerAlertId);
+      assert.equal(updatedAlert.detectionCount, 2);
+      assert.equal(updatedAlert.lastDetectedAt.toISOString(), '2026-09-19T10:10:20.000Z');
+
+      const oldAlert = await source.getRepository(SafetyAlertEntity).findOneBy({ id: oldAlertId });
+      assert.ok(oldAlert);
+      assert.equal(oldAlert.detectionCount, 1);
+      assert.equal(oldAlert.lastDetectedAt.toISOString(), '2026-09-19T10:00:00.000Z');
+    } finally {
+      if (humanRunner) {
+        if (humanRunner.isTransactionActive) {
+          await humanRunner.rollbackTransaction();
+        }
+        await humanRunner.release();
+      }
+      await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(SiteEntity).delete({ id: siteId });
+    }
+  });
+});
+
+test('DurableGroupingService: handles maximum safe integer ALERT_COOLDOWN_SECONDS without Date overflow or statement failure', async () => {
+  await withDataSource(async (source) => {
+    // Test maximum configured cooldown supported by environment validation: floor(Number.MAX_SAFE_INTEGER / 1000)
+    const maxSafeSeconds = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
+    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: maxSafeSeconds });
+    const service = new DurableGroupingService(configService);
+
+    const siteId = randomUUID();
+    try {
+      await source.getRepository(SiteEntity).save({
+        id: siteId,
+        code: `SITE-MAX-COOLDOWN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Max Cooldown Site',
+      });
+
+      const groupingKey = `PPE_HARD_HAT_MISSING:cam-maxcd:sess-maxcd:none:${Date.now()}`;
+      const candidate: AlertCandidate = {
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        cameraId: randomUUID(),
+        streamSessionId: randomUUID(),
+        trackId: 1012,
+        groupingKey,
+        details: {},
+      };
+
+      const t0 = new Date('2026-09-19T10:00:00.000Z');
+      const t1 = new Date('2026-09-19T10:05:00.000Z');
+
+      // 1. First event creates alert
+      const createdAlert = await source.transaction(async (manager) => {
+        return await service.groupCandidate(manager, siteId, candidate, t0);
+      });
+      assert.equal(createdAlert.detectionCount, 1);
+
+      // 2. Second event with massive cooldown must group successfully without Invalid Date overflow
+      const updatedAlert = await source.transaction(async (manager) => {
+        return await service.groupCandidate(manager, siteId, candidate, t1);
+      });
+
+      assert.equal(updatedAlert.id, createdAlert.id);
+      assert.equal(updatedAlert.detectionCount, 2);
+      assert.equal(updatedAlert.lastDetectedAt.toISOString(), '2026-09-19T10:05:00.000Z');
+    } finally {
       await source.getRepository(SafetyAlertEntity).delete({ siteId });
       await source.getRepository(SiteEntity).delete({ id: siteId });
     }

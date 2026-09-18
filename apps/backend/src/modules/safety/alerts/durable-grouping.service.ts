@@ -12,6 +12,11 @@ const OPEN_ALERT_STATUSES = [
   AlertStatus.CONFIRMED,
 ];
 
+// Safe bounds compatible with both ECMAScript Date and PostgreSQL timestamptz (4-digit ISO years)
+// Prevents JS Date overflow (Invalid Date) when ALERT_COOLDOWN_SECONDS is configured near MAX_SAFE_INTEGER.
+const MIN_SAFE_DATE_MS = -62_135_596_800_000; // 0001-01-01T00:00:00.000Z
+const MAX_SAFE_DATE_MS = 253_402_300_799_999; // 9999-12-31T23:59:59.999Z
+
 @Injectable()
 export class DurableGroupingService {
   constructor(private readonly configService?: ConfigService) {}
@@ -36,40 +41,37 @@ export class DurableGroupingService {
     const cooldownMs = this.getCooldownMs();
     const capturedMs = capturedAt.getTime();
 
-    // 2. Query open alerts with pessimistic_write (FOR UPDATE) to prevent concurrent mutation race
-    const openAlerts = await manager
+    // Clamp computed boundaries to safe date ranges to avoid Invalid Date on large cooldown configurations
+    const minLastDetectedMs = Math.max(MIN_SAFE_DATE_MS, capturedMs - cooldownMs);
+    const maxFirstDetectedMs = Math.min(MAX_SAFE_DATE_MS, capturedMs + cooldownMs);
+
+    const minLastDetectedAt = new Date(minLastDetectedMs);
+    const maxFirstDetectedAt = new Date(maxFirstDetectedMs);
+
+    // 2. Query open alerts matching time-window eligibility directly in SQL before FOR UPDATE.
+    // Filtering by time-window in SQL ensures PostgreSQL locks ONLY eligible rows within cooldown,
+    // preventing blocking or statement timeout on unrelated stale open alert rows held by concurrent human transactions.
+    // Preserves out-of-order semantics: firstDetectedAt <= capturedAt+cooldown AND lastDetectedAt >= capturedAt-cooldown.
+    const matchingAlerts = await manager
       .createQueryBuilder(SafetyAlertEntity, 'alert')
       .setLock('pessimistic_write')
       .where('alert.siteId = :siteId', { siteId })
       .andWhere('alert.groupingKey = :groupingKey', { groupingKey: candidate.groupingKey })
       .andWhere('alert.status IN (:...openStatuses)', { openStatuses: OPEN_ALERT_STATUSES })
+      .andWhere('alert.firstDetectedAt <= :maxFirstDetectedAt', { maxFirstDetectedAt })
+      .andWhere('alert.lastDetectedAt >= :minLastDetectedAt', { minLastDetectedAt })
       .orderBy('alert.lastDetectedAt', 'DESC')
       .addOrderBy('alert.createdAt', 'DESC')
       .getMany();
 
-    // 3. Find an open alert whose cooldown window actually covers capturedAt
-    // An alert's cooldown window covers capturedAt if:
-    // capturedAt is between (firstDetectedAt - cooldownMs) and (lastDetectedAt + cooldownMs)
-    let matchedAlert: SafetyAlertEntity | undefined;
-
-    for (const alert of openAlerts) {
-      const firstMs = alert.firstDetectedAt.getTime();
-      const lastMs = alert.lastDetectedAt.getTime();
-      const isWithinCooldownWindow =
-        capturedMs >= firstMs - cooldownMs && capturedMs <= lastMs + cooldownMs;
-
-      if (isWithinCooldownWindow) {
-        matchedAlert = alert;
-        break;
-      }
-    }
+    const matchedAlert = matchingAlerts[0];
 
     if (matchedAlert) {
       const lastDetectedMs = matchedAlert.lastDetectedAt.getTime();
       const newLastDetectedAt =
         capturedMs > lastDetectedMs ? capturedAt : matchedAlert.lastDetectedAt;
 
-      // 4. Narrow conditional update: mutate ONLY detection_count and last_detected_at.
+      // 3. Narrow conditional update: mutate ONLY detection_count and last_detected_at.
       // Guard status to ensure we never reopen a row that was closed concurrently.
       // Never mutate identity evidence columns (candidateWorkerId, identitySimilarityScore, identityQualityScore) or status.
       const updateResult = await manager
@@ -93,7 +95,7 @@ export class DurableGroupingService {
       }
     }
 
-    // 5. If no matching open alert within cooldown, or if the alert was closed concurrently: create new Alert
+    // 4. If no matching open alert within cooldown, or if the alert was closed concurrently: create new Alert
     const alertRepo = manager.getRepository(SafetyAlertEntity);
     const newAlert = alertRepo.create({
       id: randomUUID(),
