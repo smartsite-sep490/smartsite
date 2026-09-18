@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException } from '@nestjs/common';
-import type { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { type DataSource, type EntityManager, QueryFailedError, type Repository, type SelectQueryBuilder } from 'typeorm';
 import { computeCanonicalPayloadHash, type ValidationIssue } from '@smartsite/contracts';
 import {
   AlertType,
@@ -22,6 +22,7 @@ import { AlertCandidateEvaluator } from '../src/modules/safety/alerts/alert-cand
 import { DurableGroupingService } from '../src/modules/safety/alerts/durable-grouping.service.js';
 import {
   AiIngestionService,
+  isAiObservationEventPkViolation,
   parseNormalizedCapturedAt,
 } from '../src/integrations/ai/ai-ingestion.service.js';
 import { AiIngestionController } from '../src/integrations/ai/ai-ingestion.controller.js';
@@ -81,8 +82,40 @@ function createMockDataSource(store: MockStore): DataSource {
         return {
           create: (entity: AiObservationEventEntity) => ({ ...entity }),
           insert: async (entity: AiObservationEventEntity) => {
+            const exists = store.rawEvents.some((e) => e.eventId === entity.eventId);
+            if (exists) {
+              const driverError = {
+                code: '23505',
+                constraint: 'pk_ai_observation_event_event_id',
+              };
+              const err = new QueryFailedError(
+                'INSERT INTO ai_observation_event ...',
+                [],
+                driverError as unknown as Error,
+              );
+              (
+                err as unknown as {
+                  driverError: typeof driverError;
+                  code: string;
+                  constraint: string;
+                }
+              ).driverError = driverError;
+              (err as unknown as { code: string; constraint: string }).code = '23505';
+              (err as unknown as { code: string; constraint: string }).constraint =
+                'pk_ai_observation_event_event_id';
+              throw err;
+            }
             store.rawEvents.push(entity);
             return { identifiers: [{ eventId: entity.eventId }] };
+          },
+          findOneBy: async (criteria: Record<string, unknown>) => {
+            return (
+              store.rawEvents.find((e) =>
+                Object.entries(criteria).every(
+                  ([k, v]) => (e as unknown as Record<string, unknown>)[k] === v,
+                ),
+              ) ?? null
+            );
           },
         } as unknown as Repository<T>;
       }
@@ -156,6 +189,8 @@ function createMockDataSource(store: MockStore): DataSource {
     transaction: async <T>(cb: (mgr: EntityManager) => Promise<T>): Promise<T> => {
       return await cb(manager as EntityManager);
     },
+    getRepository: (target: unknown) =>
+      manager.getRepository!(target as Parameters<EntityManager['getRepository']>[0]),
   } as unknown as DataSource;
 }
 
@@ -827,4 +862,473 @@ test('AiIngestionService: leap-second capturedAt outside past boundary results i
   assert.ok(Number.isFinite(savedRaw.capturedAt.getTime()));
   assert.equal(savedRaw.capturedAt.toISOString(), '2026-12-31T23:59:59.000Z');
   assert.equal(savedRaw.processingStatus, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
+});
+
+test('isAiObservationEventPkViolation: correctly classifies SQLSTATE 23505 on pk_ai_observation_event_event_id', () => {
+  // 1. Exact match on driverError
+  const driverErrMatch = { code: '23505', constraint: 'pk_ai_observation_event_event_id' };
+  const err1 = new QueryFailedError('INSERT ...', [], driverErrMatch as unknown as Error);
+  (err1 as unknown as { driverError: typeof driverErrMatch }).driverError = driverErrMatch;
+  assert.equal(isAiObservationEventPkViolation(err1), true);
+
+  // 2. Exact match on top-level properties
+  const err2 = new QueryFailedError('INSERT ...', [], new Error());
+  (err2 as unknown as { code: string; constraint: string }).code = '23505';
+  (err2 as unknown as { code: string; constraint: string }).constraint =
+    'pk_ai_observation_event_event_id';
+  assert.equal(isAiObservationEventPkViolation(err2), true);
+
+  // 3. Different constraint name -> false
+  const driverErrDiffConstraint = { code: '23505', constraint: 'uq_camera_code' };
+  const errDiffConstraint = new QueryFailedError(
+    'INSERT ...',
+    [],
+    driverErrDiffConstraint as unknown as Error,
+  );
+  (errDiffConstraint as unknown as { driverError: typeof driverErrDiffConstraint }).driverError =
+    driverErrDiffConstraint;
+  assert.equal(isAiObservationEventPkViolation(errDiffConstraint), false);
+
+  // 4. Different SQLSTATE code -> false
+  const driverErrDiffCode = {
+    code: '23503',
+    constraint: 'pk_ai_observation_event_event_id',
+  };
+  const errDiffCode = new QueryFailedError(
+    'INSERT ...',
+    [],
+    driverErrDiffCode as unknown as Error,
+  );
+  (errDiffCode as unknown as { driverError: typeof driverErrDiffCode }).driverError =
+    driverErrDiffCode;
+  assert.equal(isAiObservationEventPkViolation(errDiffCode), false);
+
+  // 5. Plain Error or non-QueryFailedError -> false
+  assert.equal(isAiObservationEventPkViolation(new Error('connection timeout')), false);
+  assert.equal(isAiObservationEventPkViolation(null), false);
+  assert.equal(isAiObservationEventPkViolation(undefined), false);
+  assert.equal(isAiObservationEventPkViolation({ code: '23505' }), false);
+});
+
+test('AiIngestionService: identical retry with same payloadHash returns 202 DUPLICATE_ACCEPTED with no alert side effect', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => FIXED_NOW,
+  );
+
+  const payload = createSampleEvent({ cameraExternalId: 'UNKNOWN-CAM' });
+
+  // First call succeeds and persists raw event
+  const result1 = await service.ingestEvent(payload);
+  assert.equal(result1.status, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
+  assert.equal(store.rawEvents.length, 1);
+  assert.equal(store.alerts.length, 0);
+
+  // Second identical call (same eventId, same payload, same canonical payloadHash)
+  const result2 = await service.ingestEvent(payload);
+  assert.equal(result2.status, 'DUPLICATE_ACCEPTED');
+  assert.equal(result2.eventId, payload['eventId']);
+  assert.deepEqual(result2.alertIds, []);
+
+  // Assert no side effects: no duplicate raw event, no alerts, no mappings
+  assert.equal(store.rawEvents.length, 1);
+  assert.equal(store.alerts.length, 0);
+  assert.equal(store.mappings.length, 0);
+});
+
+test('AiIngestionService: retry with same eventId but different payloadHash throws ConflictException (409)', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => FIXED_NOW,
+  );
+
+  const sharedEventId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const payloadOriginal = createSampleEvent({
+    eventId: sharedEventId,
+    cameraExternalId: 'CAM-01',
+  });
+
+  // First call succeeds
+  await service.ingestEvent(payloadOriginal);
+  assert.equal(store.rawEvents.length, 1);
+  const originalHash = store.rawEvents[0]!.payloadHash;
+
+  // Second call with same eventId but modified observation (different payload hash)
+  const payloadChanged = createSampleEvent({
+    eventId: sharedEventId,
+    cameraExternalId: 'CAM-01',
+    observations: [
+      {
+        type: 'PERSON',
+        trackId: 999, // Changed trackId!
+        confidence: 0.99,
+        boundingBox: { x1: 0.2, y1: 0.2, x2: 0.5, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+    ],
+  });
+
+  await assert.rejects(
+    async () => {
+      await service.ingestEvent(payloadChanged);
+    },
+    (err: unknown) => {
+      assert.ok(err instanceof ConflictException);
+      const res = (err as ConflictException).getResponse() as Record<string, unknown>;
+      assert.ok(
+        typeof res['message'] === 'string' &&
+          res['message'].includes('already exists with a different payload hash'),
+      );
+      return true;
+    },
+  );
+
+  // Original raw payload and hash in DB remain uncorrupted
+  assert.equal(store.rawEvents.length, 1);
+  assert.equal(store.rawEvents[0]!.payloadHash, originalHash);
+});
+
+test('AiIngestionService: unique violation on another constraint is not classified as duplicate and is rethrown', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+
+  // Override transaction to throw a unique violation on an unrelated table/constraint
+  const unrelatedConstraintError = new QueryFailedError(
+    'INSERT INTO camera ...',
+    [],
+    new Error('duplicate key value'),
+  );
+  (
+    unrelatedConstraintError as unknown as {
+      driverError: { code: string; constraint: string };
+      code: string;
+      constraint: string;
+    }
+  ).driverError = {
+    code: '23505',
+    constraint: 'uq_camera_code',
+  };
+  (unrelatedConstraintError as unknown as { code: string; constraint: string }).code = '23505';
+  (unrelatedConstraintError as unknown as { code: string; constraint: string }).constraint =
+    'uq_camera_code';
+
+  ds.transaction = async () => {
+    throw unrelatedConstraintError;
+  };
+
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => FIXED_NOW,
+  );
+
+  const payload = createSampleEvent();
+
+  await assert.rejects(
+    async () => {
+      await service.ingestEvent(payload);
+    },
+    (err: unknown) => {
+      assert.equal(err, unrelatedConstraintError);
+      return true;
+    },
+  );
+});
+
+test('AiIngestionService: general non-unique DB error is rethrown untouched', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+  const dbConnectionError = new Error('Database connection lost');
+
+  ds.transaction = async () => {
+    throw dbConnectionError;
+  };
+
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => FIXED_NOW,
+  );
+
+  const payload = createSampleEvent();
+
+  await assert.rejects(
+    async () => {
+      await service.ingestEvent(payload);
+    },
+    (err: unknown) => {
+      assert.equal(err, dbConnectionError);
+      return true;
+    },
+  );
+});
+
+test('AiIngestionService: raw insert occurs before any alert side effects on duplicate event', async () => {
+  const cameraId = '33333333-3333-4333-8333-333333333333';
+  const siteId = '44444444-4444-4444-8444-444444444444';
+  const regionId = '55555555-5555-4555-8555-555555555555';
+  const zoneId = '66666666-6666-4666-8666-666666666666';
+
+  const zone: ZoneEntity = {
+    id: zoneId,
+    siteId,
+    code: 'ZONE-A',
+    name: 'Hard Hat Zone',
+    type: ZoneType.STANDARD,
+    restrictionPolicy: ZoneRestrictionPolicy.NONE,
+    requiredPpe: ['HARD_HAT'],
+    createdAt: FIXED_NOW,
+  };
+
+  const region: CameraObservationRegionEntity = {
+    id: regionId,
+    cameraId,
+    zoneId,
+    coordinateSpace: 'NORMALIZED_0_1',
+    version: 1,
+    isActive: true,
+    polygon: { type: 'Polygon', coordinates: [] },
+    createdAt: FIXED_NOW,
+  };
+
+  const camera: CameraEntity = {
+    id: cameraId,
+    siteId,
+    externalId: 'CAM-01',
+    code: 'CAM-01',
+    name: 'Gate Camera',
+    status: CameraStatus.ACTIVE,
+    createdAt: FIXED_NOW,
+  };
+
+  const store: MockStore = {
+    cameras: [camera],
+    regions: [region],
+    zones: [zone],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+
+  const ds = createMockDataSource(store);
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+
+  let groupingCalled = 0;
+  const groupingService = new DurableGroupingService();
+  const originalGroupCandidate = groupingService.groupCandidate.bind(groupingService);
+  groupingService.groupCandidate = async (...args) => {
+    groupingCalled++;
+    return await originalGroupCandidate(...args);
+  };
+
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => FIXED_NOW,
+  );
+
+  const payload = createSampleEvent({
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 101,
+        ppeItem: 'HARD_HAT',
+        status: 'MISSING',
+        regionId,
+        geometryVersion: 1,
+        confidence: 0.98,
+        boundingBox: { x1: 0.1, y1: 0.1, x2: 0.4, y2: 0.8, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+    ],
+  });
+
+  // Call 1: Actionable event creates 1 alert and 1 mapping
+  const result1 = await service.ingestEvent(payload);
+  assert.equal(result1.status, EventProcessingStatus.PROCESSED);
+  assert.equal(groupingCalled, 1);
+  assert.equal(store.alerts.length, 1);
+  assert.equal(store.mappings.length, 1);
+
+  // Call 2: Duplicate retry with identical payload
+  const result2 = await service.ingestEvent(payload);
+  assert.equal(result2.status, 'DUPLICATE_ACCEPTED');
+  assert.deepEqual(result2.alertIds, []);
+
+  // groupingService was NOT called again because raw insert failed before grouping
+  assert.equal(groupingCalled, 1);
+  assert.equal(store.alerts.length, 1);
+  assert.equal(store.mappings.length, 1);
+});
+
+test('AiIngestionService: handles observations across mixed regions and geometry versions', async () => {
+  const cameraId = '33333333-3333-4333-8333-333333333333';
+  const siteId = '44444444-4444-4444-8444-444444444444';
+  const region1Id = '11111111-2222-3333-4444-555555555551';
+  const region2Id = '11111111-2222-3333-4444-555555555552';
+  const zoneId = '66666666-6666-4666-8666-666666666666';
+
+  const zone: ZoneEntity = {
+    id: zoneId,
+    siteId,
+    code: 'ZONE-MIXED',
+    name: 'Mixed Regions Zone',
+    type: ZoneType.STANDARD,
+    restrictionPolicy: ZoneRestrictionPolicy.NONE,
+    requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+    createdAt: FIXED_NOW,
+  };
+
+  const region1: CameraObservationRegionEntity = {
+    id: region1Id,
+    cameraId,
+    zoneId,
+    coordinateSpace: 'NORMALIZED_0_1',
+    version: 1,
+    isActive: true,
+    polygon: { type: 'Polygon', coordinates: [] },
+    createdAt: FIXED_NOW,
+  };
+
+  const region2: CameraObservationRegionEntity = {
+    id: region2Id,
+    cameraId,
+    zoneId,
+    coordinateSpace: 'NORMALIZED_0_1',
+    version: 2, // different version!
+    isActive: true,
+    polygon: { type: 'Polygon', coordinates: [] },
+    createdAt: FIXED_NOW,
+  };
+
+  const camera: CameraEntity = {
+    id: cameraId,
+    siteId,
+    externalId: 'CAM-01',
+    code: 'CAM-01',
+    name: 'Multi Region Camera',
+    status: CameraStatus.ACTIVE,
+    createdAt: FIXED_NOW,
+  };
+
+  const store: MockStore = {
+    cameras: [camera],
+    regions: [region1, region2],
+    zones: [zone],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+
+  const ds = createMockDataSource(store);
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => FIXED_NOW,
+  );
+
+  const payload = createSampleEvent({
+    cameraExternalId: 'CAM-01',
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 101,
+        ppeItem: 'HARD_HAT',
+        status: 'MISSING',
+        regionId: region1Id,
+        geometryVersion: 1,
+        confidence: 0.95,
+        boundingBox: { x1: 0.1, y1: 0.1, x2: 0.4, y2: 0.8, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+      {
+        type: 'PPE',
+        trackId: 102,
+        ppeItem: 'SAFETY_VEST',
+        status: 'MISSING',
+        regionId: region2Id,
+        geometryVersion: 2,
+        confidence: 0.92,
+        boundingBox: { x1: 0.5, y1: 0.1, x2: 0.8, y2: 0.8, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+    ],
+  });
+
+  const result = await service.ingestEvent(payload);
+  assert.equal(result.status, EventProcessingStatus.PROCESSED);
+  assert.equal(result.alertIds.length, 2);
+  assert.equal(store.alerts.length, 2);
+  assert.equal(store.mappings.length, 2);
+  assert.equal(store.rawEvents.length, 1);
 });

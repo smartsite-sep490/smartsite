@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
@@ -75,6 +75,21 @@ export function parseNormalizedCapturedAt(dateString: string): Date | null {
   return null;
 }
 
+/**
+ * Classifies whether an error is a PostgreSQL unique constraint violation (SQLSTATE 23505)
+ * specifically on the primary key constraint 'pk_ai_observation_event_event_id'.
+ * Any other error, or unique violation on another table/constraint, returns false (Spec §15).
+ */
+export function isAiObservationEventPkViolation(error: unknown): boolean {
+  if (!(error instanceof QueryFailedError)) {
+    return false;
+  }
+  const driverErr = (error as { driverError?: { code?: string; constraint?: string } }).driverError;
+  const code = driverErr?.code ?? (error as { code?: string }).code;
+  const constraint = driverErr?.constraint ?? (error as { constraint?: string }).constraint;
+  return code === '23505' && constraint === 'pk_ai_observation_event_event_id';
+}
+
 @Injectable()
 export class AiIngestionService {
   private readonly clock: () => Date;
@@ -141,112 +156,139 @@ export class AiIngestionService {
     }
 
     // 4. Same-transaction context resolution, raw preservation, and alert grouping
-    return await this.dataSource.transaction(async (manager: EntityManager) => {
-      const camera = await this.contextResolver.resolveCamera(manager, event.cameraExternalId);
+    try {
+      return await this.dataSource.transaction(async (manager: EntityManager) => {
+        const camera = await this.contextResolver.resolveCamera(manager, event.cameraExternalId);
 
-      let status: EventProcessingStatus;
-      let note: string | null = null;
-      let candidates: AlertCandidate[] = [];
+        let status: EventProcessingStatus;
+        let note: string | null = null;
+        let candidates: AlertCandidate[] = [];
 
-      // Status precedence:
-      // 1. clock skew outside allowed window (or unparseable timestamp) -> SKIPPED_CLOCK_SKEW
-      // 2. otherwise unknown camera -> SKIPPED_UNKNOWN_CAMERA
-      // 3. otherwise no valid candidate/context -> SKIPPED_NO_CANDIDATE
-      // 4. otherwise -> PROCESSED
-      if (isClockSkew) {
-        status = EventProcessingStatus.SKIPPED_CLOCK_SKEW;
-        note = unparseableDateNote ?? 'Event capturedAt is outside the allowed clock skew window';
-      } else if (!camera) {
-        status = EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA;
-        note = 'Camera external ID not found or inactive';
-      } else {
-        // Resolve context per observation regionId & geometryVersion
-        const contextMap = new Map<string, ResolvedObservationContext>();
-        for (const obs of event.observations) {
-          if (
-            obs &&
-            typeof obs === 'object' &&
-            typeof obs['regionId'] === 'string' &&
-            typeof obs['geometryVersion'] === 'number'
-          ) {
-            const key = `${obs['regionId']}:${obs['geometryVersion']}`;
-            if (!contextMap.has(key)) {
-              const ctx = await this.contextResolver.resolve(
-                manager,
-                event.cameraExternalId,
-                obs['regionId'],
-                obs['geometryVersion'],
-              );
-              if (ctx) {
-                contextMap.set(key, ctx);
+        // Status precedence:
+        // 1. clock skew outside allowed window (or unparseable timestamp) -> SKIPPED_CLOCK_SKEW
+        // 2. otherwise unknown camera -> SKIPPED_UNKNOWN_CAMERA
+        // 3. otherwise no valid candidate/context -> SKIPPED_NO_CANDIDATE
+        // 4. otherwise -> PROCESSED
+        if (isClockSkew) {
+          status = EventProcessingStatus.SKIPPED_CLOCK_SKEW;
+          note = unparseableDateNote ?? 'Event capturedAt is outside the allowed clock skew window';
+        } else if (!camera) {
+          status = EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA;
+          note = 'Camera external ID not found or inactive';
+        } else {
+          // Resolve context per observation regionId & geometryVersion
+          const contextMap = new Map<string, ResolvedObservationContext>();
+          for (const obs of event.observations) {
+            if (
+              obs &&
+              typeof obs === 'object' &&
+              typeof obs['regionId'] === 'string' &&
+              typeof obs['geometryVersion'] === 'number'
+            ) {
+              const key = `${obs['regionId']}:${obs['geometryVersion']}`;
+              if (!contextMap.has(key)) {
+                const ctx = await this.contextResolver.resolve(
+                  manager,
+                  event.cameraExternalId,
+                  obs['regionId'],
+                  obs['geometryVersion'],
+                );
+                if (ctx) {
+                  contextMap.set(key, ctx);
+                }
               }
             }
           }
+
+          candidates = this.candidateEvaluator.evaluate(
+            {
+              streamSessionId: event.streamSessionId,
+              cameraExternalId: event.cameraExternalId,
+              observations: event.observations as unknown as Observation[],
+            },
+            contextMap,
+          );
+
+          if (candidates.length === 0) {
+            status = EventProcessingStatus.SKIPPED_NO_CANDIDATE;
+            note = 'No safety violation candidates detected';
+          } else {
+            status = EventProcessingStatus.PROCESSED;
+          }
         }
 
-        candidates = this.candidateEvaluator.evaluate(
-          {
-            streamSessionId: event.streamSessionId,
-            cameraExternalId: event.cameraExternalId,
-            observations: event.observations as unknown as Observation[],
-          },
-          contextMap,
+        // Spec §15.3: Raw Event insert MUST occur before any Alert side effects
+        const rawEventRepo = manager.getRepository(AiObservationEventEntity);
+        const rawEvent = rawEventRepo.create({
+          eventId: event.eventId,
+          payloadHash,
+          cameraExternalId: event.cameraExternalId,
+          resolvedCameraId: camera ? camera.id : null,
+          streamSessionId: event.streamSessionId,
+          capturedAt,
+          receivedAt: now,
+          rawPayload: event,
+          processingStatus: status,
+          processingNote: note,
+        });
+        await rawEventRepo.insert(
+          rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
         );
 
-        if (candidates.length === 0) {
-          status = EventProcessingStatus.SKIPPED_NO_CANDIDATE;
-          note = 'No safety violation candidates detected';
-        } else {
-          status = EventProcessingStatus.PROCESSED;
-        }
-      }
+        // Group candidates and create AlertDetectionMapping only when PROCESSED
+        const alertIds: string[] = [];
+        if (status === EventProcessingStatus.PROCESSED && camera) {
+          for (const candidate of candidates) {
+            const alert = await this.durableGroupingService.groupCandidate(
+              manager,
+              camera.siteId,
+              candidate,
+              capturedAt,
+            );
+            alertIds.push(alert.id);
+          }
 
-      // Spec §15.3: Raw Event insert MUST occur before any Alert side effects
-      const rawEventRepo = manager.getRepository(AiObservationEventEntity);
-      const rawEvent = rawEventRepo.create({
-        eventId: event.eventId,
-        payloadHash,
-        cameraExternalId: event.cameraExternalId,
-        resolvedCameraId: camera ? camera.id : null,
-        streamSessionId: event.streamSessionId,
-        capturedAt,
-        receivedAt: now,
-        rawPayload: event,
-        processingStatus: status,
-        processingNote: note,
+          const uniqueAlertIds = Array.from(new Set(alertIds));
+          const mappingRepo = manager.getRepository(AlertDetectionMappingEntity);
+          for (const alertId of uniqueAlertIds) {
+            await mappingRepo.insert({
+              alertId,
+              eventId: event.eventId,
+            });
+          }
+        }
+
+        return {
+          eventId: event.eventId,
+          status,
+          alertIds: Array.from(new Set(alertIds)),
+        };
       });
-      await rawEventRepo.insert(
-        rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
-      );
+    } catch (error) {
+      if (isAiObservationEventPkViolation(error)) {
+        const existing = await this.dataSource
+          .getRepository(AiObservationEventEntity)
+          .findOneBy({ eventId: event.eventId });
 
-      // Group candidates and create AlertDetectionMapping only when PROCESSED
-      const alertIds: string[] = [];
-      if (status === EventProcessingStatus.PROCESSED && camera) {
-        for (const candidate of candidates) {
-          const alert = await this.durableGroupingService.groupCandidate(
-            manager,
-            camera.siteId,
-            candidate,
-            capturedAt,
+        if (existing) {
+          if (existing.payloadHash === payloadHash) {
+            // Spec §15: Same hash -> 202 response DUPLICATE_ACCEPTED with no alert side effect
+            return {
+              eventId: event.eventId,
+              status: 'DUPLICATE_ACCEPTED',
+              alertIds: [],
+            };
+          }
+
+          // Spec §15: Changed hash for existing eventId -> 409 ConflictException
+          throw new ConflictException(
+            `Event with ID "${event.eventId}" already exists with a different payload hash`,
           );
-          alertIds.push(alert.id);
-        }
-
-        const uniqueAlertIds = Array.from(new Set(alertIds));
-        const mappingRepo = manager.getRepository(AlertDetectionMappingEntity);
-        for (const alertId of uniqueAlertIds) {
-          await mappingRepo.insert({
-            alertId,
-            eventId: event.eventId,
-          });
         }
       }
 
-      return {
-        eventId: event.eventId,
-        status,
-        alertIds: Array.from(new Set(alertIds)),
-      };
-    });
+      // Every other error rethrow
+      throw error;
+    }
   }
 }

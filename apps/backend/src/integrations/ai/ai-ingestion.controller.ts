@@ -2,6 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -20,6 +21,7 @@ export class AiIngestionController {
   @ApiOperation({ summary: 'Ingest technical observation event from SmartSite AI' })
   @ApiAcceptedResponse({ description: 'Event accepted for processing or skipped per policy.' })
   @ApiBadRequestResponse({ description: 'Contract schema or geometry validation failed.' })
+  @ApiConflictResponse({ description: 'Event ID already exists with a different payload hash.' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid service token.' })
   async ingest(@Body() payload: unknown): Promise<AiIngestionResult> {
     return await this.service.ingestEvent(payload);
