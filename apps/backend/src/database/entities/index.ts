@@ -7,6 +7,7 @@ import { SafetyAlertEntity } from './safety-alert.entity.js';
 import { AlertDetectionMappingEntity } from './alert-detection-mapping.entity.js';
 
 export * from './enums.js';
+export * from './numeric.transformer.js';
 export * from './site.entity.js';
 export * from './camera.entity.js';
 export * from './zone.entity.js';

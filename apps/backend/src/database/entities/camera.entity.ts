@@ -1,14 +1,16 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn, Unique } from 'typeorm';
+import { Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn, Unique } from 'typeorm';
 import { CameraStatus } from './enums.js';
+import { SiteEntity } from './site.entity.js';
 
 @Entity({ name: 'camera' })
 @Unique('uq_camera_external_id', ['externalId'])
 @Unique('uq_camera_site_code', ['siteId', 'code'])
 export class CameraEntity {
-  @PrimaryColumn({ name: 'id', type: 'uuid' })
+  @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_camera_id' })
   id!: string;
 
   @Column({ name: 'site_id', type: 'uuid' })
+  @ForeignKey(() => SiteEntity, { name: 'fk_camera_site', onDelete: 'RESTRICT' })
   siteId!: string;
 
   @Column({ name: 'external_id', type: 'varchar', length: 128 })

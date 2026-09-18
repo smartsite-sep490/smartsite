@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
 
 @Entity({ name: 'ai_observation_event' })
@@ -18,6 +19,7 @@ export class AiObservationEventEntity {
   cameraExternalId!: string;
 
   @Column({ name: 'resolved_camera_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => CameraEntity, { name: 'fk_event_resolved_camera', onDelete: 'SET NULL' })
   resolvedCameraId!: string | null;
 
   @Column({ name: 'stream_session_id', type: 'uuid' })
@@ -26,7 +28,7 @@ export class AiObservationEventEntity {
   @Column({ name: 'captured_at', type: 'timestamptz' })
   capturedAt!: Date;
 
-  @Column({ name: 'received_at', type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ name: 'received_at', type: 'timestamptz', default: () => 'now()' })
   receivedAt!: Date;
 
   @Column({ name: 'raw_payload', type: 'jsonb' })

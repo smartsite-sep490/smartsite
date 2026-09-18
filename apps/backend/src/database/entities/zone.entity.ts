@@ -1,13 +1,15 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn, Unique } from 'typeorm';
+import { Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn, Unique } from 'typeorm';
 import { ZoneRestrictionPolicy, ZoneType } from './enums.js';
+import { SiteEntity } from './site.entity.js';
 
 @Entity({ name: 'zone' })
 @Unique('uq_zone_site_code', ['siteId', 'code'])
 export class ZoneEntity {
-  @PrimaryColumn({ name: 'id', type: 'uuid' })
+  @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_zone_id' })
   id!: string;
 
   @Column({ name: 'site_id', type: 'uuid' })
+  @ForeignKey(() => SiteEntity, { name: 'fk_zone_site', onDelete: 'RESTRICT' })
   siteId!: string;
 
   @Column({ name: 'code', type: 'varchar', length: 64 })

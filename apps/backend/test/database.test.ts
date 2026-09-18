@@ -8,6 +8,7 @@ import { buildTypeOrmOptions } from '../src/database/typeorm.options.js';
 import AppDataSource from '../src/database/typeorm.data-source.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { resolveCliEnvironment } from '../src/config/cli-environment.js';
+import { numericTransformer } from '../src/database/entities/numeric.transformer.js';
 
 test('buildTypeOrmOptions enforces production safety invariants and connection limits', () => {
   const options = buildTypeOrmOptions({
@@ -124,4 +125,19 @@ test('resolveCliEnvironment falls back safely when .env file does not exist', ()
   const nonExistentPath = path.join(os.tmpdir(), 'does-not-exist', '.env');
   const config = resolveCliEnvironment(nonExistentPath, {});
   assert.equal(config.DATABASE_URL, 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite');
+});
+
+test('numericTransformer converts finite numbers and strings correctly', () => {
+  assert.equal(numericTransformer.to(0.95), 0.95);
+  assert.equal(numericTransformer.to('0.95'), 0.95);
+  assert.equal(numericTransformer.to(null), null);
+  assert.equal(numericTransformer.to(undefined), undefined);
+  assert.throws(() => numericTransformer.to('not-a-number'), TypeError);
+  assert.throws(() => numericTransformer.to(Infinity), TypeError);
+
+  assert.equal(numericTransformer.from('0.9500'), 0.95);
+  assert.equal(numericTransformer.from(0.95), 0.95);
+  assert.equal(numericTransformer.from(null), null);
+  assert.equal(numericTransformer.from(undefined), null);
+  assert.equal(numericTransformer.from('not-a-number'), null);
 });
