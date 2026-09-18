@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - contracts
 
 allowBuilds:
   '@nestjs/core': true

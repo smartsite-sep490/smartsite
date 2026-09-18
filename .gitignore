@@ -16,6 +16,8 @@ node_modules/
 dist/
 build/
 coverage/
+.test-build/
+apps/backend/src/generated/
 .next/
 .expo/
 .dart_tool/
