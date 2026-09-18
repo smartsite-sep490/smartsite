@@ -1,0 +1,46 @@
+name: Application checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: npm install --global pnpm@12.4.2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm peers check
+      - run: pnpm check
+      - run: pnpm --filter @smartsite/mobile check:dependencies
+      - run: pnpm --filter @smartsite/backend db:validate
+      - name: Build and start local containers
+        run: docker compose -f infra/compose.yaml up -d --build --wait --wait-timeout 120
+      - name: Check real database readiness and Web
+        run: |
+          curl --fail --max-time 10 http://localhost:3000/api/v1/health/ready
+          curl --fail --max-time 10 http://localhost:5173/healthz
+      - name: Show container status
+        if: always()
+        run: docker compose -f infra/compose.yaml ps -a
+      - name: Stop local containers
+        if: always()
+        run: docker compose -f infra/compose.yaml down

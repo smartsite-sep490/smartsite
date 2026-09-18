@@ -1,30 +1,16 @@
-# Chạy tích hợp và triển khai
+# Local integration
 
-Trạng thái: hướng thiết kế, chưa có service/Dockerfile nên chưa có Compose chạy được.
+Từ root monorepo:
 
-## Local
-
-Hai checkout đặt cạnh nhau:
-
-```text
-workspace/
-  smartsite/
-  smartsite-ai/
+```sh
+docker compose -f infra/compose.yaml up -d --build --wait
+docker compose -f infra/compose.yaml --profile ai up -d --build --wait
 ```
 
-Compose chung sẽ ở thư mục này. Cấu hình mặc định dùng image AI đã build theo phiên bản; developer AI có thể dùng override build từ checkout bên cạnh. Developer Web/Backend có thể dùng dữ liệu giả theo contract mà không cần GPU hay camera.
+Profile ai cần repo `smartsite-ai` nằm cạnh `smartsite`; không dùng Git submodule. Không profile ai vẫn chạy Web/Backend/Postgres. Port local: Web5173, Backend3000, PostgreSQL5432, AI8000; tất cả publish127.0.0.1. Nếu xung đột cổng, dừng đúng service đang dùng hoặc sửa mapping và URL tương ứng.
 
-Khi thêm Compose phải có: cấu hình mẫu không chứa secrets, healthcheck, volume dữ liệu, mạng service, hướng dẫn migration và lệnh smoke test. Không đưa database demo lên cổng công khai mặc định.
+Postgres18 volume lưu tại /var/lib/postgresql. `docker compose -f infra/compose.yaml down` giữ dữ liệu; không thêm -v khi không chủ động muốn xóa dữ liệu local.
 
-## Production
+Web/API/AI có image riêng và chạy non-root. Web API URL là build argument, truy cập từ browser. Backend health live không thay DB readiness; gọi /api/v1/health/ready để kiểm tra database thật. AI health xác nhận API service, không xác nhận model sẵn sàng.
 
-| Phần | Cách phát hành dự kiến |
-|---|---|
-| Web | Artifact hoặc image riêng; nơi host chốt theo stack |
-| Backend | Image riêng, kết nối database/object storage, migration có kiểm soát |
-| AI | Image riêng trên máy đáp ứng video/GPU; kết nối API bằng xác thực service |
-| Mobile | Build/phát hành app riêng; không xem như container web |
-
-Mỗi phần chỉ deploy khi phần đó cần thay đổi và contract còn tương thích. Ghi phiên bản image/digest, contract và migration tương ứng; không dùng `latest` làm mốc rollback.
-
-Nền tảng cụ thể chưa chốt. Có thể chạy API và AI khác máy; cách chia repo không buộc dùng chung một máy hay chung một lần deploy.
+Đây là Compose development với credentials mẫu, không phải production deployment. Deploy Web/API riêng, Neon TLS và secrets ở server; AI có thể chạy GPU tại công trường. Chưa triển khai cloud, GPU container hoặc mobile distribution.

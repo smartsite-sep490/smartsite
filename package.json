@@ -1,0 +1,35 @@
+{
+  "name": "smartsite",
+  "private": true,
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=12.4.2 <13"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@smartsite/web --filter=@smartsite/backend",
+    "dev:web": "pnpm --filter @smartsite/web dev",
+    "dev:api": "pnpm --filter @smartsite/backend dev",
+    "dev:mobile": "pnpm --filter @smartsite/mobile dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint . --max-warnings 0",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "infra:up": "docker compose -f infra/compose.yaml up -d --build",
+    "infra:down": "docker compose -f infra/compose.yaml down"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.10.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.12.0",
+    "prettier": "3.9.7",
+    "turbo": "2.10.13",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0"
+  }
+}
