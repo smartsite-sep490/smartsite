@@ -1,8 +1,8 @@
 import { DataSource } from 'typeorm';
-import { validateEnvironment } from '../config/environment.js';
+import { resolveCliEnvironment } from '../config/cli-environment.js';
 import { buildTypeOrmOptions } from './typeorm.options.js';
 
-const config = validateEnvironment(process.env);
+const config = resolveCliEnvironment();
 
 export default new DataSource(
   buildTypeOrmOptions({

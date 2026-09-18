@@ -12,10 +12,10 @@
     "test": "tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js",
     "db:validate": "tsc -p tsconfig.test.json && node --test .test-build/test/database.test.js",
     "typeorm": "typeorm",
-    "migration:show": "typeorm migration:show -d dist/database/data-source.js",
-    "migration:run": "typeorm migration:run -d dist/database/data-source.js",
-    "migration:revert": "typeorm migration:revert -d dist/database/data-source.js",
-    "migration:generate": "typeorm migration:generate -d dist/database/data-source.js"
+    "migration:show": "pnpm build && typeorm migration:show -d dist/database/data-source.js",
+    "migration:run": "pnpm build && typeorm migration:run -d dist/database/data-source.js",
+    "migration:revert": "pnpm build && typeorm migration:revert -d dist/database/data-source.js",
+    "migration:generate": "pnpm build && typeorm migration:generate -d dist/database/data-source.js"
   },
   "dependencies": {
     "@nestjs/common": "12.0.3",
@@ -24,6 +24,7 @@
     "@nestjs/platform-express": "12.0.3",
     "@nestjs/swagger": "12.0.1",
     "@nestjs/typeorm": "12.0.1",
+    "dotenv": "16.4.7",
     "pg": "8.23.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
