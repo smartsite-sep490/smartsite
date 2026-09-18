@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.io/schemas/v1/technical-observation-event.json",
+  "title": "TechnicalObservationEvent",
+  "description": "Canonical technical observation envelope transmitted from SmartSite AI to SmartSite Backend per MF05/MF06",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "schemaVersion",
+    "cameraExternalId",
+    "streamSessionId",
+    "capturedAt",
+    "observations",
+    "evidence"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "cameraExternalId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "streamSessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "frameDimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "oneOf": [
+          {
+            "$ref": "#/$defs/PersonObservation"
+          },
+          {
+            "$ref": "#/$defs/PpeObservation"
+          },
+          {
+            "$ref": "#/$defs/ZoneEntryObservation"
+          },
+          {
+            "$ref": "#/$defs/IdentityCandidateObservation"
+          }
+        ]
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceItem"
+      }
+    }
+  },
+  "$defs": {
+    "NormalizedBoundingBox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x1", "y1", "x2", "y2", "coordinateSpace"],
+      "properties": {
+        "x1": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "y1": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "x2": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "y2": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "coordinateSpace": {
+          "type": "string",
+          "const": "NORMALIZED_0_1"
+        }
+      }
+    },
+    "PersonObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "trackId", "confidence", "boundingBox"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "PERSON"
+        },
+        "trackId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "boundingBox": {
+          "$ref": "#/$defs/NormalizedBoundingBox"
+        }
+      }
+    },
+    "PpeObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "trackId", "ppeItem", "status", "confidence", "qualityScore"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "PPE"
+        },
+        "trackId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ppeItem": {
+          "type": "string",
+          "enum": ["HARD_HAT", "SAFETY_VEST"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PRESENT", "MISSING", "UNKNOWN"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "qualityScore": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "boundingBox": {
+          "$ref": "#/$defs/NormalizedBoundingBox"
+        }
+      }
+    },
+    "ZoneEntryObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "trackId",
+        "zoneId",
+        "regionId",
+        "geometryVersion",
+        "polygonOverlapRatio",
+        "isInside"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ZONE_ENTRY"
+        },
+        "trackId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "zoneId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "regionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "geometryVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "polygonOverlapRatio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "isInside": {
+          "type": "boolean"
+        }
+      }
+    },
+    "IdentityCandidateObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "trackId", "status"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "IDENTITY_CANDIDATE"
+        },
+        "trackId": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": ["CANDIDATE", "UNKNOWN", "UNAVAILABLE"]
+        },
+        "candidateWorkerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "similarityScore": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "qualityScore": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "CANDIDATE"
+              }
+            }
+          },
+          "then": {
+            "required": ["candidateWorkerId", "similarityScore"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": ["UNKNOWN", "UNAVAILABLE"]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": ["candidateWorkerId"]
+            }
+          }
+        }
+      ]
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "storageUri", "mimeType"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": ["FULL_FRAME", "PERSON_CROP", "PPE_CROP"]
+        },
+        "storageUri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": ["image/jpeg", "image/png"]
+        },
+        "trackId": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
