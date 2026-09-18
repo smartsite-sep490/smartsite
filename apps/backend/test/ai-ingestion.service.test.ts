@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import type { DataSource, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
-import type { ValidationIssue } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash, type ValidationIssue } from '@smartsite/contracts';
 import {
   AlertType,
   CameraStatus,
@@ -20,7 +20,10 @@ import { ObservationContextResolverService } from '../src/modules/zones/observat
 import { ZoneAuthorizationService } from '../src/modules/zones/zone-authorization.service.js';
 import { AlertCandidateEvaluator } from '../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../src/modules/safety/alerts/durable-grouping.service.js';
-import { AiIngestionService } from '../src/integrations/ai/ai-ingestion.service.js';
+import {
+  AiIngestionService,
+  parseNormalizedCapturedAt,
+} from '../src/integrations/ai/ai-ingestion.service.js';
 import { AiIngestionController } from '../src/integrations/ai/ai-ingestion.controller.js';
 
 interface MockStore {
@@ -620,4 +623,124 @@ test('AiIngestionController: delegates ingest to service and returns result', as
   const result = await controller.ingest(payload);
 
   assert.equal(result.status, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
+});
+
+test('parseNormalizedCapturedAt: normalizes RFC 3339 leap second (:60) to :59 of same second', () => {
+  const parsed1 = parseNormalizedCapturedAt('2026-12-31T23:59:60Z');
+  assert.ok(Number.isFinite(parsed1.getTime()));
+  assert.equal(parsed1.toISOString(), '2026-12-31T23:59:59.000Z');
+
+  const parsed2 = parseNormalizedCapturedAt('2026-12-31T23:59:60.500Z');
+  assert.ok(Number.isFinite(parsed2.getTime()));
+  assert.equal(parsed2.toISOString(), '2026-12-31T23:59:59.500Z');
+
+  const parsed3 = parseNormalizedCapturedAt('2026-12-31T23:59:60+02:00');
+  assert.ok(Number.isFinite(parsed3.getTime()));
+  assert.equal(parsed3.toISOString(), '2026-12-31T21:59:59.000Z');
+
+  const normal = parseNormalizedCapturedAt('2026-09-19T12:00:00.000Z');
+  assert.ok(Number.isFinite(normal.getTime()));
+  assert.equal(normal.toISOString(), '2026-09-19T12:00:00.000Z');
+});
+
+test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near boundary, preserves raw payload and persists valid Date', async () => {
+  const cameraId = '33333333-3333-4333-8333-333333333333';
+  const siteId = '44444444-4444-4444-8444-444444444444';
+  const camera: CameraEntity = {
+    id: cameraId,
+    siteId,
+    externalId: 'CAM-01',
+    code: 'CAM-01',
+    name: 'Gate Camera',
+    status: CameraStatus.ACTIVE,
+    createdAt: FIXED_NOW,
+  };
+  const store: MockStore = {
+    cameras: [camera],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+
+  // Fake clock: exactly 61 seconds after the leap second event (near-boundary, well within 300s past window)
+  const leapSecondClock = new Date('2027-01-01T00:01:00.000Z');
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => leapSecondClock,
+  );
+
+  const payload = createSampleEvent({
+    cameraExternalId: 'CAM-01',
+    capturedAt: '2026-12-31T23:59:60Z', // Leap second event!
+  });
+
+  const result = await service.ingestEvent(payload);
+
+  // Schema valid leap second event must NOT fail or throw 400/500
+  assert.equal(result.status, EventProcessingStatus.SKIPPED_NO_CANDIDATE);
+  assert.equal(store.rawEvents.length, 1);
+
+  const savedRaw = store.rawEvents[0]!;
+  // DB capturedAt column receives valid normalized Date (never NaN)
+  assert.ok(savedRaw.capturedAt instanceof Date);
+  assert.ok(Number.isFinite(savedRaw.capturedAt.getTime()));
+  assert.equal(savedRaw.capturedAt.toISOString(), '2026-12-31T23:59:59.000Z');
+
+  // Exact raw payload string with :60 preserved
+  const savedPayload = savedRaw.rawPayload as Record<string, unknown>;
+  assert.equal(savedPayload['capturedAt'], '2026-12-31T23:59:60Z');
+
+  // Canonical payloadHash computed on original payload
+  assert.equal(savedRaw.payloadHash, computeCanonicalPayloadHash(payload));
+});
+
+test('AiIngestionService: leap-second capturedAt outside past boundary results in SKIPPED_CLOCK_SKEW with valid normalized Date', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+  const contextResolver = new ObservationContextResolverService();
+  const zoneAuth = new ZoneAuthorizationService();
+  const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+  const groupingService = new DurableGroupingService();
+
+  // Fake clock: 302 seconds after normalized leap second (exceeds 300s past window)
+  const clockAfterBoundary = new Date('2027-01-01T00:05:01.000Z');
+  const service = new AiIngestionService(
+    ds,
+    contextResolver,
+    candidateEvaluator,
+    groupingService,
+    undefined,
+    () => clockAfterBoundary,
+  );
+
+  const payload = createSampleEvent({
+    capturedAt: '2026-12-31T23:59:60Z',
+  });
+
+  const result = await service.ingestEvent(payload);
+
+  assert.equal(result.status, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
+  assert.equal(store.rawEvents.length, 1);
+  const savedRaw = store.rawEvents[0]!;
+  assert.ok(Number.isFinite(savedRaw.capturedAt.getTime()));
+  assert.equal(savedRaw.capturedAt.toISOString(), '2026-12-31T23:59:59.000Z');
+  assert.equal(savedRaw.processingStatus, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
 });

@@ -34,6 +34,26 @@ interface ValidatedObservationEvent {
   evidence: Array<Record<string, unknown>>;
 }
 
+/**
+ * Normalizes an RFC 3339 date-time string into a valid ECMAScript Date.
+ * RFC 3339 allows leap seconds (:60), e.g. '2026-12-31T23:59:60Z' or '2026-12-31T23:59:60.123+02:00'.
+ * ECMAScript Date returns NaN for seconds = 60.
+ * Following POSIX/Unix timestamp standard, the leap second is mapped to :59 of the same second,
+ * ensuring valid Date arithmetic and PostgreSQL timestamptz persistence while preserving the
+ * exact original string in rawPayload and canonical payloadHash (Spec §15).
+ */
+export function parseNormalizedCapturedAt(dateString: string): Date {
+  const leapSecondRegex = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):60(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i;
+  const match = dateString.match(leapSecondRegex);
+  if (match) {
+    const prefix = match[1];
+    const fraction = match[2] ?? '';
+    const timezone = match[3] ?? '';
+    return new Date(`${prefix}:59${fraction}${timezone}`);
+  }
+  return new Date(dateString);
+}
+
 @Injectable()
 export class AiIngestionService {
   private readonly clock: () => Date;
@@ -70,12 +90,12 @@ export class AiIngestionService {
 
     const event = payload as ValidatedObservationEvent;
 
-    // 2. Compute canonical RFC 8785 JCS payload hash
+    // 2. Compute canonical RFC 8785 JCS payload hash on the original raw payload
     const payloadHash = computeCanonicalPayloadHash(payload);
 
-    // 3. Evaluate clock skew (Spec §15.2 status precedence)
+    // 3. Evaluate clock skew using normalized Date (supports RFC 3339 leap seconds)
     const now = this.clock();
-    const capturedAt = new Date(event.capturedAt);
+    const capturedAt = parseNormalizedCapturedAt(event.capturedAt);
     const capturedMs = capturedAt.getTime();
     const nowMs = now.getTime();
     const { maxPastEventAgeSeconds, maxFutureClockSkewSeconds } = this.getTimingConfig();

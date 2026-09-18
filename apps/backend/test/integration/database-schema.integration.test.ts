@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { DataSource } from 'typeorm';
 import {
+  AiObservationEventEntity,
   AlertStatus,
   AlertType,
   CameraStatus,
@@ -11,6 +13,7 @@ import {
   ZoneRestrictionPolicy,
   ZoneType,
 } from '../../src/database/entities/index.js';
+import { parseNormalizedCapturedAt } from '../../src/integrations/ai/ai-ingestion.service.js';
 import dataSource from '../../src/database/typeorm.data-source.js';
 
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
@@ -317,6 +320,48 @@ test('numeric runtime correctness: identity scores round-trip as finite numbers 
       // Cleanup
       await alertRepo.delete({ id: alertId });
       await siteRepo.delete({ id: siteId });
+    }
+  });
+});
+
+test('ai_observation_event persists normalized leap-second Date and exact raw payload in PostgreSQL', async () => {
+  await withDataSource(async (source) => {
+    const eventRepo = source.getRepository(AiObservationEventEntity);
+    const eventId = randomUUID();
+    const leapSecondStr = '2026-12-31T23:59:60Z';
+    const normalizedDate = parseNormalizedCapturedAt(leapSecondStr);
+
+    try {
+      const rawPayload = {
+        eventId,
+        schemaVersion: '1.0.0',
+        capturedAt: leapSecondStr,
+        cameraExternalId: 'CAM-LEAP',
+      };
+
+      await eventRepo.insert({
+        eventId,
+        payloadHash: 'a'.repeat(64),
+        cameraExternalId: 'CAM-LEAP',
+        resolvedCameraId: null,
+        streamSessionId: randomUUID(),
+        capturedAt: normalizedDate,
+        rawPayload,
+        processingStatus: EventProcessingStatus.SKIPPED_CLOCK_SKEW,
+        processingNote: 'Leap second event test',
+      });
+
+      const found = await eventRepo.findOneBy({ eventId });
+      assert.ok(found);
+      assert.ok(found.capturedAt instanceof Date);
+      assert.ok(Number.isFinite(found.capturedAt.getTime()));
+      assert.equal(found.capturedAt.toISOString(), '2026-12-31T23:59:59.000Z');
+      assert.equal(
+        (found.rawPayload as Record<string, unknown>)['capturedAt'],
+        '2026-12-31T23:59:60Z',
+      );
+    } finally {
+      await eventRepo.delete({ eventId });
     }
   });
 });
