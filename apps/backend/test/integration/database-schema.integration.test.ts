@@ -330,6 +330,7 @@ test('ai_observation_event persists normalized leap-second Date and exact raw pa
     const eventId = randomUUID();
     const leapSecondStr = '2026-12-31T23:59:60Z';
     const normalizedDate = parseNormalizedCapturedAt(leapSecondStr);
+    assert.ok(normalizedDate);
 
     try {
       const rawPayload = {

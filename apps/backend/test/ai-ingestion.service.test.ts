@@ -627,20 +627,100 @@ test('AiIngestionController: delegates ingest to service and returns result', as
 
 test('parseNormalizedCapturedAt: normalizes RFC 3339 leap second (:60) to :59 of same second', () => {
   const parsed1 = parseNormalizedCapturedAt('2026-12-31T23:59:60Z');
+  assert.ok(parsed1);
   assert.ok(Number.isFinite(parsed1.getTime()));
   assert.equal(parsed1.toISOString(), '2026-12-31T23:59:59.000Z');
 
   const parsed2 = parseNormalizedCapturedAt('2026-12-31T23:59:60.500Z');
+  assert.ok(parsed2);
   assert.ok(Number.isFinite(parsed2.getTime()));
   assert.equal(parsed2.toISOString(), '2026-12-31T23:59:59.500Z');
 
   const parsed3 = parseNormalizedCapturedAt('2026-12-31T23:59:60+02:00');
+  assert.ok(parsed3);
   assert.ok(Number.isFinite(parsed3.getTime()));
   assert.equal(parsed3.toISOString(), '2026-12-31T21:59:59.000Z');
 
   const normal = parseNormalizedCapturedAt('2026-09-19T12:00:00.000Z');
+  assert.ok(normal);
   assert.ok(Number.isFinite(normal.getTime()));
   assert.equal(normal.toISOString(), '2026-09-19T12:00:00.000Z');
+});
+
+test('AiIngestionService: bare-hour timezone offsets preserve raw events for ordinary and leap seconds', async () => {
+  const now = new Date('2027-01-01T00:00:30.000Z');
+  const camera: CameraEntity = {
+    id: '33333333-3333-4333-8333-333333333333',
+    siteId: '44444444-4444-4444-8444-444444444444',
+    externalId: 'CAM-01',
+    code: 'CAM-01',
+    name: 'Gate Camera',
+    status: CameraStatus.ACTIVE,
+    createdAt: now,
+  };
+
+  for (const capturedAt of ['2026-12-31T23:59:59+00', '2026-12-31T23:59:60+00']) {
+    const store: MockStore = {
+      cameras: [camera],
+      regions: [],
+      zones: [],
+      rawEvents: [],
+      alerts: [],
+      mappings: [],
+    };
+    const service = new AiIngestionService(
+      createMockDataSource(store),
+      new ObservationContextResolverService(),
+      new AlertCandidateEvaluator(new ZoneAuthorizationService()),
+      new DurableGroupingService(),
+      undefined,
+      () => now,
+    );
+    const payload = createSampleEvent({ capturedAt });
+
+    const result = await service.ingestEvent(payload);
+
+    assert.equal(result.status, EventProcessingStatus.SKIPPED_NO_CANDIDATE);
+    assert.equal(store.rawEvents.length, 1);
+    const saved = store.rawEvents[0]!;
+    assert.equal(saved.capturedAt.toISOString(), '2026-12-31T23:59:59.000Z');
+    assert.equal((saved.rawPayload as Record<string, unknown>)['capturedAt'], capturedAt);
+    assert.equal(saved.payloadHash, computeCanonicalPayloadHash(payload));
+    assert.equal(store.alerts.length, 0);
+  }
+});
+
+test('AiIngestionService: schema-valid but unrepresentable timestamp still preserves raw event', async () => {
+  const now = new Date('2027-01-01T00:00:30.000Z');
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const service = new AiIngestionService(
+    createMockDataSource(store),
+    new ObservationContextResolverService(),
+    new AlertCandidateEvaluator(new ZoneAuthorizationService()),
+    new DurableGroupingService(),
+    undefined,
+    () => now,
+  );
+  const capturedAt = '2026-12-31T24:59:60+01:00';
+  const payload = createSampleEvent({ capturedAt });
+
+  const result = await service.ingestEvent(payload);
+
+  assert.equal(result.status, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
+  assert.equal(store.rawEvents.length, 1);
+  const saved = store.rawEvents[0]!;
+  assert.equal(saved.capturedAt.toISOString(), now.toISOString());
+  assert.equal((saved.rawPayload as Record<string, unknown>)['capturedAt'], capturedAt);
+  assert.equal(saved.payloadHash, computeCanonicalPayloadHash(payload));
+  assert.equal(store.alerts.length, 0);
+  assert.equal(store.mappings.length, 0);
 });
 
 test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near boundary, preserves raw payload and persists valid Date', async () => {
