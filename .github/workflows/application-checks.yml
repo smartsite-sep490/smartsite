@@ -32,6 +32,8 @@ jobs:
       - run: pnpm peers check
       - run: pnpm check
       - run: pnpm --filter @smartsite/mobile check:dependencies
+        env:
+          EXPO_OFFLINE: '0'
       - name: Start PostgreSQL container
         run: docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60
       - name: Run TypeORM migrations
