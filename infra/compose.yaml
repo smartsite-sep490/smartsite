@@ -28,6 +28,10 @@ services:
       DATABASE_URL: postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite
       DATABASE_TIMEOUT_MS: '2000'
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      SMARTSITE_AI_SERVICE_TOKEN: smartsite_local_dev_service_token_only
+      ALERT_COOLDOWN_SECONDS: '60'
+      MAX_PAST_EVENT_AGE_SECONDS: '300'
+      MAX_FUTURE_CLOCK_SKEW_SECONDS: '30'
     ports:
       - '127.0.0.1:3000:3000'
     depends_on:

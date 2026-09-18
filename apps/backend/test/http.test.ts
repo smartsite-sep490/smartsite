@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-app.js';
 import { validateEnvironment } from '../src/config/environment.js';
@@ -36,6 +37,7 @@ async function startApplication(
     NODE_ENV: options.production ? 'production' : 'development',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
     CORS_ORIGINS: 'http://localhost:5173,https://app.example.com',
+    SMARTSITE_AI_SERVICE_TOKEN: options.production ? 'prod-explicit-service-token' : undefined,
   });
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ConfigService)
@@ -45,8 +47,39 @@ async function startApplication(
     .overrideProvider(DataSource)
     .useValue(dataSource)
     .compile();
-  const app = module.createNestApplication({ logger: false });
+  const app = module.createNestApplication<NestExpressApplication>({
+    logger: false,
+    bodyParser: false,
+  });
   configureApplication(app);
+
+  // Test-only routes to verify body parser limits without altering production routing
+  interface MockExpressRequest {
+    body: unknown;
+  }
+  interface MockExpressResponse {
+    status(code: number): MockExpressResponse;
+    json(body: unknown): void;
+  }
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    post(path: string, handler: (req: MockExpressRequest, res: MockExpressResponse) => void): void;
+  };
+  expressApp.post(
+    '/api/v1/test-payload/json',
+    (req: MockExpressRequest, res: MockExpressResponse) => {
+      res.status(200).json({ ok: true, size: JSON.stringify(req.body).length });
+    },
+  );
+  expressApp.post(
+    '/api/v1/test-payload/urlencoded',
+    (req: MockExpressRequest, res: MockExpressResponse) => {
+      res.status(200).json({
+        ok: true,
+        keys: Object.keys((req.body as Record<string, unknown>) ?? {}),
+      });
+    },
+  );
+
   await app.listen(0, '127.0.0.1');
   t.after(() => app.close());
   return { app, dataSource, url: await app.getUrl() };
@@ -118,4 +151,53 @@ test('application shutdown closes its PostgreSQL connection', async (t) => {
   const { app, dataSource } = await startApplication(t);
   await app.close();
   assert.equal(dataSource.destroyed, true);
+});
+
+test('1 MB body boundary: JSON payload <=1MB is accepted and >1MB is rejected with 413', async (t) => {
+  const { url } = await startApplication(t);
+
+  // <= 1MB is accepted
+  const smallPayload = JSON.stringify({ data: 'x'.repeat(10_000) });
+  const smallRes = await fetch(`${url}/api/v1/test-payload/json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: smallPayload,
+  });
+  assert.equal(smallRes.status, 200);
+  const smallBody = (await smallRes.json()) as { ok: boolean };
+  assert.equal(smallBody.ok, true);
+
+  // > 1MB is rejected with 413 Payload Too Large
+  const largePayload = JSON.stringify({ data: 'x'.repeat(1_100_000) });
+  const largeRes = await fetch(`${url}/api/v1/test-payload/json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: largePayload,
+  });
+  assert.equal(largeRes.status, 413);
+});
+
+test('1 MB body boundary: urlencoded payload <=1MB is accepted and >1MB is rejected with 413', async (t) => {
+  const { url } = await startApplication(t);
+
+  // <= 1MB is accepted
+  const smallPayload = 'field=' + encodeURIComponent('x'.repeat(10_000));
+  const smallRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: smallPayload,
+  });
+  assert.equal(smallRes.status, 200);
+  const smallBody = (await smallRes.json()) as { ok: boolean; keys: string[] };
+  assert.equal(smallBody.ok, true);
+  assert.deepEqual(smallBody.keys, ['field']);
+
+  // > 1MB is rejected with 413 Payload Too Large
+  const largePayload = 'field=' + encodeURIComponent('x'.repeat(1_100_000));
+  const largeRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: largePayload,
+  });
+  assert.equal(largeRes.status, 413);
 });

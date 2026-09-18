@@ -1,8 +1,11 @@
-import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-export function configureApplication(app: INestApplication): void {
+export function configureApplication(app: NestExpressApplication): void {
+  app.useBodyParser('json', { limit: '1mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });
+
   const config = app.get(ConfigService);
   app.setGlobalPrefix('api/v1');
   app.enableCors({ origin: config.getOrThrow<string[]>('CORS_ORIGINS') });

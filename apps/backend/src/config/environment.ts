@@ -4,6 +4,10 @@ export interface BackendEnvironment {
   DATABASE_URL: string;
   DATABASE_TIMEOUT_MS: number;
   CORS_ORIGINS: string[];
+  SMARTSITE_AI_SERVICE_TOKEN: string;
+  ALERT_COOLDOWN_SECONDS: number;
+  MAX_PAST_EVENT_AGE_SECONDS: number;
+  MAX_FUTURE_CLOCK_SKEW_SECONDS: number;
 }
 
 function integer(
@@ -70,6 +74,33 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
       );
     }
   }
+
+  // SMARTSITE_AI_SERVICE_TOKEN rules
+  let serviceToken: string;
+  if (environment === 'production') {
+    if (input.SMARTSITE_AI_SERVICE_TOKEN === undefined) {
+      throw new Error('SMARTSITE_AI_SERVICE_TOKEN must be set in production');
+    }
+    if (
+      typeof input.SMARTSITE_AI_SERVICE_TOKEN !== 'string' ||
+      input.SMARTSITE_AI_SERVICE_TOKEN.trim().length === 0
+    ) {
+      throw new Error(
+        'SMARTSITE_AI_SERVICE_TOKEN must be an explicitly configured non-empty string in production',
+      );
+    }
+    serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
+  } else {
+    if (
+      typeof input.SMARTSITE_AI_SERVICE_TOKEN === 'string' &&
+      input.SMARTSITE_AI_SERVICE_TOKEN.trim().length > 0
+    ) {
+      serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
+    } else {
+      serviceToken = 'smartsite_local_dev_service_token_only';
+    }
+  }
+
   return {
     NODE_ENV: environment,
     PORT: integer(input.PORT, 'PORT', 3000, 1, 65535),
@@ -82,5 +113,27 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
       30000,
     ),
     CORS_ORIGINS: [...new Set(origins)],
+    SMARTSITE_AI_SERVICE_TOKEN: serviceToken,
+    ALERT_COOLDOWN_SECONDS: integer(
+      input.ALERT_COOLDOWN_SECONDS,
+      'ALERT_COOLDOWN_SECONDS',
+      60,
+      1,
+      86400,
+    ),
+    MAX_PAST_EVENT_AGE_SECONDS: integer(
+      input.MAX_PAST_EVENT_AGE_SECONDS,
+      'MAX_PAST_EVENT_AGE_SECONDS',
+      300,
+      1,
+      86400,
+    ),
+    MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(
+      input.MAX_FUTURE_CLOCK_SKEW_SECONDS,
+      'MAX_FUTURE_CLOCK_SKEW_SECONDS',
+      30,
+      1,
+      86400,
+    ),
   };
 }
