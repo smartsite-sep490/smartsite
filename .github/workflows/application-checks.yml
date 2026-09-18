@@ -32,6 +32,16 @@ jobs:
       - run: pnpm peers check
       - run: pnpm check
       - run: pnpm --filter @smartsite/mobile check:dependencies
+      - name: Start PostgreSQL container
+        run: docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60
+      - name: Run TypeORM migrations
+        env:
+          DATABASE_URL: postgresql://smartsite:smartsite_local_only@127.0.0.1:5432/smartsite
+        run: pnpm --filter @smartsite/backend db:migrate:run
+      - name: Run backend database integration tests
+        env:
+          DATABASE_URL: postgresql://smartsite:smartsite_local_only@127.0.0.1:5432/smartsite
+        run: pnpm --filter @smartsite/backend test:integration
       - name: Build and start local containers
         run: docker compose -f infra/compose.yaml up -d --build --wait --wait-timeout 120
       - name: Check real database readiness and Web
