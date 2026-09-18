@@ -162,6 +162,7 @@ Additional validation used before pull requests:
 ```sh
 pnpm peers check
 pnpm --filter @smartsite/mobile check:dependencies
+pnpm --filter @smartsite/backend db:validate
 ```
 
 ## Testing and Quality Gates
@@ -174,6 +175,7 @@ Application CI currently verifies:
 - automated tests;
 - Web and Backend builds;
 - React Native JavaScript exports;
+- TypeORM configuration and database validation;
 - Docker image builds;
 - PostgreSQL readiness;
 - application container smoke tests.

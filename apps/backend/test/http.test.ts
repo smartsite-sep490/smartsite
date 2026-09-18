@@ -9,30 +9,28 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-app.js';
 import { validateEnvironment } from '../src/config/environment.js';
-import { DATABASE_POOL } from '../src/database/database.service.js';
 
 async function startApplication(
   t: TestContext,
   options: { production?: boolean; unavailable?: boolean } = {},
 ) {
-  const database = {
-    unavailable: options.unavailable ?? false,
-    closed: false,
+  const dataSource = {
+    isInitialized: !options.unavailable,
+    destroyed: false,
     async query(sql: string) {
       assert.equal(sql, 'SELECT 1');
-      if (this.unavailable) throw new Error('postgresql://app:private-password@private-host/db');
-      return { rows: [{ '?column?': 1 }], rowCount: 1, fields: [], command: 'SELECT', oid: 0 };
+      if (this.isInitialized === false) {
+        throw new Error('postgresql://app:private-password@private-host/db');
+      }
+      return [{ '?column?': 1 }];
     },
-    async end() {
-      this.closed = true;
+    async destroy() {
+      this.destroyed = true;
+      this.isInitialized = false;
     },
-  };
-  const mockDataSource = {
-    isInitialized: true,
-    query: async (sql: string) => database.query(sql),
-    destroy: async () => {},
-    close: async () => {},
-    manager: {},
+    async close() {
+      await this.destroy();
+    },
   };
   const config = validateEnvironment({
     NODE_ENV: options.production ? 'production' : 'development',
@@ -42,18 +40,16 @@ async function startApplication(
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ConfigService)
     .useValue(new ConfigService(config))
-    .overrideProvider(DATABASE_POOL)
-    .useValue(database)
     .overrideProvider(getDataSourceToken())
-    .useValue(mockDataSource)
+    .useValue(dataSource)
     .overrideProvider(DataSource)
-    .useValue(mockDataSource)
+    .useValue(dataSource)
     .compile();
   const app = module.createNestApplication({ logger: false });
   configureApplication(app);
   await app.listen(0, '127.0.0.1');
   t.after(() => app.close());
-  return { app, database, url: await app.getUrl() };
+  return { app, dataSource, url: await app.getUrl() };
 }
 
 test('liveness reports the exact public contract independently of database failure', async (t) => {
@@ -64,7 +60,7 @@ test('liveness reports the exact public contract independently of database failu
 });
 
 test('readiness tracks database failure and recovery without exposing connection details', async (t) => {
-  const { url, database } = await startApplication(t);
+  const { url, dataSource } = await startApplication(t);
   const healthy = await fetch(`${url}/api/v1/health/ready`);
   assert.equal(healthy.status, 200);
   assert.deepEqual(await healthy.json(), {
@@ -72,7 +68,7 @@ test('readiness tracks database failure and recovery without exposing connection
     service: 'smartsite-backend',
     database: 'up',
   });
-  database.unavailable = true;
+  dataSource.isInitialized = false;
   const unavailable = await fetch(`${url}/api/v1/health/ready`);
   assert.equal(unavailable.status, 503);
   assert.deepEqual(await unavailable.json(), {
@@ -80,7 +76,7 @@ test('readiness tracks database failure and recovery without exposing connection
     service: 'smartsite-backend',
     database: 'down',
   });
-  database.unavailable = false;
+  dataSource.isInitialized = true;
   assert.equal((await fetch(`${url}/api/v1/health/ready`)).status, 200);
 });
 
@@ -118,8 +114,8 @@ test('production does not publish Swagger UI or its schema', async (t) => {
   assert.equal((await fetch(`${url}/api/docs-json`)).status, 404);
 });
 
-test('application shutdown closes its PostgreSQL pool', async (t) => {
-  const { app, database } = await startApplication(t);
+test('application shutdown closes its PostgreSQL connection', async (t) => {
+  const { app, dataSource } = await startApplication(t);
   await app.close();
-  assert.equal(database.closed, true);
+  assert.equal(dataSource.destroyed, true);
 });

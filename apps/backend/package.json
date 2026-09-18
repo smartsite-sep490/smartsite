@@ -9,7 +9,13 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src test",
-    "test": "tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js",
+    "db:validate": "tsc -p tsconfig.test.json && node --test .test-build/test/database.test.js",
+    "typeorm": "typeorm",
+    "migration:show": "typeorm migration:show -d dist/database/data-source.js",
+    "migration:run": "typeorm migration:run -d dist/database/data-source.js",
+    "migration:revert": "typeorm migration:revert -d dist/database/data-source.js",
+    "migration:generate": "typeorm migration:generate -d dist/database/data-source.js"
   },
   "dependencies": {
     "@nestjs/common": "12.0.3",

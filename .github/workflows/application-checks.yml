@@ -32,6 +32,7 @@ jobs:
       - run: pnpm peers check
       - run: pnpm check
       - run: pnpm --filter @smartsite/mobile check:dependencies
+      - run: pnpm --filter @smartsite/backend db:validate
       - name: Build and start local containers
         run: docker compose -f infra/compose.yaml up -d --build --wait --wait-timeout 120
       - name: Check real database readiness and Web

@@ -12,4 +12,13 @@ GET `/api/v1/health/live` kiểm tra tiến trình; GET `/api/v1/health/ready` t
 
 Dùng PostgreSQL tại Neon cho môi trường được cấu hình; không tự tạo Neon project. Tầng dữ liệu sử dụng TypeORM Data Mapper (`@nestjs/typeorm` + `typeorm`) cùng driver `pg`. Cấu hình `synchronize: false` bắt buộc ở mọi môi trường (development và production) để đảm bảo schema luôn được kiểm soát qua reviewed migrations. Entities và migrations sẽ được thêm cùng PR nghiệp vụ đầu tiên; không tạo bảng giả để trình diễn ORM.
 
-Không tự động sync schema hay chạy migration lúc server boot. Mọi thay đổi schema phải thông qua TypeORM migration files được review kỹ lưỡng. Chưa có migration/domain schema và chưa thực hiện migration remote.
+Không tự động sync schema hay chạy migration lúc server boot. Mọi thay đổi schema phải thông qua TypeORM migration files được review kỹ lưỡng. TypeORM CLI dùng chung cấu hình DataSource và validateEnvironment với NestJS runtime (`src/database/data-source.ts`).
+
+```sh
+pnpm --filter @smartsite/backend db:validate
+pnpm --filter @smartsite/backend migration:show
+pnpm --filter @smartsite/backend migration:run
+pnpm --filter @smartsite/backend migration:revert
+```
+
+Chưa có migration/domain schema và chưa thực hiện migration remote.
