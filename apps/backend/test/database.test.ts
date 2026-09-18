@@ -38,7 +38,11 @@ test('AppDataSource is a configured TypeORM DataSource instance ready for CLI', 
   assert.ok(AppDataSource instanceof DataSource);
   assert.equal(AppDataSource.options.type, 'postgres');
   assert.equal(AppDataSource.options.synchronize, false);
-  assert.equal(AppDataSource.isInitialized, false, 'AppDataSource must not initialize connection on import');
+  assert.equal(
+    AppDataSource.isInitialized,
+    false,
+    'AppDataSource must not initialize connection on import',
+  );
 
   // Assert canonical typeorm.data-source.ts source file exists
   const backendRoot = path.resolve(
@@ -46,7 +50,10 @@ test('AppDataSource is a configured TypeORM DataSource instance ready for CLI', 
     import.meta.dirname.includes('.test-build') ? '../..' : '..',
   );
   const expectedSourceFile = path.resolve(backendRoot, 'src/database/typeorm.data-source.ts');
-  assert.ok(fs.existsSync(expectedSourceFile), 'Canonical typeorm.data-source.ts source file must exist');
+  assert.ok(
+    fs.existsSync(expectedSourceFile),
+    'Canonical typeorm.data-source.ts source file must exist',
+  );
 
   // Assert package.json migration scripts target dist/database/typeorm.data-source.js
   const pkgJsonPath = path.resolve(backendRoot, 'package.json');
@@ -99,7 +106,11 @@ test('resolveCliEnvironment loads DATABASE_URL from .env file when process envir
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartsite-cli-env-'));
   const envFile = path.join(tmpDir, '.env');
   try {
-    fs.writeFileSync(envFile, 'DATABASE_URL=postgresql://file_user:file_pass@localhost:5432/file_db\n', 'utf8');
+    fs.writeFileSync(
+      envFile,
+      'DATABASE_URL=postgresql://file_user:file_pass@localhost:5432/file_db\n',
+      'utf8',
+    );
     const config = resolveCliEnvironment(envFile, {});
     assert.equal(config.DATABASE_URL, 'postgresql://file_user:file_pass@localhost:5432/file_db');
   } finally {
@@ -111,11 +122,18 @@ test('resolveCliEnvironment prioritizes real process environment variables over 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartsite-cli-env-'));
   const envFile = path.join(tmpDir, '.env');
   try {
-    fs.writeFileSync(envFile, 'DATABASE_URL=postgresql://file_user:file_pass@localhost:5432/file_db\n', 'utf8');
+    fs.writeFileSync(
+      envFile,
+      'DATABASE_URL=postgresql://file_user:file_pass@localhost:5432/file_db\n',
+      'utf8',
+    );
     const config = resolveCliEnvironment(envFile, {
       DATABASE_URL: 'postgresql://process_user:process_pass@localhost:5432/process_db',
     });
-    assert.equal(config.DATABASE_URL, 'postgresql://process_user:process_pass@localhost:5432/process_db');
+    assert.equal(
+      config.DATABASE_URL,
+      'postgresql://process_user:process_pass@localhost:5432/process_db',
+    );
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -124,7 +142,10 @@ test('resolveCliEnvironment prioritizes real process environment variables over 
 test('resolveCliEnvironment falls back safely when .env file does not exist', () => {
   const nonExistentPath = path.join(os.tmpdir(), 'does-not-exist', '.env');
   const config = resolveCliEnvironment(nonExistentPath, {});
-  assert.equal(config.DATABASE_URL, 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite');
+  assert.equal(
+    config.DATABASE_URL,
+    'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite',
+  );
 });
 
 test('numericTransformer converts finite numbers and strings correctly', () => {
@@ -139,5 +160,5 @@ test('numericTransformer converts finite numbers and strings correctly', () => {
   assert.equal(numericTransformer.from(0.95), 0.95);
   assert.equal(numericTransformer.from(null), null);
   assert.equal(numericTransformer.from(undefined), null);
-  assert.equal(numericTransformer.from('not-a-number'), null);
+  assert.throws(() => numericTransformer.from('not-a-number'), TypeError);
 });

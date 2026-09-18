@@ -17,7 +17,7 @@ export const numericTransformer: ValueTransformer = {
     }
     const num = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(num)) {
-      return null;
+      throw new TypeError(`Expected finite number from database, received: ${String(value)}`);
     }
     return num;
   },
