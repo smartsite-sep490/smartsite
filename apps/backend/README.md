@@ -10,12 +10,6 @@ GET `/api/v1/health/live` kiểm tra tiến trình; GET `/api/v1/health/ready` t
 
 ## Database / migration
 
-Dùng PostgreSQL tại Neon cho môi trường được cấu hình; không tự tạo Neon project. `pg` hiện thực health check. Prisma CLI7.10.0 được khóa stable để validate/migration; chưa sinh Prisma Client vì chưa có domain model. Thêm model thật và generated client/adapter cùng PR nghiệp vụ đầu tiên, không tạo bảng giả để trình diễn ORM.
+Dùng PostgreSQL tại Neon cho môi trường được cấu hình; không tự tạo Neon project. Tầng dữ liệu sử dụng TypeORM Data Mapper (`@nestjs/typeorm` + `typeorm`) cùng driver `pg`. Cấu hình `synchronize: false` bắt buộc ở mọi môi trường (development và production) để đảm bảo schema luôn được kiểm soát qua reviewed migrations. Entities và migrations sẽ được thêm cùng PR nghiệp vụ đầu tiên; không tạo bảng giả để trình diễn ORM.
 
-```sh
-pnpm --filter @smartsite/backend db:validate
-pnpm --filter @smartsite/backend db:migrate:dev --name <change-name>
-pnpm --filter @smartsite/backend db:migrate:deploy
-```
-
-Hai lệnh migration chỉ dùng khi schema và migration đã được review. Không tự chạy migration lúc server boot. DIRECT_URL có thể đặt URL Neon direct cho CLI; DATABASE_URL runtime có thể dùng pooled endpoint. Chưa có migration/domain schema và chưa thực hiện migration remote.
+Không tự động sync schema hay chạy migration lúc server boot. Mọi thay đổi schema phải thông qua TypeORM migration files được review kỹ lưỡng. Chưa có migration/domain schema và chưa thực hiện migration remote.

@@ -1,9 +1,30 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { Pool } from 'pg';
 import { DATABASE_POOL, DatabaseService } from './database.service.js';
 
 @Module({
+  imports: [
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        url: config.getOrThrow<string>('DATABASE_URL'),
+        synchronize: false,
+        autoLoadEntities: true,
+        connectTimeoutMS: config.getOrThrow<number>('DATABASE_TIMEOUT_MS'),
+        extra: {
+          max: 5,
+          connectionTimeoutMillis: config.getOrThrow<number>('DATABASE_TIMEOUT_MS'),
+          query_timeout: config.getOrThrow<number>('DATABASE_TIMEOUT_MS'),
+          statement_timeout: config.getOrThrow<number>('DATABASE_TIMEOUT_MS'),
+          idleTimeoutMillis: 30000,
+          application_name: 'smartsite-backend',
+        },
+      }),
+    }),
+  ],
   providers: [
     {
       provide: DATABASE_POOL,
@@ -26,6 +47,6 @@ import { DATABASE_POOL, DatabaseService } from './database.service.js';
     },
     DatabaseService,
   ],
-  exports: [DatabaseService],
+  exports: [DatabaseService, TypeOrmModule],
 })
 export class DatabaseModule {}

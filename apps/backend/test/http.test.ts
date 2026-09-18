@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-app.js';
 import { validateEnvironment } from '../src/config/environment.js';
@@ -25,6 +27,13 @@ async function startApplication(
       this.closed = true;
     },
   };
+  const mockDataSource = {
+    isInitialized: true,
+    query: async (sql: string) => database.query(sql),
+    destroy: async () => {},
+    close: async () => {},
+    manager: {},
+  };
   const config = validateEnvironment({
     NODE_ENV: options.production ? 'production' : 'development',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
@@ -35,6 +44,10 @@ async function startApplication(
     .useValue(new ConfigService(config))
     .overrideProvider(DATABASE_POOL)
     .useValue(database)
+    .overrideProvider(getDataSourceToken())
+    .useValue(mockDataSource)
+    .overrideProvider(DataSource)
+    .useValue(mockDataSource)
     .compile();
   const app = module.createNestApplication({ logger: false });
   configureApplication(app);

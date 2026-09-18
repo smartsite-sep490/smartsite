@@ -47,7 +47,7 @@ The backend is the source of truth for Site and Zone assignments, worker and con
 | Mobile | React Native, Expo Router, TanStack Query |
 | Database | PostgreSQL |
 | Hosted database | Neon |
-| Data access | Prisma |
+| Data access | TypeORM (PostgreSQL) |
 | API | REST, OpenAPI |
 | Monorepo | pnpm workspaces, Turborepo |
 | Infrastructure | Docker, Docker Compose |
@@ -162,7 +162,6 @@ Additional validation used before pull requests:
 ```sh
 pnpm peers check
 pnpm --filter @smartsite/mobile check:dependencies
-pnpm --filter @smartsite/backend db:validate
 ```
 
 ## Testing and Quality Gates
@@ -175,7 +174,6 @@ Application CI currently verifies:
 - automated tests;
 - Web and Backend builds;
 - React Native JavaScript exports;
-- Prisma schema validation;
 - Docker image builds;
 - PostgreSQL readiness;
 - application container smoke tests.
