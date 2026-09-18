@@ -19,7 +19,7 @@ Thêm dịch vụ AI (cần checkout `../smartsite-ai` có Dockerfile):
 docker compose -f infra/compose.yaml --profile ai up -d --build --wait
 ```
 
-AI: http://localhost:8000/docs. Camera/model/OpenAI chưa được triển khai; capability API nói rõ trạng thái. Compose chỉ cho local, ports giới hạn loopback; password PostgreSQL mẫu không dùng cho production.
+AI: http://localhost:8000/docs. Camera/model/OpenAI chưa được triển khai ở tầng foundation; vai trò OpenAI đã được chốt chính thức (hỗ trợ phân tích bằng chứng cho Safety Officer, không thay thế detector gốc và không quyết định quyền Zone). Capability API phản ánh rõ trạng thái từng tính năng. Compose chỉ cho local, ports giới hạn loopback; password PostgreSQL mẫu không dùng cho production.
 
 ## Phát triển với hot reload
 
