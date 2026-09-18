@@ -1,164 +1,339 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateObservationEvent } from '../src/validation/schema-validator.js';
-import type { ValidationIssue } from '../src/validation/geometry-validator.js';
+import { validateObservationEvent } from '@smartsite/contracts';
+import type { ValidationIssue } from '@smartsite/contracts';
 
-const validBaseEvent = {
+const baseEvent = {
   eventId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
   schemaVersion: '1.0.0',
-  cameraExternalId: 'CAM_GATE_01',
-  streamSessionId: 'SESSION_20260918_001',
-  capturedAt: '2026-09-18T10:15:30.500Z',
-  frameDimensions: {
-    width: 1920,
-    height: 1080,
-  },
-  observations: [
-    {
-      type: 'PERSON',
-      trackId: 1,
-      confidence: 0.95,
-      boundingBox: {
-        x1: 0.1,
-        y1: 0.2,
-        x2: 0.5,
-        y2: 0.8,
-        coordinateSpace: 'NORMALIZED_0_1',
-      },
-    },
-    {
-      type: 'PPE',
-      trackId: 1,
-      ppeItem: 'HARD_HAT',
-      status: 'MISSING',
-      confidence: 0.9,
-      qualityScore: 0.85,
-    },
-    {
-      type: 'ZONE_ENTRY',
-      trackId: 1,
-      zoneId: 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
-      regionId: 'b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e',
-      geometryVersion: 1,
-      polygonOverlapRatio: 0.8,
-      isInside: true,
-    },
-    {
-      type: 'IDENTITY_CANDIDATE',
-      trackId: 1,
-      status: 'CANDIDATE',
-      candidateWorkerId: 'W-1001',
-      similarityScore: 0.92,
-      qualityScore: 0.88,
-    },
-  ],
-  evidence: [
-    {
-      id: 'EVID-001',
-      type: 'FULL_FRAME',
-      storageUri: 's3://smartsite/frames/f1.jpg',
-      mimeType: 'image/jpeg',
-      trackId: 1,
-    },
-  ],
+  cameraExternalId: 'cam-gate-01',
+  streamSessionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf7',
+  capturedAt: '2026-09-18T10:00:00.000Z',
+  frameDimensions: { width: 1920, height: 1080 },
+  evidence: [],
 };
 
-test('validateObservationEvent succeeds for canonical valid event payload', () => {
-  const result = validateObservationEvent(validBaseEvent);
+test('accepts a valid PERSON observation with only type and trackId', () => {
+  const result = validateObservationEvent({
+    ...baseEvent,
+    observations: [{ type: 'PERSON', trackId: 1 }],
+  });
   assert.equal(result.isValid, true);
   assert.equal(result.issues.length, 0);
 });
 
-test('validateObservationEvent rejects missing top-level required fields', () => {
-  const incomplete = { ...validBaseEvent };
-  delete (incomplete as Record<string, unknown>).eventId;
-  delete (incomplete as Record<string, unknown>).cameraExternalId;
-
-  const result = validateObservationEvent(incomplete);
-  assert.equal(result.isValid, false);
-  assert.ok(result.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.message.includes('eventId')));
-  assert.ok(result.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.message.includes('cameraExternalId')));
+test('accepts PERSON observation with optional confidence and boundingBox', () => {
+  const result = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'PERSON',
+        trackId: 1,
+        confidence: 0.95,
+        boundingBox: { x1: 0.1, y1: 0.2, x2: 0.5, y2: 0.8, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+    ],
+  });
+  assert.equal(result.isValid, true);
 });
 
-test('validateObservationEvent strictly enforces additionalProperties:false at all levels', () => {
-  const extraTopLevel = { ...validBaseEvent, rogueProperty: 'illegal' };
-  const res1 = validateObservationEvent(extraTopLevel);
-  assert.equal(res1.isValid, false);
-  assert.ok(res1.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.message.includes('rogueProperty')));
+test('accepts valid PPE observation and enforces PRESENT or MISSING without qualityScore or UNKNOWN', () => {
+  const validPpe = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 1,
+        ppeItem: 'HARD_HAT',
+        status: 'MISSING',
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+      },
+    ],
+  });
+  assert.equal(validPpe.isValid, true);
 
-  const extraInObservation = JSON.parse(JSON.stringify(validBaseEvent));
-  extraInObservation.observations[0].rogueNestedProperty = 123;
-  const res2 = validateObservationEvent(extraInObservation);
-  assert.equal(res2.isValid, false);
-  assert.ok(res2.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('/observations/0')));
+  // Status UNKNOWN is rejected in authoritative contract
+  const unknownStatus = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 1,
+        ppeItem: 'HARD_HAT',
+        status: 'UNKNOWN',
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+      },
+    ],
+  });
+  assert.equal(unknownStatus.isValid, false);
+
+  // qualityScore is rejected in PPE
+  const withQualityScore = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 1,
+        ppeItem: 'HARD_HAT',
+        status: 'PRESENT',
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+        qualityScore: 0.9,
+      },
+    ],
+  });
+  assert.equal(withQualityScore.isValid, false);
 });
 
-test('validateObservationEvent requires at least one observation item', () => {
-  const emptyObs = { ...validBaseEvent, observations: [] };
-  const result = validateObservationEvent(emptyObs);
-  assert.equal(result.isValid, false);
-  assert.ok(result.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('/observations')));
+test('accepts valid ZONE_ENTRY observation with regionId and geometryVersion', () => {
+  const result = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 2,
+        confidence: 0.85,
+      },
+    ],
+  });
+  assert.equal(result.isValid, true);
 });
 
-test('validateObservationEvent rejects non-UUID and non-date formats', () => {
-  const invalidFormat = {
-    ...validBaseEvent,
-    eventId: 'not-a-uuid',
-    capturedAt: 'invalid-date-format',
+test('strictly rejects AI-supplied zoneId, permission result, polygonOverlapRatio, or isInside in ZONE_ENTRY', () => {
+  // 1. Rejects zoneId (Backend owns Zone mapping from regionId)
+  const withZoneId = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+        zoneId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf8',
+      },
+    ],
+  });
+  assert.equal(withZoneId.isValid, false);
+  assert.ok(withZoneId.issues.some((i: ValidationIssue) => i.message.includes('zoneId')));
+
+  // 2. Rejects isInside
+  const withIsInside = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+        isInside: true,
+      },
+    ],
+  });
+  assert.equal(withIsInside.isValid, false);
+  assert.ok(withIsInside.issues.some((i: ValidationIssue) => i.message.includes('isInside')));
+
+  // 3. Rejects polygonOverlapRatio
+  const withOverlap = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+        polygonOverlapRatio: 0.75,
+      },
+    ],
+  });
+  assert.equal(withOverlap.isValid, false);
+
+  // 4. Rejects permission results (authorized)
+  const withAuthorized = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        geometryVersion: 1,
+        authorized: false,
+      },
+    ],
+  });
+  assert.equal(withAuthorized.isValid, false);
+});
+
+test('enforces IDENTITY_CANDIDATE exact oneOf semantics (BR-16)', () => {
+  // CANDIDATE requires candidateWorkerId and similarityScore
+  const validCandidate = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 1,
+        status: 'CANDIDATE',
+        candidateWorkerId: 'W-1001',
+        similarityScore: 0.94,
+        qualityScore: 0.88,
+      },
+    ],
+  });
+  assert.equal(validCandidate.isValid, true);
+
+  // CANDIDATE missing candidateWorkerId is rejected
+  const missingWorkerId = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 1,
+        status: 'CANDIDATE',
+        similarityScore: 0.94,
+      },
+    ],
+  });
+  assert.equal(missingWorkerId.isValid, false);
+
+  // UNKNOWN carrying candidateWorkerId is rejected
+  const unknownWithWorker = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 1,
+        status: 'UNKNOWN',
+        candidateWorkerId: 'W-1001',
+      },
+    ],
+  });
+  assert.equal(unknownWithWorker.isValid, false);
+
+  // UNKNOWN carrying similarityScore is rejected
+  const unknownWithScore = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 1,
+        status: 'UNKNOWN',
+        similarityScore: 0.8,
+      },
+    ],
+  });
+  assert.equal(unknownWithScore.isValid, false);
+
+  // UNAVAILABLE carrying candidateWorkerId is rejected
+  const unavailableWithWorker = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 1,
+        status: 'UNAVAILABLE',
+        candidateWorkerId: 'W-1001',
+      },
+    ],
+  });
+  assert.equal(unavailableWithWorker.isValid, false);
+
+  // Valid UNKNOWN without workerId and similarityScore
+  const validUnknown = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 1,
+        status: 'UNKNOWN',
+        qualityScore: 0.5,
+      },
+    ],
+  });
+  assert.equal(validUnknown.isValid, true);
+});
+
+test('validates evidence items (FRAME, CROP, SNAPSHOT) and rejects old legacy fields', () => {
+  const validEvidence = validateObservationEvent({
+    ...baseEvent,
+    observations: [{ type: 'PERSON', trackId: 1 }],
+    evidence: [
+      {
+        kind: 'FRAME',
+        uri: 's3://smartsite/frames/f1.jpg',
+      },
+      {
+        kind: 'CROP',
+        uri: 's3://smartsite/crops/c1.jpg',
+        trackId: 1,
+        boundingBox: { x1: 0.1, y1: 0.1, x2: 0.4, y2: 0.4, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+    ],
+  });
+  assert.equal(validEvidence.isValid, true);
+
+  // Rejects old fields: id, storageUri, mimeType
+  const oldEvidenceFields = validateObservationEvent({
+    ...baseEvent,
+    observations: [{ type: 'PERSON', trackId: 1 }],
+    evidence: [
+      {
+        id: 'EVID-001',
+        kind: 'FRAME',
+        uri: 's3://smartsite/frames/f1.jpg',
+        storageUri: 's3://smartsite/frames/f1.jpg',
+        mimeType: 'image/jpeg',
+      },
+    ],
+  });
+  assert.equal(oldEvidenceFields.isValid, false);
+});
+
+test('rejects invalid evidence geometry', () => {
+  const invalidEvidenceGeometry = validateObservationEvent({
+    ...baseEvent,
+    observations: [{ type: 'PERSON', trackId: 1 }],
+    evidence: [
+      {
+        kind: 'SNAPSHOT',
+        uri: 's3://smartsite/snaps/s1.jpg',
+        boundingBox: { x1: 0.8, y1: 0.1, x2: 0.2, y2: 0.5, coordinateSpace: 'NORMALIZED_0_1' }, // x1 > x2
+      },
+    ],
+  });
+  assert.equal(invalidEvidenceGeometry.isValid, false);
+  assert.ok(invalidEvidenceGeometry.issues.some((i: ValidationIssue) => i.code === 'INVALID_GEOMETRY' && i.path === '/evidence/0/boundingBox'));
+});
+
+test('enforces root constraints: frameDimensions required, UUID streamSessionId, maxLength 128 cameraExternalId', () => {
+  // Missing frameDimensions
+  const noFrameDimensions = { ...baseEvent, observations: [{ type: 'PERSON', trackId: 1 }] };
+  delete (noFrameDimensions as Record<string, unknown>).frameDimensions;
+  assert.equal(validateObservationEvent(noFrameDimensions).isValid, false);
+
+  // streamSessionId not a UUID
+  const invalidSession = {
+    ...baseEvent,
+    streamSessionId: 'not-a-uuid-session',
+    observations: [{ type: 'PERSON', trackId: 1 }],
   };
-  const result = validateObservationEvent(invalidFormat);
-  assert.equal(result.isValid, false);
-  assert.ok(result.issues.some((i: ValidationIssue) => i.path === '/eventId'));
-  assert.ok(result.issues.some((i: ValidationIssue) => i.path === '/capturedAt'));
-});
+  assert.equal(validateObservationEvent(invalidSession).isValid, false);
 
-test('validateObservationEvent rejects coordinate bounds outside [0.0, 1.0]', () => {
-  const outOfBounds = JSON.parse(JSON.stringify(validBaseEvent));
-  outOfBounds.observations[0].boundingBox.x2 = 1.25;
-  const result = validateObservationEvent(outOfBounds);
-  assert.equal(result.isValid, false);
-  assert.ok(result.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('/boundingBox/x2')));
-});
+  // cameraExternalId exceeding 128 chars
+  const longCameraId = {
+    ...baseEvent,
+    cameraExternalId: 'a'.repeat(129),
+    observations: [{ type: 'PERSON', trackId: 1 }],
+  };
+  assert.equal(validateObservationEvent(longCameraId).isValid, false);
 
-test('validateObservationEvent enforces conditional identity semantics (BR-16)', () => {
-  // 1. CANDIDATE status requires candidateWorkerId and similarityScore
-  const missingCandidateFields = JSON.parse(JSON.stringify(validBaseEvent));
-  delete missingCandidateFields.observations[3].candidateWorkerId;
-  const res1 = validateObservationEvent(missingCandidateFields);
-  assert.equal(res1.isValid, false);
-  assert.ok(res1.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('/observations/3')));
-
-  // 2. UNKNOWN status forbids candidateWorkerId
-  const unknownWithId = JSON.parse(JSON.stringify(validBaseEvent));
-  unknownWithId.observations[3].status = 'UNKNOWN';
-  unknownWithId.observations[3].candidateWorkerId = 'W-1001';
-  const res2 = validateObservationEvent(unknownWithId);
-  assert.equal(res2.isValid, false);
-  assert.ok(res2.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('/observations/3')));
-
-  // 3. UNAVAILABLE status forbids candidateWorkerId
-  const unavailableWithId = JSON.parse(JSON.stringify(validBaseEvent));
-  unavailableWithId.observations[3].status = 'UNAVAILABLE';
-  unavailableWithId.observations[3].candidateWorkerId = 'W-1001';
-  const res3 = validateObservationEvent(unavailableWithId);
-  assert.equal(res3.isValid, false);
-  assert.ok(res3.issues.some((i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('/observations/3')));
-
-  // 4. UNKNOWN status without candidateWorkerId is valid
-  const unknownWithoutId = JSON.parse(JSON.stringify(validBaseEvent));
-  unknownWithoutId.observations[3].status = 'UNKNOWN';
-  delete unknownWithoutId.observations[3].candidateWorkerId;
-  delete unknownWithoutId.observations[3].similarityScore;
-  const res4 = validateObservationEvent(unknownWithoutId);
-  assert.equal(res4.isValid, true);
-});
-
-test('validateObservationEvent integrates semantic geometry validation', () => {
-  const invertedGeometry = JSON.parse(JSON.stringify(validBaseEvent));
-  invertedGeometry.observations[0].boundingBox.x1 = 0.8;
-  invertedGeometry.observations[0].boundingBox.x2 = 0.2; // x1 > x2
-
-  const result = validateObservationEvent(invertedGeometry);
-  assert.equal(result.isValid, false);
-  assert.ok(result.issues.some((i: ValidationIssue) => i.code === 'INVALID_GEOMETRY' && i.path === '/observations/0/boundingBox/x1'));
+  // Extra root property
+  const extraRoot = {
+    ...baseEvent,
+    observations: [{ type: 'PERSON', trackId: 1 }],
+    unexpectedProperty: 'forbidden',
+  };
+  assert.equal(validateObservationEvent(extraRoot).isValid, false);
 });

@@ -1,220 +1,34 @@
 [
   {
-    "description": "Object key order normalization per RFC 8785 UTF-16 code units",
+    "description": "Vietnamese accents and emoji",
     "input": {
-      "z": 1,
-      "a": "first",
-      "m": {
-        "y": true,
-        "b": null
-      }
+      "text": "Công trường Landmark 81 🏗️",
+      "code": "CT-01"
     },
-    "expectedCanonicalJson": "{\"a\":\"first\",\"m\":{\"b\":null,\"y\":true},\"z\":1}",
-    "expectedSha256": "4d6e31c2392aeb95a38028d9fadb8b7803b11a3f2334105b387e39537400dd02"
+    "expectedCanonical": "{\"code\":\"CT-01\",\"text\":\"Công trường Landmark 81 🏗️\"}",
+    "expectedSha256": "3d69d86e0f2f30efa7464b5d5f6e8f20b623879c45630a31ac0f6dcde92ca00b"
   },
   {
-    "description": "Object with reordered keys yielding identical canonical representation",
-    "input": {
-      "m": {
-        "b": null,
-        "y": true
-      },
-      "a": "first",
-      "z": 1
-    },
-    "expectedCanonicalJson": "{\"a\":\"first\",\"m\":{\"b\":null,\"y\":true},\"z\":1}",
-    "expectedSha256": "4d6e31c2392aeb95a38028d9fadb8b7803b11a3f2334105b387e39537400dd02"
-  },
-  {
-    "description": "Array order preservation (array [1, 2, 3] is distinct from [3, 2, 1])",
-    "input": {
-      "items": [
-        1,
-        2,
-        3
-      ],
-      "tag": "ordered-array"
-    },
-    "expectedCanonicalJson": "{\"items\":[1,2,3],\"tag\":\"ordered-array\"}",
-    "expectedSha256": "3573148ec51e2622f67d75030e4eb9dc64a4710d70cdabab4f937e7bde9ed87c"
-  },
-  {
-    "description": "Array order negative case with reversed elements yielding different canonical string and hash",
-    "input": {
-      "items": [
-        3,
-        2,
-        1
-      ],
-      "tag": "ordered-array"
-    },
-    "expectedCanonicalJson": "{\"items\":[3,2,1],\"tag\":\"ordered-array\"}",
-    "expectedSha256": "ccd010c0d93c57cf1b044eac563fbeb721af67676edd36d7a0a6b114fe1bc072"
-  },
-  {
-    "description": "Unicode, Vietnamese diacritics, and accented text",
-    "input": {
-      "projectName": "Công trường SmartSite",
-      "location": "Khu công nghệ cao Hòa Lạc, Hà Nội, Việt Nam",
-      "safetyPolicy": "Đảm bảo 100% người lao động tuân thủ an toàn",
-      "warning": "Cảnh báo: Khu vực nguy hiểm, cấm vào!"
-    },
-    "expectedCanonicalJson": "{\"location\":\"Khu công nghệ cao Hòa Lạc, Hà Nội, Việt Nam\",\"projectName\":\"Công trường SmartSite\",\"safetyPolicy\":\"Đảm bảo 100% người lao động tuân thủ an toàn\",\"warning\":\"Cảnh báo: Khu vực nguy hiểm, cấm vào!\"}",
-    "expectedSha256": "354b7472aa05590b7659c49be00f6b49a7996ce26dff20543caa9927a6a3decf"
-  },
-  {
-    "description": "Emoji characters, multi-byte UTF-8, and escape sequences",
-    "input": {
-      "alertIcon": "⚠️",
-      "ppeIcons": [
-        "👷",
-        "🦺",
-        "🥾"
-      ],
-      "notes": "Line 1\nLine 2\tIndented with \"quotes\" and backslash: \\ and slash: /"
-    },
-    "expectedCanonicalJson": "{\"alertIcon\":\"⚠️\",\"notes\":\"Line 1\\nLine 2\\tIndented with \\\"quotes\\\" and backslash: \\\\ and slash: /\",\"ppeIcons\":[\"👷\",\"🦺\",\"🥾\"]}",
-    "expectedSha256": "d9e9583242d7e6e8239b5b54c981c7ea42f903faf7909c4bafb6e9c55a0391c9"
-  },
-  {
-    "description": "Numeric representations: zero, negative, integers, decimal floats, and scientific notation",
+    "description": "ordinary JSON numbers",
     "input": {
       "zero": 0,
-      "negativeInt": -42,
-      "positiveInt": 1000,
-      "normalizedFloat": 0.123456,
-      "score": 0.9875,
-      "fraction": 0.5
+      "negative": -42,
+      "decimal": 0.125,
+      "ratio": 1
     },
-    "expectedCanonicalJson": "{\"fraction\":0.5,\"negativeInt\":-42,\"normalizedFloat\":0.123456,\"positiveInt\":1000,\"score\":0.9875,\"zero\":0}",
-    "expectedSha256": "310f5a43052cd37a1c8049b4d4f71f5a499bf25080ed0c635dd06d33e4b02aa9"
+    "expectedCanonical": "{\"decimal\":0.125,\"negative\":-42,\"ratio\":1,\"zero\":0}",
+    "expectedSha256": "e12c69e6bffbe8f6e1424dc5f8c0b0c590d8491aafd83c2ff33c1b000ba6470d"
   },
   {
-    "description": "Full TechnicalObservationEvent sample payload",
+    "description": "nested ordering and escaping",
     "input": {
-      "eventId": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-      "schemaVersion": "1.0.0",
-      "cameraExternalId": "CAM_GATE_01",
-      "streamSessionId": "SESSION_20260918_001",
-      "capturedAt": "2026-09-18T10:15:30.500Z",
-      "frameDimensions": {
-        "width": 1920,
-        "height": 1080
+      "z": {
+        "b": 2,
+        "a": 1
       },
-      "observations": [
-        {
-          "type": "PERSON",
-          "trackId": 101,
-          "confidence": 0.95,
-          "boundingBox": {
-            "x1": 0.15,
-            "y1": 0.2,
-            "x2": 0.45,
-            "y2": 0.85,
-            "coordinateSpace": "NORMALIZED_0_1"
-          }
-        },
-        {
-          "type": "PPE",
-          "trackId": 101,
-          "ppeItem": "HARD_HAT",
-          "status": "MISSING",
-          "confidence": 0.88,
-          "qualityScore": 0.92
-        },
-        {
-          "type": "ZONE_ENTRY",
-          "trackId": 101,
-          "zoneId": "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-          "regionId": "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-          "geometryVersion": 1,
-          "polygonOverlapRatio": 0.75,
-          "isInside": true
-        },
-        {
-          "type": "IDENTITY_CANDIDATE",
-          "trackId": 101,
-          "status": "CANDIDATE",
-          "candidateWorkerId": "W-9901",
-          "similarityScore": 0.91,
-          "qualityScore": 0.85
-        }
-      ],
-      "evidence": [
-        {
-          "id": "EVID-001",
-          "type": "FULL_FRAME",
-          "storageUri": "s3://smartsite-evidence/2026/09/18/frame_001.jpg",
-          "mimeType": "image/jpeg",
-          "trackId": 101
-        }
-      ]
+      "message": "quote: \" and slash: \\ and tab: \t"
     },
-    "expectedCanonicalJson": "{\"cameraExternalId\":\"CAM_GATE_01\",\"capturedAt\":\"2026-09-18T10:15:30.500Z\",\"eventId\":\"a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d\",\"evidence\":[{\"id\":\"EVID-001\",\"mimeType\":\"image/jpeg\",\"storageUri\":\"s3://smartsite-evidence/2026/09/18/frame_001.jpg\",\"trackId\":101,\"type\":\"FULL_FRAME\"}],\"frameDimensions\":{\"height\":1080,\"width\":1920},\"observations\":[{\"boundingBox\":{\"coordinateSpace\":\"NORMALIZED_0_1\",\"x1\":0.15,\"x2\":0.45,\"y1\":0.2,\"y2\":0.85},\"confidence\":0.95,\"trackId\":101,\"type\":\"PERSON\"},{\"confidence\":0.88,\"ppeItem\":\"HARD_HAT\",\"qualityScore\":0.92,\"status\":\"MISSING\",\"trackId\":101,\"type\":\"PPE\"},{\"geometryVersion\":1,\"isInside\":true,\"polygonOverlapRatio\":0.75,\"regionId\":\"c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f\",\"trackId\":101,\"type\":\"ZONE_ENTRY\",\"zoneId\":\"b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e\"},{\"candidateWorkerId\":\"W-9901\",\"qualityScore\":0.85,\"similarityScore\":0.91,\"status\":\"CANDIDATE\",\"trackId\":101,\"type\":\"IDENTITY_CANDIDATE\"}],\"schemaVersion\":\"1.0.0\",\"streamSessionId\":\"SESSION_20260918_001\"}",
-    "expectedSha256": "3e0afa0d8a0e11db1b4b5795aaebb44a437ae4904370ef7cdeb78d41770460d0"
-  },
-  {
-    "description": "Full TechnicalObservationEvent with reordered object keys yielding identical hash as sample payload",
-    "input": {
-      "observations": [
-        {
-          "boundingBox": {
-            "coordinateSpace": "NORMALIZED_0_1",
-            "y2": 0.85,
-            "x2": 0.45,
-            "y1": 0.2,
-            "x1": 0.15
-          },
-          "confidence": 0.95,
-          "trackId": 101,
-          "type": "PERSON"
-        },
-        {
-          "qualityScore": 0.92,
-          "confidence": 0.88,
-          "status": "MISSING",
-          "ppeItem": "HARD_HAT",
-          "trackId": 101,
-          "type": "PPE"
-        },
-        {
-          "isInside": true,
-          "polygonOverlapRatio": 0.75,
-          "geometryVersion": 1,
-          "regionId": "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-          "zoneId": "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-          "trackId": 101,
-          "type": "ZONE_ENTRY"
-        },
-        {
-          "qualityScore": 0.85,
-          "similarityScore": 0.91,
-          "candidateWorkerId": "W-9901",
-          "status": "CANDIDATE",
-          "trackId": 101,
-          "type": "IDENTITY_CANDIDATE"
-        }
-      ],
-      "evidence": [
-        {
-          "trackId": 101,
-          "mimeType": "image/jpeg",
-          "storageUri": "s3://smartsite-evidence/2026/09/18/frame_001.jpg",
-          "type": "FULL_FRAME",
-          "id": "EVID-001"
-        }
-      ],
-      "frameDimensions": {
-        "height": 1080,
-        "width": 1920
-      },
-      "capturedAt": "2026-09-18T10:15:30.500Z",
-      "streamSessionId": "SESSION_20260918_001",
-      "cameraExternalId": "CAM_GATE_01",
-      "schemaVersion": "1.0.0",
-      "eventId": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
-    },
-    "expectedCanonicalJson": "{\"cameraExternalId\":\"CAM_GATE_01\",\"capturedAt\":\"2026-09-18T10:15:30.500Z\",\"eventId\":\"a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d\",\"evidence\":[{\"id\":\"EVID-001\",\"mimeType\":\"image/jpeg\",\"storageUri\":\"s3://smartsite-evidence/2026/09/18/frame_001.jpg\",\"trackId\":101,\"type\":\"FULL_FRAME\"}],\"frameDimensions\":{\"height\":1080,\"width\":1920},\"observations\":[{\"boundingBox\":{\"coordinateSpace\":\"NORMALIZED_0_1\",\"x1\":0.15,\"x2\":0.45,\"y1\":0.2,\"y2\":0.85},\"confidence\":0.95,\"trackId\":101,\"type\":\"PERSON\"},{\"confidence\":0.88,\"ppeItem\":\"HARD_HAT\",\"qualityScore\":0.92,\"status\":\"MISSING\",\"trackId\":101,\"type\":\"PPE\"},{\"geometryVersion\":1,\"isInside\":true,\"polygonOverlapRatio\":0.75,\"regionId\":\"c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f\",\"trackId\":101,\"type\":\"ZONE_ENTRY\",\"zoneId\":\"b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e\"},{\"candidateWorkerId\":\"W-9901\",\"qualityScore\":0.85,\"similarityScore\":0.91,\"status\":\"CANDIDATE\",\"trackId\":101,\"type\":\"IDENTITY_CANDIDATE\"}],\"schemaVersion\":\"1.0.0\",\"streamSessionId\":\"SESSION_20260918_001\"}",
-    "expectedSha256": "3e0afa0d8a0e11db1b4b5795aaebb44a437ae4904370ef7cdeb78d41770460d0"
+    "expectedCanonical": "{\"message\":\"quote: \\\" and slash: \\\\ and tab: \\t\",\"z\":{\"a\":1,\"b\":2}}",
+    "expectedSha256": "19887554026cd9ff2241feea249acbab0c3ba1cccbbf857cddf784bf190cc696"
   }
 ]

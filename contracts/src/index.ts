@@ -6,15 +6,11 @@ export {
 } from './hashing/canonical-hash.js';
 
 export {
-  validateGeometry,
-  validateBoundingBox,
-  validatePolygon,
+  validateGeometries,
 } from './validation/geometry-validator.js';
 
 export type {
   ValidationIssue,
-  NormalizedPoint,
-  BoundingBoxCandidate,
 } from './validation/geometry-validator.js';
 
 export {

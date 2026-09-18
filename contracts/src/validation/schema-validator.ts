@@ -1,9 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import Ajv2020Pkg from 'ajv/dist/2020.js';
 import addFormatsPkg from 'ajv-formats';
-import { validateGeometry } from './geometry-validator.js';
+import { validateGeometries } from './geometry-validator.js';
 import type { ValidationIssue } from './geometry-validator.js';
 
 export type { ValidationIssue } from './geometry-validator.js';
@@ -35,26 +33,10 @@ interface Ajv2020Constructor {
 
 type AddFormatsFunction = (ajv: unknown) => void;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const schemaPath = new URL('../../schemas/v1/technical-observation-event.json', import.meta.url);
+const rawSchema: unknown = JSON.parse(readFileSync(schemaPath, 'utf8'));
 
-function resolveSchemaPath(): string {
-  // Traverse upward until schemas/v1/technical-observation-event.json is found
-  let cur = __dirname;
-  while (cur !== path.dirname(cur)) {
-    const candidate = path.join(cur, 'schemas', 'v1', 'technical-observation-event.json');
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-    cur = path.dirname(cur);
-  }
-  throw new Error('Unable to locate canonical schema file: schemas/v1/technical-observation-event.json');
-}
-
-const schemaPath = resolveSchemaPath();
-const rawSchema: unknown = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
-
-// Resolve constructor robustly across CJS/ESM interop without using any
+// Resolve constructor robustly across CJS/ESM interop without any
 const resolvedAjvConstructor = (
   typeof Ajv2020Pkg === 'function'
     ? Ajv2020Pkg
@@ -67,10 +49,9 @@ const resolvedAddFormats = (
     : (addFormatsPkg as unknown as { default: AddFormatsFunction }).default
 ) as AddFormatsFunction;
 
-// Instantiate Ajv Draft 2020-12 with formats support
 const ajv = new resolvedAjvConstructor({
   allErrors: true,
-  strict: false,
+  strict: true,
 });
 resolvedAddFormats(ajv);
 
@@ -78,8 +59,8 @@ const validateSchema: CompiledSchemaValidator = ajv.compile(rawSchema);
 
 /**
  * Validates a technical observation envelope against:
- * 1. Canonical JSON Schema Draft 2020-12 structural rules, formats, bounds, and conditional identity rules.
- * 2. Cross-field semantic geometric invariants (x1 < x2, y1 < y2, polygon vertex counts).
+ * 1. Canonical Draft 2020-12 schema rules, formats, bounds, and conditional identity semantics.
+ * 2. Semantic cross-field bounding-box geometry (x1 < x2, y1 < y2) across observations and evidence.
  */
 export function validateObservationEvent(data: unknown): ValidationResult {
   const issues: ValidationIssue[] = [];
@@ -106,8 +87,7 @@ export function validateObservationEvent(data: unknown): ValidationResult {
     }
   }
 
-  // 2. Semantic geometry validation
-  const geometryIssues = validateGeometry(data);
+  const geometryIssues = validateGeometries(data);
   issues.push(...geometryIssues);
 
   return {
