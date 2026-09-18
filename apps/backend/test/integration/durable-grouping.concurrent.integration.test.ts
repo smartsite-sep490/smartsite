@@ -999,22 +999,11 @@ test('DurableGroupingService: locks only top ordered eligible alert with LIMIT 1
       // With LIMIT 1 FOR UPDATE, PostgreSQL only locks the top ordered row (newerAlertId).
       // If LIMIT 1 is omitted from FOR UPDATE, PostgreSQL attempts to lock ALL eligible rows (including olderAlertId),
       // blocking indefinitely or until statement timeout.
-      // We enforce a timeout race to fail fast if blocking occurs.
-      const updatedAlert = await Promise.race([
-        source.transaction(async (manager) => {
-          return await service.groupCandidate(manager, siteId, candidate, t50Candidate);
-        }),
-        new Promise<never>((_, reject) => {
-          const timeoutId = setTimeout(() => {
-            reject(
-              new Error(
-                'DurableGroupingService was blocked on older alert row lock! Expected LIMIT 1 FOR UPDATE.',
-              ),
-            );
-          }, 3000);
-          timeoutId.unref?.();
-        }),
-      ]);
+      // The database statement timeout fails this test if the query waits for the
+      // older row. Awaiting the transaction also ensures it settles before cleanup.
+      const updatedAlert = await source.transaction(async (manager) => {
+        return await service.groupCandidate(manager, siteId, candidate, t50Candidate);
+      });
 
       // Assert newer alert was chosen and updated without waiting for older alert's lock
       assert.equal(updatedAlert.id, newerAlertId);
