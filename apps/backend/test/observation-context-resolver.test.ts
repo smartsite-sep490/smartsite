@@ -222,3 +222,18 @@ test('ObservationContextResolverService: resolveCamera returns camera entity whe
   const notFound = await service.resolveCamera(manager, 'UNKNOWN');
   assert.equal(notFound, undefined);
 });
+
+test('ObservationContextResolverService: inactive camera cannot resolve camera or observation context', async () => {
+  const service = new ObservationContextResolverService();
+  const manager = createMockEntityManager({
+    cameras: [{ ...baseCamera, status: CameraStatus.INACTIVE }],
+    regions: [baseRegion],
+    zones: [baseZone],
+  });
+
+  assert.equal(await service.resolveCamera(manager, cameraExternalId), undefined);
+  assert.equal(
+    await service.resolve(manager, cameraExternalId, regionId, geometryVersion),
+    undefined,
+  );
+});

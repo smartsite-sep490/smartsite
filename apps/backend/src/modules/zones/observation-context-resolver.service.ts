@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { CameraEntity } from '../../database/entities/camera.entity.js';
 import { CameraObservationRegionEntity } from '../../database/entities/camera-observation-region.entity.js';
+import { CameraStatus } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
 
 export interface ResolvedObservationContext {
@@ -21,6 +22,7 @@ export class ObservationContextResolverService {
   ): Promise<CameraEntity | undefined> {
     const camera = await manager.getRepository(CameraEntity).findOneBy({
       externalId: cameraExternalId,
+      status: CameraStatus.ACTIVE,
     });
     return camera ?? undefined;
   }

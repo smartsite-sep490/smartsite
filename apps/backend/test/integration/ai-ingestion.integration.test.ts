@@ -481,6 +481,88 @@ test('AiIngestionService: unknown camera persists raw event with null resolvedCa
   });
 });
 
+test('AiIngestionService: inactive camera preserves raw PPE event without creating an alert in real PostgreSQL', async () => {
+  await withDataSource(async (source) => {
+    const siteId = randomUUID();
+    const cameraId = randomUUID();
+    const zoneId = randomUUID();
+    const regionId = randomUUID();
+    const cameraExternalId = `CAM-INACTIVE-${randomUUID()}`;
+
+    await source.getRepository(SiteEntity).save({
+      id: siteId,
+      code: `SITE-${randomUUID()}`,
+      name: 'Inactive Camera Site',
+    });
+    await source.getRepository(CameraEntity).save({
+      id: cameraId,
+      siteId,
+      externalId: cameraExternalId,
+      code: cameraExternalId,
+      name: 'Inactive Test Camera',
+      status: CameraStatus.INACTIVE,
+    });
+    await source.getRepository(ZoneEntity).save({
+      id: zoneId,
+      siteId,
+      code: `ZONE-${randomUUID()}`,
+      name: 'PPE Zone',
+      type: ZoneType.STANDARD,
+      restrictionPolicy: ZoneRestrictionPolicy.NONE,
+      requiredPpe: ['HARD_HAT'],
+    });
+    await source.getRepository(CameraObservationRegionEntity).save({
+      id: regionId,
+      cameraId,
+      zoneId,
+      coordinateSpace: 'NORMALIZED_0_1',
+      version: 1,
+      isActive: true,
+      polygon: { type: 'Polygon', coordinates: [] },
+    });
+
+    const service = new AiIngestionService(
+      source,
+      new ObservationContextResolverService(),
+      new AlertCandidateEvaluator(new ZoneAuthorizationService()),
+      new DurableGroupingService(),
+    );
+    const eventId = randomUUID();
+    const result = await service.ingestEvent(
+      createSampleEvent({
+        eventId,
+        cameraExternalId,
+        observations: [
+          {
+            type: 'PPE',
+            trackId: 101,
+            ppeItem: 'HARD_HAT',
+            status: 'MISSING',
+            regionId,
+            geometryVersion: 1,
+          },
+        ],
+      }),
+    );
+
+    assert.equal(result.status, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
+    assert.deepEqual(result.alertIds, []);
+    const raw = await source.getRepository(AiObservationEventEntity).findOneBy({ eventId });
+    assert.ok(raw);
+    assert.equal(raw.processingStatus, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
+    assert.equal(raw.resolvedCameraId, null);
+    assert.equal(raw.cameraExternalId, cameraExternalId);
+    assert.equal(
+      await source.getRepository(SafetyAlertEntity).countBy({ siteId }),
+      0,
+    );
+    assert.equal(
+      await source.getRepository(AlertDetectionMappingEntity).countBy({ eventId }),
+      0,
+    );
+  });
+});
+
 test('AiIngestionService: mixed observation regions and geometry versions in real PostgreSQL', async () => {
   await withDataSource(async (source) => {
     const siteRepo = source.getRepository(SiteEntity);
