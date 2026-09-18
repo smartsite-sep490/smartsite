@@ -23,10 +23,8 @@ import { ObservationContextResolverService } from '../../src/modules/zones/obser
 import { ZoneAuthorizationService } from '../../src/modules/zones/zone-authorization.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
-import {
-  AiIngestionService,
-  isAiObservationEventPkViolation,
-} from '../../src/integrations/ai/ai-ingestion.service.js';
+import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
+import { isEventIdConflict } from '../../src/integrations/ai/typeorm-error.js';
 
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
   if (!dataSource.isInitialized) {
@@ -146,7 +144,9 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
     const results = await Promise.all(tasks);
 
     // Exactly 1 request wins and becomes PROCESSED; the other 4 catch duplicate PK and become DUPLICATE_ACCEPTED
-    const processedCount = results.filter((r) => r.status === EventProcessingStatus.PROCESSED).length;
+    const processedCount = results.filter(
+      (r) => r.status === EventProcessingStatus.PROCESSED,
+    ).length;
     const duplicateCount = results.filter((r) => r.status === 'DUPLICATE_ACCEPTED').length;
 
     assert.equal(processedCount, 1);
@@ -293,7 +293,7 @@ test('AiIngestionService: other named unique violation in real PostgreSQL is not
 
     assert.ok(siteUniqueError instanceof QueryFailedError);
     // Classifier returns false for uq_site_code
-    assert.equal(isAiObservationEventPkViolation(siteUniqueError), false);
+    assert.equal(isEventIdConflict(siteUniqueError), false);
 
     // 2. Prove that if an unrelated unique violation happens during service execution, it is rethrown
     const contextResolver = new ObservationContextResolverService();
@@ -400,7 +400,13 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
           regionId,
           geometryVersion: 1,
           confidence: 0.96,
-          boundingBox: { x1: 0.15, y1: 0.15, x2: 0.45, y2: 0.85, coordinateSpace: 'NORMALIZED_0_1' },
+          boundingBox: {
+            x1: 0.15,
+            y1: 0.15,
+            x2: 0.45,
+            y2: 0.85,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
         },
       ],
     });

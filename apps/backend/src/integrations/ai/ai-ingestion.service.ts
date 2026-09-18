@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
@@ -16,6 +16,7 @@ import {
   type Observation,
 } from '../../modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../modules/safety/alerts/durable-grouping.service.js';
+import { isEventIdConflict } from './typeorm-error.js';
 
 export interface AiIngestionResult {
   eventId: string;
@@ -73,21 +74,6 @@ export function parseNormalizedCapturedAt(dateString: string): Date | null {
   }
 
   return null;
-}
-
-/**
- * Classifies whether an error is a PostgreSQL unique constraint violation (SQLSTATE 23505)
- * specifically on the primary key constraint 'pk_ai_observation_event_event_id'.
- * Any other error, or unique violation on another table/constraint, returns false (Spec §15).
- */
-export function isAiObservationEventPkViolation(error: unknown): boolean {
-  if (!(error instanceof QueryFailedError)) {
-    return false;
-  }
-  const driverErr = (error as { driverError?: { code?: string; constraint?: string } }).driverError;
-  const code = driverErr?.code ?? (error as { code?: string }).code;
-  const constraint = driverErr?.constraint ?? (error as { constraint?: string }).constraint;
-  return code === '23505' && constraint === 'pk_ai_observation_event_event_id';
 }
 
 @Injectable()
@@ -265,7 +251,7 @@ export class AiIngestionService {
         };
       });
     } catch (error) {
-      if (isAiObservationEventPkViolation(error)) {
+      if (isEventIdConflict(error)) {
         const existing = await this.dataSource
           .getRepository(AiObservationEventEntity)
           .findOneBy({ eventId: event.eventId });

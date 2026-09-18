@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { type DataSource, type EntityManager, QueryFailedError, type Repository, type SelectQueryBuilder } from 'typeorm';
+import {
+  type DataSource,
+  type EntityManager,
+  QueryFailedError,
+  type Repository,
+  type SelectQueryBuilder,
+} from 'typeorm';
 import { computeCanonicalPayloadHash, type ValidationIssue } from '@smartsite/contracts';
 import {
   AlertType,
@@ -22,7 +28,6 @@ import { AlertCandidateEvaluator } from '../src/modules/safety/alerts/alert-cand
 import { DurableGroupingService } from '../src/modules/safety/alerts/durable-grouping.service.js';
 import {
   AiIngestionService,
-  isAiObservationEventPkViolation,
   parseNormalizedCapturedAt,
 } from '../src/integrations/ai/ai-ingestion.service.js';
 import { AiIngestionController } from '../src/integrations/ai/ai-ingestion.controller.js';
@@ -862,52 +867,6 @@ test('AiIngestionService: leap-second capturedAt outside past boundary results i
   assert.ok(Number.isFinite(savedRaw.capturedAt.getTime()));
   assert.equal(savedRaw.capturedAt.toISOString(), '2026-12-31T23:59:59.000Z');
   assert.equal(savedRaw.processingStatus, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
-});
-
-test('isAiObservationEventPkViolation: correctly classifies SQLSTATE 23505 on pk_ai_observation_event_event_id', () => {
-  // 1. Exact match on driverError
-  const driverErrMatch = { code: '23505', constraint: 'pk_ai_observation_event_event_id' };
-  const err1 = new QueryFailedError('INSERT ...', [], driverErrMatch as unknown as Error);
-  (err1 as unknown as { driverError: typeof driverErrMatch }).driverError = driverErrMatch;
-  assert.equal(isAiObservationEventPkViolation(err1), true);
-
-  // 2. Exact match on top-level properties
-  const err2 = new QueryFailedError('INSERT ...', [], new Error());
-  (err2 as unknown as { code: string; constraint: string }).code = '23505';
-  (err2 as unknown as { code: string; constraint: string }).constraint =
-    'pk_ai_observation_event_event_id';
-  assert.equal(isAiObservationEventPkViolation(err2), true);
-
-  // 3. Different constraint name -> false
-  const driverErrDiffConstraint = { code: '23505', constraint: 'uq_camera_code' };
-  const errDiffConstraint = new QueryFailedError(
-    'INSERT ...',
-    [],
-    driverErrDiffConstraint as unknown as Error,
-  );
-  (errDiffConstraint as unknown as { driverError: typeof driverErrDiffConstraint }).driverError =
-    driverErrDiffConstraint;
-  assert.equal(isAiObservationEventPkViolation(errDiffConstraint), false);
-
-  // 4. Different SQLSTATE code -> false
-  const driverErrDiffCode = {
-    code: '23503',
-    constraint: 'pk_ai_observation_event_event_id',
-  };
-  const errDiffCode = new QueryFailedError(
-    'INSERT ...',
-    [],
-    driverErrDiffCode as unknown as Error,
-  );
-  (errDiffCode as unknown as { driverError: typeof driverErrDiffCode }).driverError =
-    driverErrDiffCode;
-  assert.equal(isAiObservationEventPkViolation(errDiffCode), false);
-
-  // 5. Plain Error or non-QueryFailedError -> false
-  assert.equal(isAiObservationEventPkViolation(new Error('connection timeout')), false);
-  assert.equal(isAiObservationEventPkViolation(null), false);
-  assert.equal(isAiObservationEventPkViolation(undefined), false);
-  assert.equal(isAiObservationEventPkViolation({ code: '23505' }), false);
 });
 
 test('AiIngestionService: identical retry with same payloadHash returns 202 DUPLICATE_ACCEPTED with no alert side effect', async () => {
