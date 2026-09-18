@@ -69,3 +69,10 @@ test('validateGeometries rejects invalid bounding box in evidence item', () => {
   assert.equal(issues[0]?.path, '/evidence/0/boundingBox');
   assert.equal(issues[0]?.message, 'x1 must be less than x2');
 });
+
+test('validateGeometries safely handles non-array observations and evidence without throwing', () => {
+  assert.doesNotThrow(() => {
+    const issues = validateGeometries({ observations: {}, evidence: {} });
+    assert.deepEqual(issues, []);
+  });
+});

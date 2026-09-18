@@ -27,18 +27,27 @@ function checkBox(box: BoxLike, path: string, issues: ValidationIssue[]): void {
 export function validateGeometries(payload: unknown): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (!payload || typeof payload !== 'object') return issues;
-  const event = payload as { observations?: unknown[]; evidence?: unknown[] };
-  for (const [index, observation] of (event.observations ?? []).entries()) {
+  const event = payload as { observations?: unknown; evidence?: unknown };
+
+  const observations = Array.isArray(event.observations) ? event.observations : [];
+  for (const [index, observation] of observations.entries()) {
     if (observation && typeof observation === 'object' && 'boundingBox' in observation) {
       const box = (observation as { boundingBox?: BoxLike }).boundingBox;
-      if (box) checkBox(box, `/observations/${index}/boundingBox`, issues);
+      if (box && typeof box === 'object') {
+        checkBox(box, `/observations/${index}/boundingBox`, issues);
+      }
     }
   }
-  for (const [index, evidence] of (event.evidence ?? []).entries()) {
+
+  const evidenceList = Array.isArray(event.evidence) ? event.evidence : [];
+  for (const [index, evidence] of evidenceList.entries()) {
     if (evidence && typeof evidence === 'object' && 'boundingBox' in evidence) {
       const box = (evidence as { boundingBox?: BoxLike }).boundingBox;
-      if (box) checkBox(box, `/evidence/${index}/boundingBox`, issues);
+      if (box && typeof box === 'object') {
+        checkBox(box, `/evidence/${index}/boundingBox`, issues);
+      }
     }
   }
+
   return issues;
 }

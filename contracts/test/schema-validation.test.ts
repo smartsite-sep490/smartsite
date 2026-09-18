@@ -337,3 +337,112 @@ test('enforces root constraints: frameDimensions required, UUID streamSessionId,
   };
   assert.equal(validateObservationEvent(extraRoot).isValid, false);
 });
+
+test('does not throw and returns isValid: false when observations or evidence have non-array types (observations:{}, evidence:{})', () => {
+  assert.doesNotThrow(() => {
+    const resObservationsObj = validateObservationEvent({
+      ...baseEvent,
+      observations: {},
+    });
+    assert.equal(resObservationsObj.isValid, false);
+    assert.ok(
+      resObservationsObj.issues.some(
+        (i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('observations'),
+      ),
+    );
+  });
+
+  assert.doesNotThrow(() => {
+    const resEvidenceObj = validateObservationEvent({
+      ...baseEvent,
+      observations: [{ type: 'PERSON', trackId: 1 }],
+      evidence: {},
+    });
+    assert.equal(resEvidenceObj.isValid, false);
+    assert.ok(
+      resEvidenceObj.issues.some(
+        (i: ValidationIssue) => i.code === 'SCHEMA_VIOLATION' && i.path.includes('evidence'),
+      ),
+    );
+  });
+});
+
+test('strictly rejects PPE observation missing regionId or geometryVersion and asserts required issues', () => {
+  // Missing regionId
+  const missingRegion = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 1,
+        ppeItem: 'HARD_HAT',
+        status: 'PRESENT',
+        geometryVersion: 1,
+      },
+    ],
+  });
+  assert.equal(missingRegion.isValid, false);
+  assert.ok(
+    missingRegion.issues.some(
+      (i: ValidationIssue) => i.path === '/observations/0/regionId' && i.message.includes('regionId'),
+    ),
+  );
+
+  // Missing geometryVersion
+  const missingGeomVersion = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'PPE',
+        trackId: 1,
+        ppeItem: 'HARD_HAT',
+        status: 'PRESENT',
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+      },
+    ],
+  });
+  assert.equal(missingGeomVersion.isValid, false);
+  assert.ok(
+    missingGeomVersion.issues.some(
+      (i: ValidationIssue) => i.path === '/observations/0/geometryVersion' && i.message.includes('geometryVersion'),
+    ),
+  );
+});
+
+test('strictly rejects ZONE_ENTRY observation missing regionId or geometryVersion and asserts required issues', () => {
+  // Missing regionId
+  const missingRegion = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        geometryVersion: 1,
+      },
+    ],
+  });
+  assert.equal(missingRegion.isValid, false);
+  assert.ok(
+    missingRegion.issues.some(
+      (i: ValidationIssue) => i.path === '/observations/0/regionId' && i.message.includes('regionId'),
+    ),
+  );
+
+  // Missing geometryVersion
+  const missingGeomVersion = validateObservationEvent({
+    ...baseEvent,
+    observations: [
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 1,
+        regionId: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+      },
+    ],
+  });
+  assert.equal(missingGeomVersion.isValid, false);
+  assert.ok(
+    missingGeomVersion.issues.some(
+      (i: ValidationIssue) => i.path === '/observations/0/geometryVersion' && i.message.includes('geometryVersion'),
+    ),
+  );
+});
