@@ -183,6 +183,7 @@ test('ObservationContextResolverService: Case 5 - valid camera + region + versio
   assert.equal(result.regionId, regionId);
   assert.equal(result.zoneId, zoneId);
   assert.deepEqual(result.zone, baseZone);
+  assert.equal(result.geometryVersion, geometryVersion);
 });
 
 test('ObservationContextResolverService: missing region returns undefined', async () => {

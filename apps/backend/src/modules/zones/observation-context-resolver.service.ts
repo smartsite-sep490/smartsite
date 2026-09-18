@@ -10,6 +10,7 @@ export interface ResolvedObservationContext {
   regionId: string;
   zoneId: string;
   zone: ZoneEntity;
+  geometryVersion: number;
 }
 
 @Injectable()
@@ -70,6 +71,7 @@ export class ObservationContextResolverService {
       regionId: region.id,
       zoneId: zone.id,
       zone,
+      geometryVersion: region.version,
     };
   }
 }
