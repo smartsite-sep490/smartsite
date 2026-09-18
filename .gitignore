@@ -60,3 +60,10 @@ Thumbs.db
 .turbo/
 .superpowers/
 *.tsbuildinfo
+
+# Local planning / generated documentation
+docs/
+*.md
+!README.md
+!CONTRIBUTING.md
+!**/README.md
