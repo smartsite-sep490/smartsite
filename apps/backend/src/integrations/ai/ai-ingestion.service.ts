@@ -63,7 +63,7 @@ export function parseNormalizedCapturedAt(dateString: string): Date | null {
 
   // 2. Normalize RFC 3339 leap second (:60) to :59
   normalized = normalized.replace(
-    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):60(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/i,
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):60(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i,
     (_match, prefix, fraction, tz) => `${prefix}:59${fraction ?? ''}${tz ?? ''}`,
   );
 

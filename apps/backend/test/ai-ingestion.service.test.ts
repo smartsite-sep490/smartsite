@@ -647,7 +647,7 @@ test('parseNormalizedCapturedAt: normalizes RFC 3339 leap second (:60) to :59 of
   assert.equal(normal.toISOString(), '2026-09-19T12:00:00.000Z');
 });
 
-test('AiIngestionService: bare-hour timezone offsets preserve raw events for ordinary and leap seconds', async () => {
+test('AiIngestionService: valid timezone offset forms preserve event time and raw payload', async () => {
   const now = new Date('2027-01-01T00:00:30.000Z');
   const camera: CameraEntity = {
     id: '33333333-3333-4333-8333-333333333333',
@@ -659,7 +659,11 @@ test('AiIngestionService: bare-hour timezone offsets preserve raw events for ord
     createdAt: now,
   };
 
-  for (const capturedAt of ['2026-12-31T23:59:59+00', '2026-12-31T23:59:60+00']) {
+  for (const capturedAt of [
+    '2026-12-31T23:59:59+00',
+    '2026-12-31T23:59:60+00',
+    '2026-12-31T23:59:60+0000',
+  ]) {
     const store: MockStore = {
       cameras: [camera],
       regions: [],
