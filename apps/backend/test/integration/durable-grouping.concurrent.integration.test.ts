@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
-import { DataSource } from 'typeorm';
+import { DataSource, type QueryRunner } from 'typeorm';
 import { AlertStatus, AlertType } from '../../src/database/entities/enums.js';
 import { SafetyAlertEntity } from '../../src/database/entities/safety-alert.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
@@ -482,6 +482,292 @@ test('DurableGroupingService: preserves null candidateWorkerId and pre-existing 
       assert.equal(alert.identityQualityScore, 0.85);
       assert.equal(alert.detectionCount, 2);
     } finally {
+      await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(SiteEntity).delete({ id: siteId });
+    }
+  });
+});
+
+test('DurableGroupingService: delayed candidate at t=30s groups into matching open alert at t=0s despite newer open alert at t=120s (cooldown 60s)', async () => {
+  await withDataSource(async (source) => {
+    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const service = new DurableGroupingService(configService);
+
+    const siteId = randomUUID();
+    try {
+      await source.getRepository(SiteEntity).save({
+        id: siteId,
+        code: `SITE-DELAYED-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Delayed Candidate Test Site',
+      });
+
+      const groupingKey = `PPE_HARD_HAT_MISSING:cam-delayed:sess-delayed:none:${Date.now()}`;
+      const t0 = new Date('2026-09-19T10:00:00.000Z');
+      const t120 = new Date('2026-09-19T10:02:00.000Z');
+      const t30Delayed = new Date('2026-09-19T10:00:30.000Z');
+
+      const alertIdT0 = randomUUID();
+      const alertIdT120 = randomUUID();
+
+      // Pre-seed open alert at t=0
+      await source.getRepository(SafetyAlertEntity).save({
+        id: alertIdT0,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-T0',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: t0,
+        lastDetectedAt: t0,
+        detectionCount: 1,
+      });
+
+      // Pre-seed newer open alert at t=120s
+      await source.getRepository(SafetyAlertEntity).save({
+        id: alertIdT120,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-T120',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: t120,
+        lastDetectedAt: t120,
+        detectionCount: 1,
+      });
+
+      const candidate: AlertCandidate = {
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        cameraId: randomUUID(),
+        streamSessionId: randomUUID(),
+        trackId: 1008,
+        groupingKey,
+        details: {},
+      };
+
+      // Delayed candidate captured at t=30s arrives
+      await source.transaction(async (manager) => {
+        await service.groupCandidate(manager, siteId, candidate, t30Delayed);
+      });
+
+      const alerts = await source.getRepository(SafetyAlertEntity).find({
+        where: { siteId, groupingKey },
+        order: { firstDetectedAt: 'ASC' },
+      });
+
+      // Must NOT create a 3rd alert: delayed candidate must group with t=0 alert!
+      assert.equal(alerts.length, 2);
+
+      const alertAtT0 = alerts.find((a) => a.id === alertIdT0)!;
+      assert.ok(alertAtT0);
+      assert.equal(alertAtT0.detectionCount, 2);
+      assert.equal(alertAtT0.lastDetectedAt.toISOString(), '2026-09-19T10:00:30.000Z');
+
+      const alertAtT120 = alerts.find((a) => a.id === alertIdT120)!;
+      assert.ok(alertAtT120);
+      assert.equal(alertAtT120.detectionCount, 1);
+      assert.equal(alertAtT120.lastDetectedAt.toISOString(), '2026-09-19T10:02:00.000Z');
+    } finally {
+      await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(SiteEntity).delete({ id: siteId });
+    }
+  });
+});
+
+test('DurableGroupingService: deterministic interleaving - human updates identity concurrently and row lock serializes mutation preserving human identity', async () => {
+  await withDataSource(async (source) => {
+    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const service = new DurableGroupingService(configService);
+
+    const siteId = randomUUID();
+    let humanRunner: QueryRunner | undefined;
+    try {
+      await source.getRepository(SiteEntity).save({
+        id: siteId,
+        code: `SITE-RACE-ID-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Race Identity Test Site',
+      });
+
+      const groupingKey = `PPE_HARD_HAT_MISSING:cam-race-id:sess-race-id:none:${Date.now()}`;
+      const alertId = randomUUID();
+      const initialTime = new Date();
+
+      // Alert pre-seeded with initial values
+      await source.getRepository(SafetyAlertEntity).save({
+        id: alertId,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-INITIAL',
+        identitySimilarityScore: 0.5,
+        identityQualityScore: 0.6,
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: initialTime,
+        lastDetectedAt: initialTime,
+        detectionCount: 1,
+      });
+
+      // 1. Human operator connection starts transaction and updates identity, holding the row lock
+      humanRunner = source.createQueryRunner();
+      await humanRunner.connect();
+      await humanRunner.startTransaction();
+
+      await humanRunner.manager.update(SafetyAlertEntity, alertId, {
+        candidateWorkerId: 'HUMAN-SUPERVISOR-ID',
+        identitySimilarityScore: 0.985,
+        identityQualityScore: 0.92,
+        status: AlertStatus.CONFIRMED,
+      });
+
+      const candidate: AlertCandidate = {
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        cameraId: randomUUID(),
+        streamSessionId: randomUUID(),
+        trackId: 1009,
+        groupingKey,
+        candidateWorkerId: 'AI-INFERRED-OTHER',
+        identitySimilarityScore: 0.45,
+        identityQualityScore: 0.5,
+        details: {},
+      };
+
+      // 2. Concurrently, grouping transaction starts on another connection.
+      // Its SELECT ... FOR UPDATE will wait for humanRunner's lock.
+      const groupingTask = source.transaction(async (manager) => {
+        return await service.groupCandidate(
+          manager,
+          siteId,
+          candidate,
+          new Date(initialTime.getTime() + 5000),
+        );
+      });
+
+      // 3. Human transaction commits, releasing row lock and making updated identity visible
+      await humanRunner.commitTransaction();
+      await humanRunner.release();
+      humanRunner = undefined;
+
+      // 4. Grouping transaction unblocks, executes narrow conditional update
+      const updatedAlert = await groupingTask;
+
+      // Assert human updates are preserved and only detection_count/last_detected_at changed
+      assert.equal(updatedAlert.id, alertId);
+      assert.equal(updatedAlert.candidateWorkerId, 'HUMAN-SUPERVISOR-ID');
+      assert.equal(updatedAlert.identitySimilarityScore, 0.985);
+      assert.equal(updatedAlert.identityQualityScore, 0.92);
+      assert.equal(updatedAlert.status, AlertStatus.CONFIRMED);
+      assert.equal(updatedAlert.detectionCount, 2);
+    } finally {
+      if (humanRunner) {
+        if (humanRunner.isTransactionActive) {
+          await humanRunner.rollbackTransaction();
+        }
+        await humanRunner.release();
+      }
+      await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(SiteEntity).delete({ id: siteId });
+    }
+  });
+});
+
+test('DurableGroupingService: deterministic interleaving - human closes alert concurrently and grouping creates new alert without reopening', async () => {
+  await withDataSource(async (source) => {
+    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const service = new DurableGroupingService(configService);
+
+    const siteId = randomUUID();
+    let humanRunner: QueryRunner | undefined;
+    try {
+      await source.getRepository(SiteEntity).save({
+        id: siteId,
+        code: `SITE-RACE-CLOSE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Race Close Test Site',
+      });
+
+      const groupingKey = `PPE_HARD_HAT_MISSING:cam-race-close:sess-race-close:none:${Date.now()}`;
+      const alertId = randomUUID();
+      const initialTime = new Date();
+
+      // Alert pre-seeded as PENDING_REVIEW
+      await source.getRepository(SafetyAlertEntity).save({
+        id: alertId,
+        siteId,
+        zoneId: null,
+        candidateWorkerId: 'WORKER-INITIAL',
+        alertType: AlertType.PPE_VIOLATION,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        groupingKey,
+        status: AlertStatus.PENDING_REVIEW,
+        firstDetectedAt: initialTime,
+        lastDetectedAt: initialTime,
+        detectionCount: 1,
+      });
+
+      // 1. Human operator connection starts transaction and closes the alert, holding the row lock
+      humanRunner = source.createQueryRunner();
+      await humanRunner.connect();
+      await humanRunner.startTransaction();
+
+      await humanRunner.manager.update(SafetyAlertEntity, alertId, {
+        status: AlertStatus.CLOSED,
+      });
+
+      const candidate: AlertCandidate = {
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        cameraId: randomUUID(),
+        streamSessionId: randomUUID(),
+        trackId: 1010,
+        groupingKey,
+        candidateWorkerId: 'WORKER-NEW',
+        details: {},
+      };
+
+      // 2. Concurrently, grouping transaction starts on another connection.
+      // Its SELECT ... FOR UPDATE will wait for humanRunner's lock.
+      const groupingTask = source.transaction(async (manager) => {
+        return await service.groupCandidate(
+          manager,
+          siteId,
+          candidate,
+          new Date(initialTime.getTime() + 5000),
+        );
+      });
+
+      // 3. Human transaction commits CLOSED status, releasing the lock
+      await humanRunner.commitTransaction();
+      await humanRunner.release();
+      humanRunner = undefined;
+
+      // 4. Grouping transaction unblocks. Row is now CLOSED so it is excluded from openAlerts.
+      // A new PENDING_REVIEW alert must be created, and the CLOSED alert must never be reopened.
+      const createdAlert = await groupingTask;
+
+      assert.notEqual(createdAlert.id, alertId);
+      assert.equal(createdAlert.status, AlertStatus.PENDING_REVIEW);
+      assert.equal(createdAlert.detectionCount, 1);
+      assert.equal(createdAlert.candidateWorkerId, 'WORKER-NEW');
+
+      const originalAlert = await source
+        .getRepository(SafetyAlertEntity)
+        .findOneBy({ id: alertId });
+      assert.ok(originalAlert);
+      assert.equal(originalAlert.status, AlertStatus.CLOSED);
+      assert.equal(originalAlert.detectionCount, 1);
+    } finally {
+      if (humanRunner) {
+        if (humanRunner.isTransactionActive) {
+          await humanRunner.rollbackTransaction();
+        }
+        await humanRunner.release();
+      }
       await source.getRepository(SafetyAlertEntity).delete({ siteId });
       await source.getRepository(SiteEntity).delete({ id: siteId });
     }
