@@ -4,9 +4,9 @@ Ngày: 18/09/2026. Trạng thái: đề xuất sau đối chiếu tài liệu ch
 
 ## Kết luận đề xuất
 
-Giữ Web React/TypeScript/Vite, Backend NestJS modular monolith, Mobile React Native/Expo development build. Dùng pnpm workspaces; Turborepo điều phối lint/test/build. Neon PostgreSQL và Prisma stable cho dữ liệu. TanStack Query là lớp server state duy nhất. AI camera chạy ở repo riêng theo FastAPI/YOLO11/ArcFace trong docs; vai trò OpenAI cần chốt use case.
+Giữ Web React/TypeScript/Vite, Backend NestJS modular monolith, Mobile React Native/Expo development build. Dùng pnpm workspaces; Turborepo điều phối lint/test/build. Neon PostgreSQL và TypeORM Data Mapper cho dữ liệu. TanStack Query là lớp server state duy nhất. AI camera chạy ở repo riêng theo FastAPI/YOLO11/ArcFace trong docs; vai trò OpenAI cần chốt use case.
 
-Chọn Vite vì yêu cầu hiện là dashboard gọi Backend riêng. Next.js là phương án khi có nhu cầu SSR/SEO cụ thể. Prisma ưu tiên trải nghiệm schema/migration/client có kiểu; Drizzle là phương án khi nhóm muốn kiểm soát SQL trực tiếp hơn, chưa có lý do đủ mạnh để đổi ORM. Không đổi NestJS sang hệ khác chỉ theo độ mới.
+Chọn Vite vì yêu cầu hiện là dashboard gọi Backend riêng. Next.js là phương án khi có nhu cầu SSR/SEO cụ thể. Tầng dữ liệu sử dụng TypeORM Data Mapper (@nestjs/typeorm, typeorm) và pg, synchronize: false, quản lý chặt chẽ schema bằng reviewed migrations. Không đổi NestJS sang hệ khác chỉ theo độ mới.
 
 ## Kết quả có ảnh hưởng đến thiết kế
 
@@ -17,7 +17,7 @@ Chọn Vite vì yêu cầu hiện là dashboard gọi Backend riêng. Next.js l�
 | TanStack Query trên Mobile | Có hướng dẫn kết nối onlineManager/focusManager với native events | Cấu hình mạng và AppState; phân biệt app focus với screen focus |
 | NestJS module | Provider được đóng gói và chia sẻ bằng exports/imports | Module nghiệp vụ chỉ xuất các service công khai cần dùng |
 | Neon pooling | Transaction pooling khác kết nối direct | Runtime pooled có giới hạn pool; migration/admin dùng direct; kiểm thử với ORM phiên bản đã chọn |
-| Prisma runtime | Tài liệu khuyến nghị Node Active/Maintenance LTS | Chọn Node 24 LTS làm ứng viên, kiểm tra mọi dependency trước khi khóa |
+| TypeORM runtime | Hỗ trợ TypeORM 0.3.x với NestJS 12 qua @nestjs/typeorm và pg driver | Chọn TypeORM Data Mapper, kiểm tra synchronize: false |
 | YOLO11 | Model detection mặc định được huấn luyện trên COCO | Cần weights/dataset PPE riêng và đánh giá thực nghiệm |
 | ArcFace triển khai qua InsightFace | License code và pretrained weights khác nhau | Chốt artifact, nguồn, điều kiện sử dụng; không suy từ MIT code sang mọi weights |
 
@@ -32,7 +32,7 @@ smartsite/
     mobile/{app,src/features,src/shared}/
     backend/src/{modules,platform}/
   packages/
-    api-client/       Client sinh từ OpenAPI, không chứa Prisma model
+    api-client/       Client sinh từ OpenAPI, không chứa ORM model
     config-eslint/
     config-typescript/
   contracts/         Schema/event Backend–AI có version
@@ -82,9 +82,9 @@ Auth/session cần thiết kế riêng theo yêu cầu khóa tài khoản thu h�
 - https://docs.nestjs.com/modules
 - https://docs.nestjs.com/security/authentication
 - https://neon.com/docs/connect/connection-pooling
-- https://docs.prisma.io/docs/orm/reference/system-requirements
+- https://typeorm.io/
 - https://docs.ultralytics.com/models/yolo11/
 - https://docs.ultralytics.com/datasets/detect/construction-ppe/
 - https://github.com/deepinsight/insightface#license
 
-Neon/Prisma được đọc bằng HTTP trực tiếp khi web tool không đọc được markdown. Research không phải benchmark, kiểm thử tương thích hoặc số liệu thị phần. Chưa cài hoặc tạo ứng dụng trong lượt này.
+Neon/TypeORM được đối chiếu tài liệu chính thức. Research không phải benchmark, kiểm thử tương thích hoặc số liệu thị phần. Chưa cài hoặc tạo ứng dụng trong lượt này.

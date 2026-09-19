@@ -13,7 +13,7 @@ Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa p
 | Client state/form | Redux Toolkit khi cần; React Hook Form, Zod; React Router cho Web | Trạng thái ứng dụng, form, validation và routing; thư viện bổ trợ vẫn là đề xuất |
 | Mobile | React Native + Expo development build + Expo Router | Tận dụng TypeScript, quản lý native dependencies theo SDK |
 | Backend | NestJS + TypeScript; modular monolith | Module theo nghiệp vụ, triển khai một API trước |
-| Database | Neon PostgreSQL; Prisma stable là ORM đề xuất | Database host tại Neon; auth/storage là quyết định riêng |
+| Database | Neon PostgreSQL; TypeORM Data Mapper là ORM chính thức | Database host tại Neon; auth/storage là quyết định riêng |
 | AI | Ứng viên mới: YOLO26 hoặc RF-DETR + Supervision; Roboflow Inference/Workflows là lựa chọn runtime; FastAPI cho API/control khi cần | Detector/identity chưa chốt; OpenAI đã chốt phân tích bằng chứng và hỗ trợ xử lý sự cố |
 | Monorepo | pnpm workspaces + Turborepo | Quản lý workspace và thứ tự build/cache |
 | API | REST + OpenAPI, client sinh từ contract | Giữ Web/Mobile/AI tương thích Backend |
@@ -32,9 +32,9 @@ Auth provider, object storage, realtime transport, mobile E2E và hosting sẽ �
 
 Chọn stable mới có bộ dependency tương thích, Node LTS được hỗ trợ; khóa phiên bản và lockfile, CI dùng frozen install. Mobile dùng React/React Native đúng phiên bản Expo SDK hỗ trợ, không ép giống Web. Python phải tương thích PyTorch/CUDA/model đã chọn.
 
-Kết quả đọc npm registry ngày 18/09/2026 (chỉ là snapshot, chưa phải lockfile): React 19.3.0; Vite 8.3.0; TypeScript 7.0.2; Nest core 12.0.3; Expo 57.0.23; React Native 0.87.1; pnpm 12.4.2; Turbo 2.10.13; TanStack Query 5.103.1; Zod 4.6.5. Nhãn latest của Prisma trả 8.0.0-rc.15: đây là prerelease và KHÔNG tự chọn để production. Cần chọn nhánh stable và kiểm tra hỗ trợ Node/database khi cài.
+Kết quả đọc npm registry ngày 18/09/2026 (chỉ là snapshot, chưa phải lockfile): React 19.3.0; Vite 8.3.0; TypeScript 7.0.2; Nest core 12.0.3; Expo 57.0.23; React Native 0.87.1; pnpm 12.4.2; Turbo 2.10.13; TanStack Query 5.103.1; Zod 4.6.5. Tầng dữ liệu backend sử dụng TypeORM Data Mapper (@nestjs/typeorm + typeorm) kết hợp pg. Cần chọn nhánh stable và kiểm tra hỗ trợ Node/database khi cài.
 
-Expo SDK 57 dùng React Native 0.86 và React 19.2 theo changelog chính thức, nên React Native 0.87.1 từ registry không tự động là lựa chọn đúng cho Mobile. Phiên bản TypeScript/decorator và Prisma/NestJS phải qua build/contract test trước khi chốt lockfile.
+Expo SDK 57 dùng React Native 0.86 và React 19.2 theo changelog chính thức, nên React Native 0.87.1 từ registry không tự động là lựa chọn đúng cho Mobile. Phiên bản TypeScript/decorator và TypeORM/NestJS phải qua build/contract test trước khi chốt lockfile.
 
 ## Tiêu chuẩn code có thể kiểm chứng
 

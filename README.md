@@ -40,19 +40,19 @@ The backend is the source of truth for Site and Zone assignments, worker and con
 
 ## Technology Stack
 
-| Area | Technology |
-| --- | --- |
-| Web | React, TypeScript, Vite, TanStack Query |
-| Backend | NestJS, TypeScript |
-| Mobile | React Native, Expo Router, TanStack Query |
-| Database | PostgreSQL |
-| Hosted database | Neon |
-| Data access | Prisma |
-| API | REST, OpenAPI |
-| Monorepo | pnpm workspaces, Turborepo |
-| Infrastructure | Docker, Docker Compose |
-| CI | GitHub Actions |
-| AI | Separate FastAPI service |
+| Area            | Technology                                |
+| --------------- | ----------------------------------------- |
+| Web             | React, TypeScript, Vite, TanStack Query   |
+| Backend         | NestJS, TypeScript                        |
+| Mobile          | React Native, Expo Router, TanStack Query |
+| Database        | PostgreSQL                                |
+| Hosted database | Neon                                      |
+| Data access     | TypeORM (PostgreSQL)                      |
+| API             | REST, OpenAPI                             |
+| Monorepo        | pnpm workspaces, Turborepo                |
+| Infrastructure  | Docker, Docker Compose                    |
+| CI              | GitHub Actions                            |
+| AI              | Separate FastAPI service                  |
 
 ## Repository Structure
 
@@ -108,12 +108,12 @@ pnpm dev
 
 Default development endpoints:
 
-| Service | URL |
-| --- | --- |
-| Web | http://localhost:5173 |
-| Backend liveness | http://localhost:3000/api/v1/health/live |
+| Service           | URL                                       |
+| ----------------- | ----------------------------------------- |
+| Web               | http://localhost:5173                     |
+| Backend liveness  | http://localhost:3000/api/v1/health/live  |
 | Backend readiness | http://localhost:3000/api/v1/health/ready |
-| Swagger UI | http://localhost:3000/api/docs |
+| Swagger UI        | http://localhost:3000/api/docs            |
 
 ### Run with Docker
 
@@ -162,7 +162,6 @@ Additional validation used before pull requests:
 ```sh
 pnpm peers check
 pnpm --filter @smartsite/mobile check:dependencies
-pnpm --filter @smartsite/backend db:validate
 ```
 
 ## Testing and Quality Gates
@@ -175,7 +174,7 @@ Application CI currently verifies:
 - automated tests;
 - Web and Backend builds;
 - React Native JavaScript exports;
-- Prisma schema validation;
+- TypeORM configuration and database validation;
 - Docker image builds;
 - PostgreSQL readiness;
 - application container smoke tests.
@@ -218,15 +217,18 @@ Implemented:
 - Docker-based local environment;
 - CI pipelines and automated foundation tests;
 - integration point for the separate AI service.
+- canonical MF05/MF06 technical-observation contract and RFC 8785 hashing;
+- TypeORM MF05/MF06 domain schema and reviewed migration;
+- authenticated AI event ingestion with raw-event preservation, idempotency, context validation, and durable alert grouping.
 
 Not yet implemented in this foundation:
 
-- authentication and authorization;
-- SmartSite business-domain modules;
+- end-user authentication, RBAC, and data-scope enforcement;
+- full workforce, attendance, and incident workflows;
 - production Neon integration;
 - camera ingestion and model inference;
-- MF05 PPE workflow;
-- MF06 restricted-zone workflow;
+- camera-side MF05 PPE inference and end-to-end operator workflow;
+- camera-side MF06 restricted-zone inference and permission workflow;
 - evidence storage;
 - OpenAI API calls.
 

@@ -1,6 +1,0 @@
-datasource db {
-  provider = "postgresql"
-}
-
-// This foundation has no business entities. Add reviewed models and a client
-// generator with the first feature that persists data; do not create demo tables.

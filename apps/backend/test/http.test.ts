@@ -4,43 +4,85 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-app.js';
 import { validateEnvironment } from '../src/config/environment.js';
-import { DATABASE_POOL } from '../src/database/database.service.js';
 
 async function startApplication(
   t: TestContext,
   options: { production?: boolean; unavailable?: boolean } = {},
 ) {
-  const database = {
-    unavailable: options.unavailable ?? false,
-    closed: false,
+  const dataSource = {
+    isInitialized: !options.unavailable,
+    destroyed: false,
     async query(sql: string) {
       assert.equal(sql, 'SELECT 1');
-      if (this.unavailable) throw new Error('postgresql://app:private-password@private-host/db');
-      return { rows: [{ '?column?': 1 }], rowCount: 1, fields: [], command: 'SELECT', oid: 0 };
+      if (this.isInitialized === false) {
+        throw new Error('postgresql://app:private-password@private-host/db');
+      }
+      return [{ '?column?': 1 }];
     },
-    async end() {
-      this.closed = true;
+    async destroy() {
+      this.destroyed = true;
+      this.isInitialized = false;
+    },
+    async close() {
+      await this.destroy();
     },
   };
   const config = validateEnvironment({
     NODE_ENV: options.production ? 'production' : 'development',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
     CORS_ORIGINS: 'http://localhost:5173,https://app.example.com',
+    SMARTSITE_AI_SERVICE_TOKEN: options.production ? 'prod-explicit-service-token' : undefined,
   });
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ConfigService)
     .useValue(new ConfigService(config))
-    .overrideProvider(DATABASE_POOL)
-    .useValue(database)
+    .overrideProvider(getDataSourceToken())
+    .useValue(dataSource)
+    .overrideProvider(DataSource)
+    .useValue(dataSource)
     .compile();
-  const app = module.createNestApplication({ logger: false });
+  const app = module.createNestApplication<NestExpressApplication>({
+    logger: false,
+    bodyParser: false,
+  });
   configureApplication(app);
+
+  // Test-only routes to verify body parser limits without altering production routing
+  interface MockExpressRequest {
+    body: unknown;
+  }
+  interface MockExpressResponse {
+    status(code: number): MockExpressResponse;
+    json(body: unknown): void;
+  }
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    post(path: string, handler: (req: MockExpressRequest, res: MockExpressResponse) => void): void;
+  };
+  expressApp.post(
+    '/api/v1/test-payload/json',
+    (req: MockExpressRequest, res: MockExpressResponse) => {
+      res.status(200).json({ ok: true, size: JSON.stringify(req.body).length });
+    },
+  );
+  expressApp.post(
+    '/api/v1/test-payload/urlencoded',
+    (req: MockExpressRequest, res: MockExpressResponse) => {
+      res.status(200).json({
+        ok: true,
+        keys: Object.keys((req.body as Record<string, unknown>) ?? {}),
+      });
+    },
+  );
+
   await app.listen(0, '127.0.0.1');
   t.after(() => app.close());
-  return { app, database, url: await app.getUrl() };
+  return { app, dataSource, url: await app.getUrl() };
 }
 
 test('liveness reports the exact public contract independently of database failure', async (t) => {
@@ -51,7 +93,7 @@ test('liveness reports the exact public contract independently of database failu
 });
 
 test('readiness tracks database failure and recovery without exposing connection details', async (t) => {
-  const { url, database } = await startApplication(t);
+  const { url, dataSource } = await startApplication(t);
   const healthy = await fetch(`${url}/api/v1/health/ready`);
   assert.equal(healthy.status, 200);
   assert.deepEqual(await healthy.json(), {
@@ -59,7 +101,7 @@ test('readiness tracks database failure and recovery without exposing connection
     service: 'smartsite-backend',
     database: 'up',
   });
-  database.unavailable = true;
+  dataSource.isInitialized = false;
   const unavailable = await fetch(`${url}/api/v1/health/ready`);
   assert.equal(unavailable.status, 503);
   assert.deepEqual(await unavailable.json(), {
@@ -67,7 +109,7 @@ test('readiness tracks database failure and recovery without exposing connection
     service: 'smartsite-backend',
     database: 'down',
   });
-  database.unavailable = false;
+  dataSource.isInitialized = true;
   assert.equal((await fetch(`${url}/api/v1/health/ready`)).status, 200);
 });
 
@@ -105,8 +147,61 @@ test('production does not publish Swagger UI or its schema', async (t) => {
   assert.equal((await fetch(`${url}/api/docs-json`)).status, 404);
 });
 
-test('application shutdown closes its PostgreSQL pool', async (t) => {
-  const { app, database } = await startApplication(t);
+test('application shutdown closes its PostgreSQL connection', async (t) => {
+  const { app, dataSource } = await startApplication(t);
   await app.close();
-  assert.equal(database.closed, true);
+  assert.equal(dataSource.destroyed, true);
+});
+
+test('1 MB body boundary: JSON payload exact 1048576 bytes is accepted (200) and 1048577 bytes is rejected (413)', async (t) => {
+  const { url } = await startApplication(t);
+
+  // Exactly 1,048,576 bytes (1 MB) -> 200 OK
+  const exact1MbJson = '{"d":"' + 'a'.repeat(1_048_576 - 8) + '"}';
+  assert.equal(Buffer.byteLength(exact1MbJson, 'utf8'), 1_048_576);
+  const exactRes = await fetch(`${url}/api/v1/test-payload/json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: exact1MbJson,
+  });
+  assert.equal(exactRes.status, 200);
+  const exactBody = (await exactRes.json()) as { ok: boolean };
+  assert.equal(exactBody.ok, true);
+
+  // Exactly 1,048,577 bytes (1 MB + 1 byte) -> 413 Payload Too Large
+  const over1MbJson = '{"d":"' + 'a'.repeat(1_048_577 - 8) + '"}';
+  assert.equal(Buffer.byteLength(over1MbJson, 'utf8'), 1_048_577);
+  const overRes = await fetch(`${url}/api/v1/test-payload/json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: over1MbJson,
+  });
+  assert.equal(overRes.status, 413);
+});
+
+test('1 MB body boundary: urlencoded payload exact 1048576 bytes is accepted (200) and 1048577 bytes is rejected (413)', async (t) => {
+  const { url } = await startApplication(t);
+
+  // Exactly 1,048,576 bytes (1 MB) -> 200 OK
+  const exact1MbUrl = 'd=' + 'a'.repeat(1_048_576 - 2);
+  assert.equal(Buffer.byteLength(exact1MbUrl, 'utf8'), 1_048_576);
+  const exactRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: exact1MbUrl,
+  });
+  assert.equal(exactRes.status, 200);
+  const exactBody = (await exactRes.json()) as { ok: boolean; keys: string[] };
+  assert.equal(exactBody.ok, true);
+  assert.deepEqual(exactBody.keys, ['d']);
+
+  // Exactly 1,048,577 bytes (1 MB + 1 byte) -> 413 Payload Too Large
+  const over1MbUrl = 'd=' + 'a'.repeat(1_048_577 - 2);
+  assert.equal(Buffer.byteLength(over1MbUrl, 'utf8'), 1_048_577);
+  const overRes = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: over1MbUrl,
+  });
+  assert.equal(overRes.status, 413);
 });

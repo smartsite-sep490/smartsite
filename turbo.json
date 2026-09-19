@@ -16,8 +16,13 @@
         "NODE_ENV",
         "PORT",
         "DATABASE_URL",
+        "DIRECT_URL",
         "DATABASE_TIMEOUT_MS",
         "CORS_ORIGINS",
+        "SMARTSITE_AI_SERVICE_TOKEN",
+        "ALERT_COOLDOWN_SECONDS",
+        "MAX_PAST_EVENT_AGE_SECONDS",
+        "MAX_FUTURE_CLOCK_SKEW_SECONDS",
         "VITE_API_URL",
         "EXPO_PUBLIC_API_URL"
       ]

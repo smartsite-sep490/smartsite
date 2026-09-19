@@ -4,6 +4,10 @@ export interface BackendEnvironment {
   DATABASE_URL: string;
   DATABASE_TIMEOUT_MS: number;
   CORS_ORIGINS: string[];
+  SMARTSITE_AI_SERVICE_TOKEN: string;
+  ALERT_COOLDOWN_SECONDS: number;
+  MAX_PAST_EVENT_AGE_SECONDS: number;
+  MAX_FUTURE_CLOCK_SKEW_SECONDS: number;
 }
 
 function integer(
@@ -70,6 +74,50 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
       );
     }
   }
+
+  const LOCAL_DEV_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
+  let serviceToken: string;
+  if (environment === 'production') {
+    if (input.SMARTSITE_AI_SERVICE_TOKEN === undefined) {
+      throw new Error('SMARTSITE_AI_SERVICE_TOKEN must be set in production');
+    }
+    if (
+      typeof input.SMARTSITE_AI_SERVICE_TOKEN !== 'string' ||
+      input.SMARTSITE_AI_SERVICE_TOKEN.trim().length === 0
+    ) {
+      throw new Error(
+        'SMARTSITE_AI_SERVICE_TOKEN must be an explicitly configured non-empty string in production',
+      );
+    }
+    if (input.SMARTSITE_AI_SERVICE_TOKEN === LOCAL_DEV_SERVICE_TOKEN) {
+      throw new Error(
+        'SMARTSITE_AI_SERVICE_TOKEN cannot use the default development token in production',
+      );
+    }
+    if (/\s/.test(input.SMARTSITE_AI_SERVICE_TOKEN)) {
+      throw new Error('SMARTSITE_AI_SERVICE_TOKEN must not contain whitespace');
+    }
+    serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
+  } else {
+    if (input.SMARTSITE_AI_SERVICE_TOKEN !== undefined) {
+      if (typeof input.SMARTSITE_AI_SERVICE_TOKEN !== 'string') {
+        throw new Error('SMARTSITE_AI_SERVICE_TOKEN must be a string');
+      }
+      if (input.SMARTSITE_AI_SERVICE_TOKEN.trim().length === 0) {
+        serviceToken = LOCAL_DEV_SERVICE_TOKEN;
+      } else {
+        if (/\s/.test(input.SMARTSITE_AI_SERVICE_TOKEN)) {
+          throw new Error('SMARTSITE_AI_SERVICE_TOKEN must not contain whitespace');
+        }
+        serviceToken = input.SMARTSITE_AI_SERVICE_TOKEN;
+      }
+    } else {
+      serviceToken = LOCAL_DEV_SERVICE_TOKEN;
+    }
+  }
+
+  const MAX_SAFE_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
+
   return {
     NODE_ENV: environment,
     PORT: integer(input.PORT, 'PORT', 3000, 1, 65535),
@@ -82,5 +130,27 @@ export function validateEnvironment(input: Record<string, unknown>): BackendEnvi
       30000,
     ),
     CORS_ORIGINS: [...new Set(origins)],
+    SMARTSITE_AI_SERVICE_TOKEN: serviceToken,
+    ALERT_COOLDOWN_SECONDS: integer(
+      input.ALERT_COOLDOWN_SECONDS,
+      'ALERT_COOLDOWN_SECONDS',
+      60,
+      1,
+      MAX_SAFE_SECONDS,
+    ),
+    MAX_PAST_EVENT_AGE_SECONDS: integer(
+      input.MAX_PAST_EVENT_AGE_SECONDS,
+      'MAX_PAST_EVENT_AGE_SECONDS',
+      300,
+      1,
+      MAX_SAFE_SECONDS,
+    ),
+    MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(
+      input.MAX_FUTURE_CLOCK_SKEW_SECONDS,
+      'MAX_FUTURE_CLOCK_SKEW_SECONDS',
+      30,
+      1,
+      MAX_SAFE_SECONDS,
+    ),
   };
 }

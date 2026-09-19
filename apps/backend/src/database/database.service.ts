@@ -1,24 +1,20 @@
-import { Inject, Injectable } from '@nestjs/common';
-import type { OnApplicationShutdown } from '@nestjs/common';
-import type { Pool } from 'pg';
-
-export const DATABASE_POOL = Symbol('DATABASE_POOL');
+import { Injectable } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 
 @Injectable()
-export class DatabaseService implements OnApplicationShutdown {
-  constructor(@Inject(DATABASE_POOL) private readonly pool: Pool) {}
+export class DatabaseService {
+  constructor(private readonly dataSource: DataSource) {}
 
   async isReachable(): Promise<boolean> {
     try {
-      await this.pool.query('SELECT 1');
+      if (!this.dataSource.isInitialized) {
+        return false;
+      }
+      await this.dataSource.query('SELECT 1');
       return true;
     } catch {
       // Connection errors may contain credentials or private database hostnames.
       return false;
     }
-  }
-
-  async onApplicationShutdown(): Promise<void> {
-    await this.pool.end();
   }
 }

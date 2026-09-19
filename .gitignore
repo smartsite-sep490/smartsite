@@ -16,6 +16,7 @@ node_modules/
 dist/
 build/
 coverage/
+.test-build/
 .next/
 .expo/
 .dart_tool/

@@ -1,6 +1,6 @@
-# Cập nhật triển khai nền — 18/09/2026
+# Cập nhật triển khai nền — 19/09/2026
 
-Người dùng đã yêu cầu triển khai: React/Vite, NestJS, Expo/React Native, FastAPI trong hai repo. Node24.19.0, pnpm12.4.2, TypeScript6.0.3 được khóa để tương thích eslint; React Web19.3.0, Mobile19.2.3 theo Expo57.0.23/RN0.86.3. Nest12 chạy ESM. Prisma CLI7.10.0 stable, chưa có domain models/client; pg cho health DB. Docker local PostgreSQL không thay quyết định Neon. OpenAI và YOLO/Supervision đã chốt hướng tích hợp, chưa triển khai inference/API calls. Các ghi chú nghiên cứu cũ dưới đây được đọc theo cập nhật này.
+Người dùng đã yêu cầu triển khai: React/Vite, NestJS, Expo/React Native, FastAPI trong hai repo. Node24.19.0, pnpm12.4.2, TypeScript6.0.3 được khóa để tương thích eslint; React Web19.3.0, Mobile19.2.3 theo Expo57.0.23/RN0.86.3. Nest12 chạy ESM. Tầng dữ liệu sử dụng TypeORM Data Mapper (@nestjs/typeorm, typeorm) và pg, synchronize: false. Domain entities, migration và ingestion foundation cho MF05/MF06 đã được triển khai; inference và workflow người dùng vẫn thuộc các gate sau. Docker local PostgreSQL không thay quyết định Neon.
 
 # Stack: cần chốt trước khi dựng ứng dụng
 

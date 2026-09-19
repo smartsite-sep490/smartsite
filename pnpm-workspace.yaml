@@ -1,14 +1,23 @@
 packages:
   - apps/*
   - packages/*
+  - contracts
 
 allowBuilds:
   '@nestjs/core': true
-  '@prisma/engines': true
   '@scarf/scarf': false
   esbuild: true
-  prisma: true
   sharp: true
 minimumReleaseAge: 1440
+# Expo SDK 57 compatibility patches are pinned and reviewed while the
+# registry releases are still inside the one-day age window.
+minimumReleaseAgeExclude:
+  - '@expo/cli@57.0.26'
+  - '@expo/metro-runtime@57.0.16'
+  - '@expo/ui@57.0.19'
+  - expo@57.0.24
+  - expo-asset@57.0.18
+  - expo-constants@57.0.19
+  - expo-router@57.0.22
 saveExact: true
 engineStrict: true

@@ -7,7 +7,8 @@ WORKDIR /workspace
 
 FROM base AS build
 COPY . .
-RUN pnpm --filter @smartsite/backend install --frozen-lockfile
+RUN pnpm --filter @smartsite/contracts --filter @smartsite/backend install --frozen-lockfile
+RUN pnpm --filter @smartsite/contracts build
 RUN pnpm --filter @smartsite/backend build
 
 FROM base AS dependencies
@@ -16,13 +17,17 @@ COPY apps/backend/package.json apps/backend/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
-RUN pnpm --filter @smartsite/backend install --prod --frozen-lockfile
+COPY contracts/package.json contracts/package.json
+RUN pnpm --filter @smartsite/contracts --filter @smartsite/backend install --prod --frozen-lockfile
 
 FROM node:24.19.0-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /workspace/apps/backend
 COPY --from=dependencies --chown=node:node /workspace/node_modules /workspace/node_modules
+COPY --from=dependencies --chown=node:node /workspace/contracts /workspace/contracts
 COPY --from=dependencies --chown=node:node /workspace/apps/backend/node_modules ./node_modules
+COPY --from=build --chown=node:node /workspace/contracts/dist /workspace/contracts/dist
+COPY --from=build --chown=node:node /workspace/contracts/schemas /workspace/contracts/schemas
 COPY --from=build --chown=node:node /workspace/apps/backend/dist ./dist
 COPY --from=build --chown=node:node /workspace/apps/backend/package.json ./package.json
 USER node
