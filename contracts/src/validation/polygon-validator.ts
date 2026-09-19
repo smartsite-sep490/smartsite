@@ -42,6 +42,31 @@ function segmentsIntersect(
   );
 }
 
+/** Express a schema-validated [0, 1] coordinate exactly in units of 2^-1074. */
+function exactCoordinate(value: number): bigint {
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, value);
+  const bits = view.getBigUint64(0);
+  const exponent = (bits >> 52n) & 0x7ffn;
+  const fraction = bits & 0xfffffffffffffn;
+  // Subnormal numbers have no implicit leading bit; this also handles +/-0.
+  if (exponent === 0n) return fraction;
+  return ((1n << 52n) | fraction) << (exponent - 1n);
+}
+
+function hasZeroArea(coordinates: readonly NormalizedCoordinate[]): boolean {
+  const exact = coordinates.map(([x, y]) => [exactCoordinate(x), exactCoordinate(y)] as const);
+  let twiceArea = 0n;
+  for (let index = 0; index < exact.length; index++) {
+    const current = exact[index];
+    const next = exact[(index + 1) % exact.length];
+    twiceArea += current[0] * next[1] - next[0] * current[1];
+  }
+  // The common scale cancels for a zero test. BigInt prevents cancellation
+  // and underflow without imposing any minimum area on valid polygons.
+  return twiceArea === 0n;
+}
+
 function polygonError(coordinates: readonly NormalizedCoordinate[]): string | undefined {
   const vertices = new Set<string>();
   for (const [x, y] of coordinates) {
@@ -50,13 +75,7 @@ function polygonError(coordinates: readonly NormalizedCoordinate[]): string | un
     vertices.add(key);
   }
 
-  let twiceArea = 0;
-  for (let index = 0; index < coordinates.length; index++) {
-    const current = coordinates[index];
-    const next = coordinates[(index + 1) % coordinates.length];
-    twiceArea += current[0] * next[1] - next[0] * current[1];
-  }
-  if (twiceArea === 0) return 'Polygon must have nonzero area';
+  if (hasZeroArea(coordinates)) return 'Polygon must have nonzero area';
 
   for (let first = 0; first < coordinates.length; first++) {
     const firstNext = (first + 1) % coordinates.length;

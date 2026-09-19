@@ -22,6 +22,14 @@ function configuration(coordinates: readonly NormalizedCoordinate[]): CameraRegi
 
 const invalidPolygons: Array<[string, readonly NormalizedCoordinate[]]> = [
   [
+    'exactly collinear triangle despite floating-point cancellation',
+    [
+      [450000004 / 2 ** 30, 123000000 / 2 ** 30],
+      [450010005 / 2 ** 30, 123020002 / 2 ** 30],
+      [450020006 / 2 ** 30, 123040004 / 2 ** 30],
+    ],
+  ],
+  [
     'repeated closing vertex',
     [
       [0, 0],
@@ -104,6 +112,22 @@ for (const [name, coordinates] of invalidPolygons) {
 }
 
 const validPolygons: Array<[string, readonly NormalizedCoordinate[]]> = [
+  [
+    'tiny triangle despite floating-point cancellation',
+    [
+      [0.5, 0.5],
+      [0.500000001, 0.5],
+      [0.5, 0.500000001],
+    ],
+  ],
+  [
+    'triangle with subnormal coordinates and area below Number.MIN_VALUE',
+    [
+      [0, 0],
+      [Number.MIN_VALUE, 0],
+      [0, Number.MIN_VALUE],
+    ],
+  ],
   [
     'counter-clockwise square',
     [
