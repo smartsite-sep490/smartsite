@@ -41,7 +41,9 @@ const cameraRegionConfigurationSchemaPath = new URL(
   '../../schemas/v1/camera-region-configuration.json',
   import.meta.url,
 );
-const observationEventSchema: unknown = JSON.parse(readFileSync(observationEventSchemaPath, 'utf8'));
+const observationEventSchema: unknown = JSON.parse(
+  readFileSync(observationEventSchemaPath, 'utf8'),
+);
 const cameraRegionConfigurationSchema: unknown = JSON.parse(
   readFileSync(cameraRegionConfigurationSchemaPath, 'utf8'),
 );
@@ -69,7 +71,10 @@ const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.com
   cameraRegionConfigurationSchema,
 );
 
-function schemaValidationIssues(validateSchema: CompiledSchemaValidator, data: unknown): ValidationIssue[] {
+function schemaValidationIssues(
+  validateSchema: CompiledSchemaValidator,
+  data: unknown,
+): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const valid = validateSchema(data);
 

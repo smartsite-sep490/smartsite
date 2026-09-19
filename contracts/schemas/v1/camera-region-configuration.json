@@ -4,12 +4,7 @@
   "title": "CameraRegionConfiguration",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "configurationVersion",
-    "cameraExternalId",
-    "regions"
-  ],
+  "required": ["schemaVersion", "configurationVersion", "cameraExternalId", "regions"],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
     "configurationVersion": {
