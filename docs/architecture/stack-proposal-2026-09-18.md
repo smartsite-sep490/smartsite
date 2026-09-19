@@ -5,20 +5,20 @@ Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa p
 
 ## Phương án đề xuất
 
-| Phần | Lựa chọn | Mục đích |
-|---|---|---|
-| Web | React + TypeScript + Vite | Dashboard nghiệp vụ gọi Backend riêng |
-| Web UI | Tailwind CSS + shadcn/ui | Component và token giao diện có thể tùy chỉnh |
-| Dữ liệu API Web/Mobile | **TanStack Query — đã chốt** | Server state, API cache, mutation và invalidation |
-| Client state/form | Redux Toolkit khi cần; React Hook Form, Zod; React Router cho Web | Trạng thái ứng dụng, form, validation và routing; thư viện bổ trợ vẫn là đề xuất |
-| Mobile | React Native + Expo development build + Expo Router | Tận dụng TypeScript, quản lý native dependencies theo SDK |
-| Backend | NestJS + TypeScript; modular monolith | Module theo nghiệp vụ, triển khai một API trước |
-| Database | Neon PostgreSQL; TypeORM Data Mapper là ORM chính thức | Database host tại Neon; auth/storage là quyết định riêng |
-| AI | FastAPI + YOLO11s + Supervision | Baseline detector đã chốt; checkpoint PPE/identity chưa chốt; OpenAI phân tích bổ sung bằng chứng và hỗ trợ xử lý sự cố |
-| Monorepo | pnpm workspaces + Turborepo | Quản lý workspace và thứ tự build/cache |
-| API | REST + OpenAPI, client sinh từ contract | Giữ Web/Mobile/AI tương thích Backend |
-| Chất lượng | ESLint, Prettier, Vitest/Testing Library cho Web; Jest/Supertest cho BE; pytest cho AI; Playwright cho Web E2E | Kiểm tra tự động theo từng nền tảng |
-| Vận hành | Docker, Compose local, GitHub Actions; log JSON và correlation ID | Build/deploy độc lập, theo dõi lỗi và tái lập môi trường |
+| Phần                   | Lựa chọn                                                                                                       | Mục đích                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Web                    | React + TypeScript + Vite                                                                                      | Dashboard nghiệp vụ gọi Backend riêng                                                                                   |
+| Web UI                 | Tailwind CSS + shadcn/ui                                                                                       | Component và token giao diện có thể tùy chỉnh                                                                           |
+| Dữ liệu API Web/Mobile | **TanStack Query — đã chốt**                                                                                   | Server state, API cache, mutation và invalidation                                                                       |
+| Client state/form      | Redux Toolkit khi cần; React Hook Form, Zod; React Router cho Web                                              | Trạng thái ứng dụng, form, validation và routing; thư viện bổ trợ vẫn là đề xuất                                        |
+| Mobile                 | React Native + Expo development build + Expo Router                                                            | Tận dụng TypeScript, quản lý native dependencies theo SDK                                                               |
+| Backend                | NestJS + TypeScript; modular monolith                                                                          | Module theo nghiệp vụ, triển khai một API trước                                                                         |
+| Database               | Neon PostgreSQL; TypeORM Data Mapper là ORM chính thức                                                         | Database host tại Neon; auth/storage là quyết định riêng                                                                |
+| AI                     | FastAPI + YOLO11s + Supervision                                                                                | Baseline detector đã chốt; checkpoint PPE/identity chưa chốt; OpenAI phân tích bổ sung bằng chứng và hỗ trợ xử lý sự cố |
+| Monorepo               | pnpm workspaces + Turborepo                                                                                    | Quản lý workspace và thứ tự build/cache                                                                                 |
+| API                    | REST + OpenAPI, client sinh từ contract                                                                        | Giữ Web/Mobile/AI tương thích Backend                                                                                   |
+| Chất lượng             | ESLint, Prettier, Vitest/Testing Library cho Web; Jest/Supertest cho BE; pytest cho AI; Playwright cho Web E2E | Kiểm tra tự động theo từng nền tảng                                                                                     |
+| Vận hành               | Docker, Compose local, GitHub Actions; log JSON và correlation ID                                              | Build/deploy độc lập, theo dõi lỗi và tái lập môi trường                                                                |
 
 Auth provider, object storage, realtime transport, mobile E2E và hosting sẽ được chốt theo nhu cầu cụ thể. Không xem các mục này là đã triển khai.
 

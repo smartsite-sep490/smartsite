@@ -154,7 +154,8 @@ test('resolveCliEnvironment prefers a validated DIRECT_URL for migration command
 test('resolveCliEnvironment prefers DIRECT_URL over DATABASE_URL_UNPOOLED and DATABASE_URL', () => {
   const config = resolveCliEnvironment(undefined, {
     DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
-    DATABASE_URL_UNPOOLED: 'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
+    DATABASE_URL_UNPOOLED:
+      'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
     DIRECT_URL: 'postgresql://direct_user:pass@direct.example.com:5432/app?sslmode=require',
   });
 
@@ -167,13 +168,61 @@ test('resolveCliEnvironment prefers DIRECT_URL over DATABASE_URL_UNPOOLED and DA
 test('resolveCliEnvironment prefers DATABASE_URL_UNPOOLED when DIRECT_URL is absent', () => {
   const config = resolveCliEnvironment(undefined, {
     DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
-    DATABASE_URL_UNPOOLED: 'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
+    DATABASE_URL_UNPOOLED:
+      'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
   });
 
   assert.equal(
     config.DATABASE_URL,
     'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
   );
+});
+
+test('resolveCliEnvironment chooses the process source before aliases from the env file', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartsite-cli-env-'));
+  const envFile = path.join(tmpDir, '.env');
+  try {
+    fs.writeFileSync(
+      envFile,
+      [
+        'DATABASE_URL=postgresql://file_pooled:pass@file-pooler.example.com:5432/app',
+        'DIRECT_URL=postgresql://stale_direct:pass@stale-direct.example.com:5432/app',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const config = resolveCliEnvironment(envFile, {
+      DATABASE_URL: 'postgresql://process_pooled:pass@process-pooler.example.com:5432/app',
+      DATABASE_URL_UNPOOLED: 'postgresql://process_direct:pass@process-direct.example.com:5432/app',
+    });
+
+    assert.equal(
+      config.DATABASE_URL,
+      'postgresql://process_direct:pass@process-direct.example.com:5432/app',
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('resolveCliEnvironment never reuses a direct URL from file when process selects another database', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartsite-cli-env-'));
+  const envFile = path.join(tmpDir, '.env');
+  try {
+    fs.writeFileSync(
+      envFile,
+      'DIRECT_URL=postgresql://stale_direct:pass@stale-direct.example.com:5432/app\n',
+      'utf8',
+    );
+
+    const config = resolveCliEnvironment(envFile, {
+      DATABASE_URL: 'postgresql://process_user:pass@localhost:5432/process_db',
+    });
+
+    assert.equal(config.DATABASE_URL, 'postgresql://process_user:pass@localhost:5432/process_db');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test('resolveCliEnvironment falls back to DATABASE_URL when both direct URLs are empty strings', () => {
@@ -183,9 +232,22 @@ test('resolveCliEnvironment falls back to DATABASE_URL when both direct URLs are
     DATABASE_URL_UNPOOLED: '',
   });
 
-  assert.equal(
-    config.DATABASE_URL,
-    'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+  assert.equal(config.DATABASE_URL, 'postgresql://pooled_user:pass@pooled.example.com:5432/app');
+});
+
+test('resolveCliEnvironment rejects a Neon pooled migration URL when no direct URL is available', () => {
+  assert.throws(
+    () =>
+      resolveCliEnvironment(undefined, {
+        DATABASE_URL:
+          'postgresql://pooled_user:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/app?sslmode=require',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /direct URL is required|DIRECT_URL or DATABASE_URL_UNPOOLED/);
+      assert.doesNotMatch(error.message, /pooled_user|secret/);
+      return true;
+    },
   );
 });
 
@@ -220,7 +282,6 @@ test('resolveCliEnvironment rejects an invalid DATABASE_URL_UNPOOLED without exp
     },
   );
 });
-
 
 test('resolveCliEnvironment falls back safely when .env file does not exist', () => {
   const nonExistentPath = path.join(os.tmpdir(), 'does-not-exist', '.env');

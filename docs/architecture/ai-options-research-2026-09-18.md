@@ -16,14 +16,14 @@ Ngày 18/09/2026. Người dùng cho phép thay FastAPI/YOLO11/ArcFace nếu có
 
 ## Các phương án đáng thử
 
-| Phương án | Hỗ trợ sẵn | Đánh đổi / giới hạn | Đánh giá cho SmartSite |
-|---|---|---|---|
-| Ultralytics YOLO11s + Supervision | Train/export/inference; polygon và công cụ theo dõi | Cần weights PPE phù hợp; AGPL-3.0 hoặc Enterprise khi phát hành đóng/thương mại; code xử lý video/event | Baseline triển khai đã chốt |
-| RF-DETR Nano/Small + Supervision | Fine-tune, detection và hệ công cụ Roboflow | Phải đo RAM/VRAM/latency; không suy benchmark hãng sang camera dự án | Đối chứng tùy chọn với YOLO11s |
-| Ultralytics YOLO26s + Supervision | Cùng hệ công cụ Ultralytics, kiến trúc mới hơn | Chưa có bằng chứng tốt hơn trên dữ liệu SmartSite; cùng ràng buộc giấy phép Ultralytics | Đối chứng tùy chọn, không chặn triển khai |
-| Roboflow Workflows + Inference | Ghép block bằng giao diện; chạy cloud hoặc self-host; ảnh/video/RTSP | Kiểm tra plan/license từng chức năng, dataset privacy, khả năng export và retry | Hợp khi ưu tiên dựng pipeline nhanh, ít code tích hợp |
-| NVIDIA DeepStream | Pipeline video/inference/tracking đa luồng trên hệ NVIDIA | Phụ thuộc phần cứng/runtime; cần học GStreamer/plugin | Xem xét khi có nhiều camera và GPU phù hợp |
-| AWS Rekognition | API PPE và face collection có sẵn | PPE API chỉ liệt kê face/hand/head cover, chưa đáp ứng áo phản quang; phụ thuộc mạng/API | Không chọn làm giải pháp trọn gói MF05 |
+| Phương án                         | Hỗ trợ sẵn                                                           | Đánh đổi / giới hạn                                                                                     | Đánh giá cho SmartSite                                |
+| --------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Ultralytics YOLO11s + Supervision | Train/export/inference; polygon và công cụ theo dõi                  | Cần weights PPE phù hợp; AGPL-3.0 hoặc Enterprise khi phát hành đóng/thương mại; code xử lý video/event | Baseline triển khai đã chốt                           |
+| RF-DETR Nano/Small + Supervision  | Fine-tune, detection và hệ công cụ Roboflow                          | Phải đo RAM/VRAM/latency; không suy benchmark hãng sang camera dự án                                    | Đối chứng tùy chọn với YOLO11s                        |
+| Ultralytics YOLO26s + Supervision | Cùng hệ công cụ Ultralytics, kiến trúc mới hơn                       | Chưa có bằng chứng tốt hơn trên dữ liệu SmartSite; cùng ràng buộc giấy phép Ultralytics                 | Đối chứng tùy chọn, không chặn triển khai             |
+| Roboflow Workflows + Inference    | Ghép block bằng giao diện; chạy cloud hoặc self-host; ảnh/video/RTSP | Kiểm tra plan/license từng chức năng, dataset privacy, khả năng export và retry                         | Hợp khi ưu tiên dựng pipeline nhanh, ít code tích hợp |
+| NVIDIA DeepStream                 | Pipeline video/inference/tracking đa luồng trên hệ NVIDIA            | Phụ thuộc phần cứng/runtime; cần học GStreamer/plugin                                                   | Xem xét khi có nhiều camera và GPU phù hợp            |
+| AWS Rekognition                   | API PPE và face collection có sẵn                                    | PPE API chỉ liệt kê face/hand/head cover, chưa đáp ứng áo phản quang; phụ thuộc mạng/API                | Không chọn làm giải pháp trọn gói MF05                |
 
 YOLO26 đã phát hành; YOLO27 trên docs đang là preview chưa phát hành. Không chọn preview vì số phiên bản cao hơn. Benchmark CPU/COCO do nhà cung cấp công bố không chứng minh precision PPE hoặc FPS toàn pipeline của SmartSite.
 

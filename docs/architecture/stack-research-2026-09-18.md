@@ -10,16 +10,16 @@ Chọn Vite vì yêu cầu hiện là dashboard gọi Backend riêng. Next.js l�
 
 ## Kết quả có ảnh hưởng đến thiết kế
 
-| Kiểm tra | Kết quả | Quyết định thiết kế đề xuất |
-|---|---|---|
-| Expo monorepo | Hỗ trợ workspaces/pnpm, Metro có cấu hình tự động; dependency trùng vẫn cần xử lý | Mỗi app khai báo dependency riêng, dùng workspace packages có phạm vi hẹp |
-| Expo native | Development build cho phép dùng native library/cấu hình riêng | Dùng development build, kiểm thử Android/iOS thực tế |
-| TanStack Query trên Mobile | Có hướng dẫn kết nối onlineManager/focusManager với native events | Cấu hình mạng và AppState; phân biệt app focus với screen focus |
-| NestJS module | Provider được đóng gói và chia sẻ bằng exports/imports | Module nghiệp vụ chỉ xuất các service công khai cần dùng |
-| Neon pooling | Transaction pooling khác kết nối direct | Runtime pooled có giới hạn pool; migration/admin dùng direct; kiểm thử với ORM phiên bản đã chọn |
-| TypeORM runtime | Hỗ trợ TypeORM 0.3.x với NestJS 12 qua @nestjs/typeorm và pg driver | Chọn TypeORM Data Mapper, kiểm tra synchronize: false |
-| YOLO11 | Model detection mặc định được huấn luyện trên COCO | Cần weights/dataset PPE riêng và đánh giá thực nghiệm |
-| ArcFace triển khai qua InsightFace | License code và pretrained weights khác nhau | Chốt artifact, nguồn, điều kiện sử dụng; không suy từ MIT code sang mọi weights |
+| Kiểm tra                           | Kết quả                                                                           | Quyết định thiết kế đề xuất                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Expo monorepo                      | Hỗ trợ workspaces/pnpm, Metro có cấu hình tự động; dependency trùng vẫn cần xử lý | Mỗi app khai báo dependency riêng, dùng workspace packages có phạm vi hẹp                        |
+| Expo native                        | Development build cho phép dùng native library/cấu hình riêng                     | Dùng development build, kiểm thử Android/iOS thực tế                                             |
+| TanStack Query trên Mobile         | Có hướng dẫn kết nối onlineManager/focusManager với native events                 | Cấu hình mạng và AppState; phân biệt app focus với screen focus                                  |
+| NestJS module                      | Provider được đóng gói và chia sẻ bằng exports/imports                            | Module nghiệp vụ chỉ xuất các service công khai cần dùng                                         |
+| Neon pooling                       | Transaction pooling khác kết nối direct                                           | Runtime pooled có giới hạn pool; migration/admin dùng direct; kiểm thử với ORM phiên bản đã chọn |
+| TypeORM runtime                    | Hỗ trợ TypeORM 0.3.x với NestJS 12 qua @nestjs/typeorm và pg driver               | Chọn TypeORM Data Mapper, kiểm tra synchronize: false                                            |
+| YOLO11                             | Model detection mặc định được huấn luyện trên COCO                                | Cần weights/dataset PPE riêng và đánh giá thực nghiệm                                            |
+| ArcFace triển khai qua InsightFace | License code và pretrained weights khác nhau                                      | Chốt artifact, nguồn, điều kiện sử dụng; không suy từ MIT code sang mọi weights                  |
 
 Docs monorepo hiện có ví dụ SDK 58 trong khi snapshot npm trước đó trả Expo 57.0.23. Không lấy ví dụ docs hoặc nhãn latest đơn lẻ làm bằng chứng bộ phiên bản đã ổn định. Chốt release/peer dependencies/lockfile tại thời điểm scaffold và kiểm tra build. Các con số trong stack-proposal chỉ là snapshot.
 

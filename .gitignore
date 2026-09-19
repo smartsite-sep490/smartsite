@@ -69,7 +69,6 @@ docs/local/
 *.draft.local.md
 
 # Neon and local agent tooling
-.neon/
+.neon
 .agents/
 skills-lock.json
-

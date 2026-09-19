@@ -6,15 +6,15 @@ Người dùng đã yêu cầu triển khai: React/Vite, NestJS, Expo/React Nati
 
 Cập nhật 2026-09-18: **đã chốt Mobile dùng React Native**, bỏ Flutter. Các phần còn lại đang đề xuất, chưa được chốt toàn bộ.
 
-| Thành phần | Đang có trong tài liệu                                                  | Cần quyết định                                              |
-| ---------- | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Web        | Report 2: ReactJS                                                       | Công cụ build, phiên bản và package manager                 |
-| Backend    | Report 2: NestJS                                                        | Xác nhận framework, truy cập dữ liệu, migration, auth       |
-| Mobile     | **React Native — đã chốt 18/09/2026**                                   | Chốt Expo, thư viện và bộ phiên bản tương thích             |
-| AI         | **FastAPI + YOLO11s + Supervision — baseline đã chốt 19/09/2026**       | Kiểm chứng weights PPE/license, cách định danh, hardware    |
-| Dữ liệu    | **Neon PostgreSQL — thay Supabase theo quyết định mới nhất 18/09/2026** | ORM, schema, backup, cách kết nối; Auth/Storage riêng       |
-| Bằng chứng | Report 2: Cloudflare R2                                                 | Quyền truy cập, retention, upload/download                  |
-| Deploy     | Report 2: Google Cloud/Cloud Run                                        | Tách nền tảng web/API với nơi chạy video/GPU                |
+| Thành phần | Đang có trong tài liệu                                                  | Cần quyết định                                           |
+| ---------- | ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| Web        | Report 2: ReactJS                                                       | Công cụ build, phiên bản và package manager              |
+| Backend    | Report 2: NestJS                                                        | Xác nhận framework, truy cập dữ liệu, migration, auth    |
+| Mobile     | **React Native — đã chốt 18/09/2026**                                   | Chốt Expo, thư viện và bộ phiên bản tương thích          |
+| AI         | **FastAPI + YOLO11s + Supervision — baseline đã chốt 19/09/2026**       | Kiểm chứng weights PPE/license, cách định danh, hardware |
+| Dữ liệu    | **Neon PostgreSQL — thay Supabase theo quyết định mới nhất 18/09/2026** | ORM, schema, backup, cách kết nối; Auth/Storage riêng    |
+| Bằng chứng | Report 2: Cloudflare R2                                                 | Quyền truy cập, retention, upload/download               |
+| Deploy     | Report 2: Google Cloud/Cloud Run                                        | Tách nền tảng web/API với nơi chạy video/GPU             |
 
 Nguồn đã đối chiếu: bản xuất Report 2 và tab Chức Năng ngày 17/09/2026. Các lựa chọn này là nội dung tài liệu, không phải code đã tồn tại hay quyết định cuối.
 
