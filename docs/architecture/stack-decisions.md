@@ -11,7 +11,7 @@ Cập nhật 2026-09-18: **đã chốt Mobile dùng React Native**, bỏ Flutter
 | Web        | Report 2: ReactJS                                                       | Công cụ build, phiên bản và package manager                 |
 | Backend    | Report 2: NestJS                                                        | Xác nhận framework, truy cập dữ liệu, migration, auth       |
 | Mobile     | **React Native — đã chốt 18/09/2026**                                   | Chốt Expo, thư viện và bộ phiên bản tương thích             |
-| AI         | NFR: Python/FastAPI, YOLO11/ArcFace                                     | Kiểm chứng khả thi, model/license, cách định danh, hardware |
+| AI         | **FastAPI + YOLO11s + Supervision — baseline đã chốt 19/09/2026**       | Kiểm chứng weights PPE/license, cách định danh, hardware    |
 | Dữ liệu    | **Neon PostgreSQL — thay Supabase theo quyết định mới nhất 18/09/2026** | ORM, schema, backup, cách kết nối; Auth/Storage riêng       |
 | Bằng chứng | Report 2: Cloudflare R2                                                 | Quyền truy cập, retention, upload/download                  |
 | Deploy     | Report 2: Google Cloud/Cloud Run                                        | Tách nền tảng web/API với nơi chạy video/GPU                |
@@ -26,4 +26,4 @@ Người dùng đã chốt OpenAI API để phân tích bằng chứng và hỗ 
 
 Database hiện hành là Neon PostgreSQL; chưa tạo Neon project hoặc di chuyển dữ liệu. TanStack Query đã được người dùng chốt ngày 18/09/2026; thay đề xuất RTK Query trước đây. Chưa cài dependency hoặc chốt patch version.
 
-Cập nhật AI: người dùng cho phép thay baseline docs. YOLO11/ArcFace không còn là ràng buộc lựa chọn; xem ai-options-research-2026-09-18.md. Model/runtime/identity chưa chốt trước khi có dữ liệu và hardware.
+Cập nhật AI 19/09/2026: người dùng chốt YOLO11s làm detector baseline cho MF05/MF06, Supervision hỗ trợ tracking/geometry và FastAPI làm API/control; xem ai-options-research-2026-09-18.md. RF-DETR Nano/Small và YOLO26s chỉ là benchmark tùy chọn. Checkpoint PPE, identity, license phát hành và năng lực RTX 4060 cho 1–3 camera vẫn phải kiểm chứng.

@@ -1,6 +1,6 @@
 # Stack và tiêu chuẩn code — đề xuất 18/09/2026
 
-Đã chốt: React Native, database PostgreSQL tại Neon, OpenAI API phân tích bằng chứng/hỗ trợ xử lý sự cố (ưu tiên ảnh cảnh báo PPE), hai repo smartsite/smartsite-ai, giữ nhánh sau merge. Đã chốt TanStack Query cho API/cache Web và Mobile; Redux Toolkit chỉ dành cho shared client state khi cần. Xem [quyết định OpenAI](openai-decision-2026-09-18.md); model cụ thể chưa chốt.
+Đã chốt: React Native, database PostgreSQL tại Neon, OpenAI API phân tích bằng chứng/hỗ trợ xử lý sự cố (ưu tiên ảnh cảnh báo PPE), hai repo smartsite/smartsite-ai, giữ nhánh sau merge. Đã chốt TanStack Query cho API/cache Web và Mobile; Redux Toolkit chỉ dành cho shared client state khi cần. Detector baseline được chốt ngày 19/09/2026 là YOLO11s + Supervision; checkpoint PPE và identity vẫn cần kiểm chứng. Xem [quyết định OpenAI](openai-decision-2026-09-18.md).
 Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa phải phần mềm đã cài hoặc kiểm chứng tích hợp.
 
 ## Phương án đề xuất
@@ -14,7 +14,7 @@ Các lựa chọn còn lại bên dưới là đề xuất để chốt, chưa p
 | Mobile | React Native + Expo development build + Expo Router | Tận dụng TypeScript, quản lý native dependencies theo SDK |
 | Backend | NestJS + TypeScript; modular monolith | Module theo nghiệp vụ, triển khai một API trước |
 | Database | Neon PostgreSQL; TypeORM Data Mapper là ORM chính thức | Database host tại Neon; auth/storage là quyết định riêng |
-| AI | Ứng viên mới: YOLO26 hoặc RF-DETR + Supervision; Roboflow Inference/Workflows là lựa chọn runtime; FastAPI cho API/control khi cần | Detector/identity chưa chốt; OpenAI đã chốt phân tích bằng chứng và hỗ trợ xử lý sự cố |
+| AI | FastAPI + YOLO11s + Supervision | Baseline detector đã chốt; checkpoint PPE/identity chưa chốt; OpenAI phân tích bổ sung bằng chứng và hỗ trợ xử lý sự cố |
 | Monorepo | pnpm workspaces + Turborepo | Quản lý workspace và thứ tự build/cache |
 | API | REST + OpenAPI, client sinh từ contract | Giữ Web/Mobile/AI tương thích Backend |
 | Chất lượng | ESLint, Prettier, Vitest/Testing Library cho Web; Jest/Supertest cho BE; pytest cho AI; Playwright cho Web E2E | Kiểm tra tự động theo từng nền tảng |
@@ -76,6 +76,6 @@ Nguồn bổ sung: https://redux.js.org/introduction/why-rtk-is-redux-today ; ht
 
 Người dùng đã chốt TanStack Query. Dùng làm lớp server-state/cache duy nhất cho Web và Mobile, tổ chức query keys/hooks theo feature. Redux Toolkit có thể giữ client state dùng chung khi có nhu cầu; không sao chép dữ liệu query vào Redux slice. RTK Query không thuộc phương án triển khai. Chưa cài dependency hoặc khóa patch version; sẽ kiểm tra tương thích trong bước scaffold ứng dụng.
 
-## AI được mở lại để chọn theo thực nghiệm
+## Quyết định detector AI — 19/09/2026
 
-Người dùng xác nhận không bắt buộc theo YOLO11/ArcFace trong docs. Xem [nghiên cứu lựa chọn AI](ai-options-research-2026-09-18.md), ưu tiên hơn các mô tả baseline AI trước đó. Chưa thay model bằng code hoặc chạy benchmark.
+Người dùng chốt YOLO11s làm baseline triển khai cho MF05/MF06 sau khi so sánh lựa chọn. Dùng Supervision cho tracking/geometry và FastAPI cho API/control. RF-DETR Nano/Small và YOLO26s chỉ là đối chứng benchmark tùy chọn; chúng không chặn triển khai YOLO11s. Chưa có checkpoint PPE được huấn luyện/kiểm chứng hoặc benchmark RTX 4060, nên quyết định baseline không phải tuyên bố về độ chính xác hay throughput production. Xem [nghiên cứu lựa chọn AI](ai-options-research-2026-09-18.md).
