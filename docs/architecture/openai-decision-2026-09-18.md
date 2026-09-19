@@ -21,7 +21,7 @@ Camera → detector/tracking → lưu sự kiện và bằng chứng → phân t
 
 Model OpenAI cụ thể, prompt/schema, số ảnh mỗi sự kiện và ngưỡng chất lượng sẽ chọn bằng tập ảnh thực tế. So sánh detector đơn lẻ với detector + phân tích OpenAI về độ hữu ích cho người xác minh, nhận xét sai, bỏ sót, độ trễ và chi phí. Chưa tuyên bố giảm báo giả hoặc đạt SLA.
 
-Detector YOLO26/RF-DETR và pipeline danh tính vẫn là ứng viên thử nghiệm; quyết định OpenAI không tự chốt các thành phần đó. Phần cứng dự kiến: RTX 4060, khoảng 1–3 camera, chưa đo tải thực.
+YOLO11s đã được chốt ngày 19/09/2026 làm detector baseline; RF-DETR Nano/Small và YOLO26s chỉ là đối chứng benchmark tùy chọn. Pipeline danh tính vẫn cần thử nghiệm. Quyết định OpenAI không thay detector hoặc tự chốt danh tính. Phần cứng dự kiến: RTX 4060, khoảng 1–3 camera, chưa đo tải thực.
 
 Quyết định này thay các ghi chú cũ “vai trò OpenAI chưa chốt”. Report 2/3 trên Drive chưa được cập nhật trong bước này.
 

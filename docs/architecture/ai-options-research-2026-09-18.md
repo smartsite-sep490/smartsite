@@ -2,11 +2,13 @@
 
 Ngày 18/09/2026. Người dùng cho phép thay FastAPI/YOLO11/ArcFace nếu có phương án phù hợp hơn. Đây là research từ nguồn chính thức, chưa phải benchmark trên phần cứng/dữ liệu SmartSite. Tài liệu này thay giả định phải giữ model chỉ vì đã ghi trong Report 2/NFR12.
 
+**Quyết định 19/09/2026:** chốt YOLO11s làm baseline triển khai cho MF05/MF06 vì mức độ ổn định, tài liệu và đường xuất ONNX/TensorRT phù hợp tiến độ nhóm. RF-DETR Nano/Small và YOLO26s chỉ là đối chứng benchmark tùy chọn; chưa model nào được phép tuyên bố đạt yêu cầu trước khi đo trên dữ liệu SmartSite. Quyết định này thay khuyến nghị YOLO26-first ở bản research ban đầu.
+
 ## Tách các lớp cần chọn
 
 - API/control: FastAPI là framework HTTP, không phải mô hình AI hoặc engine xử lý video.
 - Video runtime: lấy frame, reconnect, sampling, backpressure, inference, theo dõi và gửi sự kiện.
-- Detector PPE/person: YOLO26, RF-DETR hoặc model tùy chỉnh khác.
+- Detector PPE/person: YOLO11s là baseline; RF-DETR Nano/Small và YOLO26s là đối chứng tùy chọn.
 - Tracking/Zone: tracking ID, polygon, dwell time và debounce; không cung cấp danh tính Worker.
 - Identity: định danh có căn cứ, có unknown; liên kết identity với track phải được kiểm chứng riêng.
 - Backend: quyết định quyền người/Site/Zone/thời gian và xử lý cảnh báo/incident.
@@ -16,8 +18,9 @@ Ngày 18/09/2026. Người dùng cho phép thay FastAPI/YOLO11/ArcFace nếu có
 
 | Phương án | Hỗ trợ sẵn | Đánh đổi / giới hạn | Đánh giá cho SmartSite |
 |---|---|---|---|
-| Ultralytics YOLO26 n/s + Supervision | Train/export/inference; polygon và công cụ theo dõi | Cần weights PPE phù hợp; license artifact; code xử lý video/event | Ứng viên self-host ưu tiên thử đầu |
-| RF-DETR Nano/Small + Supervision | Fine-tune, detection và hệ công cụ Roboflow | Phải đo RAM/VRAM/latency; không suy benchmark hãng sang camera dự án | Đối chứng chính với YOLO26 |
+| Ultralytics YOLO11s + Supervision | Train/export/inference; polygon và công cụ theo dõi | Cần weights PPE phù hợp; AGPL-3.0 hoặc Enterprise khi phát hành đóng/thương mại; code xử lý video/event | Baseline triển khai đã chốt |
+| RF-DETR Nano/Small + Supervision | Fine-tune, detection và hệ công cụ Roboflow | Phải đo RAM/VRAM/latency; không suy benchmark hãng sang camera dự án | Đối chứng tùy chọn với YOLO11s |
+| Ultralytics YOLO26s + Supervision | Cùng hệ công cụ Ultralytics, kiến trúc mới hơn | Chưa có bằng chứng tốt hơn trên dữ liệu SmartSite; cùng ràng buộc giấy phép Ultralytics | Đối chứng tùy chọn, không chặn triển khai |
 | Roboflow Workflows + Inference | Ghép block bằng giao diện; chạy cloud hoặc self-host; ảnh/video/RTSP | Kiểm tra plan/license từng chức năng, dataset privacy, khả năng export và retry | Hợp khi ưu tiên dựng pipeline nhanh, ít code tích hợp |
 | NVIDIA DeepStream | Pipeline video/inference/tracking đa luồng trên hệ NVIDIA | Phụ thuộc phần cứng/runtime; cần học GStreamer/plugin | Xem xét khi có nhiều camera và GPU phù hợp |
 | AWS Rekognition | API PPE và face collection có sẵn | PPE API chỉ liệt kê face/hand/head cover, chưa đáp ứng áo phản quang; phụ thuộc mạng/API | Không chọn làm giải pháp trọn gói MF05 |
@@ -42,9 +45,7 @@ Code InsightFace có MIT nhưng public pretrained models được công bố cho
 
 ## Phương án khuyến nghị có điều kiện
 
-Ưu tiên proof of concept Python + YOLO26n/s + Supervision; FastAPI chỉ giữ API/control nếu cần custom integration. So sánh RF-DETR Nano/Small trên cùng tập dữ liệu PPE. Nếu dựng workflow bằng Roboflow giúp nhóm tiết kiệm công hơn và phù hợp plan, dùng Inference làm runtime thay vì tự viết thêm một inference server trùng chức năng. Không lắp tất cả các nền tảng cùng lúc.
-
-Giữ YOLO11 làm baseline so sánh nếu có weights/dataset sẵn. Chỉ đổi baseline khi phương án mới cải thiện chất lượng hoặc tổng công vận hành thực tế.
+Triển khai proof of concept Python + YOLO11s + Supervision; FastAPI giữ API/control cho tích hợp riêng. Có thể so sánh RF-DETR Nano/Small hoặc YOLO26s trên cùng tập dữ liệu PPE sau khi baseline chạy được. Chỉ đổi baseline khi đối chứng cải thiện chất lượng hoặc tổng công vận hành thực tế. Không lắp tất cả các nền tảng cùng lúc.
 
 ## Cách chốt bằng bằng chứng
 
@@ -60,6 +61,8 @@ Người dùng xác nhận dự kiến khoảng 1–3 camera, GPU NVIDIA RTX 406
 ## Nguồn chính thức
 
 - https://docs.ultralytics.com/models/yolo26
+- https://docs.ultralytics.com/models/yolo11
+- https://www.ultralytics.com/license
 - https://github.com/roboflow/rf-detr
 - https://docs.roboflow.com/workflows
 - https://supervision.roboflow.com/latest/detection/tools/polygon_zone/
