@@ -17,6 +17,8 @@ This repository contains the main SmartSite application platform:
 
 Computer-vision and AI workloads live in the companion repository: [smartsite-sep490/smartsite-ai](https://github.com/smartsite-sep490/smartsite-ai).
 
+Before contributing or using a coding assistant, read [AGENTS.md](AGENTS.md) for the mandatory architecture, security, testing, Git, and code-quality rules, then follow [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow.
+
 ## Architecture
 
 ```text
