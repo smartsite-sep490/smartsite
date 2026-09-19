@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, QueryFailedError } from 'typeorm';
 import {
@@ -268,7 +268,7 @@ test('AiIngestionService: retry with same eventId but changed payload throws 409
   });
 });
 
-test('AiIngestionService: other named unique violation in real PostgreSQL is not classified as duplicate and is rethrown', async () => {
+test('AiIngestionService: other named unique violation is not classified as duplicate and is sanitized', async () => {
   await withDataSource(async (source) => {
     // 1. Prove that PostgreSQL throws QueryFailedError with 23505 and uq_site_code for duplicate site code
     const siteRepo = source.getRepository(SiteEntity);
@@ -319,7 +319,10 @@ test('AiIngestionService: other named unique violation in real PostgreSQL is not
         await failingService.ingestEvent(createSampleEvent());
       },
       (err: unknown) => {
-        assert.equal(err, siteUniqueError);
+        assert.ok(err instanceof ServiceUnavailableException);
+        assert.equal(err.getStatus(), 503);
+        const response = JSON.stringify(err.getResponse());
+        assert.doesNotMatch(response, /INSERT INTO|Unique Code Site|SITE-UQ/);
         return true;
       },
     );
