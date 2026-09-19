@@ -33,8 +33,18 @@ interface Ajv2020Constructor {
 
 type AddFormatsFunction = (ajv: unknown) => void;
 
-const schemaPath = new URL('../../schemas/v1/technical-observation-event.json', import.meta.url);
-const rawSchema: unknown = JSON.parse(readFileSync(schemaPath, 'utf8'));
+const observationEventSchemaPath = new URL(
+  '../../schemas/v1/technical-observation-event.json',
+  import.meta.url,
+);
+const cameraRegionConfigurationSchemaPath = new URL(
+  '../../schemas/v1/camera-region-configuration.json',
+  import.meta.url,
+);
+const observationEventSchema: unknown = JSON.parse(readFileSync(observationEventSchemaPath, 'utf8'));
+const cameraRegionConfigurationSchema: unknown = JSON.parse(
+  readFileSync(cameraRegionConfigurationSchemaPath, 'utf8'),
+);
 
 // Resolve constructor robustly across CJS/ESM interop without any
 const resolvedAjvConstructor = (typeof Ajv2020Pkg === 'function'
@@ -54,17 +64,15 @@ const ajv = new resolvedAjvConstructor({
 });
 resolvedAddFormats(ajv);
 
-const validateSchema: CompiledSchemaValidator = ajv.compile(rawSchema);
+const validateObservationEventSchema: CompiledSchemaValidator = ajv.compile(observationEventSchema);
+const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
+  cameraRegionConfigurationSchema,
+);
 
-/**
- * Validates a technical observation envelope against:
- * 1. Canonical Draft 2020-12 schema rules, formats, bounds, and conditional identity semantics.
- * 2. Semantic cross-field bounding-box geometry (x1 < x2, y1 < y2) across observations and evidence.
- */
-export function validateObservationEvent(data: unknown): ValidationResult {
+function schemaValidationIssues(validateSchema: CompiledSchemaValidator, data: unknown): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-
   const valid = validateSchema(data);
+
   if (!valid && validateSchema.errors) {
     for (const err of validateSchema.errors) {
       let issuePath = err.instancePath || '';
@@ -93,8 +101,28 @@ export function validateObservationEvent(data: unknown): ValidationResult {
     }
   }
 
+  return issues;
+}
+
+/**
+ * Validates a technical observation envelope against:
+ * 1. Canonical Draft 2020-12 schema rules, formats, bounds, and conditional identity semantics.
+ * 2. Semantic cross-field bounding-box geometry (x1 < x2, y1 < y2) across observations and evidence.
+ */
+export function validateObservationEvent(data: unknown): ValidationResult {
+  const issues = schemaValidationIssues(validateObservationEventSchema, data);
+
   const geometryIssues = validateGeometries(data);
   issues.push(...geometryIssues);
+
+  return {
+    isValid: issues.length === 0,
+    issues,
+  };
+}
+
+export function validateCameraRegionConfiguration(data: unknown): ValidationResult {
+  const issues = schemaValidationIssues(validateCameraRegionConfigurationSchema, data);
 
   return {
     isValid: issues.length === 0,

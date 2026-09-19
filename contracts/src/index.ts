@@ -8,4 +8,12 @@ export type { ValidationIssue } from './validation/geometry-validator.js';
 
 export { validateObservationEvent } from './validation/schema-validator.js';
 
+export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
+
 export type { ValidationResult } from './validation/schema-validator.js';
+
+export type {
+  CameraObservationRegionConfiguration,
+  CameraRegionConfiguration,
+  NormalizedCoordinate,
+} from './camera-region-configuration.js';
