@@ -14,12 +14,26 @@ Dùng PostgreSQL tại Neon cho môi trường được cấu hình; không tự
 
 Không tự động sync schema hay chạy migration lúc server boot. Mọi thay đổi schema phải thông qua TypeORM migration files được review kỹ lưỡng. TypeORM CLI dùng chung cấu hình DataSource và validateEnvironment với NestJS runtime (`src/database/typeorm.data-source.ts`). CLI tự động nạp `apps/backend/.env` cross-platform, trong khi các biến môi trường thực tế của tiến trình (`process.env`) luôn có quyền ưu tiên ghi đè.
 
-Mỗi script migration tự động build trước khi chạy TypeORM CLI. Runtime dùng `DATABASE_URL`; migration CLI ưu tiên `DIRECT_URL` nếu được cấu hình, phù hợp với Neon pooled URL ở runtime và direct URL cho migration.
+Mỗi script migration tự động build trước khi chạy TypeORM CLI. Runtime dùng `DATABASE_URL` (kết nối pooled). Migration CLI chọn process environment trước file `apps/backend/.env`; trong nguồn đã chọn, thứ tự là `DIRECT_URL > DATABASE_URL_UNPOOLED > DATABASE_URL`. Nếu chỉ có Neon pooled URL, CLI dừng thay vì chạy migration qua pooler. Điều này tránh dùng direct URL cũ từ file khi deployment đã truyền một database khác, đồng thời tránh advisory lock hoặc transaction state qua pooler.
+
+Để cấu hình Neon trên máy mới, đăng nhập Neon CLI, liên kết đúng project rồi kéo riêng biến PostgreSQL vào file mà cả NestJS runtime và TypeORM CLI thực sự nạp:
 
 ```sh
+npx neon@latest link --project-id little-cloud-62052905 --branch production --no-env-pull --no-config -y
+npx neon@latest env pull --project-id little-cloud-62052905 --branch production --service postgres --file apps/backend/.env
+```
+
+`apps/backend/.env` được Git ignore. Không dùng `.env.local` ở repository root cho các lệnh Backend hiện tại vì NestJS và TypeORM CLI không tự nạp file đó. Sau khi pull, `DATABASE_URL` là kết nối pooled cho runtime và `DATABASE_URL_UNPOOLED` là kết nối direct cho migration. Trên CI/staging/production, cấp các biến này bằng secret manager thay vì tạo file.
+
+```sh
+# Xem trạng thái migration trên môi trường hiện tại (local hoặc Neon)
 pnpm --filter @smartsite/backend db:migrate:show
+
+# Chạy migrations
 pnpm --filter @smartsite/backend db:migrate:run
+
+# Hoàn tác migration gần nhất
 pnpm --filter @smartsite/backend db:migrate:revert
 ```
 
-Docker Compose chạy service `migrate` trước Backend. Với môi trường ngoài Compose, phải chạy `db:migrate:run` trước khi triển khai phiên bản Backend mới. Chưa thực hiện migration lên Neon remote.
+Docker Compose chạy service `migrate` trước Backend. Với môi trường ngoài Compose (như Staging/Production trên Neon), chạy `db:migrate:run` trước khi triển khai phiên bản Backend mới. Tuyệt đối không commit tệp `.env`, `.env.local` hoặc chứa secret vào Git.

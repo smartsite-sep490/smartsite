@@ -141,7 +141,12 @@ CI currently verifies Android and iOS JavaScript exports. Emulator, simulator, a
 
 Example environment files are provided where required.
 
-The backend defaults to local PostgreSQL for development. A hosted Neon connection is supplied through `DATABASE_URL` at runtime.
+The backend defaults to local PostgreSQL for development. For hosted Neon environments:
+
+- Runtime services use `DATABASE_URL` (pooled TLS connection).
+- TypeORM migration CLI commands prefer `DIRECT_URL`, then `DATABASE_URL_UNPOOLED`, within the selected environment source. Process environment values take precedence over the local env file. Neon pooled URLs fail closed when no direct URL is available.
+- For local Neon development, link the project and pull only its PostgreSQL variables into the Backend's gitignored `apps/backend/.env`; see [apps/backend/README.md](apps/backend/README.md).
+- Deployed environments must supply the same variables through their secret manager.
 
 Production configuration must provide explicit database and browser-origin settings. Secrets must not be committed to Git.
 
