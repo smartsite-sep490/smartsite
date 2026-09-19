@@ -12,6 +12,13 @@ export { validateCameraRegionConfiguration } from './validation/schema-validator
 
 export type { ValidationResult } from './validation/schema-validator.js';
 
+export {
+  MAX_CAMERA_REGION_PAYLOAD_BYTES,
+  parseCameraRegionConfigurationPayload,
+} from './validation/camera-region-configuration-validator.js';
+
+export type { CameraRegionConfigurationValidationResult } from './validation/camera-region-configuration-validator.js';
+
 export type {
   CameraObservationRegionConfiguration,
   CameraRegionConfiguration,
