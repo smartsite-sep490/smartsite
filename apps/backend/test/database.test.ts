@@ -151,6 +151,44 @@ test('resolveCliEnvironment prefers a validated DIRECT_URL for migration command
   );
 });
 
+test('resolveCliEnvironment prefers DIRECT_URL over DATABASE_URL_UNPOOLED and DATABASE_URL', () => {
+  const config = resolveCliEnvironment(undefined, {
+    DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+    DATABASE_URL_UNPOOLED: 'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
+    DIRECT_URL: 'postgresql://direct_user:pass@direct.example.com:5432/app?sslmode=require',
+  });
+
+  assert.equal(
+    config.DATABASE_URL,
+    'postgresql://direct_user:pass@direct.example.com:5432/app?sslmode=require',
+  );
+});
+
+test('resolveCliEnvironment prefers DATABASE_URL_UNPOOLED when DIRECT_URL is absent', () => {
+  const config = resolveCliEnvironment(undefined, {
+    DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+    DATABASE_URL_UNPOOLED: 'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
+  });
+
+  assert.equal(
+    config.DATABASE_URL,
+    'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
+  );
+});
+
+test('resolveCliEnvironment falls back to DATABASE_URL when both direct URLs are empty strings', () => {
+  const config = resolveCliEnvironment(undefined, {
+    DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+    DIRECT_URL: '',
+    DATABASE_URL_UNPOOLED: '',
+  });
+
+  assert.equal(
+    config.DATABASE_URL,
+    'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+  );
+});
+
 test('resolveCliEnvironment rejects an invalid DIRECT_URL without exposing credentials', () => {
   assert.throws(
     () =>
@@ -166,6 +204,23 @@ test('resolveCliEnvironment rejects an invalid DIRECT_URL without exposing crede
     },
   );
 });
+
+test('resolveCliEnvironment rejects an invalid DATABASE_URL_UNPOOLED without exposing credentials', () => {
+  assert.throws(
+    () =>
+      resolveCliEnvironment(undefined, {
+        DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+        DATABASE_URL_UNPOOLED: 'https://secret-unpooled-user:secret-unpooled-pass@example.com/app',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /DATABASE_URL_UNPOOLED must be a PostgreSQL URL/);
+      assert.doesNotMatch(error.message, /secret-unpooled-user|secret-unpooled-pass/);
+      return true;
+    },
+  );
+});
+
 
 test('resolveCliEnvironment falls back safely when .env file does not exist', () => {
   const nonExistentPath = path.join(os.tmpdir(), 'does-not-exist', '.env');

@@ -27,13 +27,19 @@ export function resolveCliEnvironment(
   }
 
   const runtimeConfig = validateEnvironment(mergedEnv);
-  const directUrl = mergedEnv.DIRECT_URL;
-  if (directUrl === undefined || directUrl.length === 0) {
+  const candidateDirectUrl =
+    mergedEnv.DIRECT_URL !== undefined && mergedEnv.DIRECT_URL.length > 0
+      ? { value: mergedEnv.DIRECT_URL, source: 'DIRECT_URL' }
+      : mergedEnv.DATABASE_URL_UNPOOLED !== undefined && mergedEnv.DATABASE_URL_UNPOOLED.length > 0
+        ? { value: mergedEnv.DATABASE_URL_UNPOOLED, source: 'DATABASE_URL_UNPOOLED' }
+        : undefined;
+
+  if (candidateDirectUrl === undefined) {
     return runtimeConfig;
   }
 
   try {
-    const parsed = new URL(directUrl);
+    const parsed = new URL(candidateDirectUrl.value);
     if (
       !['postgres:', 'postgresql:'].includes(parsed.protocol) ||
       !parsed.hostname ||
@@ -42,11 +48,14 @@ export function resolveCliEnvironment(
       throw new Error();
     }
   } catch {
-    throw new Error('DIRECT_URL must be a PostgreSQL URL with a host and database name');
+    throw new Error(
+      `${candidateDirectUrl.source} must be a PostgreSQL URL with a host and database name`,
+    );
   }
 
   return {
     ...runtimeConfig,
-    DATABASE_URL: directUrl,
+    DATABASE_URL: candidateDirectUrl.value,
   };
 }
+

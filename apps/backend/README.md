@@ -14,12 +14,18 @@ Dùng PostgreSQL tại Neon cho môi trường được cấu hình; không tự
 
 Không tự động sync schema hay chạy migration lúc server boot. Mọi thay đổi schema phải thông qua TypeORM migration files được review kỹ lưỡng. TypeORM CLI dùng chung cấu hình DataSource và validateEnvironment với NestJS runtime (`src/database/typeorm.data-source.ts`). CLI tự động nạp `apps/backend/.env` cross-platform, trong khi các biến môi trường thực tế của tiến trình (`process.env`) luôn có quyền ưu tiên ghi đè.
 
-Mỗi script migration tự động build trước khi chạy TypeORM CLI. Runtime dùng `DATABASE_URL`; migration CLI ưu tiên `DIRECT_URL` nếu được cấu hình, phù hợp với Neon pooled URL ở runtime và direct URL cho migration.
+Mỗi script migration tự động build trước khi chạy TypeORM CLI. Runtime dùng `DATABASE_URL` (kết nối pooled); migration CLI ưu tiên kết nối direct/unpooled theo thứ tự: `DIRECT_URL > DATABASE_URL_UNPOOLED > DATABASE_URL`. Điều này đảm bảo an toàn cho migration (tránh lỗi advisory lock hay transaction state trên pooled connection) trong khi vẫn tận dụng được connection pooling khi chạy backend server.
 
 ```sh
+# Xem trạng thái migration trên môi trường hiện tại (local hoặc Neon)
 pnpm --filter @smartsite/backend db:migrate:show
+
+# Chạy migrations
 pnpm --filter @smartsite/backend db:migrate:run
+
+# Hoàn tác migration gần nhất
 pnpm --filter @smartsite/backend db:migrate:revert
 ```
 
-Docker Compose chạy service `migrate` trước Backend. Với môi trường ngoài Compose, phải chạy `db:migrate:run` trước khi triển khai phiên bản Backend mới. Chưa thực hiện migration lên Neon remote.
+Docker Compose chạy service `migrate` trước Backend. Với môi trường ngoài Compose (như Staging/Production trên Neon), chạy `db:migrate:run` trước khi triển khai phiên bản Backend mới. Tuyệt đối không commit tệp `.env`, `.env.local` hoặc chứa secret vào Git.
+

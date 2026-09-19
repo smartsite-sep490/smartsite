@@ -62,10 +62,14 @@ Thumbs.db
 .superpowers/
 *.tsbuildinfo
 
-# Local planning / generated documentation
-docs/
-*.md
-!README.md
-!CONTRIBUTING.md
-!AGENTS.md
-!**/README.md
+# Local planning and working documentation
+docs/superpowers/
+docs/local/
+*.local.md
+*.draft.local.md
+
+# Neon and local agent tooling
+.neon/
+.agents/
+skills-lock.json
+

@@ -138,12 +138,16 @@ See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instruct
 CI currently verifies Android and iOS JavaScript exports. Emulator, simulator, and physical-device validation remain separate steps.
 
 ## Environment Configuration
-
+ 
 Example environment files are provided where required.
-
-The backend defaults to local PostgreSQL for development. A hosted Neon connection is supplied through `DATABASE_URL` at runtime.
-
+ 
+The backend defaults to local PostgreSQL for development. For hosted Neon environments:
+- Runtime services use `DATABASE_URL` (pooled TLS connection).
+- TypeORM migration CLI commands use a direct/unpooled connection, prioritizing: `DIRECT_URL > DATABASE_URL_UNPOOLED > DATABASE_URL`.
+- Environment variables can be pulled via `neon env pull` (stored in gitignored `.env.local`) or provided through your deployment secret manager.
+ 
 Production configuration must provide explicit database and browser-origin settings. Secrets must not be committed to Git.
+
 
 ## Development Commands
 
