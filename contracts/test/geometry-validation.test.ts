@@ -47,8 +47,22 @@ test('validateGeometries rejects inverted observation horizontal and vertical co
 
   const issues = validateGeometries(payload);
   assert.equal(issues.length, 2);
-  assert.ok(issues.some((i) => i.code === 'INVALID_GEOMETRY' && i.path === '/observations/0/boundingBox' && i.message.includes('x1')));
-  assert.ok(issues.some((i) => i.code === 'INVALID_GEOMETRY' && i.path === '/observations/0/boundingBox' && i.message.includes('y1')));
+  assert.ok(
+    issues.some(
+      (i) =>
+        i.code === 'INVALID_GEOMETRY' &&
+        i.path === '/observations/0/boundingBox' &&
+        i.message.includes('x1'),
+    ),
+  );
+  assert.ok(
+    issues.some(
+      (i) =>
+        i.code === 'INVALID_GEOMETRY' &&
+        i.path === '/observations/0/boundingBox' &&
+        i.message.includes('y1'),
+    ),
+  );
 });
 
 test('validateGeometries rejects invalid bounding box in evidence item', () => {

@@ -304,7 +304,11 @@ test('rejects invalid evidence geometry', () => {
     ],
   });
   assert.equal(invalidEvidenceGeometry.isValid, false);
-  assert.ok(invalidEvidenceGeometry.issues.some((i: ValidationIssue) => i.code === 'INVALID_GEOMETRY' && i.path === '/evidence/0/boundingBox'));
+  assert.ok(
+    invalidEvidenceGeometry.issues.some(
+      (i: ValidationIssue) => i.code === 'INVALID_GEOMETRY' && i.path === '/evidence/0/boundingBox',
+    ),
+  );
 });
 
 test('enforces root constraints: frameDimensions required, UUID streamSessionId, maxLength 128 cameraExternalId', () => {
@@ -384,7 +388,8 @@ test('strictly rejects PPE observation missing regionId or geometryVersion and a
   assert.equal(missingRegion.isValid, false);
   assert.ok(
     missingRegion.issues.some(
-      (i: ValidationIssue) => i.path === '/observations/0/regionId' && i.message.includes('regionId'),
+      (i: ValidationIssue) =>
+        i.path === '/observations/0/regionId' && i.message.includes('regionId'),
     ),
   );
 
@@ -404,7 +409,8 @@ test('strictly rejects PPE observation missing regionId or geometryVersion and a
   assert.equal(missingGeomVersion.isValid, false);
   assert.ok(
     missingGeomVersion.issues.some(
-      (i: ValidationIssue) => i.path === '/observations/0/geometryVersion' && i.message.includes('geometryVersion'),
+      (i: ValidationIssue) =>
+        i.path === '/observations/0/geometryVersion' && i.message.includes('geometryVersion'),
     ),
   );
 });
@@ -424,7 +430,8 @@ test('strictly rejects ZONE_ENTRY observation missing regionId or geometryVersio
   assert.equal(missingRegion.isValid, false);
   assert.ok(
     missingRegion.issues.some(
-      (i: ValidationIssue) => i.path === '/observations/0/regionId' && i.message.includes('regionId'),
+      (i: ValidationIssue) =>
+        i.path === '/observations/0/regionId' && i.message.includes('regionId'),
     ),
   );
 
@@ -442,7 +449,100 @@ test('strictly rejects ZONE_ENTRY observation missing regionId or geometryVersio
   assert.equal(missingGeomVersion.isValid, false);
   assert.ok(
     missingGeomVersion.issues.some(
-      (i: ValidationIssue) => i.path === '/observations/0/geometryVersion' && i.message.includes('geometryVersion'),
+      (i: ValidationIssue) =>
+        i.path === '/observations/0/geometryVersion' && i.message.includes('geometryVersion'),
     ),
+  );
+});
+
+test('rejects values that cannot be represented safely across JavaScript, JCS, and PostgreSQL', () => {
+  const unsafeInteger = Number.MAX_SAFE_INTEGER + 1;
+  const canonicalUuid = '11111111-1111-4111-8111-111111111111';
+
+  for (const payload of [
+    {
+      ...baseEvent,
+      eventId: `urn:uuid:${canonicalUuid}`,
+      observations: [{ type: 'PERSON', trackId: 1 }],
+    },
+    {
+      ...baseEvent,
+      capturedAt: '2026-09-18 10:00:00Z',
+      observations: [{ type: 'PERSON', trackId: 1 }],
+    },
+    {
+      ...baseEvent,
+      capturedAt: '2026-09-18T10:00:00+00',
+      observations: [{ type: 'PERSON', trackId: 1 }],
+    },
+    {
+      ...baseEvent,
+      frameDimensions: { width: unsafeInteger, height: 1080 },
+      observations: [{ type: 'PERSON', trackId: 1 }],
+    },
+    { ...baseEvent, observations: [{ type: 'PERSON', trackId: unsafeInteger }] },
+    {
+      ...baseEvent,
+      observations: [
+        {
+          type: 'IDENTITY_CANDIDATE',
+          trackId: 1,
+          status: 'CANDIDATE',
+          candidateWorkerId: 'W'.repeat(129),
+          similarityScore: 0.9,
+        },
+      ],
+    },
+    {
+      ...baseEvent,
+      cameraExternalId: 'CAM\u0000BROKEN',
+      observations: [{ type: 'PERSON', trackId: 1 }],
+    },
+    {
+      ...baseEvent,
+      observations: [{ type: 'PERSON', trackId: 1 }],
+      evidence: [{ kind: 'FRAME', uri: 's3://bucket/frame\u0000.jpg' }],
+    },
+  ]) {
+    assert.equal(validateObservationEvent(payload).isValid, false);
+  }
+});
+
+test('accepts storage and numeric boundary values', () => {
+  const result = validateObservationEvent({
+    ...baseEvent,
+    frameDimensions: { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER },
+    observations: [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: Number.MAX_SAFE_INTEGER,
+        status: 'CANDIDATE',
+        candidateWorkerId: 'W'.repeat(128),
+        similarityScore: 0.9,
+      },
+    ],
+    evidence: [{ kind: 'FRAME', uri: 's3://bucket/frame.jpg', trackId: Number.MAX_SAFE_INTEGER }],
+  });
+  assert.equal(result.isValid, true, JSON.stringify(result.issues));
+});
+
+test('bounds per-event collection work', () => {
+  assert.equal(
+    validateObservationEvent({
+      ...baseEvent,
+      observations: Array.from({ length: 257 }, (_, trackId) => ({ type: 'PERSON', trackId })),
+    }).isValid,
+    false,
+  );
+  assert.equal(
+    validateObservationEvent({
+      ...baseEvent,
+      observations: [{ type: 'PERSON', trackId: 1 }],
+      evidence: Array.from({ length: 257 }, (_, index) => ({
+        kind: 'FRAME',
+        uri: `s3://frames/${index}`,
+      })),
+    }).isValid,
+    false,
   );
 });

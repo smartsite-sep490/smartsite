@@ -26,5 +26,27 @@ export function resolveCliEnvironment(
     }
   }
 
-  return validateEnvironment(mergedEnv);
+  const runtimeConfig = validateEnvironment(mergedEnv);
+  const directUrl = mergedEnv.DIRECT_URL;
+  if (directUrl === undefined || directUrl.length === 0) {
+    return runtimeConfig;
+  }
+
+  try {
+    const parsed = new URL(directUrl);
+    if (
+      !['postgres:', 'postgresql:'].includes(parsed.protocol) ||
+      !parsed.hostname ||
+      parsed.pathname.length <= 1
+    ) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error('DIRECT_URL must be a PostgreSQL URL with a host and database name');
+  }
+
+  return {
+    ...runtimeConfig,
+    DATABASE_URL: directUrl,
+  };
 }

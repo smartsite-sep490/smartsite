@@ -34,7 +34,11 @@ test('canonicalize package and project hash match pinned vectors', () => {
   for (const vector of vectors) {
     const canonical = canonicalize(vector.input);
     assert.equal(canonical, vector.expectedCanonical, vector.description);
-    assert.equal(computeCanonicalPayloadHash(vector.input), vector.expectedSha256, vector.description);
+    assert.equal(
+      computeCanonicalPayloadHash(vector.input),
+      vector.expectedSha256,
+      vector.description,
+    );
     assert.equal(
       createHash('sha256').update(vector.expectedCanonical, 'utf8').digest('hex'),
       vector.expectedSha256,
@@ -47,11 +51,12 @@ test('matches RFC 8785 primitive serialization example', () => {
   const input = {
     // eslint-disable-next-line no-loss-of-precision
     numbers: [333333333.33333329, 1e30, 4.5, 2e-3, 1e-27],
-    string: "€$\u000f\nA'B\"\\\\\"/",
+    string: '€$\u000f\nA\'B"\\\\"/',
     literals: [null, true, false],
   };
-  // eslint-disable-next-line no-useless-escape
-  const expected = '{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27],"string":"€$\\u000f\\nA\'B\\"\\\\\\\\\\"/\"}';
+  const expected =
+    // eslint-disable-next-line no-useless-escape
+    '{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27],"string":"€$\\u000f\\nA\'B\\"\\\\\\\\\\"/\"}';
   assert.equal(canonicalize(input), expected);
 });
 
@@ -64,6 +69,13 @@ test('canonicalizeJson strictly preserves array element order and normalizes obj
   const obj2 = { a: 2, z: 1 };
   assert.equal(computeCanonicalPayloadHash(obj1), computeCanonicalPayloadHash(obj2));
   assert.equal(canonicalizeJson(obj1), canonicalizeJson(obj2));
+});
+
+test('rejects integers outside the interoperable JSON safe-integer domain', () => {
+  assert.throws(
+    () => computeCanonicalPayloadHash({ trackId: Number.MAX_SAFE_INTEGER + 1 }),
+    /safe integer/i,
+  );
 });
 
 test('computeCanonicalPayloadHash rejects undefined and non-serializable values', () => {

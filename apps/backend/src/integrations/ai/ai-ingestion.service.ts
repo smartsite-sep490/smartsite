@@ -1,6 +1,13 @@
-import { BadRequestException, ConflictException, Injectable, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
@@ -37,16 +44,14 @@ interface ValidatedObservationEvent {
 
 /**
  * Normalizes an RFC 3339 date-time string into a valid ECMAScript Date.
- * RFC 3339 allows:
- * 1. Bare-hour timezone offsets (+HH or -HH), e.g. '+00', '-05'.
- *    ECMAScript Date requires minute precision in timezone offsets (+HH:mm or -HH:mm).
- * 2. Leap seconds (:60), e.g. '2026-12-31T23:59:60Z' or '2026-12-31T23:59:60+00'.
+ * The canonical contract accepts RFC 3339 timestamps with `T`/`t`, `Z`/`z`
+ * or colon-delimited offsets, plus leap seconds (:60).
  *    ECMAScript Date returns NaN for seconds = 60.
  *
  * This function:
- * 1. Normalizes bare-hour offsets to +HH:00 / -HH:00.
- * 2. Normalizes leap seconds (:60) to :59 of the same second (POSIX/Unix timestamp standard).
- * 3. Returns a valid Date if the normalized string yields a finite timestamp, or null otherwise.
+ * Leap seconds are normalized to :59 of the same minute for the queryable
+ * PostgreSQL timestamp. The exact original timestamp remains in rawPayload and
+ * is used for the canonical hash.
  *
  * Spec §15 requirement: The exact original payload and canonical RFC 8785 payloadHash
  * must remain untouched, preserving raw evidence while storing a safe, queryable
@@ -59,10 +64,7 @@ export function parseNormalizedCapturedAt(dateString: string): Date | null {
 
   let normalized = dateString.trim();
 
-  // 1. Normalize bare-hour timezone offset (+HH or -HH) at end of string to +HH:00 or -HH:00
-  normalized = normalized.replace(/([+-]\d{2})$/, '$1:00');
-
-  // 2. Normalize RFC 3339 leap second (:60) to :59
+  // Normalize RFC 3339 leap second (:60) to :59.
   normalized = normalized.replace(
     /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):60(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i,
     (_match, prefix, fraction, tz) => `${prefix}:59${fraction ?? ''}${tz ?? ''}`,
@@ -78,6 +80,7 @@ export function parseNormalizedCapturedAt(dateString: string): Date | null {
 
 @Injectable()
 export class AiIngestionService {
+  private readonly logger = new Logger(AiIngestionService.name);
   private readonly clock: () => Date;
 
   constructor(
@@ -271,6 +274,25 @@ export class AiIngestionService {
             `Event with ID "${event.eventId}" already exists with a different payload hash`,
           );
         }
+      }
+
+      if (error instanceof QueryFailedError) {
+        const driverError = error.driverError as
+          { code?: unknown; constraint?: unknown } | undefined;
+        const code = typeof driverError?.code === 'string' ? driverError.code : 'UNKNOWN';
+        const rawConstraint = driverError?.constraint;
+        const constraint =
+          typeof rawConstraint === 'string' && /^[A-Za-z0-9_]{1,128}$/.test(rawConstraint)
+            ? rawConstraint
+            : 'UNKNOWN';
+
+        this.logger.error({
+          message: 'AI ingestion persistence failed',
+          eventId: event.eventId,
+          code,
+          constraint,
+        });
+        throw new ServiceUnavailableException('AI event could not be persisted');
       }
 
       // Every other error rethrow

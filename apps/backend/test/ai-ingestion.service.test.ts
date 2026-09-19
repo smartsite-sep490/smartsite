@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   type DataSource,
   type EntityManager,
@@ -244,7 +248,6 @@ test('AiIngestionService: invalid schema throws BadRequestException with structu
     undefined,
     () => FIXED_NOW,
   );
-
   const invalidPayload = {
     eventId: 'not-a-uuid',
     schemaVersion: '9.9.9',
@@ -700,9 +703,9 @@ test('AiIngestionService: valid timezone offset forms preserve event time and ra
   };
 
   for (const capturedAt of [
-    '2026-12-31T23:59:59+00',
-    '2026-12-31T23:59:60+00',
-    '2026-12-31T23:59:60+0000',
+    '2026-12-31T23:59:59+00:00',
+    '2026-12-31T23:59:60+00:00',
+    '2027-01-01T06:59:59+07:00',
   ]) {
     const store: MockStore = {
       cameras: [camera],
@@ -734,7 +737,7 @@ test('AiIngestionService: valid timezone offset forms preserve event time and ra
   }
 });
 
-test('AiIngestionService: schema-valid but unrepresentable timestamp still preserves raw event', async () => {
+test('AiIngestionService: rejects non-RFC3339 timestamp before persistence', async () => {
   const now = new Date('2027-01-01T00:00:30.000Z');
   const store: MockStore = {
     cameras: [],
@@ -755,14 +758,8 @@ test('AiIngestionService: schema-valid but unrepresentable timestamp still prese
   const capturedAt = '2026-12-31T24:59:60+01:00';
   const payload = createSampleEvent({ capturedAt });
 
-  const result = await service.ingestEvent(payload);
-
-  assert.equal(result.status, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
-  assert.equal(store.rawEvents.length, 1);
-  const saved = store.rawEvents[0]!;
-  assert.equal(saved.capturedAt.toISOString(), now.toISOString());
-  assert.equal((saved.rawPayload as Record<string, unknown>)['capturedAt'], capturedAt);
-  assert.equal(saved.payloadHash, computeCanonicalPayloadHash(payload));
+  await assert.rejects(service.ingestEvent(payload), BadRequestException);
+  assert.equal(store.rawEvents.length, 0);
   assert.equal(store.alerts.length, 0);
   assert.equal(store.mappings.length, 0);
 });
@@ -980,7 +977,7 @@ test('AiIngestionService: retry with same eventId but different payloadHash thro
   assert.equal(store.rawEvents[0]!.payloadHash, originalHash);
 });
 
-test('AiIngestionService: unique violation on another constraint is not classified as duplicate and is rethrown', async () => {
+test('AiIngestionService: sanitizes non-idempotency database errors before they reach HTTP logging', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -992,9 +989,10 @@ test('AiIngestionService: unique violation on another constraint is not classifi
   const ds = createMockDataSource(store);
 
   // Override transaction to throw a unique violation on an unrelated table/constraint
+  const sensitivePayload = 'sensitive-evidence-uri';
   const unrelatedConstraintError = new QueryFailedError(
-    'INSERT INTO camera ...',
-    [],
+    'INSERT INTO camera(raw_payload) VALUES ($1)',
+    [sensitivePayload],
     new Error('duplicate key value'),
   );
   (
@@ -1027,6 +1025,10 @@ test('AiIngestionService: unique violation on another constraint is not classifi
     undefined,
     () => FIXED_NOW,
   );
+  const sanitizedLogs: unknown[] = [];
+  (service as unknown as { logger: { error: (entry: unknown) => void } }).logger = {
+    error: (entry: unknown) => sanitizedLogs.push(entry),
+  };
 
   const payload = createSampleEvent();
 
@@ -1035,10 +1037,14 @@ test('AiIngestionService: unique violation on another constraint is not classifi
       await service.ingestEvent(payload);
     },
     (err: unknown) => {
-      assert.equal(err, unrelatedConstraintError);
+      assert.ok(err instanceof ServiceUnavailableException);
+      assert.equal(err.getStatus(), 503);
+      assert.doesNotMatch(JSON.stringify(err.getResponse()), /sensitive-evidence-uri|INSERT INTO/);
       return true;
     },
   );
+  assert.equal(sanitizedLogs.length, 1);
+  assert.doesNotMatch(JSON.stringify(sanitizedLogs), /sensitive-evidence-uri|INSERT INTO/);
 });
 
 test('AiIngestionService: general non-unique DB error is rethrown untouched', async () => {

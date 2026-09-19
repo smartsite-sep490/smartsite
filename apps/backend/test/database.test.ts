@@ -139,6 +139,34 @@ test('resolveCliEnvironment prioritizes real process environment variables over 
   }
 });
 
+test('resolveCliEnvironment prefers a validated DIRECT_URL for migration commands only', () => {
+  const config = resolveCliEnvironment(undefined, {
+    DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+    DIRECT_URL: 'postgresql://direct_user:pass@direct.example.com:5432/app?sslmode=require',
+  });
+
+  assert.equal(
+    config.DATABASE_URL,
+    'postgresql://direct_user:pass@direct.example.com:5432/app?sslmode=require',
+  );
+});
+
+test('resolveCliEnvironment rejects an invalid DIRECT_URL without exposing credentials', () => {
+  assert.throws(
+    () =>
+      resolveCliEnvironment(undefined, {
+        DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
+        DIRECT_URL: 'https://secret-user:secret-pass@example.com/app',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /DIRECT_URL must be a PostgreSQL URL/);
+      assert.doesNotMatch(error.message, /secret-user|secret-pass/);
+      return true;
+    },
+  );
+});
+
 test('resolveCliEnvironment falls back safely when .env file does not exist', () => {
   const nonExistentPath = path.join(os.tmpdir(), 'does-not-exist', '.env');
   const config = resolveCliEnvironment(nonExistentPath, {});

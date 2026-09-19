@@ -7,7 +7,11 @@ import { ZoneEntity } from './zone.entity.js';
 @Check('chk_region_version', 'version >= 1')
 @Index('idx_region_camera_active', ['cameraId', 'isActive'])
 export class CameraObservationRegionEntity {
-  @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_camera_observation_region_id' })
+  @PrimaryColumn({
+    name: 'id',
+    type: 'uuid',
+    primaryKeyConstraintName: 'pk_camera_observation_region_id',
+  })
   id!: string;
 
   @Column({ name: 'camera_id', type: 'uuid' })

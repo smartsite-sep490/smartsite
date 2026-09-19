@@ -17,7 +17,7 @@ export function configureApplication(app: NestExpressApplication): void {
       new DocumentBuilder()
         .setTitle('SmartSite API')
         .setDescription(
-          'Foundation health endpoints. Business APIs and authentication are not implemented yet.',
+          'SmartSite foundation APIs, including authenticated AI observation ingestion for MF05/MF06.',
         )
         .setVersion('0.1.0')
         .build(),

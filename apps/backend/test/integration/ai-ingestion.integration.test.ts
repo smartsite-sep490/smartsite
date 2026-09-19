@@ -388,6 +388,7 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     );
 
     const eventId = randomUUID();
+    const candidateWorkerIdAtStorageBoundary = 'W'.repeat(128);
     const payload = createSampleEvent({
       eventId,
       cameraExternalId,
@@ -407,6 +408,13 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
             y2: 0.85,
             coordinateSpace: 'NORMALIZED_0_1',
           },
+        },
+        {
+          type: 'IDENTITY_CANDIDATE',
+          trackId: 201,
+          status: 'CANDIDATE',
+          candidateWorkerId: candidateWorkerIdAtStorageBoundary,
+          similarityScore: 0.93,
         },
       ],
     });
@@ -438,6 +446,7 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     assert.equal(alert.siteId, siteId);
     assert.equal(alert.alertType, AlertType.PPE_VIOLATION);
     assert.equal(alert.candidateSubtype, 'PPE_HARD_HAT_MISSING');
+    assert.equal(alert.candidateWorkerId, candidateWorkerIdAtStorageBoundary);
   });
 });
 
@@ -552,14 +561,8 @@ test('AiIngestionService: inactive camera preserves raw PPE event without creati
     assert.equal(raw.processingStatus, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
     assert.equal(raw.resolvedCameraId, null);
     assert.equal(raw.cameraExternalId, cameraExternalId);
-    assert.equal(
-      await source.getRepository(SafetyAlertEntity).countBy({ siteId }),
-      0,
-    );
-    assert.equal(
-      await source.getRepository(AlertDetectionMappingEntity).countBy({ eventId }),
-      0,
-    );
+    assert.equal(await source.getRepository(SafetyAlertEntity).countBy({ siteId }), 0);
+    assert.equal(await source.getRepository(AlertDetectionMappingEntity).countBy({ eventId }), 0);
   });
 });
 

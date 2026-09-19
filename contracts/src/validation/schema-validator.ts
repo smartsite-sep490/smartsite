@@ -37,11 +37,10 @@ const schemaPath = new URL('../../schemas/v1/technical-observation-event.json', 
 const rawSchema: unknown = JSON.parse(readFileSync(schemaPath, 'utf8'));
 
 // Resolve constructor robustly across CJS/ESM interop without any
-const resolvedAjvConstructor = (
-  typeof Ajv2020Pkg === 'function'
-    ? Ajv2020Pkg
-    : (Ajv2020Pkg as unknown as { default: Ajv2020Constructor }).default
-) as unknown as Ajv2020Constructor;
+const resolvedAjvConstructor = (typeof Ajv2020Pkg === 'function'
+  ? Ajv2020Pkg
+  : (Ajv2020Pkg as unknown as { default: Ajv2020Constructor })
+      .default) as unknown as Ajv2020Constructor;
 
 const resolvedAddFormats = (
   typeof addFormatsPkg === 'function'
@@ -72,10 +71,17 @@ export function validateObservationEvent(data: unknown): ValidationResult {
       let issueMessage = err.message || 'Schema validation error';
 
       if (err.keyword === 'required' && typeof err.params.missingProperty === 'string') {
-        issuePath = issuePath ? `${issuePath}/${err.params.missingProperty}` : `/${err.params.missingProperty}`;
+        issuePath = issuePath
+          ? `${issuePath}/${err.params.missingProperty}`
+          : `/${err.params.missingProperty}`;
         issueMessage = `Missing required property: ${err.params.missingProperty}`;
-      } else if (err.keyword === 'additionalProperties' && typeof err.params.additionalProperty === 'string') {
-        issuePath = issuePath ? `${issuePath}/${err.params.additionalProperty}` : `/${err.params.additionalProperty}`;
+      } else if (
+        err.keyword === 'additionalProperties' &&
+        typeof err.params.additionalProperty === 'string'
+      ) {
+        issuePath = issuePath
+          ? `${issuePath}/${err.params.additionalProperty}`
+          : `/${err.params.additionalProperty}`;
         issueMessage = `Unexpected additional property: ${err.params.additionalProperty}`;
       }
 
