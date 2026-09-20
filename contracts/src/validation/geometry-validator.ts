@@ -1,5 +1,10 @@
 export interface ValidationIssue {
-  code: 'SCHEMA_VIOLATION' | 'INVALID_GEOMETRY';
+  code:
+    | 'SCHEMA_VIOLATION'
+    | 'INVALID_GEOMETRY'
+    | 'PAYLOAD_TOO_LARGE'
+    | 'INVALID_JSON'
+    | 'DUPLICATE_REGION_ID';
   path: string;
   message: string;
 }
