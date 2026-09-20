@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   MAX_CAMERA_REGION_PAYLOAD_BYTES,
   parseCameraRegionConfigurationPayload,
+  validateCameraRegionConfiguration,
 } from '@smartsite/contracts';
 import type { CameraRegionConfigurationValidationResult } from '@smartsite/contracts';
 
@@ -98,5 +99,43 @@ test('returns schema issues without traversing malformed polygon structure', () 
     assert.equal(result.isValid, false);
     assert.ok(result.issues.every((issue) => issue.code === 'SCHEMA_VIOLATION'));
     assert.equal(Object.hasOwn(result, 'value'), false);
+  }
+});
+
+for (const [name, cameraExternalId] of [
+  ['high', 'CAM-\ud800'],
+  ['low', 'CAM-\udfff'],
+] as const) {
+  test(`schema rejects a lone ${name} surrogate in cameraExternalId`, () => {
+    const result = validateCameraRegionConfiguration({ ...configuration, cameraExternalId });
+    assertRejected(result, 'SCHEMA_VIOLATION', '/cameraExternalId');
+  });
+
+  for (const encoding of ['string', 'bytes'] as const) {
+    test(`rejects an escaped lone ${name} surrogate in a ${encoding} payload`, () => {
+      const json = JSON.stringify({ ...configuration, cameraExternalId });
+      const payload = encoding === 'string' ? json : new TextEncoder().encode(json);
+      assertRejected(
+        parseCameraRegionConfigurationPayload(payload),
+        'SCHEMA_VIOLATION',
+        '/cameraExternalId',
+      );
+    });
+  }
+}
+
+test('accepts supplementary Unicode in literal and escaped string and byte payloads', () => {
+  const input = { ...configuration, cameraExternalId: 'CAM-\u{1f4f7}' };
+  assert.deepEqual(validateCameraRegionConfiguration(input), { isValid: true, issues: [] });
+  const literal = JSON.stringify(input);
+  const escaped = literal.replace('\u{1f4f7}', '\\ud83d\\udcf7');
+  for (const json of [literal, escaped]) {
+    for (const payload of [json, new TextEncoder().encode(json)]) {
+      assert.deepEqual(parseCameraRegionConfigurationPayload(payload), {
+        isValid: true,
+        issues: [],
+        value: input,
+      });
+    }
   }
 });

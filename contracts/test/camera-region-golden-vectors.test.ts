@@ -39,6 +39,14 @@ const requiredDescriptions = [
   'repeated closing point',
   'zero-area polygon',
   'self-intersecting polygon',
+  'nonzero-area self-intersection below floating-point product range',
+  'valid parallelogram below floating-point product range',
+  'mixed-case duplicate region ID',
+  'lone high surrogate camera ID',
+  'lone low surrogate camera ID',
+  'supplementary Unicode camera ID',
+  'uppercase region ID spelling',
+  '64 regions',
   '65 regions',
 ] as const;
 
@@ -125,4 +133,18 @@ test('object-key insertion order does not change the canonical payload hash', ()
     computeCanonicalPayloadHash(reordered.payload),
     computeCanonicalPayloadHash(baseline.payload),
   );
+});
+
+test('exactly 64 regions pass with a pinned golden hash and 65 regions fail', () => {
+  const accepted = vectorByDescription('64 regions');
+  const result = parseCameraRegionConfigurationPayload(JSON.stringify(accepted.payload));
+  assert.equal(result.isValid, true);
+  assert.equal(result.value?.regions.length, 64);
+  assert.equal(computeCanonicalPayloadHash(result.value), accepted.expectedSha256);
+
+  const rejected = vectorByDescription('65 regions');
+  const rejectedResult = parseCameraRegionConfigurationPayload(JSON.stringify(rejected.payload));
+  assert.equal(rejectedResult.isValid, false);
+  assert.equal(rejectedResult.issues[0]?.code, 'SCHEMA_VIOLATION');
+  assert.equal(rejectedResult.issues[0]?.path, '/regions');
 });

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseCameraRegionConfigurationPayload } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  parseCameraRegionConfigurationPayload,
+} from '@smartsite/contracts';
 import type { CameraRegionConfiguration, NormalizedCoordinate } from '@smartsite/contracts';
 import { validateCameraRegionPolygons } from '../src/validation/polygon-validator.js';
 
@@ -223,4 +226,103 @@ test('reports the polygon path for a later region', () => {
   assert.equal(result.issues[0]?.code, 'INVALID_GEOMETRY');
   assert.equal(result.issues[0]?.path, '/regions/1/polygon/coordinates');
   assert.equal(Object.hasOwn(result, 'value'), false);
+});
+
+const underflowPolygons: Array<[string, readonly NormalizedCoordinate[], boolean]> = [
+  [
+    'nonzero-area crossing below floating-point product range',
+    [
+      [0, 1e-200],
+      [2e-200, 1e-200],
+      [1e-200, 0],
+      [1e-200, 3e-200],
+    ],
+    false,
+  ],
+  [
+    'valid parallelogram below floating-point product range',
+    [
+      [0, 0],
+      [3e-200, 2e-200],
+      [3e-200, 3e-200],
+      [0, 1e-200],
+    ],
+    true,
+  ],
+];
+
+for (const [name, coordinates, valid] of underflowPolygons) {
+  test(`semantic validator handles ${name}`, () => {
+    const issues = validateCameraRegionPolygons(configuration(coordinates));
+    if (valid) {
+      assert.deepEqual(issues, []);
+    } else {
+      assert.equal(issues.length, 1);
+      assert.equal(issues[0]?.code, 'INVALID_GEOMETRY');
+      assert.equal(issues[0]?.path, '/regions/0/polygon/coordinates');
+    }
+  });
+
+  test(`public parser handles ${name}`, () => {
+    const input = configuration(coordinates);
+    const result = parseCameraRegionConfigurationPayload(JSON.stringify(input));
+    assert.equal(result.isValid, valid);
+    if (valid) {
+      assert.deepEqual(result.value, input);
+      assert.deepEqual(result.issues, []);
+    } else {
+      assert.equal(result.issues[0]?.code, 'INVALID_GEOMETRY');
+      assert.equal(result.issues[0]?.path, '/regions/0/polygon/coordinates');
+      assert.equal(Object.hasOwn(result, 'value'), false);
+    }
+  });
+}
+
+for (const boundary of ['semantic validator', 'public parser'] as const) {
+  test(`${boundary} rejects case-equivalent UUIDs without changing their text`, () => {
+    const input = configuration([
+      [0, 0],
+      [1, 0],
+      [0, 1],
+    ]);
+    const duplicate = {
+      ...input,
+      regions: [
+        input.regions[0],
+        { ...input.regions[0], regionId: input.regions[0].regionId.toUpperCase() },
+      ],
+    };
+    const before = structuredClone(duplicate);
+    const result =
+      boundary === 'public parser'
+        ? parseCameraRegionConfigurationPayload(JSON.stringify(duplicate))
+        : undefined;
+    if (result) {
+      assert.equal(result.isValid, false);
+      assert.equal(Object.hasOwn(result, 'value'), false);
+    }
+    const issues = result?.issues ?? validateCameraRegionPolygons(duplicate);
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0]?.code, 'DUPLICATE_REGION_ID');
+    assert.equal(issues[0]?.path, '/regions/1/regionId');
+    assert.deepEqual(duplicate, before);
+  });
+}
+
+test('preserves uppercase UUID spelling in accepted payloads and canonical hashing', () => {
+  const lowercase = configuration([
+    [0, 0],
+    [1, 0],
+    [0, 1],
+  ]);
+  const uppercase = {
+    ...lowercase,
+    regions: [{ ...lowercase.regions[0], regionId: lowercase.regions[0].regionId.toUpperCase() }],
+  };
+  const result = parseCameraRegionConfigurationPayload(JSON.stringify(uppercase));
+  assert.deepEqual(result, { isValid: true, issues: [], value: uppercase });
+  assert.notEqual(
+    computeCanonicalPayloadHash(result.value),
+    computeCanonicalPayloadHash(lowercase),
+  );
 });

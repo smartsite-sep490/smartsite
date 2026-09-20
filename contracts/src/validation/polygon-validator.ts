@@ -4,41 +4,38 @@ import type {
 } from '../camera-region-configuration.js';
 import type { ValidationIssue } from './geometry-validator.js';
 
-function cross(a: NormalizedCoordinate, b: NormalizedCoordinate, c: NormalizedCoordinate): number {
+type ExactCoordinate = readonly [bigint, bigint];
+
+function cross(a: ExactCoordinate, b: ExactCoordinate, c: ExactCoordinate): bigint {
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
-function onSegment(
-  a: NormalizedCoordinate,
-  b: NormalizedCoordinate,
-  point: NormalizedCoordinate,
-): boolean {
+function onSegment(a: ExactCoordinate, b: ExactCoordinate, point: ExactCoordinate): boolean {
   return (
-    point[0] >= Math.min(a[0], b[0]) &&
-    point[0] <= Math.max(a[0], b[0]) &&
-    point[1] >= Math.min(a[1], b[1]) &&
-    point[1] <= Math.max(a[1], b[1])
+    ((point[0] >= a[0] && point[0] <= b[0]) || (point[0] >= b[0] && point[0] <= a[0])) &&
+    ((point[1] >= a[1] && point[1] <= b[1]) || (point[1] >= b[1] && point[1] <= a[1]))
   );
 }
 
 function segmentsIntersect(
-  a: NormalizedCoordinate,
-  b: NormalizedCoordinate,
-  c: NormalizedCoordinate,
-  d: NormalizedCoordinate,
+  a: ExactCoordinate,
+  b: ExactCoordinate,
+  c: ExactCoordinate,
+  d: ExactCoordinate,
 ): boolean {
   const abc = cross(a, b, c);
   const abd = cross(a, b, d);
   const cda = cross(c, d, a);
   const cdb = cross(c, d, b);
 
-  if (abc === 0 && onSegment(a, b, c)) return true;
-  if (abd === 0 && onSegment(a, b, d)) return true;
-  if (cda === 0 && onSegment(c, d, a)) return true;
-  if (cdb === 0 && onSegment(c, d, b)) return true;
+  if (abc === 0n && onSegment(a, b, c)) return true;
+  if (abd === 0n && onSegment(a, b, d)) return true;
+  if (cda === 0n && onSegment(c, d, a)) return true;
+  if (cdb === 0n && onSegment(c, d, b)) return true;
 
   return (
-    ((abc > 0 && abd < 0) || (abc < 0 && abd > 0)) && ((cda > 0 && cdb < 0) || (cda < 0 && cdb > 0))
+    ((abc > 0n && abd < 0n) || (abc < 0n && abd > 0n)) &&
+    ((cda > 0n && cdb < 0n) || (cda < 0n && cdb > 0n))
   );
 }
 
@@ -54,8 +51,7 @@ function exactCoordinate(value: number): bigint {
   return ((1n << 52n) | fraction) << (exponent - 1n);
 }
 
-function hasZeroArea(coordinates: readonly NormalizedCoordinate[]): boolean {
-  const exact = coordinates.map(([x, y]) => [exactCoordinate(x), exactCoordinate(y)] as const);
+function hasZeroArea(exact: readonly ExactCoordinate[]): boolean {
   let twiceArea = 0n;
   for (let index = 0; index < exact.length; index++) {
     const current = exact[index];
@@ -75,7 +71,10 @@ function polygonError(coordinates: readonly NormalizedCoordinate[]): string | un
     vertices.add(key);
   }
 
-  if (hasZeroArea(coordinates)) return 'Polygon must have nonzero area';
+  // Share the exact representation between area and orientation predicates so
+  // underflow or cancellation cannot turn a crossing into collinear edges.
+  const exact = coordinates.map(([x, y]) => [exactCoordinate(x), exactCoordinate(y)] as const);
+  if (hasZeroArea(exact)) return 'Polygon must have nonzero area';
 
   for (let first = 0; first < coordinates.length; first++) {
     const firstNext = (first + 1) % coordinates.length;
@@ -83,14 +82,7 @@ function polygonError(coordinates: readonly NormalizedCoordinate[]): string | un
       const secondNext = (second + 1) % coordinates.length;
       // Consecutive edges (including the closing edge) share one endpoint.
       if (firstNext === second || secondNext === first) continue;
-      if (
-        segmentsIntersect(
-          coordinates[first],
-          coordinates[firstNext],
-          coordinates[second],
-          coordinates[secondNext],
-        )
-      ) {
+      if (segmentsIntersect(exact[first], exact[firstNext], exact[second], exact[secondNext])) {
         return 'Non-adjacent polygon edges must not intersect';
       }
     }
@@ -105,14 +97,15 @@ export function validateCameraRegionPolygons(
   const issues: ValidationIssue[] = [];
   const regionIds = new Set<string>();
   for (const [index, region] of configuration.regions.entries()) {
-    if (regionIds.has(region.regionId)) {
+    const comparisonId = region.regionId.toLowerCase();
+    if (regionIds.has(comparisonId)) {
       issues.push({
         code: 'DUPLICATE_REGION_ID',
         path: `/regions/${index}/regionId`,
         message: 'Region IDs must be unique',
       });
     }
-    regionIds.add(region.regionId);
+    regionIds.add(comparisonId);
   }
   if (issues.length > 0) return issues;
 
