@@ -40,11 +40,9 @@ jobs:
         env:
           DATABASE_URL: postgresql://smartsite:smartsite_local_only@127.0.0.1:5432/smartsite
         run: pnpm --filter @smartsite/backend db:migrate:run
-      - name: Start isolated test PostgreSQL container
-        run: docker compose -f infra/compose.yaml --profile test up -d postgres-test --wait --wait-timeout 60
       - name: Run backend database integration tests
         env:
-          TEST_DATABASE_URL: postgresql://smartsite_test:smartsite_test_only@127.0.0.1:5433/smartsite_test
+          DATABASE_URL: postgresql://smartsite:smartsite_local_only@127.0.0.1:5432/smartsite
         run: pnpm --filter @smartsite/backend test:integration
       - name: Build and start local containers
         run: docker compose -f infra/compose.yaml up -d --build --wait --wait-timeout 120
@@ -54,7 +52,7 @@ jobs:
           curl --fail --max-time 10 http://localhost:5173/healthz
       - name: Show container status
         if: always()
-        run: docker compose -f infra/compose.yaml --profile test ps -a
+        run: docker compose -f infra/compose.yaml ps -a
       - name: Stop local containers
         if: always()
-        run: docker compose -f infra/compose.yaml --profile test down
+        run: docker compose -f infra/compose.yaml down

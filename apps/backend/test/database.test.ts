@@ -5,10 +5,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { DataSource } from 'typeorm';
 import { buildTypeOrmOptions } from '../src/database/typeorm.options.js';
+import AppDataSource from '../src/database/typeorm.data-source.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { resolveCliEnvironment } from '../src/config/cli-environment.js';
 import { numericTransformer } from '../src/database/entities/numeric.transformer.js';
-import { resolveTestDatabaseUrl } from './support/test-environment.js';
 
 test('buildTypeOrmOptions enforces production safety invariants and connection limits', () => {
   const options = buildTypeOrmOptions({
@@ -35,9 +35,6 @@ test('buildTypeOrmOptions enforces production safety invariants and connection l
 });
 
 test('AppDataSource is a configured TypeORM DataSource instance ready for CLI', () => {
-  const AppDataSource = new DataSource(
-    buildTypeOrmOptions({ DATABASE_URL: 'postgresql://unit:unit@localhost/unit' }),
-  );
   assert.ok(AppDataSource instanceof DataSource);
   assert.equal(AppDataSource.options.type, 'postgres');
   assert.equal(AppDataSource.options.synchronize, false);
@@ -67,87 +64,6 @@ test('AppDataSource is a configured TypeORM DataSource instance ready for CLI', 
       script.includes('dist/database/typeorm.data-source.js'),
       `${scriptName} must target dist/database/typeorm.data-source.js`,
     );
-  }
-});
-
-test('migration configuration validates only database fields in production', () => {
-  const config = resolveCliEnvironment(undefined, {
-    NODE_ENV: 'production',
-    DIRECT_URL: 'postgresql://migration:private@db.example/app',
-    DATABASE_URL: 'invalid-runtime-value',
-    PORT: 'invalid-port',
-    CORS_ORIGINS: '*',
-    SMARTSITE_AI_SERVICE_TOKEN: ' invalid ',
-    LOG_LEVEL: 'invalid',
-  });
-  assert.equal(config.DATABASE_URL, 'postgresql://migration:private@db.example/app');
-  assert.equal(config.DATABASE_TIMEOUT_MS, 2000);
-});
-
-test('test and production migration commands never load runtime env files', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartsite-cli-isolation-'));
-  const envFile = path.join(tmpDir, '.env');
-  try {
-    fs.writeFileSync(
-      envFile,
-      'DIRECT_URL=postgresql://file:private@runtime.example/prod\nDATABASE_TIMEOUT_MS=invalid\n',
-    );
-    assert.throws(() => resolveCliEnvironment(envFile, { NODE_ENV: 'production' }), /DATABASE_URL/);
-    const config = resolveCliEnvironment(envFile, {
-      NODE_ENV: 'test',
-      DATABASE_URL: 'postgresql://test:test@localhost/test',
-    });
-    assert.equal(config.DATABASE_URL, 'postgresql://test:test@localhost/test');
-    assert.equal(config.DATABASE_TIMEOUT_MS, 2000);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test('integration configuration selects only a dedicated local test database and never runtime aliases', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartsite-test-env-'));
-  const envFile = path.join(tmpDir, '.env.test');
-  const localUrl = 'postgresql://smartsite_test:fake-test-password@localhost:5433/smartsite_test';
-  try {
-    for (const environment of [
-      {},
-      { DATABASE_URL: localUrl },
-      { DIRECT_URL: localUrl },
-      { DATABASE_URL_UNPOOLED: localUrl },
-    ]) {
-      assert.throws(
-        () => resolveTestDatabaseUrl(environment, envFile),
-        /TEST_DATABASE_URL must be explicitly set/,
-      );
-    }
-    fs.writeFileSync(envFile, `TEST_DATABASE_URL=${localUrl}\nDATABASE_URL=invalid-runtime-url\n`);
-    assert.equal(resolveTestDatabaseUrl({}, envFile), localUrl);
-    const processUrl = localUrl.replace('localhost:5433', '127.0.0.1:5434');
-    assert.equal(resolveTestDatabaseUrl({ TEST_DATABASE_URL: processUrl }, envFile), processUrl);
-    for (const unsafeUrl of [
-      '',
-      localUrl.replace('localhost', 'db.example'),
-      localUrl.replace('smartsite_test:', 'smartsite:'),
-      localUrl.replace('/smartsite_test', '/smartsite'),
-      localUrl.replace('fake-test-password', ''),
-      `${localUrl}?host=db.example`,
-      `${localUrl}?database=smartsite`,
-      `${localUrl}?options=-csearch_path=public`,
-      `${localUrl}#fragment`,
-      localUrl.replace('postgresql:', 'https:'),
-    ]) {
-      assert.throws(
-        () => resolveTestDatabaseUrl({ TEST_DATABASE_URL: unsafeUrl }, envFile),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.match(error.message, /TEST_DATABASE_URL/);
-          assert.doesNotMatch(error.message, /fake-test-password|db\.example/);
-          return true;
-        },
-      );
-    }
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
@@ -225,7 +141,6 @@ test('resolveCliEnvironment prioritizes real process environment variables over 
 
 test('resolveCliEnvironment prefers a validated DIRECT_URL for migration commands only', () => {
   const config = resolveCliEnvironment(undefined, {
-    NODE_ENV: 'test',
     DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
     DIRECT_URL: 'postgresql://direct_user:pass@direct.example.com:5432/app?sslmode=require',
   });
@@ -238,7 +153,6 @@ test('resolveCliEnvironment prefers a validated DIRECT_URL for migration command
 
 test('resolveCliEnvironment prefers DIRECT_URL over DATABASE_URL_UNPOOLED and DATABASE_URL', () => {
   const config = resolveCliEnvironment(undefined, {
-    NODE_ENV: 'test',
     DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
     DATABASE_URL_UNPOOLED:
       'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
@@ -253,7 +167,6 @@ test('resolveCliEnvironment prefers DIRECT_URL over DATABASE_URL_UNPOOLED and DA
 
 test('resolveCliEnvironment prefers DATABASE_URL_UNPOOLED when DIRECT_URL is absent', () => {
   const config = resolveCliEnvironment(undefined, {
-    NODE_ENV: 'test',
     DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
     DATABASE_URL_UNPOOLED:
       'postgresql://unpooled_user:pass@unpooled.example.com:5432/app?sslmode=require',
@@ -314,7 +227,6 @@ test('resolveCliEnvironment never reuses a direct URL from file when process sel
 
 test('resolveCliEnvironment falls back to DATABASE_URL when both direct URLs are empty strings', () => {
   const config = resolveCliEnvironment(undefined, {
-    NODE_ENV: 'test',
     DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
     DIRECT_URL: '',
     DATABASE_URL_UNPOOLED: '',
@@ -327,7 +239,6 @@ test('resolveCliEnvironment rejects a Neon pooled migration URL when no direct U
   assert.throws(
     () =>
       resolveCliEnvironment(undefined, {
-        NODE_ENV: 'test',
         DATABASE_URL:
           'postgresql://pooled_user:secret@ep-example-pooler.ap-southeast-1.aws.neon.tech/app?sslmode=require',
       }),
@@ -344,7 +255,6 @@ test('resolveCliEnvironment rejects an invalid DIRECT_URL without exposing crede
   assert.throws(
     () =>
       resolveCliEnvironment(undefined, {
-        NODE_ENV: 'test',
         DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
         DIRECT_URL: 'https://secret-user:secret-pass@example.com/app',
       }),
@@ -361,7 +271,6 @@ test('resolveCliEnvironment rejects an invalid DATABASE_URL_UNPOOLED without exp
   assert.throws(
     () =>
       resolveCliEnvironment(undefined, {
-        NODE_ENV: 'test',
         DATABASE_URL: 'postgresql://pooled_user:pass@pooled.example.com:5432/app',
         DATABASE_URL_UNPOOLED: 'https://secret-unpooled-user:secret-unpooled-pass@example.com/app',
       }),

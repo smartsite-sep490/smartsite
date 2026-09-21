@@ -1,13 +1,11 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
-import { SkipThrottle } from '@nestjs/throttler';
 import {
   ApiOkResponse,
   ApiProperty,
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { DatabaseService } from '../../database/database.service.js';
-import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
+import { DatabaseService } from '../database/database.service.js';
 
 class LiveHealthResponse {
   @ApiProperty({ enum: ['ok'] })
@@ -29,7 +27,6 @@ class ReadyHealthResponse {
 }
 
 @ApiTags('health')
-@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(private readonly database: DatabaseService) {}
@@ -46,7 +43,7 @@ export class HealthController {
     description: 'PostgreSQL accepts a readiness query.',
   })
   @ApiServiceUnavailableResponse({
-    type: ErrorResponseDto,
+    type: ReadyHealthResponse,
     description: 'PostgreSQL is unavailable.',
   })
   async ready(): Promise<ReadyHealthResponse> {

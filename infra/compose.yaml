@@ -17,23 +17,6 @@ services:
       timeout: 3s
       retries: 10
 
-  postgres-test:
-    profiles: ['test']
-    image: postgres:18-bookworm
-    environment:
-      POSTGRES_USER: smartsite_test
-      POSTGRES_PASSWORD: smartsite_test_only
-      POSTGRES_DB: smartsite_test
-    ports:
-      - '127.0.0.1:5433:5432'
-    tmpfs:
-      - /var/lib/postgresql
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U smartsite_test -d smartsite_test']
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   backend:
     build:
       context: ..
@@ -45,13 +28,6 @@ services:
       DATABASE_URL: postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite
       DATABASE_TIMEOUT_MS: '2000'
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
-      # The runtime image contains production dependencies only (no pino-pretty).
-      LOG_LEVEL: info
-      LOG_FORMAT: json
-      HTTP_RATE_LIMIT_TTL_MS: '60000'
-      HTTP_RATE_LIMIT_LIMIT: '120'
-      AI_RATE_LIMIT_TTL_MS: '60000'
-      AI_RATE_LIMIT_LIMIT: '600'
       SMARTSITE_AI_SERVICE_TOKEN: smartsite_local_dev_service_token_only
       ALERT_COOLDOWN_SECONDS: '60'
       MAX_PAST_EVENT_AGE_SECONDS: '300'
