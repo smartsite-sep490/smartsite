@@ -70,7 +70,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <div className="inline-block mb-6 text-[#F66B17] text-xs font-bold tracking-widest uppercase bg-black/30 px-3 py-1.5 rounded backdrop-blur-sm">
               Intelligent construction platform
             </div>
-            <h1 className="text-6xl sm:text-7xl md:text-8xl font-black tracking-tight text-white leading-[1.05] mb-8 drop-shadow-2xl">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.1] mb-8 drop-shadow-2xl">
               SMARTER SITES.<br />
               <span className="text-[#F66B17]">SAFER</span> WORK.
             </h1>
