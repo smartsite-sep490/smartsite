@@ -158,6 +158,128 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         </div>
       </section>
 
+      {/* 4. One Platform Diagram */}
+      <section id="platform" className="py-32 px-6 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">The SmartSite platform</h2>
+            <h3 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-6">
+              One platform.<br />Every part of your<br />site connected.
+            </h3>
+            <p className="text-lg text-slate-500 leading-relaxed">
+              SmartSite brings workforce, access, safety intelligence and site operations into one connected construction platform.
+            </p>
+          </div>
+
+          <div className="relative aspect-square max-w-[400px] mx-auto w-full flex items-center justify-center animate-[spin_60s_linear_infinite]">
+            {/* Outer rings */}
+            <div className="absolute inset-0 rounded-full border border-slate-100 flex items-center justify-center shadow-[inset_0_0_50px_rgba(0,0,0,0.02)]">
+              <div className="absolute w-[65%] h-[65%] rounded-full border border-slate-100 flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.02)]">
+                {/* Core */}
+                <div className="absolute w-[45%] h-[45%] rounded-full bg-[#041D2E] shadow-2xl flex flex-col items-center justify-center z-10 shadow-[#041D2E]/20 animate-[spin_60s_linear_infinite_reverse]">
+                   <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center font-black text-white text-base shadow-sm mb-2">
+                    S
+                   </div>
+                   <span className="text-white font-bold text-sm">SmartSite</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Orbiting nodes */}
+            <div className="absolute top-[8%] left-1/2 -translate-x-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+              Workforce
+            </div>
+            <div className="absolute bottom-[8%] left-1/2 -translate-x-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+              Operations
+            </div>
+            <div className="absolute left-[-2%] top-1/2 -translate-y-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+              Access
+            </div>
+            <div className="absolute right-[-2%] top-1/2 -translate-y-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+              Safety AI
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Built Around Operations */}
+      <section id="solutions" className="py-24 px-6 bg-slate-50 border-y border-slate-100">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-20 max-w-2xl">
+            Built around how construction<br />sites actually operate.
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-16">
+            {/* Workforce Management */}
+            <div className="flex gap-6 group">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+                <IconUsers className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Workforce Management</div>
+                <h4 className="text-xl font-black text-slate-900 mb-6">One verified workforce record</h4>
+                <ul className="space-y-4">
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Worker profiles</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Contractor assignments</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Certificates</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Site assignments</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Site Access */}
+            <div className="flex gap-6 group">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+                <IconKey className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Site Access</div>
+                <h4 className="text-xl font-black text-slate-900 mb-6">Secure every arrival and departure</h4>
+                <ul className="space-y-4">
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Face recognition</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Dynamic QR</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Assignment verification</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Entry / exit records</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* AI Safety */}
+            <div className="flex gap-6 group">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+                <IconShield className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">AI Safety</div>
+                <h4 className="text-xl font-black text-slate-900 mb-6">Always-on safety intelligence</h4>
+                <ul className="space-y-4">
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />PPE Monitoring</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Restricted Zone Monitoring</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Real-time safety alerts</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Incident Management */}
+            <div className="flex gap-6 group">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+                <IconAlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Incident Management</div>
+                <h4 className="text-xl font-black text-slate-900 mb-6">Move evidence into action</h4>
+                <ul className="space-y-4">
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Safety-event review</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Evidence</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Status tracking</li>
+                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium"><IconCheck className="w-4 h-4 text-[#F66B17]" />Resolution workflow</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
           </div>
   );
 }
