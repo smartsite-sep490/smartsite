@@ -14,7 +14,7 @@ export function App() {
   const [currentTab, setCurrentTab] = useState<ActiveTab>('zones');
 
   // Backend live health check
-  const health = useQuery({
+  useQuery({
     queryKey: ['backend', apiUrl, 'health'],
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
   });

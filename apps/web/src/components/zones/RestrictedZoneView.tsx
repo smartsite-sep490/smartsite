@@ -11,7 +11,6 @@ import {
   IconVolume,
   IconMaximize,
   IconGrid,
-  IconEye,
 } from '../icons';
 
 export function RestrictedZoneView() {
