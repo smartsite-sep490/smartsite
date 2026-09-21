@@ -390,6 +390,106 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         </div>
       </section>
 
+      {/* 8. Dashboard Mockup - EXACTLY like screenshot 3 */}
+      <section className="py-24 px-6 bg-[#041D2E] text-white border-t border-white/5">
+        <div className="max-w-7xl mx-auto space-y-12">
+          
+          <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 max-w-5xl">
+            <h3 className="text-4xl md:text-5xl font-black leading-tight text-white">
+              Your construction site.<br />One operational view.
+            </h3>
+            <p className="text-slate-400 text-sm leading-relaxed max-w-sm mb-2">
+              Live signals from people, access points, cameras and connected equipment — organized for faster decisions.
+            </p>
+          </div>
+
+          {/* Full Dashboard Mockup Card */}
+          <div className="bg-white rounded-[20px] shadow-2xl overflow-hidden text-slate-900 border border-white/10">
+            {/* Mockup Header bar */}
+            <div className="bg-white px-6 py-4 flex items-center gap-2 border-b border-slate-100">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#F66B17]" />
+              <span className="text-sm font-bold text-slate-800">Tower A · Live Operations</span>
+            </div>
+
+            <div className="flex flex-col md:flex-row h-[500px]">
+              {/* Sidebar */}
+              <div className="w-full md:w-56 bg-[#041D2E] p-4 flex flex-col gap-1 shrink-0 h-full">
+                <div className="bg-[#F66B17] text-white px-4 py-2.5 rounded-lg text-sm font-bold cursor-pointer">Overview</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">Workforce</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">Access</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">Safety</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">Cameras</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">Incidents</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">IoT</div>
+                <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">Progress</div>
+              </div>
+
+              {/* Main Dashboard Content */}
+              <div className="flex-1 bg-slate-50 p-6 md:p-8 overflow-y-auto">
+                {/* Stats Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">Workers On Site</div>
+                    <div className="text-3xl font-black text-slate-900">328</div>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">Active Contractors</div>
+                    <div className="text-3xl font-black text-slate-900">14</div>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">Safety Compliance</div>
+                    <div className="text-3xl font-black text-slate-900">96.8%</div>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">Open Alerts</div>
+                    <div className="text-3xl font-black text-slate-900">7</div>
+                  </div>
+                </div>
+
+                {/* Charts Row */}
+                <div className="flex flex-col lg:flex-row gap-6 h-[250px]">
+                  {/* Site Activity Chart */}
+                  <div className="flex-[2] bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                      <h4 className="font-bold text-slate-800 text-sm">Site activity</h4>
+                      <span className="text-xs text-slate-400 font-medium">Today</span>
+                    </div>
+                    <div className="flex-1 flex items-end justify-between gap-4 px-2">
+                      {[30, 45, 60, 40, 80, 50, 70, 90, 65, 85].map((h, i) => (
+                        <div 
+                          key={i} 
+                          className="w-full bg-[#F66B17]/80 hover:bg-[#F66B17] rounded-t-md transition-colors cursor-pointer" 
+                          style={{ height: `${h}%` }} 
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Systems List */}
+                  <div className="flex-1 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="font-bold text-slate-800 text-sm mb-6">Live systems</h4>
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-slate-500">Access Control</span>
+                        <span className="text-xs font-bold text-emerald-600">Online</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-slate-500">Safety AI</span>
+                        <span className="text-xs font-bold text-emerald-600">12 cameras</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-slate-500">IoT Sensors</span>
+                        <span className="text-xs font-bold text-emerald-600">48 active</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
           </div>
   );
 }
