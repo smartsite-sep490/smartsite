@@ -122,6 +122,42 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         </div>
       </section>
 
+      {/* 3. The Challenge Section */}
+      <section className="py-24 px-6 bg-slate-50 border-t border-slate-100">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-16">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">The challenge</h2>
+            <h3 className="text-3xl md:text-5xl font-black text-slate-900 max-w-3xl leading-tight">
+              Construction sites are complex.<br />Your systems shouldn't be.
+            </h3>
+          </div>
+
+          <div className="space-y-0 text-sm md:text-base hover:opacity-100 group">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default opacity-80 hover:opacity-100">
+              <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">01</div>
+              <div className="md:col-span-4 font-bold text-slate-900">DISCONNECTED WORKFORCE</div>
+              <div className="md:col-span-7 text-slate-500 leading-relaxed">
+                Worker profiles, contractor assignments, certifications and site eligibility are often managed separately.
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default opacity-80 hover:opacity-100">
+              <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">02</div>
+              <div className="md:col-span-4 font-bold text-slate-900">SAFETY RISKS</div>
+              <div className="md:col-span-7 text-slate-500 leading-relaxed">
+                Manual observation cannot continuously monitor every worker, camera and restricted area.
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-y border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default opacity-80 hover:opacity-100">
+              <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">03</div>
+              <div className="md:col-span-4 font-bold text-slate-900">FRAGMENTED SITE DATA</div>
+              <div className="md:col-span-7 text-slate-500 leading-relaxed">
+                Access control, safety events, cameras, IoT and project operations can become disconnected.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
           </div>
   );
 }
