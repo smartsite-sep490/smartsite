@@ -80,44 +80,44 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <a
                 href="#platform"
-                className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] text-white font-bold text-sm shadow-xl shadow-[#F66B17]/20 transition-all flex justify-center items-center gap-2"
+                className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] !text-white font-bold text-sm shadow-xl shadow-[#F66B17]/20 transition-all flex justify-center items-center gap-2"
               >
                 Explore SmartSite <span className="ml-1">↓</span>
               </a>
               <a
                 href="#safety-ai"
-                className="w-full sm:w-auto px-8 py-4 rounded-xl bg-black/40 hover:bg-black/60 backdrop-blur-md text-white font-bold text-sm shadow-sm border border-white/20 transition-all flex justify-center items-center gap-2"
+                className="w-full sm:w-auto px-8 py-4 rounded-xl bg-black/40 hover:bg-black/60 backdrop-blur-md !text-white font-bold text-sm shadow-sm border border-white/20 transition-all flex justify-center items-center gap-2"
               >
                 See AI Safety <span className="ml-1">→</span>
               </a>
             </div>
-          </div>
-          
-          {/* Live Site Float Card - Moved down to not block the worker */}
-          <div className="lg:col-span-4 lg:justify-self-end w-full max-w-sm mt-12 lg:mt-48 xl:mt-64 translate-y-12 animate-fade-in-up">
-             <div className="bg-[#0B1521]/30 backdrop-blur-2xl border border-white/20 rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-               <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                 <span className="text-xs font-bold text-white tracking-widest">LIVE SITE</span>
-                 <span className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase">
-                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                   Online
-                 </span>
+            
+            {/* Live Site Float Card - Moved to the left side under the buttons to never block the worker */}
+            <div className="mt-16 w-full max-w-[280px] animate-fade-in-up hidden md:block">
+               <div className="bg-[#0B1521]/30 backdrop-blur-2xl border border-white/20 rounded-xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+                 <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                   <span className="text-[10px] font-bold text-white tracking-widest">LIVE SITE</span>
+                   <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase">
+                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                     Online
+                   </span>
+                 </div>
+                 <div className="space-y-4">
+                   <div className="flex justify-between items-center">
+                     <span className="text-xs text-slate-300">Workers On Site</span>
+                     <span className="text-2xl font-black text-white">328</span>
+                   </div>
+                   <div className="flex justify-between items-center">
+                     <span className="text-xs text-slate-300">Safety Compliance</span>
+                     <span className="text-2xl font-black text-white">96.8%</span>
+                   </div>
+                   <div className="flex justify-between items-center">
+                     <span className="text-xs text-slate-300">Active Alerts</span>
+                     <span className="text-2xl font-black text-white">7</span>
+                   </div>
+                 </div>
                </div>
-               <div className="space-y-6">
-                 <div className="flex justify-between items-center">
-                   <span className="text-sm text-slate-400">Workers On Site</span>
-                   <span className="text-3xl font-black text-white">328</span>
-                 </div>
-                 <div className="flex justify-between items-center">
-                   <span className="text-sm text-slate-400">Safety Compliance</span>
-                   <span className="text-3xl font-black text-white">96.8%</span>
-                 </div>
-                 <div className="flex justify-between items-center">
-                   <span className="text-sm text-slate-400">Active Alerts</span>
-                   <span className="text-3xl font-black text-white">7</span>
-                 </div>
-               </div>
-             </div>
+            </div>
           </div>
         </div>
       </section>
