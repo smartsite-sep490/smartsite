@@ -390,6 +390,73 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         </div>
       </section>
 
+      {/* 7. How It Works */}
+      <section id="how-it-works" className="py-24 px-6 bg-[#FAFAFA]">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-20">
+            <div className="text-[#F66B17] text-[10px] font-black tracking-widest uppercase mb-4">HOW IT WORKS</div>
+            <h2 className="text-4xl md:text-[44px] lg:text-[56px] font-black text-[#041D2E] tracking-tight leading-tight">
+              From site activity to actionable intelligence.
+            </h2>
+          </div>
+
+          {/* Timeline */}
+          <div className="relative">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-8 lg:gap-12 relative z-10">
+              {/* Step 1 */}
+              <div className="relative pt-8 md:pt-0">
+                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="mt-8 md:mt-10">
+                  <div className="text-[#F66B17] font-black text-xs mb-1">01</div>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">SENSE</h4>
+                  <p className="text-slate-500 text-sm leading-relaxed pr-4">Cameras, gates and site systems collect operational events.</p>
+                </div>
+              </div>
+              {/* Step 2 */}
+              <div className="relative pt-8 md:pt-0">
+                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="mt-8 md:mt-10">
+                  <div className="text-[#F66B17] font-black text-xs mb-1">02</div>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">UNDERSTAND</h4>
+                  <p className="text-slate-500 text-sm leading-relaxed pr-4">SmartSite identifies workers, equipment and safety conditions.</p>
+                </div>
+              </div>
+              {/* Step 3 */}
+              <div className="relative pt-8 md:pt-0">
+                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="mt-8 md:mt-10">
+                  <div className="text-[#F66B17] font-black text-xs mb-1">03</div>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">VERIFY</h4>
+                  <p className="text-slate-500 text-sm leading-relaxed pr-4">The platform checks assignments, PPE requirements and zone permissions.</p>
+                </div>
+              </div>
+              {/* Step 4 */}
+              <div className="relative pt-8 md:pt-0">
+                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="mt-8 md:mt-10">
+                  <div className="text-[#F66B17] font-black text-xs mb-1">04</div>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">ALERT</h4>
+                  <p className="text-slate-500 text-sm leading-relaxed pr-4">Relevant violations or uncertain events generate classified alerts.</p>
+                </div>
+              </div>
+              {/* Step 5 */}
+              <div className="relative pt-8 md:pt-0">
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="mt-8 md:mt-10">
+                  <div className="text-[#F66B17] font-black text-xs mb-1">05</div>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">ACT</h4>
+                  <p className="text-slate-500 text-sm leading-relaxed pr-4">Responsible personnel review and resolve the event.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 8. Dashboard Mockup - EXACTLY like screenshot 3 */}
       <section className="py-24 px-6 bg-[#041D2E] text-white border-t border-white/5">
         <div className="max-w-7xl mx-auto space-y-12">
@@ -490,30 +557,35 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         </div>
       </section>
 
-      {/* 9. Lifecycle */}
+      {/* 9. Lifecycle (Connected from the gate to the jobsite) */}
       <section className="py-24 px-6 bg-white border-t border-slate-100">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-16 items-center">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-16 md:items-center">
           <div className="md:w-1/2">
-            <h3 className="text-4xl md:text-5xl font-black text-slate-900 mb-6 leading-tight">Connected from the gate to the jobsite.</h3>
-            <p className="text-slate-500 text-lg leading-relaxed">
+            <h3 className="text-4xl md:text-5xl font-black text-[#041D2E] mb-6 leading-tight">Connected from<br />the gate to the<br />jobsite.</h3>
+            <p className="text-slate-500 text-sm leading-relaxed max-w-sm">
               SmartSite connects events across the worker lifecycle instead of operating as isolated tools.
             </p>
           </div>
 
-          <div className="md:w-1/2 pl-8">
-            <div className="border-l-2 border-slate-100 py-4 space-y-10 relative">
+          <div className="md:w-1/2 md:pl-16 w-full">
+            <div className="space-y-4">
               {[
-                'Onboarding',
-                'Site Access',
-                'Zone Entry',
-                'Safety Monitoring',
-                'Alerts',
-                'Incident Review',
-                'Site Operations'
+                'WORKFORCE',
+                'SITE ASSIGNMENT',
+                'SITE ACCESS',
+                'SITE OPERATIONS',
+                'AI SAFETY',
+                'INCIDENT RESPONSE',
+                'SITE INTELLIGENCE'
               ].map((step, index) => (
-                <div key={step} className="relative flex items-center pl-8 group">
-                  <div className="absolute -left-[11px] w-5 h-5 rounded-full bg-[#F66B17] border-[4px] border-white shadow-sm transition-transform group-hover:scale-150" />
-                  <div className="text-base font-bold text-slate-900 transition-colors group-hover:text-[#F66B17]">{step}</div>
+                <div key={step} className="flex items-center justify-between group cursor-pointer py-1">
+                  <div className="flex items-center gap-4">
+                    <div className="w-6 h-6 rounded-full bg-[#F66B17] flex items-center justify-center text-white text-[10px] font-black shrink-0">
+                      {index + 1}
+                    </div>
+                    <div className="text-xs font-black text-[#041D2E]">{step}</div>
+                  </div>
+                  <div className="text-[#F66B17] text-lg font-light">↓</div>
                 </div>
               ))}
             </div>
@@ -522,47 +594,43 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 10. Bottom CTA */}
-      <section className="py-24 px-6 bg-[#041D2E] text-white border-b border-white/5 relative overflow-hidden">
-        {/* Subtle background decoration */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-[#F66B17]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-        
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12 relative z-10">
-          <div className="md:w-1/2 text-center md:text-left">
-            <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">Build smarter.<br /><span className="text-[#F66B17]">Work safer.</span></h2>
-            <p className="text-slate-400 text-lg">
+      <section className="py-24 px-6 bg-[#041D2E] text-white">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-12">
+          <div className="md:w-1/2">
+            <h2 className="text-5xl md:text-6xl font-black mb-6 leading-tight">Build smarter.<br /><span className="text-[#F66B17]">Work safer.</span></h2>
+            <p className="text-slate-400 text-sm max-w-md leading-relaxed">
               Connect your workforce, safety systems and construction operations with SmartSite.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button onClick={() => onEnterApp('dashboard')} className="px-8 py-4 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] font-bold text-sm shadow-[0_0_20px_rgba(246,107,23,0.3)] hover:shadow-[0_0_30px_rgba(246,107,23,0.5)] transition-all whitespace-nowrap">
-              Launch Workspace
+          <div className="flex flex-col sm:flex-row gap-4 items-center md:justify-end md:w-1/2">
+            <button onClick={() => onEnterApp('dashboard')} className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] !text-white font-bold text-sm transition-all whitespace-nowrap">
+              Request a Demo
             </button>
-            <button onClick={() => onEnterApp('dashboard')} className="px-8 py-4 rounded-xl bg-white/5 hover:bg-white/10 font-bold text-sm border border-white/10 transition-all whitespace-nowrap backdrop-blur-sm">
-              Request Demo
+            <button onClick={() => onEnterApp('dashboard')} className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-transparent hover:bg-white/5 !text-white font-bold text-sm border border-slate-600 transition-all whitespace-nowrap flex items-center justify-center gap-2">
+              Explore Platform <span className="ml-1">→</span>
             </button>
           </div>
         </div>
       </section>
 
       {/* 11. Footer */}
-      <footer className="py-16 px-6 bg-[#041D2E] text-white">
-        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-12 text-sm">
+      <footer className="py-16 px-6 bg-[#041D2E] text-white border-t border-slate-700/50">
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-12 md:gap-8 text-sm">
           <div className="col-span-2 space-y-6">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center font-black text-white text-base shadow-[0_0_15px_rgba(246,107,23,0.4)]">
-                S
+              <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center shadow-sm">
+                <IconHardHat className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight">Smart<span className="text-[#F66B17]">Site</span></span>
+              <span className="text-xl font-bold tracking-tight">Smart<span className="text-white">Site</span></span>
             </div>
-            <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
+            <p className="text-slate-400 text-xs max-w-xs leading-relaxed">
               Intelligent construction operations and AI safety, connected in one platform.
             </p>
-            <p className="text-slate-500 text-xs pt-4">© 2026 SmartSite · SEP490 Capstone Project.</p>
           </div>
 
           <div>
-            <h4 className="font-bold text-white mb-6 text-xs tracking-widest">PLATFORM</h4>
-            <ul className="space-y-4 text-slate-400 text-sm">
+            <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">PLATFORM</h4>
+            <ul className="space-y-4 text-slate-400 text-xs font-medium">
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('workforce')}>Workforce</li>
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('access')}>Site Access</li>
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('ppe')}>Safety AI</li>
@@ -572,8 +640,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </div>
 
           <div>
-            <h4 className="font-bold text-white mb-6 text-xs tracking-widest">SOLUTIONS</h4>
-            <ul className="space-y-4 text-slate-400 text-sm">
+            <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">SOLUTIONS</h4>
+            <ul className="space-y-4 text-slate-400 text-xs font-medium">
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('ppe')}>PPE Monitoring</li>
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('zones')}>Restricted Zones</li>
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('incidents')}>Incident Management</li>
@@ -581,12 +649,25 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </div>
 
           <div>
-            <h4 className="font-bold text-white mb-6 text-xs tracking-widest">PRODUCT</h4>
-            <ul className="space-y-4 text-slate-400 text-sm">
+            <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">RESOURCES</h4>
+            <ul className="space-y-4 text-slate-400 text-xs font-medium">
+              <li className="hover:text-white cursor-pointer transition-colors">Documentation</li>
+              <li className="hover:text-white cursor-pointer transition-colors">Support</li>
+              <li className="hover:text-white cursor-pointer transition-colors">About</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">PRODUCT</h4>
+            <ul className="space-y-4 text-slate-400 text-xs font-medium">
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('dashboard')}>Sign In</li>
               <li className="hover:text-white cursor-pointer transition-colors" onClick={() => onEnterApp('dashboard')}>Request Demo</li>
             </ul>
           </div>
+        </div>
+        
+        <div className="max-w-6xl mx-auto mt-16 pt-8 border-t border-slate-700/50">
+          <p className="text-slate-500 text-[10px]">© 2026 SmartSite. Built for safer construction.</p>
         </div>
       </footer>
     </div>
