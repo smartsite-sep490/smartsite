@@ -2,8 +2,8 @@ import { createTestConfig } from '../support/config.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
-import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
+import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
   AiObservationEventEntity,
   AlertDetectionMappingEntity,
@@ -182,7 +182,7 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
   });
 });
 
-test('AiIngestionService: retry with same eventId but changed payload throws 409 ConflictException in real PostgreSQL', async () => {
+test('AiIngestionService: retry with same eventId but changed payload returns public 409 in real PostgreSQL', async () => {
   await withDataSource(async (source) => {
     const siteRepo = source.getRepository(SiteEntity);
     const cameraRepo = source.getRepository(CameraEntity);
@@ -246,12 +246,11 @@ test('AiIngestionService: retry with same eventId but changed payload throws 409
         await service.ingestEvent(payloadModified);
       },
       (err: unknown) => {
-        assert.ok(err instanceof ConflictException);
-        const res = (err as ConflictException).getResponse() as Record<string, unknown>;
-        assert.ok(
-          typeof res['message'] === 'string' &&
-            res['message'].includes('already exists with a different payload hash'),
-        );
+        assert.ok(err instanceof PublicHttpException);
+        assert.equal(err.getStatus(), 409);
+        const res = err.getResponse() as Record<string, unknown>;
+        assert.equal(res['code'], 'AI_EVENT_ID_CONFLICT');
+        assert.equal(res['message'], 'Event ID already exists with a different payload');
         return true;
       },
     );
@@ -322,9 +321,10 @@ test('AiIngestionService: other named unique violation is not classified as dupl
         await failingService.ingestEvent(createSampleEvent());
       },
       (err: unknown) => {
-        assert.ok(err instanceof ServiceUnavailableException);
+        assert.ok(err instanceof PublicHttpException);
         assert.equal(err.getStatus(), 503);
         const response = JSON.stringify(err.getResponse());
+        assert.match(response, /AI_INGESTION_UNAVAILABLE/);
         assert.doesNotMatch(response, /INSERT INTO|Unique Code Site|SITE-UQ/);
         return true;
       },

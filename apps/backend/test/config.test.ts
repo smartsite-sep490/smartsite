@@ -62,7 +62,7 @@ test('production rejects the local database credential even when explicitly prov
           NODE_ENV: 'production',
           DATABASE_URL: `postgresql://smartsite:${password}@db.example/smartsite`,
           CORS_ORIGINS: '',
-          SMARTSITE_AI_SERVICE_TOKEN: 'production-test-token',
+          SMARTSITE_AI_SERVICE_TOKEN: 'production-test-token-at-least-32-characters',
         }),
       (error: unknown) => {
         assert.ok(error instanceof Error);
@@ -78,7 +78,7 @@ test('production rejects the local database credential even when explicitly prov
         NODE_ENV: 'production',
         DATABASE_URL: 'postgresql://app:example@localhost/app?password=smartsite_local_only',
         CORS_ORIGINS: '',
-        SMARTSITE_AI_SERVICE_TOKEN: 'production-test-token',
+        SMARTSITE_AI_SERVICE_TOKEN: 'production-test-token-at-least-32-characters',
       }),
     /DATABASE_URL/,
   );
@@ -116,13 +116,13 @@ test('accepts explicit production configuration and exact origin list', () => {
     DATABASE_URL: 'postgresql://app:example@db.example.com/app?sslmode=require',
     DATABASE_TIMEOUT_MS: '1500',
     CORS_ORIGINS: 'https://app.example.com, https://admin.example.com',
-    SMARTSITE_AI_SERVICE_TOKEN: 'prod-service-token',
+    SMARTSITE_AI_SERVICE_TOKEN: 'prod-service-token-at-least-32-characters',
   });
   assert.equal(config.NODE_ENV, 'production');
   assert.equal(config.PORT, 8080);
   assert.equal(config.DATABASE_TIMEOUT_MS, 1500);
   assert.deepEqual(config.CORS_ORIGINS, ['https://app.example.com', 'https://admin.example.com']);
-  assert.equal(config.SMARTSITE_AI_SERVICE_TOKEN, 'prod-service-token');
+  assert.equal(config.SMARTSITE_AI_SERVICE_TOKEN, 'prod-service-token-at-least-32-characters');
 });
 
 test('rejects invalid ports, environment names and database timeout values', () => {
@@ -282,12 +282,47 @@ test('production requires an explicit non-empty SMARTSITE_AI_SERVICE_TOKEN and n
     },
   );
 
+  for (const weakToken of ['x', 'a'.repeat(31)]) {
+    assert.throws(
+      () => validateEnvironment({ ...validBase, SMARTSITE_AI_SERVICE_TOKEN: weakToken }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /SMARTSITE_AI_SERVICE_TOKEN/);
+        assert.doesNotMatch(error.message, new RegExp(weakToken));
+        return true;
+      },
+    );
+  }
+
   // Valid token accepted
+  const productionToken = 'a'.repeat(32);
   const valid = validateEnvironment({
     ...validBase,
-    SMARTSITE_AI_SERVICE_TOKEN: 'prod-secret-token-xyz',
+    SMARTSITE_AI_SERVICE_TOKEN: productionToken,
   });
-  assert.equal(valid.SMARTSITE_AI_SERVICE_TOKEN, 'prod-secret-token-xyz');
+  assert.equal(valid.SMARTSITE_AI_SERVICE_TOKEN, productionToken);
+});
+
+test('pretty logging is accepted only in development', () => {
+  assert.equal(
+    validateEnvironment({ NODE_ENV: 'development', LOG_FORMAT: 'pretty' }).LOG_FORMAT,
+    'pretty',
+  );
+  assert.throws(
+    () => validateEnvironment({ NODE_ENV: 'test', LOG_FORMAT: 'pretty' }),
+    /LOG_FORMAT/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
+        CORS_ORIGINS: 'https://app.example.com',
+        SMARTSITE_AI_SERVICE_TOKEN: 'a'.repeat(32),
+        LOG_FORMAT: 'pretty',
+      }),
+    /LOG_FORMAT/,
+  );
 });
 
 test('timing variables reject non-positive, non-integer, or out-of-range values and accept values above 86400', () => {

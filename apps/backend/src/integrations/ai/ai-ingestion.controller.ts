@@ -8,10 +8,23 @@ import {
   ApiUnauthorizedResponse,
   ApiTooManyRequestsResponse,
   ApiServiceUnavailableResponse,
+  ApiProperty,
 } from '@nestjs/swagger';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { ServiceAuthGuard } from '../../modules/auth/service-auth.guard.js';
 import { AiIngestionService, type AiIngestionResult } from './ai-ingestion.service.js';
+import { EventProcessingStatus } from '../../database/entities/enums.js';
+
+class AiIngestionResponseDto implements AiIngestionResult {
+  @ApiProperty({ format: 'uuid' })
+  eventId!: string;
+
+  @ApiProperty({ enum: [...Object.values(EventProcessingStatus), 'DUPLICATE_ACCEPTED'] })
+  status!: AiIngestionResult['status'];
+
+  @ApiProperty({ type: [String], format: 'uuid' })
+  alertIds!: string[];
+}
 
 @ApiTags('ai-ingestion')
 @Controller('integrations/ai')
@@ -22,7 +35,10 @@ export class AiIngestionController {
   @Post('events')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Ingest technical observation event from SmartSite AI' })
-  @ApiAcceptedResponse({ description: 'Event accepted for processing or skipped per policy.' })
+  @ApiAcceptedResponse({
+    type: AiIngestionResponseDto,
+    description: 'Event accepted for processing or skipped per policy.',
+  })
   @ApiBadRequestResponse({
     type: ErrorResponseDto,
     description: 'Contract schema or geometry validation failed.',

@@ -1,4 +1,4 @@
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, HttpStatus } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   ApiOkResponse,
@@ -8,6 +8,7 @@ import {
 } from '@nestjs/swagger';
 import { DatabaseService } from '../../database/database.service.js';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
+import { PublicHttpException } from '../../common/http/public-http-exception.js';
 
 class LiveHealthResponse {
   @ApiProperty({ enum: ['ok'] })
@@ -51,7 +52,9 @@ export class HealthController {
   })
   async ready(): Promise<ReadyHealthResponse> {
     if (!(await this.database.isReachable())) {
-      throw new ServiceUnavailableException({
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'DATABASE_UNAVAILABLE',
+        message: 'Database unavailable',
         status: 'error',
         service: 'smartsite-backend',
         database: 'down',

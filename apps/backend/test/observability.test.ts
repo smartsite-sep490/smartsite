@@ -14,7 +14,7 @@ import { sanitizeError } from '../src/observability/sanitize-error.js';
 import { validateEnvironment, type BackendEnvironment } from '../src/config/environment.js';
 
 const databaseUrl = 'postgresql://user:FAKE_DATABASE_PASSWORD@localhost/test';
-const token = 'FAKE_SERVICE_TOKEN';
+const token = 'FAKE_SERVICE_TOKEN_AT_LEAST_32_CHARACTERS';
 function config(input: Record<string, unknown> = {}) {
   return new ConfigService<BackendEnvironment, true>(
     validateEnvironment({
@@ -87,6 +87,23 @@ test('JSON logging removes credentials and omits body, query, evidence and error
     },
     `Configured ${token} ${databaseUrl}`,
   );
+  const circular: Record<string, unknown> = { safe: 'kept' };
+  circular['self'] = circular;
+  logger.info({
+    eventId: 'safe-event-id',
+    context: {
+      token,
+      databaseUrl,
+      nested: [
+        {
+          password: 'FAKE_NESTED_PASSWORD',
+          safeCode: 'SAFE_CODE',
+          note: `Bearer FAKE_NESTED_BEARER ${databaseUrl}`,
+        },
+      ],
+      circular,
+    },
+  });
   const output = lines.join('');
   for (const secret of [
     token,
@@ -97,10 +114,15 @@ test('JSON logging removes credentials and omits body, query, evidence and error
     'FAKE_SET_COOKIE',
     'FAKE_AUTHORIZATION',
     'FAKE_EVIDENCE',
+    'FAKE_NESTED_PASSWORD',
+    'FAKE_NESTED_BEARER',
   ]) {
     assert.ok(!output.includes(secret), `Must omit ${secret}`);
   }
-  assert.equal(lines.length, 3);
+  assert.equal(lines.length, 4);
+  assert.match(output, /safe-event-id/);
+  assert.match(output, /SAFE_CODE/);
+  assert.match(output, /\[Circular\]/);
   const failure = JSON.parse(lines[0]!) as {
     err: { type: string; code: string; stack: string[]; cause: unknown };
   };
@@ -229,7 +251,10 @@ test('real bootstrap exits unsuccessfully with safe configuration diagnostics', 
   const output = result.stdout + result.stderr;
   assert.match(output, /Backend failed to start/);
   assert.match(output, /PORT/);
-  assert.doesNotMatch(output, /FAKE_BOOTSTRAP_SECRET|FAKE_DATABASE_PASSWORD|FAKE_SERVICE_TOKEN/);
+  assert.doesNotMatch(
+    output,
+    /FAKE_BOOTSTRAP_SECRET|FAKE_DATABASE_PASSWORD|FAKE_SERVICE_TOKEN_AT_LEAST_32_CHARACTERS/,
+  );
 });
 
 test('JSON mode never configures pino-pretty, while development pretty mode does', () => {

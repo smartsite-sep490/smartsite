@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BACKEND_ERROR_CODES, type BackendErrorCode } from './public-http-exception.js';
 
 class ValidationIssueDto {
   @ApiProperty()
@@ -18,11 +19,11 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 400 })
   statusCode!: number;
 
-  @ApiProperty({ example: 'BAD_REQUEST' })
-  code!: string;
+  @ApiProperty({ enum: BACKEND_ERROR_CODES, example: 'BAD_REQUEST' })
+  code!: BackendErrorCode;
 
-  @ApiProperty({ oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] })
-  message!: string | string[];
+  @ApiProperty()
+  message!: string;
 
   @ApiProperty()
   requestId!: string;

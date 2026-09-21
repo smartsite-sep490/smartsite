@@ -133,6 +133,13 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    if (config.LOG_FORMAT === 'pretty' && config.NODE_ENV !== 'development') {
+      context.addIssue({
+        code: 'custom',
+        path: ['LOG_FORMAT'],
+        message: 'pretty is allowed only in development',
+      });
+    }
     if (config.NODE_ENV !== 'production') return;
     if (config.CORS_ORIGINS === undefined) {
       context.addIssue({
@@ -152,6 +159,12 @@ export const backendEnvironmentSchema = z
         code: 'custom',
         path: ['SMARTSITE_AI_SERVICE_TOKEN'],
         message: 'cannot use the default development token in production',
+      });
+    } else if (config.SMARTSITE_AI_SERVICE_TOKEN.length < 32) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SMARTSITE_AI_SERVICE_TOKEN'],
+        message: 'must contain at least 32 characters in production',
       });
     }
   })

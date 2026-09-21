@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -56,6 +57,13 @@ class FoundationTestController {
   @Get('conflict')
   conflict() {
     throw new ConflictException('Event already exists');
+  }
+
+  @Get('unsafe-bad-request')
+  unsafeBadRequest() {
+    throw new BadRequestException(
+      'postgresql://app:private-password@internal/db Bearer private-service-token',
+    );
   }
 
   @Get('failure')
@@ -112,7 +120,9 @@ async function startApplication(
     NODE_ENV: options.production ? 'production' : 'development',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
     CORS_ORIGINS: 'http://localhost:5173,https://app.example.com',
-    SMARTSITE_AI_SERVICE_TOKEN: options.production ? 'prod-explicit-service-token' : undefined,
+    SMARTSITE_AI_SERVICE_TOKEN: options.production
+      ? 'prod-explicit-service-token-at-least-32-characters'
+      : undefined,
     LOG_FORMAT: 'json',
     HTTP_RATE_LIMIT_LIMIT: String(options.httpLimit ?? 120),
     AI_RATE_LIMIT_LIMIT: String(options.aiLimit ?? 600),
@@ -169,6 +179,8 @@ test('readiness tracks database failure and recovery without exposing connection
   const unavailable = await fetch(`${url}/api/v1/health/ready`);
   assert.equal(unavailable.status, 503);
   const body = await assertError(unavailable, 503);
+  assert.equal(body.code, 'DATABASE_UNAVAILABLE');
+  assert.equal(body.message, 'Database unavailable');
   assert.equal(body.status, 'error');
   assert.equal(body.service, 'smartsite-backend');
   assert.equal(body.database, 'down');
@@ -191,14 +203,23 @@ async function assertError(response: Response, status: number) {
 
 test('validation rejects extra properties and implicit conversion; explicit query conversion works', async (t) => {
   const { url } = await startApplication(t);
-  for (const payload of [{ count: 1, admin: true }, { count: '1' }, { count: 0 }]) {
+  for (const [payload, issue] of [
+    [
+      { count: 1, admin: true },
+      { code: 'UNKNOWN_FIELD', path: '/admin', message: 'Unknown field' },
+    ],
+    [{ count: '1' }, { code: 'INVALID_VALUE', path: '/count', message: 'Invalid value' }],
+    [{ count: 0 }, { code: 'INVALID_VALUE', path: '/count', message: 'Invalid value' }],
+  ] as const) {
     const response = await fetch(`${url}/api/v1/test-foundation/dto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const error = await assertError(response, 400);
-    assert.ok(Array.isArray(error.message));
+    assert.equal(error.code, 'VALIDATION_FAILED');
+    assert.equal(error.message, 'Validation failed');
+    assert.deepEqual(error.issues, [issue]);
   }
   const valid = await fetch(`${url}/api/v1/test-foundation/dto`, {
     method: 'POST',
@@ -214,6 +235,7 @@ test('error contract covers missing route, unauthorized ingestion, conflict and 
   const { url, logLines } = await startApplication(t, { production: true });
   for (const [path, status, code] of [
     ['/missing', 404, 'NOT_FOUND'],
+    ['/api/v1/test-foundation/unsafe-bad-request', 400, 'BAD_REQUEST'],
     ['/api/v1/test-foundation/conflict', 409, 'CONFLICT'],
     ['/api/v1/test-foundation/failure', 500, 'INTERNAL_SERVER_ERROR'],
   ] as const) {
@@ -224,9 +246,17 @@ test('error contract covers missing route, unauthorized ingestion, conflict and 
     assert.equal(error.code, code);
     assert.equal(error.path, path);
     assert.equal(error.requestId, 'test.request_42');
-    assert.doesNotMatch(JSON.stringify(error), /fake-|postgresql|internal\/db|stack/);
+    assert.doesNotMatch(
+      JSON.stringify(error),
+      /fake-|private-|postgresql|internal\/db|Bearer|Event already exists|stack/,
+    );
   }
-  await assertError(await fetch(`${url}/api/v1/integrations/ai/events`, { method: 'POST' }), 401);
+  const unauthorized = await assertError(
+    await fetch(`${url}/api/v1/integrations/ai/events`, { method: 'POST' }),
+    401,
+  );
+  assert.equal(unauthorized.code, 'UNAUTHORIZED');
+  assert.equal(unauthorized.message, 'Unauthorized');
   const records = logLines.map(
     (line) =>
       JSON.parse(line) as {
@@ -249,9 +279,9 @@ test('error contract covers missing route, unauthorized ingestion, conflict and 
 
 test('request ID survives parser failures and CORS preflight; invalid IDs are replaced', async (t) => {
   const { url, logLines } = await startApplication(t);
-  for (const [body, status] of [
-    ['{"secret":"fake-parser-secret",', 400],
-    ['x'.repeat(1_048_577), 413],
+  for (const [body, status, code] of [
+    ['{"secret":"fake-parser-secret",', 400, 'INVALID_JSON'],
+    ['x'.repeat(1_048_577), 413, 'PAYLOAD_TOO_LARGE'],
   ] as const) {
     const response = await fetch(`${url}/api/v1/test-foundation/dto`, {
       method: 'POST',
@@ -259,6 +289,7 @@ test('request ID survives parser failures and CORS preflight; invalid IDs are re
       body,
     });
     const error = await assertError(response, status);
+    assert.equal(error.code, code);
     assert.equal(error.requestId, 'early-error-id');
     assert.doesNotMatch(JSON.stringify(error), /fake-parser-secret/);
   }
@@ -328,30 +359,35 @@ test('body parser client errors retain 400/413/415 with safe messages', async (t
       headers: { 'Content-Type': 'application/json; charset=FAKE_CHARSET_SECRET' },
       body: '{}',
       status: 415,
+      code: 'UNSUPPORTED_MEDIA_TYPE',
     },
     {
       headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'FAKE_ENCODING_SECRET' },
       body: '{}',
       status: 415,
+      code: 'UNSUPPORTED_MEDIA_TYPE',
     },
     {
       headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
       body: 'invalid gzip',
       status: 400,
+      code: 'BAD_REQUEST',
     },
     {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: Array.from({ length: 1001 }, (_, i) => `field${i}=x`).join('&'),
       status: 413,
+      code: 'PAYLOAD_TOO_LARGE',
     },
   ];
-  for (const { headers, body, status } of cases) {
+  for (const { headers, body, status, code } of cases) {
     const response = await fetch(`${url}/api/v1/test-payload/urlencoded`, {
       method: 'POST',
       headers: headers as Record<string, string>,
       body,
     });
     const error = await assertError(response, status);
+    assert.equal(error.code, code);
     assert.doesNotMatch(JSON.stringify(error), /FAKE_|fake_|invalid gzip/);
   }
 });
@@ -362,7 +398,7 @@ test('HTTP and AI limits are independent, health is exempt, forwarded IP cannot 
   const limited = await fetch(`${url}/api/v1/test-foundation/query?count=1`, {
     headers: { 'X-Forwarded-For': '203.0.113.2' },
   });
-  await assertError(limited, 429);
+  assert.equal((await assertError(limited, 429)).code, 'RATE_LIMIT_EXCEEDED');
   assert.ok(Number(limited.headers.get('retry-after')) > 0);
   for (let i = 0; i < 4; i++) {
     assert.equal((await fetch(`${url}/api/v1/health/live`)).status, 200);
@@ -378,10 +414,11 @@ test('HTTP and AI limits are independent, health is exempt, forwarded IP cannot 
       body: '{}',
     });
     const error = await assertError(response, 400);
+    assert.equal(error.code, 'VALIDATION_FAILED');
     assert.ok(Array.isArray(error.issues));
   }
   const aiLimited = await fetch(`${url}/api/v1/integrations/ai/events`, { method: 'POST' });
-  await assertError(aiLimited, 429);
+  assert.equal((await assertError(aiLimited, 429)).code, 'RATE_LIMIT_EXCEEDED');
   assert.ok(Number(aiLimited.headers.get('retry-after')) > 0);
 });
 
@@ -403,14 +440,28 @@ test('CORS grants exact allowed origins and excludes lookalikes and null origins
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://app.example.com');
 });
 
-test('development OpenAPI describes both real health routes', async (t) => {
+test('development OpenAPI includes the AI ingestion 202 response schema', async (t) => {
   const { url } = await startApplication(t);
   assert.equal((await fetch(`${url}/api/docs`)).status, 200);
   const response = await fetch(`${url}/api/docs-json`);
   assert.equal(response.status, 200);
-  const schema = (await response.json()) as { paths: Record<string, unknown> };
+  const schema = (await response.json()) as {
+    paths: Record<
+      string,
+      {
+        post?: {
+          responses?: Record<string, { content?: { 'application/json'?: { schema?: unknown } } }>;
+        };
+      }
+    >;
+  };
   assert.ok(schema.paths['/api/v1/health/live']);
   assert.ok(schema.paths['/api/v1/health/ready']);
+  assert.ok(
+    schema.paths['/api/v1/integrations/ai/events']?.post?.responses?.['202']?.content?.[
+      'application/json'
+    ]?.schema,
+  );
 });
 
 test('production does not publish Swagger UI or its schema', async (t) => {

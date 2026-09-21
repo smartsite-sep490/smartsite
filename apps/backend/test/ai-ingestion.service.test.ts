@@ -1,11 +1,7 @@
 import { createTestConfig } from './support/config.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  BadRequestException,
-  ConflictException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { PublicHttpException } from '../src/common/http/public-http-exception.js';
 import {
   type DataSource,
   type EntityManager,
@@ -227,7 +223,7 @@ function createSampleEvent(overrides: Record<string, unknown> = {}): Record<stri
   };
 }
 
-test('AiIngestionService: invalid schema throws BadRequestException with structured issues', async () => {
+test('AiIngestionService: invalid schema throws a public validation error with structured issues', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -259,8 +255,9 @@ test('AiIngestionService: invalid schema throws BadRequestException with structu
       await service.ingestEvent(invalidPayload);
     },
     (err: unknown) => {
-      assert.ok(err instanceof BadRequestException);
+      assert.ok(err instanceof PublicHttpException);
       const res = err.getResponse() as Record<string, unknown>;
+      assert.equal(res['code'], 'VALIDATION_FAILED');
       assert.equal(res['message'], 'Validation failed');
       const issues = res['issues'] as ValidationIssue[];
       assert.ok(Array.isArray(issues));
@@ -274,7 +271,7 @@ test('AiIngestionService: invalid schema throws BadRequestException with structu
   assert.equal(store.rawEvents.length, 0);
 });
 
-test('AiIngestionService: invalid geometry throws BadRequestException with INVALID_GEOMETRY issues', async () => {
+test('AiIngestionService: invalid geometry returns a public INVALID_GEOMETRY issue', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -313,8 +310,9 @@ test('AiIngestionService: invalid geometry throws BadRequestException with INVAL
       await service.ingestEvent(invalidGeometryPayload);
     },
     (err: unknown) => {
-      assert.ok(err instanceof BadRequestException);
+      assert.ok(err instanceof PublicHttpException);
       const res = err.getResponse() as Record<string, unknown>;
+      assert.equal(res['code'], 'VALIDATION_FAILED');
       assert.equal(res['message'], 'Validation failed');
       const issues = res['issues'] as ValidationIssue[];
       assert.ok(Array.isArray(issues));
@@ -759,7 +757,7 @@ test('AiIngestionService: rejects non-RFC3339 timestamp before persistence', asy
   const capturedAt = '2026-12-31T24:59:60+01:00';
   const payload = createSampleEvent({ capturedAt });
 
-  await assert.rejects(service.ingestEvent(payload), BadRequestException);
+  await assert.rejects(service.ingestEvent(payload), PublicHttpException);
   assert.equal(store.rawEvents.length, 0);
   assert.equal(store.alerts.length, 0);
   assert.equal(store.mappings.length, 0);
@@ -910,7 +908,7 @@ test('AiIngestionService: identical retry with same payloadHash returns 202 DUPL
   assert.equal(store.mappings.length, 0);
 });
 
-test('AiIngestionService: retry with same eventId but different payloadHash throws ConflictException (409)', async () => {
+test('AiIngestionService: retry with same eventId but different payloadHash returns public 409', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -963,12 +961,10 @@ test('AiIngestionService: retry with same eventId but different payloadHash thro
       await service.ingestEvent(payloadChanged);
     },
     (err: unknown) => {
-      assert.ok(err instanceof ConflictException);
-      const res = (err as ConflictException).getResponse() as Record<string, unknown>;
-      assert.ok(
-        typeof res['message'] === 'string' &&
-          res['message'].includes('already exists with a different payload hash'),
-      );
+      assert.ok(err instanceof PublicHttpException);
+      const res = err.getResponse() as Record<string, unknown>;
+      assert.equal(res['code'], 'AI_EVENT_ID_CONFLICT');
+      assert.equal(res['message'], 'Event ID already exists with a different payload');
       return true;
     },
   );
@@ -1038,8 +1034,12 @@ test('AiIngestionService: sanitizes non-idempotency database errors before they 
       await service.ingestEvent(payload);
     },
     (err: unknown) => {
-      assert.ok(err instanceof ServiceUnavailableException);
+      assert.ok(err instanceof PublicHttpException);
       assert.equal(err.getStatus(), 503);
+      assert.equal(
+        (err.getResponse() as Record<string, unknown>)['code'],
+        'AI_INGESTION_UNAVAILABLE',
+      );
       assert.doesNotMatch(JSON.stringify(err.getResponse()), /sensitive-evidence-uri|INSERT INTO/);
       return true;
     },

@@ -1,7 +1,30 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { getBackendHealth } from '../src/index';
+import { getBackendHealth, parseBackendErrorEnvelope } from '../src/index';
+
+const validError = {
+  success: false,
+  statusCode: 503,
+  code: 'DATABASE_UNAVAILABLE',
+  message: 'Database unavailable',
+  requestId: 'health-request-1',
+  timestamp: '2026-09-21T00:00:00.000Z',
+  path: '/api/v1/health/live',
+} as const;
+
+describe('backend error parser', () => {
+  it('rejects mismatched status, unknown codes and malformed fields', () => {
+    expect(parseBackendErrorEnvelope(validError, 503)).toMatchObject(validError);
+    expect(parseBackendErrorEnvelope(validError, 500)).toBeUndefined();
+    expect(
+      parseBackendErrorEnvelope({ ...validError, code: 'PRIVATE_DATABASE_ERROR' }),
+    ).toBeUndefined();
+    expect(
+      parseBackendErrorEnvelope({ ...validError, message: ['private detail'] }),
+    ).toBeUndefined();
+  });
+});
 
 describe('backend health client HTTP boundary', () => {
   let server: Server;
@@ -12,6 +35,19 @@ describe('backend health client HTTP boundary', () => {
       if (req.url === '/slow/api/v1/health/live') return;
       res.setHeader('Content-Type', 'application/json');
       if (req.url === '/unavailable/api/v1/health/live') {
+        res.writeHead(503).end(
+          JSON.stringify({
+            success: false,
+            statusCode: 503,
+            code: 'DATABASE_UNAVAILABLE',
+            message: 'Database unavailable',
+            requestId: 'health-request-1',
+            timestamp: '2026-09-21T00:00:00.000Z',
+            path: '/api/v1/health/live',
+            issues: [{ code: 'INVALID_VALUE', path: '/count', message: 'Invalid value' }],
+          }),
+        );
+      } else if (req.url === '/unsafe-error/api/v1/health/live') {
         res.writeHead(503).end('{"detail":"private infrastructure details"}');
       } else if (req.url === '/invalid/api/v1/health/live') {
         res.end('{"status":"ok","service":"a-different-service"}');
@@ -43,12 +79,27 @@ describe('backend health client HTTP boundary', () => {
     }
   });
 
-  it('rejects non-success responses without exposing server response bodies', async () => {
+  it('preserves a valid backend error contract for Web and Mobile consumers', async () => {
     await expect(getBackendHealth(`${baseUrl}/unavailable`)).rejects.toMatchObject({
       code: 'http',
       status: 503,
+      message: 'Database unavailable',
+      backendError: {
+        code: 'DATABASE_UNAVAILABLE',
+        requestId: 'health-request-1',
+        issues: [{ code: 'INVALID_VALUE', path: '/count', message: 'Invalid value' }],
+      },
     });
-    await expect(getBackendHealth(`${baseUrl}/unavailable`)).rejects.not.toThrow(
+  });
+
+  it('rejects malformed error bodies without exposing their contents', async () => {
+    await expect(getBackendHealth(`${baseUrl}/unsafe-error`)).rejects.toMatchObject({
+      code: 'http',
+      status: 503,
+      message: 'Backend returned HTTP 503.',
+      backendError: undefined,
+    });
+    await expect(getBackendHealth(`${baseUrl}/unsafe-error`)).rejects.not.toThrow(
       'private infrastructure details',
     );
   });

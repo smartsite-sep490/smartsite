@@ -11,14 +11,14 @@ This contract describes connectivity checks. Authenticated Backend–AI observat
 
 ### Backend HTTP errors and request correlation
 
-Backend error responses use `success: false`, `statusCode`, `code` (for example `BAD_REQUEST`, `TOO_MANY_REQUESTS`, `SERVICE_UNAVAILABLE`), `message` (string or validation-message array), `requestId`, `timestamp` (UTC RFC 3339), and `path` (without query string). Unexpected errors use a generic message; SQL, credentials and stack traces are never public. Only explicitly allowed details are retained, including AI validation `issues` and the readiness fields shown here:
+Backend error responses use `success: false`, `statusCode`, a stable `code` (for example `VALIDATION_FAILED`, `RATE_LIMIT_EXCEEDED`, `DATABASE_UNAVAILABLE`), string `message`, `requestId`, `timestamp` (UTC RFC 3339), and `path` (without query string). Validation detail belongs in structured `issues` with JSON Pointer paths. Unexpected or unapproved HTTP exceptions use a generic message; SQL, credentials and stack traces are never public. Only explicitly allowed details are retained, including AI validation `issues` and the readiness fields shown here:
 
 ```json
 {
   "success": false,
   "statusCode": 503,
-  "code": "SERVICE_UNAVAILABLE",
-  "message": "Service Unavailable",
+  "code": "DATABASE_UNAVAILABLE",
+  "message": "Database unavailable",
   "requestId": "health-probe-1",
   "timestamp": "2026-09-21T00:00:00.000Z",
   "path": "/api/v1/health/ready",
@@ -28,7 +28,7 @@ Backend error responses use `success: false`, `statusCode`, `code` (for example 
 }
 ```
 
-Success bodies retain their existing shape. Clients must tolerate the additional error-envelope fields while continuing to read readiness `status`, `service` and `database`; this HTTP change does not change the canonical AI event schema or hashing.
+Success bodies retain their existing shape. Web and Mobile use the shared API client parser, which accepts only a valid envelope whose status matches the HTTP response and ignores malformed upstream bodies. This HTTP change does not change the canonical AI event schema or hashing.
 
 Every Backend response carries `X-Request-Id`, reused in logs and error bodies. A client ID is accepted only when exactly one header matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`; a missing, malformed or duplicate header is replaced with a server UUID. Configured CORS origins may send and read this header, without credentialed CORS. Logs omit request bodies, query strings, headers and sensitive error details.
 

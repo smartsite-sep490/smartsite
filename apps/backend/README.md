@@ -70,9 +70,9 @@ NODE_ENV=production pnpm --filter @smartsite/backend start
 | `DATABASE_URL`                                    | PostgreSQL local của Compose; production bắt buộc cấp rõ ràng.                                                                                             |
 | `DATABASE_TIMEOUT_MS`                             | `2000`; timeout kết nối/readiness.                                                                                                                         |
 | `CORS_ORIGINS`                                    | `http://localhost:5173`; danh sách origin HTTP(S) chính xác, phân cách dấu phẩy. Production bắt buộc cấp; chuỗi rỗng tắt quyền đọc từ browser khác origin. |
-| `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng, không rỗng, không whitespace và không dùng token mặc định.                         |
+| `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng dài ít nhất 32 ký tự, không whitespace và không dùng token mặc định.                |
 | `LOG_LEVEL`                                       | `info`; nhận `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                                                 |
-| `LOG_FORMAT`                                      | `pretty` ở development, `json` ở test/production. Container Compose đặt rõ `json` vì image runtime chỉ chứa production dependencies.                       |
+| `LOG_FORMAT`                                      | `pretty` chỉ hợp lệ ở development; test/production dùng `json`. Image runtime không chứa `pino-pretty`.                                                    |
 | `HTTP_RATE_LIMIT_TTL_MS`, `HTTP_RATE_LIMIT_LIMIT` | `60000`, `120`: cửa sổ và quota HTTP thông thường.                                                                                                         |
 | `AI_RATE_LIMIT_TTL_MS`, `AI_RATE_LIMIT_LIMIT`     | `60000`, `600`: quota riêng cho AI ingestion.                                                                                                              |
 | `ALERT_COOLDOWN_SECONDS`                          | `60`; cooldown nhóm cảnh báo hiện có.                                                                                                                      |
@@ -81,13 +81,15 @@ NODE_ENV=production pnpm --filter @smartsite/backend start
 
 TTL/quota rate limit phải là chuỗi số nguyên dương an toàn; TTL tối đa `2147483647` ms để không tràn bộ đếm thời gian của Node. `DIRECT_URL` và `DATABASE_URL_UNPOOLED` chỉ chọn kết nối migration; `TEST_DATABASE_URL` chỉ dành cho integration test. Không dùng URL test làm fallback runtime. Không commit `.env`, `.env.test`, connection string thật hay service token.
 
+Tạo service token production từ ít nhất 32 byte ngẫu nhiên, ví dụ `openssl rand -base64 32`, rồi cấp qua secret manager; không ghi kết quả vào Git.
+
 ## HTTP, lỗi và log
 
 - Giữ prefix `/api/v1`; Swagger UI/schema chỉ mở trong development. JSON và urlencoded có giới hạn 1 MB.
 - Global `ValidationPipe` whitelist DTO và từ chối field lạ; không bật chuyển kiểu ngầm. Field cần chuyển kiểu phải khai báo rõ. Body AI vẫn là `unknown`, giữ nguyên đến Ajv/canonical contract validation và hashing; không dùng DTO transformation để thay raw payload.
 - Helmet bật security headers. CORS chỉ cho origin được cấu hình, cho phép gửi và đọc `X-Request-Id`, không bật credentials. Không bật `trust proxy`; cần cấu hình proxy được tin cậy trước khi triển khai sau ingress.
 - Response header, error body và log dùng cùng `X-Request-Id`. Chấp nhận đúng một header khớp `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` (1–64 ký tự); header thiếu, không hợp lệ hoặc lặp lại được thay bằng UUID do server tạo.
-- Lỗi công khai có envelope dưới đây. `message` có thể là chuỗi hoặc mảng chuỗi validation; `timestamp` là UTC RFC 3339, `path` không chứa query string. Chỉ chi tiết được cho phép như AI `issues` và readiness `status`, `service`, `database` được giữ lại; không trả lỗi SQL/driver, stack hay credentials.
+- Lỗi công khai có envelope dưới đây. `message` luôn là chuỗi; lỗi validation đặt chi tiết ổn định trong `issues` với JSON Pointer `path`. Chỉ `PublicHttpException` có kiểu mới được đưa message/code/chi tiết ra client; các `HttpException` khác dùng thông báo an toàn theo status. `timestamp` là UTC RFC 3339, `path` không chứa query string. Chỉ AI `issues` và readiness `status`, `service`, `database` được giữ lại; không trả lỗi SQL/driver, stack hay credentials.
 
 ```json
 {
@@ -101,7 +103,7 @@ TTL/quota rate limit phải là chuỗi số nguyên dương an toàn; TTL tối
 }
 ```
 
-Pino ghi log có request ID và ngữ cảnh vận hành đã làm sạch; không ghi request body, raw evidence, query string, Authorization/cookie, token hoặc database URL. Thông báo lỗi và cause cũng phải được làm sạch. `pino-pretty` chỉ phục vụ development ngoài container.
+Pino ghi log có request ID và ngữ cảnh vận hành đã làm sạch đệ quy; không ghi request body, raw evidence, query string, Authorization/cookie, token hoặc database URL dù nằm trong object/array lồng nhau. Thông báo lỗi và cause cũng được làm sạch. `pino-pretty` chỉ phục vụ development ngoài container.
 
 Rate limit dùng bộ nhớ **của từng instance**, không chia sẻ giữa replica. Health live/ready được miễn; AI dùng quota riêng, không bị áp đồng thời quota HTTP mặc định. Khi vượt quota trả `429` và `Retry-After`. Các mức 120/600 mỗi phút là cấu hình khởi điểm, không phải throughput đã benchmark; cần điều chỉnh theo số camera, retry/backpressure, ingress và số replica thực tế.
 
@@ -144,7 +146,7 @@ npx neon@latest env pull --project-id little-cloud-62052905 --branch production 
 
 ## Kiểm thử và quality gates
 
-Unit/HTTP tests chạy qua `scripts/run-tests.mjs`: đặt `NODE_ENV=test` trước import, loại các biến cấu hình runtime được thừa hưởng và không đọc `.env` local. HTTP tests dùng database stub; không kết nối database phát triển.
+Unit/HTTP tests xóa `.test-build` trước khi compile rồi chạy qua `scripts/run-tests.mjs`: đặt `NODE_ENV=test` trước import, loại các biến cấu hình runtime được thừa hưởng và không đọc `.env` local. HTTP tests dùng database stub; không kết nối database phát triển.
 
 Integration chỉ nhận `TEST_DATABASE_URL` từ process hoặc file `apps/backend/.env.test` được tạo rõ ràng. Không fallback sang `DATABASE_URL`, direct URL hay `.env`. Validator chỉ chấp nhận host `localhost`, `127.0.0.1` hoặc `[::1]`, user và database đều là `smartsite_test`, không query/fragment. DataSource kiểm thử độc lập với runtime/CLI. Runner migrate database test **một lần**, rồi chạy tuần tự các test file (`--test-concurrency=1`); các thao tác đồng thời bên trong test race vẫn giữ nguyên.
 
