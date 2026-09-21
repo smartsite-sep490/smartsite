@@ -14,7 +14,7 @@ import {
   ZoneType,
 } from '../../src/database/entities/index.js';
 import { parseNormalizedCapturedAt } from '../../src/integrations/ai/ai-ingestion.service.js';
-import dataSource from '../../src/database/typeorm.data-source.js';
+import dataSource from '../support/test-data-source.js';
 
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
   if (!dataSource.isInitialized) await dataSource.initialize();

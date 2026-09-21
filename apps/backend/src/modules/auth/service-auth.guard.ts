@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BackendEnvironment } from '../../config/environment.js';
 
 function digest(value: string): Buffer {
   return createHash('sha256').update(value, 'utf8').digest();
@@ -13,7 +14,7 @@ function digest(value: string): Buffer {
 
 @Injectable()
 export class ServiceAuthGuard implements CanActivate {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService<BackendEnvironment, true>) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<{
@@ -43,7 +44,9 @@ export class ServiceAuthGuard implements CanActivate {
     if (!tokenPart) {
       throw new UnauthorizedException();
     }
-    const expectedToken = this.configService.getOrThrow<string>('SMARTSITE_AI_SERVICE_TOKEN');
+    const expectedToken = this.configService.getOrThrow('SMARTSITE_AI_SERVICE_TOKEN', {
+      infer: true,
+    });
 
     const expectedDigest = digest(expectedToken);
     const providedDigest = digest(tokenPart);

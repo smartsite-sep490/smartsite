@@ -1,10 +1,7 @@
+import { createTestConfig } from './support/config.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  BadRequestException,
-  ConflictException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { PublicHttpException } from '../src/common/http/public-http-exception.js';
 import {
   type DataSource,
   type EntityManager,
@@ -226,7 +223,7 @@ function createSampleEvent(overrides: Record<string, unknown> = {}): Record<stri
   };
 }
 
-test('AiIngestionService: invalid schema throws BadRequestException with structured issues', async () => {
+test('AiIngestionService: invalid schema throws a public validation error with structured issues', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -239,13 +236,13 @@ test('AiIngestionService: invalid schema throws BadRequestException with structu
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
   const invalidPayload = {
@@ -258,8 +255,9 @@ test('AiIngestionService: invalid schema throws BadRequestException with structu
       await service.ingestEvent(invalidPayload);
     },
     (err: unknown) => {
-      assert.ok(err instanceof BadRequestException);
+      assert.ok(err instanceof PublicHttpException);
       const res = err.getResponse() as Record<string, unknown>;
+      assert.equal(res['code'], 'VALIDATION_FAILED');
       assert.equal(res['message'], 'Validation failed');
       const issues = res['issues'] as ValidationIssue[];
       assert.ok(Array.isArray(issues));
@@ -273,7 +271,7 @@ test('AiIngestionService: invalid schema throws BadRequestException with structu
   assert.equal(store.rawEvents.length, 0);
 });
 
-test('AiIngestionService: invalid geometry throws BadRequestException with INVALID_GEOMETRY issues', async () => {
+test('AiIngestionService: invalid geometry returns a public INVALID_GEOMETRY issue', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -286,13 +284,13 @@ test('AiIngestionService: invalid geometry throws BadRequestException with INVAL
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -312,8 +310,9 @@ test('AiIngestionService: invalid geometry throws BadRequestException with INVAL
       await service.ingestEvent(invalidGeometryPayload);
     },
     (err: unknown) => {
-      assert.ok(err instanceof BadRequestException);
+      assert.ok(err instanceof PublicHttpException);
       const res = err.getResponse() as Record<string, unknown>;
+      assert.equal(res['code'], 'VALIDATION_FAILED');
       assert.equal(res['message'], 'Validation failed');
       const issues = res['issues'] as ValidationIssue[];
       assert.ok(Array.isArray(issues));
@@ -338,13 +337,13 @@ test('AiIngestionService: clock older than 300s results in SKIPPED_CLOCK_SKEW an
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -382,13 +381,13 @@ test('AiIngestionService: clock more than 30s in the future results in SKIPPED_C
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -420,13 +419,13 @@ test('AiIngestionService: unknown camera results in SKIPPED_UNKNOWN_CAMERA and p
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -464,13 +463,13 @@ test('AiIngestionService: known camera with no violation candidate results in SK
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -538,13 +537,13 @@ test('AiIngestionService: valid violation candidate is PROCESSED, groups alert, 
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -611,13 +610,13 @@ test('AiIngestionService: clock skew event still records resolvedCameraId when c
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -651,13 +650,13 @@ test('AiIngestionController: delegates ingest to service and returns result', as
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
   const controller = new AiIngestionController(service);
@@ -719,8 +718,8 @@ test('AiIngestionService: valid timezone offset forms preserve event time and ra
       createMockDataSource(store),
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-      new DurableGroupingService(),
-      undefined,
+      new DurableGroupingService(createTestConfig()),
+      createTestConfig(),
       () => now,
     );
     const payload = createSampleEvent({ capturedAt });
@@ -751,14 +750,14 @@ test('AiIngestionService: rejects non-RFC3339 timestamp before persistence', asy
     createMockDataSource(store),
     new ObservationContextResolverService(),
     new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-    new DurableGroupingService(),
-    undefined,
+    new DurableGroupingService(createTestConfig()),
+    createTestConfig(),
     () => now,
   );
   const capturedAt = '2026-12-31T24:59:60+01:00';
   const payload = createSampleEvent({ capturedAt });
 
-  await assert.rejects(service.ingestEvent(payload), BadRequestException);
+  await assert.rejects(service.ingestEvent(payload), PublicHttpException);
   assert.equal(store.rawEvents.length, 0);
   assert.equal(store.alerts.length, 0);
   assert.equal(store.mappings.length, 0);
@@ -788,7 +787,7 @@ test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near bou
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
 
   // Fake clock: exactly 61 seconds after the leap second event (near-boundary, well within 300s past window)
   const leapSecondClock = new Date('2027-01-01T00:01:00.000Z');
@@ -797,7 +796,7 @@ test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near bou
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => leapSecondClock,
   );
 
@@ -839,7 +838,7 @@ test('AiIngestionService: leap-second capturedAt outside past boundary results i
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
 
   // Fake clock: 302 seconds after normalized leap second (exceeds 300s past window)
   const clockAfterBoundary = new Date('2027-01-01T00:05:01.000Z');
@@ -848,7 +847,7 @@ test('AiIngestionService: leap-second capturedAt outside past boundary results i
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => clockAfterBoundary,
   );
 
@@ -879,13 +878,13 @@ test('AiIngestionService: identical retry with same payloadHash returns 202 DUPL
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -909,7 +908,7 @@ test('AiIngestionService: identical retry with same payloadHash returns 202 DUPL
   assert.equal(store.mappings.length, 0);
 });
 
-test('AiIngestionService: retry with same eventId but different payloadHash throws ConflictException (409)', async () => {
+test('AiIngestionService: retry with same eventId but different payloadHash returns public 409', async () => {
   const store: MockStore = {
     cameras: [],
     regions: [],
@@ -922,13 +921,13 @@ test('AiIngestionService: retry with same eventId but different payloadHash thro
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -962,12 +961,10 @@ test('AiIngestionService: retry with same eventId but different payloadHash thro
       await service.ingestEvent(payloadChanged);
     },
     (err: unknown) => {
-      assert.ok(err instanceof ConflictException);
-      const res = (err as ConflictException).getResponse() as Record<string, unknown>;
-      assert.ok(
-        typeof res['message'] === 'string' &&
-          res['message'].includes('already exists with a different payload hash'),
-      );
+      assert.ok(err instanceof PublicHttpException);
+      const res = err.getResponse() as Record<string, unknown>;
+      assert.equal(res['code'], 'AI_EVENT_ID_CONFLICT');
+      assert.equal(res['message'], 'Event ID already exists with a different payload');
       return true;
     },
   );
@@ -1016,13 +1013,13 @@ test('AiIngestionService: sanitizes non-idempotency database errors before they 
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
   const sanitizedLogs: unknown[] = [];
@@ -1037,8 +1034,12 @@ test('AiIngestionService: sanitizes non-idempotency database errors before they 
       await service.ingestEvent(payload);
     },
     (err: unknown) => {
-      assert.ok(err instanceof ServiceUnavailableException);
+      assert.ok(err instanceof PublicHttpException);
       assert.equal(err.getStatus(), 503);
+      assert.equal(
+        (err.getResponse() as Record<string, unknown>)['code'],
+        'AI_INGESTION_UNAVAILABLE',
+      );
       assert.doesNotMatch(JSON.stringify(err.getResponse()), /sensitive-evidence-uri|INSERT INTO/);
       return true;
     },
@@ -1066,13 +1067,13 @@ test('AiIngestionService: general non-unique DB error is rethrown untouched', as
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -1142,7 +1143,7 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
 
   let groupingCalled = 0;
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const originalGroupCandidate = groupingService.groupCandidate.bind(groupingService);
   groupingService.groupCandidate = async (...args) => {
     groupingCalled++;
@@ -1154,7 +1155,7 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 
@@ -1254,13 +1255,13 @@ test('AiIngestionService: handles observations across mixed regions and geometry
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService();
+  const groupingService = new DurableGroupingService(createTestConfig());
   const service = new AiIngestionService(
     ds,
     contextResolver,
     candidateEvaluator,
     groupingService,
-    undefined,
+    createTestConfig(),
     () => FIXED_NOW,
   );
 

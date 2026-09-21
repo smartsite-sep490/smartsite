@@ -72,7 +72,7 @@ docs/               Architecture decisions and repository guides
 infra/              Dockerfiles and local Compose configuration
 ```
 
-The current foundation intentionally contains infrastructure-level modules only. Business modules are introduced together with reviewed domain workflows rather than as empty placeholders.
+The current foundation contains shared infrastructure and the existing MF05/MF06 observation ingestion, Zone context and Safety evaluation modules. Further business modules are introduced together with reviewed domain workflows rather than as empty placeholders. See the [Backend guide](apps/backend/README.md) for module ownership and HTTP boundaries.
 
 ## Getting Started
 
@@ -96,10 +96,12 @@ pnpm install --frozen-lockfile
 
 ### Run Web and Backend locally
 
-Start PostgreSQL:
+Copy the Backend example without replacing an existing configuration, start PostgreSQL, and apply migrations (PowerShell and Linux):
 
 ```sh
-docker compose -f infra/compose.yaml up -d postgres
+node -e "const fs=require('node:fs'); if (!fs.existsSync('apps/backend/.env')) fs.copyFileSync('apps/backend/.env.example','apps/backend/.env')"
+docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60
+pnpm --filter @smartsite/backend db:migrate:run
 ```
 
 Start the development applications:
@@ -141,14 +143,14 @@ CI currently verifies Android and iOS JavaScript exports. Emulator, simulator, a
 
 Example environment files are provided where required.
 
-The backend defaults to local PostgreSQL for development. For hosted Neon environments:
+The backend validates environment variables with Zod and defaults to local PostgreSQL for development. Only development loads `apps/backend/.env`; production and test ignore it. Set `NODE_ENV` in the process before importing the application. For hosted Neon environments:
 
 - Runtime services use `DATABASE_URL` (pooled TLS connection).
 - TypeORM migration CLI commands prefer `DIRECT_URL`, then `DATABASE_URL_UNPOOLED`, within the selected environment source. Process environment values take precedence over the local env file. Neon pooled URLs fail closed when no direct URL is available.
 - For local Neon development, link the project and pull only its PostgreSQL variables into the Backend's gitignored `apps/backend/.env`; see [apps/backend/README.md](apps/backend/README.md).
 - Deployed environments must supply the same variables through their secret manager.
 
-Production configuration must provide explicit database and browser-origin settings. Secrets must not be committed to Git.
+Production configuration must provide explicit database, browser-origin and AI service-token settings. Secrets must not be committed to Git. The [Backend guide](apps/backend/README.md) documents logging, request IDs, error responses, rate limits and PowerShell/Linux commands.
 
 ## Development Commands
 
@@ -186,11 +188,22 @@ Application CI currently verifies:
 - PostgreSQL readiness;
 - application container smoke tests.
 
+Backend integration tests use a separate PostgreSQL 18 service with ephemeral storage, never the development volume or Neon. To run them locally:
+
+```sh
+node -e "const fs=require('node:fs'); if (!fs.existsSync('apps/backend/.env.test')) fs.copyFileSync('apps/backend/.env.test.example','apps/backend/.env.test')"
+docker compose -f infra/compose.yaml --profile test up -d postgres-test --wait --wait-timeout 60
+pnpm --filter @smartsite/backend test:integration
+docker compose -f infra/compose.yaml --profile test down
+```
+
+Only `TEST_DATABASE_URL` from the process or the explicit Backend `.env.test` is accepted, with local host and `smartsite_test` user/database. The test runner applies migrations once before sequential test files; concurrency within race tests is preserved. Unit/HTTP tests set `NODE_ENV=test` before imports and discard inherited runtime configuration. See the [Backend guide](apps/backend/README.md) for the complete quality and Compose readiness checks.
+
 Architecture quality is enforced through module boundaries, authorization, validation, tests, auditability, and integration contracts rather than folder structure alone.
 
 ## API Documentation
 
-Swagger is available in development at `http://localhost:3000/api/docs` and is disabled in production by default.
+Swagger is available only in development at `http://localhost:3000/api/docs`; it is disabled in test and production.
 
 Shared client code lives in [packages/api-client](packages/api-client). Business contracts will be introduced alongside their corresponding domain modules.
 

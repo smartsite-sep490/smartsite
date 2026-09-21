@@ -1,12 +1,6 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  Optional,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BackendEnvironment } from '../../config/environment.js';
 import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
@@ -24,6 +18,7 @@ import {
 } from '../../modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../modules/safety/alerts/durable-grouping.service.js';
 import { isEventIdConflict } from './typeorm-error.js';
+import { PublicHttpException } from '../../common/http/public-http-exception.js';
 
 export interface AiIngestionResult {
   eventId: string;
@@ -88,18 +83,20 @@ export class AiIngestionService {
     private readonly contextResolver: ObservationContextResolverService,
     private readonly candidateEvaluator: AlertCandidateEvaluator,
     private readonly durableGroupingService: DurableGroupingService,
-    private readonly configService?: ConfigService,
+    private readonly configService: ConfigService<BackendEnvironment, true>,
     @Optional() clock?: () => Date,
   ) {
     this.clock = clock ?? (() => new Date());
   }
 
   private getTimingConfig() {
-    const pastAge = this.configService?.get<number>('MAX_PAST_EVENT_AGE_SECONDS');
-    const futureSkew = this.configService?.get<number>('MAX_FUTURE_CLOCK_SKEW_SECONDS');
     return {
-      maxPastEventAgeSeconds: typeof pastAge === 'number' && pastAge > 0 ? pastAge : 300,
-      maxFutureClockSkewSeconds: typeof futureSkew === 'number' && futureSkew > 0 ? futureSkew : 30,
+      maxPastEventAgeSeconds: this.configService.getOrThrow('MAX_PAST_EVENT_AGE_SECONDS', {
+        infer: true,
+      }),
+      maxFutureClockSkewSeconds: this.configService.getOrThrow('MAX_FUTURE_CLOCK_SKEW_SECONDS', {
+        infer: true,
+      }),
     };
   }
 
@@ -107,7 +104,8 @@ export class AiIngestionService {
     // 1. Validate contract schema and semantic geometry (Spec §15.1, §16)
     const validationResult = validateObservationEvent(payload);
     if (!validationResult.isValid) {
-      throw new BadRequestException({
+      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
         message: 'Validation failed',
         issues: validationResult.issues,
       });
@@ -269,10 +267,11 @@ export class AiIngestionService {
             };
           }
 
-          // Spec §15: Changed hash for existing eventId -> 409 ConflictException
-          throw new ConflictException(
-            `Event with ID "${event.eventId}" already exists with a different payload hash`,
-          );
+          // Spec §15: Changed hash for existing eventId -> stable public 409 conflict
+          throw new PublicHttpException(HttpStatus.CONFLICT, {
+            code: 'AI_EVENT_ID_CONFLICT',
+            message: 'Event ID already exists with a different payload',
+          });
         }
       }
 
@@ -292,7 +291,10 @@ export class AiIngestionService {
           code,
           constraint,
         });
-        throw new ServiceUnavailableException('AI event could not be persisted');
+        throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+          code: 'AI_INGESTION_UNAVAILABLE',
+          message: 'AI ingestion is temporarily unavailable',
+        });
       }
 
       // Every other error rethrow

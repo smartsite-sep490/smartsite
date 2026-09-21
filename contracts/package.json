@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "pnpm run build && tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js"
+    "test": "pnpm run build && node -e \"require('node:fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node --test .test-build/test/*.test.js"
   },
   "dependencies": {
     "ajv": "8.17.1",
