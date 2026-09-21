@@ -1,8 +1,8 @@
+import { createTestConfig } from '../support/config.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DataSource, QueryFailedError } from 'typeorm';
 import {
   AiObservationEventEntity,
@@ -18,7 +18,7 @@ import {
   ZoneRestrictionPolicy,
   ZoneType,
 } from '../../src/database/entities/index.js';
-import dataSource from '../../src/database/typeorm.data-source.js';
+import dataSource from '../support/test-data-source.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { ZoneAuthorizationService } from '../../src/modules/zones/zone-authorization.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
@@ -112,13 +112,14 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
-      new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 }),
+      createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
     );
     const service = new AiIngestionService(
       source,
       contextResolver,
       candidateEvaluator,
       groupingService,
+      createTestConfig(),
     );
 
     const sharedEventId = randomUUID();
@@ -208,12 +209,13 @@ test('AiIngestionService: retry with same eventId but changed payload throws 409
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService();
+    const groupingService = new DurableGroupingService(createTestConfig());
     const service = new AiIngestionService(
       source,
       contextResolver,
       candidateEvaluator,
       groupingService,
+      createTestConfig(),
     );
 
     const sharedEventId = randomUUID();
@@ -299,7 +301,7 @@ test('AiIngestionService: other named unique violation is not classified as dupl
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService();
+    const groupingService = new DurableGroupingService(createTestConfig());
 
     // Force an unrelated unique violation inside the transaction
     const failingService = new AiIngestionService(
@@ -312,6 +314,7 @@ test('AiIngestionService: other named unique violation is not classified as dupl
       contextResolver,
       candidateEvaluator,
       groupingService,
+      createTestConfig(),
     );
 
     await assert.rejects(
@@ -381,13 +384,14 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
-      new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 }),
+      createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
     );
     const service = new AiIngestionService(
       source,
       contextResolver,
       candidateEvaluator,
       groupingService,
+      createTestConfig(),
     );
 
     const eventId = randomUUID();
@@ -458,12 +462,13 @@ test('AiIngestionService: unknown camera persists raw event with null resolvedCa
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService();
+    const groupingService = new DurableGroupingService(createTestConfig());
     const service = new AiIngestionService(
       source,
       contextResolver,
       candidateEvaluator,
       groupingService,
+      createTestConfig(),
     );
 
     const unknownExternalId = `CAM-NONEXISTENT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -537,7 +542,8 @@ test('AiIngestionService: inactive camera preserves raw PPE event without creati
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-      new DurableGroupingService(),
+      new DurableGroupingService(createTestConfig()),
+      createTestConfig(),
     );
     const eventId = randomUUID();
     const result = await service.ingestEvent(
@@ -632,13 +638,14 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
-      new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 }),
+      createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
     );
     const service = new AiIngestionService(
       source,
       contextResolver,
       candidateEvaluator,
       groupingService,
+      createTestConfig(),
     );
 
     const eventId = randomUUID();

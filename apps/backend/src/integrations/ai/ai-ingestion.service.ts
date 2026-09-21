@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BackendEnvironment } from '../../config/environment.js';
 import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
@@ -88,18 +89,20 @@ export class AiIngestionService {
     private readonly contextResolver: ObservationContextResolverService,
     private readonly candidateEvaluator: AlertCandidateEvaluator,
     private readonly durableGroupingService: DurableGroupingService,
-    private readonly configService?: ConfigService,
+    private readonly configService: ConfigService<BackendEnvironment, true>,
     @Optional() clock?: () => Date,
   ) {
     this.clock = clock ?? (() => new Date());
   }
 
   private getTimingConfig() {
-    const pastAge = this.configService?.get<number>('MAX_PAST_EVENT_AGE_SECONDS');
-    const futureSkew = this.configService?.get<number>('MAX_FUTURE_CLOCK_SKEW_SECONDS');
     return {
-      maxPastEventAgeSeconds: typeof pastAge === 'number' && pastAge > 0 ? pastAge : 300,
-      maxFutureClockSkewSeconds: typeof futureSkew === 'number' && futureSkew > 0 ? futureSkew : 30,
+      maxPastEventAgeSeconds: this.configService.getOrThrow('MAX_PAST_EVENT_AGE_SECONDS', {
+        infer: true,
+      }),
+      maxFutureClockSkewSeconds: this.configService.getOrThrow('MAX_FUTURE_CLOCK_SKEW_SECONDS', {
+        infer: true,
+      }),
     };
   }
 

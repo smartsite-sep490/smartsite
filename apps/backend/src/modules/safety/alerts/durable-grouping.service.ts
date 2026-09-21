@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BackendEnvironment } from '../../../config/environment.js';
 import { type EntityManager } from 'typeorm';
 import { AlertStatus, AlertType } from '../../../database/entities/enums.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
@@ -19,13 +20,10 @@ const MAX_SAFE_DATE_MS = 253_402_300_799_999; // 9999-12-31T23:59:59.999Z
 
 @Injectable()
 export class DurableGroupingService {
-  constructor(private readonly configService?: ConfigService) {}
+  constructor(private readonly configService: ConfigService<BackendEnvironment, true>) {}
 
   private getCooldownMs(): number {
-    const rawSeconds = this.configService?.get<number | string>('ALERT_COOLDOWN_SECONDS');
-    const parsed = typeof rawSeconds === 'number' ? rawSeconds : Number(rawSeconds);
-    const cooldownSeconds = Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
-    return cooldownSeconds * 1000;
+    return this.configService.getOrThrow('ALERT_COOLDOWN_SECONDS', { infer: true }) * 1000;
   }
 
   async groupCandidate(
