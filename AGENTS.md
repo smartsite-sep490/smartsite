@@ -42,8 +42,6 @@ infra          Docker and local orchestration
 
 ## 4. Backend rules
 
-Before changing `apps/backend`, also read [apps/backend/AGENTS.md](apps/backend/AGENTS.md) for backend module ownership, HTTP boundaries, and test isolation rules.
-
 - Controllers handle HTTP concerns only: validated input, authentication context, status mapping, and response DTOs. Business rules belong in application/domain services.
 - Validate every external input at the boundary. Reject unknown or malformed security-sensitive fields.
 - Authorization MUST combine role and data scope. Loading a record by ID without verifying its Site/Contractor/Zone ownership is forbidden.
