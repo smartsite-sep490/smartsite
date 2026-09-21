@@ -1,6 +1,6 @@
+import { createTestConfig } from './support/config.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConfigService } from '@nestjs/config';
 import { type ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ServiceAuthGuard } from '../src/modules/auth/service-auth.guard.js';
 
@@ -17,14 +17,14 @@ function makeContext(header?: string | string[], rawHeaders?: string[]): Executi
 
 test('ServiceAuthGuard rejects missing authorization header', () => {
   const guard = new ServiceAuthGuard(
-    new ConfigService({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
+    createTestConfig({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
   );
   assert.throws(() => guard.canActivate(makeContext()), UnauthorizedException);
 });
 
 test('ServiceAuthGuard rejects malformed authorization headers and strict whitespace violations', () => {
   const guard = new ServiceAuthGuard(
-    new ConfigService({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
+    createTestConfig({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
   );
 
   const malformedHeaders: Array<string | string[]> = [
@@ -60,7 +60,7 @@ test('ServiceAuthGuard rejects malformed authorization headers and strict whites
 
 test('ServiceAuthGuard rejects duplicate raw Authorization headers', () => {
   const guard = new ServiceAuthGuard(
-    new ConfigService({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
+    createTestConfig({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
   );
 
   const duplicateRawCases = [
@@ -91,7 +91,7 @@ test('ServiceAuthGuard rejects duplicate raw Authorization headers', () => {
 
 test('ServiceAuthGuard rejects wrong token without leaking credential in error', () => {
   const guard = new ServiceAuthGuard(
-    new ConfigService({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
+    createTestConfig({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
   );
 
   assert.throws(
@@ -107,7 +107,7 @@ test('ServiceAuthGuard rejects wrong token without leaking credential in error',
 
 test('ServiceAuthGuard accepts exact Bearer token with single header entry', () => {
   const guard = new ServiceAuthGuard(
-    new ConfigService({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
+    createTestConfig({ SMARTSITE_AI_SERVICE_TOKEN: 'expected-super-secret-token' }),
   );
 
   const allowedWithoutRaw = guard.canActivate(makeContext('Bearer expected-super-secret-token'));

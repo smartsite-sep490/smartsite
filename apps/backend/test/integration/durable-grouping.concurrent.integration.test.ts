@@ -1,12 +1,12 @@
+import { createTestConfig } from '../support/config.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
-import { ConfigService } from '@nestjs/config';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { AlertStatus, AlertType } from '../../src/database/entities/enums.js';
 import { SafetyAlertEntity } from '../../src/database/entities/safety-alert.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
-import dataSource from '../../src/database/typeorm.data-source.js';
+import dataSource from '../support/test-data-source.js';
 import type { AlertCandidate } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
 
@@ -25,7 +25,7 @@ after(async () => {
 
 test('DurableGroupingService: 10 concurrent transactions with identical site/groupingKey result in exactly 1 open alert with detectionCount=10', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -77,7 +77,7 @@ test('DurableGroupingService: 10 concurrent transactions with identical site/gro
 
 test('DurableGroupingService: preserves lastDetectedAt when out-of-order candidate arrives with earlier timestamp (max(old, new))', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -132,7 +132,7 @@ test('DurableGroupingService: preserves lastDetectedAt when out-of-order candida
 test('DurableGroupingService: cooldown boundary creates a new alert once cooldown window is exceeded', async () => {
   await withDataSource(async (source) => {
     // 10-second cooldown window
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 10 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(10) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -200,7 +200,7 @@ test('DurableGroupingService: cooldown boundary creates a new alert once cooldow
 
 test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creates a new one', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -282,7 +282,7 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
 
 test('DurableGroupingService: preserves human workflow status (e.g. CONFIRMED) and updates lastDetectedAt', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -343,7 +343,7 @@ test('DurableGroupingService: preserves human workflow status (e.g. CONFIRMED) a
 
 test('DurableGroupingService: never overwrites existing identity evidence', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -416,7 +416,7 @@ test('DurableGroupingService: never overwrites existing identity evidence', asyn
 
 test('DurableGroupingService: preserves null candidateWorkerId and pre-existing quality score on repeat detection (no backfill or overwrite)', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -490,7 +490,7 @@ test('DurableGroupingService: preserves null candidateWorkerId and pre-existing 
 
 test('DurableGroupingService: delayed candidate at t=30s groups into matching open alert at t=0s despite newer open alert at t=120s (cooldown 60s)', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -580,7 +580,7 @@ test('DurableGroupingService: delayed candidate at t=30s groups into matching op
 
 test('DurableGroupingService: human concurrent identity update is preserved and not overwritten by grouping update', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -678,7 +678,7 @@ test('DurableGroupingService: human concurrent identity update is preserved and 
 
 test('DurableGroupingService: human concurrent alert closure is respected and grouping creates new alert without reopening', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -773,7 +773,7 @@ test('DurableGroupingService: human concurrent alert closure is respected and gr
 
 test('DurableGroupingService: candidate matching newer alert completes without blocking when unrelated stale open alert row lock is held by another transaction', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -872,7 +872,7 @@ test('DurableGroupingService: handles maximum safe integer ALERT_COOLDOWN_SECOND
   await withDataSource(async (source) => {
     // Test maximum configured cooldown supported by environment validation: floor(Number.MAX_SAFE_INTEGER / 1000)
     const maxSafeSeconds = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: maxSafeSeconds });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(maxSafeSeconds) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();
@@ -920,7 +920,7 @@ test('DurableGroupingService: handles maximum safe integer ALERT_COOLDOWN_SECOND
 
 test('DurableGroupingService: locks only top ordered eligible alert with LIMIT 1 FOR UPDATE, completing without blocking when older still-eligible alert row lock is held', async () => {
   await withDataSource(async (source) => {
-    const configService = new ConfigService({ ALERT_COOLDOWN_SECONDS: 60 });
+    const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(configService);
 
     const siteId = randomUUID();

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateEnvironment } from '../src/config/environment.js';
+import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
+import path from 'node:path';
+import fs from 'node:fs';
 
 test('development starts with local PostgreSQL and a restrictive browser origin', () => {
   const config = validateEnvironment({});
@@ -11,6 +14,99 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
     'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite',
   );
   assert.deepEqual(config.CORS_ORIGINS, ['http://localhost:5173']);
+});
+
+test('logging and throttling defaults are safe and explicit settings validate without coercion', () => {
+  const defaults = validateEnvironment({}) as unknown as Record<string, unknown>;
+  assert.equal(defaults.LOG_LEVEL, 'info');
+  assert.equal(defaults.LOG_FORMAT, 'pretty');
+  assert.equal(
+    (validateEnvironment({ NODE_ENV: 'test' }) as unknown as Record<string, unknown>).LOG_FORMAT,
+    'json',
+  );
+  for (const [field, fallback] of Object.entries({
+    HTTP_RATE_LIMIT_TTL_MS: 60000,
+    HTTP_RATE_LIMIT_LIMIT: 120,
+    AI_RATE_LIMIT_TTL_MS: 60000,
+    AI_RATE_LIMIT_LIMIT: 600,
+  })) {
+    assert.equal(defaults[field], fallback);
+    for (const value of ['0', '-1', '+2', '1.5', '1e3', ' 2 ', '', '9007199254740992', 2, null]) {
+      assert.throws(() => validateEnvironment({ [field]: value }), new RegExp(field));
+    }
+    const maximum = field.endsWith('_TTL_MS') ? 2_147_483_647 : Number.MAX_SAFE_INTEGER;
+    assert.equal(
+      (validateEnvironment({ [field]: String(maximum) }) as Record<string, unknown>)[field],
+      maximum,
+    );
+    assert.throws(() => validateEnvironment({ [field]: String(maximum + 1) }), new RegExp(field));
+  }
+  for (const field of ['LOG_LEVEL', 'LOG_FORMAT']) {
+    assert.throws(
+      () => validateEnvironment({ [field]: 'secret-invalid-value' }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, new RegExp(field));
+        assert.doesNotMatch(error.message, /secret-invalid-value/);
+        return true;
+      },
+    );
+  }
+});
+
+test('production rejects the local database credential even when explicitly provided', () => {
+  for (const password of ['smartsite_local_only', '%73martsite_local_only']) {
+    assert.throws(
+      () =>
+        validateEnvironment({
+          NODE_ENV: 'production',
+          DATABASE_URL: `postgresql://smartsite:${password}@db.example/smartsite`,
+          CORS_ORIGINS: '',
+          SMARTSITE_AI_SERVICE_TOKEN: 'production-test-token',
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /DATABASE_URL/);
+        assert.doesNotMatch(error.message, /smartsite_local_only|db.example/);
+        return true;
+      },
+    );
+  }
+  assert.throws(
+    () =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://app:example@localhost/app?password=smartsite_local_only',
+        CORS_ORIGINS: '',
+        SMARTSITE_AI_SERVICE_TOKEN: 'production-test-token',
+      }),
+    /DATABASE_URL/,
+  );
+});
+
+test('unit test processes start in test mode with runtime credentials removed', () => {
+  assert.equal(process.env.NODE_ENV, 'test');
+  for (const key of [
+    'DATABASE_URL',
+    'DIRECT_URL',
+    'DATABASE_URL_UNPOOLED',
+    'SMARTSITE_AI_SERVICE_TOKEN',
+    'TEST_DATABASE_URL',
+  ]) {
+    assert.equal(process.env[key], undefined, `${key} must not reach unit test imports`);
+  }
+});
+
+test('runtime env loading is anchored to the backend package and disabled outside development', () => {
+  const options = runtimeEnvironmentOptions({ NODE_ENV: 'development' });
+  const packageFile = path.join(path.dirname(options.envFilePath), 'package.json');
+  assert.equal(JSON.parse(fs.readFileSync(packageFile, 'utf8')).name, '@smartsite/backend');
+  assert.equal(path.basename(options.envFilePath), '.env');
+  assert.equal(options.ignoreEnvFile, false);
+  assert.equal(runtimeEnvironmentOptions({}).ignoreEnvFile, false);
+  for (const NODE_ENV of ['test', 'production', 'invalid']) {
+    assert.equal(runtimeEnvironmentOptions({ NODE_ENV }).ignoreEnvFile, true);
+  }
 });
 
 test('accepts explicit production configuration and exact origin list', () => {
