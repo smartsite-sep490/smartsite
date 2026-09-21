@@ -280,6 +280,116 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         </div>
       </section>
 
+      {/* 6. Safety AI - EXACTLY like screenshot 2 */}
+      <section id="safety-ai" className="py-24 px-6 bg-[#041D2E] text-white overflow-hidden">
+        <div className="max-w-7xl mx-auto space-y-12">
+          {/* Section Header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="max-w-2xl">
+              <h3 className="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
+                See risk.<br />Verify context. Act faster.
+              </h3>
+              <p className="text-slate-400 text-lg leading-relaxed">
+                SmartSite turns site cameras into an intelligent safety layer that detects potential risks and connects them with real operational data.
+              </p>
+            </div>
+            <div className="flex bg-[#0B1521] border border-white/10 rounded-xl p-1 shadow-inner">
+              <button
+                onClick={() => setActiveAiTab('ppe')}
+                className={`px-6 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                  activeAiTab === 'ppe' ? 'bg-[#F66B17] text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                PPE MONITORING
+              </button>
+              <button
+                onClick={() => setActiveAiTab('zones')}
+                className={`px-6 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                  activeAiTab === 'zones' ? 'bg-[#F66B17] text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                RESTRICTED ZONES
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive AI Showcase Component */}
+          <div className="bg-[#0B1521] border border-white/10 rounded-2xl flex flex-col lg:flex-row overflow-hidden shadow-2xl">
+            {/* Left side: Video Feed */}
+            <div className="lg:w-2/3 relative aspect-video bg-black">
+              <img
+                src="https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
+                alt="Construction AI View"
+                className="w-full h-full object-cover opacity-90"
+              />
+              
+              {/* Video Overlays */}
+              <div className="absolute top-4 left-4">
+                <div className="text-white text-xs font-bold tracking-widest bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10 shadow-sm mb-1">
+                  CAM-07
+                </div>
+                <div className="text-slate-300 text-[10px] tracking-widest font-semibold ml-1">
+                  WORK AREA B
+                </div>
+              </div>
+              
+              <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-white text-[10px] font-bold tracking-widest">LIVE • 10:42:16</span>
+              </div>
+
+              {/* Bounding Box Simulation */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-80 border-[3px] border-[#F66B17] group cursor-pointer transition-colors hover:bg-[#F66B17]/10">
+                <div className="absolute -top-[28px] left-[-3px] bg-[#F66B17] px-3 py-1">
+                  <span className="text-white text-[10px] font-bold tracking-widest">WORKER #1024 • 97%</span>
+                </div>
+              </div>
+              
+              {/* Scanning laser effect */}
+              <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-[#F66B17] opacity-50 shadow-[0_0_10px_#F66B17] animate-pulse" />
+            </div>
+
+            {/* Right side: PPE Checklist & Result */}
+            <div className="lg:w-1/3 bg-[#0B1521] p-8 flex flex-col h-full border-l border-white/5">
+              <div className="mb-6">
+                <span className="text-[#F66B17] text-[10px] font-bold tracking-widest uppercase">PPE CHECK</span>
+              </div>
+
+              <div className="space-y-6 flex-1">
+                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                  <span className="text-white text-sm font-semibold">Helmet</span>
+                  <IconCheck className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                  <span className="text-white text-sm font-semibold">Safety Vest</span>
+                  <IconCheck className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div className="flex items-center justify-between border-b border-white/10 pb-4 bg-red-500/5 -mx-8 px-8 border-l-[3px] border-l-red-500">
+                  <span className="text-white text-sm font-semibold">Gloves</span>
+                  <IconX className="w-5 h-5 text-red-500" />
+                </div>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-white/10">
+                <div className="border-l-4 border-red-500 pl-4 mb-6">
+                  <div className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mb-1">RESULT</div>
+                  <div className="text-red-500 text-xl font-black tracking-tight mb-1">PPE VIOLATION</div>
+                  <div className="text-slate-400 text-xs">Missing required PPE: Gloves</div>
+                </div>
+                
+                <button
+                  onClick={() => onEnterApp('ppe')}
+                  className="w-full sm:w-auto px-6 py-3 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white font-bold text-sm shadow-xl transition-all flex items-center justify-between"
+                >
+                  <span>Explore PPE Monitoring</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
           </div>
   );
 }
