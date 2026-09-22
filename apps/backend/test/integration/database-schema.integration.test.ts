@@ -69,6 +69,7 @@ camera|code|varchar|NO|64|||
 camera|name|varchar|NO|255|||
 camera|status|camera_status|NO||||'ACTIVE'::camera_status
 camera|created_at|timestamptz|NO||||now()
+camera|configuration_version|int8|NO||64|0|1
 camera_observation_region|id|uuid|NO||||
 camera_observation_region|camera_id|uuid|NO||||
 camera_observation_region|zone_id|uuid|NO||||
@@ -103,6 +104,7 @@ zone|type|zone_type|NO||||
 zone|restriction_policy|zone_restriction_policy|NO||||
 zone|required_ppe|_text|NO||||'{}'::text[]
 zone|created_at|timestamptz|NO||||now()
+zone|configuration_locked|bool|NO||||false
 `
       .trim()
       .split('\n');
@@ -206,6 +208,10 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
     const chkNames = new Set(chkRows.map((r: { conname: string }) => r.conname));
     assert.ok(chkNames.has('chk_region_coordinate_space'), 'Missing chk_region_coordinate_space');
     assert.ok(chkNames.has('chk_region_version'), 'Missing chk_region_version');
+    assert.ok(
+      chkNames.has('chk_camera_configuration_version'),
+      'Missing chk_camera_configuration_version',
+    );
 
     // 4. Foreign Keys with exact onDelete actions:
     // confdeltype: 'r' = RESTRICT, 'c' = CASCADE, 'n' = SET NULL, 'a' = NO ACTION

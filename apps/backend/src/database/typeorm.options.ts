@@ -1,6 +1,8 @@
 import type { DataSourceOptions } from 'typeorm';
 import { ENTITIES } from './entities/index.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
+import { CameraRegionConfiguration1790035200000 } from './migrations/1790035200000-CameraRegionConfiguration.js';
+import { UserAuthentication1790121600000 } from './migrations/1790121600000-UserAuthentication.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -16,7 +18,11 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     migrationsRun: false,
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
-    migrations: [Mf05Mf06Foundation1789689600000],
+    migrations: [
+      Mf05Mf06Foundation1789689600000,
+      CameraRegionConfiguration1790035200000,
+      UserAuthentication1790121600000,
+    ],
     logging: false,
     extra: {
       max: 5,
