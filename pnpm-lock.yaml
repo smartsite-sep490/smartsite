@@ -397,6 +397,10 @@ importers:
         version: 6.0.3
 
   packages/api-client:
+    dependencies:
+      '@smartsite/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
