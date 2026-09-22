@@ -8,6 +8,29 @@ import {
   type PublicErrorPayload,
 } from './public-http-exception.js';
 
+function isDatabaseUnavailable(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as {
+    code?: unknown;
+    driverError?: { code?: unknown };
+    cause?: { code?: unknown };
+  };
+  const code = candidate.driverError?.code ?? candidate.cause?.code ?? candidate.code;
+  return (
+    typeof code === 'string' &&
+    (code.startsWith('08') ||
+      [
+        '57P01',
+        '57P02',
+        '57P03',
+        'ECONNREFUSED',
+        'ECONNRESET',
+        'ETIMEDOUT',
+        'EHOSTUNREACH',
+      ].includes(code))
+  );
+}
+
 /** Only middleware errors reach here; controller errors go directly to the Nest filter. */
 export function normalizeBodyParserError(
   error: unknown,
@@ -37,7 +60,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   reply(exception: unknown, req: Request, res: Response): void {
-    const candidateStatus = exception instanceof HttpException ? exception.getStatus() : 500;
+    const candidateStatus =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : isDatabaseUnavailable(exception)
+          ? 503
+          : 500;
     const status =
       Number.isInteger(candidateStatus) && candidateStatus >= 400 && candidateStatus <= 599
         ? candidateStatus
