@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   IconCheck,
   IconX,
@@ -12,9 +12,29 @@ import {
 } from '../icons';
 
 export function PpeMonitoringView() {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
+
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      void video.play();
+    } else {
+      video.pause();
+    }
+  };
+
+  const toggleMuted = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+  };
 
   const ppeEvents = [
     {
@@ -69,11 +89,19 @@ export function PpeMonitoringView() {
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
         {/* Left: Camera Feed */}
         <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
-          {/* Real Construction Site Photograph */}
+          {/* Local PPE video fixture; the overlay remains representative UI data. */}
           <div className="absolute inset-0">
-            <img
-              src="/assets/ppe-camera-view.png"
-              alt="Live PPE construction camera"
+            <video
+              ref={videoRef}
+              src="/assets/morteza_ppe_test_video.mp4"
+              poster="/assets/ppe-camera-view.png"
+              autoPlay
+              muted={isMuted}
+              loop
+              playsInline
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              aria-label="PPE test video"
               className="w-full h-full object-cover"
             />
 
@@ -117,14 +145,14 @@ export function PpeMonitoringView() {
           <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
+                onClick={togglePlayback}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
                 title={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
-                onClick={() => setIsMuted(!isMuted)}
+                onClick={toggleMuted}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
                 title="Sound"
               >
@@ -136,7 +164,11 @@ export function PpeMonitoringView() {
               <button className="p-1.5 rounded hover:bg-white/15 text-white transition-colors" title="Grid">
                 <IconGrid className="w-4 h-4" />
               </button>
-              <button className="p-1.5 rounded hover:bg-white/15 text-white transition-colors" title="Fullscreen">
+              <button
+                onClick={() => void videoRef.current?.requestFullscreen()}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                title="Fullscreen"
+              >
                 <IconMaximize className="w-4 h-4" />
               </button>
             </div>

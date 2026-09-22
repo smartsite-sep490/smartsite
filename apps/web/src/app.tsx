@@ -2,16 +2,22 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getBackendHealth } from '@smartsite/api-client';
 import { AppLayout, ActiveTab } from './components/layout/AppLayout';
-import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
-import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
+import { CameraMonitoringView, CameraSubTab } from './components/cameras/CameraMonitoringView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
-import { IconAlertTriangle, IconRadio, IconUsers, IconKey, IconTrendingUp } from './components/icons';
+import {
+  IconAlertTriangle,
+  IconRadio,
+  IconUsers,
+  IconKey,
+  IconTrendingUp,
+} from './components/icons';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function App() {
-  const [currentTab, setCurrentTab] = useState<ActiveTab>('zones');
+  const [currentTab, setCurrentTab] = useState<ActiveTab>('cameras');
+  const [cameraSubTab, setCameraSubTab] = useState<CameraSubTab>('zones');
 
   // Backend live health check
   useQuery({
@@ -19,27 +25,32 @@ export function App() {
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
   });
 
+  const handleSelectTab = (tab: ActiveTab) => {
+    if (tab === 'ppe') {
+      setCameraSubTab('ppe');
+      setCurrentTab('cameras');
+    } else if (tab === 'zones') {
+      setCameraSubTab('zones');
+      setCurrentTab('cameras');
+    } else {
+      setCurrentTab(tab);
+    }
+  };
+
   // If viewing public landing page
   if (currentTab === 'landing') {
-    return (
-      <LandingPage
-        onEnterApp={(targetTab = 'dashboard') => setCurrentTab(targetTab)}
-      />
-    );
+    return <LandingPage onEnterApp={(targetTab = 'dashboard') => handleSelectTab(targetTab)} />;
   }
 
   return (
-    <AppLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
-      {/* Tab: Restricted Zones (MF06) */}
-      {currentTab === 'zones' && <RestrictedZoneView />}
-
-      {/* Tab: PPE Monitoring (MF05) */}
-      {currentTab === 'ppe' && <PpeMonitoringView />}
+    <AppLayout currentTab={currentTab} onSelectTab={handleSelectTab}>
+      {/* Tab: Combined Camera Monitoring (MF05 PPE + MF06 Restricted Zones) */}
+      {(currentTab === 'cameras' || currentTab === 'ppe' || currentTab === 'zones') && (
+        <CameraMonitoringView activeSubTab={cameraSubTab} onSubTabChange={setCameraSubTab} />
+      )}
 
       {/* Tab: Operational Dashboard */}
-      {currentTab === 'dashboard' && (
-        <DashboardView onNavigate={(tab) => setCurrentTab(tab)} />
-      )}
+      {currentTab === 'dashboard' && <DashboardView onNavigate={(tab) => handleSelectTab(tab)} />}
 
       {/* Placeholder tabs for remaining modules */}
       {currentTab === 'workforce' && (
@@ -73,7 +84,8 @@ export function App() {
           </div>
           <h2 className="text-xl font-bold text-[#041D2E]">Safety Incidents & MF08 Review</h2>
           <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Safety Officer investigation workflows, evidence preservation and contractor corrective actions.
+            Safety Officer investigation workflows, evidence preservation and contractor corrective
+            actions.
           </p>
         </div>
       )}

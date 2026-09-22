@@ -4,7 +4,6 @@ import {
   IconUsers,
   IconKey,
   IconHardHat,
-  IconShield,
   IconAlertTriangle,
   IconRadio,
   IconTrendingUp,
@@ -15,12 +14,14 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
+  IconCamera,
 } from '../icons';
 
 export type ActiveTab =
   | 'dashboard'
   | 'workforce'
   | 'access'
+  | 'cameras'
   | 'ppe'
   | 'zones'
   | 'incidents'
@@ -42,8 +43,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
     { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
     { id: 'workforce', label: 'Workforce', icon: IconUsers },
     { id: 'access', label: 'Site Access', icon: IconKey },
-    { id: 'ppe', label: 'PPE Monitoring', icon: IconHardHat },
-    { id: 'zones', label: 'Restricted Zones', icon: IconShield },
+    { id: 'cameras', label: 'Camera Monitoring', icon: IconCamera },
     { id: 'incidents', label: 'Incidents', icon: IconAlertTriangle },
     { id: 'iot', label: 'IoT Monitoring', icon: IconRadio },
     { id: 'progress', label: 'Progress', icon: IconTrendingUp },
@@ -105,7 +105,10 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
             )}
             <nav className="space-y-1">
               {navItems.map((item) => {
-                const isActive = currentTab === item.id;
+                const isCameras = item.id === 'cameras';
+                const isActive =
+                  currentTab === item.id ||
+                  (isCameras && (currentTab === 'ppe' || currentTab === 'zones'));
                 const Icon = item.icon;
                 return (
                   <button
@@ -211,9 +214,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
         </header>
 
         {/* Viewport Content */}
-        <main className="flex-1 p-6 md:p-8">
-          {children}
-        </main>
+        <main className="flex-1 p-6 md:p-8">{children}</main>
       </div>
     </div>
   );
