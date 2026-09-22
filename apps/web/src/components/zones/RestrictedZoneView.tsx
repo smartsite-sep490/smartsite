@@ -232,7 +232,7 @@ export function RestrictedZoneView() {
                   </div>
                   <IconX className="w-5 h-5 text-red-500" />
                 </div>
-                
+
                 <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-slate-500">
                   <span>Permission validity</span>
                   <span className="font-bold text-slate-300">—</span>
