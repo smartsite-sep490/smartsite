@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getBackendHealth } from '@smartsite/api-client';
 import { AppLayout, ActiveTab } from './components/layout/AppLayout';
-import { CameraMonitoringView, CameraSubTab } from './components/cameras/CameraMonitoringView';
+import { LiveMonitoringView } from './components/live/LiveMonitoringView';
+import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
+import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import {
@@ -16,8 +18,7 @@ import {
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function App() {
-  const [currentTab, setCurrentTab] = useState<ActiveTab>('cameras');
-  const [cameraSubTab, setCameraSubTab] = useState<CameraSubTab>('zones');
+  const [currentTab, setCurrentTab] = useState<ActiveTab>('live-monitoring');
 
   // Backend live health check
   useQuery({
@@ -43,11 +44,15 @@ export function App() {
   }
 
   return (
-    <AppLayout currentTab={currentTab} onSelectTab={handleSelectTab}>
-      {/* Tab: Combined Camera Monitoring (MF05 PPE + MF06 Restricted Zones) */}
-      {(currentTab === 'cameras' || currentTab === 'ppe' || currentTab === 'zones') && (
-        <CameraMonitoringView activeSubTab={cameraSubTab} onSubTabChange={setCameraSubTab} />
-      )}
+    <AppLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
+      {/* Tab: Live Monitoring */}
+      {currentTab === 'live-monitoring' && <LiveMonitoringView onNavigate={(tab) => setCurrentTab(tab)} />}
+
+      {/* Tab: Restricted Zones (MF06) */}
+      {currentTab === 'zones' && <RestrictedZoneView />}
+
+      {/* Tab: PPE Monitoring (MF05) */}
+      {currentTab === 'ppe' && <PpeMonitoringView />}
 
       {/* Tab: Operational Dashboard */}
       {currentTab === 'dashboard' && <DashboardView onNavigate={(tab) => handleSelectTab(tab)} />}
