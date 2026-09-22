@@ -17,6 +17,17 @@ import {
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 
+type NormalizedPoint = [number, number];
+
+const DEFAULT_ZONE_POLYGON: NormalizedPoint[] = [
+  [0.63, 0.2],
+  [0.98, 0.2],
+  [0.98, 0.9],
+  [0.63, 0.9],
+];
+
+const ZONE_STORAGE_KEY = 'smartsite.restricted-zone.camera-04';
+
 export function RestrictedZoneView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -27,7 +38,73 @@ export function RestrictedZoneView() {
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(DEFAULT_ZONE_POLYGON);
+  const [isEditingZone, setIsEditingZone] = useState(false);
+  const activeZonePoint = useRef<number | null>(null);
   const testDetection = getZoneVideoTestDetection(videoTimeline, aiTimeline);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(ZONE_STORAGE_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as unknown;
+      if (
+        Array.isArray(parsed) &&
+        parsed.length >= 3 &&
+        parsed.every(
+          (point) =>
+            Array.isArray(point) &&
+            point.length === 2 &&
+            typeof point[0] === 'number' &&
+            typeof point[1] === 'number',
+        )
+      ) {
+        setZonePolygon(parsed as NormalizedPoint[]);
+      }
+    } catch {
+      // Ignore malformed local test data and keep the default zone.
+    }
+  }, []);
+
+  const updateZonePoint = (event: React.PointerEvent<SVGSVGElement>) => {
+    const pointIndex = activeZonePoint.current;
+    if (pointIndex === null) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    setZonePolygon((previous) =>
+      previous.map((point, index) => (index === pointIndex ? [x, y] : point)),
+    );
+  };
+
+  const saveZone = () => {
+    window.localStorage.setItem(ZONE_STORAGE_KEY, JSON.stringify(zonePolygon));
+    setIsEditingZone(false);
+  };
+
+  const resetZone = () => {
+    setZonePolygon(DEFAULT_ZONE_POLYGON);
+    window.localStorage.removeItem(ZONE_STORAGE_KEY);
+  };
+
+  const exportZone = () => {
+    const payload = `${JSON.stringify(
+      {
+        configVersion: 4,
+        cameraExternalId: 'CAM-04',
+        regionId: 'crane-operation-zone',
+        geometry: { type: 'POLYGON', coordinates: [zonePolygon] },
+      },
+      null,
+      2,
+    )}\n`;
+    const blobUrl = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = 'zone-ui-region-configuration.json';
+    link.click();
+    URL.revokeObjectURL(blobUrl);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -127,20 +204,90 @@ export function RestrictedZoneView() {
             {/* Horizontal scanning line */}
             <div className="absolute top-[52%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
 
-            {/* NO ENTRY ZONE polygon overlay box */}
-            <div
-              className="absolute border-[1.6px] border-[#DF2225] bg-[#DF2225]/10 pointer-events-none transition-all duration-300"
-              style={{
-                left: '63.0%',
-                top: '20.0%',
-                width: '35.0%',
-                height: '70.0%',
-                opacity: testDetection.active ? 1 : 0.45,
+            {/* Manually adjustable restricted-zone polygon. Coordinates are normalized 0..1. */}
+            <svg
+              className="absolute inset-0 w-full h-full"
+              viewBox="0 0 1 1"
+              preserveAspectRatio="none"
+              onPointerMove={isEditingZone ? updateZonePoint : undefined}
+              onPointerUp={() => {
+                activeZonePoint.current = null;
               }}
+              aria-label="Restricted zone editor"
             >
-              <div className="absolute top-4 left-4 px-2 py-0.5 bg-[#DF2225]/90 backdrop-blur-sm text-white text-[10px] font-extrabold uppercase tracking-widest shadow-sm">
+              <polygon
+                points={zonePolygon.map(([x, y]) => `${x},${y}`).join(' ')}
+                fill="#DF2225"
+                fillOpacity={testDetection.active ? 0.16 : 0.08}
+                stroke="#DF2225"
+                strokeWidth="0.006"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+              <text
+                x={(zonePolygon[0]?.[0] ?? 0.63) + 0.012}
+                y={(zonePolygon[0]?.[1] ?? 0.2) + 0.035}
+                fill="white"
+                fontSize="0.025"
+                fontWeight="800"
+                letterSpacing="0.06em"
+                style={{ textTransform: 'uppercase' }}
+                pointerEvents="none"
+              >
                 NO ENTRY ZONE
-              </div>
+              </text>
+              {isEditingZone &&
+                zonePolygon.map(([x, y], index) => (
+                  <circle
+                    key={`zone-point-${index}`}
+                    cx={x}
+                    cy={y}
+                    r="0.018"
+                    fill="#F66B17"
+                    stroke="white"
+                    strokeWidth="0.006"
+                    onPointerDown={(event) => {
+                      activeZonePoint.current = index;
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUp={() => {
+                      activeZonePoint.current = null;
+                    }}
+                    style={{ cursor: 'grab', pointerEvents: 'all' }}
+                  />
+                ))}
+            </svg>
+
+            <div className="absolute left-4 bottom-4 z-10 flex items-center gap-2">
+              {!isEditingZone ? (
+                <button
+                  onClick={() => setIsEditingZone(true)}
+                  className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950"
+                >
+                  EDIT ZONE
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={saveZone}
+                    className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700"
+                  >
+                    SAVE ZONE
+                  </button>
+                  <button
+                    onClick={resetZone}
+                    className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950"
+                  >
+                    RESET
+                  </button>
+                  <button
+                    onClick={exportZone}
+                    className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B]"
+                  >
+                    EXPORT JSON
+                  </button>
+                </>
+              )}
             </div>
 
             {/* PERSON #1024 bounding box */}
