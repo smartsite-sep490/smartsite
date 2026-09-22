@@ -41,6 +41,7 @@ export interface VideoTestDetection {
   confidence: number | null;
   eventId: string;
   label: string;
+  ppeStatus: Record<'HARD_HAT' | 'SAFETY_VEST', 'PRESENT' | 'MISSING' | 'UNKNOWN'>;
   timecode: string;
   trackId: number | null;
 }
@@ -115,6 +116,7 @@ function detectionFor(
       confidence: null,
       eventId: timeline ? `${type}-NO-EVENT` : `${type}-WAITING-FOR-AI-RUN`,
       label: timeline ? `${type} NO EVENT` : `${type} WAITING FOR AI RUN`,
+      ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       timecode: formatTimecode(videoTimeline.currentTime),
       trackId: null,
     };
@@ -127,6 +129,22 @@ function detectionFor(
     type === 'MF05'
       ? `MISSING ${match.observation.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
       : 'ZONE ENTRY';
+  const ppeStatus = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' } as Record<
+    'HARD_HAT' | 'SAFETY_VEST',
+    'PRESENT' | 'MISSING' | 'UNKNOWN'
+  >;
+  if (type === 'MF05') {
+    for (const observation of match.entry.event.observations) {
+      if (
+        observation.type === 'PPE' &&
+        observation.trackId === match.observation.trackId &&
+        observation.ppeItem &&
+        observation.status
+      ) {
+        ppeStatus[observation.ppeItem] = observation.status;
+      }
+    }
+  }
 
   return {
     active: true,
@@ -134,6 +152,7 @@ function detectionFor(
     confidence: match.observation.confidence ?? person?.confidence ?? null,
     eventId: match.entry.event.eventId,
     label: `${type} ${detail}`,
+    ppeStatus,
     timecode: formatTimecode(match.entry.videoTimeSeconds),
     trackId: match.observation.trackId,
   };

@@ -28,6 +28,12 @@ export function PpeMonitoringView() {
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
   const testDetection = getPpeVideoTestDetection(videoTimeline, aiTimeline);
+  const ppeCheck = (item: 'HARD_HAT' | 'SAFETY_VEST') => {
+    const status = testDetection.ppeStatus[item];
+    if (status === 'MISSING') return { label: 'Missing', icon: <IconX className="w-5 h-5 text-red-500" /> };
+    if (status === 'PRESENT') return { label: 'Detected', icon: <IconCheck className="w-5 h-5 text-emerald-500" /> };
+    return { label: 'Not assessed in this observation', icon: <IconClock className="w-5 h-5 text-slate-400" /> };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -269,33 +275,18 @@ export function PpeMonitoringView() {
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-slate-900 text-xs">Helmet</p>
-                    <p className="text-[11px] text-slate-500">Detected</p>
+                    <p className="text-[11px] text-slate-500">{ppeCheck('HARD_HAT').label}</p>
                   </div>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
+                  {ppeCheck('HARD_HAT').icon}
                 </div>
 
                 {/* Safety Vest */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-slate-900 text-xs">Safety Vest</p>
-                    <p className="text-[11px] text-slate-500">Detected</p>
+                    <p className="text-[11px] text-slate-500">{ppeCheck('SAFETY_VEST').label}</p>
                   </div>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
-                </div>
-
-                {/* Gloves - Missing */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Gloves</p>
-                    <p className="text-[11px] text-slate-500">
-                      {testDetection.active ? 'Missing' : 'Waiting for detection'}
-                    </p>
-                  </div>
-                  {testDetection.active ? (
-                    <IconX className="w-5 h-5 text-red-500" />
-                  ) : (
-                    <IconClock className="w-5 h-5 text-slate-400" />
-                  )}
+                  {ppeCheck('SAFETY_VEST').icon}
                 </div>
               </div>
             </div>
