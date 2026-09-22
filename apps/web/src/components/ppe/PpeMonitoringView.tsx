@@ -130,8 +130,8 @@ export function PpeMonitoringView() {
         <button
           onClick={() => setSelectedAlert(item.id)}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] ${
-            selectedAlert === item.id 
-              ? 'bg-[#041D2E] text-white' 
+            selectedAlert === item.id
+              ? 'bg-[#041D2E] text-white'
               : item.status === 'Open' || item.status === 'Needs Review'
               ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               : 'text-slate-500 hover:text-slate-700'
@@ -194,7 +194,7 @@ export function PpeMonitoringView() {
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      
+
       <CameraSelectorBar
         siteName="Tower A"
         contextName={activeCamera.location}
@@ -207,7 +207,7 @@ export function PpeMonitoringView() {
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start">
-        
+
         {/* Camera Feed */}
         <CameraFeed
           cameraId={activeCamera.id}
@@ -282,7 +282,7 @@ export function PpeMonitoringView() {
                 <>AI confidently detected a missing safety item for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker} ({activeEvent.workerId})</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong>. Missing item(s): <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> ({activeEvent.confidence} confidence).</>
               )}
             </p>
-            
+
             <div className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
               <p className="font-bold text-slate-900 text-xs uppercase tracking-[0.1em]">Safety Protocol: {activePolicy.location}</p>
               <p className="text-slate-700 text-xs leading-relaxed">
@@ -335,9 +335,9 @@ export function PpeMonitoringView() {
                 <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {selectedWorker}</p>
               </div>
             </div>
-            
+
             <div className="h-px bg-slate-100 w-full" />
-            
+
             {selectedWorker === 'Unknown' ? (
               <div className="py-8 px-4 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100 text-center">
                 <IconAlertTriangle className="w-8 h-8 text-slate-400 mb-3" />

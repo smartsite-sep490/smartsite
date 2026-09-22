@@ -41,7 +41,7 @@ export function CameraSelectorBar({
 
   return (
     <div className="w-full bg-white border border-slate-200 rounded-xl shadow-sm p-2 flex items-center justify-between mb-6">
-      
+
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 pl-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
@@ -49,7 +49,7 @@ export function CameraSelectorBar({
           <span>{siteName}</span>
         </div>
         <span className="text-slate-300">/</span>
-        
+
         {/* Camera Dropdown Container */}
         <div className="relative" ref={dropdownRef}>
           <button
@@ -105,13 +105,13 @@ export function CameraSelectorBar({
             </div>
           )}
         </div>
-        
+
         <span className="text-slate-300">/</span>
         <div className="flex items-center gap-1.5 text-xs font-bold text-[#041D2E] bg-slate-100 px-2.5 py-1 rounded-md">
           {contextName}
         </div>
       </div>
-      
+
       <div className="pr-2 flex items-center gap-2">
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

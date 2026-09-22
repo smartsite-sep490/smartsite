@@ -43,7 +43,7 @@ export function EventDetailPanel({
   return (
     <div className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-[2rem] shadow-sm">
       <div className="bg-white rounded-[calc(2rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,1)] border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-hidden">
-        
+
         {/* Scrollable Content Area */}
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
           {/* Header */}

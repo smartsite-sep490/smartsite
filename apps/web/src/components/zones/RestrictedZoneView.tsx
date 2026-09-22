@@ -125,8 +125,8 @@ export function RestrictedZoneView() {
         <button
           onClick={() => setSelectedIncident(item.id)}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] ${
-            selectedIncident === item.id 
-              ? 'bg-[#041D2E] text-white' 
+            selectedIncident === item.id
+              ? 'bg-[#041D2E] text-white'
               : item.result === 'Violation' || item.result === 'Needs Review'
               ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               : 'text-slate-500 hover:text-slate-700'
@@ -157,7 +157,7 @@ export function RestrictedZoneView() {
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-3">
         VERIFICATION LOGIC
       </p>
-      
+
       {activePolicyType === 'NO_ENTRY' ? (
         <div className="space-y-1.5">
           <div className="flex items-start gap-3 p-3 rounded-xl bg-red-50/50 border border-red-100">
@@ -217,7 +217,7 @@ export function RestrictedZoneView() {
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      
+
       <CameraSelectorBar
         siteName="Tower A"
         contextName={activeCamera.location}
@@ -230,7 +230,7 @@ export function RestrictedZoneView() {
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
-        
+
         {/* Camera Feed */}
         <CameraFeed
           cameraId={activeCamera.id}
@@ -269,8 +269,8 @@ export function RestrictedZoneView() {
           resultStatus={activeEvent ? (activeEvent.result === 'Violation' ? 'error' : activeEvent.result === 'Access Valid' ? 'success' : 'warning') : 'success'}
           resultTitle={activeEvent ? (activeEvent.result === 'Violation' ? 'RESTRICTED ZONE VIOLATION' : activeEvent.result) : 'MONITORING ACTIVE'}
           resultMessage={
-            activeEvent 
-              ? (activePolicyType === 'NO_ENTRY' 
+            activeEvent
+              ? (activePolicyType === 'NO_ENTRY'
                 ? "Presence detected in a strictly prohibited No Entry zone."
                 : activeEvent.result === 'Violation'
                   ? (activeEvent.assignmentStatus === 'Inactive' ? "Worker has an inactive site assignment." : "No valid permission for this zone at detection time.")
@@ -325,7 +325,7 @@ export function RestrictedZoneView() {
                 <>Worker <strong className="text-slate-900 font-semibold">{activeEvent.person}</strong> was detected in the <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> without valid permissions at detection time.</>
               )}
             </p>
-            
+
             <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-200">
               <p className="font-bold text-slate-900 text-xs uppercase tracking-[0.1em]">Verification Snapshot</p>
               <div className="space-y-2 text-xs">
@@ -405,9 +405,9 @@ export function RestrictedZoneView() {
                 <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {selectedWorker}</p>
               </div>
             </div>
-            
+
             <div className="h-px bg-slate-100 w-full" />
-            
+
             {selectedWorker === 'Unknown' ? (
               <div className="py-8 px-4 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100 text-center">
                 <IconAlertTriangle className="w-8 h-8 text-slate-400 mb-3" />

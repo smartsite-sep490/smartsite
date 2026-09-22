@@ -98,7 +98,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Live Monitoring</h1>

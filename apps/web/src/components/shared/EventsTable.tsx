@@ -26,7 +26,7 @@ export function EventsTable<T>({
   return (
     <div className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-[2rem] shadow-sm">
       <div className="bg-white rounded-[calc(2rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,1)] border border-slate-100 p-6 space-y-5">
-        
+
         {/* Header Section */}
         <div className="flex items-center justify-between">
           <div>

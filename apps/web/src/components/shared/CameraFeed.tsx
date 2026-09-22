@@ -35,7 +35,7 @@ export function CameraFeed({
             alt={`Live feed from ${cameraId}`}
             className="w-full h-full object-cover opacity-90 mix-blend-lighten"
           />
-          
+
           {/* Custom overlays from parent (e.g. bounding boxes) */}
           {children}
         </div>

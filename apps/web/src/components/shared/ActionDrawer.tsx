@@ -58,7 +58,7 @@ export function ActionDrawer({
       >
         {/* Inner Core (Double-bezel style) */}
         <div className="bg-white h-full rounded-[calc(2rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,1)] border border-slate-100 flex flex-col overflow-hidden">
-          
+
           {/* Header */}
           <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md z-10">
             <div className="flex items-center gap-2">
@@ -81,7 +81,7 @@ export function ActionDrawer({
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
             {children}
           </div>
-          
+
         </div>
       </div>
     </div>

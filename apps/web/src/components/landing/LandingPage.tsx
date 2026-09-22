@@ -24,11 +24,11 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
   const [activeAiTab, setActiveAiTab] = useState<'ppe' | 'zones'>('ppe');
 
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // 1. Hero Section Animation
   useGSAP(() => {
     const tl = gsap.timeline();
-    
+
     // Animate the main headline
     tl.from('.hero-badge', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out', delay: 0.2 })
       .from('.hero-headline', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.4')
@@ -171,7 +171,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       <section
         className="hero-section relative min-h-screen flex items-center pt-20 overflow-hidden"
       >
-        <div 
+        <div
           className="hero-bg absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: "url('https://onsite-guard-ai.lovable.app/assets/smartsite-hero-BVCX8sql.jpg')" }}
         />
