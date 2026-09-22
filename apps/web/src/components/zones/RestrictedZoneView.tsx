@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   IconCheck,
   IconX,
@@ -12,6 +12,8 @@ import {
 } from '../icons';
 import {
   getZoneVideoTestDetection,
+  loadAiVideoTimeline,
+  type AiVideoTimeline,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 
@@ -24,7 +26,22 @@ export function RestrictedZoneView() {
     currentTime: 0,
     duration: 0,
   });
-  const testDetection = getZoneVideoTestDetection(videoTimeline);
+  const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const testDetection = getZoneVideoTestDetection(videoTimeline, aiTimeline);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadAiVideoTimeline('/assets/zone-ai.timeline.json')
+      .then((timeline) => {
+        if (!cancelled) setAiTimeline(timeline);
+      })
+      .catch(() => {
+        if (!cancelled) setAiTimeline(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateVideoTimeline = (video: HTMLVideoElement) => {
     setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
@@ -49,52 +66,27 @@ export function RestrictedZoneView() {
     setIsMuted(video.muted);
   };
 
-  const events = [
-    {
-      id: 'EVT-2048',
-      time: '10:42',
-      person: 'Nguyen Van A',
-      zone: 'Crane Operation Area',
-      camera: 'CAM-04',
-      identity: 'Identified',
-      authorization: 'Unauthorized',
-      result: 'Violation',
-      statusType: 'error',
-    },
-    {
-      id: 'EVT-2042',
-      time: '10:37',
-      person: 'Tran Van B',
-      zone: 'Electrical Room',
-      camera: 'CAM-08',
-      identity: 'Identified',
-      authorization: 'Authorized',
-      result: 'Access Valid',
-      statusType: 'success',
-    },
-    {
-      id: 'EVT-2035',
-      time: '10:29',
-      person: 'Unknown Person',
-      zone: 'Material Storage',
-      camera: 'CAM-09',
-      identity: 'Unidentified',
-      authorization: 'Unknown',
-      result: 'Needs Review',
-      statusType: 'warning',
-    },
-    {
-      id: 'EVT-2020',
-      time: '10:14',
-      person: 'Le Van C',
-      zone: 'Crane Operation Area',
-      camera: 'CAM-04',
-      identity: 'Identified',
-      authorization: 'Authorized',
-      result: 'Access Valid',
-      statusType: 'success',
-    },
-  ];
+  const events = (aiTimeline?.entries ?? [])
+    .flatMap((entry) =>
+      entry.event.observations
+        .filter((observation) => observation.type === 'ZONE_ENTRY')
+        .map((observation) => ({
+          id: entry.event.eventId,
+          time: `${Math.floor(entry.videoTimeSeconds / 60)
+            .toString()
+            .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
+            .toString()
+            .padStart(2, '0')}`,
+          person: `Track #${observation.trackId}`,
+          zone: `Region ${(observation.regionId ?? 'unknown').slice(0, 8)}`,
+          camera: entry.event.cameraExternalId,
+          identity: 'Unknown',
+          authorization: 'Backend evaluation required',
+          result: 'Technical entry',
+        })),
+    )
+    .slice(-20)
+    .reverse();
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
@@ -127,7 +119,8 @@ export function RestrictedZoneView() {
                   : 'bg-slate-900/75 text-white/80'
               }`}
             >
-              LOCAL MF06 TEST · {testDetection.active ? 'VIOLATION' : 'SCANNING'} ·{' '}
+              {aiTimeline ? 'MF06 AI PIPELINE' : 'MF06 AI OUTPUT REQUIRED'} ·{' '}
+              {testDetection.active ? 'ZONE ENTRY' : 'SCANNING'} ·{' '}
               {testDetection.timecode}
             </div>
 
@@ -138,10 +131,10 @@ export function RestrictedZoneView() {
             <div
               className="absolute border-[1.6px] border-[#DF2225] bg-[#DF2225]/10 pointer-events-none transition-all duration-300"
               style={{
-                left: '21.0%',
+                left: '65.0%',
                 top: '40.0%',
-                width: '57.0%',
-                height: '46.0%',
+                width: '7.0%',
+                height: '15.0%',
                 opacity: testDetection.active ? 1 : 0.45,
               }}
             >
@@ -154,11 +147,19 @@ export function RestrictedZoneView() {
             <div
               className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
               style={{
-                left: '42.0%',
-                top: '55.0%',
-                width: '10.0%',
-                height: '25.0%',
-                opacity: testDetection.active ? 1 : 0.35,
+                left: `${(testDetection.boundingBox?.x1 ?? 0.42) * 100}%`,
+                top: `${(testDetection.boundingBox?.y1 ?? 0.55) * 100}%`,
+                width: `${
+                  ((testDetection.boundingBox?.x2 ?? 0.52) -
+                    (testDetection.boundingBox?.x1 ?? 0.42)) *
+                  100
+                }%`,
+                height: `${
+                  ((testDetection.boundingBox?.y2 ?? 0.8) -
+                    (testDetection.boundingBox?.y1 ?? 0.55)) *
+                  100
+                }%`,
+                opacity: testDetection.active && testDetection.boundingBox ? 1 : 0,
               }}
             >
               {/* Floating Label directly above person bounding box */}
@@ -235,11 +236,13 @@ export function RestrictedZoneView() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Identity</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">Nguyen Van A</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">Unknown</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker ID</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">WK-1024</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {testDetection.trackId === null ? '—' : `Track #${testDetection.trackId}`}
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Camera</p>
@@ -255,7 +258,11 @@ export function RestrictedZoneView() {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recognition Confidence</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">97%</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {testDetection.confidence === null
+                    ? '—'
+                    : `${Math.round(testDetection.confidence * 100)}%`}
+                </p>
               </div>
             </div>
 
@@ -272,25 +279,25 @@ export function RestrictedZoneView() {
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-slate-900 text-xs">Identity</p>
-                    <p className="text-[11px] text-slate-500">Nguyen Van A</p>
+                    <p className="text-[11px] text-slate-500">Unknown</p>
                   </div>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
+                  <IconClock className="w-5 h-5 text-slate-400" />
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-slate-900 text-xs">Site Assignment</p>
-                    <p className="text-[11px] text-slate-500">Active</p>
+                    <p className="text-[11px] text-slate-500">Not evaluated</p>
                   </div>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
+                  <IconClock className="w-5 h-5 text-slate-400" />
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-slate-900 text-xs">Zone Permission</p>
-                    <p className="text-[11px] text-slate-500">Not Authorized</p>
+                    <p className="text-[11px] text-slate-500">Backend evaluation required</p>
                   </div>
-                  <IconX className="w-5 h-5 text-red-500" />
+                  <IconClock className="w-5 h-5 text-slate-400" />
                 </div>
 
                 <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-slate-500">
@@ -316,14 +323,12 @@ export function RestrictedZoneView() {
                   }`}
                 >
                   {testDetection.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
-                  <span>
-                    {testDetection.active ? 'RESTRICTED ZONE VIOLATION' : 'SCANNING VIDEO'}
-                  </span>
+                  <span>{testDetection.active ? 'ZONE ENTRY OBSERVATION' : 'SCANNING VIDEO'}</span>
                 </div>
                 <p className="text-xs text-slate-600">
                   {testDetection.active
-                    ? 'No valid permission for this zone at detection time.'
-                    : 'Play the video to activate the MF06 test event.'}
+                    ? 'Technical zone-entry observation; Backend decides authorization and violation.'
+                    : 'Generate zone-ai.timeline.json, then play the matching video.'}
                 </p>
               </div>
             </div>

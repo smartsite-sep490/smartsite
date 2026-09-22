@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   IconCheck,
   IconX,
@@ -12,6 +12,8 @@ import {
 } from '../icons';
 import {
   getPpeVideoTestDetection,
+  loadAiVideoTimeline,
+  type AiVideoTimeline,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 
@@ -24,7 +26,22 @@ export function PpeMonitoringView() {
     currentTime: 0,
     duration: 0,
   });
-  const testDetection = getPpeVideoTestDetection(videoTimeline);
+  const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const testDetection = getPpeVideoTestDetection(videoTimeline, aiTimeline);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadAiVideoTimeline('/assets/ppe-ai.timeline.json')
+      .then((timeline) => {
+        if (!cancelled) setAiTimeline(timeline);
+      })
+      .catch(() => {
+        if (!cancelled) setAiTimeline(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateVideoTimeline = (video: HTMLVideoElement) => {
     setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
@@ -49,52 +66,33 @@ export function PpeMonitoringView() {
     setIsMuted(video.muted);
   };
 
-  const ppeEvents = [
-    {
-      id: 'EVT-2048',
-      time: '10:42',
-      worker: 'Nguyen Van A',
-      camera: 'CAM-07',
-      workArea: 'Work Area B',
-      issue: 'Missing Gloves',
-      confidence: '97%',
-      status: 'Open',
-      statusType: 'error',
-    },
-    {
-      id: 'EVT-2042',
-      time: '10:36',
-      worker: 'Tran Van B',
-      camera: 'CAM-02',
-      workArea: 'Tower B',
-      issue: 'Missing Helmet',
-      confidence: '95%',
-      status: 'Under Review',
-      statusType: 'warning',
-    },
-    {
-      id: 'EVT-2035',
-      time: '10:21',
-      worker: 'Unknown',
-      camera: 'CAM-05',
-      workArea: 'Tower A',
-      issue: 'Uncertain PPE',
-      confidence: '72%',
-      status: 'Needs Review',
-      statusType: 'warning',
-    },
-    {
-      id: 'EVT-2029',
-      time: '09:58',
-      worker: 'Le Van C',
-      camera: 'CAM-03',
-      workArea: 'Tower A',
-      issue: 'Compliant',
-      confidence: '98%',
-      status: 'Logged',
-      statusType: 'success',
-    },
-  ];
+  const ppeEvents = (aiTimeline?.entries ?? [])
+    .flatMap((entry) =>
+      entry.event.observations
+        .filter((observation) => observation.type === 'PPE' && observation.status === 'MISSING')
+        .map((observation) => {
+          const person = entry.event.observations.find(
+            (candidate) =>
+              candidate.type === 'PERSON' && candidate.trackId === observation.trackId,
+          );
+          return {
+            id: entry.event.eventId,
+            time: `${Math.floor(entry.videoTimeSeconds / 60)
+              .toString()
+              .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
+              .toString()
+              .padStart(2, '0')}`,
+            worker: `Track #${observation.trackId}`,
+            camera: entry.event.cameraExternalId,
+            workArea: 'Local test region',
+            issue: `Missing ${observation.ppeItem === 'HARD_HAT' ? 'Hard Hat' : 'Safety Vest'}`,
+            confidence: person?.confidence ? `${Math.round(person.confidence * 100)}%` : '—',
+            status: 'Technical observation',
+          };
+        }),
+    )
+    .slice(-20)
+    .reverse();
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
@@ -127,7 +125,8 @@ export function PpeMonitoringView() {
                   : 'bg-slate-900/75 text-white/80'
               }`}
             >
-              LOCAL MF05 TEST · {testDetection.active ? 'VIOLATION' : 'SCANNING'} ·{' '}
+              {aiTimeline ? 'MF05 AI PIPELINE' : 'MF05 AI OUTPUT REQUIRED'} ·{' '}
+              {testDetection.active ? 'MISSING PPE' : 'SCANNING'} ·{' '}
               {testDetection.timecode}
             </div>
 
@@ -139,11 +138,19 @@ export function PpeMonitoringView() {
               className="absolute border-[1.6px] border-[#F66B17] pointer-events-none transition-all duration-300"
               data-testid="mf05-test-detection"
               style={{
-                left: '42.0%',
-                top: '30.0%',
-                width: '12.0%',
-                height: '55.0%',
-                opacity: testDetection.active ? 1 : 0.35,
+                top: `${(testDetection.boundingBox?.y1 ?? 0.3) * 100}%`,
+                width: `${
+                  ((testDetection.boundingBox?.x2 ?? 0.54) -
+                    (testDetection.boundingBox?.x1 ?? 0.42)) *
+                  100
+                }%`,
+                height: `${
+                  ((testDetection.boundingBox?.y2 ?? 0.85) -
+                    (testDetection.boundingBox?.y1 ?? 0.3)) *
+                  100
+                }%`,
+                left: `${(testDetection.boundingBox?.x1 ?? 0.42) * 100}%`,
+                opacity: testDetection.active && testDetection.boundingBox ? 1 : 0,
               }}
             >
               {/* Floating label */}
@@ -220,11 +227,13 @@ export function PpeMonitoringView() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">Nguyen Van A</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">Unknown</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker ID</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">WK-1024</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {testDetection.trackId === null ? '—' : `Track #${testDetection.trackId}`}
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Camera</p>
@@ -240,7 +249,11 @@ export function PpeMonitoringView() {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recognition Confidence</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">97%</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {testDetection.confidence === null
+                    ? '—'
+                    : `${Math.round(testDetection.confidence * 100)}%`}
+                </p>
               </div>
             </div>
 
@@ -303,12 +316,12 @@ export function PpeMonitoringView() {
                   }`}
                 >
                   {testDetection.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
-                  <span>{testDetection.active ? 'PPE VIOLATION' : 'SCANNING VIDEO'}</span>
+                  <span>{testDetection.active ? 'MISSING PPE OBSERVATION' : 'SCANNING VIDEO'}</span>
                 </div>
                 <p className="text-xs text-slate-600">
                   {testDetection.active
-                    ? 'Missing required PPE: Gloves'
-                    : 'Play the video to activate the MF05 test event.'}
+                    ? 'Technical observation from the local YOLO + MF05 pipeline.'
+                    : 'Generate ppe-ai.timeline.json, then play the matching video.'}
                 </p>
               </div>
             </div>
