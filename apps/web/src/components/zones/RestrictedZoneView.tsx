@@ -258,7 +258,7 @@ export function RestrictedZoneView() {
                 ))}
             </svg>
 
-            <div className="absolute left-4 bottom-4 z-10 flex items-center gap-2">
+            <div className="absolute left-4 bottom-16 z-20 flex items-center gap-2">
               {!isEditingZone ? (
                 <button
                   onClick={() => setIsEditingZone(true)}
