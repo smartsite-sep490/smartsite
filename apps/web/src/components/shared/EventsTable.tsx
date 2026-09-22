@@ -44,7 +44,7 @@ export function EventsTable<T>({
           <table className="w-full text-left border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-[0.08em] text-[10px]">
-                {columns.map((col, idx) => (
+                {columns.map((col) => (
                   <th
                     key={col.key}
                     className={`py-3 px-3 ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
@@ -55,14 +55,14 @@ export function EventsTable<T>({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/80">
-              {data.map((item, idx) => (
+              {data.map((item) => (
                 <tr key={keyExtractor(item)} className="hover:bg-slate-50/50 transition-colors group">
                   {columns.map((col) => (
                     <td
                       key={col.key}
                       className={`py-3 px-3 ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
                     >
-                      {col.render ? col.render(item) : (item as any)[col.key]}
+                      {col.render ? col.render(item) : String((item as Record<string, unknown>)[col.key])}
                     </td>
                   ))}
                 </tr>

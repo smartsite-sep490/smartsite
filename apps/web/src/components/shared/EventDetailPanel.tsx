@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconAlertTriangle, IconCheck, IconX } from '../icons';
+import { IconAlertTriangle, IconCheck } from '../icons';
 
 interface DetailItem {
   label: string;

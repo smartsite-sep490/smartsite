@@ -15,8 +15,12 @@ interface ZoneEvent {
   person: string;
   zone: string;
   camera: string;
-  identity: string;
-  authorization: string;
+  identity: 'Identified' | 'Unidentified' | 'N/A';
+  assignmentStatus: 'Active' | 'Inactive' | 'Unknown' | 'N/A';
+  zonePermission: 'Authorized' | 'Unauthorized' | 'Unknown' | 'N/A';
+  permissionValidFrom?: string;
+  permissionValidUntil?: string;
+  detectedAt: string;
   result: ZoneResult;
   policyType: PolicyType;
 }
@@ -40,7 +44,9 @@ export function RestrictedZoneView() {
       zone: 'High Voltage Room',
       camera: 'CAM-12',
       identity: 'N/A',
-      authorization: 'N/A',
+      assignmentStatus: 'N/A',
+      zonePermission: 'N/A',
+      detectedAt: '2026-09-22T10:43:00Z',
       result: 'Violation',
       policyType: 'NO_ENTRY',
     },
@@ -51,7 +57,11 @@ export function RestrictedZoneView() {
       zone: 'Crane Operation Area',
       camera: 'CAM-04',
       identity: 'Identified',
-      authorization: 'Unauthorized',
+      assignmentStatus: 'Active',
+      zonePermission: 'Unauthorized',
+      permissionValidFrom: '2026-09-01T00:00:00Z',
+      permissionValidUntil: '2026-09-30T23:59:59Z',
+      detectedAt: '2026-09-22T10:42:00Z',
       result: 'Violation',
       policyType: 'AUTHORIZED_ONLY',
     },
@@ -62,8 +72,12 @@ export function RestrictedZoneView() {
       zone: 'Material Storage',
       camera: 'CAM-08',
       identity: 'Identified',
-      authorization: 'Authorized',
-      result: 'Access Valid',
+      assignmentStatus: 'Inactive',
+      zonePermission: 'Authorized',
+      permissionValidFrom: '2026-09-01T00:00:00Z',
+      permissionValidUntil: '2026-09-30T23:59:59Z',
+      detectedAt: '2026-09-22T10:37:00Z',
+      result: 'Violation', // Violation because assignment is Inactive
       policyType: 'AUTHORIZED_ONLY',
     },
     {
@@ -73,7 +87,9 @@ export function RestrictedZoneView() {
       zone: 'Material Storage',
       camera: 'CAM-08',
       identity: 'Unidentified',
-      authorization: 'Unknown',
+      assignmentStatus: 'Unknown',
+      zonePermission: 'Unknown',
+      detectedAt: '2026-09-22T10:29:00Z',
       result: 'Needs Review',
       policyType: 'AUTHORIZED_ONLY',
     },
@@ -163,21 +179,30 @@ export function RestrictedZoneView() {
             </div>
             {activeEvent.identity === 'Identified' ? <IconCheck className="w-5 h-5 text-emerald-500" /> : <IconAlertTriangle className="w-5 h-5 text-amber-500" />}
           </div>
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+          <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.assignmentStatus === 'Active' ? 'bg-emerald-50/50 border-emerald-100' : activeEvent.assignmentStatus === 'Inactive' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
             <div className="flex flex-col gap-0.5">
               <p className="font-semibold text-slate-900 text-xs">Site Assignment</p>
-              <p className="text-[11px] text-slate-500">{activeEvent.identity === 'Identified' ? 'Active' : 'Unknown'}</p>
+              <p className={`text-[11px] font-medium ${activeEvent.assignmentStatus === 'Active' ? 'text-emerald-700' : activeEvent.assignmentStatus === 'Inactive' ? 'text-red-500' : 'text-slate-500'}`}>{activeEvent.assignmentStatus}</p>
             </div>
-            {activeEvent.identity === 'Identified' ? <IconCheck className="w-5 h-5 text-emerald-500" /> : <IconAlertTriangle className="w-5 h-5 text-amber-500" />}
+            {activeEvent.assignmentStatus === 'Active' ? <IconCheck className="w-5 h-5 text-emerald-500" /> : activeEvent.assignmentStatus === 'Inactive' ? <IconX className="w-5 h-5 text-red-500" /> : <IconAlertTriangle className="w-5 h-5 text-amber-500" />}
           </div>
-          <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.authorization === 'Authorized' ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
+          <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.zonePermission === 'Authorized' ? 'bg-emerald-50/50 border-emerald-100' : activeEvent.zonePermission === 'Unauthorized' ? 'bg-red-50/50 border-red-100' : 'bg-amber-50/50 border-amber-100'}`}>
             <div className="flex flex-col gap-0.5">
               <p className="font-semibold text-slate-900 text-xs">Zone Permission</p>
-              <p className={`text-[11px] font-medium ${activeEvent.authorization === 'Authorized' ? 'text-emerald-700' : 'text-red-500'}`}>
-                {activeEvent.authorization === 'Authorized' ? 'Authorized' : 'Not Authorized'}
+              <p className={`text-[11px] font-medium ${activeEvent.zonePermission === 'Authorized' ? 'text-emerald-700' : activeEvent.zonePermission === 'Unauthorized' ? 'text-red-500' : 'text-amber-600'}`}>
+                {activeEvent.zonePermission === 'Authorized' ? 'Authorized' : activeEvent.zonePermission === 'Unauthorized' ? 'Not Authorized' : 'Not Evaluated'}
               </p>
             </div>
-            {activeEvent.authorization === 'Authorized' ? <IconCheck className="w-5 h-5 text-emerald-500" /> : <IconX className="w-5 h-5 text-red-500" />}
+            {activeEvent.zonePermission === 'Authorized' ? <IconCheck className="w-5 h-5 text-emerald-500" /> : activeEvent.zonePermission === 'Unauthorized' ? <IconX className="w-5 h-5 text-red-500" /> : <IconAlertTriangle className="w-5 h-5 text-amber-500" />}
+          </div>
+          <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.zonePermission === 'Authorized' ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div className="flex flex-col gap-0.5">
+              <p className="font-semibold text-slate-900 text-xs">Temporal Validity</p>
+              <p className={`text-[11px] font-medium ${activeEvent.zonePermission === 'Authorized' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {activeEvent.zonePermission === 'Authorized' ? 'Valid at Detection Time' : 'N/A'}
+              </p>
+            </div>
+            {activeEvent.zonePermission === 'Authorized' ? <IconCheck className="w-5 h-5 text-emerald-500" /> : <span className="w-5 h-5 flex items-center justify-center text-slate-400 font-bold text-xs">-</span>}
           </div>
         </div>
       )}
@@ -248,16 +273,16 @@ export function RestrictedZoneView() {
               ? (activePolicyType === 'NO_ENTRY' 
                 ? "Presence detected in a strictly prohibited No Entry zone."
                 : activeEvent.result === 'Violation'
-                  ? "No valid permission for this zone at detection time."
-                  : "Personnel has valid active permission for this zone.")
+                  ? (activeEvent.assignmentStatus === 'Inactive' ? "Worker has an inactive site assignment." : "No valid permission for this zone at detection time.")
+                  : activeEvent.result === 'Needs Review'
+                    ? "Identity and permission could not be verified automatically."
+                    : "Personnel has valid active permission for this zone.")
               : `System is continuously monitoring the ${activeCamera.location}.`
           }
-          primaryActionLabel={activeEvent && activeEvent.result !== 'Access Valid' ? "Review Incident" : "Live View"}
+          primaryActionLabel={activeEvent && activeEvent.result !== 'Access Valid' ? "Review Incident" : "View Event"}
           onPrimaryAction={() => {
-            if (activeEvent && activeEvent.result !== 'Access Valid') {
-              alert('Opening review drawer...');
-            } else {
-              alert('Camera is in live monitoring mode.');
+            if (activeEvent) {
+              setSelectedIncident(activeEvent.id);
             }
           }}
           secondaryActionLabel={activeEvent ? "View Worker" : "View Zone Policies"}
@@ -279,14 +304,96 @@ export function RestrictedZoneView() {
         keyExtractor={(item) => item.id}
       />
 
+      {/* Slide-over Drawer for Reviewing Incident */}
+      {activeEvent && (
+        <ActionDrawer
+          isOpen={selectedIncident === activeEvent.id}
+          onClose={() => setSelectedIncident(null)}
+          title={activeEvent.result === 'Access Valid' ? "Event Details" : activeEvent.result === 'Needs Review' ? "Detection Review" : "Incident Review"}
+          badge={activeEvent.id}
+          badgeType={activeEvent.result === 'Violation' ? 'error' : activeEvent.result === 'Access Valid' ? 'info' : 'warning'}
+        >
+          <div className="space-y-6 text-sm text-slate-600">
+            <p className="leading-relaxed">
+              {activePolicyType === 'NO_ENTRY' ? (
+                <>AI detected an individual entering the <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> at {activeEvent.time}, which is a strictly prohibited <strong className="text-red-600">No Entry Zone</strong>.</>
+              ) : activeEvent.result === 'Needs Review' ? (
+                <>AI detected an unidentified person in the <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong>. Identity and permissions could not be established.</>
+              ) : activeEvent.result === 'Access Valid' ? (
+                <>Worker <strong className="text-slate-900 font-semibold">{activeEvent.person}</strong> was verified entering the <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> with active permissions.</>
+              ) : (
+                <>Worker <strong className="text-slate-900 font-semibold">{activeEvent.person}</strong> was detected in the <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> without valid permissions at detection time.</>
+              )}
+            </p>
+            
+            <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-200">
+              <p className="font-bold text-slate-900 text-xs uppercase tracking-[0.1em]">Verification Snapshot</p>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between border-b border-slate-200 pb-2">
+                  <span className="text-slate-500 font-medium">Zone Policy</span>
+                  <span className="text-slate-900 font-semibold">{activeEvent.policyType.replace('_', ' ')}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-200 pb-2">
+                  <span className="text-slate-500 font-medium">Identity</span>
+                  <span className="text-slate-900 font-semibold">{activeEvent.person}</span>
+                </div>
+                {activePolicyType !== 'NO_ENTRY' && (
+                  <>
+                    <div className="flex justify-between border-b border-slate-200 pb-2">
+                      <span className="text-slate-500 font-medium">Site Assignment</span>
+                      <span className={`${activeEvent.assignmentStatus === 'Active' ? 'text-emerald-600' : activeEvent.assignmentStatus === 'Inactive' ? 'text-red-600' : 'text-amber-600'} font-semibold`}>{activeEvent.assignmentStatus}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-200 pb-2">
+                      <span className="text-slate-500 font-medium">Zone Permission</span>
+                      <span className={`${activeEvent.zonePermission === 'Authorized' ? 'text-emerald-600' : activeEvent.zonePermission === 'Unauthorized' ? 'text-red-600' : 'text-amber-600'} font-semibold`}>{activeEvent.zonePermission}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 font-medium">Permission Validity</span>
+                      <span className="text-slate-900 font-semibold text-right">
+                        {activeEvent.permissionValidFrom && activeEvent.permissionValidUntil ? (
+                          <>Valid: {new Date(activeEvent.permissionValidFrom).toLocaleDateString()} - {new Date(activeEvent.permissionValidUntil).toLocaleDateString()}<br/>Detected: {new Date(activeEvent.detectedAt).toLocaleString()}</>
+                        ) : 'N/A'}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {activeEvent.result !== 'Access Valid' && (
+              <div className="flex flex-col gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    alert(activeEvent.result === 'Needs Review' ? 'Flagged for further investigation.' : 'Incident created and notification dispatched.');
+                    setSelectedIncident(null);
+                  }}
+                  className="py-3 px-4 rounded-xl bg-[#F66B17] hover:bg-orange-700 text-white font-bold text-sm shadow-[0_2px_10px_rgba(246,107,23,0.3)] transition-all active:scale-[0.98]"
+                >
+                  {activeEvent.result === 'Needs Review' ? 'Flag for Investigation' : 'Create Incident'}
+                </button>
+                <button
+                  onClick={() => {
+                    alert('Event dismissed.');
+                    setSelectedIncident(null);
+                  }}
+                  className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-[0.98]"
+                >
+                  Dismiss Event
+                </button>
+              </div>
+            )}
+          </div>
+        </ActionDrawer>
+      )}
+
       {/* Slide-over Drawer for Worker Profile */}
       {selectedWorker && (
         <ActionDrawer
           isOpen={selectedWorker !== null}
           onClose={() => setSelectedWorker(null)}
           title="Worker Profile"
-          badge="Active"
-          badgeType="info"
+          badge={selectedWorker === 'Unknown' ? 'Unknown' : 'Active'}
+          badgeType={selectedWorker === 'Unknown' ? 'warning' : 'info'}
         >
           <div className="space-y-6">
             <div className="flex items-center gap-4">
@@ -298,6 +405,31 @@ export function RestrictedZoneView() {
                 <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {selectedWorker}</p>
               </div>
             </div>
+            
+            <div className="h-px bg-slate-100 w-full" />
+            
+            {selectedWorker === 'Unknown' ? (
+              <div className="py-8 px-4 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100 text-center">
+                <IconAlertTriangle className="w-8 h-8 text-slate-400 mb-3" />
+                <p className="text-slate-600 font-medium text-sm">Identity Unconfirmed</p>
+                <p className="text-slate-400 text-xs mt-1">No personnel profile or permission data is available for unidentified individuals.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Role</span>
+                  <span className="text-slate-900 font-semibold">Crane Operator</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Subcontractor</span>
+                  <span className="text-slate-900 font-semibold">Alpha Construction</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Access Level</span>
+                  <span className="text-emerald-600 font-bold">Level 3</span>
+                </div>
+              </div>
+            )}
           </div>
         </ActionDrawer>
       )}

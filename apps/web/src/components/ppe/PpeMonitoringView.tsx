@@ -17,7 +17,12 @@ interface PPEEvent {
   issue: string;
   confidence: string;
   status: PPEStatus;
-  missingItems: string[];
+  detectedPPE: string[]; // List of PPE that AI successfully detected
+}
+
+interface WorkAreaPolicy {
+  location: string;
+  requiredPPE: string[];
 }
 
 export function PpeMonitoringView() {
@@ -31,6 +36,12 @@ export function PpeMonitoringView() {
     { id: 'CAM-05', name: 'Main Entrance', location: 'Tower A', status: 'online', capabilities: ['PPE', 'FACIAL_REC'] },
   ];
 
+  const workAreaPolicies: WorkAreaPolicy[] = [
+    { location: 'Work Area B', requiredPPE: ['Helmet', 'Safety Vest', 'Gloves'] },
+    { location: 'Tower B', requiredPPE: ['Helmet', 'Safety Vest'] },
+    { location: 'Tower A', requiredPPE: ['Helmet', 'Safety Vest'] },
+  ];
+
   const allEvents: PPEEvent[] = [
     {
       id: 'EVT-2048',
@@ -41,7 +52,7 @@ export function PpeMonitoringView() {
       issue: 'Missing Gloves',
       confidence: '97%',
       status: 'Open',
-      missingItems: ['Gloves'],
+      detectedPPE: ['Helmet', 'Safety Vest'], // Required: Helmet, Vest, Gloves. Missing: Gloves.
     },
     {
       id: 'EVT-2042',
@@ -52,7 +63,7 @@ export function PpeMonitoringView() {
       issue: 'Missing Helmet',
       confidence: '95%',
       status: 'Under Review',
-      missingItems: ['Helmet'],
+      detectedPPE: ['Safety Vest'], // Required: Helmet, Vest. Missing: Helmet.
     },
     {
       id: 'EVT-2035',
@@ -63,7 +74,7 @@ export function PpeMonitoringView() {
       issue: 'Uncertain PPE',
       confidence: '72%',
       status: 'Needs Review',
-      missingItems: ['Safety Vest'],
+      detectedPPE: ['Helmet'], // Required: Helmet, Vest. Missing: Vest (uncertain).
     },
     {
       id: 'EVT-2029',
@@ -74,13 +85,26 @@ export function PpeMonitoringView() {
       issue: 'Compliant',
       confidence: '98%',
       status: 'Logged',
-      missingItems: [],
+      detectedPPE: ['Helmet', 'Safety Vest', 'Gloves'],
     },
   ];
 
   const activeCamera = (cameras.find(c => c.id === selectedCameraId) || cameras[0]) as CameraModel;
   const filteredEvents = allEvents.filter(e => e.camera === activeCamera.id);
   const activeEvent = filteredEvents.find(e => e.id === selectedAlert) || filteredEvents[0];
+  const activePolicy = workAreaPolicies.find(p => p.location === activeCamera.location) || { location: activeCamera.location, requiredPPE: [] };
+
+  const getMissingItems = (event: PPEEvent) => {
+    return activePolicy.requiredPPE.filter(item => !event.detectedPPE.includes(item));
+  };
+  const activeMissingItems = activeEvent ? getMissingItems(activeEvent) : [];
+
+  const getResultState = (status: PPEStatus) => {
+    if (status === 'Logged') return { type: 'success' as const, title: 'COMPLIANT' };
+    if (status === 'Needs Review') return { type: 'warning' as const, title: 'NEEDS REVIEW' };
+    return { type: 'error' as const, title: 'PPE VIOLATION' };
+  };
+  const activeResult = activeEvent ? getResultState(activeEvent.status) : { type: 'success' as const, title: 'MONITORING ACTIVE' };
 
   const columns: TableColumn<PPEEvent>[] = [
     { header: 'Time', key: 'time', render: (item) => <span className="font-mono text-slate-500 text-xs">{item.time}</span> },
@@ -136,36 +160,28 @@ export function PpeMonitoringView() {
   const checklistSlot = activeEvent ? (
     <div>
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-3">
-        PPE CHECK
+        PPE CHECK - {activePolicy.location.toUpperCase()}
       </p>
       <div className="space-y-1.5">
-        <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.missingItems.includes('Helmet') ? 'bg-red-50/50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
-          <div className="flex flex-col gap-0.5">
-            <p className="font-semibold text-slate-900 text-xs">Helmet</p>
-            <p className={`text-[11px] font-medium ${activeEvent.missingItems.includes('Helmet') ? 'text-red-500' : 'text-slate-500'}`}>
-              {activeEvent.missingItems.includes('Helmet') ? 'Missing' : 'Detected'}
-            </p>
-          </div>
-          {activeEvent.missingItems.includes('Helmet') ? <IconX className="w-5 h-5 text-red-500" /> : <IconCheck className="w-5 h-5 text-emerald-500" />}
-        </div>
-        <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.missingItems.includes('Safety Vest') ? 'bg-red-50/50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
-          <div className="flex flex-col gap-0.5">
-            <p className="font-semibold text-slate-900 text-xs">Safety Vest</p>
-            <p className={`text-[11px] font-medium ${activeEvent.missingItems.includes('Safety Vest') ? 'text-red-500' : 'text-slate-500'}`}>
-              {activeEvent.missingItems.includes('Safety Vest') ? 'Missing' : 'Detected'}
-            </p>
-          </div>
-          {activeEvent.missingItems.includes('Safety Vest') ? <IconX className="w-5 h-5 text-red-500" /> : <IconCheck className="w-5 h-5 text-emerald-500" />}
-        </div>
-        <div className={`flex items-center justify-between p-3 rounded-xl border ${activeEvent.missingItems.includes('Gloves') ? 'bg-red-50/50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
-          <div className="flex flex-col gap-0.5">
-            <p className="font-semibold text-slate-900 text-xs">Gloves</p>
-            <p className={`text-[11px] font-medium ${activeEvent.missingItems.includes('Gloves') ? 'text-red-500' : 'text-slate-500'}`}>
-              {activeEvent.missingItems.includes('Gloves') ? 'Missing' : 'Detected'}
-            </p>
-          </div>
-          {activeEvent.missingItems.includes('Gloves') ? <IconX className="w-5 h-5 text-red-500" /> : <IconCheck className="w-5 h-5 text-emerald-500" />}
-        </div>
+        {activePolicy.requiredPPE.map((item) => {
+          const isMissing = !activeEvent.detectedPPE.includes(item);
+          let itemState = isMissing ? 'missing' : 'detected';
+          if (activeEvent.status === 'Needs Review' && isMissing) {
+            itemState = 'uncertain';
+          }
+
+          return (
+            <div key={item} className={`flex items-center justify-between p-3 rounded-xl border ${itemState === 'missing' ? 'bg-red-50/50 border-red-100' : itemState === 'uncertain' ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex flex-col gap-0.5">
+                <p className="font-semibold text-slate-900 text-xs">{item}</p>
+                <p className={`text-[11px] font-medium ${itemState === 'missing' ? 'text-red-500' : itemState === 'uncertain' ? 'text-amber-500' : 'text-slate-500'}`}>
+                  {itemState === 'missing' ? 'Missing' : itemState === 'uncertain' ? 'Uncertain Detection' : 'Detected'}
+                </p>
+              </div>
+              {itemState === 'missing' ? <IconX className="w-5 h-5 text-red-500" /> : itemState === 'uncertain' ? <IconAlertTriangle className="w-5 h-5 text-amber-500" /> : <IconCheck className="w-5 h-5 text-emerald-500" />}
+            </div>
+          );
+        })}
       </div>
     </div>
   ) : (
@@ -219,20 +235,18 @@ export function PpeMonitoringView() {
           eventId={activeEvent ? activeEvent.id : "NO-EVENT"}
           details={detailsGrid}
           checklistSlot={checklistSlot}
-          resultStatus={activeEvent ? (activeEvent.status === 'Logged' ? 'success' : activeEvent.status === 'Open' ? 'error' : 'warning') : 'success'}
-          resultTitle={activeEvent ? (activeEvent.status === 'Logged' ? 'COMPLIANT' : 'PPE VIOLATION') : 'MONITORING ACTIVE'}
-          resultMessage={activeEvent ? (activeEvent.status === 'Logged' ? 'All required PPE items verified.' : `Missing required PPE: ${activeEvent.missingItems.join(', ')}`) : 'System is continuously scanning for PPE violations.'}
-          primaryActionLabel={activeEvent && activeEvent.status !== 'Logged' ? "Review Alert" : "Live View"}
+          resultStatus={activeResult.type}
+          resultTitle={activeResult.title}
+          resultMessage={activeEvent ? (activeResult.title === 'COMPLIANT' ? 'All required PPE items verified.' : activeResult.title === 'NEEDS REVIEW' ? `Uncertain evidence for: ${activeMissingItems.join(', ')}` : `Missing required PPE: ${activeMissingItems.join(', ')}`) : 'System is continuously scanning for PPE violations.'}
+          primaryActionLabel={activeEvent && activeEvent.status !== 'Logged' ? (activeEvent.status === 'Needs Review' ? "Review Detection" : "Review Alert") : "View Event"}
           onPrimaryAction={() => {
-            if (activeEvent && activeEvent.status !== 'Logged') {
+            if (activeEvent) {
               setSelectedAlert(activeEvent.id);
-            } else {
-              alert('Camera is in live monitoring mode.');
             }
           }}
-          secondaryActionLabel={activeEvent ? "View Worker" : "View Area Policies"}
+          secondaryActionLabel={activeEvent && activeEvent.workerId !== 'Unknown' ? "View Worker" : "View Area Policies"}
           onSecondaryAction={() => {
-            if (activeEvent) {
+            if (activeEvent && activeEvent.workerId !== 'Unknown') {
               setSelectedWorker(activeEvent.workerId);
             } else {
               alert(`Showing PPE policies for ${activeCamera.location}...`);
@@ -249,50 +263,55 @@ export function PpeMonitoringView() {
         keyExtractor={(item) => item.id}
       />
 
-      {/* Slide-over Drawer for Reviewing Alert */}
+      {/* Slide-over Drawer for Reviewing Event */}
       {activeEvent && (
         <ActionDrawer
-          isOpen={selectedAlert === activeEvent.id && activeEvent.status !== 'Logged'}
+          isOpen={selectedAlert === activeEvent.id}
           onClose={() => setSelectedAlert(null)}
-          title="Violation Review"
+          title={activeResult.title === 'COMPLIANT' ? "Event Details" : activeResult.title === 'NEEDS REVIEW' ? "Detection Review" : "Violation Review"}
           badge={activeEvent.id}
-          badgeType="error"
+          badgeType={activeResult.type === 'success' ? 'info' : activeResult.type}
         >
           <div className="space-y-6 text-sm text-slate-600">
             <p className="leading-relaxed">
-              AI detected a missing safety item for worker{' '}
-              <strong className="text-slate-900 font-semibold">{activeEvent.worker} ({activeEvent.workerId})</strong> in{' '}
-              <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong>. Missing item(s):{' '}
-              <strong className="text-slate-900 font-semibold">{activeEvent.missingItems.join(', ')}</strong> ({activeEvent.confidence} confidence).
+              {activeResult.title === 'COMPLIANT' ? (
+                <>AI verified all required safety items for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker}</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> ({activeEvent.confidence} confidence).</>
+              ) : activeResult.title === 'NEEDS REVIEW' ? (
+                <>AI detection is uncertain regarding <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> for an unidentified person in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> ({activeEvent.confidence} confidence).</>
+              ) : (
+                <>AI confidently detected a missing safety item for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker} ({activeEvent.workerId})</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong>. Missing item(s): <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> ({activeEvent.confidence} confidence).</>
+              )}
             </p>
             
-            <div className="p-4 bg-amber-50 rounded-xl space-y-2 border border-amber-100">
-              <p className="font-bold text-amber-900 text-xs uppercase tracking-[0.1em]">Safety Protocol</p>
-              <p className="text-amber-800 text-xs leading-relaxed">
-                Handling rebar or mechanical parts requires EN 388 protective gloves and a Type 1 safety helmet at all times.
+            <div className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
+              <p className="font-bold text-slate-900 text-xs uppercase tracking-[0.1em]">Safety Protocol: {activePolicy.location}</p>
+              <p className="text-slate-700 text-xs leading-relaxed">
+                Personnel in this area are required to wear: <span className="font-semibold">{activePolicy.requiredPPE.join(', ')}</span> at all times while active work is occurring.
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 pt-4">
-              <button
-                onClick={() => {
-                  alert('Notification dispatched to Site Supervisor.');
-                  setSelectedAlert(null);
-                }}
-                className="py-3 px-4 rounded-xl bg-[#F66B17] hover:bg-orange-700 text-white font-bold text-sm shadow-[0_2px_10px_rgba(246,107,23,0.3)] transition-all active:scale-[0.98]"
-              >
-                Notify Supervisor
-              </button>
-              <button
-                onClick={() => {
-                  alert('Alert dismissed as false positive.');
-                  setSelectedAlert(null);
-                }}
-                className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-[0.98]"
-              >
-                Dismiss
-              </button>
-            </div>
+            {activeResult.title !== 'COMPLIANT' && (
+              <div className="flex flex-col gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    alert(activeResult.title === 'NEEDS REVIEW' ? 'Flagged for further investigation.' : 'Notification dispatched to Site Supervisor.');
+                    setSelectedAlert(null);
+                  }}
+                  className="py-3 px-4 rounded-xl bg-[#F66B17] hover:bg-orange-700 text-white font-bold text-sm shadow-[0_2px_10px_rgba(246,107,23,0.3)] transition-all active:scale-[0.98]"
+                >
+                  {activeResult.title === 'NEEDS REVIEW' ? 'Flag for Investigation' : 'Notify Supervisor'}
+                </button>
+                <button
+                  onClick={() => {
+                    alert('Event dismissed.');
+                    setSelectedAlert(null);
+                  }}
+                  className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-[0.98]"
+                >
+                  Dismiss Event
+                </button>
+              </div>
+            )}
           </div>
         </ActionDrawer>
       )}
@@ -312,27 +331,35 @@ export function PpeMonitoringView() {
                 {selectedWorker === 'Unknown' ? '?' : 'NV'}
               </div>
               <div>
-                <h4 className="text-lg font-bold text-slate-900">{activeEvent?.worker || 'Unknown'}</h4>
+                <h4 className="text-lg font-bold text-slate-900">{selectedWorker === 'Unknown' ? 'Unknown Person' : activeEvent?.worker}</h4>
                 <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {selectedWorker}</p>
               </div>
             </div>
             
             <div className="h-px bg-slate-100 w-full" />
             
-            <div className="space-y-4 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Role</span>
-                <span className="text-slate-900 font-semibold">Steel Worker</span>
+            {selectedWorker === 'Unknown' ? (
+              <div className="py-8 px-4 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100 text-center">
+                <IconAlertTriangle className="w-8 h-8 text-slate-400 mb-3" />
+                <p className="text-slate-600 font-medium text-sm">Identity Unconfirmed</p>
+                <p className="text-slate-400 text-xs mt-1">No personnel profile or historical safety data is available for unidentified individuals.</p>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Subcontractor</span>
-                <span className="text-slate-900 font-semibold">Alpha Construction</span>
+            ) : (
+              <div className="space-y-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Role</span>
+                  <span className="text-slate-900 font-semibold">Steel Worker</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Subcontractor</span>
+                  <span className="text-slate-900 font-semibold">Alpha Construction</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Safety Score</span>
+                  <span className="text-emerald-600 font-bold">92%</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Safety Score</span>
-                <span className="text-emerald-600 font-bold">92%</span>
-              </div>
-            </div>
+            )}
           </div>
         </ActionDrawer>
       )}

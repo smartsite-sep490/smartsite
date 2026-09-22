@@ -21,14 +21,16 @@ export function ActionDrawer({
   // We use a slight delay for the mount/unmount logic to allow CSS transitions to play
   const [shouldRender, setShouldRender] = useState(isOpen);
 
+  if (isOpen && !shouldRender) {
+    setShouldRender(true);
+  }
+
   useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-    } else {
+    if (!isOpen && shouldRender) {
       const timer = setTimeout(() => setShouldRender(false), 500); // match transition duration
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, shouldRender]);
 
   if (!shouldRender) return null;
 
