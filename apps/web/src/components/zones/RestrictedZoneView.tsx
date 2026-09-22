@@ -14,6 +14,7 @@ import {
   getZoneVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
+  type VideoTestDetection,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 
@@ -38,10 +39,13 @@ export function RestrictedZoneView() {
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const [liveZoneDetections, setLiveZoneDetections] = useState<VideoTestDetection[]>([]);
   const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(DEFAULT_ZONE_POLYGON);
   const [isEditingZone, setIsEditingZone] = useState(false);
   const activeZonePoint = useRef<number | null>(null);
-  const zoneDetections = getZoneVideoTestDetections(videoTimeline, aiTimeline);
+  const zoneDetections = liveZoneDetections.length
+    ? liveZoneDetections
+    : getZoneVideoTestDetections(videoTimeline, aiTimeline);
   const testDetection = zoneDetections[0]!;
   const activeZoneDetections = zoneDetections.filter((detection) => detection.active);
 
@@ -66,6 +70,43 @@ export function RestrictedZoneView() {
     } catch {
       // Ignore malformed local test data and keep the default zone.
     }
+  }, []);
+
+  useEffect(() => {
+    const socketUrl = import.meta.env.VITE_AI_WS_URL ?? 'ws://127.0.0.1:8000/ws/realtime';
+    const socket = new WebSocket(socketUrl);
+    socket.onmessage = (message) => {
+      try {
+        const payload = JSON.parse(message.data) as {
+          type?: string;
+          zoneDetections?: Array<{
+            trackId: number;
+            confidence: number;
+            boundingBox: VideoTestDetection['boundingBox'];
+            active: boolean;
+            label: string;
+          }>;
+        };
+        if (payload.type !== 'frame' || !payload.zoneDetections) return;
+        setLiveZoneDetections(
+          payload.zoneDetections.map((detection) => ({
+            active: detection.active,
+            boundingBox: detection.boundingBox,
+            confidence: detection.confidence,
+            eventId: `REALTIME-ZONE-TRACK-${detection.trackId}`,
+            label: `MF06 ${detection.label}`,
+            ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
+            timecode: 'LIVE',
+            trackId: detection.trackId,
+          })),
+        );
+      } catch {
+        // Ignore malformed frames and keep the last valid live result.
+      }
+    };
+    socket.onerror = () => setLiveZoneDetections([]);
+    socket.onclose = () => setLiveZoneDetections([]);
+    return () => socket.close();
   }, []);
 
   const updateZonePoint = (event: React.PointerEvent<SVGSVGElement>) => {
