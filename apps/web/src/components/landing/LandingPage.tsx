@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(ScrollTrigger);
 import {
   IconCheck,
   IconHardHat,
@@ -18,8 +23,100 @@ interface LandingPageProps {
 export function LandingPage({ onEnterApp }: LandingPageProps) {
   const [activeAiTab, setActiveAiTab] = useState<'ppe' | 'zones'>('ppe');
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // 1. Hero Section Animation
+  useGSAP(() => {
+    const tl = gsap.timeline();
+    
+    // Animate the main headline
+    tl.from('.hero-badge', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out', delay: 0.2 })
+      .from('.hero-headline', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.4')
+      .from('.hero-desc', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.6')
+      .from('.hero-btns', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.4')
+      .from('.hero-card', { x: -30, opacity: 0, duration: 0.8, ease: 'back.out(1.5)' }, '-=0.4');
+
+    // Parallax on scroll for the hero background
+    gsap.to('.hero-bg', {
+      y: '20%',
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero-section',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: true,
+      },
+    });
+
+    // 2. The Challenge Section
+    gsap.from('.challenge-header', {
+      scrollTrigger: { trigger: '.challenge-section', start: 'top 80%' },
+      y: 30, opacity: 0, duration: 0.6, ease: 'power2.out'
+    });
+    gsap.from('.challenge-card', {
+      scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
+      y: 40, opacity: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out'
+    });
+
+    // 3. One Platform
+    gsap.from('.platform-text', {
+      scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
+      x: -50, opacity: 0, duration: 0.8, ease: 'power3.out'
+    });
+    gsap.from('.platform-diagram', {
+      scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
+      scale: 0.8, opacity: 0, duration: 0.8, ease: 'back.out(1.2)'
+    });
+
+    // 4. Solutions Grid
+    gsap.from('.solution-card', {
+      scrollTrigger: { trigger: '.solutions-section', start: 'top 75%' },
+      y: 40, opacity: 0, duration: 0.6, stagger: 0.1, ease: 'power2.out'
+    });
+
+    // 5. Safety AI Showcase
+    gsap.to('.ai-laser', {
+      scrollTrigger: { trigger: '.safety-ai-section', start: 'top center', end: 'bottom center', scrub: 1 },
+      top: '90%', ease: 'none'
+    });
+    gsap.from('.ai-checklist-item', {
+      scrollTrigger: { trigger: '.safety-ai-section', start: 'top 60%' },
+      x: 30, opacity: 0, duration: 0.5, stagger: 0.2, ease: 'power2.out'
+    });
+
+    // 6. Timeline
+    gsap.from('.timeline-step', {
+      scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
+      y: 30, opacity: 0, duration: 0.5, stagger: 0.2, ease: 'power2.out'
+    });
+    gsap.from('.timeline-line', {
+      scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
+      width: 0, duration: 1.5, ease: 'power2.out'
+    });
+
+    // 7. Dashboard
+    gsap.from('.dashboard-mockup', {
+      scrollTrigger: { trigger: '.dashboard-section', start: 'top 80%' },
+      y: 100, opacity: 0, duration: 0.8, ease: 'power3.out'
+    });
+    gsap.from('.dashboard-stat', {
+      scrollTrigger: { trigger: '.dashboard-section', start: 'top 60%' },
+      scale: 0.8, opacity: 0, duration: 0.5, stagger: 0.1, ease: 'back.out(1.5)'
+    });
+
+    // 8. Lifecycle
+    gsap.from('.lifecycle-text', {
+      scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
+      x: -40, opacity: 0, duration: 0.7, ease: 'power2.out'
+    });
+    gsap.from('.lifecycle-step', {
+      scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
+      x: 40, opacity: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out'
+    });
+  }, { scope: containerRef });
+
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-[#F66B17]/20 scroll-smooth">
+    <div ref={containerRef} className="relative w-full overflow-x-hidden min-h-screen bg-white text-slate-900 font-sans selection:bg-[#F66B17]/20 scroll-smooth">
       {/* 1. Header Navigation - Updated for Dark Hero */}
       <header className="absolute top-0 inset-x-0 z-50 bg-transparent">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -72,12 +169,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
       {/* 2. Hero Section - EXACTLY like screenshot 1 */}
       <section
-        className="relative min-h-screen flex items-center pt-20 overflow-hidden bg-cover bg-center"
-        style={{
-          backgroundImage:
-            "url('https://onsite-guard-ai.lovable.app/assets/smartsite-hero-BVCX8sql.jpg')",
-        }}
+        className="hero-section relative min-h-screen flex items-center pt-20 overflow-hidden"
       >
+        <div 
+          className="hero-bg absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('https://onsite-guard-ai.lovable.app/assets/smartsite-hero-BVCX8sql.jpg')" }}
+        />
         {/* Gradient Overlays - Reduced opacity to make image clearer */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#041D2E]/90 via-[#041D2E]/40 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#041D2E]/70" />
@@ -85,19 +182,19 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         {/* Slight overall tint for text readability */}
         <div className="max-w-7xl mx-auto px-6 relative z-10 w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center h-full pb-20">
           <div className="lg:col-span-8">
-            <div className="inline-block mb-6 text-[#F66B17] text-xs font-bold tracking-widest uppercase bg-black/30 px-3 py-1.5 rounded backdrop-blur-sm">
+            <div className="hero-badge inline-block mb-6 text-[#F66B17] text-xs font-bold tracking-widest uppercase bg-black/30 px-3 py-1.5 rounded backdrop-blur-sm">
               Intelligent construction platform
             </div>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.1] mb-8 drop-shadow-2xl">
+            <h1 className="hero-headline text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.1] mb-8 drop-shadow-2xl">
               SMARTER SITES.
               <br />
               <span className="text-[#F66B17]">SAFER</span> WORK.
             </h1>
-            <p className="text-lg md:text-xl text-slate-200 mb-12 max-w-2xl leading-relaxed drop-shadow-lg font-medium">
+            <p className="hero-desc text-lg md:text-xl text-slate-200 mb-12 max-w-2xl leading-relaxed drop-shadow-lg font-medium">
               Connect workforce management, site access, AI safety monitoring and construction
               operations in one intelligent platform.
             </p>
-            <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="hero-btns flex flex-col sm:flex-row items-center gap-4">
               <a
                 href="#platform"
                 className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] !text-white font-bold text-sm shadow-xl shadow-[#F66B17]/20 transition-all flex justify-center items-center gap-2"
@@ -113,7 +210,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Live Site Float Card - Moved to the left side under the buttons to never block the worker */}
-            <div className="mt-16 w-full max-w-[280px] animate-fade-in-up hidden md:block">
+            <div className="hero-card mt-16 w-full max-w-[280px] hidden md:block">
               <div className="bg-[#0B1521]/30 backdrop-blur-2xl border border-white/20 rounded-xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
                   <span className="text-[10px] font-bold text-white tracking-widest">
@@ -145,9 +242,9 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 3. The Challenge Section */}
-      <section className="py-24 px-6 bg-slate-50 border-t border-slate-100">
+      <section className="challenge-section py-24 px-6 bg-slate-50 border-t border-slate-100">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-16">
+          <div className="challenge-header mb-16">
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
               The challenge
             </h2>
@@ -158,8 +255,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </h3>
           </div>
 
-          <div className="space-y-0 text-sm md:text-base hover:opacity-100 group">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default opacity-80 hover:opacity-100">
+          <div className="challenge-cards-container space-y-0 text-sm md:text-base hover:opacity-100 group">
+            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">01</div>
               <div className="md:col-span-4 font-bold text-slate-900">DISCONNECTED WORKFORCE</div>
               <div className="md:col-span-7 text-slate-500 leading-relaxed">
@@ -167,7 +264,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 often managed separately.
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default opacity-80 hover:opacity-100">
+            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">02</div>
               <div className="md:col-span-4 font-bold text-slate-900">SAFETY RISKS</div>
               <div className="md:col-span-7 text-slate-500 leading-relaxed">
@@ -175,7 +272,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 area.
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-y border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default opacity-80 hover:opacity-100">
+            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-y border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">03</div>
               <div className="md:col-span-4 font-bold text-slate-900">FRAGMENTED SITE DATA</div>
               <div className="md:col-span-7 text-slate-500 leading-relaxed">
@@ -188,9 +285,9 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 4. One Platform Diagram */}
-      <section id="platform" className="py-32 px-6 max-w-6xl mx-auto">
+      <section id="platform" className="platform-section py-32 px-6 max-w-6xl mx-auto scroll-mt-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-          <div>
+          <div className="platform-text">
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
               The SmartSite platform
             </h2>
@@ -207,7 +304,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </p>
           </div>
 
-          <div className="relative aspect-square max-w-[400px] mx-auto w-full flex items-center justify-center animate-[spin_60s_linear_infinite]">
+          <div className="platform-diagram relative aspect-square max-w-[400px] mx-auto w-full flex items-center justify-center animate-[spin_60s_linear_infinite]">
             {/* Outer rings */}
             <div className="absolute inset-0 rounded-full border border-slate-100 flex items-center justify-center shadow-[inset_0_0_50px_rgba(0,0,0,0.02)]">
               <div className="absolute w-[65%] h-[65%] rounded-full border border-slate-100 flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.02)]">
@@ -222,24 +319,32 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Orbiting nodes */}
-            <div className="absolute top-[8%] left-1/2 -translate-x-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
-              Workforce
+            <div className="absolute top-[8%] left-1/2 -translate-x-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+                Workforce
+              </div>
             </div>
-            <div className="absolute bottom-[8%] left-1/2 -translate-x-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
-              Operations
+            <div className="absolute bottom-[8%] left-1/2 -translate-x-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+                Operations
+              </div>
             </div>
-            <div className="absolute left-[-2%] top-1/2 -translate-y-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
-              Access
+            <div className="absolute left-[-2%] top-1/2 -translate-y-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+                Access
+              </div>
             </div>
-            <div className="absolute right-[-2%] top-1/2 -translate-y-1/2 px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
-              Safety AI
+            <div className="absolute right-[-2%] top-1/2 -translate-y-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+                Safety AI
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* 5. Built Around Operations */}
-      <section id="solutions" className="py-24 px-6 bg-slate-50 border-y border-slate-100">
+      <section id="solutions" className="solutions-section py-24 px-6 bg-slate-50 border-y border-slate-100 scroll-mt-10">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-20 max-w-2xl">
             Built around how construction
@@ -249,7 +354,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-16">
             {/* Workforce Management */}
-            <div className="flex gap-6 group">
+            <div className="solution-card flex gap-6 group">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
                 <IconUsers className="w-6 h-6" />
               </div>
@@ -282,7 +387,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Site Access */}
-            <div className="flex gap-6 group">
+            <div className="solution-card flex gap-6 group">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
                 <IconKey className="w-6 h-6" />
               </div>
@@ -315,7 +420,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* AI Safety */}
-            <div className="flex gap-6 group">
+            <div className="solution-card flex gap-6 group">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
                 <IconShield className="w-6 h-6" />
               </div>
@@ -344,7 +449,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Incident Management */}
-            <div className="flex gap-6 group">
+            <div className="solution-card flex gap-6 group">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
                 <IconAlertTriangle className="w-6 h-6" />
               </div>
@@ -380,7 +485,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 6. Safety AI - EXACTLY like screenshot 2 */}
-      <section id="safety-ai" className="py-24 px-6 bg-[#041D2E] text-white overflow-hidden">
+      <section id="safety-ai" className="safety-ai-section py-24 px-6 bg-[#041D2E] text-white overflow-hidden scroll-mt-10">
         <div className="max-w-7xl mx-auto space-y-12">
           {/* Section Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -456,7 +561,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
 
               {/* Scanning laser effect */}
-              <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-[#F66B17] opacity-50 shadow-[0_0_10px_#F66B17] animate-pulse" />
+              <div className="ai-laser absolute top-0 left-0 right-0 h-[2px] bg-[#F66B17] shadow-[0_0_15px_#F66B17]" />
             </div>
 
             {/* Right side: PPE Checklist & Result */}
@@ -468,15 +573,15 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
 
               <div className="space-y-6 flex-1">
-                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4">
                   <span className="text-white text-sm font-semibold">Helmet</span>
                   <IconCheck className="w-5 h-5 text-emerald-500" />
                 </div>
-                <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4">
                   <span className="text-white text-sm font-semibold">Safety Vest</span>
                   <IconCheck className="w-5 h-5 text-emerald-500" />
                 </div>
-                <div className="flex items-center justify-between border-b border-white/10 pb-4 bg-red-500/5 -mx-8 px-8 border-l-[3px] border-l-red-500">
+                <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4 bg-red-500/5 -mx-8 px-8 border-l-[3px] border-l-red-500">
                   <span className="text-white text-sm font-semibold">Gloves</span>
                   <IconX className="w-5 h-5 text-red-500" />
                 </div>
@@ -507,7 +612,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 7. How It Works */}
-      <section id="how-it-works" className="py-24 px-6 bg-[#FAFAFA]">
+      <section id="how-it-works" className="timeline-section py-24 px-6 bg-[#FAFAFA] scroll-mt-10">
         <div className="max-w-7xl mx-auto">
           <div className="mb-20">
             <div className="text-[#F66B17] text-[10px] font-black tracking-widest uppercase mb-4">
@@ -522,8 +627,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           <div className="relative">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-8 lg:gap-12 relative z-10">
               {/* Step 1 */}
-              <div className="relative pt-8 md:pt-0">
-                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+              <div className="timeline-step relative pt-8 md:pt-0">
+                <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">01</div>
@@ -534,8 +639,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 </div>
               </div>
               {/* Step 2 */}
-              <div className="relative pt-8 md:pt-0">
-                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+              <div className="timeline-step relative pt-8 md:pt-0">
+                <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">02</div>
@@ -548,8 +653,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 </div>
               </div>
               {/* Step 3 */}
-              <div className="relative pt-8 md:pt-0">
-                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+              <div className="timeline-step relative pt-8 md:pt-0">
+                <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">03</div>
@@ -562,8 +667,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 </div>
               </div>
               {/* Step 4 */}
-              <div className="relative pt-8 md:pt-0">
-                <div className="hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10" />
+              <div className="timeline-step relative pt-8 md:pt-0">
+                <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">04</div>
@@ -574,7 +679,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 </div>
               </div>
               {/* Step 5 */}
-              <div className="relative pt-8 md:pt-0">
+              <div className="timeline-step relative pt-8 md:pt-0">
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">05</div>
@@ -590,7 +695,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 8. Dashboard Mockup - EXACTLY like screenshot 3 */}
-      <section className="py-24 px-6 bg-[#041D2E] text-white border-t border-white/5">
+      <section className="dashboard-section py-24 px-6 bg-[#041D2E] text-white border-t border-white/5">
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 max-w-5xl">
             <h3 className="text-4xl md:text-5xl font-black leading-tight text-white">
@@ -605,7 +710,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </div>
 
           {/* Full Dashboard Mockup Card */}
-          <div className="bg-white rounded-[20px] shadow-2xl overflow-hidden text-slate-900 border border-white/10">
+          <div className="dashboard-mockup bg-white rounded-[20px] shadow-2xl overflow-hidden text-slate-900 border border-white/10">
             {/* Mockup Header bar */}
             <div className="bg-white px-6 py-4 flex items-center gap-2 border-b border-slate-100">
               <span className="w-2.5 h-2.5 rounded-full bg-[#F66B17]" />
@@ -645,25 +750,25 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <div className="flex-1 bg-slate-50 p-6 md:p-8 overflow-y-auto">
                 {/* Stats Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
                       Workers On Site
                     </div>
                     <div className="text-3xl font-black text-slate-900">328</div>
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
                       Active Contractors
                     </div>
                     <div className="text-3xl font-black text-slate-900">14</div>
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
                       Safety Compliance
                     </div>
                     <div className="text-3xl font-black text-slate-900">96.8%</div>
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
                       Open Alerts
                     </div>
@@ -716,9 +821,9 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 9. Lifecycle (Connected from the gate to the jobsite) */}
-      <section className="py-24 px-6 bg-white border-t border-slate-100">
+      <section className="lifecycle-section py-24 px-6 bg-white border-t border-slate-100 scroll-mt-10">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-16 md:items-center">
-          <div className="md:w-1/2">
+          <div className="lifecycle-text md:w-1/2">
             <h3 className="text-4xl md:text-5xl font-black text-[#041D2E] mb-6 leading-tight">
               Connected from
               <br />
@@ -745,7 +850,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               ].map((step, index) => (
                 <div
                   key={step}
-                  className="flex items-center justify-between group cursor-pointer py-1"
+                  className="lifecycle-step flex items-center justify-between group cursor-pointer py-1"
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-6 h-6 rounded-full bg-[#F66B17] flex items-center justify-center text-white text-[10px] font-black shrink-0">
