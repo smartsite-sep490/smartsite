@@ -171,3 +171,39 @@ export function getZoneVideoTestDetection(
 ): VideoTestDetection {
   return detectionFor(videoTimeline, timeline, 'MF06');
 }
+
+/** Return every zone-entry track visible at the current video time. */
+export function getZoneVideoTestDetections(
+  videoTimeline: VideoTestTimeline,
+  timeline: AiVideoTimeline | null,
+): VideoTestDetection[] {
+  const match = latestRelevantEntry(
+    timeline,
+    videoTimeline.currentTime,
+    (observation) => observation.type === 'ZONE_ENTRY',
+  );
+
+  if (!match) return [getZoneVideoTestDetection(videoTimeline, timeline)];
+
+  const zoneEntries = match.entry.event.observations.filter(
+    (observation) => observation.type === 'ZONE_ENTRY',
+  );
+
+  return zoneEntries.map((observation) => {
+    const person = match.entry.event.observations.find(
+      (candidate) =>
+        candidate.type === 'PERSON' && candidate.trackId === observation.trackId,
+    );
+
+    return {
+      active: true,
+      boundingBox: person?.boundingBox ?? null,
+      confidence: observation.confidence ?? person?.confidence ?? null,
+      eventId: match.entry.event.eventId,
+      label: 'MF06 ZONE ENTRY',
+      ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
+      timecode: formatTimecode(match.entry.videoTimeSeconds),
+      trackId: observation.trackId,
+    };
+  });
+}

@@ -11,7 +11,7 @@ import {
   IconGrid,
 } from '../icons';
 import {
-  getZoneVideoTestDetection,
+  getZoneVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
   type VideoTestTimeline,
@@ -41,7 +41,9 @@ export function RestrictedZoneView() {
   const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(DEFAULT_ZONE_POLYGON);
   const [isEditingZone, setIsEditingZone] = useState(false);
   const activeZonePoint = useRef<number | null>(null);
-  const testDetection = getZoneVideoTestDetection(videoTimeline, aiTimeline);
+  const zoneDetections = getZoneVideoTestDetections(videoTimeline, aiTimeline);
+  const testDetection = zoneDetections[0]!;
+  const activeZoneDetections = zoneDetections.filter((detection) => detection.active);
 
   useEffect(() => {
     try {
@@ -290,30 +292,25 @@ export function RestrictedZoneView() {
               )}
             </div>
 
-            {/* PERSON #1024 bounding box */}
-            <div
-              className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
-              style={{
-                left: `${(testDetection.boundingBox?.x1 ?? 0.42) * 100}%`,
-                top: `${(testDetection.boundingBox?.y1 ?? 0.55) * 100}%`,
-                width: `${
-                  ((testDetection.boundingBox?.x2 ?? 0.52) -
-                    (testDetection.boundingBox?.x1 ?? 0.42)) *
-                  100
-                }%`,
-                height: `${
-                  ((testDetection.boundingBox?.y2 ?? 0.8) -
-                    (testDetection.boundingBox?.y1 ?? 0.55)) *
-                  100
-                }%`,
-                opacity: testDetection.active && testDetection.boundingBox ? 1 : 0,
-              }}
-            >
-              {/* Floating Label directly above person bounding box */}
-              <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                {testDetection.label}
-              </div>
-            </div>
+            {/* Render one bounding box per active zone-entry track. */}
+            {activeZoneDetections.map((detection) =>
+              detection.boundingBox ? (
+                <div
+                  key={`${detection.eventId}-${detection.trackId}`}
+                  className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
+                  style={{
+                    left: `${detection.boundingBox.x1 * 100}%`,
+                    top: `${detection.boundingBox.y1 * 100}%`,
+                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                  }}
+                >
+                  <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
+                    {detection.label} · TRACK #{detection.trackId}
+                  </div>
+                </div>
+              ) : null,
+            )}
           </div>
 
           {/* Top Header Overlay */}
@@ -388,7 +385,9 @@ export function RestrictedZoneView() {
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker ID</p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
-                  {testDetection.trackId === null ? '—' : `Track #${testDetection.trackId}`}
+                  {activeZoneDetections.length === 0
+                    ? '—'
+                    : activeZoneDetections.map((detection) => `Track #${detection.trackId}`).join(', ')}
                 </p>
               </div>
               <div>
