@@ -10,12 +10,25 @@ import {
   IconMaximize,
   IconGrid,
 } from '../icons';
+import {
+  getZoneVideoTestDetection,
+  type VideoTestTimeline,
+} from '../cameras/videoTestFixture';
 
 export function RestrictedZoneView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
+  const [videoTimeline, setVideoTimeline] = useState<VideoTestTimeline>({
+    currentTime: 0,
+    duration: 0,
+  });
+  const testDetection = getZoneVideoTestDetection(videoTimeline);
+
+  const updateVideoTimeline = (video: HTMLVideoElement) => {
+    setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
+  };
 
   const togglePlayback = () => {
     const video = videoRef.current;
@@ -89,7 +102,7 @@ export function RestrictedZoneView() {
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
         {/* Left: Camera Video Feed */}
         <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
-          {/* Local restricted-zone video fixture; the overlay remains representative UI data. */}
+          {/* Local MF06 test fixture driven by the video timeline. */}
           <div className="absolute inset-0">
             <video
               ref={videoRef}
@@ -101,9 +114,22 @@ export function RestrictedZoneView() {
               playsInline
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onLoadedMetadata={(event) => updateVideoTimeline(event.currentTarget)}
+              onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
               aria-label="Restricted-zone test video"
               className="w-full h-full object-cover"
             />
+
+            <div
+              className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm ${
+                testDetection.active
+                  ? 'bg-[#DF2225]/90 text-white'
+                  : 'bg-slate-900/75 text-white/80'
+              }`}
+            >
+              LOCAL MF06 TEST · {testDetection.active ? 'VIOLATION' : 'SCANNING'} ·{' '}
+              {testDetection.timecode}
+            </div>
 
             {/* Horizontal scanning line */}
             <div className="absolute top-[52%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
@@ -116,6 +142,7 @@ export function RestrictedZoneView() {
                 top: '40.0%',
                 width: '57.0%',
                 height: '46.0%',
+                opacity: testDetection.active ? 1 : 0.45,
               }}
             >
               <div className="absolute top-4 left-4 px-2 py-0.5 bg-[#DF2225]/90 backdrop-blur-sm text-white text-[10px] font-extrabold uppercase tracking-widest shadow-sm">
@@ -131,11 +158,12 @@ export function RestrictedZoneView() {
                 top: '55.0%',
                 width: '10.0%',
                 height: '25.0%',
+                opacity: testDetection.active ? 1 : 0.35,
               }}
             >
               {/* Floating Label directly above person bounding box */}
               <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                PERSON #1024 - 97%
+                {testDetection.label}
               </div>
             </div>
           </div>
@@ -199,7 +227,7 @@ export function RestrictedZoneView() {
                 DETECTION DETAILS
               </span>
               <span className="font-mono text-[11px] font-semibold text-slate-500">
-                EVT-2048
+                {testDetection.eventId}
               </span>
             </div>
 
@@ -274,16 +302,28 @@ export function RestrictedZoneView() {
 
             {/* Result Alert Box */}
             <div className="pt-1">
-              <div className="border-l-[3px] border-red-500 pl-3">
+              <div
+                className={`border-l-[3px] pl-3 ${
+                  testDetection.active ? 'border-red-500' : 'border-slate-300'
+                }`}
+              >
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
                   RESULT
                 </p>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-red-500 mb-1">
-                  <IconAlertTriangle className="w-3.5 h-3.5" />
-                  <span>RESTRICTED ZONE VIOLATION</span>
+                <div
+                  className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
+                    testDetection.active ? 'text-red-500' : 'text-slate-500'
+                  }`}
+                >
+                  {testDetection.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
+                  <span>
+                    {testDetection.active ? 'RESTRICTED ZONE VIOLATION' : 'SCANNING VIDEO'}
+                  </span>
                 </div>
                 <p className="text-xs text-slate-600">
-                  No valid permission for this zone at detection time.
+                  {testDetection.active
+                    ? 'No valid permission for this zone at detection time.'
+                    : 'Play the video to activate the MF06 test event.'}
                 </p>
               </div>
             </div>

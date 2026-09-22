@@ -10,12 +10,25 @@ import {
   IconMaximize,
   IconGrid,
 } from '../icons';
+import {
+  getPpeVideoTestDetection,
+  type VideoTestTimeline,
+} from '../cameras/videoTestFixture';
 
 export function PpeMonitoringView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
+  const [videoTimeline, setVideoTimeline] = useState<VideoTestTimeline>({
+    currentTime: 0,
+    duration: 0,
+  });
+  const testDetection = getPpeVideoTestDetection(videoTimeline);
+
+  const updateVideoTimeline = (video: HTMLVideoElement) => {
+    setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
+  };
 
   const togglePlayback = () => {
     const video = videoRef.current;
@@ -89,7 +102,7 @@ export function PpeMonitoringView() {
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
         {/* Left: Camera Feed */}
         <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
-          {/* Local PPE video fixture; the overlay remains representative UI data. */}
+          {/* Local MF05 test fixture driven by the video timeline. */}
           <div className="absolute inset-0">
             <video
               ref={videoRef}
@@ -101,9 +114,22 @@ export function PpeMonitoringView() {
               playsInline
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onLoadedMetadata={(event) => updateVideoTimeline(event.currentTarget)}
+              onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
               aria-label="PPE test video"
               className="w-full h-full object-cover"
             />
+
+            <div
+              className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm ${
+                testDetection.active
+                  ? 'bg-[#DF2225]/90 text-white'
+                  : 'bg-slate-900/75 text-white/80'
+              }`}
+            >
+              LOCAL MF05 TEST · {testDetection.active ? 'VIOLATION' : 'SCANNING'} ·{' '}
+              {testDetection.timecode}
+            </div>
 
             {/* Horizontal scanning line */}
             <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
@@ -111,16 +137,18 @@ export function PpeMonitoringView() {
             {/* Bounding box for worker with missing PPE */}
             <div
               className="absolute border-[1.6px] border-[#F66B17] pointer-events-none transition-all duration-300"
+              data-testid="mf05-test-detection"
               style={{
                 left: '42.0%',
                 top: '30.0%',
                 width: '12.0%',
                 height: '55.0%',
+                opacity: testDetection.active ? 1 : 0.35,
               }}
             >
               {/* Floating label */}
               <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                WORKER #1024 - 97%
+                {testDetection.label}
               </div>
             </div>
           </div>
@@ -184,7 +212,7 @@ export function PpeMonitoringView() {
                 AI DETECTION
               </span>
               <span className="font-mono text-[11px] font-semibold text-slate-500">
-                EVT-2048
+                {testDetection.eventId}
               </span>
             </div>
 
@@ -246,25 +274,41 @@ export function PpeMonitoringView() {
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
                   <div className="flex flex-col gap-0.5">
                     <p className="font-semibold text-slate-900 text-xs">Gloves</p>
-                    <p className="text-[11px] text-slate-500">Missing</p>
+                    <p className="text-[11px] text-slate-500">
+                      {testDetection.active ? 'Missing' : 'Waiting for detection'}
+                    </p>
                   </div>
-                  <IconX className="w-5 h-5 text-red-500" />
+                  {testDetection.active ? (
+                    <IconX className="w-5 h-5 text-red-500" />
+                  ) : (
+                    <IconClock className="w-5 h-5 text-slate-400" />
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Result Box */}
             <div className="pt-2">
-              <div className="border-l-[3px] border-red-500 pl-3">
+              <div
+                className={`border-l-[3px] pl-3 ${
+                  testDetection.active ? 'border-red-500' : 'border-slate-300'
+                }`}
+              >
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
                   RESULT
                 </p>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-red-500 mb-1">
-                  <IconAlertTriangle className="w-3.5 h-3.5" />
-                  <span>PPE VIOLATION</span>
+                <div
+                  className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
+                    testDetection.active ? 'text-red-500' : 'text-slate-500'
+                  }`}
+                >
+                  {testDetection.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
+                  <span>{testDetection.active ? 'PPE VIOLATION' : 'SCANNING VIDEO'}</span>
                 </div>
                 <p className="text-xs text-slate-600">
-                  Missing required PPE: Gloves
+                  {testDetection.active
+                    ? 'Missing required PPE: Gloves'
+                    : 'Play the video to activate the MF05 test event.'}
                 </p>
               </div>
             </div>
