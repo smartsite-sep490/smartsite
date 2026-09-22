@@ -15,13 +15,14 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconCamera,
+  IconShield,
 } from '../icons';
 
 export type ActiveTab =
   | 'dashboard'
   | 'workforce'
   | 'access'
-  | 'cameras'
+  | 'live-monitoring'
   | 'ppe'
   | 'zones'
   | 'incidents'
@@ -39,15 +40,32 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
   // Sidebar state: expanded (to) vs collapsed (nhỏ)
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
-    { id: 'workforce', label: 'Workforce', icon: IconUsers },
-    { id: 'access', label: 'Site Access', icon: IconKey },
-    { id: 'cameras', label: 'Camera Monitoring', icon: IconCamera },
-    { id: 'incidents', label: 'Incidents', icon: IconAlertTriangle },
-    { id: 'iot', label: 'IoT Monitoring', icon: IconRadio },
-    { id: 'progress', label: 'Progress', icon: IconTrendingUp },
-  ] as const;
+  const navGroups = [
+    {
+      label: 'Workspace',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
+        { id: 'workforce', label: 'Workforce', icon: IconUsers },
+        { id: 'access', label: 'Site Access', icon: IconKey },
+      ]
+    },
+    {
+      label: 'Safety',
+      items: [
+        { id: 'live-monitoring', label: 'Live Monitoring', icon: IconCamera },
+        { id: 'ppe', label: 'PPE Monitoring', icon: IconHardHat },
+        { id: 'zones', label: 'Restricted Zones', icon: IconShield },
+        { id: 'incidents', label: 'Incidents', icon: IconAlertTriangle },
+      ]
+    },
+    {
+      label: 'Site Data',
+      items: [
+        { id: 'iot', label: 'IoT Monitoring', icon: IconRadio },
+        { id: 'progress', label: 'Progress', icon: IconTrendingUp },
+      ]
+    }
+  ];
 
   return (
     <div className="min-h-screen bg-[#F9FAFC] text-[#182232] font-sans flex">
@@ -97,51 +115,52 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
           </div>
 
           {/* Navigation Section */}
-          <div className="px-3 py-3">
-            {!isCollapsed && (
-              <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">
-                Workspace
-              </p>
-            )}
-            <nav className="space-y-1">
-              {navItems.map((item) => {
-                const isCameras = item.id === 'cameras';
-                const isActive =
-                  currentTab === item.id ||
-                  (isCameras && (currentTab === 'ppe' || currentTab === 'zones'));
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onSelectTab(item.id as ActiveTab)}
-                    title={isCollapsed ? item.label : undefined}
-                    className={`w-full flex items-center ${
-                      isCollapsed ? 'justify-center px-0 py-2.5' : 'justify-between px-3.5 py-2.5'
-                    } rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
-                      isActive
-                        ? 'bg-white/10 text-white font-semibold shadow-inner'
-                        : 'text-white/70 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <div className={`flex items-center ${isCollapsed ? '' : 'gap-3'}`}>
-                      <Icon
-                        className={`w-4 h-4 shrink-0 ${
-                          isActive ? 'text-[#F66B17]' : 'text-white/60'
+          <div className="px-3 py-3 flex-1 overflow-y-auto custom-scrollbar">
+            <nav className="space-y-6">
+              {navGroups.map((group, groupIdx) => (
+                <div key={groupIdx} className="space-y-1">
+                  {!isCollapsed && (
+                    <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      {group.label}
+                    </p>
+                  )}
+                  {group.items.map((item) => {
+                    const isActive = currentTab === item.id;
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => onSelectTab(item.id as ActiveTab)}
+                        title={isCollapsed ? item.label : undefined}
+                        className={`w-full flex items-center ${
+                          isCollapsed ? 'justify-center px-0 py-2.5' : 'justify-between px-3.5 py-2.5'
+                        } rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
+                          isActive
+                            ? 'bg-white/10 text-white font-semibold shadow-inner'
+                            : 'text-white/70 hover:bg-white/5 hover:text-white'
                         }`}
-                      />
-                      {!isCollapsed && (
-                        <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
-                      )}
-                    </div>
-                    {isActive && !isCollapsed && (
-                      <span className="w-1.5 h-4 rounded-full bg-[#F66B17]" />
-                    )}
-                    {isActive && isCollapsed && (
-                      <span className="absolute left-1 w-1 h-5 rounded-full bg-[#F66B17]" />
-                    )}
-                  </button>
-                );
-              })}
+                      >
+                        <div className={`flex items-center ${isCollapsed ? '' : 'gap-3'}`}>
+                          <Icon
+                            className={`w-4 h-4 shrink-0 ${
+                              isActive ? 'text-[#F66B17]' : 'text-white/60'
+                            }`}
+                          />
+                          {!isCollapsed && (
+                            <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
+                          )}
+                        </div>
+                        {isActive && !isCollapsed && (
+                          <span className="w-1.5 h-4 rounded-full bg-[#F66B17]" />
+                        )}
+                        {isActive && isCollapsed && (
+                          <span className="absolute left-1 w-1 h-5 rounded-full bg-[#F66B17]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
           </div>
         </div>
