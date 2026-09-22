@@ -64,6 +64,15 @@ export function CameraMonitoringView({
               className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-[#F66B17]' : 'text-[#62748E]'}`}
             />
             <span>PPE Monitoring</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                activeTab === 'ppe'
+                  ? 'bg-[#F66B17]/10 text-[#F66B17] font-bold'
+                  : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              MF05
+            </span>
           </button>
 
           <button
@@ -79,6 +88,15 @@ export function CameraMonitoringView({
               className={`w-4 h-4 ${activeTab === 'zones' ? 'text-[#F66B17]' : 'text-[#62748E]'}`}
             />
             <span>Restricted Zones</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                activeTab === 'zones'
+                  ? 'bg-[#F66B17]/10 text-[#F66B17] font-bold'
+                  : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              MF06
+            </span>
           </button>
         </div>
       </div>

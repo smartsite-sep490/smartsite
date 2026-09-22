@@ -103,7 +103,6 @@ export function PpeMonitoringView() {
 
     pausedViolationRef.current = testDetection.eventId;
     video.pause();
-    setIsPlaying(false);
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
@@ -111,11 +110,13 @@ export function PpeMonitoringView() {
     const context = canvas.getContext('2d');
     if (!context) return;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setViolationSnapshot({
+    const snapshot = {
       eventId: testDetection.eventId,
       imageUrl: canvas.toDataURL('image/jpeg', 0.9),
       timecode: testDetection.timecode,
-    });
+    };
+    const frame = window.requestAnimationFrame(() => setViolationSnapshot(snapshot));
+    return () => window.cancelAnimationFrame(frame);
   }, [testDetection.active, testDetection.eventId, testDetection.timecode, videoTimeline.currentTime]);
 
   const updateVideoTimeline = (video: HTMLVideoElement) => {

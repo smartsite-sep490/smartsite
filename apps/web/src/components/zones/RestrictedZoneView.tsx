@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  IconCheck,
   IconX,
   IconAlertTriangle,
   IconClock,
@@ -29,6 +28,30 @@ const DEFAULT_ZONE_POLYGON: NormalizedPoint[] = [
 
 const ZONE_STORAGE_KEY = 'smartsite.restricted-zone.camera-04';
 
+function getSavedZonePolygon(): NormalizedPoint[] {
+  try {
+    const saved = window.localStorage.getItem(ZONE_STORAGE_KEY);
+    if (!saved) return DEFAULT_ZONE_POLYGON;
+    const parsed = JSON.parse(saved) as unknown;
+    if (
+      Array.isArray(parsed) &&
+      parsed.length >= 3 &&
+      parsed.every(
+        (point) =>
+          Array.isArray(point) &&
+          point.length === 2 &&
+          typeof point[0] === 'number' &&
+          typeof point[1] === 'number',
+      )
+    ) {
+      return parsed as NormalizedPoint[];
+    }
+  } catch {
+    // Ignore malformed local test data and use the default zone.
+  }
+  return DEFAULT_ZONE_POLYGON;
+}
+
 export function RestrictedZoneView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -40,7 +63,7 @@ export function RestrictedZoneView() {
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
   const [liveZoneDetections, setLiveZoneDetections] = useState<VideoTestDetection[]>([]);
-  const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(DEFAULT_ZONE_POLYGON);
+  const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(getSavedZonePolygon);
   const [isEditingZone, setIsEditingZone] = useState(false);
   const activeZonePoint = useRef<number | null>(null);
   const zoneDetections = liveZoneDetections.length
@@ -48,29 +71,6 @@ export function RestrictedZoneView() {
     : getZoneVideoTestDetections(videoTimeline, aiTimeline);
   const testDetection = zoneDetections[0]!;
   const activeZoneDetections = zoneDetections.filter((detection) => detection.active);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(ZONE_STORAGE_KEY);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as unknown;
-      if (
-        Array.isArray(parsed) &&
-        parsed.length >= 3 &&
-        parsed.every(
-          (point) =>
-            Array.isArray(point) &&
-            point.length === 2 &&
-            typeof point[0] === 'number' &&
-            typeof point[1] === 'number',
-        )
-      ) {
-        setZonePolygon(parsed as NormalizedPoint[]);
-      }
-    } catch {
-      // Ignore malformed local test data and keep the default zone.
-    }
-  }, []);
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_AI_WS_URL ?? 'ws://127.0.0.1:8000/ws/realtime';
