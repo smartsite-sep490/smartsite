@@ -1,394 +1,367 @@
 import React, { useState } from 'react';
-import {
-  IconCheck,
-  IconX,
-  IconAlertTriangle,
-  IconClock,
-  IconPlay,
-  IconPause,
-  IconVolume,
-  IconMaximize,
-  IconGrid,
-} from '../icons';
+import { CameraFeed } from '../shared/CameraFeed';
+import { EventDetailPanel } from '../shared/EventDetailPanel';
+import { EventsTable, TableColumn, StatusBadge } from '../shared/EventsTable';
+import { ActionDrawer } from '../shared/ActionDrawer';
+import { CameraSelectorBar, CameraModel } from '../shared/CameraSelectorBar';
+import { IconCheck, IconX, IconAlertTriangle } from '../icons';
+
+type PPEStatus = 'Open' | 'Under Review' | 'Needs Review' | 'Logged';
+
+interface PPEEvent {
+  id: string;
+  time: string;
+  worker: string;
+  workerId: string;
+  camera: string;
+  issue: string;
+  confidence: string;
+  status: PPEStatus;
+  detectedPPE: string[]; // List of PPE that AI successfully detected
+}
+
+interface WorkAreaPolicy {
+  location: string;
+  requiredPPE: string[];
+}
 
 export function PpeMonitoringView() {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('CAM-07');
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
+  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
 
-  const ppeEvents = [
+  const cameras: CameraModel[] = [
+    { id: 'CAM-07', name: 'Tower Crane 1 Base', location: 'Work Area B', status: 'online', capabilities: ['PPE', 'ZONE'] },
+    { id: 'CAM-02', name: 'Scaffold Level 4', location: 'Tower B', status: 'online', capabilities: ['PPE'] },
+    { id: 'CAM-05', name: 'Main Entrance', location: 'Tower A', status: 'online', capabilities: ['PPE', 'FACIAL_REC'] },
+  ];
+
+  const workAreaPolicies: WorkAreaPolicy[] = [
+    { location: 'Work Area B', requiredPPE: ['Helmet', 'Safety Vest', 'Gloves'] },
+    { location: 'Tower B', requiredPPE: ['Helmet', 'Safety Vest'] },
+    { location: 'Tower A', requiredPPE: ['Helmet', 'Safety Vest'] },
+  ];
+
+  const allEvents: PPEEvent[] = [
     {
       id: 'EVT-2048',
       time: '10:42',
       worker: 'Nguyen Van A',
+      workerId: 'WK-1024',
       camera: 'CAM-07',
-      workArea: 'Work Area B',
       issue: 'Missing Gloves',
       confidence: '97%',
       status: 'Open',
-      statusType: 'error',
+      detectedPPE: ['Helmet', 'Safety Vest'], // Required: Helmet, Vest, Gloves. Missing: Gloves.
     },
     {
       id: 'EVT-2042',
       time: '10:36',
       worker: 'Tran Van B',
+      workerId: 'WK-1025',
       camera: 'CAM-02',
-      workArea: 'Tower B',
       issue: 'Missing Helmet',
       confidence: '95%',
       status: 'Under Review',
-      statusType: 'warning',
+      detectedPPE: ['Safety Vest'], // Required: Helmet, Vest. Missing: Helmet.
     },
     {
       id: 'EVT-2035',
       time: '10:21',
       worker: 'Unknown',
+      workerId: 'Unknown',
       camera: 'CAM-05',
-      workArea: 'Tower A',
       issue: 'Uncertain PPE',
       confidence: '72%',
       status: 'Needs Review',
-      statusType: 'warning',
+      detectedPPE: ['Helmet'], // Required: Helmet, Vest. Missing: Vest (uncertain).
     },
     {
       id: 'EVT-2029',
       time: '09:58',
       worker: 'Le Van C',
-      camera: 'CAM-03',
-      workArea: 'Tower A',
+      workerId: 'WK-1026',
+      camera: 'CAM-07',
       issue: 'Compliant',
       confidence: '98%',
       status: 'Logged',
-      statusType: 'success',
+      detectedPPE: ['Helmet', 'Safety Vest', 'Gloves'],
     },
   ];
 
+  const activeCamera = (cameras.find(c => c.id === selectedCameraId) || cameras[0]) as CameraModel;
+  const filteredEvents = allEvents.filter(e => e.camera === activeCamera.id);
+  const activeEvent = filteredEvents.find(e => e.id === selectedAlert) || filteredEvents[0];
+  const activePolicy = workAreaPolicies.find(p => p.location === activeCamera.location) || { location: activeCamera.location, requiredPPE: [] };
+
+  const getMissingItems = (event: PPEEvent) => {
+    return activePolicy.requiredPPE.filter(item => !event.detectedPPE.includes(item));
+  };
+  const activeMissingItems = activeEvent ? getMissingItems(activeEvent) : [];
+
+  const getResultState = (status: PPEStatus) => {
+    if (status === 'Logged') return { type: 'success' as const, title: 'COMPLIANT' };
+    if (status === 'Needs Review') return { type: 'warning' as const, title: 'NEEDS REVIEW' };
+    return { type: 'error' as const, title: 'PPE VIOLATION' };
+  };
+  const activeResult = activeEvent ? getResultState(activeEvent.status) : { type: 'success' as const, title: 'MONITORING ACTIVE' };
+
+  const columns: TableColumn<PPEEvent>[] = [
+    { header: 'Time', key: 'time', render: (item) => <span className="font-mono text-slate-500 text-xs">{item.time}</span> },
+    { header: 'Worker', key: 'worker', render: (item) => <span className="font-semibold text-slate-900">{item.worker}</span> },
+    { header: 'Issue', key: 'issue', render: (item) => <span className="font-medium text-slate-900">{item.issue}</span> },
+    { header: 'Confidence', key: 'confidence', render: (item) => <span className="font-semibold text-slate-900">{item.confidence}</span> },
+    {
+      header: 'Status',
+      key: 'status',
+      render: (item) => {
+        let type: 'error' | 'warning' | 'success' | 'info' = 'info';
+        if (item.status === 'Open') type = 'error';
+        if (item.status === 'Logged') type = 'success';
+        if (item.status === 'Under Review' || item.status === 'Needs Review') type = 'warning';
+        return <StatusBadge status={item.status} type={type} />;
+      },
+    },
+    {
+      header: 'Action',
+      key: 'action',
+      align: 'right',
+      render: (item) => (
+        <button
+          onClick={() => setSelectedAlert(item.id)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] ${
+            selectedAlert === item.id
+              ? 'bg-[#041D2E] text-white'
+              : item.status === 'Open' || item.status === 'Needs Review'
+              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {item.status === 'Logged' ? 'View' : 'Select'}
+        </button>
+      ),
+    },
+  ];
+
+  const detailsGrid = activeEvent ? [
+    { label: 'Worker', value: activeEvent.worker },
+    { label: 'Worker ID', value: activeEvent.workerId },
+    { label: 'Camera', value: activeEvent.camera },
+    { label: 'Work Area', value: activeCamera.location },
+    { label: 'Detected', value: activeEvent.time + ':16' },
+    { label: 'Confidence', value: activeEvent.confidence },
+  ] : [
+    { label: 'Status', value: 'System Online' },
+    { label: 'Camera', value: activeCamera.id },
+    { label: 'Work Area', value: activeCamera.location },
+    { label: 'Detections', value: '0 Active' },
+  ];
+
+  const checklistSlot = activeEvent ? (
+    <div>
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-3">
+        PPE CHECK - {activePolicy.location.toUpperCase()}
+      </p>
+      <div className="space-y-1.5">
+        {activePolicy.requiredPPE.map((item) => {
+          const isMissing = !activeEvent.detectedPPE.includes(item);
+          let itemState = isMissing ? 'missing' : 'detected';
+          if (activeEvent.status === 'Needs Review' && isMissing) {
+            itemState = 'uncertain';
+          }
+
+          return (
+            <div key={item} className={`flex items-center justify-between p-3 rounded-xl border ${itemState === 'missing' ? 'bg-red-50/50 border-red-100' : itemState === 'uncertain' ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex flex-col gap-0.5">
+                <p className="font-semibold text-slate-900 text-xs">{item}</p>
+                <p className={`text-[11px] font-medium ${itemState === 'missing' ? 'text-red-500' : itemState === 'uncertain' ? 'text-amber-500' : 'text-slate-500'}`}>
+                  {itemState === 'missing' ? 'Missing' : itemState === 'uncertain' ? 'Uncertain Detection' : 'Detected'}
+                </p>
+              </div>
+              {itemState === 'missing' ? <IconX className="w-5 h-5 text-red-500" /> : itemState === 'uncertain' ? <IconAlertTriangle className="w-5 h-5 text-amber-500" /> : <IconCheck className="w-5 h-5 text-emerald-500" />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ) : (
+    <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-100 rounded-xl mt-4">
+      <IconCheck className="w-8 h-8 text-emerald-500 mb-2 opacity-80" />
+      <p className="text-xs font-bold text-slate-600">ALL COMPLIANT</p>
+      <p className="text-[11px] text-slate-400 text-center mt-1">No PPE violations currently detected in this work area.</p>
+    </div>
+  );
+
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      {/* Main Interactive Viewport: Camera Video Feed (829px) + Right Card (355px) */}
-      <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
-        {/* Left: Camera Feed */}
-        <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
-          {/* Real Construction Site Photograph */}
-          <div className="absolute inset-0">
-            <img
-              src="/assets/ppe-camera-view.png"
-              alt="Live PPE construction camera"
-              className="w-full h-full object-cover"
-            />
 
-            {/* Horizontal scanning line */}
-            <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
+      <CameraSelectorBar
+        siteName="Tower A"
+        contextName={activeCamera.location}
+        cameras={cameras}
+        activeCameraId={selectedCameraId}
+        onSelectCamera={(id) => {
+          setSelectedCameraId(id);
+          setSelectedAlert(null); // Reset selection when camera changes
+        }}
+      />
 
-            {/* Bounding box for worker with missing PPE */}
-            <div
-              className="absolute border-[1.6px] border-[#F66B17] pointer-events-none transition-all duration-300"
-              style={{
-                left: '42.0%',
-                top: '30.0%',
-                width: '12.0%',
-                height: '55.0%',
-              }}
-            >
-              {/* Floating label */}
-              <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                WORKER #1024 - 97%
-              </div>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start">
 
-          {/* Top Camera Metadata */}
-          <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white">
-            <div className="flex flex-col gap-0.5">
-              <span className="font-bold text-sm tracking-wide text-white drop-shadow-md">CAM-07</span>
-              <span className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md">
-                WORK AREA B
-              </span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#DF2225] animate-ping" />
-              <span className="font-mono text-[10px] font-bold text-white tracking-wider">
-                LIVE - 10:42:16
-              </span>
-            </div>
-          </div>
-
-          {/* Bottom Camera Controls */}
-          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title={isPlaying ? 'Pause' : 'Play'}
+        {/* Camera Feed */}
+        <CameraFeed
+          cameraId={activeCamera.id}
+          zoneName={activeCamera.location}
+          imageUrl={activeCamera.id === 'CAM-07' ? "/assets/ppe-camera-view.png" : "/assets/crane-camera-view.png"}
+        >
+          {activeEvent && activeEvent.status !== 'Logged' && (
+            <>
+              <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
+              <div
+                className="absolute border-[1.6px] border-[#F66B17] pointer-events-none transition-all duration-300"
+                style={{ left: '42.0%', top: '30.0%', width: '12.0%', height: '55.0%' }}
               >
-                {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => setIsMuted(!isMuted)}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Sound"
-              >
-                <IconVolume className="w-4 h-4" />
-              </button>
+                <div className="absolute -top-[20px] left-[-1.6px] px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-widest shadow-sm">
+                  {activeEvent.workerId !== 'Unknown' ? `WORKER #${activeEvent.workerId.replace('WK-', '')} - ${activeEvent.confidence}` : `UNKNOWN - ${activeEvent.confidence}`}
+                </div>
+              </div>
+            </>
+          )}
+        </CameraFeed>
+
+        {/* Detail Panel */}
+        <EventDetailPanel
+          title="AI DETECTION"
+          eventId={activeEvent ? activeEvent.id : "NO-EVENT"}
+          details={detailsGrid}
+          checklistSlot={checklistSlot}
+          resultStatus={activeResult.type}
+          resultTitle={activeResult.title}
+          resultMessage={activeEvent ? (activeResult.title === 'COMPLIANT' ? 'All required PPE items verified.' : activeResult.title === 'NEEDS REVIEW' ? `Uncertain evidence for: ${activeMissingItems.join(', ')}` : `Missing required PPE: ${activeMissingItems.join(', ')}`) : 'System is continuously scanning for PPE violations.'}
+          primaryActionLabel={activeEvent && activeEvent.status !== 'Logged' ? (activeEvent.status === 'Needs Review' ? "Review Detection" : "Review Alert") : "View Event"}
+          onPrimaryAction={() => {
+            if (activeEvent) {
+              setSelectedAlert(activeEvent.id);
+            }
+          }}
+          secondaryActionLabel={activeEvent && activeEvent.workerId !== 'Unknown' ? "View Worker" : "View Area Policies"}
+          onSecondaryAction={() => {
+            if (activeEvent && activeEvent.workerId !== 'Unknown') {
+              setSelectedWorker(activeEvent.workerId);
+            } else {
+              alert(`Showing PPE policies for ${activeCamera.location}...`);
+            }
+          }}
+        />
+      </div>
+
+      <EventsTable
+        title="Recent PPE Events"
+        subtitle={`Latest camera detections for ${activeCamera.name}.`}
+        data={filteredEvents}
+        columns={columns}
+        keyExtractor={(item) => item.id}
+      />
+
+      {/* Slide-over Drawer for Reviewing Event */}
+      {activeEvent && (
+        <ActionDrawer
+          isOpen={selectedAlert === activeEvent.id}
+          onClose={() => setSelectedAlert(null)}
+          title={activeResult.title === 'COMPLIANT' ? "Event Details" : activeResult.title === 'NEEDS REVIEW' ? "Detection Review" : "Violation Review"}
+          badge={activeEvent.id}
+          badgeType={activeResult.type === 'success' ? 'info' : activeResult.type}
+        >
+          <div className="space-y-6 text-sm text-slate-600">
+            <p className="leading-relaxed">
+              {activeResult.title === 'COMPLIANT' ? (
+                <>AI verified all required safety items for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker}</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> ({activeEvent.confidence} confidence).</>
+              ) : activeResult.title === 'NEEDS REVIEW' ? (
+                <>AI detection is uncertain regarding <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> for an unidentified person in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> ({activeEvent.confidence} confidence).</>
+              ) : (
+                <>AI confidently detected a missing safety item for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker} ({activeEvent.workerId})</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong>. Missing item(s): <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> ({activeEvent.confidence} confidence).</>
+              )}
+            </p>
+
+            <div className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
+              <p className="font-bold text-slate-900 text-xs uppercase tracking-[0.1em]">Safety Protocol: {activePolicy.location}</p>
+              <p className="text-slate-700 text-xs leading-relaxed">
+                Personnel in this area are required to wear: <span className="font-semibold">{activePolicy.requiredPPE.join(', ')}</span> at all times while active work is occurring.
+              </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button className="p-1.5 rounded hover:bg-white/15 text-white transition-colors" title="Grid">
-                <IconGrid className="w-4 h-4" />
-              </button>
-              <button className="p-1.5 rounded hover:bg-white/15 text-white transition-colors" title="Fullscreen">
-                <IconMaximize className="w-4 h-4" />
-              </button>
-            </div>
+            {activeResult.title !== 'COMPLIANT' && (
+              <div className="flex flex-col gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    alert(activeResult.title === 'NEEDS REVIEW' ? 'Flagged for further investigation.' : 'Notification dispatched to Site Supervisor.');
+                    setSelectedAlert(null);
+                  }}
+                  className="py-3 px-4 rounded-xl bg-[#F66B17] hover:bg-orange-700 text-white font-bold text-sm shadow-[0_2px_10px_rgba(246,107,23,0.3)] transition-all active:scale-[0.98]"
+                >
+                  {activeResult.title === 'NEEDS REVIEW' ? 'Flag for Investigation' : 'Notify Supervisor'}
+                </button>
+                <button
+                  onClick={() => {
+                    alert('Event dismissed.');
+                    setSelectedAlert(null);
+                  }}
+                  className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-[0.98]"
+                >
+                  Dismiss Event
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        </ActionDrawer>
+      )}
 
-        {/* Right: AI Detection & PPE Check Card (355px) */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
-          <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                AI DETECTION
-              </span>
-              <span className="font-mono text-[11px] font-semibold text-slate-500">
-                EVT-2048
-              </span>
-            </div>
-
-            {/* 2-Column Details Grid */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">Nguyen Van A</p>
+      {/* Slide-over Drawer for Worker Profile */}
+      {selectedWorker && (
+        <ActionDrawer
+          isOpen={selectedWorker !== null}
+          onClose={() => setSelectedWorker(null)}
+          title="Worker Profile"
+          badge="Active"
+          badgeType="info"
+        >
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xl uppercase">
+                {selectedWorker === 'Unknown' ? '?' : 'NV'}
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker ID</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">WK-1024</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Camera</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">CAM-07</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Work Area</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">Work Area B</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Detected</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">10:42:16</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recognition Confidence</p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">97%</p>
+                <h4 className="text-lg font-bold text-slate-900">{selectedWorker === 'Unknown' ? 'Unknown Person' : activeEvent?.worker}</h4>
+                <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {selectedWorker}</p>
               </div>
             </div>
 
             <div className="h-px bg-slate-100 w-full" />
 
-            {/* PPE Check List */}
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
-                PPE CHECK
-              </p>
-              <div className="space-y-2">
-                {/* Helmet */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Helmet</p>
-                    <p className="text-[11px] text-slate-500">Detected</p>
-                  </div>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
+            {selectedWorker === 'Unknown' ? (
+              <div className="py-8 px-4 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100 text-center">
+                <IconAlertTriangle className="w-8 h-8 text-slate-400 mb-3" />
+                <p className="text-slate-600 font-medium text-sm">Identity Unconfirmed</p>
+                <p className="text-slate-400 text-xs mt-1">No personnel profile or historical safety data is available for unidentified individuals.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Role</span>
+                  <span className="text-slate-900 font-semibold">Steel Worker</span>
                 </div>
-
-                {/* Safety Vest */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Safety Vest</p>
-                    <p className="text-[11px] text-slate-500">Detected</p>
-                  </div>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Subcontractor</span>
+                  <span className="text-slate-900 font-semibold">Alpha Construction</span>
                 </div>
-
-                {/* Gloves - Missing */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Gloves</p>
-                    <p className="text-[11px] text-slate-500">Missing</p>
-                  </div>
-                  <IconX className="w-5 h-5 text-red-500" />
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Safety Score</span>
+                  <span className="text-emerald-600 font-bold">92%</span>
                 </div>
               </div>
-            </div>
-
-            {/* Result Box */}
-            <div className="pt-2">
-              <div className="border-l-[3px] border-red-500 pl-3">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
-                  RESULT
-                </p>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-red-500 mb-1">
-                  <IconAlertTriangle className="w-3.5 h-3.5" />
-                  <span>PPE VIOLATION</span>
-                </div>
-                <p className="text-xs text-slate-600">
-                  Missing required PPE: Gloves
-                </p>
-              </div>
-            </div>
+            )}
           </div>
-
-          {/* Action Buttons */}
-          <div className="p-6 pt-0 space-y-2">
-            <button
-              onClick={() => setSelectedAlert('EVT-2048')}
-              className="w-full py-2.5 px-4 rounded-lg bg-[#F66B17] hover:bg-[#E05A0B] text-white font-semibold text-sm shadow-sm transition-colors cursor-pointer"
-            >
-              Review Alert
-            </button>
-            <button className="w-full py-2.5 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors cursor-pointer">
-              View Worker
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent PPE Events Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Recent PPE Events</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Latest camera detections and verification outcomes.
-            </p>
-          </div>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            <IconClock className="w-3.5 h-3.5 text-slate-400" />
-            <span>Last 24 hours</span>
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-3">Time</th>
-                <th className="py-3 px-3">Worker</th>
-                <th className="py-3 px-3">Camera</th>
-                <th className="py-3 px-3">Work Area</th>
-                <th className="py-3 px-3">Issue</th>
-                <th className="py-3 px-3">Confidence</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {ppeEvents.map((evt) => (
-                <tr key={evt.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">
-                    {evt.time}
-                  </td>
-                  <td className="py-3 px-3 font-semibold text-slate-900">
-                    {evt.worker}
-                  </td>
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">
-                    {evt.camera}
-                  </td>
-                  <td className="py-3 px-3 text-slate-600">
-                    {evt.workArea}
-                  </td>
-                  <td className="py-3 px-3 font-medium text-slate-900">
-                    {evt.issue}
-                  </td>
-                  <td className="py-3 px-3 font-semibold text-slate-900">
-                    {evt.confidence}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                        evt.status === 'Open'
-                          ? 'bg-red-50 text-red-600'
-                          : evt.status === 'Logged'
-                          ? 'bg-emerald-50 text-emerald-600'
-                          : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {evt.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => setSelectedAlert(evt.id)}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition-colors opacity-0 group-hover:opacity-100 ${
-                        evt.status === 'Open' || evt.status === 'Needs Review'
-                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {evt.status === 'Logged' ? 'View' : 'Review'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Review Modal */}
-      {selectedAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold font-mono uppercase tracking-wider">
-                  {selectedAlert}
-                </span>
-                <h3 className="font-bold text-slate-900">Violation Review</h3>
-              </div>
-              <button
-                onClick={() => setSelectedAlert(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <IconX className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-sm text-slate-600">
-              <p>
-                AI detected a missing safety item for worker{' '}
-                <strong className="text-slate-900">Nguyen Van A (WK-1024)</strong> in <strong className="text-slate-900">Work Area B</strong>. Missing item: <strong className="text-slate-900">Gloves</strong> (97% confidence).
-              </p>
-              <div className="p-3 bg-amber-50 rounded-lg space-y-1">
-                <p className="font-bold text-amber-900 text-xs uppercase tracking-wider">Safety Protocol</p>
-                <p className="text-amber-800 text-xs">
-                  Handling rebar or mechanical parts requires EN 388 protective gloves at all times.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                onClick={() => {
-                  alert('Notification dispatched to Site Supervisor to provide gloves.');
-                  setSelectedAlert(null);
-                }}
-                className="py-2 px-4 rounded-lg bg-[#F66B17] hover:bg-orange-700 text-white font-bold text-sm shadow transition-colors"
-              >
-                Notify Supervisor
-              </button>
-              <button
-                onClick={() => {
-                  alert('Alert dismissed as false positive.');
-                  setSelectedAlert(null);
-                }}
-                className="py-2 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
+        </ActionDrawer>
       )}
     </div>
   );
