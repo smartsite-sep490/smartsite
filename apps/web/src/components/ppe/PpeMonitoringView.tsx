@@ -14,6 +14,7 @@ import {
   getPpeVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
+  type VideoTestDetection,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 
@@ -28,12 +29,15 @@ export function PpeMonitoringView() {
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const [liveDetections, setLiveDetections] = useState<VideoTestDetection[]>([]);
   const [violationSnapshot, setViolationSnapshot] = useState<{
     eventId: string;
     imageUrl: string;
     timecode: string;
   } | null>(null);
-  const ppeDetections = getPpeVideoTestDetections(videoTimeline, aiTimeline);
+  const ppeDetections = liveDetections.length
+    ? liveDetections
+    : getPpeVideoTestDetections(videoTimeline, aiTimeline);
   const testDetection = ppeDetections.find((detection) => detection.active) ?? ppeDetections[0]!;
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +51,44 @@ export function PpeMonitoringView() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const socketUrl = import.meta.env.VITE_AI_WS_URL ?? 'ws://127.0.0.1:8000/ws/realtime';
+    const socket = new WebSocket(socketUrl);
+    socket.onmessage = (message) => {
+      try {
+        const payload = JSON.parse(message.data) as {
+          type?: string;
+          detections?: Array<{
+            trackId: number;
+            confidence: number;
+            boundingBox: VideoTestDetection['boundingBox'];
+            ppeStatus: VideoTestDetection['ppeStatus'];
+            active: boolean;
+            label: string;
+          }>;
+        };
+        if (payload.type !== 'frame' || !payload.detections) return;
+        setLiveDetections(
+          payload.detections.map((detection) => ({
+            active: detection.active,
+            boundingBox: detection.boundingBox,
+            confidence: detection.confidence,
+            eventId: `REALTIME-TRACK-${detection.trackId}`,
+            label: `MF05 ${detection.label}`,
+            ppeStatus: detection.ppeStatus,
+            timecode: 'LIVE',
+            trackId: detection.trackId,
+          })),
+        );
+      } catch {
+        // Ignore malformed frames and keep the last valid live result.
+      }
+    };
+    socket.onerror = () => setLiveDetections([]);
+    socket.onclose = () => setLiveDetections([]);
+    return () => socket.close();
   }, []);
 
   useEffect(() => {
