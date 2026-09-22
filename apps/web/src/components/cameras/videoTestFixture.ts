@@ -79,15 +79,16 @@ function latestRelevantEntry(
   if (!timeline || !Number.isFinite(currentTime)) return null;
 
   const candidates = timeline.entries
-    .filter((entry) => Math.abs(entry.videoTimeSeconds - currentTime) <= 0.75)
+    .filter((entry) =>
+      entry.videoTimeSeconds <= currentTime + 0.1 &&
+      currentTime - entry.videoTimeSeconds <= 1.5,
+    )
     .flatMap((entry) =>
       entry.event.observations.filter(matches).map((observation) => ({ entry, observation })),
     );
 
   return candidates.sort(
-    (first, second) =>
-      Math.abs(first.entry.videoTimeSeconds - currentTime) -
-      Math.abs(second.entry.videoTimeSeconds - currentTime),
+    (first, second) => second.entry.videoTimeSeconds - first.entry.videoTimeSeconds,
   )[0] ?? null;
 }
 
@@ -163,6 +164,54 @@ export function getPpeVideoTestDetection(
   timeline: AiVideoTimeline | null,
 ): VideoTestDetection {
   return detectionFor(videoTimeline, timeline, 'MF05');
+}
+
+/** Return every tracked person with PPE observations at the current video time. */
+export function getPpeVideoTestDetections(
+  videoTimeline: VideoTestTimeline,
+  timeline: AiVideoTimeline | null,
+): VideoTestDetection[] {
+  const match = latestRelevantEntry(
+    timeline,
+    videoTimeline.currentTime,
+    (observation) => observation.type === 'PPE',
+  );
+  if (!match) return [getPpeVideoTestDetection(videoTimeline, timeline)];
+
+  const trackIds = [...new Set(
+    match.entry.event.observations
+      .filter((observation) => observation.type === 'PPE')
+      .map((observation) => observation.trackId),
+  )];
+
+  return trackIds.map((trackId) => {
+    const person = match.entry.event.observations.find(
+      (observation) => observation.type === 'PERSON' && observation.trackId === trackId,
+    );
+    const ppeStatus = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' } as Record<
+      'HARD_HAT' | 'SAFETY_VEST',
+      'PRESENT' | 'MISSING' | 'UNKNOWN'
+    >;
+    const trackObservations = match.entry.event.observations.filter(
+      (observation) => observation.type === 'PPE' && observation.trackId === trackId,
+    );
+    for (const observation of trackObservations) {
+      if (observation.ppeItem && observation.status) ppeStatus[observation.ppeItem] = observation.status;
+    }
+    const missingItem = trackObservations.find((observation) => observation.status === 'MISSING');
+    return {
+      active: Boolean(missingItem),
+      boundingBox: person?.boundingBox ?? null,
+      confidence: missingItem?.confidence ?? person?.confidence ?? null,
+      eventId: match.entry.event.eventId,
+      label: missingItem
+        ? `MF05 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
+        : 'MF05 PPE OK',
+      ppeStatus,
+      timecode: formatTimecode(match.entry.videoTimeSeconds),
+      trackId,
+    };
+  });
 }
 
 export function getZoneVideoTestDetection(

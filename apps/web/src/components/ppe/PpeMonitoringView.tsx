@@ -11,7 +11,7 @@ import {
   IconGrid,
 } from '../icons';
 import {
-  getPpeVideoTestDetection,
+  getPpeVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
   type VideoTestTimeline,
@@ -33,14 +33,8 @@ export function PpeMonitoringView() {
     imageUrl: string;
     timecode: string;
   } | null>(null);
-  const testDetection = getPpeVideoTestDetection(videoTimeline, aiTimeline);
-  const ppeCheck = (item: 'HARD_HAT' | 'SAFETY_VEST') => {
-    const status = testDetection.ppeStatus[item];
-    if (status === 'MISSING') return { label: 'Missing', icon: <IconX className="w-5 h-5 text-red-500" /> };
-    if (status === 'PRESENT') return { label: 'Detected', icon: <IconCheck className="w-5 h-5 text-emerald-500" /> };
-    return { label: 'Not assessed in this observation', icon: <IconClock className="w-5 h-5 text-slate-400" /> };
-  };
-
+  const ppeDetections = getPpeVideoTestDetections(videoTimeline, aiTimeline);
+  const testDetection = ppeDetections.find((detection) => detection.active) ?? ppeDetections[0]!;
   useEffect(() => {
     let cancelled = false;
     void loadAiVideoTimeline('/assets/ppe-ai.timeline.json')
@@ -172,31 +166,28 @@ export function PpeMonitoringView() {
             {/* Horizontal scanning line */}
             <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
 
-            {/* Bounding box for worker with missing PPE */}
-            <div
-              className="absolute border-[1.6px] border-[#F66B17] pointer-events-none transition-all duration-300"
-              data-testid="mf05-test-detection"
-              style={{
-                top: `${(testDetection.boundingBox?.y1 ?? 0.3) * 100}%`,
-                width: `${
-                  ((testDetection.boundingBox?.x2 ?? 0.54) -
-                    (testDetection.boundingBox?.x1 ?? 0.42)) *
-                  100
-                }%`,
-                height: `${
-                  ((testDetection.boundingBox?.y2 ?? 0.85) -
-                    (testDetection.boundingBox?.y1 ?? 0.3)) *
-                  100
-                }%`,
-                left: `${(testDetection.boundingBox?.x1 ?? 0.42) * 100}%`,
-                opacity: testDetection.active && testDetection.boundingBox ? 1 : 0,
-              }}
-            >
-              {/* Floating label */}
-              <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                {testDetection.label}
-              </div>
-            </div>
+            {/* Render every tracked worker and keep each box tied to its track id. */}
+            {ppeDetections.map((detection) =>
+              detection.boundingBox ? (
+                <div
+                  key={`${detection.eventId}-${detection.trackId}`}
+                  className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
+                    detection.active ? 'border-[#F66B17]' : 'border-emerald-400'
+                  }`}
+                  data-testid="mf05-test-detection"
+                  style={{
+                    top: `${detection.boundingBox.y1 * 100}%`,
+                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                    left: `${detection.boundingBox.x1 * 100}%`,
+                  }}
+                >
+                  <div className={`absolute -top-[18px] left-[-1.6px] whitespace-nowrap px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-sm ${detection.active ? 'bg-[#F66B17]' : 'bg-emerald-600'}`}>
+                    {detection.label} · TRACK #{detection.trackId}
+                  </div>
+                </div>
+              ) : null,
+            )}
           </div>
 
           {/* Top Camera Metadata */}
@@ -271,7 +262,7 @@ export function PpeMonitoringView() {
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker ID</p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
-                  {testDetection.trackId === null ? '—' : `Track #${testDetection.trackId}`}
+                  {ppeDetections.map((detection) => `Track #${detection.trackId}`).join(', ') || '—'}
                 </p>
               </div>
               <div>
@@ -304,23 +295,23 @@ export function PpeMonitoringView() {
                 PPE CHECK
               </p>
               <div className="space-y-2">
-                {/* Helmet */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Helmet</p>
-                    <p className="text-[11px] text-slate-500">{ppeCheck('HARD_HAT').label}</p>
-                  </div>
-                  {ppeCheck('HARD_HAT').icon}
-                </div>
-
-                {/* Safety Vest */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Safety Vest</p>
-                    <p className="text-[11px] text-slate-500">{ppeCheck('SAFETY_VEST').label}</p>
-                  </div>
-                  {ppeCheck('SAFETY_VEST').icon}
-                </div>
+                {ppeDetections.map((detection) => {
+                  const helmet = detection.ppeStatus.HARD_HAT;
+                  const vest = detection.ppeStatus.SAFETY_VEST;
+                  return (
+                    <div key={`ppe-check-${detection.trackId}`} className="rounded-lg bg-slate-50 p-3">
+                      <p className="mb-2 text-[11px] font-bold text-slate-700">Track #{detection.trackId}</p>
+                      <div className="flex items-center justify-between text-xs">
+                        <span>Helmet · {helmet === 'MISSING' ? 'Missing' : helmet === 'PRESENT' ? 'Detected' : 'Not assessed'}</span>
+                        {helmet === 'MISSING' ? <IconX className="w-4 h-4 text-red-500" /> : helmet === 'PRESENT' ? <IconCheck className="w-4 h-4 text-emerald-500" /> : <IconClock className="w-4 h-4 text-slate-400" />}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-xs">
+                        <span>Safety Vest · {vest === 'MISSING' ? 'Missing' : vest === 'PRESENT' ? 'Detected' : 'Not assessed'}</span>
+                        {vest === 'MISSING' ? <IconX className="w-4 h-4 text-red-500" /> : vest === 'PRESENT' ? <IconCheck className="w-4 h-4 text-emerald-500" /> : <IconClock className="w-4 h-4 text-slate-400" />}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
