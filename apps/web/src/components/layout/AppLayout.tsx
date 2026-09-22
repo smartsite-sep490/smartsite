@@ -15,6 +15,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconCamera,
+  IconShield,
 } from '../icons';
 
 export type ActiveTab =

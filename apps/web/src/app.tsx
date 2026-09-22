@@ -27,15 +27,7 @@ export function App() {
   });
 
   const handleSelectTab = (tab: ActiveTab) => {
-    if (tab === 'ppe') {
-      setCameraSubTab('ppe');
-      setCurrentTab('cameras');
-    } else if (tab === 'zones') {
-      setCameraSubTab('zones');
-      setCurrentTab('cameras');
-    } else {
-      setCurrentTab(tab);
-    }
+    setCurrentTab(tab);
   };
 
   // If viewing public landing page
