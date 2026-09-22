@@ -131,10 +131,10 @@ export function RestrictedZoneView() {
             <div
               className="absolute border-[1.6px] border-[#DF2225] bg-[#DF2225]/10 pointer-events-none transition-all duration-300"
               style={{
-                left: '64.0%',
-                top: '35.0%',
-                width: '31.0%',
-                height: '40.0%',
+                left: '63.0%',
+                top: '20.0%',
+                width: '35.0%',
+                height: '70.0%',
                 opacity: testDetection.active ? 1 : 0.45,
               }}
             >

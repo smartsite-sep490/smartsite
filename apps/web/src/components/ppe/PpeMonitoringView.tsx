@@ -19,6 +19,7 @@ import {
 
 export function PpeMonitoringView() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const pausedViolationRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
@@ -27,6 +28,11 @@ export function PpeMonitoringView() {
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const [violationSnapshot, setViolationSnapshot] = useState<{
+    eventId: string;
+    imageUrl: string;
+    timecode: string;
+  } | null>(null);
   const testDetection = getPpeVideoTestDetection(videoTimeline, aiTimeline);
   const ppeCheck = (item: 'HARD_HAT' | 'SAFETY_VEST') => {
     const status = testDetection.ppeStatus[item];
@@ -48,6 +54,33 @@ export function PpeMonitoringView() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!testDetection.active) {
+      pausedViolationRef.current = null;
+      return;
+    }
+    if (pausedViolationRef.current) return;
+
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+    pausedViolationRef.current = testDetection.eventId;
+    video.pause();
+    setIsPlaying(false);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setViolationSnapshot({
+      eventId: testDetection.eventId,
+      imageUrl: canvas.toDataURL('image/jpeg', 0.9),
+      timecode: testDetection.timecode,
+    });
+  }, [testDetection.active, testDetection.eventId, testDetection.timecode, videoTimeline.currentTime]);
 
   const updateVideoTimeline = (video: HTMLVideoElement) => {
     setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
@@ -316,6 +349,19 @@ export function PpeMonitoringView() {
                 </p>
               </div>
             </div>
+
+            {violationSnapshot && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3" data-testid="mf05-evidence-capture">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-red-700">
+                  Evidence captured · {violationSnapshot.timecode}
+                </p>
+                <img
+                  src={violationSnapshot.imageUrl}
+                  alt={`Captured frame for ${violationSnapshot.eventId}`}
+                  className="mt-2 w-full rounded border border-red-200"
+                />
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
