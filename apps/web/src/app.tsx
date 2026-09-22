@@ -44,7 +44,7 @@ export function App() {
 
   return (
     <AppLayout currentTab={currentTab} onSelectTab={handleSelectTab}>
-      {/* Tab: Combined Camera Monitoring (MF05 PPE + MF06 Restricted Zones) */}
+      {/* Tab: Combined Camera Monitoring (PPE + Restricted Zones) */}
       {(currentTab === 'cameras' || currentTab === 'ppe' || currentTab === 'zones') && (
         <CameraMonitoringView activeSubTab={cameraSubTab} onSubTabChange={setCameraSubTab} />
       )}
