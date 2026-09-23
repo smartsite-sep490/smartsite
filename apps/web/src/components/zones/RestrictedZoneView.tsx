@@ -25,6 +25,8 @@ import {
   mapVideoNormalizedToContainerNormalized,
   exportZoneBrowserDraft,
   formatClockTime,
+  resolveCameraAndWorkArea,
+  filterZoneEvents,
   type NormalizedPoint,
   type Size2D,
 } from '../cameras/monitoringUtils';
@@ -94,7 +96,7 @@ export function RestrictedZoneView() {
   const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
   const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
-  const [timeFilter, setTimeFilter] = useState<'all' | '24h'>('24h');
+  const [zoneFilter, setZoneFilter] = useState<'ALL' | 'ACTIVE_ONLY'>('ALL');
   const activeZonePoint = useRef<number | null>(null);
 
   const [containerSize, setContainerSize] = useState<Size2D>({ width: 829, height: 466 });
@@ -167,12 +169,14 @@ export function RestrictedZoneView() {
             const payload = JSON.parse(message.data) as {
               type?: string;
               message?: string;
+              cameraExternalId?: string;
               zoneDetections?: Array<{
                 trackId: number;
                 confidence: number;
                 boundingBox: VideoTestDetection['boundingBox'];
                 active: boolean;
                 label: string;
+                regionId?: string;
               }>;
             };
 
@@ -188,10 +192,12 @@ export function RestrictedZoneView() {
               payload.zoneDetections.map((detection) => ({
                 active: detection.active,
                 boundingBox: detection.boundingBox,
+                cameraExternalId: payload.cameraExternalId,
                 confidence: detection.confidence,
                 eventId: `REALTIME-ZONE-TRACK-${detection.trackId}`,
                 label: `MF06 ${detection.label}`,
                 ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
+                regionId: detection.regionId,
                 timecode: 'LIVE',
                 trackId: detection.trackId,
               })),
@@ -297,8 +303,13 @@ export function RestrictedZoneView() {
     setTimeout(() => setSaveStatusMessage(null), 4000);
   };
 
+  const activeCameraContext = useMemo(() => {
+    const rawCamera = testDetection?.cameraExternalId || aiTimeline?.cameraExternalId;
+    return resolveCameraAndWorkArea(rawCamera, testDetection?.regionId, 'CAM-04');
+  }, [testDetection, aiTimeline]);
+
   const exportZone = () => {
-    const draft = exportZoneBrowserDraft(zonePolygon, 'CAM-04');
+    const draft = exportZoneBrowserDraft(zonePolygon, activeCameraContext.camera);
     const blobUrl = URL.createObjectURL(new Blob([draft.content], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = blobUrl;
@@ -352,44 +363,56 @@ export function RestrictedZoneView() {
       .flatMap((entry) =>
         entry.event.observations
           .filter((observation) => observation.type === 'ZONE_ENTRY')
-          .map((observation) => ({
-            id: entry.event.eventId,
-            rowKey: getZoneEventRowKey(entry.event.eventId, observation.trackId),
-            trackId: observation.trackId,
-            time: `${Math.floor(entry.videoTimeSeconds / 60)
-              .toString()
-              .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
-              .toString()
-              .padStart(2, '0')}`,
-            person: `Track #${observation.trackId}`,
-            zone: `Region ${(observation.regionId ?? 'unknown').slice(0, 8)}`,
-            camera: entry.event.cameraExternalId,
-            identity: 'Unknown',
-            authorization: 'Backend evaluation required',
-            result: 'Technical entry',
-          })),
+          .map((observation) => {
+            const context = resolveCameraAndWorkArea(
+              entry.event.cameraExternalId,
+              observation.regionId,
+              'CAM-04',
+            );
+            return {
+              id: entry.event.eventId,
+              rowKey: getZoneEventRowKey(entry.event.eventId, observation.trackId),
+              trackId: observation.trackId,
+              time: `${Math.floor(entry.videoTimeSeconds / 60)
+                .toString()
+                .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
+                .toString()
+                .padStart(2, '0')}`,
+              person: `Track #${observation.trackId}`,
+              zone: context.workArea,
+              camera: context.camera,
+              identity: 'Unknown',
+              authorization: 'Backend evaluation required',
+              result: 'Technical entry',
+            };
+          }),
       )
       .slice(-20)
       .reverse();
   }, [aiTimeline]);
 
+  // Truly filters the loaded Zone events list
   const displayedEvents = useMemo(() => {
-    let result = events;
-    if (activeFilterWorker !== null) {
-      result = result.filter((e) => e.trackId === activeFilterWorker);
-    }
-    return result;
-  }, [events, activeFilterWorker]);
+    return filterZoneEvents(events, {
+      workerTrackId: activeFilterWorker,
+      activeOnly: zoneFilter === 'ACTIVE_ONLY',
+    });
+  }, [events, activeFilterWorker, zoneFilter]);
 
   const openReviewFromDetection = () => {
     if (!testDetection) return;
+    const context = resolveCameraAndWorkArea(
+      testDetection.cameraExternalId || aiTimeline?.cameraExternalId,
+      testDetection.regionId,
+      'CAM-04',
+    );
     setSelectedIncident({
       id: testDetection.eventId,
       rowKey: `${testDetection.eventId}-${testDetection.trackId ?? 0}`,
       trackId: testDetection.trackId ?? 0,
       person: testDetection.trackId !== null ? `Track #${testDetection.trackId}` : 'Unknown Person',
-      zone: 'Crane Operation Area',
-      camera: 'CAM-04',
+      zone: context.workArea,
+      camera: context.camera,
       identity: 'Unknown',
       authorization: 'Backend evaluation required',
       result: testDetection.active ? 'Zone Entry Observation' : 'Scanning Video',
@@ -577,10 +600,10 @@ export function RestrictedZoneView() {
           <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white">
             <div className="flex flex-col gap-0.5">
               <span className="font-bold text-sm tracking-wide text-white drop-shadow-md">
-                CAM-04
+                {activeCameraContext.camera}
               </span>
               <span className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md">
-                CRANE OPERATION AREA
+                {activeCameraContext.workArea}
               </span>
             </div>
             <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm">
@@ -689,14 +712,16 @@ export function RestrictedZoneView() {
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                   Camera
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">CAM-04</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {activeCameraContext.camera}
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                   Zone
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1 truncate">
-                  Crane Operation Area
+                  {activeCameraContext.workArea}
                 </p>
               </div>
               <div>
@@ -834,7 +859,7 @@ export function RestrictedZoneView() {
 
       {/* Bottom Table Section: Recent Zone Events */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-slate-900">Recent Zone Events</h3>
             <p className="text-xs text-slate-500 mt-1">
@@ -842,17 +867,36 @@ export function RestrictedZoneView() {
               {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
             </p>
           </div>
-          <button
-            onClick={() => setTimeFilter((prev) => (prev === '24h' ? 'all' : '24h'))}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              timeFilter === '24h'
-                ? 'border-orange-200 bg-orange-50 text-[#F66B17]'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            <IconClock className="w-3.5 h-3.5" />
-            <span>{timeFilter === '24h' ? 'Last 24 hours (Active)' : 'All Time'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setZoneFilter('ALL')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                zoneFilter === 'ALL'
+                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              All Events ({events.length})
+            </button>
+            <button
+              onClick={() => setZoneFilter('ACTIVE_ONLY')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                zoneFilter === 'ACTIVE_ONLY'
+                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Zone Entries (
+              {
+                events.filter(
+                  (e) =>
+                    e.result.toLowerCase().includes('entry') ||
+                    e.result.toLowerCase().includes('violation'),
+                ).length
+              }
+              )
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

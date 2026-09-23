@@ -1,5 +1,4 @@
 import React from 'react';
-import { IconClock } from '../icons';
 
 export interface TableColumn<T> {
   header: string;
@@ -33,10 +32,7 @@ export function EventsTable<T>({
             <h3 className="text-lg font-bold text-slate-900 tracking-tight">{title}</h3>
             <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
           </div>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all active:scale-[0.98]">
-            <IconClock className="w-3.5 h-3.5" />
-            <span>Last 24 hours</span>
-          </button>
+
         </div>
 
         {/* Table Content */}

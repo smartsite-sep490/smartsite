@@ -202,3 +202,88 @@ export function exportZoneBrowserDraft(
     label: 'Browser-local draft (not a contract v1 configuration)',
   };
 }
+
+/**
+ * Resolves the cameraExternalId and human-readable work area without fabricating fake codes.
+ * Binds directly to the selected event or detection metadata.
+ */
+export function resolveCameraAndWorkArea(
+  cameraExternalId?: string | null,
+  regionId?: string | null,
+  defaultCamera = 'Chưa có mã camera',
+): { camera: string; workArea: string } {
+  const camera = (cameraExternalId && cameraExternalId.trim()) || defaultCamera;
+
+  let workArea: string;
+  if (regionId && regionId.trim()) {
+    workArea = `Region ${regionId.trim()}`;
+  } else if (camera === 'CAM-07') {
+    workArea = 'Work Area B';
+  } else if (camera === 'CAM-04') {
+    workArea = 'Crane Operation Area';
+  } else {
+    workArea = `Zone (${camera})`;
+  }
+
+  return { camera, workArea };
+}
+
+export interface PpeFilterOptions {
+  workerTrackId?: number | null;
+  itemType?: 'ALL' | 'HARD_HAT' | 'SAFETY_VEST';
+}
+
+/**
+ * Truly filters the loaded PPE events list so that the table changes according to user selection.
+ */
+export function filterPpeEvents<
+  T extends { trackId: number; ppeItem?: 'HARD_HAT' | 'SAFETY_VEST'; issue: string },
+>(events: T[], options: PpeFilterOptions): T[] {
+  let result = events;
+  if (options.workerTrackId !== null && options.workerTrackId !== undefined) {
+    result = result.filter((e) => e.trackId === options.workerTrackId);
+  }
+  if (options.itemType === 'HARD_HAT') {
+    result = result.filter(
+      (e) =>
+        e.ppeItem === 'HARD_HAT' ||
+        e.issue.toLowerCase().includes('hard hat') ||
+        e.issue.toLowerCase().includes('helmet'),
+    );
+  } else if (options.itemType === 'SAFETY_VEST') {
+    result = result.filter(
+      (e) => e.ppeItem === 'SAFETY_VEST' || e.issue.toLowerCase().includes('vest'),
+    );
+  }
+  return result;
+}
+
+export interface ZoneFilterOptions {
+  workerTrackId?: number | null;
+  regionId?: string | null;
+  activeOnly?: boolean;
+}
+
+/**
+ * Truly filters the loaded Zone events list so that the table changes according to user selection.
+ */
+export function filterZoneEvents<T extends { trackId: number; zone: string; result: string }>(
+  events: T[],
+  options: ZoneFilterOptions,
+): T[] {
+  let result = events;
+  if (options.workerTrackId !== null && options.workerTrackId !== undefined) {
+    result = result.filter((e) => e.trackId === options.workerTrackId);
+  }
+  if (options.regionId) {
+    result = result.filter((e) => e.zone.toLowerCase().includes(options.regionId!.toLowerCase()));
+  }
+  if (options.activeOnly) {
+    result = result.filter(
+      (e) =>
+        e.result.toLowerCase().includes('violation') || e.result.toLowerCase().includes('entry'),
+    );
+  }
+  return result;
+}
+

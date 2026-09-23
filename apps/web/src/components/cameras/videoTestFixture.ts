@@ -38,10 +38,12 @@ export interface AiVideoTimeline {
 export interface VideoTestDetection {
   active: boolean;
   boundingBox: NormalizedBoundingBox | null;
+  cameraExternalId?: string;
   confidence: number | null;
   eventId: string;
   label: string;
   ppeStatus: Record<'HARD_HAT' | 'SAFETY_VEST', 'PRESENT' | 'MISSING' | 'UNKNOWN'>;
+  regionId?: string;
   timecode: string;
   trackId: number | null;
 }
@@ -114,10 +116,12 @@ function detectionFor(
     return {
       active: false,
       boundingBox: null,
+      cameraExternalId: timeline?.cameraExternalId,
       confidence: null,
       eventId: timeline ? `${type}-NO-EVENT` : `${type}-WAITING-FOR-AI-RUN`,
       label: timeline ? `${type} NO EVENT` : `${type} WAITING FOR AI RUN`,
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
+      regionId: undefined,
       timecode: formatTimecode(videoTimeline.currentTime),
       trackId: null,
     };
@@ -150,10 +154,12 @@ function detectionFor(
   return {
     active: true,
     boundingBox: person?.boundingBox ?? null,
+    cameraExternalId: match.entry.event.cameraExternalId,
     confidence: match.observation.confidence ?? person?.confidence ?? null,
     eventId: match.entry.event.eventId,
     label: `${type} ${detail}`,
     ppeStatus,
+    regionId: match.observation.regionId,
     timecode: formatTimecode(match.entry.videoTimeSeconds),
     trackId: match.observation.trackId,
   };
@@ -202,12 +208,14 @@ export function getPpeVideoTestDetections(
     return {
       active: Boolean(missingItem),
       boundingBox: person?.boundingBox ?? null,
+      cameraExternalId: match.entry.event.cameraExternalId,
       confidence: missingItem?.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
       label: missingItem
         ? `MF05 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
         : 'MF05 PPE OK',
       ppeStatus,
+      regionId: missingItem?.regionId ?? trackObservations[0]?.regionId,
       timecode: formatTimecode(match.entry.videoTimeSeconds),
       trackId,
     };
@@ -247,10 +255,12 @@ export function getZoneVideoTestDetections(
     return {
       active: true,
       boundingBox: person?.boundingBox ?? null,
+      cameraExternalId: match.entry.event.cameraExternalId,
       confidence: observation.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
       label: 'MF06 ZONE ENTRY',
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
+      regionId: observation.regionId,
       timecode: formatTimecode(match.entry.videoTimeSeconds),
       trackId: observation.trackId,
     };

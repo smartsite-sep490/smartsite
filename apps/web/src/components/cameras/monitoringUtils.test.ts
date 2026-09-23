@@ -8,6 +8,9 @@ import {
   mapContainerPointToVideoNormalized,
   mapVideoNormalizedToContainerNormalized,
   exportZoneBrowserDraft,
+  resolveCameraAndWorkArea,
+  filterPpeEvents,
+  filterZoneEvents,
 } from './monitoringUtils';
 import type { VideoTestDetection } from './videoTestFixture';
 
@@ -231,4 +234,69 @@ describe('monitoringUtils', () => {
       expect(parsed.schemaVersion).toBeUndefined(); // Does NOT claim to be contract v1
     });
   });
+
+  describe('resolveCameraAndWorkArea', () => {
+    it('uses explicit cameraExternalId from event instead of hardcoding CAM-07', () => {
+      const result = resolveCameraAndWorkArea('CAM-12', 'crane-staging');
+      expect(result.camera).toBe('CAM-12');
+      expect(result.workArea).toBe('Region crane-staging');
+    });
+
+    it('derives default workArea for CAM-07 when regionId is not specified', () => {
+      const result = resolveCameraAndWorkArea('CAM-07', null);
+      expect(result.camera).toBe('CAM-07');
+      expect(result.workArea).toBe('Work Area B');
+    });
+
+    it('derives default workArea for CAM-04 when regionId is not specified', () => {
+      const result = resolveCameraAndWorkArea('CAM-04', null);
+      expect(result.camera).toBe('CAM-04');
+      expect(result.workArea).toBe('Crane Operation Area');
+    });
+
+    it('generates descriptive zone for unassigned camera without fabricating fake code', () => {
+      const result = resolveCameraAndWorkArea('CAM-88', null);
+      expect(result.camera).toBe('CAM-88');
+      expect(result.workArea).toBe('Zone (CAM-88)');
+    });
+  });
+
+  describe('Event Filtering', () => {
+    const mockPpeEvents = [
+      { id: '1', rowKey: '1-1-HARD_HAT', trackId: 1, ppeItem: 'HARD_HAT' as const, issue: 'Missing Hard Hat' },
+      { id: '2', rowKey: '2-1-SAFETY_VEST', trackId: 1, ppeItem: 'SAFETY_VEST' as const, issue: 'Missing Safety Vest' },
+      { id: '3', rowKey: '3-2-HARD_HAT', trackId: 2, ppeItem: 'HARD_HAT' as const, issue: 'Missing Hard Hat' },
+    ];
+
+    it('filters PPE events by item type truly changing list length', () => {
+      const hardHatOnly = filterPpeEvents(mockPpeEvents, { itemType: 'HARD_HAT' });
+      expect(hardHatOnly.length).toBe(2);
+      expect(hardHatOnly.every((e) => e.ppeItem === 'HARD_HAT')).toBe(true);
+
+      const vestOnly = filterPpeEvents(mockPpeEvents, { itemType: 'SAFETY_VEST' });
+      expect(vestOnly.length).toBe(1);
+      expect(vestOnly[0]?.ppeItem).toBe('SAFETY_VEST');
+
+      const all = filterPpeEvents(mockPpeEvents, { itemType: 'ALL' });
+      expect(all.length).toBe(3);
+    });
+
+    it('filters PPE events by worker track ID', () => {
+      const worker2Only = filterPpeEvents(mockPpeEvents, { workerTrackId: 2 });
+      expect(worker2Only.length).toBe(1);
+      expect(worker2Only[0]?.trackId).toBe(2);
+    });
+
+    const mockZoneEvents = [
+      { id: '1', trackId: 10, zone: 'Region crane-01', result: 'Zone Entry Violation' },
+      { id: '2', trackId: 20, zone: 'Region walkway', result: 'Access Valid' },
+    ];
+
+    it('filters Zone events by active violation status', () => {
+      const violationsOnly = filterZoneEvents(mockZoneEvents, { activeOnly: true });
+      expect(violationsOnly.length).toBe(1);
+      expect(violationsOnly[0]?.trackId).toBe(10);
+    });
+  });
 });
+
