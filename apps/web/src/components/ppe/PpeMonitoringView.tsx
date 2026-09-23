@@ -1,367 +1,880 @@
-import React, { useState } from 'react';
-import { CameraFeed } from '../shared/CameraFeed';
-import { EventDetailPanel } from '../shared/EventDetailPanel';
-import { EventsTable, TableColumn, StatusBadge } from '../shared/EventsTable';
-import { ActionDrawer } from '../shared/ActionDrawer';
-import { CameraSelectorBar, CameraModel } from '../shared/CameraSelectorBar';
-import { IconCheck, IconX, IconAlertTriangle } from '../icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  IconCheck,
+  IconX,
+  IconAlertTriangle,
+  IconPlay,
+  IconPause,
+  IconVolume,
+  IconMaximize,
+  IconGrid,
+} from '../icons';
+import {
+  getPpeVideoTestDetections,
+  loadAiVideoTimeline,
+  type AiVideoTimeline,
+  type VideoTestDetection,
+  type VideoTestTimeline,
+} from '../cameras/videoTestFixture';
+import {
+  buildAiWebSocketUrl,
+  getEffectiveDetections,
+  getPpeEventRowKey,
+  formatClockTime,
+  resolveCameraAndWorkArea,
+  filterPpeEvents,
+} from '../cameras/monitoringUtils';
 
-type PPEStatus = 'Open' | 'Under Review' | 'Needs Review' | 'Logged';
-
-interface PPEEvent {
+interface PpeReviewItem {
   id: string;
-  time: string;
+  rowKey: string;
+  trackId: number;
+  ppeItem?: 'HARD_HAT' | 'SAFETY_VEST';
   worker: string;
-  workerId: string;
   camera: string;
+  workArea: string;
   issue: string;
   confidence: string;
-  status: PPEStatus;
-  detectedPPE: string[]; // List of PPE that AI successfully detected
-}
-
-interface WorkAreaPolicy {
-  location: string;
-  requiredPPE: string[];
+  status: string;
+  time: string;
 }
 
 export function PpeMonitoringView() {
-  const [selectedCameraId, setSelectedCameraId] = useState<string>('CAM-07');
-  const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
-  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const pausedViolationRef = useRef<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+  const [selectedReview, setSelectedReview] = useState<PpeReviewItem | null>(null);
+  const [videoTimeline, setVideoTimeline] = useState<VideoTestTimeline>({
+    currentTime: 0,
+    duration: 0,
+  });
+  const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
+  const [liveDetections, setLiveDetections] = useState<VideoTestDetection[] | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [socketRuntimeError, setSocketRuntimeError] = useState<string | null>(null);
+  const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
+  const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
+  const [ppeFilter, setPpeFilter] = useState<'ALL' | 'HARD_HAT' | 'SAFETY_VEST'>('ALL');
+  const [violationSnapshot, setViolationSnapshot] = useState<{
+    eventId: string;
+    imageUrl: string;
+    timecode: string;
+  } | null>(null);
 
-  const cameras: CameraModel[] = [
-    { id: 'CAM-07', name: 'Tower Crane 1 Base', location: 'Work Area B', status: 'online', capabilities: ['PPE', 'ZONE'] },
-    { id: 'CAM-02', name: 'Scaffold Level 4', location: 'Tower B', status: 'online', capabilities: ['PPE'] },
-    { id: 'CAM-05', name: 'Main Entrance', location: 'Tower A', status: 'online', capabilities: ['PPE', 'FACIAL_REC'] },
-  ];
+  const rawUrl = import.meta.env.VITE_AI_WS_URL;
+  const token =
+    import.meta.env.VITE_AI_BACKEND_SERVICE_TOKEN ??
+    import.meta.env.VITE_AI_WS_TOKEN ??
+    import.meta.env.VITE_AI_SERVICE_TOKEN ??
+    '';
 
-  const workAreaPolicies: WorkAreaPolicy[] = [
-    { location: 'Work Area B', requiredPPE: ['Helmet', 'Safety Vest', 'Gloves'] },
-    { location: 'Tower B', requiredPPE: ['Helmet', 'Safety Vest'] },
-    { location: 'Tower A', requiredPPE: ['Helmet', 'Safety Vest'] },
-  ];
+  const wsConfig = useMemo(() => {
+    return buildAiWebSocketUrl(rawUrl, token);
+  }, [rawUrl, token]);
 
-  const allEvents: PPEEvent[] = [
-    {
-      id: 'EVT-2048',
-      time: '10:42',
-      worker: 'Nguyen Van A',
-      workerId: 'WK-1024',
-      camera: 'CAM-07',
-      issue: 'Missing Gloves',
-      confidence: '97%',
-      status: 'Open',
-      detectedPPE: ['Helmet', 'Safety Vest'], // Required: Helmet, Vest, Gloves. Missing: Gloves.
-    },
-    {
-      id: 'EVT-2042',
-      time: '10:36',
-      worker: 'Tran Van B',
-      workerId: 'WK-1025',
-      camera: 'CAM-02',
-      issue: 'Missing Helmet',
-      confidence: '95%',
-      status: 'Under Review',
-      detectedPPE: ['Safety Vest'], // Required: Helmet, Vest. Missing: Helmet.
-    },
-    {
-      id: 'EVT-2035',
-      time: '10:21',
-      worker: 'Unknown',
-      workerId: 'Unknown',
-      camera: 'CAM-05',
-      issue: 'Uncertain PPE',
-      confidence: '72%',
-      status: 'Needs Review',
-      detectedPPE: ['Helmet'], // Required: Helmet, Vest. Missing: Vest (uncertain).
-    },
-    {
-      id: 'EVT-2029',
-      time: '09:58',
-      worker: 'Le Van C',
-      workerId: 'WK-1026',
-      camera: 'CAM-07',
-      issue: 'Compliant',
-      confidence: '98%',
-      status: 'Logged',
-      detectedPPE: ['Helmet', 'Safety Vest', 'Gloves'],
-    },
-  ];
+  const socketError = wsConfig.error ?? socketRuntimeError;
 
-  const activeCamera = (cameras.find(c => c.id === selectedCameraId) || cameras[0]) as CameraModel;
-  const filteredEvents = allEvents.filter(e => e.camera === activeCamera.id);
-  const activeEvent = filteredEvents.find(e => e.id === selectedAlert) || filteredEvents[0];
-  const activePolicy = workAreaPolicies.find(p => p.location === activeCamera.location) || { location: activeCamera.location, requiredPPE: [] };
+  // Update real-time clock every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setClockTime(formatClockTime());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const getMissingItems = (event: PPEEvent) => {
-    return activePolicy.requiredPPE.filter(item => !event.detectedPPE.includes(item));
-  };
-  const activeMissingItems = activeEvent ? getMissingItems(activeEvent) : [];
+  // Load timeline fixture for fallback / demo replay
+  useEffect(() => {
+    let cancelled = false;
+    void loadAiVideoTimeline('/assets/ppe-ai.timeline.json')
+      .then((timeline) => {
+        if (!cancelled) setAiTimeline(timeline);
+      })
+      .catch(() => {
+        if (!cancelled) setAiTimeline(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const getResultState = (status: PPEStatus) => {
-    if (status === 'Logged') return { type: 'success' as const, title: 'COMPLIANT' };
-    if (status === 'Needs Review') return { type: 'warning' as const, title: 'NEEDS REVIEW' };
-    return { type: 'error' as const, title: 'PPE VIOLATION' };
-  };
-  const activeResult = activeEvent ? getResultState(activeEvent.status) : { type: 'success' as const, title: 'MONITORING ACTIVE' };
+  // AI Realtime WebSocket connection with auth token
+  useEffect(() => {
+    if (!wsConfig.url) {
+      return;
+    }
 
-  const columns: TableColumn<PPEEvent>[] = [
-    { header: 'Time', key: 'time', render: (item) => <span className="font-mono text-slate-500 text-xs">{item.time}</span> },
-    { header: 'Worker', key: 'worker', render: (item) => <span className="font-semibold text-slate-900">{item.worker}</span> },
-    { header: 'Issue', key: 'issue', render: (item) => <span className="font-medium text-slate-900">{item.issue}</span> },
-    { header: 'Confidence', key: 'confidence', render: (item) => <span className="font-semibold text-slate-900">{item.confidence}</span> },
-    {
-      header: 'Status',
-      key: 'status',
-      render: (item) => {
-        let type: 'error' | 'warning' | 'success' | 'info' = 'info';
-        if (item.status === 'Open') type = 'error';
-        if (item.status === 'Logged') type = 'success';
-        if (item.status === 'Under Review' || item.status === 'Needs Review') type = 'warning';
-        return <StatusBadge status={item.status} type={type} />;
-      },
-    },
-    {
-      header: 'Action',
-      key: 'action',
-      align: 'right',
-      render: (item) => (
-        <button
-          onClick={() => setSelectedAlert(item.id)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] ${
-            selectedAlert === item.id
-              ? 'bg-[#041D2E] text-white'
-              : item.status === 'Open' || item.status === 'Needs Review'
-              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          {item.status === 'Logged' ? 'View' : 'Select'}
-        </button>
-      ),
-    },
-  ];
+    let unmounted = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let currentSocket: WebSocket | null = null;
 
-  const detailsGrid = activeEvent ? [
-    { label: 'Worker', value: activeEvent.worker },
-    { label: 'Worker ID', value: activeEvent.workerId },
-    { label: 'Camera', value: activeEvent.camera },
-    { label: 'Work Area', value: activeCamera.location },
-    { label: 'Detected', value: activeEvent.time + ':16' },
-    { label: 'Confidence', value: activeEvent.confidence },
-  ] : [
-    { label: 'Status', value: 'System Online' },
-    { label: 'Camera', value: activeCamera.id },
-    { label: 'Work Area', value: activeCamera.location },
-    { label: 'Detections', value: '0 Active' },
-  ];
+    const connect = () => {
+      if (unmounted) return;
+      try {
+        const socket = new WebSocket(wsConfig.url!);
+        currentSocket = socket;
 
-  const checklistSlot = activeEvent ? (
-    <div>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-3">
-        PPE CHECK - {activePolicy.location.toUpperCase()}
-      </p>
-      <div className="space-y-1.5">
-        {activePolicy.requiredPPE.map((item) => {
-          const isMissing = !activeEvent.detectedPPE.includes(item);
-          let itemState = isMissing ? 'missing' : 'detected';
-          if (activeEvent.status === 'Needs Review' && isMissing) {
-            itemState = 'uncertain';
+        socket.onopen = () => {
+          if (unmounted) return;
+          setSocketConnected(true);
+          setSocketRuntimeError(null);
+        };
+
+        socket.onmessage = (message) => {
+          if (unmounted) return;
+          try {
+            const payload = JSON.parse(message.data) as {
+              type?: string;
+              message?: string;
+              cameraExternalId?: string;
+              detections?: Array<{
+                trackId: number;
+                confidence: number;
+                boundingBox: VideoTestDetection['boundingBox'];
+                ppeStatus: VideoTestDetection['ppeStatus'];
+                active: boolean;
+                label: string;
+                regionId?: string;
+              }>;
+            };
+
+            if (payload.type === 'error') {
+              setSocketRuntimeError(payload.message ?? 'Realtime AI socket error');
+              return;
+            }
+
+            if (payload.type !== 'frame' || !payload.detections) return;
+
+            setSocketRuntimeError(null);
+            setLiveDetections(
+              payload.detections.map((detection) => ({
+                active: detection.active,
+                boundingBox: detection.boundingBox,
+                cameraExternalId: payload.cameraExternalId,
+                confidence: detection.confidence,
+                eventId: `REALTIME-TRACK-${detection.trackId}`,
+                label: `MF05 ${detection.label}`,
+                ppeStatus: detection.ppeStatus,
+                regionId: detection.regionId,
+                timecode: 'LIVE',
+                trackId: detection.trackId,
+              })),
+            );
+          } catch {
+            // Keep last frame on malformed message
           }
+        };
 
-          return (
-            <div key={item} className={`flex items-center justify-between p-3 rounded-xl border ${itemState === 'missing' ? 'bg-red-50/50 border-red-100' : itemState === 'uncertain' ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
-              <div className="flex flex-col gap-0.5">
-                <p className="font-semibold text-slate-900 text-xs">{item}</p>
-                <p className={`text-[11px] font-medium ${itemState === 'missing' ? 'text-red-500' : itemState === 'uncertain' ? 'text-amber-500' : 'text-slate-500'}`}>
-                  {itemState === 'missing' ? 'Missing' : itemState === 'uncertain' ? 'Uncertain Detection' : 'Detected'}
-                </p>
-              </div>
-              {itemState === 'missing' ? <IconX className="w-5 h-5 text-red-500" /> : itemState === 'uncertain' ? <IconAlertTriangle className="w-5 h-5 text-amber-500" /> : <IconCheck className="w-5 h-5 text-emerald-500" />}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  ) : (
-    <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-100 rounded-xl mt-4">
-      <IconCheck className="w-8 h-8 text-emerald-500 mb-2 opacity-80" />
-      <p className="text-xs font-bold text-slate-600">ALL COMPLIANT</p>
-      <p className="text-[11px] text-slate-400 text-center mt-1">No PPE violations currently detected in this work area.</p>
-    </div>
+        socket.onerror = () => {
+          if (unmounted) return;
+          setSocketConnected(false);
+          setSocketRuntimeError('WebSocket connection error');
+          setLiveDetections(null);
+        };
+
+        socket.onclose = () => {
+          if (unmounted) return;
+          setSocketConnected(false);
+          setLiveDetections(null);
+          // Auto-reconnect when still mounted
+          reconnectTimeout = setTimeout(connect, 3000);
+        };
+      } catch (err) {
+        if (unmounted) return;
+        setSocketConnected(false);
+        setSocketRuntimeError(err instanceof Error ? err.message : 'Failed to connect WebSocket');
+        setLiveDetections(null);
+      }
+    };
+
+    connect();
+
+    return () => {
+      unmounted = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (currentSocket) {
+        currentSocket.onopen = null;
+        currentSocket.onmessage = null;
+        currentSocket.onerror = null;
+        currentSocket.onclose = null;
+        currentSocket.close();
+      }
+    };
+  }, [wsConfig.url]);
+
+  const fallbackDetections = useMemo(
+    () => getPpeVideoTestDetections(videoTimeline, aiTimeline),
+    [videoTimeline, aiTimeline],
   );
+
+  const { detections: ppeDetections, isLive } = getEffectiveDetections(
+    liveDetections,
+    fallbackDetections,
+  );
+
+  const testDetection = useMemo(() => {
+    if (ppeDetections.length === 0) return null;
+    return ppeDetections.find((detection) => detection.active) ?? ppeDetections[0] ?? null;
+  }, [ppeDetections]);
+
+  // Derive cameraExternalId and human-readable work area directly from active detection or timeline
+  const activeCameraContext = useMemo(() => {
+    return resolveCameraAndWorkArea(
+      testDetection?.cameraExternalId || aiTimeline?.cameraExternalId,
+      testDetection?.regionId,
+      'Chưa có mã camera',
+    );
+  }, [testDetection?.cameraExternalId, testDetection?.regionId, aiTimeline?.cameraExternalId]);
+
+  // Snapshot PPE: only auto-pause when playing timeline fixture; do not pause local video on websocket frames
+  useEffect(() => {
+    if (isLive) {
+      pausedViolationRef.current = null;
+      return;
+    }
+
+    if (!testDetection || !testDetection.active) {
+      pausedViolationRef.current = null;
+      return;
+    }
+
+    if (pausedViolationRef.current === testDetection.eventId) return;
+
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+    pausedViolationRef.current = testDetection.eventId;
+    video.pause();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const snapshot = {
+      eventId: testDetection.eventId,
+      imageUrl: canvas.toDataURL('image/jpeg', 0.9),
+      timecode: testDetection.timecode,
+    };
+
+    const frameId = window.requestAnimationFrame(() => {
+      setViolationSnapshot(snapshot);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isLive, testDetection]);
+
+  const updateVideoTimeline = (video: HTMLVideoElement) => {
+    setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
+  };
+
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      void video.play();
+    } else {
+      video.pause();
+    }
+  };
+
+  const toggleMuted = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+  };
+
+  const ppeEvents: PpeReviewItem[] = useMemo(() => {
+    return (aiTimeline?.entries ?? [])
+      .flatMap((entry) =>
+        entry.event.observations
+          .filter((observation) => observation.type === 'PPE' && observation.status === 'MISSING')
+          .map((observation) => {
+            const person = entry.event.observations.find(
+              (candidate) =>
+                candidate.type === 'PERSON' && candidate.trackId === observation.trackId,
+            );
+            const context = resolveCameraAndWorkArea(
+              entry.event.cameraExternalId,
+              observation.regionId,
+              'Chưa có mã camera',
+            );
+            return {
+              id: entry.event.eventId,
+              rowKey: getPpeEventRowKey(entry.event.eventId, observation.trackId, observation.ppeItem),
+              trackId: observation.trackId,
+              ppeItem: observation.ppeItem,
+              time: `${Math.floor(entry.videoTimeSeconds / 60)
+                .toString()
+                .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
+                .toString()
+                .padStart(2, '0')}`,
+              worker: `Track #${observation.trackId}`,
+              camera: context.camera,
+              workArea: context.workArea,
+              issue: `Missing ${observation.ppeItem === 'HARD_HAT' ? 'Hard Hat' : 'Safety Vest'}`,
+              confidence: person?.confidence ? `${Math.round(person.confidence * 100)}%` : '—',
+              status: 'Technical observation',
+            };
+          }),
+      )
+      .slice(-20)
+      .reverse();
+  }, [aiTimeline]);
+
+  // Truly filters the loaded PPE events list
+  const displayedEvents = useMemo(() => {
+    return filterPpeEvents(ppeEvents, {
+      workerTrackId: activeFilterWorker,
+      itemType: ppeFilter,
+    });
+  }, [ppeEvents, activeFilterWorker, ppeFilter]);
+
+  const openReviewFromDetection = () => {
+    if (!testDetection) return;
+    const context = resolveCameraAndWorkArea(
+      testDetection.cameraExternalId || aiTimeline?.cameraExternalId,
+      testDetection.regionId,
+      'Chưa có mã camera',
+    );
+    setSelectedReview({
+      id: testDetection.eventId,
+      rowKey: `${testDetection.eventId}-${testDetection.trackId ?? 0}`,
+      trackId: testDetection.trackId ?? 0,
+      worker: testDetection.trackId !== null ? `Track #${testDetection.trackId}` : 'Unknown Worker',
+      camera: context.camera,
+      workArea: context.workArea,
+      issue: testDetection.label,
+      confidence:
+        testDetection.confidence !== null ? `${Math.round(testDetection.confidence * 100)}%` : '—',
+      status: testDetection.active ? 'Observation Active' : 'Scanning',
+      time: isLive ? clockTime : testDetection.timecode,
+    });
+  };
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
+      {/* Main Interactive Viewport: Camera Video Feed (829px) + Right Card (355px) */}
+      <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
+        {/* Left: Camera Feed */}
+        <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
+          {/* Local MF05 test fixture driven by the video timeline. */}
+          <div className="absolute inset-0">
+            <video
+              ref={videoRef}
+              src="/assets/morteza_ppe_test_video.mp4"
+              poster="/assets/ppe-camera-view.png"
+              autoPlay
+              muted={isMuted}
+              loop
+              playsInline
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onLoadedMetadata={(event) => updateVideoTimeline(event.currentTarget)}
+              onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
+              aria-label="PPE test video"
+              className="w-full h-full object-cover"
+            />
 
-      <CameraSelectorBar
-        siteName="Tower A"
-        contextName={activeCamera.location}
-        cameras={cameras}
-        activeCameraId={selectedCameraId}
-        onSelectCamera={(id) => {
-          setSelectedCameraId(id);
-          setSelectedAlert(null); // Reset selection when camera changes
-        }}
-      />
-
-      <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start">
-
-        {/* Camera Feed */}
-        <CameraFeed
-          cameraId={activeCamera.id}
-          zoneName={activeCamera.location}
-          imageUrl={activeCamera.id === 'CAM-07' ? "/assets/ppe-camera-view.png" : "/assets/crane-camera-view.png"}
-        >
-          {activeEvent && activeEvent.status !== 'Logged' && (
-            <>
-              <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
-              <div
-                className="absolute border-[1.6px] border-[#F66B17] pointer-events-none transition-all duration-300"
-                style={{ left: '42.0%', top: '30.0%', width: '12.0%', height: '55.0%' }}
-              >
-                <div className="absolute -top-[20px] left-[-1.6px] px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-widest shadow-sm">
-                  {activeEvent.workerId !== 'Unknown' ? `WORKER #${activeEvent.workerId.replace('WK-', '')} - ${activeEvent.confidence}` : `UNKNOWN - ${activeEvent.confidence}`}
-                </div>
-              </div>
-            </>
-          )}
-        </CameraFeed>
-
-        {/* Detail Panel */}
-        <EventDetailPanel
-          title="AI DETECTION"
-          eventId={activeEvent ? activeEvent.id : "NO-EVENT"}
-          details={detailsGrid}
-          checklistSlot={checklistSlot}
-          resultStatus={activeResult.type}
-          resultTitle={activeResult.title}
-          resultMessage={activeEvent ? (activeResult.title === 'COMPLIANT' ? 'All required PPE items verified.' : activeResult.title === 'NEEDS REVIEW' ? `Uncertain evidence for: ${activeMissingItems.join(', ')}` : `Missing required PPE: ${activeMissingItems.join(', ')}`) : 'System is continuously scanning for PPE violations.'}
-          primaryActionLabel={activeEvent && activeEvent.status !== 'Logged' ? (activeEvent.status === 'Needs Review' ? "Review Detection" : "Review Alert") : "View Event"}
-          onPrimaryAction={() => {
-            if (activeEvent) {
-              setSelectedAlert(activeEvent.id);
-            }
-          }}
-          secondaryActionLabel={activeEvent && activeEvent.workerId !== 'Unknown' ? "View Worker" : "View Area Policies"}
-          onSecondaryAction={() => {
-            if (activeEvent && activeEvent.workerId !== 'Unknown') {
-              setSelectedWorker(activeEvent.workerId);
-            } else {
-              alert(`Showing PPE policies for ${activeCamera.location}...`);
-            }
-          }}
-        />
-      </div>
-
-      <EventsTable
-        title="Recent PPE Events"
-        subtitle={`Latest camera detections for ${activeCamera.name}.`}
-        data={filteredEvents}
-        columns={columns}
-        keyExtractor={(item) => item.id}
-      />
-
-      {/* Slide-over Drawer for Reviewing Event */}
-      {activeEvent && (
-        <ActionDrawer
-          isOpen={selectedAlert === activeEvent.id}
-          onClose={() => setSelectedAlert(null)}
-          title={activeResult.title === 'COMPLIANT' ? "Event Details" : activeResult.title === 'NEEDS REVIEW' ? "Detection Review" : "Violation Review"}
-          badge={activeEvent.id}
-          badgeType={activeResult.type === 'success' ? 'info' : activeResult.type}
-        >
-          <div className="space-y-6 text-sm text-slate-600">
-            <p className="leading-relaxed">
-              {activeResult.title === 'COMPLIANT' ? (
-                <>AI verified all required safety items for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker}</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> ({activeEvent.confidence} confidence).</>
-              ) : activeResult.title === 'NEEDS REVIEW' ? (
-                <>AI detection is uncertain regarding <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> for an unidentified person in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong> ({activeEvent.confidence} confidence).</>
-              ) : (
-                <>AI confidently detected a missing safety item for worker <strong className="text-slate-900 font-semibold">{activeEvent.worker} ({activeEvent.workerId})</strong> in <strong className="text-slate-900 font-semibold">{activeCamera.location}</strong>. Missing item(s): <strong className="text-slate-900 font-semibold">{activeMissingItems.join(', ')}</strong> ({activeEvent.confidence} confidence).</>
-              )}
-            </p>
-
-            <div className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
-              <p className="font-bold text-slate-900 text-xs uppercase tracking-[0.1em]">Safety Protocol: {activePolicy.location}</p>
-              <p className="text-slate-700 text-xs leading-relaxed">
-                Personnel in this area are required to wear: <span className="font-semibold">{activePolicy.requiredPPE.join(', ')}</span> at all times while active work is occurring.
-              </p>
+            {/* AI Status Badge */}
+            <div
+              className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm ${
+                testDetection?.active
+                  ? 'bg-[#DF2225]/90 text-white'
+                  : 'bg-slate-900/75 text-white/80'
+              }`}
+            >
+              {isLive
+                ? 'MF05 AI REALTIME'
+                : aiTimeline
+                ? 'MF05 AI PIPELINE'
+                : 'MF05 AI OUTPUT REQUIRED'} ·{' '}
+              {testDetection ? (testDetection.active ? 'MISSING PPE' : 'SCANNING') : 'NO TARGETS'} ·{' '}
+              {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
             </div>
 
-            {activeResult.title !== 'COMPLIANT' && (
-              <div className="flex flex-col gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    alert(activeResult.title === 'NEEDS REVIEW' ? 'Flagged for further investigation.' : 'Notification dispatched to Site Supervisor.');
-                    setSelectedAlert(null);
+            {/* Horizontal scanning line */}
+            <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
+
+            {/* Render every tracked worker in the current frame */}
+            {ppeDetections.map((detection) =>
+              detection.boundingBox ? (
+                <div
+                  key={`${detection.eventId}-${detection.trackId}`}
+                  className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
+                    detection.active ? 'border-[#F66B17]' : 'border-emerald-400'
+                  }`}
+                  data-testid="mf05-test-detection"
+                  style={{
+                    top: `${detection.boundingBox.y1 * 100}%`,
+                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                    left: `${detection.boundingBox.x1 * 100}%`,
                   }}
-                  className="py-3 px-4 rounded-xl bg-[#F66B17] hover:bg-orange-700 text-white font-bold text-sm shadow-[0_2px_10px_rgba(246,107,23,0.3)] transition-all active:scale-[0.98]"
                 >
-                  {activeResult.title === 'NEEDS REVIEW' ? 'Flag for Investigation' : 'Notify Supervisor'}
-                </button>
-                <button
-                  onClick={() => {
-                    alert('Event dismissed.');
-                    setSelectedAlert(null);
-                  }}
-                  className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-[0.98]"
-                >
-                  Dismiss Event
-                </button>
+                  <div
+                    className={`absolute -top-[18px] left-[-1.6px] whitespace-nowrap px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-sm ${
+                      detection.active ? 'bg-[#F66B17]' : 'bg-emerald-600'
+                    }`}
+                  >
+                    {detection.label} · TRACK #{detection.trackId}
+                  </div>
+                </div>
+              ) : null,
+            )}
+
+            {/* Empty live frame indicator */}
+            {isLive && ppeDetections.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold">
+                  Live Feed Connected · No Workers Detected In Frame
+                </div>
               </div>
             )}
           </div>
-        </ActionDrawer>
-      )}
 
-      {/* Slide-over Drawer for Worker Profile */}
-      {selectedWorker && (
-        <ActionDrawer
-          isOpen={selectedWorker !== null}
-          onClose={() => setSelectedWorker(null)}
-          title="Worker Profile"
-          badge="Active"
-          badgeType="info"
-        >
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xl uppercase">
-                {selectedWorker === 'Unknown' ? '?' : 'NV'}
+          {/* Top Camera Metadata */}
+          <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white">
+            <div className="flex flex-col gap-0.5">
+              <span className="font-bold text-sm tracking-wide text-white drop-shadow-md">
+                {activeCameraContext.camera}
+              </span>
+              <span className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md">
+                {activeCameraContext.workArea}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isLive && socketConnected
+                    ? 'bg-[#DF2225] animate-ping'
+                    : socketError
+                    ? 'bg-amber-400'
+                    : 'bg-slate-400'
+                }`}
+              />
+              <span className="font-mono text-[10px] font-bold text-white tracking-wider">
+                {isLive && socketConnected
+                  ? `LIVE - ${clockTime}`
+                  : socketError
+                  ? 'OFFLINE (SOCKET ERROR)'
+                  : `TIMELINE - ${testDetection?.timecode ?? '00:00'}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Socket error message banner if present */}
+          {socketError && (
+            <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center gap-2 backdrop-blur-sm">
+              <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+              <span className="truncate">AI WebSocket: {socketError}</span>
+            </div>
+          )}
+
+          {/* Bottom Camera Controls */}
+          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={togglePlayback}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={toggleMuted}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                title="Sound"
+              >
+                <IconVolume className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button className="p-1.5 rounded hover:bg-white/15 text-white transition-colors" title="Grid">
+                <IconGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => void videoRef.current?.requestFullscreen()}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                title="Fullscreen"
+              >
+                <IconMaximize className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: AI Detection & PPE Check Card (355px) */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                AI DETECTION
+              </span>
+              <span className="font-mono text-[11px] font-semibold text-slate-500">
+                {testDetection?.eventId ?? 'NO-DETECTION'}
+              </span>
+            </div>
+
+            {/* 2-Column Details Grid */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {testDetection?.trackId !== null && testDetection?.trackId !== undefined
+                    ? `Worker (Track #${testDetection.trackId})`
+                    : 'Unassigned'}
+                </p>
               </div>
               <div>
-                <h4 className="text-lg font-bold text-slate-900">{selectedWorker === 'Unknown' ? 'Unknown Person' : activeEvent?.worker}</h4>
-                <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {selectedWorker}</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Worker ID</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {ppeDetections.map((detection) => `Track #${detection.trackId}`).join(', ') || '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Camera</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {activeCameraContext.camera}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Work Area</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {activeCameraContext.workArea}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Detected</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recognition Confidence</p>
+                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                  {testDetection?.confidence === null || testDetection?.confidence === undefined
+                    ? '—'
+                    : `${Math.round(testDetection.confidence * 100)}%`}
+                </p>
               </div>
             </div>
 
             <div className="h-px bg-slate-100 w-full" />
 
-            {selectedWorker === 'Unknown' ? (
-              <div className="py-8 px-4 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100 text-center">
-                <IconAlertTriangle className="w-8 h-8 text-slate-400 mb-3" />
-                <p className="text-slate-600 font-medium text-sm">Identity Unconfirmed</p>
-                <p className="text-slate-400 text-xs mt-1">No personnel profile or historical safety data is available for unidentified individuals.</p>
+            {/* PPE Check List */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+                PPE CHECK
+              </p>
+              <div className="space-y-2">
+                {ppeDetections.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No tracked individuals in current frame</p>
+                ) : (
+                  ppeDetections.map((detection) => {
+                    const helmet = detection.ppeStatus.HARD_HAT;
+                    const vest = detection.ppeStatus.SAFETY_VEST;
+                    return (
+                      <div key={`ppe-check-${detection.trackId}`} className="rounded-lg bg-slate-50 p-3">
+                        <p className="mb-2 text-[11px] font-bold text-slate-700">Track #{detection.trackId}</p>
+                        <div className="flex items-center justify-between text-xs">
+                          <span>
+                            Helmet ·{' '}
+                            {helmet === 'MISSING'
+                              ? 'Missing'
+                              : helmet === 'PRESENT'
+                              ? 'Detected'
+                              : 'Not assessed'}
+                          </span>
+                          {helmet === 'MISSING' ? (
+                            <IconX className="w-4 h-4 text-red-500" />
+                          ) : helmet === 'PRESENT' ? (
+                            <IconCheck className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <span className="text-[10px] text-slate-400">—</span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center justify-between text-xs">
+                          <span>
+                            Safety Vest ·{' '}
+                            {vest === 'MISSING'
+                              ? 'Missing'
+                              : vest === 'PRESENT'
+                              ? 'Detected'
+                              : 'Not assessed'}
+                          </span>
+                          {vest === 'MISSING' ? (
+                            <IconX className="w-4 h-4 text-red-500" />
+                          ) : vest === 'PRESENT' ? (
+                            <IconCheck className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <span className="text-[10px] text-slate-400">—</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            ) : (
-              <div className="space-y-4 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Role</span>
-                  <span className="text-slate-900 font-semibold">Steel Worker</span>
+            </div>
+
+            {/* Result Box */}
+            <div className="pt-2">
+              <div
+                className={`border-l-[3px] pl-3 ${
+                  testDetection?.active ? 'border-red-500' : 'border-slate-300'
+                }`}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                  RESULT
+                </p>
+                <div
+                  className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
+                    testDetection?.active ? 'text-red-500' : 'text-slate-500'
+                  }`}
+                >
+                  {testDetection?.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
+                  <span>
+                    {testDetection?.active
+                      ? 'MISSING PPE OBSERVATION'
+                      : ppeDetections.length === 0
+                      ? 'CLEAR - NO TARGETS'
+                      : 'ALL PPE COMPLIANT'}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Subcontractor</span>
-                  <span className="text-slate-900 font-semibold">Alpha Construction</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-medium">Safety Score</span>
-                  <span className="text-emerald-600 font-bold">92%</span>
-                </div>
+                <p className="text-xs text-slate-600">
+                  {testDetection?.active
+                    ? 'Technical observation from the YOLO + MF05 pipeline.'
+                    : isLive
+                    ? 'Streaming live inference from AI WebSocket.'
+                    : 'Generate ppe-ai.timeline.json, then play the matching video.'}
+                </p>
+              </div>
+            </div>
+
+            {violationSnapshot && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3" data-testid="mf05-evidence-capture">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-red-700">
+                  Evidence captured · {violationSnapshot.timecode}
+                </p>
+                <img
+                  src={violationSnapshot.imageUrl}
+                  alt={`Captured frame for ${violationSnapshot.eventId}`}
+                  className="mt-2 w-full rounded border border-red-200"
+                />
               </div>
             )}
           </div>
-        </ActionDrawer>
+
+          {/* Action Buttons */}
+          <div className="p-6 pt-0 space-y-2">
+            <button
+              onClick={openReviewFromDetection}
+              disabled={!testDetection?.active}
+              className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-sm transition-colors cursor-pointer ${
+                testDetection?.active
+                  ? 'bg-[#F66B17] hover:bg-[#E05A0B] text-white'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              Review Alert
+            </button>
+            <button
+              onClick={() => {
+                if (testDetection?.trackId !== null && testDetection?.trackId !== undefined) {
+                  setActiveFilterWorker((prev) =>
+                    prev === testDetection.trackId ? null : testDetection.trackId,
+                  );
+                }
+              }}
+              className="w-full py-2.5 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              {activeFilterWorker !== null
+                ? `Clear Worker Filter (#${activeFilterWorker})`
+                : testDetection?.trackId !== null && testDetection?.trackId !== undefined
+                ? `Filter By Worker Track #${testDetection.trackId}`
+                : 'View Worker (No Target)'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent PPE Events Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Recent PPE Events</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Latest camera detections and verification outcomes.
+              {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
+            </p>
+          </div>
+          {/* Functional event filter controls (no misleading "Last 24 hours" label) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setPpeFilter('ALL')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                ppeFilter === 'ALL'
+                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              All Events ({ppeEvents.length})
+            </button>
+            <button
+              onClick={() => setPpeFilter('HARD_HAT')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                ppeFilter === 'HARD_HAT'
+                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Missing Helmet ({ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length})
+            </button>
+            <button
+              onClick={() => setPpeFilter('SAFETY_VEST')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                ppeFilter === 'SAFETY_VEST'
+                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                <th className="py-3 px-3">Time</th>
+                <th className="py-3 px-3">Worker</th>
+                <th className="py-3 px-3">Camera</th>
+                <th className="py-3 px-3">Work Area</th>
+                <th className="py-3 px-3">Issue</th>
+                <th className="py-3 px-3">Confidence</th>
+                <th className="py-3 px-3">Status</th>
+                <th className="py-3 px-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {displayedEvents.map((evt) => (
+                <tr key={evt.rowKey} className="hover:bg-slate-50 transition-colors group">
+                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">
+                    {evt.time}
+                  </td>
+                  <td className="py-3 px-3 font-semibold text-slate-900">
+                    {evt.worker}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-slate-500 text-xs font-semibold">
+                    {evt.camera}
+                  </td>
+                  <td className="py-3 px-3 text-slate-600">
+                    {evt.workArea}
+                  </td>
+                  <td className="py-3 px-3 font-medium text-slate-900">
+                    {evt.issue}
+                  </td>
+                  <td className="py-3 px-3 font-semibold text-slate-900">
+                    {evt.confidence}
+                  </td>
+                  <td className="py-3 px-3">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                        evt.status === 'Open'
+                          ? 'bg-red-50 text-red-600'
+                          : evt.status === 'Logged'
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-amber-50 text-amber-600'
+                      }`}
+                    >
+                      {evt.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <button
+                      onClick={() => setSelectedReview(evt)}
+                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                    >
+                      Review
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {displayedEvents.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-slate-400 text-xs">
+                    No PPE events match the selected criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Review Modal with Bound Data from Selected Row or Detection */}
+      {selectedReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold font-mono uppercase tracking-wider">
+                  {selectedReview.id}
+                </span>
+                <h3 className="font-bold text-slate-900">Violation Review</h3>
+              </div>
+              <button
+                onClick={() => setSelectedReview(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <IconX className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm text-slate-600">
+              <p>
+                AI detected an observation for{' '}
+                <strong className="text-slate-900">{selectedReview.worker}</strong> in{' '}
+                <strong className="text-slate-900">{selectedReview.workArea}</strong> ({selectedReview.camera}).
+                Observation: <strong className="text-slate-900">{selectedReview.issue}</strong> (Confidence: {selectedReview.confidence}).
+              </p>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                <p className="font-bold text-slate-700 text-xs uppercase tracking-wider">
+                  Review Status: Local Preview
+                </p>
+                <p className="text-slate-600 text-xs">
+                  Backend review and dispatch API endpoints are not yet integrated. Actions below are recorded in preview state only.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                disabled
+                title="Review dispatch API endpoint pending integration"
+                className="py-2 px-4 rounded-lg bg-[#F66B17]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors"
+              >
+                Dispatch (API Pending)
+              </button>
+              <button
+                onClick={() => setSelectedReview(null)}
+                className="py-2 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+              >
+                Dismiss Preview
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

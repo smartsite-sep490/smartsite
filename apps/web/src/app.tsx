@@ -36,9 +36,9 @@ export function App() {
   }
 
   return (
-    <AppLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
+    <AppLayout currentTab={currentTab} onSelectTab={handleSelectTab}>
       {/* Tab: Live Monitoring */}
-      {currentTab === 'live-monitoring' && <LiveMonitoringView onNavigate={(tab) => setCurrentTab(tab)} />}
+      {currentTab === 'live-monitoring' && <LiveMonitoringView onNavigate={(tab) => handleSelectTab(tab)} />}
 
       {/* Tab: Restricted Zones (MF06) */}
       {currentTab === 'zones' && <RestrictedZoneView />}
