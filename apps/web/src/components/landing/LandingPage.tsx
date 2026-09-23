@@ -3,7 +3,6 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
 
-gsap.registerPlugin(ScrollTrigger);
 import {
   IconCheck,
   IconHardHat,
@@ -13,6 +12,8 @@ import {
   IconAlertTriangle,
   IconX,
 } from '../icons';
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface LandingPageProps {
   onEnterApp: (
@@ -108,7 +109,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
     );
 
     // 4b. Solutions Grid Hover
-    const solutionCards = gsap.utils.toArray('.solution-card') as HTMLElement[];
+    const solutionCards = Array.from(document.querySelectorAll('.solution-card')) as HTMLElement[];
     solutionCards.forEach((card) => {
       const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
       
