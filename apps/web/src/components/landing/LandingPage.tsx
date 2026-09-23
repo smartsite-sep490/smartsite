@@ -112,12 +112,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
     const solutionCards = Array.from(document.querySelectorAll('.solution-card')) as HTMLElement[];
     solutionCards.forEach((card) => {
       const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
-      
+
       card.addEventListener('mouseenter', () => {
         gsap.to(card, { y: -10, scale: 1.02, duration: 0.3, ease: 'power2.out', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' });
         if (icon) gsap.to(icon, { rotation: 15, scale: 1.2, duration: 0.4, ease: 'back.out(2)' });
       });
-      
+
       card.addEventListener('mouseleave', () => {
         gsap.to(card, { y: 0, scale: 1, duration: 0.3, ease: 'power2.out', boxShadow: 'none' });
         if (icon) gsap.to(icon, { rotation: 0, scale: 1, duration: 0.4, ease: 'power2.out' });
