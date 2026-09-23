@@ -3,7 +3,6 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
 
-gsap.registerPlugin(ScrollTrigger);
 import {
   IconCheck,
   IconHardHat,
@@ -13,6 +12,8 @@ import {
   IconAlertTriangle,
   IconX,
 } from '../icons';
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface LandingPageProps {
   onEnterApp: (
@@ -53,25 +54,74 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       scrollTrigger: { trigger: '.challenge-section', start: 'top 80%' },
       y: 30, opacity: 0, duration: 0.6, ease: 'power2.out'
     });
-    gsap.from('.challenge-card', {
-      scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
-      y: 40, opacity: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out'
-    });
+    gsap.fromTo('.challenge-card',
+      { y: 40, opacity: 0 },
+      {
+        scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
+        y: 0, opacity: 1, duration: 0.6, stagger: 0.15, ease: 'power2.out'
+      }
+    );
 
     // 3. One Platform
-    gsap.from('.platform-text', {
+    const platformTl = gsap.timeline({
       scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
-      x: -50, opacity: 0, duration: 0.8, ease: 'power3.out'
     });
-    gsap.from('.platform-diagram', {
-      scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
-      scale: 0.8, opacity: 0, duration: 0.8, ease: 'back.out(1.2)'
+    platformTl.from('.platform-text > *', {
+      x: -50,
+      opacity: 0,
+      duration: 0.8,
+      stagger: 0.2,
+      ease: 'back.out(1.2)',
+    });
+    platformTl.from(
+      '.platform-diagram',
+      {
+        scale: 0.5,
+        rotation: -45,
+        opacity: 0,
+        duration: 1.2,
+        ease: 'elastic.out(1, 0.5)',
+      },
+      '-=0.6',
+    );
+    // Add subtle floating to the orbiting nodes
+    gsap.to('.orbit-node', {
+      y: -10,
+      duration: 1.5,
+      yoyo: true,
+      repeat: -1,
+      ease: 'sine.inOut',
+      stagger: 0.3,
     });
 
-    // 4. Solutions Grid
-    gsap.from('.solution-card', {
-      scrollTrigger: { trigger: '.solutions-section', start: 'top 75%' },
-      y: 40, opacity: 0, duration: 0.6, stagger: 0.1, ease: 'power2.out'
+    // 4. Solutions Grid Entrance
+    gsap.fromTo('.solution-card',
+      { y: 100, opacity: 0, scale: 0.95 },
+      {
+        scrollTrigger: { trigger: '.solutions-section', start: 'top 80%' },
+        y: 0,
+        opacity: 1,
+        scale: 1,
+        duration: 0.8,
+        stagger: 0.15,
+        ease: 'back.out(1.5)'
+      }
+    );
+
+    // 4b. Solutions Grid Hover
+    const solutionCards = Array.from(document.querySelectorAll('.solution-card')) as HTMLElement[];
+    solutionCards.forEach((card) => {
+      const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
+
+      card.addEventListener('mouseenter', () => {
+        gsap.to(card, { y: -10, scale: 1.02, duration: 0.3, ease: 'power2.out', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' });
+        if (icon) gsap.to(icon, { rotation: 15, scale: 1.2, duration: 0.4, ease: 'back.out(2)' });
+      });
+
+      card.addEventListener('mouseleave', () => {
+        gsap.to(card, { y: 0, scale: 1, duration: 0.3, ease: 'power2.out', boxShadow: 'none' });
+        if (icon) gsap.to(icon, { rotation: 0, scale: 1, duration: 0.4, ease: 'power2.out' });
+      });
     });
 
     // 5. Safety AI Showcase
@@ -319,23 +369,23 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Orbiting nodes */}
-            <div className="absolute top-[8%] left-1/2 -translate-x-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+            <div className="orbit-node absolute top-[8%] left-1/2 -translate-x-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Workforce
               </div>
             </div>
-            <div className="absolute bottom-[8%] left-1/2 -translate-x-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+            <div className="orbit-node absolute bottom-[8%] left-1/2 -translate-x-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Operations
               </div>
             </div>
-            <div className="absolute left-[-2%] top-1/2 -translate-y-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+            <div className="orbit-node absolute left-[-2%] top-1/2 -translate-y-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Access
               </div>
             </div>
-            <div className="absolute right-[-2%] top-1/2 -translate-y-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse]">
+            <div className="orbit-node absolute right-[-2%] top-1/2 -translate-y-1/2">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Safety AI
               </div>
             </div>
@@ -354,8 +404,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-16">
             {/* Workforce Management */}
-            <div className="solution-card flex gap-6 group">
-              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconUsers className="w-6 h-6" />
               </div>
               <div>
@@ -387,8 +437,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Site Access */}
-            <div className="solution-card flex gap-6 group">
-              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconKey className="w-6 h-6" />
               </div>
               <div>
@@ -420,8 +470,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* AI Safety */}
-            <div className="solution-card flex gap-6 group">
-              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconShield className="w-6 h-6" />
               </div>
               <div>
@@ -449,8 +499,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Incident Management */}
-            <div className="solution-card flex gap-6 group">
-              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
+            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconAlertTriangle className="w-6 h-6" />
               </div>
               <div>

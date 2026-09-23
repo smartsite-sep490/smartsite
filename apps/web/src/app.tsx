@@ -18,7 +18,7 @@ import {
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function App() {
-  const [currentTab, setCurrentTab] = useState<ActiveTab>('live-monitoring');
+  const [currentTab, setCurrentTab] = useState<ActiveTab>('landing');
 
   // Backend live health check
   useQuery({
