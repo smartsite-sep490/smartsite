@@ -9,7 +9,6 @@ import { HttpExceptionFilter } from './common/http/http-exception.filter.js';
 import { createLoggerParams } from './observability/logger.js';
 import { AiIntegrationModule } from './integrations/ai/ai-integration.module.js';
 import { AiIngestionController } from './integrations/ai/ai-ingestion.controller.js';
-import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
@@ -48,7 +47,6 @@ import { HealthModule } from './modules/health/health.module.js';
       ],
     }),
     HealthModule,
-    CatalogModule,
     AiIntegrationModule,
   ],
   providers: [
