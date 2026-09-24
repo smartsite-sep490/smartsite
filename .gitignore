@@ -52,6 +52,7 @@ runs/
 *.onnx
 *.engine
 *.safetensors
+apps/web/public/assets/*-ai.timeline.json
 
 # Machine-specific files
 .vscode/
