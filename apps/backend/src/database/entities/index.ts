@@ -5,6 +5,8 @@ import { CameraObservationRegionEntity } from './camera-observation-region.entit
 import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { SafetyAlertEntity } from './safety-alert.entity.js';
 import { AlertDetectionMappingEntity } from './alert-detection-mapping.entity.js';
+import { UserEntity } from './user.entity.js';
+import { AuthSessionEntity } from './auth-session.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -15,6 +17,8 @@ export * from './camera-observation-region.entity.js';
 export * from './ai-observation-event.entity.js';
 export * from './safety-alert.entity.js';
 export * from './alert-detection-mapping.entity.js';
+export * from './user.entity.js';
+export * from './auth-session.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -24,4 +28,6 @@ export const ENTITIES = [
   AiObservationEventEntity,
   SafetyAlertEntity,
   AlertDetectionMappingEntity,
+  UserEntity,
+  AuthSessionEntity,
 ] as const;

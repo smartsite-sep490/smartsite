@@ -449,6 +449,7 @@ test('AiIngestionService: known camera with no violation candidate results in SK
     code: 'CAM-01',
     name: 'Gate Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: FIXED_NOW,
   };
   const store: MockStore = {
@@ -500,6 +501,7 @@ test('AiIngestionService: valid violation candidate is PROCESSED, groups alert, 
     type: ZoneType.STANDARD,
     restrictionPolicy: ZoneRestrictionPolicy.NONE,
     requiredPpe: ['HARD_HAT'],
+    configurationLocked: false,
     createdAt: FIXED_NOW,
   };
 
@@ -521,6 +523,7 @@ test('AiIngestionService: valid violation candidate is PROCESSED, groups alert, 
     code: 'CAM-01',
     name: 'Gate Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: FIXED_NOW,
   };
 
@@ -596,6 +599,7 @@ test('AiIngestionService: clock skew event still records resolvedCameraId when c
     code: 'CAM-01',
     name: 'Gate Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: FIXED_NOW,
   };
   const store: MockStore = {
@@ -698,6 +702,7 @@ test('AiIngestionService: valid timezone offset forms preserve event time and ra
     code: 'CAM-01',
     name: 'Gate Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: now,
   };
 
@@ -773,6 +778,7 @@ test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near bou
     code: 'CAM-01',
     name: 'Gate Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: FIXED_NOW,
   };
   const store: MockStore = {
@@ -1104,6 +1110,7 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
     type: ZoneType.STANDARD,
     restrictionPolicy: ZoneRestrictionPolicy.NONE,
     requiredPpe: ['HARD_HAT'],
+    configurationLocked: false,
     createdAt: FIXED_NOW,
   };
 
@@ -1125,6 +1132,7 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
     code: 'CAM-01',
     name: 'Gate Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: FIXED_NOW,
   };
 
@@ -1207,6 +1215,7 @@ test('AiIngestionService: handles observations across mixed regions and geometry
     type: ZoneType.STANDARD,
     restrictionPolicy: ZoneRestrictionPolicy.NONE,
     requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+    configurationLocked: false,
     createdAt: FIXED_NOW,
   };
 
@@ -1239,6 +1248,7 @@ test('AiIngestionService: handles observations across mixed regions and geometry
     code: 'CAM-01',
     name: 'Multi Region Camera',
     status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
     createdAt: FIXED_NOW,
   };
 

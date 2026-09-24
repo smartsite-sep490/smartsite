@@ -13,6 +13,7 @@ function createZone(restrictionPolicy: ZoneRestrictionPolicy): ZoneEntity {
     type: ZoneType.RESTRICTED,
     restrictionPolicy,
     requiredPpe: ['HARD_HAT'],
+    configurationLocked: false,
     createdAt: new Date(),
   };
 }

@@ -37,6 +37,7 @@ function createTestContext(overrides?: {
       type: ZoneType.RESTRICTED,
       restrictionPolicy: overrides?.restrictionPolicy ?? ZoneRestrictionPolicy.NONE,
       requiredPpe: overrides?.requiredPpe ?? [],
+      configurationLocked: false,
       createdAt: new Date(),
     },
     geometryVersion: currentGeometryVersion,

@@ -7,10 +7,14 @@ Read the root `AGENTS.md`, this guide, and `README.md` before changing the backe
 - `app.module.ts` composes modules; `configure-app.ts` owns shared HTTP bootstrap for runtime and tests.
 - `config/` owns validated runtime and migration configuration. `database/` owns TypeORM connection, entities, and migrations.
 - `common/http/` owns request IDs and public errors. `observability/` owns logger configuration and sanitization.
-- `modules/health` owns liveness/readiness; `modules/auth` owns service authentication only.
+- `modules/health` owns liveness/readiness; `modules/auth` owns user sessions and AI service authentication; `modules/users` owns account management.
 - `modules/zones` resolves observation context and Zone authorization; `modules/safety/alerts` evaluates and groups alerts.
+- `modules/sites` owns Site metadata; `modules/cameras` owns Camera, observation Region, revision updates, and AI configuration snapshots. `modules/zones` also owns Zone policy and its permanent lock after a Region is linked.
 - `integrations/ai` owns ingestion orchestration, raw payload preservation, idempotency, and the transaction boundary.
 - Add feature modules only with real behavior. Import a module's exported service instead of its persistence internals. Export only providers with consumers; import DatabaseModule explicitly when needed.
+- Configuration controllers require an active Admin account that has changed its temporary password. Admin is global across Sites in this milestone; Worker has no configuration permissions. A Site ID never proves user authorization. AI snapshot reads require a service token and an explicit camera allowlist.
+- A software account is not a camera identity or a Worker business record. Never treat track IDs or login roles as proof of Zone-entry permission. Store only salted password hashes and hashed session tokens; revoke sessions on reset, password change and account disable.
+- Every Region or Camera-status mutation checks the expected camera revision and updates revisions in one PostgreSQL transaction. A linked Zone's policy stays locked even after its Regions are deactivated.
 - Use relative ESM imports with `.js` extensions. Do not create empty folders, generic repositories, base services, forwarding layers, or dependencies for hypothetical needs.
 
 ## Growing the backend

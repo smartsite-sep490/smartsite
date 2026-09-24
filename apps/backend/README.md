@@ -1,6 +1,6 @@
 # Backend
 
-NestJS 12, ESM và TypeScript trong pnpm workspace hiện tại. Backend sở hữu dữ liệu và quyết định nghiệp vụ; AI chỉ cung cấp bằng chứng kỹ thuật. Nền hiện có health API và ingestion MF05/MF06, chưa có đăng nhập người dùng, RBAC hay workflow nghiệp vụ hoàn chỉnh.
+NestJS 12, ESM và TypeScript trong pnpm workspace hiện tại. Backend sở hữu dữ liệu và quyết định nghiệp vụ; AI chỉ cung cấp bằng chứng kỹ thuật. Backend có health, tài khoản Admin/Worker, API quản lý cấu hình và ingestion MF05/MF06. Quyền theo từng Site/Zone và workflow nghiệp vụ hoàn chỉnh vẫn là bước sau.
 
 ## Chạy local
 
@@ -23,6 +23,10 @@ AppModule
   ├── ConfigModule       → cấu hình Zod đã kiểm tra
   ├── LoggerModule       → log Pino đã làm sạch
   ├── HealthModule       → DatabaseModule
+  ├── AuthModule         → phiên người dùng và token dịch vụ AI
+  ├── UsersModule        → tài khoản Admin/Worker
+  ├── SitesModule        → DatabaseModule, AuthModule
+  ├── CamerasModule      → DatabaseModule, SitesModule, ZonesModule, AuthModule
   └── AiIntegrationModule
         ├── DatabaseModule
         ├── AuthModule
@@ -30,17 +34,20 @@ AppModule
         └── SafetyModule → ZonesModule
 ```
 
-| Vị trí                              | Trách nhiệm                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------- |
-| `app.module.ts`, `configure-app.ts` | Ghép module; bootstrap HTTP dùng chung cho runtime và test.                                 |
-| `config/`                           | Schema môi trường và kiểu suy ra; cấu hình CLI độc lập với HTTP.                            |
-| `database/`                         | TypeORM Data Mapper, entities, migration, kết nối và readiness.                             |
-| `common/http/`, `observability/`    | Request ID, lỗi công khai, giới hạn request và log an toàn.                                 |
-| `modules/health`                    | Liveness và readiness qua DatabaseModule.                                                   |
-| `modules/auth`                      | Guard xác thực token dịch vụ AI; chưa phải xác thực người dùng.                             |
-| `modules/zones`                     | Resolve Site/Camera/Region/Zone và kiểm tra quyền Zone theo ngữ cảnh.                       |
-| `modules/safety/alerts`             | Đánh giá ứng viên và nhóm cảnh báo; dùng dịch vụ được ZonesModule export.                   |
-| `integrations/ai`                   | Điều phối ingest, raw payload, idempotency và transaction; dùng Database/Auth/Zones/Safety. |
+| Vị trí                              | Trách nhiệm                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| `app.module.ts`, `configure-app.ts` | Ghép module; bootstrap HTTP dùng chung cho runtime và test.                               |
+| `config/`                           | Schema môi trường và kiểu suy ra; cấu hình CLI độc lập với HTTP.                          |
+| `database/`                         | TypeORM Data Mapper, entities, migration, kết nối và readiness.                           |
+| `common/http/`, `observability/`    | Request ID, lỗi công khai, giới hạn request và log an toàn.                               |
+| `modules/health`                    | Liveness và readiness qua DatabaseModule.                                                 |
+| `modules/auth`                      | Đăng nhập người dùng, phiên, guard Admin và token dịch vụ AI.                             |
+| `modules/users`                     | Cấp, xem, khóa/mở tài khoản và đặt lại mật khẩu.                                          |
+| `modules/sites`                     | Tạo/đọc/đổi tên Site qua API Admin.                                                       |
+| `modules/cameras`                   | Quản lý Camera/Region, phiên bản cấu hình và tạo snapshot theo contract AI.               |
+| `modules/zones`                     | Quản lý Zone, khóa chính sách sau khi gắn Region, resolve context và kiểm tra quyền Zone. |
+| `modules/safety/alerts`             | Đánh giá ứng viên và nhóm cảnh báo; dùng dịch vụ được ZonesModule export.                 |
+| `integrations/ai`                   | Ingest observation và cấp snapshot theo danh sách camera cho AI.                          |
 
 Controller chỉ xử lý HTTP. Module gọi provider được export của module khác, không đọc persistence nội bộ. Chỉ thêm module khi có hành vi thật; không thêm repository tổng quát, base service hay folder chờ tính năng. Quy tắc chi tiết ở [AGENTS.md](AGENTS.md).
 
@@ -71,6 +78,7 @@ NODE_ENV=production pnpm --filter @smartsite/backend start
 | `DATABASE_TIMEOUT_MS`                             | `2000`; timeout kết nối/readiness.                                                                                                                         |
 | `CORS_ORIGINS`                                    | `http://localhost:5173`; danh sách origin HTTP(S) chính xác, phân cách dấu phẩy. Production bắt buộc cấp; chuỗi rỗng tắt quyền đọc từ browser khác origin. |
 | `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng dài ít nhất 32 ký tự, không whitespace và không dùng token mặc định.                |
+| `AI_CONFIGURATION_CAMERA_IDS`                     | Danh sách UUID camera mà AI được tải cấu hình; mặc định rỗng và từ chối mọi camera.                                                                        |
 | `LOG_LEVEL`                                       | `info`; nhận `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                                                 |
 | `LOG_FORMAT`                                      | `pretty` chỉ hợp lệ ở development; test/production dùng `json`. Image runtime không chứa `pino-pretty`.                                                    |
 | `HTTP_RATE_LIMIT_TTL_MS`, `HTTP_RATE_LIMIT_LIMIT` | `60000`, `120`: cửa sổ và quota HTTP thông thường.                                                                                                         |
@@ -112,6 +120,25 @@ Rate limit dùng bộ nhớ **của từng instance**, không chia sẻ giữa r
 ## Database và migration
 
 TypeORM Data Mapper (`@nestjs/typeorm`, `typeorm`, `pg`) quản lý Site, Camera, Zone, observation region, raw AI event, Safety Alert và detection mapping. `synchronize: false` và `migrationsRun: false` ở mọi môi trường; không chạy migration trong lúc server boot. Thay đổi schema cần migration được review và integration test với PostgreSQL thật.
+
+API quản trị Site/Camera/Zone/Region yêu cầu tài khoản Admin active đã đổi mật khẩu tạm; Admin có quyền trên mọi Site trong mốc hiện tại. Worker chỉ dùng endpoint tài khoản của chính mình. Camera có `configurationVersion`; mỗi thao tác sửa Region hoặc trạng thái Camera phải gửi revision hiện tại và được thực hiện trong transaction. Sau khi Zone đã gắn Region, `type`, `restrictionPolicy` và `requiredPpe` bị khóa vĩnh viễn; tên vẫn sửa được. Snapshot chỉ gồm các Region active và được kiểm tra bằng contract Backend–AI trước khi trả. `siteId` trong service chỉ giới hạn dữ liệu, không chứng minh quyền người dùng.
+
+### Tài khoản và API cấu hình
+
+Chạy migration trước, sau đó tạo Admin đầu tiên bằng terminal tương tác:
+
+```sh
+pnpm --filter @smartsite/backend db:migrate:run
+pnpm --filter @smartsite/backend auth:bootstrap-admin
+```
+
+Lệnh bootstrap hỏi username, tên và mật khẩu tạm qua terminal; mật khẩu không hiển thị và không truyền trong command line. Chỉ chạy được khi chưa có tài khoản. Admin đăng nhập qua `POST /api/v1/auth/login`, đổi mật khẩu tạm qua `POST /api/v1/auth/change-password`, rồi đăng nhập lại để gọi API quản trị. Token người dùng là Bearer token ngẫu nhiên, hết hạn tuyệt đối sau 8 giờ; logout, đổi/reset mật khẩu hoặc khóa tài khoản thu hồi phiên. Client giữ token ngoài URL; môi trường triển khai phải dùng HTTPS. Không có endpoint tự đăng ký.
+
+`GET /api/v1/auth/me` và `POST /api/v1/auth/logout` dùng cho cả Admin và Worker. Admin cấp tài khoản qua `POST /api/v1/users`, xem danh sách/chi tiết, khóa/mở và đặt lại mật khẩu tạm. Các route quản trị nằm dưới `/api/v1/sites`; xem Swagger development để biết DTO, pagination và response. Danh sách có `offset=0`, `limit=20` mặc định và `limit` tối đa 100. Mutation Region trả `{ region, configurationVersion }` để dùng revision mới; revision cũ trả 409.
+
+AI đọc `GET /api/v1/integrations/ai/cameras/:cameraId/configuration` bằng service token hiện có. Biến `AI_CONFIGURATION_CAMERA_IDS` chứa danh sách UUID camera phân cách dấu phẩy; để rỗng thì từ chối mọi camera. Camera không được cấp hoặc không tồn tại trả 404, inactive trả 409, active không có Region trả `regions: []`. Endpoint này không đưa Zone policy, Worker hoặc RTSP credentials cho AI. Allowlist chỉ áp dụng cho việc tải cấu hình; ingestion event hiện giữ semantics cũ.
+
+Login giới hạn 5 lần/phút/IP, đổi mật khẩu 5 lần/phút/user; quota hiện lưu trong bộ nhớ mỗi instance. Quyền vào Zone theo Worker chưa được triển khai: tài khoản `WORKER` và một track từ camera không tự chứng minh cùng một người. `ADMIN` toàn hệ thống, `WORKER` chỉ có quyền tài khoản và phiên Bearer lưu trong PostgreSQL là lựa chọn tạm cho mốc này. Khi chốt actor/role nghiệp vụ, phải xem lại mô hình tài khoản, phạm vi quyền theo Site/Contractor/Zone và cả cơ chế xác thực/phiên trước khi mở thêm quyền; thay đổi đó cần migration, cập nhật API/client và kiểm thử tương thích. Phía AI cần xử lý snapshot rỗng, camera inactive và Region PPE không còn active trước khi tích hợp luồng thật.
 
 CLI dùng `src/database/typeorm.data-source.ts` với cấu hình **chỉ cho database**, không yêu cầu CORS, service token hay logging. Development đọc `apps/backend/.env`; test/production không đọc file này. Chọn nhóm URL trong process trước nhóm trong file; trong nhóm đã chọn, thứ tự là `DIRECT_URL > DATABASE_URL_UNPOOLED > DATABASE_URL`. Một `DATABASE_URL` được truyền vào process vì vậy thắng `DIRECT_URL` cũ trong file. URL Neon pooled bị từ chối cho migration; runtime vẫn dùng pooled `DATABASE_URL`.
 
@@ -188,4 +215,4 @@ Nếu không có Docker/database thì báo rõ phần integration/smoke chưa ch
 | `pino-pretty` (dev)                    | Đọc log local; không cần trong image runtime.                                 |
 | Ajv hiện có trong contracts            | Giữ validation canonical AI contract; không thay bằng DTO/Zod.                |
 
-Đây là nền để nhóm tiếp tục phát triển, chưa phải chứng nhận production. Xác thực người dùng, RBAC, phạm vi Site/Contractor/Zone cho API người dùng, cấu hình proxy, quota chia sẻ nhiều replica, retention/backup và vận hành triển khai còn cần yêu cầu và kiểm chứng riêng. AI không được quyết định danh tính, quyền Zone, vi phạm hay đóng incident. Mọi thay đổi cần một thành viên khác review trước khi merge.
+Đây là nền để nhóm tiếp tục phát triển, chưa phải chứng nhận production. Phân quyền theo Site/Contractor/Zone, nhận diện Worker từ camera, cấu hình proxy, quota chia sẻ nhiều replica, retention/backup và vận hành triển khai còn cần yêu cầu và kiểm chứng riêng. AI không được quyết định danh tính, quyền Zone, vi phạm hay đóng incident. Mọi thay đổi cần một thành viên khác review trước khi merge.

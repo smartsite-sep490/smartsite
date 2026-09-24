@@ -240,10 +240,11 @@ Implemented:
 - canonical MF05/MF06 technical-observation contract and RFC 8785 hashing;
 - TypeORM MF05/MF06 domain schema and reviewed migration;
 - authenticated AI event ingestion with raw-event preservation, idempotency, context validation, and durable alert grouping.
+- Admin/Worker login, revocable sessions, Admin configuration APIs, and camera-scoped AI configuration reads.
 
 Not yet implemented in this foundation:
 
-- end-user authentication, RBAC, and data-scope enforcement;
+- role và data-scope chi tiết theo Site/Contractor/Zone (hiện mới có Admin toàn hệ thống và Worker tự quản lý tài khoản);
 - full workforce, attendance, and incident workflows;
 - production Neon integration;
 - camera ingestion and model inference;
