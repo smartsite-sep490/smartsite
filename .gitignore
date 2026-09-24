@@ -43,6 +43,8 @@ face-data/
 embeddings/
 runs/
 *.mp4
+!apps/web/public/assets/morteza_ppe_test_video.mp4
+!apps/web/public/assets/hazard_restricted_zone_test.mp4
 *.avi
 *.mov
 *.mkv
@@ -53,6 +55,8 @@ runs/
 *.engine
 *.safetensors
 apps/web/public/assets/*-ai.timeline.json
+!apps/web/public/assets/ppe-ai.timeline.json
+!apps/web/public/assets/zone-ai.timeline.json
 
 # Machine-specific files
 .vscode/

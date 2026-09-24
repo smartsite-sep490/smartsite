@@ -1,0 +1,3860 @@
+{
+  "cameraExternalId": "ppe-demo",
+  "entries": [
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:07.911171+00:00",
+        "eventId": "99e08bb0-1858-51b6-a231-a6d3fe5f44a3",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7049445470174154,
+              "x2": 0.9260124206542969,
+              "y1": 0.02939817640516493,
+              "y2": 0.9875014693648727
+            },
+            "confidence": 0.7354139685630798,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7387052536010742,
+              "x2": 0.806114387512207,
+              "y1": 0.054900805155436196,
+              "y2": 0.1322750515407986
+            },
+            "confidence": 0.6602284908294678,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7524955749511719,
+              "x2": 0.8801916122436524,
+              "y1": 0.1673707467538339,
+              "y2": 0.49853430853949654
+            },
+            "confidence": 0.9534476399421692,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "confidence": 0.7354139685630798,
+            "geometryVersion": 1,
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "trackId": 2,
+            "type": "ZONE_ENTRY"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.067
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.111171+00:00",
+        "eventId": "168a99ec-7ac8-54d5-854e-33b909aec881",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7029016494750977,
+              "x2": 0.9088315963745117,
+              "y1": 0.03874147203233507,
+              "y2": 0.9668390344690394
+            },
+            "confidence": 0.7641607522964478,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7296398162841797,
+              "x2": 0.7943115234375,
+              "y1": 0.05756100548638238,
+              "y2": 0.1415411348696108
+            },
+            "confidence": 0.5476074814796448,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7480772018432618,
+              "x2": 0.8880411148071289,
+              "y1": 0.17124294704861112,
+              "y2": 0.5098192003038194
+            },
+            "confidence": 0.9423880577087402,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.267
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.177837+00:00",
+        "eventId": "6797dfe7-2e8f-5f13-9be3-ccf9ec146e48",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.70284423828125,
+              "x2": 0.904111099243164,
+              "y1": 0.044068993462456595,
+              "y2": 0.9751434326171875
+            },
+            "confidence": 0.8036333918571472,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.722396977742513,
+              "x2": 0.7894456863403321,
+              "y1": 0.06453361511230468,
+              "y2": 0.15421358744303384
+            },
+            "confidence": 0.6999362707138062,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7443965911865235,
+              "x2": 0.8907112121582031,
+              "y1": 0.1699599372016059,
+              "y2": 0.5169754593460648
+            },
+            "confidence": 0.9231508374214172,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.333
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.244504+00:00",
+        "eventId": "2c7fd0b6-7708-5f89-baf5-c971f55774cb",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7055533091227214,
+              "x2": 0.8835627237955729,
+              "y1": 0.04873877631293403,
+              "y2": 0.9705964265046296
+            },
+            "confidence": 0.8138980865478516,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.715275764465332,
+              "x2": 0.7826964696248372,
+              "y1": 0.07007586161295573,
+              "y2": 0.1698261402271412
+            },
+            "confidence": 0.6956906318664551,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7385187149047852,
+              "x2": 0.8754613876342774,
+              "y1": 0.17012460496690537,
+              "y2": 0.5168819286205151
+            },
+            "confidence": 0.9009842276573181,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.4
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.377837+00:00",
+        "eventId": "978313ca-3966-5227-a810-fdddd28948f6",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6942094802856446,
+              "x2": 0.8893850326538086,
+              "y1": 0.07305899726019965,
+              "y2": 0.9687446876808449
+            },
+            "confidence": 0.6120331883430481,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7040727615356446,
+              "x2": 0.7679513931274414,
+              "y1": 0.09258028666178385,
+              "y2": 0.1796833179615162
+            },
+            "confidence": 0.6325269341468811,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7344911575317383,
+              "x2": 0.872675895690918,
+              "y1": 0.16336318122016058,
+              "y2": 0.5246222036856192
+            },
+            "confidence": 0.6946769952774048,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.533
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.444504+00:00",
+        "eventId": "eb12cda3-0edd-5c1f-8882-ac55e22f997b",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6890745162963867,
+              "x2": 0.8879344940185547,
+              "y1": 0.07904858059353298,
+              "y2": 0.9747212727864584
+            },
+            "confidence": 0.5366367697715759,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.699255625406901,
+              "x2": 0.7628037134806315,
+              "y1": 0.09545483059353299,
+              "y2": 0.19725273980034722
+            },
+            "confidence": 0.8080917596817017,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7337650299072266,
+              "x2": 0.8718994140625,
+              "y1": 0.16831704598885996,
+              "y2": 0.5206575746889468
+            },
+            "confidence": 0.7067020535469055,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.6
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.511171+00:00",
+        "eventId": "46c44308-d9a1-5958-8f40-edc135478776",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6852665583292643,
+              "x2": 0.8888681411743165,
+              "y1": 0.09394921196831597,
+              "y2": 0.9585313585069445
+            },
+            "confidence": 0.5361055135726929,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6918862024943034,
+              "x2": 0.7543018341064454,
+              "y1": 0.11191370222303602,
+              "y2": 0.20583395781340422
+            },
+            "confidence": 0.7844003438949585,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7402649561564127,
+              "x2": 0.8730702082316081,
+              "y1": 0.2656702677408854,
+              "y2": 0.5084551210756655
+            },
+            "confidence": 0.6323531270027161,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.667
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.577837+00:00",
+        "eventId": "2d103df6-813d-5aff-a7f0-35ba9a522392",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6792047500610352,
+              "x2": 0.8713224411010743,
+              "y1": 0.10952979193793402,
+              "y2": 0.9799222592954282
+            },
+            "confidence": 0.6823916435241699,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6852191925048828,
+              "x2": 0.7407981872558593,
+              "y1": 0.12934629652235244,
+              "y2": 0.22232415941026476
+            },
+            "confidence": 0.8022451400756836,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7342955271402994,
+              "x2": 0.8654613494873047,
+              "y1": 0.24846310085720485,
+              "y2": 0.5010916815863715
+            },
+            "confidence": 0.4479738473892212,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.733
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.644504+00:00",
+        "eventId": "17c6a973-c0c6-5aea-abb3-d3dcf6c89f9b",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6757257461547852,
+              "x2": 0.8706350326538086,
+              "y1": 0.12017500135633681,
+              "y2": 0.9729075113932292
+            },
+            "confidence": 0.6453726887702942,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6831899642944336,
+              "x2": 0.7392383575439453,
+              "y1": 0.1385692455150463,
+              "y2": 0.23128462897406685
+            },
+            "confidence": 0.8391134738922119,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7497780481974284,
+              "x2": 0.862623659769694,
+              "y1": 0.27532645331488714,
+              "y2": 0.5685891610604745
+            },
+            "confidence": 0.6757123470306396,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.8
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.711171+00:00",
+        "eventId": "b093dacb-1bef-527c-a65d-da52e21c7de4",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6765861511230469,
+              "x2": 0.8680009841918945,
+              "y1": 0.13360655042860242,
+              "y2": 0.9339623345269097
+            },
+            "confidence": 0.8196653127670288,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6765537261962891,
+              "x2": 0.7367206573486328,
+              "y1": 0.1594239976671007,
+              "y2": 0.24610267921730325
+            },
+            "confidence": 0.8106000423431396,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7391930262247721,
+              "x2": 0.8591557184855143,
+              "y1": 0.27989764743381074,
+              "y2": 0.5172753228081597
+            },
+            "confidence": 0.6205829977989197,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.867
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.777837+00:00",
+        "eventId": "b562ce92-e51c-56c7-8591-fc30b4830a8e",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6737475077311198,
+              "x2": 0.868928591410319,
+              "y1": 0.13508656819661458,
+              "y2": 0.9280932956271701
+            },
+            "confidence": 0.842384397983551,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.674714724222819,
+              "x2": 0.7314671198527019,
+              "y1": 0.16873431735568575,
+              "y2": 0.2611016167534722
+            },
+            "confidence": 0.79202800989151,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7236026763916016,
+              "x2": 0.8475021998087565,
+              "y1": 0.2627919797544126,
+              "y2": 0.48343398482711225
+            },
+            "confidence": 0.7344966530799866,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 0.933
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.844504+00:00",
+        "eventId": "0cd82be8-46fa-55fc-a24c-89adec5e5afa",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6680370966593424,
+              "x2": 0.8685632705688476,
+              "y1": 0.16829393174913193,
+              "y2": 0.9335735744900173
+            },
+            "confidence": 0.756847083568573,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6697830200195313,
+              "x2": 0.7292581558227539,
+              "y1": 0.1840694851345486,
+              "y2": 0.28027750651041666
+            },
+            "confidence": 0.6513970494270325,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7113365809122721,
+              "x2": 0.8607725779215495,
+              "y1": 0.3003914727105035,
+              "y2": 0.5821065266927083
+            },
+            "confidence": 0.46173059940338135,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.0
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.911171+00:00",
+        "eventId": "5e963619-82a3-5346-bca5-e411755f94fd",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6646031061808269,
+              "x2": 0.8695622126261393,
+              "y1": 0.19529520670572917,
+              "y2": 0.8509793316876447
+            },
+            "confidence": 0.7899035215377808,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6701695124308268,
+              "x2": 0.7271919886271159,
+              "y1": 0.2081133100721571,
+              "y2": 0.27919797544126157
+            },
+            "confidence": 0.7742713689804077,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7091677347819011,
+              "x2": 0.8529799143473308,
+              "y1": 0.22453919869882089,
+              "y2": 0.528781975640191
+            },
+            "confidence": 0.5655415058135986,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.067
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:08.977837+00:00",
+        "eventId": "6a2b7d98-14e5-54dd-8625-bfc3226769ab",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6623827616373698,
+              "x2": 0.8709785461425781,
+              "y1": 0.20409393310546875,
+              "y2": 0.8967125786675347
+            },
+            "confidence": 0.804577112197876,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6705481847127278,
+              "x2": 0.7285226821899414,
+              "y1": 0.21388507419162325,
+              "y2": 0.28042127821180557
+            },
+            "confidence": 0.6634564399719238,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7073229471842448,
+              "x2": 0.8668413162231445,
+              "y1": 0.23215802510579428,
+              "y2": 0.5416164822048611
+            },
+            "confidence": 0.5702962875366211,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.133
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.044504+00:00",
+        "eventId": "9f0349b1-d1c4-5f18-95f2-1502f49c1c25",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6625619888305664,
+              "x2": 0.8716402689615885,
+              "y1": 0.2039971386944806,
+              "y2": 0.8841293334960938
+            },
+            "confidence": 0.7923956513404846,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.670387077331543,
+              "x2": 0.7273466110229492,
+              "y1": 0.21385503698278358,
+              "y2": 0.28168713604962387
+            },
+            "confidence": 0.6440758109092712,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.710399881998698,
+              "x2": 0.8707129160563151,
+              "y1": 0.22946065266927082,
+              "y2": 0.5469546847873263
+            },
+            "confidence": 0.6705115437507629,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.2
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.111171+00:00",
+        "eventId": "3cca6b20-a550-582f-99a5-a584458fc8d8",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6629398345947266,
+              "x2": 0.8715341567993165,
+              "y1": 0.1908637152777778,
+              "y2": 0.927278815375434
+            },
+            "confidence": 0.8090246319770813,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6693727493286132,
+              "x2": 0.7256609598795573,
+              "y1": 0.20233912997775608,
+              "y2": 0.28130326447663484
+            },
+            "confidence": 0.8246572613716125,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7114906946818034,
+              "x2": 0.8692423502604166,
+              "y1": 0.22494693332248264,
+              "y2": 0.5557252671983507
+            },
+            "confidence": 0.8042222261428833,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.267
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.177837+00:00",
+        "eventId": "ccd743b3-0fb3-5a3b-9f28-529593658e38",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6639864603678386,
+              "x2": 0.8727667490641277,
+              "y1": 0.18300866021050347,
+              "y2": 0.8879535816333912
+            },
+            "confidence": 0.7932068109512329,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.669135856628418,
+              "x2": 0.7257236480712891,
+              "y1": 0.19869846767849392,
+              "y2": 0.28357139869972514
+            },
+            "confidence": 0.8155629634857178,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.711143684387207,
+              "x2": 0.8662972132364909,
+              "y1": 0.22467254356101707,
+              "y2": 0.544373462818287
+            },
+            "confidence": 0.7597212195396423,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.333
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.244504+00:00",
+        "eventId": "360a3b8c-fc38-526b-95fd-75120b3027a2",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6667974472045899,
+              "x2": 0.8767853418986002,
+              "y1": 0.17062505086263022,
+              "y2": 0.9153685393156828
+            },
+            "confidence": 0.7742947340011597,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6674018859863281,
+              "x2": 0.7278528213500977,
+              "y1": 0.18736822340223525,
+              "y2": 0.28374738340024597
+            },
+            "confidence": 0.7479156255722046,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7122185389200847,
+              "x2": 0.8725000381469726,
+              "y1": 0.216114256117079,
+              "y2": 0.5265694512261285
+            },
+            "confidence": 0.8467676043510437,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.4
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.311171+00:00",
+        "eventId": "161e2683-8a22-5398-a6b8-88e89f080423",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6675481796264648,
+              "x2": 0.8800833384195964,
+              "y1": 0.15460679796006943,
+              "y2": 0.9383663601345487
+            },
+            "confidence": 0.7442599534988403,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6710122426350912,
+              "x2": 0.7306205113728841,
+              "y1": 0.17931251525878905,
+              "y2": 0.2661373844853154
+            },
+            "confidence": 0.750321090221405,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7102325439453125,
+              "x2": 0.8631779352823893,
+              "y1": 0.21025123596191406,
+              "y2": 0.53778076171875
+            },
+            "confidence": 0.5147397518157959,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.467
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.377837+00:00",
+        "eventId": "be6e62f0-37ee-5437-bc49-704852f11523",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6759976069132487,
+              "x2": 0.8859277725219726,
+              "y1": 0.13813290066189235,
+              "y2": 0.9453121609157986
+            },
+            "confidence": 0.7001057267189026,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6766329447428385,
+              "x2": 0.7387987772623698,
+              "y1": 0.15983293321397568,
+              "y2": 0.24983418782552083
+            },
+            "confidence": 0.8246294260025024,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7206331888834635,
+              "x2": 0.8777138392130533,
+              "y1": 0.20572433471679688,
+              "y2": 0.5464301780418114
+            },
+            "confidence": 0.6587697863578796,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.533
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.444504+00:00",
+        "eventId": "d2aa0363-d5c9-5663-806b-4c7ec3d5cd2d",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6703556060791016,
+              "x2": 0.8882774988810221,
+              "y1": 0.13092837863498263,
+              "y2": 0.9814477991174768
+            },
+            "confidence": 0.30289608240127563,
+            "trackId": 2,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.679493268330892,
+              "x2": 0.7428090413411458,
+              "y1": 0.1509719000922309,
+              "y2": 0.24374330308702258
+            },
+            "confidence": 0.7959086894989014,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 2,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.72204163869222,
+              "x2": 0.8826854705810547,
+              "y1": 0.19624031914605033,
+              "y2": 0.6143214473017939
+            },
+            "confidence": 0.4460907578468323,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 2,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 1.6
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.844504+00:00",
+        "eventId": "af29405a-b61d-59e9-b397-1737278238e1",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.711336898803711,
+              "x2": 0.9080020904541015,
+              "y1": 0.04630126953125,
+              "y2": 0.9892032199435764
+            },
+            "confidence": 0.6620450615882874,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.723970603942871,
+              "x2": 0.7925279617309571,
+              "y1": 0.06909891764322916,
+              "y2": 0.16476724412706162
+            },
+            "confidence": 0.6497653126716614,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7414927164713542,
+              "x2": 0.8928133646647135,
+              "y1": 0.1641657511393229,
+              "y2": 0.5392917774341724
+            },
+            "confidence": 0.5770359635353088,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.0
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.911171+00:00",
+        "eventId": "eb9092ad-0cb9-5417-a574-1726dc1cfa98",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7135629653930664,
+              "x2": 0.9024293899536133,
+              "y1": 0.04004245334201389,
+              "y2": 0.9797007242838541
+            },
+            "confidence": 0.7098835110664368,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7344493865966797,
+              "x2": 0.8014444351196289,
+              "y1": 0.060754352145724826,
+              "y2": 0.1553182390001085
+            },
+            "confidence": 0.8262454271316528,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7427752176920573,
+              "x2": 0.889224116007487,
+              "y1": 0.15339881049262152,
+              "y2": 0.517919921875
+            },
+            "confidence": 0.7361111640930176,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.067
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:09.977837+00:00",
+        "eventId": "6e3e0d24-9326-57b9-b2cc-1bb8497cb9ff",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7098711013793946,
+              "x2": 0.9754426956176758,
+              "y1": 0.0,
+              "y2": 0.9849364104094329
+            },
+            "confidence": 0.8475693464279175,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7380823135375977,
+              "x2": 0.8053325653076172,
+              "y1": 0.05479337904188368,
+              "y2": 0.14654608832465277
+            },
+            "confidence": 0.7850533127784729,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7492656707763672,
+              "x2": 0.8836702346801758,
+              "y1": 0.15231696234809028,
+              "y2": 0.5022304958767361
+            },
+            "confidence": 0.8119445443153381,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.133
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.044504+00:00",
+        "eventId": "f971abf0-a950-587d-a2e7-5da6f2e50f6d",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7081897735595704,
+              "x2": 0.9725627899169922,
+              "y1": 0.0,
+              "y2": 0.989241197374132
+            },
+            "confidence": 0.8338854908943176,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7389537811279296,
+              "x2": 0.8054733276367188,
+              "y1": 0.0552495108710395,
+              "y2": 0.14490047030978734
+            },
+            "confidence": 0.6465914249420166,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7526112874348958,
+              "x2": 0.8851831436157227,
+              "y1": 0.15218498795120805,
+              "y2": 0.4969847502531829
+            },
+            "confidence": 0.8533781170845032,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.2
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.111171+00:00",
+        "eventId": "451b6038-552b-55c0-9336-f5a483f4b18b",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7037866592407227,
+              "x2": 0.9670240402221679,
+              "y1": 0.0,
+              "y2": 0.9890263310185186
+            },
+            "confidence": 0.8130215406417847,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7392976760864258,
+              "x2": 0.8060308456420898,
+              "y1": 0.054374482896592885,
+              "y2": 0.14362523114239728
+            },
+            "confidence": 0.6095702052116394,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7563526153564453,
+              "x2": 0.8814552307128907,
+              "y1": 0.1552388932969835,
+              "y2": 0.4975370619032118
+            },
+            "confidence": 0.8385326266288757,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.267
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.177837+00:00",
+        "eventId": "5cfe9e4f-718c-5b0d-977d-13c86421c4a8",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7102619171142578,
+              "x2": 0.9393903732299804,
+              "y1": 0.03175150553385417,
+              "y2": 0.9887953016493055
+            },
+            "confidence": 0.6731541752815247,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7388287226359049,
+              "x2": 0.805593744913737,
+              "y1": 0.05442885646113643,
+              "y2": 0.1474667019314236
+            },
+            "confidence": 0.7117640376091003,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7557804107666015,
+              "x2": 0.8797828674316406,
+              "y1": 0.1562220255533854,
+              "y2": 0.4871739705403646
+            },
+            "confidence": 0.8091979622840881,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.333
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.244504+00:00",
+        "eventId": "9258a780-adba-5f83-9df7-a02729840468",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7134235382080079,
+              "x2": 0.9352817535400391,
+              "y1": 0.03201412624782986,
+              "y2": 0.9744252522786458
+            },
+            "confidence": 0.5524734854698181,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7379910151163737,
+              "x2": 0.8049753824869792,
+              "y1": 0.055419141274911383,
+              "y2": 0.1476244749846282
+            },
+            "confidence": 0.8093113303184509,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7498380661010742,
+              "x2": 0.8796926498413086,
+              "y1": 0.162081782023112,
+              "y2": 0.48908216688368056
+            },
+            "confidence": 0.6713857650756836,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.4
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.311171+00:00",
+        "eventId": "21c1657a-cf61-5514-9834-1b106cad472a",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7084180831909179,
+              "x2": 0.9520309448242188,
+              "y1": 0.036031680636935765,
+              "y2": 0.9795033772786458
+            },
+            "confidence": 0.7463020086288452,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7365120569864909,
+              "x2": 0.8043505350748698,
+              "y1": 0.05667103661431207,
+              "y2": 0.1513829125298394
+            },
+            "confidence": 0.8693256378173828,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7478502273559571,
+              "x2": 0.8847681045532226,
+              "y1": 0.15441928439670138,
+              "y2": 0.49422115749782985
+            },
+            "confidence": 0.8144645690917969,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.467
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.377837+00:00",
+        "eventId": "1dccd679-aca8-5fcc-bf5c-394f4160765e",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7067815780639648,
+              "x2": 0.951182746887207,
+              "y1": 0.03537707858615451,
+              "y2": 0.9891903347439236
+            },
+            "confidence": 0.7947458624839783,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7361465454101562,
+              "x2": 0.8034580230712891,
+              "y1": 0.0577252917819553,
+              "y2": 0.1529764387342665
+            },
+            "confidence": 0.8830961585044861,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7502071380615234,
+              "x2": 0.9029281616210938,
+              "y1": 0.14568008140281394,
+              "y2": 0.49949747721354165
+            },
+            "confidence": 0.8232863545417786,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.533
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.444504+00:00",
+        "eventId": "b547ae8a-868f-5623-877f-d657cd3aec47",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6976673762003581,
+              "x2": 0.9431891123453776,
+              "y1": 0.02782830132378472,
+              "y2": 0.9856995759186922
+            },
+            "confidence": 0.8346174359321594,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7327781677246094,
+              "x2": 0.799901008605957,
+              "y1": 0.06470565795898438,
+              "y2": 0.15487819247775608
+            },
+            "confidence": 0.8171005845069885,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7560560226440429,
+              "x2": 0.8895797729492188,
+              "y1": 0.14544448852539063,
+              "y2": 0.5021152637622974
+            },
+            "confidence": 0.8465000987052917,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.6
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.511171+00:00",
+        "eventId": "d2ad484d-9ec1-555d-9ac6-35cc1f24b66b",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7020577112833659,
+              "x2": 0.9472584406534831,
+              "y1": 0.03404159545898437,
+              "y2": 0.9861792670355902
+            },
+            "confidence": 0.7997078895568848,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7257879892985026,
+              "x2": 0.7896370569864909,
+              "y1": 0.068960083855523,
+              "y2": 0.1558927889223452
+            },
+            "confidence": 0.7493927478790283,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7479146957397461,
+              "x2": 0.8859933853149414,
+              "y1": 0.1545280032687717,
+              "y2": 0.5016870569299768
+            },
+            "confidence": 0.8946391344070435,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.667
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.577837+00:00",
+        "eventId": "3b07c117-b90f-58d3-84d5-cd4f7a0e5675",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6964316050211589,
+              "x2": 0.9705280939737956,
+              "y1": 0.01638726128472222,
+              "y2": 0.9961389612268519
+            },
+            "confidence": 0.6968293190002441,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7200091679890951,
+              "x2": 0.7852908452351888,
+              "y1": 0.06870602501763237,
+              "y2": 0.15551263314706307
+            },
+            "confidence": 0.7480783462524414,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7390056610107422,
+              "x2": 0.8780736923217773,
+              "y1": 0.1583687252468533,
+              "y2": 0.5003463745117187
+            },
+            "confidence": 0.8633485436439514,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.733
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.644504+00:00",
+        "eventId": "dc490c32-925e-5073-8dbf-feb3158a623a",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6984150568644206,
+              "x2": 0.9907999674479167,
+              "y1": 0.019458177354600696,
+              "y2": 0.9909379747178819
+            },
+            "confidence": 0.6934579014778137,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7153820673624675,
+              "x2": 0.7829081217447916,
+              "y1": 0.0678616205851237,
+              "y2": 0.1643048745614511
+            },
+            "confidence": 0.6575667262077332,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7364913940429687,
+              "x2": 0.8751674652099609,
+              "y1": 0.15230106777615018,
+              "y2": 0.5025269684968171
+            },
+            "confidence": 0.898710310459137,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.8
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.711171+00:00",
+        "eventId": "e2c9fdf5-1546-503a-a5f8-6d23266c34be",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7040267944335937,
+              "x2": 0.8913372039794922,
+              "y1": 0.04562861124674479,
+              "y2": 0.9829414650245949
+            },
+            "confidence": 0.6306715607643127,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7145906448364258,
+              "x2": 0.7821441650390625,
+              "y1": 0.06820992363823784,
+              "y2": 0.16749068366156683
+            },
+            "confidence": 0.7656388282775879,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7360393524169921,
+              "x2": 0.8750556945800781,
+              "y1": 0.14466082255045573,
+              "y2": 0.49759849265769673
+            },
+            "confidence": 0.8448581695556641,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.867
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.777837+00:00",
+        "eventId": "917369ef-4d60-5327-ac63-b75a0a41bb54",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.703509521484375,
+              "x2": 0.8850569407145182,
+              "y1": 0.0448288811577691,
+              "y2": 0.9828577112268518
+            },
+            "confidence": 0.5732230544090271,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7128964742024739,
+              "x2": 0.7824975331624349,
+              "y1": 0.06554446750217013,
+              "y2": 0.16444385669849537
+            },
+            "confidence": 0.708732008934021,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.733628527323405,
+              "x2": 0.8726248423258464,
+              "y1": 0.14616478814019096,
+              "y2": 0.49434464066116895
+            },
+            "confidence": 0.8836942315101624,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 2.933
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.844504+00:00",
+        "eventId": "fd26884f-d504-5586-8642-fa6fd009ea2c",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6998992919921875,
+              "x2": 0.917782974243164,
+              "y1": 0.04240993923611111,
+              "y2": 0.9999709517867477
+            },
+            "confidence": 0.6131988763809204,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7112080256144205,
+              "x2": 0.7759450912475586,
+              "y1": 0.06858155992296007,
+              "y2": 0.17231438248245803
+            },
+            "confidence": 0.8147249817848206,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7290827433268229,
+              "x2": 0.8764038721720377,
+              "y1": 0.13616049024793836,
+              "y2": 0.4945628978587963
+            },
+            "confidence": 0.831138551235199,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.0
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.911171+00:00",
+        "eventId": "b9b05c2e-a04a-5730-8eaa-b01c2163187d",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6932847976684571,
+              "x2": 0.9161954879760742,
+              "y1": 0.04316923353407118,
+              "y2": 0.9953637017144097
+            },
+            "confidence": 0.6708879470825195,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7088356653849284,
+              "x2": 0.7743940989176432,
+              "y1": 0.0704902860853407,
+              "y2": 0.18297932942708334
+            },
+            "confidence": 0.764781653881073,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.730004628499349,
+              "x2": 0.8831209182739258,
+              "y1": 0.1342410617404514,
+              "y2": 0.5023520010489004
+            },
+            "confidence": 0.753032922744751,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "confidence": 0.6708879470825195,
+            "geometryVersion": 1,
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "trackId": 3,
+            "type": "ZONE_ENTRY"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.067
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:10.977837+00:00",
+        "eventId": "661706ef-d39f-5141-986e-1e54f0ef8b5e",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6854595184326172,
+              "x2": 0.9072320938110352,
+              "y1": 0.04954833984375,
+              "y2": 0.9803835268373843
+            },
+            "confidence": 0.7196552753448486,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7074794769287109,
+              "x2": 0.7695526123046875,
+              "y1": 0.07479565938313802,
+              "y2": 0.17983487447102864
+            },
+            "confidence": 0.8128874897956848,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7311024347941081,
+              "x2": 0.8870995203653972,
+              "y1": 0.16126458909776475,
+              "y2": 0.5082051595052083
+            },
+            "confidence": 0.8231381177902222,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.133
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.044504+00:00",
+        "eventId": "bba9c9fc-180f-5749-ac98-e606027fa375",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6848085403442383,
+              "x2": 0.9006591796875,
+              "y1": 0.05081973605685764,
+              "y2": 0.9909326623987269
+            },
+            "confidence": 0.7217512130737305,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7038515090942383,
+              "x2": 0.7676161448160808,
+              "y1": 0.07895079718695747,
+              "y2": 0.17537621392144098
+            },
+            "confidence": 0.782386839389801,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7266629536946615,
+              "x2": 0.8772253036499024,
+              "y1": 0.1443277147081163,
+              "y2": 0.5096905743634259
+            },
+            "confidence": 0.8321582078933716,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.2
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.111171+00:00",
+        "eventId": "3fccef1d-4d2e-5f45-9c6b-fd510e9546b9",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6822073618570964,
+              "x2": 0.8922386805216471,
+              "y1": 0.06076168484157986,
+              "y2": 0.9979615388093172
+            },
+            "confidence": 0.6643129587173462,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7003395080566406,
+              "x2": 0.7662282943725586,
+              "y1": 0.08429520924886068,
+              "y2": 0.18507202996148003
+            },
+            "confidence": 0.6967288255691528,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7257680892944336,
+              "x2": 0.8729065577189128,
+              "y1": 0.14074889289008247,
+              "y2": 0.5166000366210938
+            },
+            "confidence": 0.8365085124969482,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.267
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.177837+00:00",
+        "eventId": "611ce963-de12-5bb4-a510-bcd5cad10496",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.67916259765625,
+              "x2": 0.8937002182006836,
+              "y1": 0.06387422349717882,
+              "y2": 0.9875689471209491
+            },
+            "confidence": 0.7088501453399658,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6960634231567383,
+              "x2": 0.7623186747233073,
+              "y1": 0.08971159193250867,
+              "y2": 0.18809319955331308
+            },
+            "confidence": 0.6114223599433899,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7167257308959961,
+              "x2": 0.8698051452636719,
+              "y1": 0.1477876451280382,
+              "y2": 0.5327909681532118
+            },
+            "confidence": 0.8030338287353516,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.333
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.244504+00:00",
+        "eventId": "ac6e2381-742d-5c18-b6e4-2e777a12d768",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6839160919189453,
+              "x2": 0.8778036117553711,
+              "y1": 0.08677520751953124,
+              "y2": 0.9668965657552083
+            },
+            "confidence": 0.761541485786438,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6919546763102213,
+              "x2": 0.7562479654947917,
+              "y1": 0.0991533915201823,
+              "y2": 0.2035101572672526
+            },
+            "confidence": 0.7656455636024475,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7187898635864258,
+              "x2": 0.8662019729614258,
+              "y1": 0.15112550523546006,
+              "y2": 0.5228666517469618
+            },
+            "confidence": 0.8590672016143799,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.4
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.311171+00:00",
+        "eventId": "ce2b33ce-befa-52da-a1f4-fad1ea0e70d4",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6808142344156901,
+              "x2": 0.8701494852701823,
+              "y1": 0.09523230658637152,
+              "y2": 0.9693325466579861
+            },
+            "confidence": 0.767802894115448,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6906557083129883,
+              "x2": 0.7521462122599284,
+              "y1": 0.10770878261990018,
+              "y2": 0.19782740275065105
+            },
+            "confidence": 0.8121867179870605,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7171871821085612,
+              "x2": 0.8638975143432617,
+              "y1": 0.1535808563232422,
+              "y2": 0.5199215359157986
+            },
+            "confidence": 0.8297188878059387,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.467
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.377837+00:00",
+        "eventId": "37a90494-1e10-56c4-a001-37acf8808a63",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6813090006510417,
+              "x2": 0.8622036616007487,
+              "y1": 0.09662543402777778,
+              "y2": 0.9568393283420139
+            },
+            "confidence": 0.6333742737770081,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6855478286743164,
+              "x2": 0.7450829188028971,
+              "y1": 0.11927980493616175,
+              "y2": 0.20522969563802082
+            },
+            "confidence": 0.7398231625556946,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7161863327026368,
+              "x2": 0.8629930496215821,
+              "y1": 0.13619961208767362,
+              "y2": 0.5103490758825231
+            },
+            "confidence": 0.8603553771972656,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.533
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.444504+00:00",
+        "eventId": "9f83eca6-86d7-5503-a206-c6d398c15cc8",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6827545801798502,
+              "x2": 0.8642466227213542,
+              "y1": 0.11307203504774306,
+              "y2": 0.9756403040002893
+            },
+            "confidence": 0.714368999004364,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.685218620300293,
+              "x2": 0.7399362564086914,
+              "y1": 0.1361500210232205,
+              "y2": 0.22253837585449218
+            },
+            "confidence": 0.7015018463134766,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7253913879394531,
+              "x2": 0.8584717432657878,
+              "y1": 0.2770645706741898,
+              "y2": 0.6257070470739294
+            },
+            "confidence": 0.49947163462638855,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.6
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.577837+00:00",
+        "eventId": "e99ef377-e135-5517-b175-f6ed7289fc6b",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6771203994750976,
+              "x2": 0.8660928726196289,
+              "y1": 0.13155509101019966,
+              "y2": 0.9736243353949653
+            },
+            "confidence": 0.7697269916534424,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6841187159220378,
+              "x2": 0.7343828837076823,
+              "y1": 0.1617230450665509,
+              "y2": 0.23564187509042245
+            },
+            "confidence": 0.7990544438362122,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7221206665039063,
+              "x2": 0.8591428756713867,
+              "y1": 0.255049557156033,
+              "y2": 0.5343497947410301
+            },
+            "confidence": 0.4506929814815521,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.733
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.644504+00:00",
+        "eventId": "4f226ce8-3b1a-5a7c-af34-e4703e713a15",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6801579157511394,
+              "x2": 0.8669445037841796,
+              "y1": 0.14447818332248263,
+              "y2": 0.9701175265842014
+            },
+            "confidence": 0.7229298949241638,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6804823557535807,
+              "x2": 0.7742378870646159,
+              "y1": 0.1431807623969184,
+              "y2": 0.8651991102430555
+            },
+            "confidence": 0.2690884470939636,
+            "trackId": 4,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6830818176269531,
+              "x2": 0.7335880279541016,
+              "y1": 0.1660418192545573,
+              "y2": 0.2442591349283854
+            },
+            "confidence": 0.8419293761253357,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7185451507568359,
+              "x2": 0.7752815882364908,
+              "y1": 0.16838660063566985,
+              "y2": 0.4803258825231482
+            },
+            "confidence": 0.48513898253440857,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.8
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:11.711171+00:00",
+        "eventId": "b1d2d54b-6b71-553f-8ff6-7f146f176560",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6759180068969727,
+              "x2": 0.8689043045043945,
+              "y1": 0.14817937215169272,
+              "y2": 0.9215347290039062
+            },
+            "confidence": 0.7855314016342163,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.683328119913737,
+              "x2": 0.7324326197306316,
+              "y1": 0.17886895073784723,
+              "y2": 0.24479209052191842
+            },
+            "confidence": 0.5895063877105713,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7125925064086914,
+              "x2": 0.8622114181518554,
+              "y1": 0.21702490912543404,
+              "y2": 0.542873693395544
+            },
+            "confidence": 0.6845073103904724,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 3.867
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.111171+00:00",
+        "eventId": "1cdeb4e5-f2ad-51cf-9a19-31d890897fc4",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6834077835083008,
+              "x2": 0.8727569580078125,
+              "y1": 0.13646731906467013,
+              "y2": 0.823964097764757
+            },
+            "confidence": 0.7739892601966858,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6846117655436198,
+              "x2": 0.7422346750895182,
+              "y1": 0.158660888671875,
+              "y2": 0.23986409505208334
+            },
+            "confidence": 0.6121839880943298,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7148242950439453,
+              "x2": 0.863646125793457,
+              "y1": 0.20688624911838108,
+              "y2": 0.5169814498336227
+            },
+            "confidence": 0.8077037334442139,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.267
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.177837+00:00",
+        "eventId": "a6f50619-b2c9-5e27-b598-8b665cbaa24e",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6644875208536783,
+              "x2": 0.8784761428833008,
+              "y1": 0.12916649712456596,
+              "y2": 0.9267686631944444
+            },
+            "confidence": 0.7768880724906921,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6834674835205078,
+              "x2": 0.7427408854166667,
+              "y1": 0.15211062961154515,
+              "y2": 0.23327034844292535
+            },
+            "confidence": 0.7644942998886108,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7134914398193359,
+              "x2": 0.8686786651611328,
+              "y1": 0.1999254862467448,
+              "y2": 0.5269485473632812
+            },
+            "confidence": 0.8712353706359863,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.333
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.244504+00:00",
+        "eventId": "d2276662-5cb7-5a58-aa06-af25e992a189",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6748219172159831,
+              "x2": 0.8807966232299804,
+              "y1": 0.1114672342936198,
+              "y2": 0.9695098876953125
+            },
+            "confidence": 0.7897157669067383,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6835287094116211,
+              "x2": 0.7434135437011719,
+              "y1": 0.1364892606382017,
+              "y2": 0.22533476087782117
+            },
+            "confidence": 0.7506304383277893,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7156611124674479,
+              "x2": 0.8730764389038086,
+              "y1": 0.19283346953215422,
+              "y2": 0.5371819390190973
+            },
+            "confidence": 0.8537654280662537,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.4
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.311171+00:00",
+        "eventId": "bb923540-0e08-5cfe-9e8f-8c613165a2a4",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6734491348266601,
+              "x2": 0.8780073165893555,
+              "y1": 0.10738618638780383,
+              "y2": 0.9674285888671875
+            },
+            "confidence": 0.8301236033439636,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6842333475748698,
+              "x2": 0.7457401911417644,
+              "y1": 0.13028110928005643,
+              "y2": 0.2257973141140408
+            },
+            "confidence": 0.7435709834098816,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7153238932291667,
+              "x2": 0.8705236434936523,
+              "y1": 0.1951578069616247,
+              "y2": 0.5522873489945023
+            },
+            "confidence": 0.85982346534729,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.467
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.377837+00:00",
+        "eventId": "91f3454a-ffa3-5321-b0a9-6ed6625b9675",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6733124415079753,
+              "x2": 0.8864790598551432,
+              "y1": 0.09716915554470486,
+              "y2": 0.9786627875434027
+            },
+            "confidence": 0.7450620532035828,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6650707880655925,
+              "x2": 0.7220099131266277,
+              "y1": 0.26506017049153646,
+              "y2": 0.4287727355957031
+            },
+            "confidence": 0.35022440552711487,
+            "trackId": 5,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6890115737915039,
+              "x2": 0.7519514083862304,
+              "y1": 0.11697516971164279,
+              "y2": 0.2161757292570891
+            },
+            "confidence": 0.7027133703231812,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7197055816650391,
+              "x2": 0.8711338043212891,
+              "y1": 0.18043492635091146,
+              "y2": 0.5946401525426794
+            },
+            "confidence": 0.8298150897026062,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.533
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.444504+00:00",
+        "eventId": "da858dd9-9a0c-5b1e-a687-6f33543a35e9",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6769266764322917,
+              "x2": 0.880443000793457,
+              "y1": 0.091107177734375,
+              "y2": 0.9815039740668403
+            },
+            "confidence": 0.5687316060066223,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6682907104492187,
+              "x2": 0.7248948415120443,
+              "y1": 0.26748312490957754,
+              "y2": 0.429609454119647
+            },
+            "confidence": 0.6589129567146301,
+            "trackId": 5,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6941219329833984,
+              "x2": 0.7600139617919922,
+              "y1": 0.1062082290649414,
+              "y2": 0.19826797202781396
+            },
+            "confidence": 0.6170235276222229,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7203290939331055,
+              "x2": 0.8647529602050781,
+              "y1": 0.1747810787624783,
+              "y2": 0.5654758029513889
+            },
+            "confidence": 0.7391334176063538,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6903090159098307,
+              "x2": 0.7075709025065104,
+              "y1": 0.27326490614149307,
+              "y2": 0.30512172557689526
+            },
+            "confidence": 0.2719680964946747,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 5,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6753894805908203,
+              "x2": 0.7227745691935221,
+              "y1": 0.3119608278627749,
+              "y2": 0.42493760850694445
+            },
+            "confidence": 0.4246430993080139,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 5,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.6
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.511171+00:00",
+        "eventId": "afaca80d-682d-5547-924a-c833d4ac8031",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6789375305175781,
+              "x2": 0.8868904749552409,
+              "y1": 0.08833999633789062,
+              "y2": 0.9769266764322917
+            },
+            "confidence": 0.36286911368370056,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6697170893351237,
+              "x2": 0.7278134028116862,
+              "y1": 0.2700877719455295,
+              "y2": 0.43295152452256946
+            },
+            "confidence": 0.6208521723747253,
+            "trackId": 5,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.696710205078125,
+              "x2": 0.7625978469848633,
+              "y1": 0.10147675408257378,
+              "y2": 0.1951714833577474
+            },
+            "confidence": 0.8250240683555603,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7187735239664713,
+              "x2": 0.8777197519938151,
+              "y1": 0.17521976894802518,
+              "y2": 0.5872243245442709
+            },
+            "confidence": 0.7622854709625244,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6777651468912761,
+              "x2": 0.7238211313883464,
+              "y1": 0.31087988394278065,
+              "y2": 0.4208679481788918
+            },
+            "confidence": 0.4381474554538727,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 5,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.667
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.577837+00:00",
+        "eventId": "f7fa8187-8eff-5fa4-8840-f08d0e772d9a",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6686548868815104,
+              "x2": 0.8989418029785157,
+              "y1": 0.06739086574978298,
+              "y2": 0.9855029070818866
+            },
+            "confidence": 0.2557241916656494,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6721069971720378,
+              "x2": 0.7303316752115886,
+              "y1": 0.2702561272515191,
+              "y2": 0.4386945088704427
+            },
+            "confidence": 0.6822128295898438,
+            "trackId": 5,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7030846277872721,
+              "x2": 0.7672861735026042,
+              "y1": 0.09502090877956815,
+              "y2": 0.17486336319534868
+            },
+            "confidence": 0.5474624037742615,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7166187922159831,
+              "x2": 0.8824991861979167,
+              "y1": 0.17245046827528213,
+              "y2": 0.5689878110532407
+            },
+            "confidence": 0.8114446997642517,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.679571533203125,
+              "x2": 0.723208236694336,
+              "y1": 0.31038106282552086,
+              "y2": 0.42709969414605037
+            },
+            "confidence": 0.3565138280391693,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 5,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.733
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.644504+00:00",
+        "eventId": "067e199c-f731-5ebe-b1bb-7e6940a7b6bf",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6879860560099283,
+              "x2": 0.9042844772338867,
+              "y1": 0.053015051947699655,
+              "y2": 0.9898830837673611
+            },
+            "confidence": 0.3716790974140167,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6747245788574219,
+              "x2": 0.7342075347900391,
+              "y1": 0.26823416815863715,
+              "y2": 0.4392538282606337
+            },
+            "confidence": 0.7411761283874512,
+            "trackId": 5,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7104333877563477,
+              "x2": 0.7791370391845703,
+              "y1": 0.0803124745686849,
+              "y2": 0.17883724636501735
+            },
+            "confidence": 0.487409383058548,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7204430898030599,
+              "x2": 0.8886850357055665,
+              "y1": 0.16848424275716145,
+              "y2": 0.5402867635091145
+            },
+            "confidence": 0.6700280904769897,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6795088450113932,
+              "x2": 0.7294445673624674,
+              "y1": 0.3080249927662037,
+              "y2": 0.4268448723687066
+            },
+            "confidence": 0.528169572353363,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 5,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.8
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.777837+00:00",
+        "eventId": "5102bb84-6150-58f6-ac8d-b1027b66a97e",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6928194681803386,
+              "x2": 0.9039073944091797,
+              "y1": 0.04266984727647569,
+              "y2": 1.0
+            },
+            "confidence": 0.598530113697052,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6817551294962565,
+              "x2": 0.7448967615763347,
+              "y1": 0.26877701370804397,
+              "y2": 0.4408593919542101
+            },
+            "confidence": 0.5070905685424805,
+            "trackId": 5,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7284097671508789,
+              "x2": 0.7945249557495118,
+              "y1": 0.06618470085991754,
+              "y2": 0.1493175082736545
+            },
+            "confidence": 0.6023633480072021,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.7332578659057617,
+              "x2": 0.8810911178588867,
+              "y1": 0.1659226311577691,
+              "y2": 0.4817917435257523
+            },
+            "confidence": 0.7774462699890137,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.686363410949707,
+              "x2": 0.7390006383260092,
+              "y1": 0.30791275589554395,
+              "y2": 0.4294539557562934
+            },
+            "confidence": 0.3231658339500427,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 5,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 4.933
+    },
+    {
+      "event": {
+        "cameraExternalId": "ppe-demo",
+        "capturedAt": "2026-09-23T09:49:12.844504+00:00",
+        "eventId": "a9d6e69f-1366-596b-9f59-82b825bbc481",
+        "evidence": [],
+        "frameDimensions": {
+          "height": 1080,
+          "width": 1920
+        },
+        "observations": [
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.6977121353149414,
+              "x2": 0.9105365753173829,
+              "y1": 0.037778981526692706,
+              "y2": 1.0
+            },
+            "confidence": 0.5427427887916565,
+            "trackId": 3,
+            "type": "PERSON"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.734081522623698,
+              "x2": 0.8021322886149088,
+              "y1": 0.056547355651855466,
+              "y2": 0.138713624742296
+            },
+            "confidence": 0.7016400098800659,
+            "geometryVersion": 1,
+            "ppeItem": "HARD_HAT",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "MISSING",
+            "trackId": 3,
+            "type": "PPE"
+          },
+          {
+            "boundingBox": {
+              "coordinateSpace": "NORMALIZED_0_1",
+              "x1": 0.734814707438151,
+              "x2": 0.8859650293986002,
+              "y1": 0.16747618781195747,
+              "y2": 0.5637053878219039
+            },
+            "confidence": 0.6100517511367798,
+            "geometryVersion": 1,
+            "ppeItem": "SAFETY_VEST",
+            "regionId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "status": "PRESENT",
+            "trackId": 3,
+            "type": "PPE"
+          }
+        ],
+        "schemaVersion": "1.0.0",
+        "streamSessionId": "76964564-6996-4446-9416-ff643a20b2bc"
+      },
+      "videoTimeSeconds": 5.0
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}
