@@ -47,7 +47,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
         { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
         { id: 'workforce', label: 'Workforce', icon: IconUsers },
         { id: 'access', label: 'Site Access', icon: IconKey },
-      ]
+      ],
     },
     {
       label: 'Safety',
@@ -56,15 +56,15 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
         { id: 'ppe', label: 'PPE Monitoring', icon: IconHardHat },
         { id: 'zones', label: 'Restricted Zones', icon: IconShield },
         { id: 'incidents', label: 'Incidents', icon: IconAlertTriangle },
-      ]
+      ],
     },
     {
       label: 'Site Data',
       items: [
         { id: 'iot', label: 'IoT Monitoring', icon: IconRadio },
         { id: 'progress', label: 'Progress', icon: IconTrendingUp },
-      ]
-    }
+      ],
+    },
   ];
 
   return (
@@ -133,7 +133,9 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                         onClick={() => onSelectTab(item.id as ActiveTab)}
                         title={isCollapsed ? item.label : undefined}
                         className={`w-full flex items-center ${
-                          isCollapsed ? 'justify-center px-0 py-2.5' : 'justify-between px-3.5 py-2.5'
+                          isCollapsed
+                            ? 'justify-center px-0 py-2.5'
+                            : 'justify-between px-3.5 py-2.5'
                         } rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
                           isActive
                             ? 'bg-white/10 text-white font-semibold shadow-inner'
