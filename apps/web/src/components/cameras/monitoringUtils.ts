@@ -63,6 +63,57 @@ export function getEffectiveDetections(
   return { detections: liveDetections, isLive: true };
 }
 
+export type PpeResultState =
+  'NO_TARGETS' | 'CONFIRMED_MISSING' | 'PENDING_CONFIRMATION' | 'COMPLIANT' | 'UNKNOWN';
+
+export type PpeItemDisplayState = 'CONFIRMED_MISSING' | 'PENDING_MISSING' | 'PRESENT' | 'UNKNOWN';
+
+function resolvePpeAlertState(
+  detection: VideoTestDetection,
+): Exclude<VideoTestDetection['alertState'], undefined> {
+  if (detection.alertState) return detection.alertState;
+  if (detection.active) return 'CONFIRMED';
+  if (Object.values(detection.ppeStatus).some((status) => status === 'MISSING')) {
+    return 'PENDING_CONFIRMATION';
+  }
+  if (Object.values(detection.ppeStatus).every((status) => status === 'PRESENT')) {
+    return 'COMPLIANT';
+  }
+  return 'UNKNOWN';
+}
+
+/** Uses the AI alert state first and the legacy active flag only when no state was sent. */
+export function isConfirmedPpeDetection(detection: VideoTestDetection): boolean {
+  return detection.alertState ? detection.alertState === 'CONFIRMED' : detection.active;
+}
+
+/** Derives the MF05 result without treating omitted PPE evidence as compliance. */
+export function getPpeResultState(detections: VideoTestDetection[]): PpeResultState {
+  if (detections.length === 0) return 'NO_TARGETS';
+  const states = detections.map(resolvePpeAlertState);
+  if (states.includes('CONFIRMED')) return 'CONFIRMED_MISSING';
+  if (states.includes('PENDING_CONFIRMATION')) {
+    return 'PENDING_CONFIRMATION';
+  }
+  if (states.every((state) => state === 'COMPLIANT')) return 'COMPLIANT';
+  return 'UNKNOWN';
+}
+
+/** Separates the current-frame item evidence from the temporally latched alert. */
+export function getPpeItemDisplayState(
+  detection: VideoTestDetection,
+  item: 'HARD_HAT' | 'SAFETY_VEST',
+): PpeItemDisplayState {
+  const confirmedItems = detection.confirmedMissingItems;
+  const confirmed = confirmedItems
+    ? confirmedItems.includes(item)
+    : isConfirmedPpeDetection(detection) && detection.ppeStatus[item] === 'MISSING';
+  if (confirmed) return 'CONFIRMED_MISSING';
+  if (detection.ppeStatus[item] === 'MISSING') return 'PENDING_MISSING';
+  if (detection.ppeStatus[item] === 'PRESENT') return 'PRESENT';
+  return 'UNKNOWN';
+}
+
 /**
  * Selects the primary detection for badges and summary cards in RestrictedZoneView.
  * Prioritizes the first active (intruding) track, and falls back to index 0.

@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   buildAiWebSocketUrl,
   getEffectiveDetections,
+  getPpeItemDisplayState,
+  getPpeResultState,
+  isConfirmedPpeDetection,
   getPrimaryZoneDetection,
   getPpeEventRowKey,
   getZoneEventRowKey,
@@ -89,6 +92,79 @@ describe('monitoringUtils', () => {
       const result = getEffectiveDetections([liveItem], [mockFixtureDetection]);
       expect(result.isLive).toBe(true);
       expect(result.detections).toEqual([liveItem]);
+    });
+  });
+
+  describe('getPpeResultState', () => {
+    const detection = (
+      active: boolean,
+      hardHat: 'PRESENT' | 'MISSING' | 'UNKNOWN',
+      safetyVest: 'PRESENT' | 'MISSING' | 'UNKNOWN',
+    ): VideoTestDetection => ({
+      active,
+      boundingBox: null,
+      confidence: 0.9,
+      eventId: 'EVT-PPE',
+      label: 'PPE',
+      ppeStatus: { HARD_HAT: hardHat, SAFETY_VEST: safetyVest },
+      timecode: 'LIVE',
+      trackId: 1,
+    });
+
+    it('does not turn unknown evidence into compliance', () => {
+      expect(getPpeResultState([detection(false, 'UNKNOWN', 'UNKNOWN')])).toBe('UNKNOWN');
+      expect(getPpeResultState([detection(false, 'PRESENT', 'UNKNOWN')])).toBe('UNKNOWN');
+    });
+
+    it('distinguishes raw missing evidence from a confirmed candidate', () => {
+      expect(getPpeResultState([detection(false, 'MISSING', 'PRESENT')])).toBe(
+        'PENDING_CONFIRMATION',
+      );
+      expect(getPpeResultState([detection(true, 'MISSING', 'PRESENT')])).toBe('CONFIRMED_MISSING');
+    });
+
+    it('requires every required item on every track before reporting compliance', () => {
+      expect(getPpeResultState([detection(false, 'PRESENT', 'PRESENT')])).toBe('COMPLIANT');
+      expect(
+        getPpeResultState([
+          detection(false, 'PRESENT', 'PRESENT'),
+          { ...detection(false, 'PRESENT', 'UNKNOWN'), trackId: 2 },
+        ]),
+      ).toBe('UNKNOWN');
+      expect(getPpeResultState([])).toBe('NO_TARGETS');
+    });
+
+    it('uses the AI alert state as source of truth for latched confirmation', () => {
+      const confirmed = {
+        ...detection(false, 'PRESENT', 'UNKNOWN'),
+        alertState: 'CONFIRMED' as const,
+        confirmedMissingItems: ['HARD_HAT'] as const,
+      };
+      expect(getPpeResultState([confirmed])).toBe('CONFIRMED_MISSING');
+      expect(isConfirmedPpeDetection(confirmed)).toBe(true);
+      expect(
+        isConfirmedPpeDetection({
+          ...detection(true, 'MISSING', 'PRESENT'),
+          alertState: 'UNKNOWN',
+        }),
+      ).toBe(false);
+      expect(isConfirmedPpeDetection(detection(true, 'MISSING', 'PRESENT'))).toBe(true);
+    });
+
+    it('keeps item-level confirmation separate from current frame evidence', () => {
+      const latched = {
+        ...detection(true, 'PRESENT', 'MISSING'),
+        alertState: 'CONFIRMED' as const,
+        confirmedMissingItems: ['HARD_HAT'] as const,
+      };
+      expect(getPpeItemDisplayState(latched, 'HARD_HAT')).toBe('CONFIRMED_MISSING');
+      expect(getPpeItemDisplayState(latched, 'SAFETY_VEST')).toBe('PENDING_MISSING');
+      expect(
+        getPpeItemDisplayState(
+          { ...detection(false, 'MISSING', 'PRESENT'), alertState: 'CONFIRMED' },
+          'HARD_HAT',
+        ),
+      ).toBe('CONFIRMED_MISSING');
     });
   });
 
@@ -263,9 +339,27 @@ describe('monitoringUtils', () => {
 
   describe('Event Filtering', () => {
     const mockPpeEvents = [
-      { id: '1', rowKey: '1-1-HARD_HAT', trackId: 1, ppeItem: 'HARD_HAT' as const, issue: 'Missing Hard Hat' },
-      { id: '2', rowKey: '2-1-SAFETY_VEST', trackId: 1, ppeItem: 'SAFETY_VEST' as const, issue: 'Missing Safety Vest' },
-      { id: '3', rowKey: '3-2-HARD_HAT', trackId: 2, ppeItem: 'HARD_HAT' as const, issue: 'Missing Hard Hat' },
+      {
+        id: '1',
+        rowKey: '1-1-HARD_HAT',
+        trackId: 1,
+        ppeItem: 'HARD_HAT' as const,
+        issue: 'Missing Hard Hat',
+      },
+      {
+        id: '2',
+        rowKey: '2-1-SAFETY_VEST',
+        trackId: 1,
+        ppeItem: 'SAFETY_VEST' as const,
+        issue: 'Missing Safety Vest',
+      },
+      {
+        id: '3',
+        rowKey: '3-2-HARD_HAT',
+        trackId: 2,
+        ppeItem: 'HARD_HAT' as const,
+        issue: 'Missing Hard Hat',
+      },
     ];
 
     it('filters PPE events by item type truly changing list length', () => {
