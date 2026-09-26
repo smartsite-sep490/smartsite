@@ -27,146 +27,199 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 1. Hero Section Animation
-  useGSAP(() => {
-    const tl = gsap.timeline();
+  useGSAP(
+    () => {
+      const tl = gsap.timeline();
 
-    // Animate the main headline
-    tl.from('.hero-badge', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out', delay: 0.2 })
-      .from('.hero-headline', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.4')
-      .from('.hero-desc', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.6')
-      .from('.hero-btns', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.4')
-      .from('.hero-card', { x: -30, opacity: 0, duration: 0.8, ease: 'back.out(1.5)' }, '-=0.4');
+      // Animate the main headline
+      tl.from('.hero-badge', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out', delay: 0.2 })
+        .from('.hero-headline', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.4')
+        .from('.hero-desc', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.6')
+        .from('.hero-btns', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.4')
+        .from('.hero-card', { x: -30, opacity: 0, duration: 0.8, ease: 'back.out(1.5)' }, '-=0.4');
 
-    // Parallax on scroll for the hero background
-    gsap.to('.hero-bg', {
-      y: '20%',
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '.hero-section',
-        start: 'top top',
-        end: 'bottom top',
-        scrub: true,
-      },
-    });
+      // Parallax on scroll for the hero background
+      gsap.to('.hero-bg', {
+        y: '20%',
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.hero-section',
+          start: 'top top',
+          end: 'bottom top',
+          scrub: true,
+        },
+      });
 
-    // 2. The Challenge Section
-    gsap.from('.challenge-header', {
-      scrollTrigger: { trigger: '.challenge-section', start: 'top 80%' },
-      y: 30, opacity: 0, duration: 0.6, ease: 'power2.out'
-    });
-    gsap.fromTo('.challenge-card',
-      { y: 40, opacity: 0 },
-      {
-        scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
-        y: 0, opacity: 1, duration: 0.6, stagger: 0.15, ease: 'power2.out'
-      }
-    );
-
-    // 3. One Platform
-    const platformTl = gsap.timeline({
-      scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
-    });
-    platformTl.from('.platform-text > *', {
-      x: -50,
-      opacity: 0,
-      duration: 0.8,
-      stagger: 0.2,
-      ease: 'back.out(1.2)',
-    });
-    platformTl.from(
-      '.platform-diagram',
-      {
-        scale: 0.5,
-        rotation: -45,
+      // 2. The Challenge Section
+      gsap.from('.challenge-header', {
+        scrollTrigger: { trigger: '.challenge-section', start: 'top 80%' },
+        y: 30,
         opacity: 0,
-        duration: 1.2,
-        ease: 'elastic.out(1, 0.5)',
-      },
-      '-=0.6',
-    );
-    // Add subtle floating to the orbiting nodes
-    gsap.to('.orbit-node', {
-      y: -10,
-      duration: 1.5,
-      yoyo: true,
-      repeat: -1,
-      ease: 'sine.inOut',
-      stagger: 0.3,
-    });
+        duration: 0.6,
+        ease: 'power2.out',
+      });
+      gsap.fromTo(
+        '.challenge-card',
+        { y: 40, opacity: 0 },
+        {
+          scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
+          y: 0,
+          opacity: 1,
+          duration: 0.6,
+          stagger: 0.15,
+          ease: 'power2.out',
+        },
+      );
 
-    // 4. Solutions Grid Entrance
-    gsap.fromTo('.solution-card',
-      { y: 100, opacity: 0, scale: 0.95 },
-      {
-        scrollTrigger: { trigger: '.solutions-section', start: 'top 80%' },
-        y: 0,
-        opacity: 1,
-        scale: 1,
+      // 3. One Platform
+      const platformTl = gsap.timeline({
+        scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
+      });
+      platformTl.from('.platform-text > *', {
+        x: -50,
+        opacity: 0,
         duration: 0.8,
-        stagger: 0.15,
-        ease: 'back.out(1.5)'
-      }
-    );
-
-    // 4b. Solutions Grid Hover
-    const solutionCards = Array.from(document.querySelectorAll('.solution-card')) as HTMLElement[];
-    solutionCards.forEach((card) => {
-      const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
-
-      card.addEventListener('mouseenter', () => {
-        gsap.to(card, { y: -10, scale: 1.02, duration: 0.3, ease: 'power2.out', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' });
-        if (icon) gsap.to(icon, { rotation: 15, scale: 1.2, duration: 0.4, ease: 'back.out(2)' });
+        stagger: 0.2,
+        ease: 'back.out(1.2)',
+      });
+      platformTl.from(
+        '.platform-diagram',
+        {
+          scale: 0.5,
+          rotation: -45,
+          opacity: 0,
+          duration: 1.2,
+          ease: 'elastic.out(1, 0.5)',
+        },
+        '-=0.6',
+      );
+      // Add subtle floating to the orbiting nodes
+      gsap.to('.orbit-node', {
+        y: -10,
+        duration: 1.5,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inOut',
+        stagger: 0.3,
       });
 
-      card.addEventListener('mouseleave', () => {
-        gsap.to(card, { y: 0, scale: 1, duration: 0.3, ease: 'power2.out', boxShadow: 'none' });
-        if (icon) gsap.to(icon, { rotation: 0, scale: 1, duration: 0.4, ease: 'power2.out' });
+      // 4. Solutions Grid Entrance
+      gsap.fromTo(
+        '.solution-card',
+        { y: 100, opacity: 0, scale: 0.95 },
+        {
+          scrollTrigger: { trigger: '.solutions-section', start: 'top 80%' },
+          y: 0,
+          opacity: 1,
+          scale: 1,
+          duration: 0.8,
+          stagger: 0.15,
+          ease: 'back.out(1.5)',
+        },
+      );
+
+      // 4b. Solutions Grid Hover
+      const solutionCards = Array.from(
+        document.querySelectorAll('.solution-card'),
+      ) as HTMLElement[];
+      solutionCards.forEach((card) => {
+        const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
+
+        card.addEventListener('mouseenter', () => {
+          gsap.to(card, {
+            y: -10,
+            scale: 1.02,
+            duration: 0.3,
+            ease: 'power2.out',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          });
+          if (icon) gsap.to(icon, { rotation: 15, scale: 1.2, duration: 0.4, ease: 'back.out(2)' });
+        });
+
+        card.addEventListener('mouseleave', () => {
+          gsap.to(card, { y: 0, scale: 1, duration: 0.3, ease: 'power2.out', boxShadow: 'none' });
+          if (icon) gsap.to(icon, { rotation: 0, scale: 1, duration: 0.4, ease: 'power2.out' });
+        });
       });
-    });
 
-    // 5. Safety AI Showcase
-    gsap.to('.ai-laser', {
-      scrollTrigger: { trigger: '.safety-ai-section', start: 'top center', end: 'bottom center', scrub: 1 },
-      top: '90%', ease: 'none'
-    });
-    gsap.from('.ai-checklist-item', {
-      scrollTrigger: { trigger: '.safety-ai-section', start: 'top 60%' },
-      x: 30, opacity: 0, duration: 0.5, stagger: 0.2, ease: 'power2.out'
-    });
+      // 5. Safety AI Showcase
+      gsap.to('.ai-laser', {
+        scrollTrigger: {
+          trigger: '.safety-ai-section',
+          start: 'top center',
+          end: 'bottom center',
+          scrub: 1,
+        },
+        top: '90%',
+        ease: 'none',
+      });
+      gsap.from('.ai-checklist-item', {
+        scrollTrigger: { trigger: '.safety-ai-section', start: 'top 60%' },
+        x: 30,
+        opacity: 0,
+        duration: 0.5,
+        stagger: 0.2,
+        ease: 'power2.out',
+      });
 
-    // 6. Timeline
-    gsap.from('.timeline-step', {
-      scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
-      y: 30, opacity: 0, duration: 0.5, stagger: 0.2, ease: 'power2.out'
-    });
-    gsap.from('.timeline-line', {
-      scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
-      width: 0, duration: 1.5, ease: 'power2.out'
-    });
+      // 6. Timeline
+      gsap.from('.timeline-step', {
+        scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
+        y: 30,
+        opacity: 0,
+        duration: 0.5,
+        stagger: 0.2,
+        ease: 'power2.out',
+      });
+      gsap.from('.timeline-line', {
+        scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
+        width: 0,
+        duration: 1.5,
+        ease: 'power2.out',
+      });
 
-    // 7. Dashboard
-    gsap.from('.dashboard-mockup', {
-      scrollTrigger: { trigger: '.dashboard-section', start: 'top 80%' },
-      y: 100, opacity: 0, duration: 0.8, ease: 'power3.out'
-    });
-    gsap.from('.dashboard-stat', {
-      scrollTrigger: { trigger: '.dashboard-section', start: 'top 60%' },
-      scale: 0.8, opacity: 0, duration: 0.5, stagger: 0.1, ease: 'back.out(1.5)'
-    });
+      // 7. Dashboard
+      gsap.from('.dashboard-mockup', {
+        scrollTrigger: { trigger: '.dashboard-section', start: 'top 80%' },
+        y: 100,
+        opacity: 0,
+        duration: 0.8,
+        ease: 'power3.out',
+      });
+      gsap.from('.dashboard-stat', {
+        scrollTrigger: { trigger: '.dashboard-section', start: 'top 60%' },
+        scale: 0.8,
+        opacity: 0,
+        duration: 0.5,
+        stagger: 0.1,
+        ease: 'back.out(1.5)',
+      });
 
-    // 8. Lifecycle
-    gsap.from('.lifecycle-text', {
-      scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
-      x: -40, opacity: 0, duration: 0.7, ease: 'power2.out'
-    });
-    gsap.from('.lifecycle-step', {
-      scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
-      x: 40, opacity: 0, duration: 0.5, stagger: 0.1, ease: 'power2.out'
-    });
-  }, { scope: containerRef });
+      // 8. Lifecycle
+      gsap.from('.lifecycle-text', {
+        scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
+        x: -40,
+        opacity: 0,
+        duration: 0.7,
+        ease: 'power2.out',
+      });
+      gsap.from('.lifecycle-step', {
+        scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
+        x: 40,
+        opacity: 0,
+        duration: 0.5,
+        stagger: 0.1,
+        ease: 'power2.out',
+      });
+    },
+    { scope: containerRef },
+  );
 
   return (
-    <div ref={containerRef} className="relative w-full overflow-x-hidden min-h-screen bg-white text-slate-900 font-sans selection:bg-[#F66B17]/20 scroll-smooth">
+    <div
+      ref={containerRef}
+      className="relative w-full overflow-x-hidden min-h-screen bg-white text-slate-900 font-sans selection:bg-[#F66B17]/20 scroll-smooth"
+    >
       {/* 1. Header Navigation - Updated for Dark Hero */}
       <header className="absolute top-0 inset-x-0 z-50 bg-transparent">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -218,12 +271,13 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </header>
 
       {/* 2. Hero Section - EXACTLY like screenshot 1 */}
-      <section
-        className="hero-section relative min-h-screen flex items-center pt-20 overflow-hidden"
-      >
+      <section className="hero-section relative min-h-screen flex items-center pt-20 overflow-hidden">
         <div
           className="hero-bg absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url('https://onsite-guard-ai.lovable.app/assets/smartsite-hero-BVCX8sql.jpg')" }}
+          style={{
+            backgroundImage:
+              "url('https://onsite-guard-ai.lovable.app/assets/smartsite-hero-BVCX8sql.jpg')",
+          }}
         />
         {/* Gradient Overlays - Reduced opacity to make image clearer */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#041D2E]/90 via-[#041D2E]/40 to-transparent" />
@@ -394,7 +448,10 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 5. Built Around Operations */}
-      <section id="solutions" className="solutions-section py-24 px-6 bg-slate-50 border-y border-slate-100 scroll-mt-10">
+      <section
+        id="solutions"
+        className="solutions-section py-24 px-6 bg-slate-50 border-y border-slate-100 scroll-mt-10"
+      >
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-20 max-w-2xl">
             Built around how construction
@@ -535,7 +592,10 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 6. Safety AI - EXACTLY like screenshot 2 */}
-      <section id="safety-ai" className="safety-ai-section py-24 px-6 bg-[#041D2E] text-white overflow-hidden scroll-mt-10">
+      <section
+        id="safety-ai"
+        className="safety-ai-section py-24 px-6 bg-[#041D2E] text-white overflow-hidden scroll-mt-10"
+      >
         <div className="max-w-7xl mx-auto space-y-12">
           {/* Section Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
