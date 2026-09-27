@@ -107,6 +107,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
   const [type, setType] = useState<'ALL' | SafetyAlertType>('ALL');
   const [offset, setOffset] = useState(0);
   const activeSession = useRef<{ token: string; userId: string } | null>(null);
+  const lifecycleGeneration = useRef(0);
 
   const removeSessionQueries = useCallback(
     (userId: string) => {
@@ -119,6 +120,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
 
   const login = useMutation({
     mutationFn: async () => {
+      const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
       if (result.user.role !== 'ADMIN') {
         await client.logout(result.accessToken).catch(() => undefined);
@@ -128,6 +130,10 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
         await client.logout(result.accessToken).catch(() => undefined);
         throw new Error('Change the temporary Admin password before opening safety alerts.');
       }
+      if (generation !== lifecycleGeneration.current) {
+        void client.logout(result.accessToken).catch(() => undefined);
+        return;
+      }
       activeSession.current = { token: result.accessToken, userId: result.user.id };
       setSession(result);
       setPassword('');
@@ -135,16 +141,17 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     },
   });
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    lifecycleGeneration.current += 1;
+    return () => {
+      lifecycleGeneration.current += 1;
       const current = activeSession.current;
       activeSession.current = null;
       if (!current) return;
       removeSessionQueries(current.userId);
       void client.logout(current.token).catch(() => undefined);
-    },
-    [client, removeSessionQueries],
-  );
+    };
+  }, [client, removeSessionQueries]);
 
   const token = session?.accessToken ?? '';
   const sessionScope = session?.user.id ?? '';
