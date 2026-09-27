@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -106,6 +106,16 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
   const [status, setStatus] = useState<'ALL' | SafetyAlertStatus>('ALL');
   const [type, setType] = useState<'ALL' | SafetyAlertType>('ALL');
   const [offset, setOffset] = useState(0);
+  const activeSession = useRef<{ token: string; userId: string } | null>(null);
+
+  const removeSessionQueries = useCallback(
+    (userId: string) => {
+      queryClient.removeQueries({ queryKey: ['sites', apiUrl, userId] });
+      queryClient.removeQueries({ queryKey: ['safety-alerts', apiUrl, userId] });
+      queryClient.removeQueries({ queryKey: ['safety-alert', apiUrl, userId] });
+    },
+    [apiUrl, queryClient],
+  );
 
   const login = useMutation({
     mutationFn: async () => {
@@ -118,17 +128,28 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
         await client.logout(result.accessToken).catch(() => undefined);
         throw new Error('Change the temporary Admin password before opening safety alerts.');
       }
-      return result;
-    },
-    onSuccess: (result) => {
+      activeSession.current = { token: result.accessToken, userId: result.user.id };
       setSession(result);
       setPassword('');
+      // Do not retain LoginResponse in TanStack mutation data because it contains the access token.
     },
   });
 
+  useEffect(
+    () => () => {
+      const current = activeSession.current;
+      activeSession.current = null;
+      if (!current) return;
+      removeSessionQueries(current.userId);
+      void client.logout(current.token).catch(() => undefined);
+    },
+    [client, removeSessionQueries],
+  );
+
   const token = session?.accessToken ?? '';
+  const sessionScope = session?.user.id ?? '';
   const sites = useQuery({
-    queryKey: ['sites', apiUrl, token],
+    queryKey: ['sites', apiUrl, sessionScope],
     queryFn: () => client.listSites(token, { limit: 100 }),
     enabled: token.length > 0,
   });
@@ -138,7 +159,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     : (sites.data?.items[0]?.id ?? '');
 
   const alerts = useQuery({
-    queryKey: ['safety-alerts', apiUrl, token, selectedSiteId, status, type, offset],
+    queryKey: ['safety-alerts', apiUrl, sessionScope, selectedSiteId, status, type, offset],
     queryFn: () =>
       client.listSafetyAlerts(token, selectedSiteId, {
         offset,
@@ -154,7 +175,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     : (alerts.data?.items[0]?.id ?? '');
 
   const detail = useQuery({
-    queryKey: ['safety-alert', apiUrl, token, selectedSiteId, selectedAlertId],
+    queryKey: ['safety-alert', apiUrl, sessionScope, selectedSiteId, selectedAlertId],
     queryFn: () => client.getSafetyAlert(token, selectedSiteId, selectedAlertId),
     enabled: token.length > 0 && selectedSiteId.length > 0 && selectedAlertId.length > 0,
   });
@@ -164,20 +185,16 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     login.mutate();
   };
 
-  const handleLogout = async () => {
-    try {
-      await client.logout(token);
-    } catch {
-      // Local logout must still complete when the server is unreachable or the token has expired.
-    } finally {
-      queryClient.removeQueries({ queryKey: ['sites', apiUrl, token] });
-      queryClient.removeQueries({ queryKey: ['safety-alerts', apiUrl, token] });
-      queryClient.removeQueries({ queryKey: ['safety-alert', apiUrl, token] });
-      setSession(null);
-      setRequestedSiteId('');
-      setRequestedAlertId('');
-      setOffset(0);
-    }
+  const handleLogout = () => {
+    const current = activeSession.current;
+    activeSession.current = null;
+    if (current) removeSessionQueries(current.userId);
+    login.reset();
+    setSession(null);
+    setRequestedSiteId('');
+    setRequestedAlertId('');
+    setOffset(0);
+    if (current) void client.logout(current.token).catch(() => undefined);
   };
 
   if (!session) {
@@ -241,7 +258,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
         </div>
         <button
           type="button"
-          onClick={() => void handleLogout()}
+          onClick={handleLogout}
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
         >
           Sign out {session.user.displayName}

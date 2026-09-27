@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -62,6 +62,7 @@ export class SafetyAlertsController {
   constructor(private readonly alerts: SafetyAlertQueryService) {}
 
   @Get()
+  @Header('Cache-Control', 'no-store')
   @ApiOkResponse({ type: SafetyAlertPageResponseDto })
   async list(
     @Param('siteId') siteId: string,
@@ -76,6 +77,7 @@ export class SafetyAlertsController {
   }
 
   @Get(':alertId')
+  @Header('Cache-Control', 'no-store')
   @ApiOkResponse({ type: SafetyAlertDetailResponseDto })
   async get(@Param('siteId') siteId: string, @Param('alertId') alertId: string) {
     const result = await this.alerts.get(siteId, alertId);

@@ -227,8 +227,8 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                 SC
               </div>
               <div className="text-left leading-tight hidden sm:block">
-                <p className="font-semibold text-xs text-[#041D2E]">Sarah Chen</p>
-                <p className="text-[11px] text-[#62748E]">Safety Officer</p>
+                <p className="font-semibold text-xs text-[#041D2E]">SmartSite</p>
+                <p className="text-[11px] text-[#62748E]">Demo workspace</p>
               </div>
             </div>
           </div>

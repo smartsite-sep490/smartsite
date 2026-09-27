@@ -146,6 +146,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } },
   );
   assert.equal(alertList.status, 200);
+  assert.equal(alertList.headers.get('cache-control'), 'no-store');
   assert.deepEqual(alertListArguments, [
     siteId,
     2,
@@ -160,6 +161,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     headers: { Authorization: `Bearer ${'A'.repeat(43)}` },
   });
   assert.equal(alertDetail.status, 200);
+  assert.equal(alertDetail.headers.get('cache-control'), 'no-store');
   const alertDetailBody = (await alertDetail.json()) as Record<string, unknown>;
   assert.equal(alertDetailBody.id, alertId);
   assert.equal(alertDetailBody.detectionsTotal, 1);
