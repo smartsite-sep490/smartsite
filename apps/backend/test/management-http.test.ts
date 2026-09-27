@@ -8,6 +8,7 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../src/config/environment.js';
@@ -59,6 +60,8 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     }),
   };
   const site = { id: siteId, code: 'SITE', name: 'Site', createdAt: new Date() };
+  let configurationReads = 0;
+  let cameraExternalId = 'CAM-1';
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ConfigService)
     .useValue(config)
@@ -74,12 +77,15 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     .useValue({ list: async () => ({ items: [site], total: 1 }) })
     .overrideProvider(CameraConfigurationService)
     .useValue({
-      buildConfigurationForCamera: async () => ({
-        schemaVersion: '1.0.0',
-        configurationVersion: 1,
-        cameraExternalId: 'CAM-1',
-        regions: [],
-      }),
+      buildConfigurationForCamera: async () => {
+        configurationReads += 1;
+        return {
+          schemaVersion: '1.0.0',
+          configurationVersion: 1,
+          cameraExternalId,
+          regions: [],
+        };
+      },
     })
     .compile();
   const app = module.createNestApplication<NestExpressApplication>({
@@ -130,17 +136,101 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   const snapshot = await fetch(aiUrl, { headers: { Authorization: `Bearer ${serviceToken}` } });
   assert.equal(snapshot.status, 200);
   assert.equal(snapshot.headers.get('cache-control'), 'no-store');
+  const etag = `"sha256:${computeCanonicalPayloadHash({
+    schemaVersion: '1.0.0',
+    configurationVersion: 1,
+    cameraExternalId: 'CAM-1',
+    regions: [],
+  })}"`;
+  assert.equal(snapshot.headers.get('etag'), etag);
   assert.deepEqual(((await snapshot.json()) as { regions: unknown[] }).regions, []);
+  const unchanged = await fetch(aiUrl, {
+    headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': etag },
+  });
+  assert.equal(unchanged.status, 304);
+  assert.equal(unchanged.headers.get('etag'), etag);
+  assert.equal(unchanged.headers.get('cache-control'), 'no-store');
+  assert.equal(await unchanged.text(), '');
+  const weakUnchanged = await fetch(aiUrl, {
+    headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': `W/${etag}` },
+  });
+  assert.equal(weakUnchanged.status, 304);
+  assert.equal(weakUnchanged.headers.get('etag'), etag);
+  assert.equal(await weakUnchanged.text(), '');
+  const changed = await fetch(aiUrl, {
+    headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': `"${cameraId}:0"` },
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.headers.get('etag'), etag);
+  assert.deepEqual(((await changed.json()) as { regions: unknown[] }).regions, []);
+  assert.equal(configurationReads, 4);
+  cameraExternalId = 'CAM-1-REPAIRED';
+  const sameVersionDifferentBody = await fetch(aiUrl, {
+    headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': etag },
+  });
+  assert.equal(sameVersionDifferentBody.status, 200);
+  assert.notEqual(sameVersionDifferentBody.headers.get('etag'), etag);
+  assert.equal(
+    ((await sameVersionDifferentBody.json()) as { cameraExternalId: string }).cameraExternalId,
+    'CAM-1-REPAIRED',
+  );
+  assert.equal(configurationReads, 5);
   assert.equal(
     (await fetch(aiUrl, { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } })).status,
     401,
   );
-  assert.equal(
-    (
-      await fetch(`${url}/api/v1/integrations/ai/cameras/${deniedCameraId}/configuration`, {
-        headers: { Authorization: `Bearer ${serviceToken}` },
-      })
-    ).status,
-    404,
+  const denied = await fetch(
+    `${url}/api/v1/integrations/ai/cameras/${deniedCameraId}/configuration`,
+    { headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': '*' } },
   );
+  assert.equal(denied.status, 404);
+  const deniedBody = (await denied.json()) as {
+    success: boolean;
+    statusCode: number;
+    code: string;
+    message: string;
+    requestId: string;
+  };
+  assert.deepEqual(
+    {
+      success: deniedBody.success,
+      statusCode: deniedBody.statusCode,
+      code: deniedBody.code,
+      message: deniedBody.message,
+    },
+    {
+      success: false,
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Configuration resource not found',
+    },
+  );
+  assert.equal(deniedBody.requestId, denied.headers.get('x-request-id'));
+  const invalid = await fetch(`${url}/api/v1/integrations/ai/cameras/not-a-uuid/configuration`, {
+    headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': '*' },
+  });
+  assert.equal(invalid.status, 404);
+  const invalidBody = (await invalid.json()) as {
+    success: boolean;
+    statusCode: number;
+    code: string;
+    message: string;
+    requestId: string;
+  };
+  assert.deepEqual(
+    {
+      success: invalidBody.success,
+      statusCode: invalidBody.statusCode,
+      code: invalidBody.code,
+      message: invalidBody.message,
+    },
+    {
+      success: false,
+      statusCode: 404,
+      code: 'NOT_FOUND',
+      message: 'Configuration resource not found',
+    },
+  );
+  assert.equal(invalidBody.requestId, invalid.headers.get('x-request-id'));
+  assert.equal(configurationReads, 5);
 });
