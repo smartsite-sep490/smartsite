@@ -260,6 +260,8 @@ These capabilities are intentionally developed through dedicated feature pull re
 ## Documentation
 
 Architecture decisions and technical baselines are maintained under [docs/architecture](docs/architecture).
+The verified local YOLO11s-to-alert demonstration is documented in the
+[MF05/MF06 end-to-end runbook](docs/operations/mf05-mf06-local-demo.md).
 
 Per repository policy, generated task plans, execution specs, and working documentation are local-only artifacts and are not committed to Git.
 
