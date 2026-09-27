@@ -81,6 +81,8 @@ export async function configureApplication(app: NestExpressApplication): Promise
           'SmartSite foundation APIs, including authenticated AI observation ingestion for MF05/MF06.',
         )
         .setVersion('0.1.0')
+        .addBearerAuth({ type: 'http', scheme: 'bearer' }, 'user-token')
+        .addBearerAuth({ type: 'http', scheme: 'bearer' }, 'ai-service-token')
         .build(),
     );
     SwaggerModule.setup('api/docs', app, document);

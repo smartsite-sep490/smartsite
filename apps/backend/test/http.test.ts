@@ -72,7 +72,24 @@ class FoundationTestController {
       cause: new Error('Bearer fake-cause-token'),
     });
   }
+
+  @Get('database-unavailable')
+  databaseUnavailable() {
+    throw Object.assign(new Error('postgresql://user:fake-secret@internal/db'), {
+      code: 'ECONNREFUSED',
+    });
+  }
 }
+
+test('database connection failure returns a safe 503 envelope', async (t) => {
+  const { url } = await startApplication(t);
+  const response = await fetch(`${url}/api/v1/test-foundation/database-unavailable`);
+  assert.equal(response.status, 503);
+  const body = (await response.json()) as Record<string, unknown>;
+  assert.equal(body.code, 'SERVICE_UNAVAILABLE');
+  assert.equal(body.requestId, response.headers.get('x-request-id'));
+  assert.ok(!JSON.stringify(body).includes('fake-secret'));
+});
 
 @Controller('test-payload')
 class PayloadTestController {

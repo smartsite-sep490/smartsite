@@ -75,6 +75,7 @@ const baseCamera: CameraEntity = {
   code: 'CAM-01',
   name: 'North Gate Camera',
   status: CameraStatus.ACTIVE,
+  configurationVersion: 1,
   createdAt: new Date(),
 };
 
@@ -86,6 +87,7 @@ const baseZone: ZoneEntity = {
   type: ZoneType.HAZARDOUS,
   restrictionPolicy: ZoneRestrictionPolicy.PROHIBITED_FOR_ALL,
   requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+  configurationLocked: false,
   createdAt: new Date(),
 };
 

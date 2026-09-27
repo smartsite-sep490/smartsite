@@ -43,7 +43,6 @@ export function EventDetailPanel({
   return (
     <div className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-[2rem] shadow-sm">
       <div className="bg-white rounded-[calc(2rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,1)] border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-hidden">
-
         {/* Scrollable Content Area */}
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
           {/* Header */}
@@ -73,9 +72,7 @@ export function EventDetailPanel({
           <div className="h-px bg-slate-100 w-full" />
 
           {/* Optional Checklist / Custom Slot */}
-          {checklistSlot && (
-            <div>{checklistSlot}</div>
-          )}
+          {checklistSlot && <div>{checklistSlot}</div>}
 
           {/* Result Alert Box */}
           <div className="pt-2">
@@ -89,9 +86,7 @@ export function EventDetailPanel({
                 {resultStatus === 'success' && <IconCheck className="w-3.5 h-3.5" />}
                 <span className="uppercase tracking-wide">{resultTitle}</span>
               </div>
-              <p className="text-xs font-medium opacity-80 leading-relaxed">
-                {resultMessage}
-              </p>
+              <p className="text-xs font-medium opacity-80 leading-relaxed">{resultMessage}</p>
             </div>
           </div>
         </div>

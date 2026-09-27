@@ -5,6 +5,7 @@ RUN npm install --global pnpm@12.4.2
 WORKDIR /workspace
 COPY . .
 RUN pnpm --filter @smartsite/web... install --frozen-lockfile
+RUN pnpm --filter @smartsite/contracts build
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
 RUN pnpm --filter @smartsite/web build

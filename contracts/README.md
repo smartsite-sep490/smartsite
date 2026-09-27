@@ -30,3 +30,5 @@ Khi nhận cùng một `configurationVersion`, hai phía canonical hóa toàn b�
 5. Không trỏ provenance vào một branch đang thay đổi; luôn dùng commit SHA bất biến.
 
 AI chỉ phát technical observations. Backend xác minh camera/region/Zone, quyết định quyền nghiệp vụ, giữ raw event, xử lý idempotency và quản lý Safety Alert/Incident.
+
+`src/management-api.ts` cũng định nghĩa các kiểu response TypeScript dùng chung cho Backend API, Web và Mobile. Safety Alert list/detail chỉ công bố các trường quản lý ổn định; detail có `detectionsTotal` và tối đa 100 detection summaries mới nhất, không công bố raw event payload. Đây là bổ sung tương thích ngược cho API quản lý; JSON Schema v1 giữa Backend và AI không thay đổi.

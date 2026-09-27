@@ -7,13 +7,8 @@ import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
-import {
-  IconAlertTriangle,
-  IconRadio,
-  IconUsers,
-  IconKey,
-  IconTrendingUp,
-} from './components/icons';
+import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
+import { IconRadio, IconUsers, IconKey, IconTrendingUp } from './components/icons';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -36,9 +31,11 @@ export function App() {
   }
 
   return (
-    <AppLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
+    <AppLayout currentTab={currentTab} onSelectTab={handleSelectTab}>
       {/* Tab: Live Monitoring */}
-      {currentTab === 'live-monitoring' && <LiveMonitoringView onNavigate={(tab) => setCurrentTab(tab)} />}
+      {currentTab === 'live-monitoring' && (
+        <LiveMonitoringView onNavigate={(tab) => handleSelectTab(tab)} />
+      )}
 
       {/* Tab: Restricted Zones (MF06) */}
       {currentTab === 'zones' && <RestrictedZoneView />}
@@ -74,18 +71,7 @@ export function App() {
         </div>
       )}
 
-      {currentTab === 'incidents' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-red-100 text-[#DF2225] mx-auto flex items-center justify-center">
-            <IconAlertTriangle className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">Safety Incidents & MF08 Review</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Safety Officer investigation workflows, evidence preservation and contractor corrective
-            actions.
-          </p>
-        </div>
-      )}
+      {currentTab === 'incidents' && <SafetyAlertsView apiUrl={apiUrl} />}
 
       {currentTab === 'iot' && (
         <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">

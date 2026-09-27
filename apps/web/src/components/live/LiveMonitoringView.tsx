@@ -63,13 +63,35 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
   ];
 
   const columns: TableColumn<CombinedEvent>[] = [
-    { header: 'Time', key: 'time', render: (item) => <span className="font-mono text-slate-500 text-xs">{item.time}</span> },
-    { header: 'Type', key: 'type', render: (item) => (
-      <span className="font-bold text-[11px] text-slate-500 uppercase tracking-widest">{item.type}</span>
-    )},
-    { header: 'Person', key: 'person', render: (item) => <span className="font-semibold text-slate-900">{item.person}</span> },
-    { header: 'Camera', key: 'camera', render: (item) => <span className="font-mono text-slate-500 text-xs">{item.camera}</span> },
-    { header: 'Detection', key: 'issue', render: (item) => <span className="font-medium text-slate-900">{item.issue}</span> },
+    {
+      header: 'Time',
+      key: 'time',
+      render: (item) => <span className="font-mono text-slate-500 text-xs">{item.time}</span>,
+    },
+    {
+      header: 'Type',
+      key: 'type',
+      render: (item) => (
+        <span className="font-bold text-[11px] text-slate-500 uppercase tracking-widest">
+          {item.type}
+        </span>
+      ),
+    },
+    {
+      header: 'Person',
+      key: 'person',
+      render: (item) => <span className="font-semibold text-slate-900">{item.person}</span>,
+    },
+    {
+      header: 'Camera',
+      key: 'camera',
+      render: (item) => <span className="font-mono text-slate-500 text-xs">{item.camera}</span>,
+    },
+    {
+      header: 'Detection',
+      key: 'issue',
+      render: (item) => <span className="font-medium text-slate-900">{item.issue}</span>,
+    },
     {
       header: 'Result',
       key: 'status',
@@ -98,12 +120,12 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Live Monitoring</h1>
         <p className="text-sm text-slate-500 mt-2 max-w-2xl leading-relaxed">
-          Operational workspace displaying real-time safety detections across all cameras. Multiple AI models run concurrently to detect PPE compliance and Restricted Zone access.
+          Operational workspace displaying real-time safety detections across all cameras. Multiple
+          AI models run concurrently to detect PPE compliance and Restricted Zone access.
         </p>
       </div>
 

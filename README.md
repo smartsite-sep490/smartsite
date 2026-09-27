@@ -240,15 +240,18 @@ Implemented:
 - canonical MF05/MF06 technical-observation contract and RFC 8785 hashing;
 - TypeORM MF05/MF06 domain schema and reviewed migration;
 - authenticated AI event ingestion with raw-event preservation, idempotency, context validation, and durable alert grouping.
+- Admin/Worker login, revocable sessions, Admin configuration APIs, and camera-scoped AI configuration reads.
+- Site-scoped, Admin-only read APIs and a read-only Web queue for MF05/MF06 safety alerts, including curated source-observation summaries without exposing raw AI payloads.
+- companion AI worker support for finite video, laptop camera, and RTSP sources through the locked YOLO11s detection, tracking, PPE, and restricted-zone pipeline.
 
 Not yet implemented in this foundation:
 
-- end-user authentication, RBAC, and data-scope enforcement;
+- role và data-scope chi tiết theo Site/Contractor/Zone (hiện mới có Admin toàn hệ thống và Worker tự quản lý tài khoản);
 - full workforce, attendance, and incident workflows;
 - production Neon integration;
-- camera ingestion and model inference;
-- camera-side MF05 PPE inference and end-to-end operator workflow;
-- camera-side MF06 restricted-zone inference and permission workflow;
+- production multi-camera operations and benchmark evidence;
+- scoped Safety Officer access and the MF05/MF06 confirm, dismiss, and request-evidence workflow;
+- MF06 worker identity and Site/Zone permission resolution;
 - evidence storage;
 - OpenAI API calls.
 
@@ -257,6 +260,8 @@ These capabilities are intentionally developed through dedicated feature pull re
 ## Documentation
 
 Architecture decisions and technical baselines are maintained under [docs/architecture](docs/architecture).
+The verified local YOLO11s-to-alert demonstration is documented in the
+[MF05/MF06 end-to-end runbook](docs/operations/mf05-mf06-local-demo.md).
 
 Per repository policy, generated task plans, execution specs, and working documentation are local-only artifacts and are not committed to Git.
 

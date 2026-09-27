@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  IconPlay,
-  IconPause,
-  IconVolume,
-  IconMaximize,
-  IconGrid,
-} from '../icons';
+import { IconPlay, IconPause, IconVolume, IconMaximize, IconGrid } from '../icons';
 
 interface CameraFeedProps {
   cameraId: string;
@@ -82,10 +76,16 @@ export function CameraFeed({
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="group p-2 rounded-full hover:bg-white/10 transition-colors" title="Grid">
+            <button
+              className="group p-2 rounded-full hover:bg-white/10 transition-colors"
+              title="Grid"
+            >
               <IconGrid className="w-4 h-4 group-active:scale-90 transition-transform" />
             </button>
-            <button className="group p-2 rounded-full hover:bg-white/10 transition-colors" title="Fullscreen">
+            <button
+              className="group p-2 rounded-full hover:bg-white/10 transition-colors"
+              title="Fullscreen"
+            >
               <IconMaximize className="w-4 h-4 group-active:scale-90 transition-transform" />
             </button>
           </div>

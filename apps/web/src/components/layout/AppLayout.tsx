@@ -47,7 +47,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
         { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
         { id: 'workforce', label: 'Workforce', icon: IconUsers },
         { id: 'access', label: 'Site Access', icon: IconKey },
-      ]
+      ],
     },
     {
       label: 'Safety',
@@ -55,16 +55,16 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
         { id: 'live-monitoring', label: 'Live Monitoring', icon: IconCamera },
         { id: 'ppe', label: 'PPE Monitoring', icon: IconHardHat },
         { id: 'zones', label: 'Restricted Zones', icon: IconShield },
-        { id: 'incidents', label: 'Incidents', icon: IconAlertTriangle },
-      ]
+        { id: 'incidents', label: 'Safety Alerts', icon: IconAlertTriangle },
+      ],
     },
     {
       label: 'Site Data',
       items: [
         { id: 'iot', label: 'IoT Monitoring', icon: IconRadio },
         { id: 'progress', label: 'Progress', icon: IconTrendingUp },
-      ]
-    }
+      ],
+    },
   ];
 
   return (
@@ -133,7 +133,9 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                         onClick={() => onSelectTab(item.id as ActiveTab)}
                         title={isCollapsed ? item.label : undefined}
                         className={`w-full flex items-center ${
-                          isCollapsed ? 'justify-center px-0 py-2.5' : 'justify-between px-3.5 py-2.5'
+                          isCollapsed
+                            ? 'justify-center px-0 py-2.5'
+                            : 'justify-between px-3.5 py-2.5'
                         } rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
                           isActive
                             ? 'bg-white/10 text-white font-semibold shadow-inner'
@@ -225,8 +227,8 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                 SC
               </div>
               <div className="text-left leading-tight hidden sm:block">
-                <p className="font-semibold text-xs text-[#041D2E]">Sarah Chen</p>
-                <p className="text-[11px] text-[#62748E]">Safety Officer</p>
+                <p className="font-semibold text-xs text-[#041D2E]">SmartSite</p>
+                <p className="text-[11px] text-[#62748E]">Demo workspace</p>
               </div>
             </div>
           </div>

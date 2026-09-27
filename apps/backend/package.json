@@ -17,7 +17,8 @@
     "db:migrate:run": "pnpm build && typeorm migration:run -d dist/database/typeorm.data-source.js",
     "db:migrate:revert": "pnpm build && typeorm migration:revert -d dist/database/typeorm.data-source.js",
     "db:migrate:show": "pnpm build && typeorm migration:show -d dist/database/typeorm.data-source.js",
-    "db:migrate:generate": "pnpm build && typeorm migration:generate -d dist/database/typeorm.data-source.js"
+    "db:migrate:generate": "pnpm build && typeorm migration:generate -d dist/database/typeorm.data-source.js",
+    "auth:bootstrap-admin": "pnpm build && node dist/scripts/bootstrap-admin.js"
   },
   "dependencies": {
     "@nestjs/common": "12.0.3",

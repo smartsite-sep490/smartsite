@@ -69,6 +69,7 @@ camera|code|varchar|NO|64|||
 camera|name|varchar|NO|255|||
 camera|status|camera_status|NO||||'ACTIVE'::camera_status
 camera|created_at|timestamptz|NO||||now()
+camera|configuration_version|int8|NO||64|0|1
 camera_observation_region|id|uuid|NO||||
 camera_observation_region|camera_id|uuid|NO||||
 camera_observation_region|zone_id|uuid|NO||||
@@ -103,6 +104,7 @@ zone|type|zone_type|NO||||
 zone|restriction_policy|zone_restriction_policy|NO||||
 zone|required_ppe|_text|NO||||'{}'::text[]
 zone|created_at|timestamptz|NO||||now()
+zone|configuration_locked|bool|NO||||false
 `
       .trim()
       .split('\n');
@@ -206,6 +208,10 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
     const chkNames = new Set(chkRows.map((r: { conname: string }) => r.conname));
     assert.ok(chkNames.has('chk_region_coordinate_space'), 'Missing chk_region_coordinate_space');
     assert.ok(chkNames.has('chk_region_version'), 'Missing chk_region_version');
+    assert.ok(
+      chkNames.has('chk_camera_configuration_version'),
+      'Missing chk_camera_configuration_version',
+    );
 
     // 4. Foreign Keys with exact onDelete actions:
     // confdeltype: 'r' = RESTRICT, 'c' = CASCADE, 'n' = SET NULL, 'a' = NO ACTION
@@ -242,7 +248,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
 test('foundation migration creates required performance indexes', async () => {
   await withDataSource(async (source) => {
     const indexRows = await source.query(
-      `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`,
+      `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
     const indexNames = new Set(indexRows.map((r: { indexname: string }) => r.indexname));
     assert.ok(indexNames.has('idx_region_camera_active'), 'Missing idx_region_camera_active');
@@ -251,6 +257,19 @@ test('foundation migration creates required performance indexes', async () => {
       'Missing idx_event_camera_session_captured',
     );
     assert.ok(indexNames.has('idx_alert_grouping'), 'Missing idx_alert_grouping');
+    assert.ok(
+      indexNames.has('idx_alert_site_last_detected'),
+      'Missing idx_alert_site_last_detected',
+    );
+
+    const alertReadIndex = indexRows.find(
+      (row: { indexname: string; indexdef: string }) =>
+        row.indexname === 'idx_alert_site_last_detected',
+    ) as { indexdef?: string } | undefined;
+    assert.match(
+      alertReadIndex?.indexdef ?? '',
+      /USING btree \(site_id, last_detected_at DESC, id\)/,
+    );
   });
 });
 

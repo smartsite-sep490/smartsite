@@ -105,6 +105,19 @@ const originsSchema = z
     'must contain exact HTTP(S) origins without paths, credentials, or wildcards',
   );
 
+const cameraIdsSchema = z
+  .string()
+  .default('')
+  .transform((value, context) => {
+    if (!value.trim()) return [];
+    const ids = value.split(',').map((id) => id.trim().toLowerCase());
+    if (ids.some((id) => !z.uuid().safeParse(id).success)) {
+      context.addIssue({ code: 'custom', message: 'must contain comma-separated camera UUIDs' });
+      return z.NEVER;
+    }
+    return [...new Set(ids)];
+  });
+
 export const backendEnvironmentSchema = z
   .object({
     ...databaseFields,
@@ -130,6 +143,7 @@ export const backendEnvironmentSchema = z
     HTTP_RATE_LIMIT_LIMIT: integer(120, 1, Number.MAX_SAFE_INTEGER),
     AI_RATE_LIMIT_TTL_MS: integer(60000, 1, MAX_TIMER_MS),
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
+    AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);

@@ -24,3 +24,19 @@ export type {
   CameraRegionConfiguration,
   NormalizedCoordinate,
 } from './camera-region-configuration.js';
+
+export type {
+  AccountResponse,
+  LoginResponse,
+  Page,
+  SiteResponse,
+  CameraResponse,
+  ZoneResponse,
+  RegionResponse,
+  RegionMutationResponse,
+  SafetyAlertType,
+  SafetyAlertStatus,
+  SafetyAlertResponse,
+  SafetyAlertDetectionResponse,
+  SafetyAlertDetailResponse,
+} from './management-api.js';

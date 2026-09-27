@@ -37,6 +37,9 @@ export class ZoneEntity {
   @Column({ name: 'required_ppe', type: 'text', array: true, default: '{}' })
   requiredPpe!: string[];
 
+  @Column({ name: 'configuration_locked', type: 'boolean', default: false })
+  configurationLocked!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }
