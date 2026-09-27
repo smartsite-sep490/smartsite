@@ -17,6 +17,8 @@ import { AuthService } from '../src/modules/auth/auth.service.js';
 import { SiteConfigurationService } from '../src/modules/sites/site-configuration.service.js';
 import { CameraConfigurationService } from '../src/modules/cameras/camera-configuration.service.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
+import { AlertStatus, AlertType, EventProcessingStatus } from '../src/database/entities/enums.js';
+import { SafetyAlertQueryService } from '../src/modules/safety/alerts/safety-alert-query.service.js';
 
 test('HTTP separates Admin, Worker and AI configuration credentials', async (t) => {
   const cameraId = randomUUID();
@@ -60,6 +62,21 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     }),
   };
   const site = { id: siteId, code: 'SITE', name: 'Site', createdAt: new Date() };
+  const alertId = randomUUID();
+  const alert = {
+    id: alertId,
+    siteId,
+    zoneId: null,
+    candidateWorkerId: null,
+    alertType: AlertType.PPE_VIOLATION,
+    candidateSubtype: 'PPE_HARD_HAT_MISSING',
+    status: AlertStatus.PENDING_REVIEW,
+    firstDetectedAt: new Date('2026-09-27T01:00:00Z'),
+    lastDetectedAt: new Date('2026-09-27T01:01:00Z'),
+    detectionCount: 3,
+    createdAt: new Date('2026-09-27T01:00:00Z'),
+  };
+  let alertListArguments: unknown[] | undefined;
   let configurationReads = 0;
   let cameraExternalId = 'CAM-1';
   const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -87,6 +104,25 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
         };
       },
     })
+    .overrideProvider(SafetyAlertQueryService)
+    .useValue({
+      list: async (...args: unknown[]) => {
+        alertListArguments = args;
+        return { items: [alert], total: 1 };
+      },
+      get: async () => ({
+        alert,
+        detections: [
+          {
+            eventId: randomUUID(),
+            cameraExternalId: 'CAM-1',
+            capturedAt: new Date('2026-09-27T01:01:00Z'),
+            processingStatus: EventProcessingStatus.PROCESSED,
+          },
+        ],
+        detectionsTotal: 1,
+      }),
+    })
     .compile();
   const app = module.createNestApplication<NestExpressApplication>({
     logger: false,
@@ -104,6 +140,38 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   assert.equal((await getSites('W'.repeat(43))).status, 403);
   assert.equal((await getSites('T'.repeat(43))).status, 403);
   assert.equal((await getSites(serviceToken)).status, 401);
+  const alertsUrl = `${url}/api/v1/sites/${siteId}/safety-alerts`;
+  const alertList = await fetch(
+    `${alertsUrl}?offset=2&limit=5&status=PENDING_REVIEW&type=PPE_VIOLATION`,
+    { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } },
+  );
+  assert.equal(alertList.status, 200);
+  assert.deepEqual(alertListArguments, [
+    siteId,
+    2,
+    5,
+    {
+      status: AlertStatus.PENDING_REVIEW,
+      type: AlertType.PPE_VIOLATION,
+    },
+  ]);
+  assert.equal(((await alertList.json()) as { total: number }).total, 1);
+  const alertDetail = await fetch(`${alertsUrl}/${alertId}`, {
+    headers: { Authorization: `Bearer ${'A'.repeat(43)}` },
+  });
+  assert.equal(alertDetail.status, 200);
+  const alertDetailBody = (await alertDetail.json()) as Record<string, unknown>;
+  assert.equal(alertDetailBody.id, alertId);
+  assert.equal(alertDetailBody.detectionsTotal, 1);
+  assert.equal('rawPayload' in alertDetailBody, false);
+  assert.equal(
+    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${'W'.repeat(43)}` } })).status,
+    403,
+  );
+  assert.equal(
+    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${serviceToken}` } })).status,
+    401,
+  );
   const login = await fetch(`${url}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

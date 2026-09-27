@@ -15,3 +15,10 @@ Làm theo thứ tự phụ thuộc dưới đây; tài liệu và code đi cùng
 Có thể làm khảo sát khả thi AI song song với bước 1–4. Chưa khóa deadline hoặc phân công thành viên trong tài liệu này.
 
 Mỗi bước chia issue nhỏ có người thực hiện và người review luân phiên. Không cần làm xong toàn bộ Report 3 mới bắt đầu code; phần nghiệp vụ còn mở phải được đánh dấu rõ.
+
+## Tiến độ hiện tại
+
+- Bước 1–3 đã có baseline code, contract và CI.
+- Bước 4 đã có ingestion, chống event trùng, nhóm alert bền vững, API danh sách/chi tiết theo Site và Web queue chỉ đọc. Phần bằng chứng media và thao tác review của Safety Officer chưa thuộc lát cắt này.
+- Bước 5 đã có worker một camera nhận video file, camera laptop hoặc RTSP trong repo AI; benchmark 1–3 stream và báo cáo chất lượng model vẫn phải hoàn tất trên bộ thử đã chốt.
+- Bước 6 mới dừng ở quan sát vào vùng và chính sách `PROHIBITED_FOR_ALL`; định danh người và kiểm tra quyền cho `AUTHORIZATION_REQUIRED` chưa hoàn thành.
