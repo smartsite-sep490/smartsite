@@ -6,6 +6,7 @@ import { ZoneEntity } from './zone.entity.js';
 
 @Entity({ name: 'safety_alert' })
 @Index('idx_alert_grouping', ['groupingKey', 'status'])
+@Index('idx_alert_site_last_detected', { synchronize: false })
 export class SafetyAlertEntity {
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_safety_alert_id' })
   id!: string;

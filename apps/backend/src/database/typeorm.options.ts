@@ -3,6 +3,7 @@ import { ENTITIES } from './entities/index.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
 import { CameraRegionConfiguration1790035200000 } from './migrations/1790035200000-CameraRegionConfiguration.js';
 import { UserAuthentication1790121600000 } from './migrations/1790121600000-UserAuthentication.js';
+import { SafetyAlertReadIndex1790467200000 } from './migrations/1790467200000-SafetyAlertReadIndex.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -22,6 +23,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf05Mf06Foundation1789689600000,
       CameraRegionConfiguration1790035200000,
       UserAuthentication1790121600000,
+      SafetyAlertReadIndex1790467200000,
     ],
     logging: false,
     extra: {

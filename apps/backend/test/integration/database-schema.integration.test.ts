@@ -248,7 +248,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
 test('foundation migration creates required performance indexes', async () => {
   await withDataSource(async (source) => {
     const indexRows = await source.query(
-      `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`,
+      `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
     const indexNames = new Set(indexRows.map((r: { indexname: string }) => r.indexname));
     assert.ok(indexNames.has('idx_region_camera_active'), 'Missing idx_region_camera_active');
@@ -257,6 +257,19 @@ test('foundation migration creates required performance indexes', async () => {
       'Missing idx_event_camera_session_captured',
     );
     assert.ok(indexNames.has('idx_alert_grouping'), 'Missing idx_alert_grouping');
+    assert.ok(
+      indexNames.has('idx_alert_site_last_detected'),
+      'Missing idx_alert_site_last_detected',
+    );
+
+    const alertReadIndex = indexRows.find(
+      (row: { indexname: string; indexdef: string }) =>
+        row.indexname === 'idx_alert_site_last_detected',
+    ) as { indexdef?: string } | undefined;
+    assert.match(
+      alertReadIndex?.indexdef ?? '',
+      /USING btree \(site_id, last_detected_at DESC, id\)/,
+    );
   });
 });
 

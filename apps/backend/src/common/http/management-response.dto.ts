@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CameraStatus, ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.js';
+import {
+  AlertStatus,
+  AlertType,
+  CameraStatus,
+  EventProcessingStatus,
+  ZoneRestrictionPolicy,
+  ZoneType,
+} from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 
 export class AccountResponseDto {
@@ -62,6 +69,38 @@ export class RegionResponseDto {
 export class RegionMutationResponseDto {
   @ApiProperty({ type: RegionResponseDto }) region!: RegionResponseDto;
   @ApiProperty() configurationVersion!: number;
+}
+
+export class SafetyAlertResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) zoneId!: string | null;
+  @ApiProperty({ nullable: true }) candidateWorkerId!: string | null;
+  @ApiProperty({ enum: AlertType }) alertType!: AlertType;
+  @ApiProperty() candidateSubtype!: string;
+  @ApiProperty({ enum: AlertStatus }) status!: AlertStatus;
+  @ApiProperty({ format: 'date-time' }) firstDetectedAt!: string;
+  @ApiProperty({ format: 'date-time' }) lastDetectedAt!: string;
+  @ApiProperty() detectionCount!: number;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class SafetyAlertDetectionResponseDto {
+  @ApiProperty({ format: 'uuid' }) eventId!: string;
+  @ApiProperty() cameraExternalId!: string;
+  @ApiProperty({ format: 'date-time' }) capturedAt!: string;
+  @ApiProperty({ enum: EventProcessingStatus }) processingStatus!: EventProcessingStatus;
+}
+
+export class SafetyAlertDetailResponseDto extends SafetyAlertResponseDto {
+  @ApiProperty({ type: [SafetyAlertDetectionResponseDto] })
+  detections!: SafetyAlertDetectionResponseDto[];
+  @ApiProperty() detectionsTotal!: number;
+}
+
+export class SafetyAlertPageResponseDto {
+  @ApiProperty({ type: [SafetyAlertResponseDto] }) items!: SafetyAlertResponseDto[];
+  @ApiProperty() total!: number;
 }
 
 export class AccountPageResponseDto {

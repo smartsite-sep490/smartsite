@@ -5,12 +5,20 @@ import type {
   Page,
   RegionMutationResponse,
   RegionResponse,
+  SafetyAlertDetailResponse,
+  SafetyAlertResponse,
+  SafetyAlertStatus,
+  SafetyAlertType,
   SiteResponse,
   ZoneResponse,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
 type PageOptions = { offset?: number; limit?: number };
+export type SafetyAlertListOptions = PageOptions & {
+  status?: SafetyAlertStatus;
+  type?: SafetyAlertType;
+};
 type CameraMutation = { expectedConfigurationVersion: number };
 const pathId = (id: string) => encodeURIComponent(id);
 
@@ -115,6 +123,26 @@ export class SmartSiteManagementClient {
   }
   getSite(token: string, siteId: string) {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
+  }
+  listSafetyAlerts(token: string, siteId: string, options: SafetyAlertListOptions = {}) {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.status !== undefined) query.set('status', options.status);
+    if (options.type !== undefined) query.set('type', options.type);
+    const path = `/sites/${pathId(siteId)}/safety-alerts`;
+    return this.request<Page<SafetyAlertResponse>>(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+    );
+  }
+  getSafetyAlert(token: string, siteId: string, alertId: string) {
+    return this.request<SafetyAlertDetailResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}`,
+      token,
+    );
   }
   renameSite(token: string, siteId: string, name: string) {
     return this.request<SiteResponse>('PATCH', `/sites/${pathId(siteId)}`, token, { name });
