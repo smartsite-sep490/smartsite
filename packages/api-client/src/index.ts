@@ -1,5 +1,6 @@
 export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
 export { SmartSiteManagementClient } from './management';
+export type { SafetyAlertListOptions } from './management';
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 export type ApiErrorCode = 'http' | 'network' | 'invalid-response' | 'timeout' | 'cancelled';
 export const BACKEND_ERROR_CODES = [

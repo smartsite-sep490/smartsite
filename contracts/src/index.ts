@@ -34,4 +34,9 @@ export type {
   ZoneResponse,
   RegionResponse,
   RegionMutationResponse,
+  SafetyAlertType,
+  SafetyAlertStatus,
+  SafetyAlertResponse,
+  SafetyAlertDetectionResponse,
+  SafetyAlertDetailResponse,
 } from './management-api.js';

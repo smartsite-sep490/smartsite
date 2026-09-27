@@ -66,3 +66,35 @@ export interface RegionMutationResponse {
   region: RegionResponse;
   configurationVersion: number;
 }
+
+export type SafetyAlertType = 'PPE_VIOLATION' | 'RESTRICTED_ZONE_INTRUSION';
+
+export type SafetyAlertStatus =
+  'PENDING_REVIEW' | 'NEEDS_MORE_EVIDENCE' | 'CONFIRMED' | 'DISMISSED' | 'CLOSED';
+
+export interface SafetyAlertResponse {
+  id: string;
+  siteId: string;
+  zoneId: string | null;
+  candidateWorkerId: string | null;
+  alertType: SafetyAlertType;
+  candidateSubtype: string;
+  status: SafetyAlertStatus;
+  firstDetectedAt: string;
+  lastDetectedAt: string;
+  detectionCount: number;
+  createdAt: string;
+}
+
+export interface SafetyAlertDetectionResponse {
+  eventId: string;
+  cameraExternalId: string;
+  capturedAt: string;
+  processingStatus:
+    'PROCESSED' | 'SKIPPED_CLOCK_SKEW' | 'SKIPPED_NO_CANDIDATE' | 'SKIPPED_UNKNOWN_CAMERA';
+}
+
+export interface SafetyAlertDetailResponse extends SafetyAlertResponse {
+  detectionsTotal: number;
+  detections: SafetyAlertDetectionResponse[];
+}

@@ -53,4 +53,61 @@ describe('management client', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('encodes the site ID and constructs alert pagination and filters with bearer auth', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
+      void _url;
+      void _init;
+      return new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test/');
+      const result = await client.listSafetyAlerts('alert-token', 'site/a b', {
+        offset: 0,
+        limit: 25,
+        status: 'NEEDS_MORE_EVIDENCE',
+        type: 'RESTRICTED_ZONE_INTRUSION',
+      });
+      expect(result).toEqual({ items: [], total: 0 });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2Fa%20b/safety-alerts?offset=0&limit=25&status=NEEDS_MORE_EVIDENCE&type=RESTRICTED_ZONE_INTRUSION',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer alert-token', Accept: 'application/json' },
+      });
+      await client.listSafetyAlerts('alert-token', 'site/a b');
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2Fa%20b/safety-alerts',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('encodes alert detail path IDs and sends bearer auth', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
+      void _url;
+      void _init;
+      return new Response(JSON.stringify({ id: 'alert/1', detections: [], detectionsTotal: 0 }), {
+        status: 200,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      const result = await client.getSafetyAlert('detail-token', 'site/1', 'alert/1');
+      expect(result.detectionsTotal).toBe(0);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/safety-alerts/alert%2F1',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer detail-token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
