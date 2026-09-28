@@ -8,6 +8,7 @@ import {
   ZoneType,
 } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
+import { ZoneAccessEffect } from '../../database/entities/zone-access-grant.entity.js';
 
 export class AccountResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
@@ -133,5 +134,57 @@ export class ZonePageResponseDto {
 
 export class RegionPageResponseDto {
   @ApiProperty({ type: [RegionResponseDto] }) items!: RegionResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class WorkerResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty() externalId!: string;
+  @ApiProperty() displayName!: string;
+  @ApiProperty() isActive!: boolean;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class WorkerPageResponseDto {
+  @ApiProperty({ type: [WorkerResponseDto] }) items!: WorkerResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class ZoneAccessGrantResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid' }) zoneId!: string;
+  @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty({ enum: ZoneAccessEffect }) effect!: ZoneAccessEffect;
+  @ApiProperty({ format: 'date-time' }) validFrom!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) validUntil!: string | null;
+  @ApiProperty({ format: 'date-time', nullable: true }) revokedAt!: string | null;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class ZoneAccessGrantPageResponseDto {
+  @ApiProperty({ type: [ZoneAccessGrantResponseDto] }) items!: ZoneAccessGrantResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class ZoneEntryDecisionResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) eventId!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid' }) zoneId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) workerId!: string | null;
+  @ApiProperty({ nullable: true }) candidateWorkerId!: string | null;
+  @ApiProperty() trackId!: number;
+  @ApiProperty({ enum: ['ALLOWED', 'DENIED', 'UNAVAILABLE'] })
+  status!: 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
+  @ApiProperty() reasonCode!: string;
+  @ApiProperty({ format: 'date-time' }) evaluatedAt!: string;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class ZoneEntryDecisionPageResponseDto {
+  @ApiProperty({ type: [ZoneEntryDecisionResponseDto] })
+  items!: ZoneEntryDecisionResponseDto[];
   @ApiProperty() total!: number;
 }
