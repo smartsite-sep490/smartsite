@@ -437,7 +437,7 @@ export function PpeMonitoringView() {
                   className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
                     isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
                   }`}
-                  data-testid="mf05-test-detection"
+                  data-testid="mf04-test-detection"
                   style={{
                     top: `${detection.boundingBox.y1 * 100}%`,
                     width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
@@ -745,7 +745,7 @@ export function PpeMonitoringView() {
             {violationSnapshot && (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 p-3"
-                data-testid="mf05-evidence-capture"
+                data-testid="mf04-evidence-capture"
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest text-red-700">
                   Evidence captured · {violationSnapshot.timecode}
