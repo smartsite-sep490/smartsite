@@ -137,6 +137,7 @@ async function startApplication(
     NODE_ENV: options.production ? 'production' : 'development',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
     CORS_ORIGINS: 'http://localhost:5173,https://app.example.com',
+    AUTH_JWT_SECRET: options.production ? 'a'.repeat(32) : undefined,
     SMARTSITE_AI_SERVICE_TOKEN: options.production
       ? 'prod-explicit-service-token-at-least-32-characters'
       : undefined,
@@ -444,6 +445,7 @@ test('CORS grants exact allowed origins and excludes lookalikes and null origins
   for (const origin of ['http://localhost:5173', 'https://app.example.com']) {
     const response = await fetch(`${url}/api/v1/health/live`, { headers: { Origin: origin } });
     assert.equal(response.headers.get('access-control-allow-origin'), origin);
+    assert.equal(response.headers.get('access-control-allow-credentials'), 'true');
   }
   for (const origin of ['https://app.example.com.evil.example', 'http://localhost:51730', 'null']) {
     const response = await fetch(`${url}/api/v1/health/live`, { headers: { Origin: origin } });
@@ -455,14 +457,18 @@ test('CORS grants exact allowed origins and excludes lookalikes and null origins
   });
   assert.equal(preflight.status, 204);
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://app.example.com');
+  assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
 });
 
-test('development OpenAPI includes the AI ingestion 202 response schema', async (t) => {
+test('development OpenAPI separates provisionable request roles from persisted account roles', async (t) => {
   const { url } = await startApplication(t);
   assert.equal((await fetch(`${url}/api/docs`)).status, 200);
   const response = await fetch(`${url}/api/docs-json`);
   assert.equal(response.status, 200);
   const schema = (await response.json()) as {
+    components?: {
+      schemas?: Record<string, { properties?: Record<string, { enum?: string[] }> }>;
+    };
     paths: Record<
       string,
       {
@@ -479,6 +485,20 @@ test('development OpenAPI includes the AI ingestion 202 response schema', async 
       'application/json'
     ]?.schema,
   );
+  assert.deepEqual(schema.components?.schemas?.RoleAssignmentDto?.properties?.role?.enum, [
+    'ADMIN',
+    'SITE_MANAGER',
+    'SAFETY_OFFICER',
+    'SECURITY_OFFICER',
+  ]);
+  assert.deepEqual(schema.components?.schemas?.RoleAssignmentResponseDto?.properties?.role?.enum, [
+    'ADMIN',
+    'SITE_MANAGER',
+    'CONTRACTOR_REPRESENTATIVE',
+    'SAFETY_OFFICER',
+    'SECURITY_OFFICER',
+    'WORKER',
+  ]);
 });
 
 test('production does not publish Swagger UI or its schema', async (t) => {

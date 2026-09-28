@@ -7,6 +7,7 @@ import { SafetyAlertEntity } from './safety-alert.entity.js';
 import { AlertDetectionMappingEntity } from './alert-detection-mapping.entity.js';
 import { UserEntity } from './user.entity.js';
 import { AuthSessionEntity } from './auth-session.entity.js';
+import { UserRoleAssignmentEntity } from './user-role-assignment.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -19,6 +20,7 @@ export * from './safety-alert.entity.js';
 export * from './alert-detection-mapping.entity.js';
 export * from './user.entity.js';
 export * from './auth-session.entity.js';
+export * from './user-role-assignment.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -30,4 +32,5 @@ export const ENTITIES = [
   AlertDetectionMappingEntity,
   UserEntity,
   AuthSessionEntity,
+  UserRoleAssignmentEntity,
 ] as const;

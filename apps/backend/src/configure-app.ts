@@ -49,7 +49,7 @@ export async function configureApplication(app: NestExpressApplication): Promise
     origin: config.get('CORS_ORIGINS', { infer: true }),
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
     exposedHeaders: ['X-Request-Id', 'Retry-After'],
-    credentials: false,
+    credentials: true,
   });
   app.useBodyParser('json', { limit: '1mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });

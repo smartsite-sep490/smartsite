@@ -14,6 +14,37 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
     'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite',
   );
   assert.deepEqual(config.CORS_ORIGINS, ['http://localhost:5173']);
+  assert.equal(config.AUTH_JWT_SECRET, 'smartsite_local_dev_jwt_secret_only_32_bytes');
+});
+
+test('JWT signing secret is mandatory and strong in production without leaking its value', () => {
+  const production = {
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgresql://app:example@db.example.com/app',
+    CORS_ORIGINS: 'https://app.example.com',
+    SMARTSITE_AI_SERVICE_TOKEN: 'prod-service-token-at-least-32-characters',
+  };
+  assert.throws(() => validateEnvironment(production), /AUTH_JWT_SECRET/);
+  for (const AUTH_JWT_SECRET of [
+    '',
+    'short-secret',
+    'smartsite_local_dev_jwt_secret_only_32_bytes',
+    'secret with whitespace but definitely long enough',
+  ]) {
+    assert.throws(
+      () => validateEnvironment({ ...production, AUTH_JWT_SECRET }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /AUTH_JWT_SECRET/);
+        assert.doesNotMatch(error.message, new RegExp(AUTH_JWT_SECRET || 'unused-secret-value'));
+        return true;
+      },
+    );
+  }
+  assert.equal(
+    validateEnvironment({ ...production, AUTH_JWT_SECRET: 'a'.repeat(32) }).AUTH_JWT_SECRET,
+    'a'.repeat(32),
+  );
 });
 
 test('logging and throttling defaults are safe and explicit settings validate without coercion', () => {
@@ -116,6 +147,7 @@ test('accepts explicit production configuration and exact origin list', () => {
     DATABASE_URL: 'postgresql://app:example@db.example.com/app?sslmode=require',
     DATABASE_TIMEOUT_MS: '1500',
     CORS_ORIGINS: 'https://app.example.com, https://admin.example.com',
+    AUTH_JWT_SECRET: 'a'.repeat(32),
     SMARTSITE_AI_SERVICE_TOKEN: 'prod-service-token-at-least-32-characters',
   });
   assert.equal(config.NODE_ENV, 'production');
@@ -197,6 +229,7 @@ test('production requires an explicit non-empty SMARTSITE_AI_SERVICE_TOKEN and n
     NODE_ENV: 'production',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
     CORS_ORIGINS: 'https://app.example.com',
+    AUTH_JWT_SECRET: 'a'.repeat(32),
   };
 
   // Missing token throws
@@ -318,6 +351,7 @@ test('pretty logging is accepted only in development', () => {
         NODE_ENV: 'production',
         DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
         CORS_ORIGINS: 'https://app.example.com',
+        AUTH_JWT_SECRET: 'a'.repeat(32),
         SMARTSITE_AI_SERVICE_TOKEN: 'a'.repeat(32),
         LOG_FORMAT: 'pretty',
       }),

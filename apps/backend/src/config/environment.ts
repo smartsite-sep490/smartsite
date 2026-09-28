@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const LOCAL_DATABASE_URL = 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite';
 const LOCAL_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
+const LOCAL_JWT_SECRET = 'smartsite_local_dev_jwt_secret_only_32_bytes';
 const MAX_SAFE_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
 // Throttler's in-memory expiry uses setTimeout; larger delays wrap to 1 ms in Node.
 const MAX_TIMER_MS = 2_147_483_647;
@@ -123,6 +124,11 @@ export const backendEnvironmentSchema = z
     ...databaseFields,
     PORT: integer(3000, 1, 65535),
     CORS_ORIGINS: originsSchema.optional(),
+    AUTH_JWT_SECRET: z
+      .string({ error: 'must be a string' })
+      .min(32, 'must contain at least 32 characters')
+      .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
     SMARTSITE_AI_SERVICE_TOKEN: z
       .string({ error: 'must be a string' })
       .refine(
@@ -162,6 +168,19 @@ export const backendEnvironmentSchema = z
         message: 'must be set explicitly in production (empty disables browser access)',
       });
     }
+    if (config.AUTH_JWT_SECRET === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_JWT_SECRET'],
+        message: 'must be set in production',
+      });
+    } else if (config.AUTH_JWT_SECRET === LOCAL_JWT_SECRET) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_JWT_SECRET'],
+        message: 'cannot use the local development secret in production',
+      });
+    }
     if (!config.SMARTSITE_AI_SERVICE_TOKEN?.trim()) {
       context.addIssue({
         code: 'custom',
@@ -186,6 +205,7 @@ export const backendEnvironmentSchema = z
     ...config,
     DATABASE_URL: config.DATABASE_URL ?? LOCAL_DATABASE_URL,
     CORS_ORIGINS: config.CORS_ORIGINS ?? ['http://localhost:5173'],
+    AUTH_JWT_SECRET: config.AUTH_JWT_SECRET ?? LOCAL_JWT_SECRET,
     SMARTSITE_AI_SERVICE_TOKEN: config.SMARTSITE_AI_SERVICE_TOKEN?.trim()
       ? config.SMARTSITE_AI_SERVICE_TOKEN
       : LOCAL_SERVICE_TOKEN,

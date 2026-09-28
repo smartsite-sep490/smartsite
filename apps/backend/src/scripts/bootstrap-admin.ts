@@ -3,6 +3,7 @@ import * as readline from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import dataSource from '../database/typeorm.data-source.js';
 import { UsersService } from '../modules/users/users.service.js';
+import { SiteConfigurationService } from '../modules/sites/site-configuration.service.js';
 
 function hiddenPassword(): Promise<string> {
   if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stdin.setRawMode)
@@ -39,9 +40,7 @@ function hiddenPassword(): Promise<string> {
 async function main(): Promise<void> {
   await dataSource.initialize();
   try {
-    const users = new UsersService(dataSource);
-    if ((await users.list(0, 1)).total !== 0)
-      throw new Error('Initial Admin already exists; bootstrap cannot overwrite accounts');
+    const users = new UsersService(dataSource, new SiteConfigurationService(dataSource));
     const prompt = createInterface({ input: process.stdin, output: process.stdout });
     let username: string;
     let displayName: string;

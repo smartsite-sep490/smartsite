@@ -25,6 +25,10 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   const deniedCameraId = randomUUID();
   const siteId = randomUUID();
   const serviceToken = 'test-ai-service-token-only';
+  const jwt = (value: string) => `${value.repeat(16)}.${value.repeat(16)}.${value.repeat(16)}`;
+  const adminToken = jwt('A');
+  const temporaryAdminToken = jwt('T');
+  const workerToken = jwt('W');
   const config = new ConfigService<BackendEnvironment, true>(
     validateEnvironment({
       NODE_ENV: 'test',
@@ -40,25 +44,30 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   };
   const fakeAuth = {
     authenticate: async (token: string) => {
-      const role =
-        token === 'A'.repeat(43) || token === 'T'.repeat(43) ? UserRole.ADMIN : UserRole.WORKER;
+      const roleAssignments =
+        token === adminToken || token === temporaryAdminToken
+          ? [{ role: UserRole.ADMIN, siteId: null }]
+          : [{ role: UserRole.SECURITY_OFFICER, siteId }];
       return {
         user: {
           id: randomUUID(),
           username: 'tester',
           displayName: 'Tester',
-          role,
+          roleAssignments,
           isActive: true,
-          mustChangePassword: token === 'T'.repeat(43),
+          mustChangePassword: token === temporaryAdminToken,
         },
-        tokenHash: 'fake-hash',
+        sessionId: randomUUID(),
+        clientType: 'MOBILE',
       };
     },
     login: async () => ({
-      accessToken: 'A'.repeat(43),
+      accessToken: adminToken,
       tokenType: 'Bearer',
-      expiresAt: new Date(Date.now() + 1000).toISOString(),
-      user: { role: UserRole.ADMIN },
+      accessTokenExpiresAt: new Date(Date.now() + 1000).toISOString(),
+      refreshToken: `${randomUUID()}.${'R'.repeat(43)}`,
+      refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      user: { roleAssignments: [{ role: UserRole.ADMIN, siteId: null }] },
     }),
   };
   const site = { id: siteId, code: 'SITE', name: 'Site', createdAt: new Date() };
@@ -136,14 +145,14 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     fetch(`${url}/api/v1/sites`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-  assert.equal((await getSites('A'.repeat(43))).status, 200);
-  assert.equal((await getSites('W'.repeat(43))).status, 403);
-  assert.equal((await getSites('T'.repeat(43))).status, 403);
+  assert.equal((await getSites(adminToken)).status, 200);
+  assert.equal((await getSites(workerToken)).status, 403);
+  assert.equal((await getSites(temporaryAdminToken)).status, 403);
   assert.equal((await getSites(serviceToken)).status, 401);
   const alertsUrl = `${url}/api/v1/sites/${siteId}/safety-alerts`;
   const alertList = await fetch(
     `${alertsUrl}?offset=2&limit=5&status=PENDING_REVIEW&type=PPE_VIOLATION`,
-    { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } },
+    { headers: { Authorization: `Bearer ${adminToken}` } },
   );
   assert.equal(alertList.status, 200);
   assert.equal(alertList.headers.get('cache-control'), 'no-store');
@@ -158,7 +167,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   ]);
   assert.equal(((await alertList.json()) as { total: number }).total, 1);
   const alertDetail = await fetch(`${alertsUrl}/${alertId}`, {
-    headers: { Authorization: `Bearer ${'A'.repeat(43)}` },
+    headers: { Authorization: `Bearer ${adminToken}` },
   });
   assert.equal(alertDetail.status, 200);
   assert.equal(alertDetail.headers.get('cache-control'), 'no-store');
@@ -167,7 +176,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   assert.equal(alertDetailBody.detectionsTotal, 1);
   assert.equal('rawPayload' in alertDetailBody, false);
   assert.equal(
-    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${'W'.repeat(43)}` } })).status,
+    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${workerToken}` } })).status,
     403,
   );
   assert.equal(
@@ -177,7 +186,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   const login = await fetch(`${url}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'tester', password: 'password' }),
+    body: JSON.stringify({ username: 'tester', password: 'password', clientType: 'MOBILE' }),
   });
   assert.equal(login.status, 200);
   assert.equal(login.headers.get('cache-control'), 'no-store');
@@ -187,7 +196,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
         await fetch(`${url}/api/v1/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: 'tester', password: 'password' }),
+          body: JSON.stringify({ username: 'tester', password: 'password', clientType: 'MOBILE' }),
         })
       ).status,
       200,
@@ -195,7 +204,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   const limited = await fetch(`${url}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'tester', password: 'password' }),
+    body: JSON.stringify({ username: 'tester', password: 'password', clientType: 'MOBILE' }),
   });
   assert.equal(limited.status, 429);
   assert.equal(
@@ -246,7 +255,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   );
   assert.equal(configurationReads, 5);
   assert.equal(
-    (await fetch(aiUrl, { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } })).status,
+    (await fetch(aiUrl, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
     401,
   );
   const denied = await fetch(

@@ -2,24 +2,73 @@ import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
   ForbiddenException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsEnum, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { DataSource } from 'typeorm';
+import { ApiProperty } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import { command, knownUnique, page, uuid } from '../../common/configuration/commands.js';
+import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { AuthSessionEntity } from '../../database/entities/auth-session.entity.js';
+import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
 import { hashPassword, validPassword } from '../auth/password.js';
 import { publicUser } from '../auth/auth.service.js';
+import { SiteConfigurationService } from '../sites/site-configuration.service.js';
 
 const username = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
 const displayName = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
+const PROVISIONABLE_USER_ROLES = [
+  UserRole.ADMIN,
+  UserRole.SITE_MANAGER,
+  UserRole.SAFETY_OFFICER,
+  UserRole.SECURITY_OFFICER,
+] as const;
+type ProvisionableUserRole = (typeof PROVISIONABLE_USER_ROLES)[number];
+const PROVISIONABLE_SITE_ROLES: ReadonlySet<UserRole> = new Set([
+  UserRole.SITE_MANAGER,
+  UserRole.SAFETY_OFFICER,
+  UserRole.SECURITY_OFFICER,
+]);
 
-export class CreateUserDto {
+export class RoleAssignmentDto {
+  @ApiProperty({ enum: [...PROVISIONABLE_USER_ROLES] })
+  @IsIn(PROVISIONABLE_USER_ROLES)
+  role!: ProvisionableUserRole;
+
+  @ApiProperty({ format: 'uuid', nullable: true })
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  siteId!: string | null;
+}
+
+export class ReplaceRoleAssignmentsDto {
+  @ApiProperty({ type: () => [RoleAssignmentDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RoleAssignmentDto)
+  roleAssignments!: RoleAssignmentDto[];
+}
+
+export class CreateUserDto extends ReplaceRoleAssignmentsDto {
   @Transform(username)
   @IsString()
   @Matches(/^[a-z0-9][a-z0-9._-]{2,63}$/)
@@ -31,9 +80,6 @@ export class CreateUserDto {
   @MaxLength(255)
   @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
   displayName!: string;
-
-  @IsEnum(UserRole)
-  role!: UserRole;
 
   @IsString()
   @MinLength(15)
@@ -55,22 +101,87 @@ export class ResetPasswordDto {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly sites: SiteConfigurationService,
+  ) {}
+
+  private invalidAssignments(): never {
+    throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+      code: 'VALIDATION_FAILED',
+      message: 'Invalid role assignments',
+    });
+  }
+
+  private async validateAssignments(assignments: RoleAssignmentDto[]) {
+    const seen = new Set<string>();
+    const siteIds = new Set<string>();
+    for (const assignment of assignments) {
+      const globalAdmin = assignment.role === UserRole.ADMIN && assignment.siteId === null;
+      const scopedRole = PROVISIONABLE_SITE_ROLES.has(assignment.role) && !!assignment.siteId;
+      if (!globalAdmin && !scopedRole) this.invalidAssignments();
+      const key = `${assignment.role}:${assignment.siteId ?? ''}`;
+      if (seen.has(key)) this.invalidAssignments();
+      seen.add(key);
+      if (assignment.siteId) siteIds.add(assignment.siteId);
+    }
+    await Promise.all([...siteIds].map((siteId) => this.sites.get(siteId)));
+  }
+
+  private async response(manager: EntityManager, user: UserEntity) {
+    const assignments = await manager.getRepository(UserRoleAssignmentEntity).findBy({
+      userId: user.id,
+    });
+    return publicUser(user, assignments);
+  }
+
+  private async revokeSessions(manager: EntityManager, userId: string) {
+    await manager
+      .getRepository(AuthSessionEntity)
+      .createQueryBuilder()
+      .update()
+      .set({ revokedAt: new Date() })
+      .where('user_id = :userId AND revoked_at IS NULL', { userId })
+      .execute();
+  }
+
+  private async activeAdminCount(manager: EntityManager) {
+    return manager
+      .getRepository(UserEntity)
+      .createQueryBuilder('user')
+      .innerJoin(
+        UserRoleAssignmentEntity,
+        'assignment',
+        "assignment.user_id = user.id AND assignment.role = 'ADMIN' AND assignment.site_id IS NULL",
+      )
+      .where('user.is_active = TRUE')
+      .getCount();
+  }
 
   async create(input: CreateUserDto) {
     const value = command(CreateUserDto, input);
+    await this.validateAssignments(value.roleAssignments);
     const passwordHash = await hashPassword(value.temporaryPassword);
     try {
-      const user = await this.dataSource.getRepository(UserEntity).save({
-        id: randomUUID(),
-        username: value.username,
-        displayName: value.displayName,
-        role: value.role,
-        passwordHash,
-        isActive: true,
-        mustChangePassword: true,
+      return await this.dataSource.transaction(async (manager) => {
+        const user = await manager.getRepository(UserEntity).save({
+          id: randomUUID(),
+          username: value.username,
+          displayName: value.displayName,
+          passwordHash,
+          isActive: true,
+          mustChangePassword: true,
+        });
+        await manager.getRepository(UserRoleAssignmentEntity).insert(
+          value.roleAssignments.map(({ role, siteId }) => ({
+            id: randomUUID(),
+            userId: user.id,
+            role,
+            siteId,
+          })),
+        );
+        return this.response(manager, user);
       });
-      return publicUser(user);
     } catch (error) {
       knownUnique(error, ['uq_app_user_username']);
     }
@@ -81,41 +192,59 @@ export class UsersService {
     const value = command(CreateUserDto, {
       username: usernameValue,
       displayName: displayNameValue,
-      role: UserRole.ADMIN,
+      roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
       temporaryPassword: password,
     });
     const passwordHash = await hashPassword(value.temporaryPassword);
     return this.dataSource.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
-      if ((await manager.getRepository(UserEntity).count()) !== 0)
+      if ((await this.activeAdminCount(manager)) !== 0)
         throw new ConflictException('Initial Admin already exists');
       const user = await manager.getRepository(UserEntity).save({
         id: randomUUID(),
         username: value.username,
         displayName: value.displayName,
         passwordHash,
-        role: UserRole.ADMIN,
         isActive: true,
         mustChangePassword: true,
       });
-      return publicUser(user);
+      await manager.getRepository(UserRoleAssignmentEntity).insert({
+        id: randomUUID(),
+        userId: user.id,
+        role: UserRole.ADMIN,
+        siteId: null,
+      });
+      return this.response(manager, user);
     });
   }
 
   async get(id: string) {
     const user = await this.dataSource.getRepository(UserEntity).findOneBy({ id: uuid(id) });
     if (!user) throw new NotFoundException();
-    return publicUser(user);
+    return this.response(this.dataSource.manager, user);
   }
 
   async list(offset = 0, limit = 20) {
     const pagination = page(offset, limit);
-    const [items, total] = await this.dataSource.getRepository(UserEntity).findAndCount({
+    const [users, total] = await this.dataSource.getRepository(UserEntity).findAndCount({
       order: { username: 'ASC', id: 'ASC' },
       skip: pagination.offset,
       take: pagination.limit,
     });
-    return { items: items.map(publicUser), total };
+    const assignments = users.length
+      ? await this.dataSource
+          .getRepository(UserRoleAssignmentEntity)
+          .findBy({ userId: In(users.map(({ id }) => id)) })
+      : [];
+    return {
+      items: users.map((user) =>
+        publicUser(
+          user,
+          assignments.filter(({ userId }) => userId === user.id),
+        ),
+      ),
+      total,
+    };
   }
 
   async setStatus(actorId: string, userId: string, input: SetUserStatusDto) {
@@ -130,19 +259,57 @@ export class UsersService {
         .where('user.id = :id', { id })
         .getOne();
       if (!user) throw new NotFoundException();
-      if (user.isActive === value.isActive) return publicUser(user);
+      if (user.isActive === value.isActive) return this.response(manager, user);
       if (!value.isActive && actorId === id) throw new ForbiddenException();
-      if (!value.isActive && user.role === UserRole.ADMIN) {
-        const activeAdmins = await manager.getRepository(UserEntity).countBy({
-          role: UserRole.ADMIN,
-          isActive: true,
-        });
-        if (activeAdmins <= 1) throw new ConflictException('At least one active Admin is required');
-      }
+      const assignments = await manager
+        .getRepository(UserRoleAssignmentEntity)
+        .findBy({ userId: id });
+      if (value.isActive && assignments.length === 0) this.invalidAssignments();
+      if (
+        !value.isActive &&
+        assignments.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
+        (await this.activeAdminCount(manager)) <= 1
+      )
+        throw new ConflictException('At least one active Admin is required');
       user.isActive = value.isActive;
       await manager.getRepository(UserEntity).save(user);
-      if (!value.isActive) await manager.getRepository(AuthSessionEntity).delete({ userId: id });
-      return publicUser(user);
+      if (!value.isActive) await this.revokeSessions(manager, id);
+      return publicUser(user, assignments);
+    });
+  }
+
+  async replaceRoleAssignments(userId: string, input: ReplaceRoleAssignmentsDto) {
+    const value = command(ReplaceRoleAssignmentsDto, input);
+    await this.validateAssignments(value.roleAssignments);
+    const id = uuid(userId);
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
+      const user = await manager
+        .getRepository(UserEntity)
+        .createQueryBuilder('user')
+        .setLock('pessimistic_write')
+        .where('user.id = :id', { id })
+        .getOne();
+      if (!user) throw new NotFoundException();
+      const current = await manager.getRepository(UserRoleAssignmentEntity).findBy({ userId: id });
+      const removesAdmin =
+        current.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
+        !value.roleAssignments.some(
+          ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
+        );
+      if (user.isActive && removesAdmin && (await this.activeAdminCount(manager)) <= 1)
+        throw new ConflictException('At least one active Admin is required');
+      await manager.getRepository(UserRoleAssignmentEntity).delete({ userId: id });
+      await manager.getRepository(UserRoleAssignmentEntity).insert(
+        value.roleAssignments.map(({ role, siteId }) => ({
+          id: randomUUID(),
+          userId: id,
+          role,
+          siteId,
+        })),
+      );
+      await this.revokeSessions(manager, id);
+      return this.response(manager, user);
     });
   }
 
@@ -158,14 +325,10 @@ export class UsersService {
         .where('user.id = :id', { id })
         .getOne();
       if (!user) throw new NotFoundException();
-      await manager.getRepository(UserEntity).update(
-        { id },
-        {
-          passwordHash: replacement,
-          mustChangePassword: true,
-        },
-      );
-      await manager.getRepository(AuthSessionEntity).delete({ userId: id });
+      await manager
+        .getRepository(UserEntity)
+        .update({ id }, { passwordHash: replacement, mustChangePassword: true });
+      await this.revokeSessions(manager, id);
     });
   }
 }

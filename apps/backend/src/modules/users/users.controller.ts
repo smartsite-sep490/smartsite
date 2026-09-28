@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Req,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -34,6 +35,7 @@ import { type AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   CreateUserDto,
+  ReplaceRoleAssignmentsDto,
   ResetPasswordDto,
   SetUserStatusDto,
   UsersService,
@@ -73,6 +75,22 @@ export class UsersController {
   @ApiOkResponse({ type: AccountResponseDto })
   get(@Param('userId') userId: string) {
     return this.users.get(userId);
+  }
+
+  @Put(':userId/role-assignments')
+  @ApiOkResponse({ type: AccountResponseDto })
+  async replaceRoleAssignments(
+    @Req() request: AuthenticatedRequest,
+    @Param('userId') userId: string,
+    @Body() input: ReplaceRoleAssignmentsDto,
+  ) {
+    const user = await this.users.replaceRoleAssignments(userId, input);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'user.role-assignments.replace',
+      resourceId: user.id,
+    });
+    return user;
   }
 
   @Patch(':userId/status')
