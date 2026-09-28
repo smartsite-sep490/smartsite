@@ -122,16 +122,18 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     mutationFn: async () => {
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
-      if (result.user.role !== 'ADMIN') {
-        await client.logout(result.accessToken).catch(() => undefined);
+      if (
+        !result.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null)
+      ) {
+        await client.logout().catch(() => undefined);
         throw new Error('This milestone requires an Admin account.');
       }
       if (result.user.mustChangePassword) {
-        await client.logout(result.accessToken).catch(() => undefined);
+        await client.logout().catch(() => undefined);
         throw new Error('Change the temporary Admin password before opening safety alerts.');
       }
       if (generation !== lifecycleGeneration.current) {
-        void client.logout(result.accessToken).catch(() => undefined);
+        void client.logout().catch(() => undefined);
         return;
       }
       activeSession.current = { token: result.accessToken, userId: result.user.id };
@@ -149,7 +151,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
       activeSession.current = null;
       if (!current) return;
       removeSessionQueries(current.userId);
-      void client.logout(current.token).catch(() => undefined);
+      void client.logout().catch(() => undefined);
     };
   }, [client, removeSessionQueries]);
 
@@ -201,7 +203,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     setRequestedSiteId('');
     setRequestedAlertId('');
     setOffset(0);
-    if (current) void client.logout(current.token).catch(() => undefined);
+    if (current) void client.logout().catch(() => undefined);
   };
 
   if (!session) {

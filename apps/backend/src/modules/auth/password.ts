@@ -1,4 +1,5 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { isValidPassword } from '../../common/configuration/password-policy.js';
 
 const COST = 32_768;
 const BLOCK_SIZE = 8;
@@ -24,7 +25,7 @@ function derive(password: string, salt: Buffer): Promise<Buffer> {
 }
 
 export function validPassword(value: unknown): value is string {
-  return typeof value === 'string' && value.length >= 15 && value.length <= 128;
+  return isValidPassword(value);
 }
 
 export async function hashPassword(password: string): Promise<string> {

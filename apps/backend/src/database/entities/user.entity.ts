@@ -1,21 +1,16 @@
-import {
-  Check,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  Unique,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryColumn, Unique, UpdateDateColumn } from 'typeorm';
 
 export enum UserRole {
   ADMIN = 'ADMIN',
+  SITE_MANAGER = 'SITE_MANAGER',
+  CONTRACTOR_REPRESENTATIVE = 'CONTRACTOR_REPRESENTATIVE',
+  SAFETY_OFFICER = 'SAFETY_OFFICER',
+  SECURITY_OFFICER = 'SECURITY_OFFICER',
   WORKER = 'WORKER',
 }
 
 @Entity({ name: 'app_user' })
 @Unique('uq_app_user_username', ['username'])
-@Check('chk_app_user_role', "role IN ('ADMIN', 'WORKER')")
 export class UserEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_app_user_id' })
   id!: string;
@@ -28,9 +23,6 @@ export class UserEntity {
 
   @Column({ name: 'password_hash', type: 'varchar', length: 255 })
   passwordHash!: string;
-
-  @Column({ type: 'varchar', length: 16 })
-  role!: UserRole;
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;

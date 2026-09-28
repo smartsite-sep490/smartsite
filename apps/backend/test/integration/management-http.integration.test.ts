@@ -16,6 +16,7 @@ import { validateEnvironment, type BackendEnvironment } from '../../src/config/e
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
+import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 
 after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
@@ -24,13 +25,13 @@ after(async () => {
 test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observation', async () => {
   await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
-  const temporaryPassword = 'temporary-admin-password-123';
-  const newPassword = 'permanent-admin-password-123';
+  const temporaryPassword = 'TempAdmin123!';
+  const newPassword = 'PermanentAdmin123!';
   const serviceToken = 'test-ai-service-token-only';
-  await new UsersService(dataSource).create({
+  await new UsersService(dataSource, new SiteConfigurationService(dataSource)).create({
     username: `http-admin-${suffix}`,
     displayName: 'HTTP Admin',
-    role: UserRole.ADMIN,
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
     temporaryPassword,
   });
   const environment = validateEnvironment({
@@ -70,6 +71,7 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
     const firstLogin = await post('/auth/login', {
       username: `http-admin-${suffix}`,
       password: temporaryPassword,
+      clientType: 'MOBILE',
     });
     assert.equal(firstLogin.status, 200);
     const temporaryToken = ((await firstLogin.json()) as { accessToken: string }).accessToken;
@@ -101,6 +103,7 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
     const secondLogin = await post('/auth/login', {
       username: `http-admin-${suffix}`,
       password: newPassword,
+      clientType: 'MOBILE',
     });
     assert.equal(secondLogin.status, 200);
     const adminToken = ((await secondLogin.json()) as { accessToken: string }).accessToken;

@@ -105,12 +105,15 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     mutationFn: async () => {
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
-      if (result.user.role !== 'ADMIN' || result.user.mustChangePassword) {
-        await client.logout(result.accessToken).catch(() => undefined);
+      const isGlobalAdmin = result.user.roleAssignments.some(
+        ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+      );
+      if (!isGlobalAdmin || result.user.mustChangePassword) {
+        await client.logout('WEB').catch(() => undefined);
         throw new Error('Use an active Admin account with its permanent password.');
       }
       if (generation !== lifecycleGeneration.current) {
-        await client.logout(result.accessToken).catch(() => undefined);
+        await client.logout('WEB').catch(() => undefined);
         throw new Error('The sign-in request was cancelled.');
       }
       activeSession.current = { token: result.accessToken, userId: result.user.id };
@@ -127,7 +130,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       activeSession.current = null;
       if (!current) return;
       removeSessionQueries(current.userId);
-      void client.logout(current.token).catch(() => undefined);
+      void client.logout('WEB').catch(() => undefined);
     };
   }, [client, removeSessionQueries]);
 
@@ -251,7 +254,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     setGrantOffset(0);
     setDecisionOffset(0);
     if (current) removeSessionQueries(current.userId);
-    if (current) void client.logout(current.token).catch(() => undefined);
+    if (current) void client.logout('WEB').catch(() => undefined);
   };
 
   const submitLogin = (event: FormEvent) => {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { resolveBootstrapEnvironment } from '../src/config/bootstrap-environment.js';
 import { validateEnvironment } from '../src/config/environment.js';
 import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
 import path from 'node:path';
@@ -14,6 +15,71 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
     'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite',
   );
   assert.deepEqual(config.CORS_ORIGINS, ['http://localhost:5173']);
+  assert.equal(config.AUTH_JWT_SECRET, 'smartsite_local_dev_jwt_secret_only_32_bytes');
+});
+
+test('development accepts optional Admin bootstrap settings from environment', () => {
+  const config = validateEnvironment({
+    BOOTSTRAP_ADMIN_USERNAME: 'admin',
+    BOOTSTRAP_ADMIN_DISPLAY_NAME: 'Initial Admin',
+    BOOTSTRAP_ADMIN_PASSWORD: 'Admin123!',
+  }) as unknown as Record<string, unknown>;
+  assert.equal(config.BOOTSTRAP_ADMIN_USERNAME, 'admin');
+  assert.equal(config.BOOTSTRAP_ADMIN_DISPLAY_NAME, 'Initial Admin');
+  assert.equal(config.BOOTSTRAP_ADMIN_PASSWORD, 'Admin123!');
+});
+
+test('bootstrap settings merge process environment over the local env file', () => {
+  const config = resolveBootstrapEnvironment({
+    NODE_ENV: 'test',
+    BOOTSTRAP_ADMIN_USERNAME: 'admin-from-process',
+    BOOTSTRAP_ADMIN_DISPLAY_NAME: 'Initial Admin',
+    BOOTSTRAP_ADMIN_PASSWORD: 'Admin123!',
+  });
+
+  assert.equal(config.BOOTSTRAP_ADMIN_USERNAME, 'admin-from-process');
+  assert.equal(config.BOOTSTRAP_ADMIN_DISPLAY_NAME, 'Initial Admin');
+  assert.equal(config.BOOTSTRAP_ADMIN_PASSWORD, 'Admin123!');
+});
+
+test('bootstrap password rejects missing complexity requirements', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        BOOTSTRAP_ADMIN_PASSWORD: 'admin123!',
+      }),
+    /BOOTSTRAP_ADMIN_PASSWORD/,
+  );
+});
+
+test('JWT signing secret is mandatory and strong in production without leaking its value', () => {
+  const production = {
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgresql://app:example@db.example.com/app',
+    CORS_ORIGINS: 'https://app.example.com',
+    SMARTSITE_AI_SERVICE_TOKEN: 'prod-service-token-at-least-32-characters',
+  };
+  assert.throws(() => validateEnvironment(production), /AUTH_JWT_SECRET/);
+  for (const AUTH_JWT_SECRET of [
+    '',
+    'short-secret',
+    'smartsite_local_dev_jwt_secret_only_32_bytes',
+    'secret with whitespace but definitely long enough',
+  ]) {
+    assert.throws(
+      () => validateEnvironment({ ...production, AUTH_JWT_SECRET }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /AUTH_JWT_SECRET/);
+        assert.doesNotMatch(error.message, new RegExp(AUTH_JWT_SECRET || 'unused-secret-value'));
+        return true;
+      },
+    );
+  }
+  assert.equal(
+    validateEnvironment({ ...production, AUTH_JWT_SECRET: 'a'.repeat(32) }).AUTH_JWT_SECRET,
+    'a'.repeat(32),
+  );
 });
 
 test('logging and throttling defaults are safe and explicit settings validate without coercion', () => {
@@ -116,6 +182,7 @@ test('accepts explicit production configuration and exact origin list', () => {
     DATABASE_URL: 'postgresql://app:example@db.example.com/app?sslmode=require',
     DATABASE_TIMEOUT_MS: '1500',
     CORS_ORIGINS: 'https://app.example.com, https://admin.example.com',
+    AUTH_JWT_SECRET: 'a'.repeat(32),
     SMARTSITE_AI_SERVICE_TOKEN: 'prod-service-token-at-least-32-characters',
   });
   assert.equal(config.NODE_ENV, 'production');
@@ -197,6 +264,7 @@ test('production requires an explicit non-empty SMARTSITE_AI_SERVICE_TOKEN and n
     NODE_ENV: 'production',
     DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
     CORS_ORIGINS: 'https://app.example.com',
+    AUTH_JWT_SECRET: 'a'.repeat(32),
   };
 
   // Missing token throws
@@ -318,6 +386,7 @@ test('pretty logging is accepted only in development', () => {
         NODE_ENV: 'production',
         DATABASE_URL: 'postgresql://app:example@localhost:5432/app',
         CORS_ORIGINS: 'https://app.example.com',
+        AUTH_JWT_SECRET: 'a'.repeat(32),
         SMARTSITE_AI_SERVICE_TOKEN: 'a'.repeat(32),
         LOG_FORMAT: 'pretty',
       }),

@@ -14,15 +14,23 @@ export class AccountResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() username!: string;
   @ApiProperty() displayName!: string;
-  @ApiProperty({ enum: UserRole }) role!: UserRole;
+  @ApiProperty({ type: () => [RoleAssignmentResponseDto] })
+  roleAssignments!: RoleAssignmentResponseDto[];
   @ApiProperty() isActive!: boolean;
   @ApiProperty() mustChangePassword!: boolean;
+}
+
+export class RoleAssignmentResponseDto {
+  @ApiProperty({ enum: UserRole }) role!: UserRole;
+  @ApiProperty({ format: 'uuid', nullable: true }) siteId!: string | null;
 }
 
 export class LoginResponseDto {
   @ApiProperty() accessToken!: string;
   @ApiProperty({ enum: ['Bearer'] }) tokenType!: 'Bearer';
-  @ApiProperty({ format: 'date-time' }) expiresAt!: string;
+  @ApiProperty({ format: 'date-time' }) accessTokenExpiresAt!: string;
+  @ApiProperty({ required: false }) refreshToken?: string;
+  @ApiProperty({ format: 'date-time' }) refreshTokenExpiresAt!: string;
   @ApiProperty({ type: AccountResponseDto }) user!: AccountResponseDto;
 }
 

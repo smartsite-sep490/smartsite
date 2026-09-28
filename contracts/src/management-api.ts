@@ -1,10 +1,29 @@
-export type UserRole = 'ADMIN' | 'WORKER';
+export type UserRole =
+  | 'ADMIN'
+  | 'SITE_MANAGER'
+  | 'CONTRACTOR_REPRESENTATIVE'
+  | 'SAFETY_OFFICER'
+  | 'SECURITY_OFFICER'
+  | 'WORKER';
+export type ProvisionableUserRole =
+  'ADMIN' | 'SITE_MANAGER' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+export type AuthClientType = 'WEB' | 'MOBILE';
+
+export interface ProvisionableRoleAssignment {
+  role: ProvisionableUserRole;
+  siteId: string | null;
+}
+
+export interface RoleAssignmentResponse {
+  role: UserRole;
+  siteId: string | null;
+}
 
 export interface AccountResponse {
   id: string;
   username: string;
   displayName: string;
-  role: UserRole;
+  roleAssignments: RoleAssignmentResponse[];
   isActive: boolean;
   mustChangePassword: boolean;
 }
@@ -12,7 +31,9 @@ export interface AccountResponse {
 export interface LoginResponse {
   accessToken: string;
   tokenType: 'Bearer';
-  expiresAt: string;
+  accessTokenExpiresAt: string;
+  refreshToken?: string;
+  refreshTokenExpiresAt: string;
   user: AccountResponse;
 }
 

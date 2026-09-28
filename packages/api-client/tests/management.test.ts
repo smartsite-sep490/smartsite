@@ -49,6 +49,32 @@ describe('management client', () => {
       await client.login('admin', 'test-password-secret');
       expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/auth/login');
       expect(fetchMock.mock.calls[0]?.[1].body).toContain('test-password-secret');
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' });
+      expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1].body))).toEqual({
+        username: 'admin',
+        password: 'test-password-secret',
+        clientType: 'WEB',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('uses cookies only for Web refresh/logout and JSON refresh tokens only for Mobile', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.logout();
+      await client.logout('MOBILE', 'mobile-refresh-token');
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        credentials: 'include',
+        body: JSON.stringify({ clientType: 'WEB' }),
+      });
+      expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+        body: JSON.stringify({ clientType: 'MOBILE', refreshToken: 'mobile-refresh-token' }),
+      });
+      expect(fetchMock.mock.calls[1]?.[1].credentials).toBeUndefined();
     } finally {
       vi.unstubAllGlobals();
     }

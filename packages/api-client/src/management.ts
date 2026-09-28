@@ -1,8 +1,10 @@
 import type {
   AccountResponse,
+  AuthClientType,
   CameraResponse,
   LoginResponse,
   Page,
+  ProvisionableRoleAssignment,
   RegionMutationResponse,
   RegionResponse,
   SafetyAlertDetailResponse,
@@ -39,6 +41,7 @@ export class SmartSiteManagementClient {
     path: string,
     token?: string,
     body?: unknown,
+    credentials?: RequestCredentials,
   ): Promise<T> {
     let response: Response;
     try {
@@ -50,6 +53,7 @@ export class SmartSiteManagementClient {
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(credentials ? { credentials } : {}),
       });
     } catch {
       throw new ApiError('network', 'Could not connect to the backend.');
@@ -80,8 +84,23 @@ export class SmartSiteManagementClient {
     return `${path}${query.size ? `?${query}` : ''}`;
   }
 
-  login(username: string, password: string) {
-    return this.request<LoginResponse>('POST', '/auth/login', undefined, { username, password });
+  login(username: string, password: string, clientType: AuthClientType = 'WEB') {
+    return this.request<LoginResponse>(
+      'POST',
+      '/auth/login',
+      undefined,
+      { username, password, clientType },
+      clientType === 'WEB' ? 'include' : undefined,
+    );
+  }
+  refresh(clientType: AuthClientType, refreshToken?: string) {
+    return this.request<LoginResponse>(
+      'POST',
+      '/auth/refresh',
+      undefined,
+      { clientType, ...(refreshToken ? { refreshToken } : {}) },
+      clientType === 'WEB' ? 'include' : undefined,
+    );
   }
   me(token: string) {
     return this.request<AccountResponse>('GET', '/auth/me', token);
@@ -92,8 +111,14 @@ export class SmartSiteManagementClient {
       newPassword,
     });
   }
-  logout(token: string) {
-    return this.request<void>('POST', '/auth/logout', token);
+  logout(clientType: AuthClientType = 'WEB', refreshToken?: string) {
+    return this.request<void>(
+      'POST',
+      '/auth/logout',
+      undefined,
+      { clientType, ...(refreshToken ? { refreshToken } : {}) },
+      clientType === 'WEB' ? 'include' : undefined,
+    );
   }
 
   createUser(
@@ -101,11 +126,23 @@ export class SmartSiteManagementClient {
     input: {
       username: string;
       displayName: string;
-      role: 'ADMIN' | 'WORKER';
+      roleAssignments: ProvisionableRoleAssignment[];
       temporaryPassword: string;
     },
   ) {
     return this.request<AccountResponse>('POST', '/users', token, input);
+  }
+  replaceUserRoleAssignments(
+    token: string,
+    userId: string,
+    roleAssignments: ProvisionableRoleAssignment[],
+  ) {
+    return this.request<AccountResponse>(
+      'PUT',
+      `/users/${pathId(userId)}/role-assignments`,
+      token,
+      { roleAssignments },
+    );
   }
   listUsers(token: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>('GET', this.listPath('/users', options), token);
