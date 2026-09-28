@@ -228,6 +228,48 @@ test('Case 8: ZONE_ENTRY in AUTHORIZATION_REQUIRED returns ZONE_ENTRY_AUTHORIZAT
   );
 });
 
+test('MF06 authorization lookup suppresses allowed entry and emits UNAUTHORIZED for a denied worker', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({
+    restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+  });
+  const event = createBaseEvent([
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 110,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'WORKER-ALLOW',
+      similarityScore: 0.98,
+    },
+    { type: 'ZONE_ENTRY', trackId: 110, regionId, geometryVersion },
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 111,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'WORKER-DENY',
+      similarityScore: 0.97,
+    },
+    { type: 'ZONE_ENTRY', trackId: 111, regionId, geometryVersion },
+  ]);
+
+  const candidates = evaluator.evaluate(event, context, ({ trackId }) =>
+    trackId === 110
+      ? { status: 'ALLOWED', workerId: 'worker-allow', reasonCode: 'VALID_ALLOW' }
+      : {
+          status: 'DENIED',
+          workerId: 'worker-deny',
+          candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED',
+          reasonCode: 'EXPLICIT_DENY',
+          reason: 'Denied',
+        },
+  );
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]!.trackId, 111);
+  assert.equal(candidates[0]!.candidateSubtype, 'ZONE_ENTRY_UNAUTHORIZED');
+  assert.equal(candidates[0]!.candidateWorkerId, 'WORKER-DENY');
+});
+
 test('Case 9: Candidate identity for same track is attached into evidence fields only', () => {
   const evaluator = new AlertCandidateEvaluator();
   const context = createTestContext({ requiredPpe: ['HARD_HAT'] });
