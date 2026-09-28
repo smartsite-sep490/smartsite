@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import * as readline from 'node:readline';
 import { createInterface } from 'node:readline/promises';
+import { resolveBootstrapEnvironment } from '../config/bootstrap-environment.js';
 import dataSource from '../database/typeorm.data-source.js';
 import { UsersService } from '../modules/users/users.service.js';
 import { SiteConfigurationService } from '../modules/sites/site-configuration.service.js';
@@ -41,16 +42,22 @@ async function main(): Promise<void> {
   await dataSource.initialize();
   try {
     const users = new UsersService(dataSource, new SiteConfigurationService(dataSource));
+    const bootstrapEnvironment = resolveBootstrapEnvironment();
     const prompt = createInterface({ input: process.stdin, output: process.stdout });
     let username: string;
     let displayName: string;
     try {
-      username = await prompt.question('Admin username: ');
-      displayName = await prompt.question('Display name: ');
+      username =
+        bootstrapEnvironment.BOOTSTRAP_ADMIN_USERNAME ??
+        (await prompt.question('Admin username: '));
+      displayName =
+        bootstrapEnvironment.BOOTSTRAP_ADMIN_DISPLAY_NAME ??
+        (await prompt.question('Display name: '));
     } finally {
       prompt.close();
     }
-    const password = await hiddenPassword();
+    const password =
+      bootstrapEnvironment.BOOTSTRAP_ADMIN_PASSWORD ?? (await hiddenPassword());
     const user = await users.bootstrap(username, displayName, password);
     process.stdout.write(`Initial Admin created: ${user.username}\n`);
   } finally {

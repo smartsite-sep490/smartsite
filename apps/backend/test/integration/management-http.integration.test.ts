@@ -25,8 +25,8 @@ after(async () => {
 test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observation', async () => {
   await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
-  const temporaryPassword = 'temporary-admin-password-123';
-  const newPassword = 'permanent-admin-password-123';
+  const temporaryPassword = 'TempAdmin123!';
+  const newPassword = 'PermanentAdmin123!';
   const serviceToken = 'test-ai-service-token-only';
   await new UsersService(dataSource, new SiteConfigurationService(dataSource)).create({
     username: `http-admin-${suffix}`,

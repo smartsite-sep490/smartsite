@@ -17,10 +17,12 @@ import { AuthClientType } from '../src/database/entities/auth-session.entity.js'
 import { AuthTokenService } from '../src/modules/auth/auth-token.service.js';
 import { AuthController } from '../src/modules/auth/auth.controller.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
+import { command } from '../src/common/configuration/commands.js';
+import { CreateUserDto, ResetPasswordDto } from '../src/modules/users/users.service.js';
 import { createTestConfig } from './support/config.js';
 
 test('password hashing uses a random salt and rejects an incorrect password', async () => {
-  const password = 'correct horse battery staple';
+  const password = 'correct Horse1!';
   assert.equal(validPassword(password), true);
   assert.equal(validPassword('short'), false);
   const first = await hashPassword(password);
@@ -30,6 +32,36 @@ test('password hashing uses a random salt and rejects an incorrect password', as
   assert.equal(await verifyPassword('wrong-password-123', first), false);
   assert.equal(await verifyPassword(password, 'bad-hash'), false);
   assert.equal(first.includes(password), false);
+});
+
+test('password policy requires uppercase, digit, and special character from eight characters', () => {
+  assert.equal(validPassword('Abcd123!'), true);
+  assert.equal(validPassword('ABCDEFG1!'), true);
+  assert.equal(validPassword('abcdefg1!'), false);
+  assert.equal(validPassword('ABCDEFG!'), false);
+  assert.equal(validPassword('Abcdefgh'), false);
+  assert.equal(validPassword('Abc12!'), false);
+  assert.equal(validPassword('ABCDEFG1 '), false);
+  assert.equal(validPassword('Abcd123!\n'), false);
+  assert.equal(validPassword(`A1!${'a'.repeat(126)}`), false);
+});
+
+test('user creation and reset DTOs enforce the shared password policy', () => {
+  const account = {
+    username: 'admin',
+    displayName: 'Admin',
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  };
+  assert.doesNotThrow(() =>
+    command(CreateUserDto, { ...account, temporaryPassword: 'Abcd123!' }),
+  );
+  assert.throws(
+    () => command(CreateUserDto, { ...account, temporaryPassword: 'abcdefg1!' }),
+    { status: 400 },
+  );
+  assert.throws(() => command(ResetPasswordDto, { temporaryPassword: 'ABCDEFG!' }), {
+    status: 400,
+  });
 });
 
 test('access JWT is scoped to one database session and expires after fifteen minutes', async () => {
@@ -297,6 +329,10 @@ test('auth request bodies reject invalid security-sensitive fields and unknown f
     {
       method: 'changePassword' as const,
       body: { currentPassword: 'current-password', newPassword: 'p'.repeat(129) },
+    },
+    {
+      method: 'changePassword' as const,
+      body: { currentPassword: 'legacy', newPassword: 'abcdefg1!' },
     },
     {
       method: 'login' as const,

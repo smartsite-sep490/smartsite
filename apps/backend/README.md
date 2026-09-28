@@ -133,7 +133,16 @@ pnpm --filter @smartsite/backend db:migrate:run
 pnpm --filter @smartsite/backend auth:bootstrap-admin
 ```
 
-Lệnh bootstrap hỏi username, tên và mật khẩu tạm qua terminal; mật khẩu không hiển thị và không truyền trong command line. Chỉ chạy được khi chưa có Admin global đang hoạt động, kể cả sau migration giữ lại legacy Worker inactive. Admin đăng nhập qua `POST /api/v1/auth/login`, đổi mật khẩu tạm qua `POST /api/v1/auth/change-password`, rồi đăng nhập lại để gọi API quản trị. Access token là JWT HS256 15 phút, chỉ mang `sub`, `sid`, `typ`, `iat`, `exp`, `iss`, `aud`; quyền luôn được đọc lại từ PostgreSQL. Refresh session hết hạn tuyệt đối sau 30 ngày và rotate tại `POST /api/v1/auth/refresh`. Logout, đổi/reset mật khẩu, khóa tài khoản hoặc đổi role thu hồi session ngay. Không có endpoint tự đăng ký.
+Mặc định lệnh bootstrap hỏi username, tên và mật khẩu tạm qua terminal; mật khẩu không hiển thị và không truyền trong command line. Nếu muốn chạy nhanh bằng `.env` local, đặt đủ ba biến sau trong `apps/backend/.env` rồi chạy lại lệnh bootstrap:
+
+```dotenv
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_DISPLAY_NAME=Initial Admin
+BOOTSTRAP_ADMIN_PASSWORD=Admin123!
+```
+
+Khi đủ cả ba biến, lệnh không hỏi tương tác; thiếu biến nào thì chỉ hỏi biến đó. Xóa `BOOTSTRAP_ADMIN_PASSWORD` khỏi `.env` ngay sau khi tạo Admin thành công và không commit `.env`. Chỉ chạy được khi chưa có Admin global đang hoạt động, kể cả sau migration giữ lại legacy Worker inactive. Admin đăng nhập qua `POST /api/v1/auth/login`, đổi mật khẩu tạm qua `POST /api/v1/auth/change-password`, rồi đăng nhập lại để gọi API quản trị. Access token là JWT HS256 15 phút, chỉ mang `sub`, `sid`, `typ`, `iat`, `exp`, `iss`, `aud`; quyền luôn được đọc lại từ PostgreSQL. Refresh session hết hạn tuyệt đối sau 30 ngày và rotate tại `POST /api/v1/auth/refresh`. Logout, đổi/reset mật khẩu, khóa tài khoản hoặc đổi role thu hồi session ngay. Không có endpoint tự đăng ký.
+Mật khẩu mới phải dài 8–128 ký tự, có ít nhất một chữ hoa, một số và một ký tự đặc biệt; chữ thường không bắt buộc. Password cũ của account hiện tại vẫn đăng nhập được cho tới khi được đổi hoặc reset.
 
 Web gửi `clientType=WEB`: access token trả trong JSON, refresh token chỉ ở cookie host-only `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth` và `Secure` ở production; login/refresh/logout yêu cầu Origin trong allowlist. Mobile gửi `clientType=MOBILE` và nhận cả hai token trong JSON để ứng dụng lưu refresh token bằng secure storage. Không được trộn cookie và refresh token JSON.
 

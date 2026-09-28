@@ -21,7 +21,7 @@ test('mobile refresh rotates once and replay revokes the database-backed JWT ses
   const users = new UsersService(dataSource, new SiteConfigurationService(dataSource));
   const tokens = new AuthTokenService(new JwtService(), createTestConfig());
   const auth = new AuthService(dataSource, tokens);
-  const password = 'initial-admin-password-123';
+  const password = 'InitialAdmin1!';
   const admin = await users.bootstrap(
     `jwt-admin-${randomUUID().slice(0, 8)}`,
     'JWT Admin',
@@ -50,7 +50,7 @@ test('concurrent refresh cannot leave two valid rotated tokens', async () => {
     dataSource,
     new AuthTokenService(new JwtService(), createTestConfig()),
   );
-  const password = 'concurrent-admin-password-123';
+  const password = 'ConcurrentAdmin1!';
   const admin = await users.bootstrap(
     `race-admin-${randomUUID().slice(0, 8)}`,
     'Race Admin',

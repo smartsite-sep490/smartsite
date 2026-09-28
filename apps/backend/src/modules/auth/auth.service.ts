@@ -7,6 +7,7 @@ import { UserEntity } from '../../database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import { AuthTokenService, REFRESH_SESSION_MS } from './auth-token.service.js';
 import { hashPassword, validPassword, verifyPassword } from './password.js';
+import { PASSWORD_POLICY_MESSAGE } from '../../common/configuration/password-policy.js';
 
 const DUMMY_PASSWORD_HASH = hashPassword('nonexistent-account-password');
 
@@ -208,7 +209,7 @@ export class AuthService {
     if (!validPassword(newPassword))
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
-        message: 'Invalid password length',
+        message: PASSWORD_POLICY_MESSAGE,
       });
     const user = await this.dataSource.getRepository(UserEntity).findOneBy({ id: userId });
     if (!user || !(await verifyPassword(currentPassword, user.passwordHash)))

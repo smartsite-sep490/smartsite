@@ -30,6 +30,12 @@ import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
 import { hashPassword, validPassword } from '../auth/password.js';
 import { publicUser } from '../auth/auth.service.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_MESSAGE,
+  PASSWORD_POLICY_PATTERN,
+} from '../../common/configuration/password-policy.js';
 
 const username = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
@@ -82,8 +88,9 @@ export class CreateUserDto extends ReplaceRoleAssignmentsDto {
   displayName!: string;
 
   @IsString()
-  @MinLength(15)
-  @MaxLength(128)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
+  @Matches(PASSWORD_POLICY_PATTERN, { message: PASSWORD_POLICY_MESSAGE })
   temporaryPassword!: string;
 }
 
@@ -94,8 +101,9 @@ export class SetUserStatusDto {
 
 export class ResetPasswordDto {
   @IsString()
-  @MinLength(15)
-  @MaxLength(128)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
+  @Matches(PASSWORD_POLICY_PATTERN, { message: PASSWORD_POLICY_MESSAGE })
   temporaryPassword!: string;
 }
 
@@ -188,7 +196,7 @@ export class UsersService {
   }
 
   async bootstrap(usernameValue: string, displayNameValue: string, password: string) {
-    if (!validPassword(password)) throw new Error('Password must be 15–128 characters');
+    if (!validPassword(password)) throw new Error(PASSWORD_POLICY_MESSAGE);
     const value = command(CreateUserDto, {
       username: usernameValue,
       displayName: displayNameValue,

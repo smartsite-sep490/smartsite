@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  isValidPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_MESSAGE,
+} from '../common/configuration/password-policy.js';
 
 const LOCAL_DATABASE_URL = 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite';
 const LOCAL_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
@@ -128,6 +134,22 @@ export const backendEnvironmentSchema = z
       .string({ error: 'must be a string' })
       .min(32, 'must contain at least 32 characters')
       .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
+    BOOTSTRAP_ADMIN_USERNAME: z
+      .string({ error: 'must be a string' })
+      .min(1, 'must not be empty')
+      .max(64, 'must contain at most 64 characters')
+      .optional(),
+    BOOTSTRAP_ADMIN_DISPLAY_NAME: z
+      .string({ error: 'must be a string' })
+      .min(1, 'must not be empty')
+      .max(255, 'must contain at most 255 characters')
+      .optional(),
+    BOOTSTRAP_ADMIN_PASSWORD: z
+      .string({ error: 'must be a string' })
+      .min(PASSWORD_MIN_LENGTH, `must contain at least ${PASSWORD_MIN_LENGTH} characters`)
+      .max(PASSWORD_MAX_LENGTH, `must contain at most ${PASSWORD_MAX_LENGTH} characters`)
+      .refine(isValidPassword, PASSWORD_POLICY_MESSAGE)
       .optional(),
     SMARTSITE_AI_SERVICE_TOKEN: z
       .string({ error: 'must be a string' })

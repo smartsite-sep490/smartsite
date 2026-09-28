@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { resolveBootstrapEnvironment } from '../src/config/bootstrap-environment.js';
 import { validateEnvironment } from '../src/config/environment.js';
 import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
 import path from 'node:path';
@@ -15,6 +16,40 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
   );
   assert.deepEqual(config.CORS_ORIGINS, ['http://localhost:5173']);
   assert.equal(config.AUTH_JWT_SECRET, 'smartsite_local_dev_jwt_secret_only_32_bytes');
+});
+
+test('development accepts optional Admin bootstrap settings from environment', () => {
+  const config = validateEnvironment({
+    BOOTSTRAP_ADMIN_USERNAME: 'admin',
+    BOOTSTRAP_ADMIN_DISPLAY_NAME: 'Initial Admin',
+    BOOTSTRAP_ADMIN_PASSWORD: 'Admin123!',
+  }) as unknown as Record<string, unknown>;
+  assert.equal(config.BOOTSTRAP_ADMIN_USERNAME, 'admin');
+  assert.equal(config.BOOTSTRAP_ADMIN_DISPLAY_NAME, 'Initial Admin');
+  assert.equal(config.BOOTSTRAP_ADMIN_PASSWORD, 'Admin123!');
+});
+
+test('bootstrap settings merge process environment over the local env file', () => {
+  const config = resolveBootstrapEnvironment({
+    NODE_ENV: 'test',
+    BOOTSTRAP_ADMIN_USERNAME: 'admin-from-process',
+    BOOTSTRAP_ADMIN_DISPLAY_NAME: 'Initial Admin',
+    BOOTSTRAP_ADMIN_PASSWORD: 'Admin123!',
+  });
+
+  assert.equal(config.BOOTSTRAP_ADMIN_USERNAME, 'admin-from-process');
+  assert.equal(config.BOOTSTRAP_ADMIN_DISPLAY_NAME, 'Initial Admin');
+  assert.equal(config.BOOTSTRAP_ADMIN_PASSWORD, 'Admin123!');
+});
+
+test('bootstrap password rejects missing complexity requirements', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        BOOTSTRAP_ADMIN_PASSWORD: 'admin123!',
+      }),
+    /BOOTSTRAP_ADMIN_PASSWORD/,
+  );
 });
 
 test('JWT signing secret is mandatory and strong in production without leaking its value', () => {

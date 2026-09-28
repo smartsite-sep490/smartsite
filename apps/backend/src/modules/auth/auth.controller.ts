@@ -20,7 +20,15 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { IsEnum, IsNotEmpty, IsString, MaxLength, ValidateIf } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 import type { Request, Response } from 'express';
 import { AuthService, type AuthenticatedRequest } from './auth.service.js';
 import { AccountResponseDto, LoginResponseDto } from '../../common/http/management-response.dto.js';
@@ -29,6 +37,12 @@ import { ChangePasswordThrottleGuard, UserAuthGuard } from './user-auth.guard.js
 import { AuthClientType } from '../../database/entities/auth-session.entity.js';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_PATTERN,
+  PASSWORD_POLICY_MESSAGE,
+} from '../../common/configuration/password-policy.js';
 
 const REFRESH_COOKIE = 'smartsite_refresh';
 const REFRESH_TOKEN_LENGTH = 80;
@@ -59,11 +73,13 @@ class RefreshDto {
 
 class ChangePasswordDto {
   @IsString()
-  @MaxLength(128)
+  @MaxLength(PASSWORD_MAX_LENGTH)
   currentPassword!: string;
 
   @IsString()
-  @MaxLength(128)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
+  @Matches(PASSWORD_POLICY_PATTERN, { message: PASSWORD_POLICY_MESSAGE })
   newPassword!: string;
 }
 
