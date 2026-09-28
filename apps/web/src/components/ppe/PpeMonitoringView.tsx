@@ -160,7 +160,7 @@ export function PpeMonitoringView() {
                 confidence: detection.confidence,
                 confirmedMissingItems: detection.confirmedMissingItems,
                 eventId: `REALTIME-TRACK-${detection.trackId}`,
-                label: `MF05 ${detection.label}`,
+                label: `MF04 ${detection.label}`,
                 ppeStatus: detection.ppeStatus,
                 regionId: detection.regionId,
                 timecode: 'LIVE',
@@ -380,7 +380,7 @@ export function PpeMonitoringView() {
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
         {/* Left: Camera Feed */}
         <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
-          {/* Local MF05 test fixture driven by the video timeline. */}
+          {/* Local MF04 test fixture driven by the video timeline. */}
           <div className="absolute inset-0">
             <video
               ref={videoRef}
@@ -409,10 +409,10 @@ export function PpeMonitoringView() {
               }`}
             >
               {isLive
-                ? 'MF05 AI REALTIME'
+                ? 'MF04 AI REALTIME'
                 : aiTimeline
-                  ? 'MF05 AI PIPELINE'
-                  : 'MF05 AI OUTPUT REQUIRED'}{' '}
+                  ? 'MF04 AI PIPELINE'
+                  : 'MF04 AI OUTPUT REQUIRED'}{' '}
               ·{' '}
               {ppeResultState === 'CONFIRMED_MISSING'
                 ? 'MISSING PPE'
@@ -437,7 +437,7 @@ export function PpeMonitoringView() {
                   className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
                     isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
                   }`}
-                  data-testid="mf05-test-detection"
+                  data-testid="mf04-test-detection"
                   style={{
                     top: `${detection.boundingBox.y1 * 100}%`,
                     width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
@@ -730,7 +730,7 @@ export function PpeMonitoringView() {
                 </div>
                 <p className="text-xs text-slate-600">
                   {ppeResultState === 'CONFIRMED_MISSING'
-                    ? 'Technical observation from the YOLO + MF05 pipeline.'
+                    ? 'Technical observation from the YOLO + MF04 pipeline.'
                     : ppeResultState === 'PENDING_CONFIRMATION'
                       ? 'Missing evidence is waiting for multi-frame confirmation.'
                       : ppeResultState === 'UNKNOWN'
@@ -745,7 +745,7 @@ export function PpeMonitoringView() {
             {violationSnapshot && (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 p-3"
-                data-testid="mf05-evidence-capture"
+                data-testid="mf04-evidence-capture"
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest text-red-700">
                   Evidence captured · {violationSnapshot.timecode}

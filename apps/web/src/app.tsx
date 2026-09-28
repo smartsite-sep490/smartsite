@@ -38,10 +38,10 @@ export function App() {
         <LiveMonitoringView onNavigate={(tab) => handleSelectTab(tab)} />
       )}
 
-      {/* Tab: Restricted Zones (MF06) */}
+      {/* Tab: Restricted Zones (MF05) */}
       {currentTab === 'zones' && <RestrictedZoneView />}
 
-      {/* Tab: PPE Monitoring (MF05) */}
+      {/* Tab: PPE Monitoring (MF04) */}
       {currentTab === 'ppe' && <PpeMonitoringView />}
 
       {/* Tab: Operational Dashboard */}
