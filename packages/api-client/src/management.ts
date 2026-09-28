@@ -11,6 +11,11 @@ import type {
   SafetyAlertType,
   SiteResponse,
   ZoneResponse,
+  WorkerResponse,
+  ZoneAccessEffect,
+  ZoneAccessGrantResponse,
+  ZoneEntryDecisionResponse,
+  ZoneEntryDecisionStatus,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
@@ -18,6 +23,10 @@ type PageOptions = { offset?: number; limit?: number };
 export type SafetyAlertListOptions = PageOptions & {
   status?: SafetyAlertStatus;
   type?: SafetyAlertType;
+};
+export type ZoneEntryDecisionListOptions = PageOptions & {
+  zoneId?: string;
+  status?: ZoneEntryDecisionStatus;
 };
 type CameraMutation = { expectedConfigurationVersion: number };
 const pathId = (id: string) => encodeURIComponent(id);
@@ -146,6 +155,67 @@ export class SmartSiteManagementClient {
   }
   renameSite(token: string, siteId: string, name: string) {
     return this.request<SiteResponse>('PATCH', `/sites/${pathId(siteId)}`, token, { name });
+  }
+
+  createWorker(token: string, siteId: string, input: { externalId: string; displayName: string }) {
+    return this.request<WorkerResponse>('POST', `/sites/${pathId(siteId)}/workers`, token, input);
+  }
+  listWorkers(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<WorkerResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/workers`, options),
+      token,
+    );
+  }
+
+  createZoneAccessGrant(
+    token: string,
+    siteId: string,
+    zoneId: string,
+    input: {
+      workerId: string;
+      effect: ZoneAccessEffect;
+      validFrom: string;
+      validUntil: string | null;
+    },
+  ) {
+    return this.request<ZoneAccessGrantResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}/access-grants`,
+      token,
+      input,
+    );
+  }
+  listZoneAccessGrants(token: string, siteId: string, zoneId: string, options?: PageOptions) {
+    return this.request<Page<ZoneAccessGrantResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/zones/${pathId(zoneId)}/access-grants`, options),
+      token,
+    );
+  }
+  revokeZoneAccessGrant(token: string, siteId: string, zoneId: string, grantId: string) {
+    return this.request<ZoneAccessGrantResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}/access-grants/${pathId(grantId)}/revoke`,
+      token,
+    );
+  }
+  listZoneEntryDecisions(
+    token: string,
+    siteId: string,
+    options: ZoneEntryDecisionListOptions = {},
+  ) {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.zoneId !== undefined) query.set('zoneId', options.zoneId);
+    if (options.status !== undefined) query.set('status', options.status);
+    const path = `/sites/${pathId(siteId)}/zone-entry-decisions`;
+    return this.request<Page<ZoneEntryDecisionResponse>>(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+    );
   }
 
   createCamera(

@@ -110,4 +110,63 @@ describe('management client', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('constructs worker and zone access endpoints with encoded scope IDs', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listWorkers('access-token', 'site/a', { limit: 100 });
+      await client.listZoneAccessGrants('access-token', 'site/a', 'zone/b', { limit: 100 });
+      await client.listZoneEntryDecisions('access-token', 'site/a', {
+        zoneId: 'zone/b',
+        status: 'DENIED',
+        limit: 50,
+      });
+
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        'https://api.example.test/api/v1/sites/site%2Fa/workers?limit=100',
+        'https://api.example.test/api/v1/sites/site%2Fa/zones/zone%2Fb/access-grants?limit=100',
+        'https://api.example.test/api/v1/sites/site%2Fa/zone-entry-decisions?limit=50&zoneId=zone%2Fb&status=DENIED',
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('sends grant creation and revocation mutations with bearer auth', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ id: 'grant-1', effect: 'ALLOW' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.createZoneAccessGrant('access-token', 'site-1', 'zone-1', {
+        workerId: 'worker-1',
+        effect: 'ALLOW',
+        validFrom: '2026-09-28T12:00:00.000Z',
+        validUntil: null,
+      });
+      await client.revokeZoneAccessGrant('access-token', 'site-1', 'zone-1', 'grant-1');
+
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
+        body: JSON.stringify({
+          workerId: 'worker-1',
+          effect: 'ALLOW',
+          validFrom: '2026-09-28T12:00:00.000Z',
+          validUntil: null,
+        }),
+      });
+      expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+        method: 'PATCH',
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
