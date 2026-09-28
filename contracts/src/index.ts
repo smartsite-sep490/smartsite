@@ -27,7 +27,12 @@ export type {
 
 export type {
   AccountResponse,
+  AuthClientType,
   LoginResponse,
+  ProvisionableRoleAssignment,
+  ProvisionableUserRole,
+  RoleAssignmentResponse,
+  UserRole,
   Page,
   SiteResponse,
   CameraResponse,
