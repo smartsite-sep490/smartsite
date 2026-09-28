@@ -71,7 +71,7 @@ export function CameraMonitoringView({
                   : 'bg-slate-200 text-slate-600'
               }`}
             >
-              MF05
+              MF04
             </span>
           </button>
 
@@ -95,7 +95,7 @@ export function CameraMonitoringView({
                   : 'bg-slate-200 text-slate-600'
               }`}
             >
-              MF06
+              MF05
             </span>
           </button>
         </div>

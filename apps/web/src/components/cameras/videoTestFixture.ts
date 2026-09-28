@@ -220,8 +220,8 @@ export function getPpeVideoTestDetections(
       confidence: missingItem?.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
       label: missingItem
-        ? `MF05 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
-        : 'MF05 PPE OK',
+        ? `MF04 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
+        : 'MF04 PPE OK',
       ppeStatus,
       regionId: missingItem?.regionId ?? trackObservations[0]?.regionId,
       timecode: formatTimecode(match.entry.videoTimeSeconds),
@@ -265,7 +265,7 @@ export function getZoneVideoTestDetections(
       cameraExternalId: match.entry.event.cameraExternalId,
       confidence: observation.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
-      label: 'MF06 ZONE ENTRY',
+      label: 'MF05 ZONE ENTRY',
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       regionId: observation.regionId,
       timecode: formatTimecode(match.entry.videoTimeSeconds),

@@ -195,7 +195,7 @@ export function RestrictedZoneView() {
                 cameraExternalId: payload.cameraExternalId,
                 confidence: detection.confidence,
                 eventId: `REALTIME-ZONE-TRACK-${detection.trackId}`,
-                label: `MF06 ${detection.label}`,
+                label: `MF05 ${detection.label}`,
                 ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
                 regionId: detection.regionId,
                 timecode: 'LIVE',
@@ -429,7 +429,7 @@ export function RestrictedZoneView() {
           ref={containerRef}
           className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none"
         >
-          {/* Local MF06 test fixture driven by the video timeline. */}
+          {/* Local MF05 test fixture driven by the video timeline. */}
           <div className="absolute inset-0">
             <video
               ref={videoRef}
@@ -462,10 +462,10 @@ export function RestrictedZoneView() {
               }`}
             >
               {isLive
-                ? 'MF06 AI REALTIME'
+                ? 'MF05 AI REALTIME'
                 : aiTimeline
-                  ? 'MF06 AI PIPELINE'
-                  : 'MF06 AI OUTPUT REQUIRED'}{' '}
+                  ? 'MF05 AI PIPELINE'
+                  : 'MF05 AI OUTPUT REQUIRED'}{' '}
               · {testDetection ? (testDetection.active ? 'ZONE ENTRY' : 'SCANNING') : 'NO TARGETS'}{' '}
               · {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
             </div>
