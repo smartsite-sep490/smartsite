@@ -98,3 +98,42 @@ export interface SafetyAlertDetailResponse extends SafetyAlertResponse {
   detectionsTotal: number;
   detections: SafetyAlertDetectionResponse[];
 }
+
+export interface WorkerResponse {
+  id: string;
+  siteId: string;
+  externalId: string;
+  displayName: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type ZoneAccessEffect = 'ALLOW' | 'DENY';
+
+export interface ZoneAccessGrantResponse {
+  id: string;
+  siteId: string;
+  zoneId: string;
+  workerId: string;
+  effect: ZoneAccessEffect;
+  validFrom: string;
+  validUntil: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export type ZoneEntryDecisionStatus = 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
+
+export interface ZoneEntryDecisionResponse {
+  id: string;
+  eventId: string;
+  siteId: string;
+  zoneId: string;
+  workerId: string | null;
+  candidateWorkerId: string | null;
+  trackId: number;
+  status: ZoneEntryDecisionStatus;
+  reasonCode: string;
+  evaluatedAt: string;
+  createdAt: string;
+}

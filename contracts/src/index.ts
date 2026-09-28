@@ -39,4 +39,9 @@ export type {
   SafetyAlertResponse,
   SafetyAlertDetectionResponse,
   SafetyAlertDetailResponse,
+  WorkerResponse,
+  ZoneAccessEffect,
+  ZoneAccessGrantResponse,
+  ZoneEntryDecisionStatus,
+  ZoneEntryDecisionResponse,
 } from './management-api.js';
