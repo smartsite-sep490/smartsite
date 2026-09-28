@@ -125,13 +125,53 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
         code: `ZONE-${suffix}`,
         name: 'Restricted gate',
         type: 'RESTRICTED',
-        restrictionPolicy: 'PROHIBITED_FOR_ALL',
+        restrictionPolicy: 'AUTHORIZATION_REQUIRED',
         requiredPpe: [],
       },
       adminToken,
     );
     assert.equal(zoneResponse.status, 201);
     const zone = (await zoneResponse.json()) as { id: string };
+    const workerResponse = await post(
+      `/sites/${site.id}/workers`,
+      { externalId: `WORKER-${suffix}`, displayName: 'Authorized Worker' },
+      adminToken,
+    );
+    assert.equal(workerResponse.status, 201);
+    const worker = (await workerResponse.json()) as { id: string };
+    const workerList = await fetch(`${url}/api/v1/sites/${site.id}/workers`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(workerList.status, 200);
+    assert.equal(((await workerList.json()) as { total: number }).total, 1);
+    const timezoneLessGrant = await post(
+      `/sites/${site.id}/zones/${zone.id}/access-grants`,
+      {
+        workerId: worker.id,
+        effect: 'ALLOW',
+        validFrom: '2026-09-28T00:00:00',
+        validUntil: null,
+      },
+      adminToken,
+    );
+    assert.equal(timezoneLessGrant.status, 400);
+    const grantResponse = await post(
+      `/sites/${site.id}/zones/${zone.id}/access-grants`,
+      {
+        workerId: worker.id,
+        effect: 'ALLOW',
+        validFrom: '2026-09-28T00:00:00.000Z',
+        validUntil: null,
+      },
+      adminToken,
+    );
+    assert.equal(grantResponse.status, 201);
+    const grantList = await fetch(`${url}/api/v1/sites/${site.id}/zones/${zone.id}/access-grants`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(grantList.status, 200);
+    const grantListBody = (await grantList.json()) as { items: { id: string }[]; total: number };
+    assert.equal(grantListBody.total, 1);
     const regionResponse = await post(
       `/sites/${site.id}/cameras/${camera.id}/regions`,
       {
@@ -175,6 +215,13 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
       frameDimensions: { width: 640, height: 480 },
       observations: [
         {
+          type: 'IDENTITY_CANDIDATE',
+          trackId: 1,
+          status: 'CANDIDATE',
+          candidateWorkerId: `WORKER-${suffix}`,
+          similarityScore: 0.98,
+        },
+        {
           type: 'ZONE_ENTRY',
           trackId: 1,
           regionId: created.region.id,
@@ -186,9 +233,37 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
     const firstEvent = await post('/integrations/ai/events', event, serviceToken);
     assert.equal(firstEvent.status, 202);
     assert.equal(((await firstEvent.json()) as { status: string }).status, 'PROCESSED');
+    const unverifiedDecisions = await fetch(
+      `${url}/api/v1/sites/${site.id}/zone-entry-decisions?zoneId=${zone.id}&status=UNAVAILABLE`,
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    assert.equal(unverifiedDecisions.status, 200);
+    assert.equal(((await unverifiedDecisions.json()) as { total: number }).total, 1);
     const retry = await post('/integrations/ai/events', event, serviceToken);
     assert.equal(retry.status, 202);
     assert.equal(((await retry.json()) as { status: string }).status, 'DUPLICATE_ACCEPTED');
+    const revoked = await fetch(
+      `${url}/api/v1/sites/${site.id}/zones/${zone.id}/access-grants/${grantListBody.items[0]!.id}/revoke`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      },
+    );
+    assert.equal(revoked.status, 200);
+    assert.notEqual(((await revoked.json()) as { revokedAt: string | null }).revokedAt, null);
+    const deniedEvent = await post(
+      '/integrations/ai/events',
+      { ...event, eventId: randomUUID(), capturedAt: new Date().toISOString() },
+      serviceToken,
+    );
+    assert.equal(deniedEvent.status, 202);
+    assert.equal(((await deniedEvent.json()) as { status: string }).status, 'PROCESSED');
+    const stillUnverifiedDecisions = await fetch(
+      `${url}/api/v1/sites/${site.id}/zone-entry-decisions?zoneId=${zone.id}&status=UNAVAILABLE`,
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    assert.equal(stillUnverifiedDecisions.status, 200);
+    assert.equal(((await stillUnverifiedDecisions.json()) as { total: number }).total, 2);
     const changed = await fetch(
       `${url}/api/v1/sites/${site.id}/cameras/${camera.id}/regions/${created.region.id}/polygon`,
       {
