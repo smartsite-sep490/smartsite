@@ -84,7 +84,7 @@ test('scoped auth migration backfills Admin, deactivates Worker, and invalidates
     const recovered = await users.bootstrap(
       'recovered-admin',
       'Recovered Admin',
-      'recovered-admin-password-123',
+      'RecoveredAdmin123!',
     );
     assert.deepEqual(recovered.roleAssignments, [{ role: 'ADMIN', siteId: null }]);
   } finally {

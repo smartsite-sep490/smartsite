@@ -71,4 +71,3 @@ test('concurrent refresh cannot leave two valid rotated tokens', async () => {
     if (attempt.status === 'fulfilled')
       await assert.rejects(auth.authenticate(attempt.value.accessToken));
 });
-
