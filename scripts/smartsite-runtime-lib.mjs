@@ -70,7 +70,8 @@ function requireValue(arguments_, index, option) {
 }
 
 export function parseRuntimeArguments(arguments_) {
-  const [command, ...options] = arguments_;
+  const normalizedArguments = arguments_[0] === '--' ? arguments_.slice(1) : arguments_;
+  const [command, ...options] = normalizedArguments;
   if (!COMMANDS.has(command)) {
     throw new Error('command must be one of start, status, stop');
   }

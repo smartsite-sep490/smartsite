@@ -24,6 +24,16 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+test('accepts the argument separator passed through by pnpm scripts', () => {
+  assert.deepEqual(parseRuntimeArguments(['--', 'status', '--config', 'D:/runtime/control.json']), {
+    command: 'status',
+    source: undefined,
+    configPath: 'D:/runtime/control.json',
+    build: false,
+  });
+  assert.equal(parseRuntimeArguments(['--', 'start', '--source', 'mp4']).command, 'start');
+});
+
 test('accepts only the supported commands and named source profiles', () => {
   assert.deepEqual(
     parseRuntimeArguments([
