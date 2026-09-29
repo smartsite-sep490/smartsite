@@ -10,6 +10,7 @@ import {
   type SafetyAlertStatus,
   type SafetyAlertType,
 } from '@smartsite/api-client';
+import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
 
 interface SafetyAlertsViewProps {
   apiUrl: string;
@@ -535,6 +536,13 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                         <p className="mt-1 break-all font-mono text-slate-400">
                           {detection.eventId}
                         </p>
+                        <SafetyAlertEvidencePanel
+                          client={client}
+                          token={token}
+                          siteId={selectedSiteId}
+                          alertId={detail.data.id}
+                          detection={detection}
+                        />
                       </div>
                     ))}
                     {detail.data.detections.length === 0 && (
