@@ -16,6 +16,7 @@
     "lint": "eslint . --max-warnings 0",
     "test": "turbo run test && node --test scripts/*.test.mjs",
     "demo:setup": "node scripts/mf05-mf06-demo-setup.mjs",
+    "demo:runtime": "node scripts/smartsite-runtime.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
