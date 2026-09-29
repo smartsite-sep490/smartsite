@@ -8,20 +8,29 @@ import {
   ZoneType,
 } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
+import { ZoneAccessEffect } from '../../database/entities/zone-access-grant.entity.js';
 
 export class AccountResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() username!: string;
   @ApiProperty() displayName!: string;
-  @ApiProperty({ enum: UserRole }) role!: UserRole;
+  @ApiProperty({ type: () => [RoleAssignmentResponseDto] })
+  roleAssignments!: RoleAssignmentResponseDto[];
   @ApiProperty() isActive!: boolean;
   @ApiProperty() mustChangePassword!: boolean;
+}
+
+export class RoleAssignmentResponseDto {
+  @ApiProperty({ enum: UserRole }) role!: UserRole;
+  @ApiProperty({ format: 'uuid', nullable: true }) siteId!: string | null;
 }
 
 export class LoginResponseDto {
   @ApiProperty() accessToken!: string;
   @ApiProperty({ enum: ['Bearer'] }) tokenType!: 'Bearer';
-  @ApiProperty({ format: 'date-time' }) expiresAt!: string;
+  @ApiProperty({ format: 'date-time' }) accessTokenExpiresAt!: string;
+  @ApiProperty({ required: false }) refreshToken?: string;
+  @ApiProperty({ format: 'date-time' }) refreshTokenExpiresAt!: string;
   @ApiProperty({ type: AccountResponseDto }) user!: AccountResponseDto;
 }
 
@@ -82,7 +91,16 @@ export class SafetyAlertResponseDto {
   @ApiProperty({ format: 'date-time' }) firstDetectedAt!: string;
   @ApiProperty({ format: 'date-time' }) lastDetectedAt!: string;
   @ApiProperty() detectionCount!: number;
+  @ApiProperty() revision!: number;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
+  @ApiProperty({ format: 'date-time' }) updatedAt!: string;
+}
+
+export class SafetyAlertEvidenceResponseDto {
+  @ApiProperty({ minimum: 0, maximum: 255 }) index!: number;
+  @ApiProperty({ enum: ['FRAME', 'CROP', 'SNAPSHOT'] }) kind!: 'FRAME' | 'CROP' | 'SNAPSHOT';
+  @ApiProperty({ required: false, minimum: 0 }) trackId?: number;
+  @ApiProperty() available!: boolean;
 }
 
 export class SafetyAlertDetectionResponseDto {
@@ -90,12 +108,38 @@ export class SafetyAlertDetectionResponseDto {
   @ApiProperty() cameraExternalId!: string;
   @ApiProperty({ format: 'date-time' }) capturedAt!: string;
   @ApiProperty({ enum: EventProcessingStatus }) processingStatus!: EventProcessingStatus;
+  @ApiProperty({ type: [SafetyAlertEvidenceResponseDto] })
+  evidence!: SafetyAlertEvidenceResponseDto[];
 }
 
 export class SafetyAlertDetailResponseDto extends SafetyAlertResponseDto {
   @ApiProperty({ type: [SafetyAlertDetectionResponseDto] })
   detections!: SafetyAlertDetectionResponseDto[];
   @ApiProperty() detectionsTotal!: number;
+  @ApiProperty({ type: () => [SafetyAlertReviewResponseDto] })
+  reviews!: SafetyAlertReviewResponseDto[];
+  @ApiProperty() reviewsTotal!: number;
+}
+
+export class SafetyAlertReviewResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) alertId!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid' }) actorUserId!: string;
+  @ApiProperty({ enum: AlertStatus }) fromStatus!: AlertStatus;
+  @ApiProperty({
+    enum: [AlertStatus.CONFIRMED, AlertStatus.DISMISSED, AlertStatus.NEEDS_MORE_EVIDENCE],
+  })
+  toStatus!: AlertStatus;
+  @ApiProperty() reason!: string;
+  @ApiProperty() alertRevision!: number;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class SafetyAlertReviewMutationResponseDto {
+  @ApiProperty({ type: SafetyAlertResponseDto }) alert!: SafetyAlertResponseDto;
+  @ApiProperty({ type: SafetyAlertReviewResponseDto }) review!: SafetyAlertReviewResponseDto;
+  @ApiProperty() replayed!: boolean;
 }
 
 export class SafetyAlertPageResponseDto {
@@ -125,5 +169,57 @@ export class ZonePageResponseDto {
 
 export class RegionPageResponseDto {
   @ApiProperty({ type: [RegionResponseDto] }) items!: RegionResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class WorkerResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty() externalId!: string;
+  @ApiProperty() displayName!: string;
+  @ApiProperty() isActive!: boolean;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class WorkerPageResponseDto {
+  @ApiProperty({ type: [WorkerResponseDto] }) items!: WorkerResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class ZoneAccessGrantResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid' }) zoneId!: string;
+  @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty({ enum: ZoneAccessEffect }) effect!: ZoneAccessEffect;
+  @ApiProperty({ format: 'date-time' }) validFrom!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) validUntil!: string | null;
+  @ApiProperty({ format: 'date-time', nullable: true }) revokedAt!: string | null;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class ZoneAccessGrantPageResponseDto {
+  @ApiProperty({ type: [ZoneAccessGrantResponseDto] }) items!: ZoneAccessGrantResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class ZoneEntryDecisionResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) eventId!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid' }) zoneId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) workerId!: string | null;
+  @ApiProperty({ nullable: true }) candidateWorkerId!: string | null;
+  @ApiProperty() trackId!: number;
+  @ApiProperty({ enum: ['ALLOWED', 'DENIED', 'UNAVAILABLE'] })
+  status!: 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
+  @ApiProperty() reasonCode!: string;
+  @ApiProperty({ format: 'date-time' }) evaluatedAt!: string;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class ZoneEntryDecisionPageResponseDto {
+  @ApiProperty({ type: [ZoneEntryDecisionResponseDto] })
+  items!: ZoneEntryDecisionResponseDto[];
   @ApiProperty() total!: number;
 }

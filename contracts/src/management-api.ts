@@ -1,10 +1,29 @@
-export type UserRole = 'ADMIN' | 'WORKER';
+export type UserRole =
+  | 'ADMIN'
+  | 'SITE_MANAGER'
+  | 'CONTRACTOR_REPRESENTATIVE'
+  | 'SAFETY_OFFICER'
+  | 'SECURITY_OFFICER'
+  | 'WORKER';
+export type ProvisionableUserRole =
+  'ADMIN' | 'SITE_MANAGER' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+export type AuthClientType = 'WEB' | 'MOBILE';
+
+export interface ProvisionableRoleAssignment {
+  role: ProvisionableUserRole;
+  siteId: string | null;
+}
+
+export interface RoleAssignmentResponse {
+  role: UserRole;
+  siteId: string | null;
+}
 
 export interface AccountResponse {
   id: string;
   username: string;
   displayName: string;
-  role: UserRole;
+  roleAssignments: RoleAssignmentResponse[];
   isActive: boolean;
   mustChangePassword: boolean;
 }
@@ -12,7 +31,9 @@ export interface AccountResponse {
 export interface LoginResponse {
   accessToken: string;
   tokenType: 'Bearer';
-  expiresAt: string;
+  accessTokenExpiresAt: string;
+  refreshToken?: string;
+  refreshTokenExpiresAt: string;
   user: AccountResponse;
 }
 
@@ -83,6 +104,22 @@ export interface SafetyAlertResponse {
   firstDetectedAt: string;
   lastDetectedAt: string;
   detectionCount: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SafetyAlertReviewTargetStatus = 'CONFIRMED' | 'DISMISSED' | 'NEEDS_MORE_EVIDENCE';
+
+export interface SafetyAlertReviewResponse {
+  id: string;
+  alertId: string;
+  siteId: string;
+  actorUserId: string;
+  fromStatus: SafetyAlertStatus;
+  toStatus: SafetyAlertReviewTargetStatus;
+  reason: string;
+  alertRevision: number;
   createdAt: string;
 }
 
@@ -92,9 +129,64 @@ export interface SafetyAlertDetectionResponse {
   capturedAt: string;
   processingStatus:
     'PROCESSED' | 'SKIPPED_CLOCK_SKEW' | 'SKIPPED_NO_CANDIDATE' | 'SKIPPED_UNKNOWN_CAMERA';
+  evidence: SafetyAlertEvidenceResponse[];
+}
+
+export interface SafetyAlertEvidenceResponse {
+  index: number;
+  kind: 'FRAME' | 'CROP' | 'SNAPSHOT';
+  trackId?: number;
+  available: boolean;
 }
 
 export interface SafetyAlertDetailResponse extends SafetyAlertResponse {
   detectionsTotal: number;
   detections: SafetyAlertDetectionResponse[];
+  reviewsTotal: number;
+  reviews: SafetyAlertReviewResponse[];
+}
+
+export interface SafetyAlertReviewMutationResponse {
+  alert: SafetyAlertResponse;
+  review: SafetyAlertReviewResponse;
+  replayed: boolean;
+}
+
+export interface WorkerResponse {
+  id: string;
+  siteId: string;
+  externalId: string;
+  displayName: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type ZoneAccessEffect = 'ALLOW' | 'DENY';
+
+export interface ZoneAccessGrantResponse {
+  id: string;
+  siteId: string;
+  zoneId: string;
+  workerId: string;
+  effect: ZoneAccessEffect;
+  validFrom: string;
+  validUntil: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export type ZoneEntryDecisionStatus = 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
+
+export interface ZoneEntryDecisionResponse {
+  id: string;
+  eventId: string;
+  siteId: string;
+  zoneId: string;
+  workerId: string | null;
+  candidateWorkerId: string | null;
+  trackId: number;
+  status: ZoneEntryDecisionStatus;
+  reasonCode: string;
+  evaluatedAt: string;
+  createdAt: string;
 }

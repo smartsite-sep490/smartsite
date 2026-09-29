@@ -1,7 +1,15 @@
 import { z } from 'zod';
+import { isAbsolute } from 'node:path';
+import {
+  isValidPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_MESSAGE,
+} from '../common/configuration/password-policy.js';
 
 const LOCAL_DATABASE_URL = 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite';
 const LOCAL_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
+const LOCAL_JWT_SECRET = 'smartsite_local_dev_jwt_secret_only_32_bytes';
 const MAX_SAFE_SECONDS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
 // Throttler's in-memory expiry uses setTimeout; larger delays wrap to 1 ms in Node.
 const MAX_TIMER_MS = 2_147_483_647;
@@ -123,6 +131,27 @@ export const backendEnvironmentSchema = z
     ...databaseFields,
     PORT: integer(3000, 1, 65535),
     CORS_ORIGINS: originsSchema.optional(),
+    AUTH_JWT_SECRET: z
+      .string({ error: 'must be a string' })
+      .min(32, 'must contain at least 32 characters')
+      .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
+    BOOTSTRAP_ADMIN_USERNAME: z
+      .string({ error: 'must be a string' })
+      .min(1, 'must not be empty')
+      .max(64, 'must contain at most 64 characters')
+      .optional(),
+    BOOTSTRAP_ADMIN_DISPLAY_NAME: z
+      .string({ error: 'must be a string' })
+      .min(1, 'must not be empty')
+      .max(255, 'must contain at most 255 characters')
+      .optional(),
+    BOOTSTRAP_ADMIN_PASSWORD: z
+      .string({ error: 'must be a string' })
+      .min(PASSWORD_MIN_LENGTH, `must contain at least ${PASSWORD_MIN_LENGTH} characters`)
+      .max(PASSWORD_MAX_LENGTH, `must contain at most ${PASSWORD_MAX_LENGTH} characters`)
+      .refine(isValidPassword, PASSWORD_POLICY_MESSAGE)
+      .optional(),
     SMARTSITE_AI_SERVICE_TOKEN: z
       .string({ error: 'must be a string' })
       .refine(
@@ -144,6 +173,13 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_TTL_MS: integer(60000, 1, MAX_TIMER_MS),
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
+    EVIDENCE_LOCAL_ROOT: z
+      .string({ error: 'must be a string' })
+      .trim()
+      .min(1, 'must not be empty')
+      .max(2048, 'must contain at most 2048 characters')
+      .refine(isAbsolute, 'must be an absolute path')
+      .optional(),
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
@@ -160,6 +196,19 @@ export const backendEnvironmentSchema = z
         code: 'custom',
         path: ['CORS_ORIGINS'],
         message: 'must be set explicitly in production (empty disables browser access)',
+      });
+    }
+    if (config.AUTH_JWT_SECRET === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_JWT_SECRET'],
+        message: 'must be set in production',
+      });
+    } else if (config.AUTH_JWT_SECRET === LOCAL_JWT_SECRET) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_JWT_SECRET'],
+        message: 'cannot use the local development secret in production',
       });
     }
     if (!config.SMARTSITE_AI_SERVICE_TOKEN?.trim()) {
@@ -186,6 +235,7 @@ export const backendEnvironmentSchema = z
     ...config,
     DATABASE_URL: config.DATABASE_URL ?? LOCAL_DATABASE_URL,
     CORS_ORIGINS: config.CORS_ORIGINS ?? ['http://localhost:5173'],
+    AUTH_JWT_SECRET: config.AUTH_JWT_SECRET ?? LOCAL_JWT_SECRET,
     SMARTSITE_AI_SERVICE_TOKEN: config.SMARTSITE_AI_SERVICE_TOKEN?.trim()
       ? config.SMARTSITE_AI_SERVICE_TOKEN
       : LOCAL_SERVICE_TOKEN,

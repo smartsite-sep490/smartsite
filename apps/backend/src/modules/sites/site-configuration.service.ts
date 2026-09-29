@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { command, knownUnique, missing, page, uuid } from '../../common/configuration/commands.js';
 
@@ -51,9 +51,15 @@ export class SiteConfigurationService {
     return site ?? missing();
   }
 
-  async list(offset = 0, limit = 20): Promise<{ items: SiteEntity[]; total: number }> {
+  async list(
+    offset = 0,
+    limit = 20,
+    allowedSiteIds?: readonly string[],
+  ): Promise<{ items: SiteEntity[]; total: number }> {
     const pagination = page(offset, limit);
+    if (allowedSiteIds?.length === 0) return { items: [], total: 0 };
     const [items, total] = await this.dataSource.getRepository(SiteEntity).findAndCount({
+      ...(allowedSiteIds ? { where: { id: In([...new Set(allowedSiteIds)]) } } : {}),
       order: { code: 'ASC', id: 'ASC' },
       skip: pagination.offset,
       take: pagination.limit,

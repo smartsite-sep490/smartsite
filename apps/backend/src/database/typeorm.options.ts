@@ -4,6 +4,9 @@ import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05
 import { CameraRegionConfiguration1790035200000 } from './migrations/1790035200000-CameraRegionConfiguration.js';
 import { UserAuthentication1790121600000 } from './migrations/1790121600000-UserAuthentication.js';
 import { SafetyAlertReadIndex1790467200000 } from './migrations/1790467200000-SafetyAlertReadIndex.js';
+import { ScopedJwtAuthentication1790553600000 } from './migrations/1790553600000-ScopedJwtAuthentication.js';
+import { Mf06ZoneAuthorization1790553600000 } from './migrations/1790553600000-Mf06ZoneAuthorization.js';
+import { SafetyAlertReviews1790640000000 } from './migrations/1790640000000-SafetyAlertReviews.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -24,6 +27,9 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       CameraRegionConfiguration1790035200000,
       UserAuthentication1790121600000,
       SafetyAlertReadIndex1790467200000,
+      ScopedJwtAuthentication1790553600000,
+      Mf06ZoneAuthorization1790553600000,
+      SafetyAlertReviews1790640000000,
     ],
     logging: false,
     extra: {

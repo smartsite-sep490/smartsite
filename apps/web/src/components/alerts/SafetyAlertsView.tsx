@@ -6,9 +6,11 @@ import {
   SmartSiteManagementClient,
   type LoginResponse,
   type SafetyAlertResponse,
+  type SafetyAlertReviewTargetStatus,
   type SafetyAlertStatus,
   type SafetyAlertType,
 } from '@smartsite/api-client';
+import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
 
 interface SafetyAlertsViewProps {
   apiUrl: string;
@@ -42,6 +44,8 @@ function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Your session is no longer valid. Sign in again.';
     if (error.status === 403) return 'This account cannot view the selected Site alerts.';
+    if (error.status === 409)
+      return 'This alert changed while you were reviewing it. The latest record has been loaded; review it before submitting again.';
     return error.message;
   }
   return error instanceof Error ? error.message : 'The request could not be completed.';
@@ -106,6 +110,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
   const [status, setStatus] = useState<'ALL' | SafetyAlertStatus>('ALL');
   const [type, setType] = useState<'ALL' | SafetyAlertType>('ALL');
   const [offset, setOffset] = useState(0);
+  const [reviewReason, setReviewReason] = useState('');
   const activeSession = useRef<{ token: string; userId: string } | null>(null);
   const lifecycleGeneration = useRef(0);
 
@@ -114,6 +119,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
       queryClient.removeQueries({ queryKey: ['sites', apiUrl, userId] });
       queryClient.removeQueries({ queryKey: ['safety-alerts', apiUrl, userId] });
       queryClient.removeQueries({ queryKey: ['safety-alert', apiUrl, userId] });
+      queryClient.removeQueries({ queryKey: ['safety-alert-evidence', apiUrl, userId] });
     },
     [apiUrl, queryClient],
   );
@@ -122,16 +128,20 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     mutationFn: async () => {
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
-      if (result.user.role !== 'ADMIN') {
-        await client.logout(result.accessToken).catch(() => undefined);
-        throw new Error('This milestone requires an Admin account.');
+      const canReviewSafetyAlerts = result.user.roleAssignments.some(
+        ({ role, siteId }) =>
+          (role === 'ADMIN' && siteId === null) || (role === 'SAFETY_OFFICER' && siteId !== null),
+      );
+      if (!canReviewSafetyAlerts) {
+        await client.logout().catch(() => undefined);
+        throw new Error('A global Admin or Site-scoped Safety Officer role is required.');
       }
       if (result.user.mustChangePassword) {
-        await client.logout(result.accessToken).catch(() => undefined);
-        throw new Error('Change the temporary Admin password before opening safety alerts.');
+        await client.logout().catch(() => undefined);
+        throw new Error('Change the temporary password before opening safety alerts.');
       }
       if (generation !== lifecycleGeneration.current) {
-        void client.logout(result.accessToken).catch(() => undefined);
+        void client.logout().catch(() => undefined);
         return;
       }
       activeSession.current = { token: result.accessToken, userId: result.user.id };
@@ -149,7 +159,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
       activeSession.current = null;
       if (!current) return;
       removeSessionQueries(current.userId);
-      void client.logout(current.token).catch(() => undefined);
+      void client.logout().catch(() => undefined);
     };
   }, [client, removeSessionQueries]);
 
@@ -161,9 +171,27 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     enabled: token.length > 0,
   });
 
-  const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
+  const isGlobalAdmin =
+    session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null) ??
+    false;
+  const safetyOfficerSiteIds = useMemo(
+    () =>
+      new Set(
+        session?.user.roleAssignments.flatMap(({ role, siteId }) =>
+          role === 'SAFETY_OFFICER' && siteId !== null ? [siteId] : [],
+        ) ?? [],
+      ),
+    [session],
+  );
+  const visibleSites = useMemo(
+    () =>
+      sites.data?.items.filter((site) => isGlobalAdmin || safetyOfficerSiteIds.has(site.id)) ?? [],
+    [isGlobalAdmin, safetyOfficerSiteIds, sites.data?.items],
+  );
+
+  const selectedSiteId = visibleSites.some((site) => site.id === requestedSiteId)
     ? requestedSiteId
-    : (sites.data?.items[0]?.id ?? '');
+    : (visibleSites[0]?.id ?? '');
 
   const alerts = useQuery({
     queryKey: ['safety-alerts', apiUrl, sessionScope, selectedSiteId, status, type, offset],
@@ -187,6 +215,35 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     enabled: token.length > 0 && selectedSiteId.length > 0 && selectedAlertId.length > 0,
   });
 
+  const review = useMutation({
+    mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
+      if (!detail.data) throw new Error('Load an alert before submitting a review.');
+      return client.reviewSafetyAlert(token, selectedSiteId, detail.data.id, {
+        commandId: crypto.randomUUID(),
+        expectedRevision: detail.data.revision,
+        targetStatus,
+        reason: reviewReason,
+      });
+    },
+    onSuccess: async () => {
+      setReviewReason('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['safety-alerts', apiUrl, sessionScope] }),
+        queryClient.invalidateQueries({ queryKey: ['safety-alert', apiUrl, sessionScope] }),
+      ]);
+    },
+    onError: async (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        await Promise.all([alerts.refetch(), detail.refetch()]);
+      }
+    },
+  });
+
+  const resetReviewDraft = () => {
+    review.reset();
+    setReviewReason('');
+  };
+
   const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     login.mutate();
@@ -201,17 +258,18 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     setRequestedSiteId('');
     setRequestedAlertId('');
     setOffset(0);
-    if (current) void client.logout(current.token).catch(() => undefined);
+    setReviewReason('');
+    if (current) void client.logout().catch(() => undefined);
   };
 
   if (!session) {
     return (
       <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF05 / MF06</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
         <h1 className="mt-2 text-2xl font-bold text-slate-950">Safety alert queue</h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Sign in with the current milestone Admin account to inspect Site-scoped AI alerts. Review
-          decisions remain disabled until Safety Officer roles and Site grants are implemented.
+          Sign in as a global Admin or Site-scoped Safety Officer to inspect AI evidence and record
+          an auditable review decision.
         </p>
         <form className="mt-6 space-y-4" onSubmit={handleLogin}>
           <label className="block text-sm font-semibold text-slate-700">
@@ -256,11 +314,11 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
     <div className="mx-auto max-w-[1202px] space-y-6 pb-10 text-[#182232]">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF05 / MF06</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Safety alerts</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Read-only alert evidence generated by Backend policy from durable AI observations.
-            Confirmation and dismissal remain part of the future scoped Safety Officer workflow.
+            Review durable AI observations, request more evidence, confirm a safety violation, or
+            dismiss a false alert. Every decision requires a reason and is kept in the audit trail.
           </p>
         </div>
         <button
@@ -281,11 +339,12 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
               setRequestedSiteId(event.target.value);
               setRequestedAlertId('');
               setOffset(0);
+              resetReviewDraft();
             }}
-            disabled={sites.isPending || !sites.data?.items.length}
+            disabled={sites.isPending || visibleSites.length === 0}
             className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
           >
-            {sites.data?.items.map((site) => (
+            {visibleSites.map((site) => (
               <option key={site.id} value={site.id}>
                 {site.code} · {site.name}
               </option>
@@ -298,7 +357,9 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
             value={status}
             onChange={(event) => {
               setStatus(event.target.value as 'ALL' | SafetyAlertStatus);
+              setRequestedAlertId('');
               setOffset(0);
+              resetReviewDraft();
             }}
             className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
           >
@@ -316,7 +377,9 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
             value={type}
             onChange={(event) => {
               setType(event.target.value as 'ALL' | SafetyAlertType);
+              setRequestedAlertId('');
               setOffset(0);
+              resetReviewDraft();
             }}
             className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
           >
@@ -336,9 +399,9 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
           {errorMessage(sites.error)}
         </p>
       )}
-      {sites.data?.items.length === 0 && (
+      {sites.data && visibleSites.length === 0 && (
         <p className="rounded-xl bg-white p-5 text-sm text-slate-600">
-          No Site is configured for this system.
+          No Site with Safety Officer access is assigned to this account.
         </p>
       )}
 
@@ -380,7 +443,10 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                 key={alert.id}
                 alert={alert}
                 selected={selectedAlertId === alert.id}
-                onSelect={() => setRequestedAlertId(alert.id)}
+                onSelect={() => {
+                  if (alert.id !== selectedAlertId) resetReviewDraft();
+                  setRequestedAlertId(alert.id);
+                }}
               />
             ))}
             {alerts.data && alerts.data.total > alertPageSize && (
@@ -436,6 +502,12 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                     </dd>
                   </div>
                   <div>
+                    <dt className="text-slate-500">Status</dt>
+                    <dd className="mt-1 font-semibold text-slate-900">
+                      {formatLabel(detail.data.status)} · revision {detail.data.revision}
+                    </dd>
+                  </div>
+                  <div>
                     <dt className="text-slate-500">First seen</dt>
                     <dd className="mt-1 font-semibold text-slate-900">
                       {formatDate(detail.data.firstDetectedAt)}
@@ -452,7 +524,10 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                   <h3 className="text-sm font-bold text-slate-900">Source observations</h3>
                   <div className="mt-2 max-h-80 space-y-2 overflow-auto">
                     {detail.data.detections.map((detection) => (
-                      <div key={detection.eventId} className="rounded-lg bg-slate-50 p-3 text-xs">
+                      <div
+                        key={`${detail.data.id}:${detection.eventId}`}
+                        className="rounded-lg bg-slate-50 p-3 text-xs"
+                      >
                         <div className="flex justify-between gap-3">
                           <span className="font-mono font-semibold text-slate-700">
                             {detection.cameraExternalId}
@@ -465,6 +540,15 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                         <p className="mt-1 break-all font-mono text-slate-400">
                           {detection.eventId}
                         </p>
+                        <SafetyAlertEvidencePanel
+                          client={client}
+                          apiUrl={apiUrl}
+                          sessionScope={sessionScope}
+                          token={token}
+                          siteId={selectedSiteId}
+                          alertId={detail.data.id}
+                          detection={detection}
+                        />
                       </div>
                     ))}
                     {detail.data.detections.length === 0 && (
@@ -474,6 +558,98 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                     )}
                   </div>
                 </div>
+                {(detail.data.status === 'PENDING_REVIEW' ||
+                  detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
+                  <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-bold text-slate-950">Record review decision</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Explain the evidence behind the decision. The reason is required and cannot be
+                      edited after submission.
+                    </p>
+                    <textarea
+                      value={reviewReason}
+                      onChange={(event) => setReviewReason(event.target.value)}
+                      minLength={5}
+                      maxLength={1000}
+                      rows={3}
+                      placeholder="Example: Worker is clearly visible without a hard hat across the linked observations."
+                      className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100"
+                    />
+                    {review.error && (
+                      <p
+                        role="alert"
+                        className="mt-2 rounded-lg bg-red-50 p-2 text-xs text-red-700"
+                      >
+                        {errorMessage(review.error)}
+                      </p>
+                    )}
+                    {review.isSuccess && (
+                      <p
+                        role="status"
+                        className="mt-2 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-700"
+                      >
+                        Review decision recorded.
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={reviewReason.trim().length < 5 || review.isPending}
+                        onClick={() => review.mutate('CONFIRMED')}
+                        className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Confirm violation
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewReason.trim().length < 5 || review.isPending}
+                        onClick={() => review.mutate('DISMISSED')}
+                        className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Dismiss alert
+                      </button>
+                      {detail.data.status === 'PENDING_REVIEW' && (
+                        <button
+                          type="button"
+                          disabled={reviewReason.trim().length < 5 || review.isPending}
+                          onClick={() => review.mutate('NEEDS_MORE_EVIDENCE')}
+                          className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Request more evidence
+                        </button>
+                      )}
+                    </div>
+                  </section>
+                )}
+                <section>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Review history ({detail.data.reviewsTotal})
+                  </h3>
+                  <div className="mt-2 space-y-2">
+                    {detail.data.reviews.map((item) => (
+                      <article
+                        key={item.id}
+                        className="rounded-lg border border-slate-200 p-3 text-xs"
+                      >
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <span className="font-bold text-slate-800">
+                            {formatLabel(item.fromStatus)} → {formatLabel(item.toStatus)}
+                          </span>
+                          <time className="text-slate-500">{formatDate(item.createdAt)}</time>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-slate-700">{item.reason}</p>
+                        <p className="mt-2 font-mono text-[10px] text-slate-400">
+                          Actor {item.actorUserId} · revision {item.alertRevision}
+                        </p>
+                      </article>
+                    ))}
+                    {detail.data.reviews.length === 0 && (
+                      <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+                        No review decision has been recorded.
+                      </p>
+                    )}
+                  </div>
+                </section>
               </div>
             )}
           </aside>

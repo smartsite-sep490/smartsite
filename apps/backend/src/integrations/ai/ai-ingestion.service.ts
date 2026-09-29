@@ -19,6 +19,11 @@ import {
 import { DurableGroupingService } from '../../modules/safety/alerts/durable-grouping.service.js';
 import { isEventIdConflict } from './typeorm-error.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import {
+  ZoneEntryAuthorizationService,
+  type ZoneEntryDecisionInput,
+} from '../../modules/zones/zone-entry-authorization.service.js';
+import type { ZoneAuthorizationResult } from '../../modules/zones/zone-authorization.interface.js';
 
 export interface AiIngestionResult {
   eventId: string;
@@ -77,6 +82,7 @@ export function parseNormalizedCapturedAt(dateString: string): Date | null {
 export class AiIngestionService {
   private readonly logger = new Logger(AiIngestionService.name);
   private readonly clock: () => Date;
+  private readonly zoneEntryAuthorization: ZoneEntryAuthorizationService;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -85,8 +91,10 @@ export class AiIngestionService {
     private readonly durableGroupingService: DurableGroupingService,
     private readonly configService: ConfigService<BackendEnvironment, true>,
     @Optional() clock?: () => Date,
+    @Optional() zoneEntryAuthorization?: ZoneEntryAuthorizationService,
   ) {
     this.clock = clock ?? (() => new Date());
+    this.zoneEntryAuthorization = zoneEntryAuthorization ?? new ZoneEntryAuthorizationService();
   }
 
   private getTimingConfig() {
@@ -150,6 +158,10 @@ export class AiIngestionService {
         let status: EventProcessingStatus;
         let note: string | null = null;
         let candidates: AlertCandidate[] = [];
+        const zoneDecisions: Array<{
+          input: ZoneEntryDecisionInput;
+          result: ZoneAuthorizationResult;
+        }> = [];
 
         // Status precedence:
         // 1. clock skew outside allowed window (or unparseable timestamp) -> SKIPPED_CLOCK_SKEW
@@ -187,6 +199,49 @@ export class AiIngestionService {
             }
           }
 
+          const identityByTrack = new Map<number, string>();
+          for (const observation of event.observations) {
+            if (
+              observation['type'] === 'IDENTITY_CANDIDATE' &&
+              observation['status'] === 'CANDIDATE' &&
+              typeof observation['trackId'] === 'number' &&
+              typeof observation['candidateWorkerId'] === 'string'
+            ) {
+              identityByTrack.set(observation['trackId'], observation['candidateWorkerId']);
+            }
+          }
+
+          const decisionByObservation = new Map<string, ZoneAuthorizationResult>();
+          for (const observation of event.observations) {
+            if (
+              observation['type'] !== 'ZONE_ENTRY' ||
+              typeof observation['trackId'] !== 'number' ||
+              typeof observation['regionId'] !== 'string' ||
+              typeof observation['geometryVersion'] !== 'number'
+            ) {
+              continue;
+            }
+            const context = contextMap.get(
+              `${observation['regionId']}:${observation['geometryVersion']}`,
+            );
+            if (!context) continue;
+            const input: ZoneEntryDecisionInput = {
+              eventId: event.eventId,
+              siteId: context.siteId,
+              zoneId: context.zoneId,
+              candidateWorkerId: identityByTrack.get(observation['trackId']),
+              trackId: observation['trackId'],
+              evaluatedAt: capturedAt,
+              restrictionPolicy: context.zone.restrictionPolicy,
+            };
+            const result = await this.zoneEntryAuthorization.decide(manager, input);
+            zoneDecisions.push({ input, result });
+            decisionByObservation.set(
+              `${input.trackId}:${observation['regionId']}:${observation['geometryVersion']}`,
+              result,
+            );
+          }
+
           candidates = this.candidateEvaluator.evaluate(
             {
               streamSessionId: event.streamSessionId,
@@ -194,6 +249,13 @@ export class AiIngestionService {
               observations: event.observations as unknown as Observation[],
             },
             contextMap,
+            ({ trackId, regionId, geometryVersion }) =>
+              decisionByObservation.get(`${trackId}:${regionId}:${geometryVersion}`) ?? {
+                status: 'UNAVAILABLE',
+                candidateSubtype: 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+                reasonCode: 'AUTHORIZATION_DATA_UNAVAILABLE',
+                reason: 'Zone authorization decision is unavailable',
+              },
           );
 
           if (candidates.length === 0) {
@@ -221,6 +283,10 @@ export class AiIngestionService {
         await rawEventRepo.insert(
           rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
         );
+
+        for (const decision of zoneDecisions) {
+          await this.zoneEntryAuthorization.record(manager, decision.input, decision.result);
+        }
 
         // Group candidates and create AlertDetectionMapping only when PROCESSED
         const alertIds: string[] = [];

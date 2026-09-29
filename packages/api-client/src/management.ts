@@ -1,16 +1,25 @@
 import type {
   AccountResponse,
+  AuthClientType,
   CameraResponse,
   LoginResponse,
   Page,
+  ProvisionableRoleAssignment,
   RegionMutationResponse,
   RegionResponse,
   SafetyAlertDetailResponse,
   SafetyAlertResponse,
+  SafetyAlertReviewMutationResponse,
+  SafetyAlertReviewTargetStatus,
   SafetyAlertStatus,
   SafetyAlertType,
   SiteResponse,
   ZoneResponse,
+  WorkerResponse,
+  ZoneAccessEffect,
+  ZoneAccessGrantResponse,
+  ZoneEntryDecisionResponse,
+  ZoneEntryDecisionStatus,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
@@ -18,6 +27,10 @@ type PageOptions = { offset?: number; limit?: number };
 export type SafetyAlertListOptions = PageOptions & {
   status?: SafetyAlertStatus;
   type?: SafetyAlertType;
+};
+export type ZoneEntryDecisionListOptions = PageOptions & {
+  zoneId?: string;
+  status?: ZoneEntryDecisionStatus;
 };
 type CameraMutation = { expectedConfigurationVersion: number };
 const pathId = (id: string) => encodeURIComponent(id);
@@ -30,6 +43,7 @@ export class SmartSiteManagementClient {
     path: string,
     token?: string,
     body?: unknown,
+    credentials?: RequestCredentials,
   ): Promise<T> {
     let response: Response;
     try {
@@ -41,6 +55,7 @@ export class SmartSiteManagementClient {
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(credentials ? { credentials } : {}),
       });
     } catch {
       throw new ApiError('network', 'Could not connect to the backend.');
@@ -64,6 +79,44 @@ export class SmartSiteManagementClient {
     return payload as T;
   }
 
+  private async requestBlob(path: string, token: string): Promise<Blob> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+        headers: {
+          Accept: 'image/jpeg',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      throw new ApiError('network', 'Could not connect to the backend.');
+    }
+    if (!response.ok) {
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+      }
+      const error = parseBackendErrorEnvelope(payload, response.status);
+      throw new ApiError(
+        'http',
+        error?.message ?? `Backend returned HTTP ${response.status}.`,
+        response.status,
+        error,
+      );
+    }
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
+    if (contentType !== 'image/jpeg') {
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned an invalid evidence type.',
+        response.status,
+      );
+    }
+    return response.blob();
+  }
+
   private listPath(path: string, options: PageOptions = {}) {
     const query = new URLSearchParams();
     if (options.offset !== undefined) query.set('offset', String(options.offset));
@@ -71,8 +124,23 @@ export class SmartSiteManagementClient {
     return `${path}${query.size ? `?${query}` : ''}`;
   }
 
-  login(username: string, password: string) {
-    return this.request<LoginResponse>('POST', '/auth/login', undefined, { username, password });
+  login(username: string, password: string, clientType: AuthClientType = 'WEB') {
+    return this.request<LoginResponse>(
+      'POST',
+      '/auth/login',
+      undefined,
+      { username, password, clientType },
+      clientType === 'WEB' ? 'include' : undefined,
+    );
+  }
+  refresh(clientType: AuthClientType, refreshToken?: string) {
+    return this.request<LoginResponse>(
+      'POST',
+      '/auth/refresh',
+      undefined,
+      { clientType, ...(refreshToken ? { refreshToken } : {}) },
+      clientType === 'WEB' ? 'include' : undefined,
+    );
   }
   me(token: string) {
     return this.request<AccountResponse>('GET', '/auth/me', token);
@@ -83,8 +151,14 @@ export class SmartSiteManagementClient {
       newPassword,
     });
   }
-  logout(token: string) {
-    return this.request<void>('POST', '/auth/logout', token);
+  logout(clientType: AuthClientType = 'WEB', refreshToken?: string) {
+    return this.request<void>(
+      'POST',
+      '/auth/logout',
+      undefined,
+      { clientType, ...(refreshToken ? { refreshToken } : {}) },
+      clientType === 'WEB' ? 'include' : undefined,
+    );
   }
 
   createUser(
@@ -92,11 +166,23 @@ export class SmartSiteManagementClient {
     input: {
       username: string;
       displayName: string;
-      role: 'ADMIN' | 'WORKER';
+      roleAssignments: ProvisionableRoleAssignment[];
       temporaryPassword: string;
     },
   ) {
     return this.request<AccountResponse>('POST', '/users', token, input);
+  }
+  replaceUserRoleAssignments(
+    token: string,
+    userId: string,
+    roleAssignments: ProvisionableRoleAssignment[],
+  ) {
+    return this.request<AccountResponse>(
+      'PUT',
+      `/users/${pathId(userId)}/role-assignments`,
+      token,
+      { roleAssignments },
+    );
   }
   listUsers(token: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>('GET', this.listPath('/users', options), token);
@@ -144,8 +230,99 @@ export class SmartSiteManagementClient {
       token,
     );
   }
+  getSafetyAlertEvidence(
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    evidenceIndex: number,
+  ) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/evidence/${pathId(String(evidenceIndex))}`,
+      token,
+    );
+  }
+  reviewSafetyAlert(
+    token: string,
+    siteId: string,
+    alertId: string,
+    input: {
+      commandId: string;
+      expectedRevision: number;
+      targetStatus: SafetyAlertReviewTargetStatus;
+      reason: string;
+    },
+  ) {
+    return this.request<SafetyAlertReviewMutationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/reviews`,
+      token,
+      input,
+    );
+  }
   renameSite(token: string, siteId: string, name: string) {
     return this.request<SiteResponse>('PATCH', `/sites/${pathId(siteId)}`, token, { name });
+  }
+
+  createWorker(token: string, siteId: string, input: { externalId: string; displayName: string }) {
+    return this.request<WorkerResponse>('POST', `/sites/${pathId(siteId)}/workers`, token, input);
+  }
+  listWorkers(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<WorkerResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/workers`, options),
+      token,
+    );
+  }
+
+  createZoneAccessGrant(
+    token: string,
+    siteId: string,
+    zoneId: string,
+    input: {
+      workerId: string;
+      effect: ZoneAccessEffect;
+      validFrom: string;
+      validUntil: string | null;
+    },
+  ) {
+    return this.request<ZoneAccessGrantResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}/access-grants`,
+      token,
+      input,
+    );
+  }
+  listZoneAccessGrants(token: string, siteId: string, zoneId: string, options?: PageOptions) {
+    return this.request<Page<ZoneAccessGrantResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/zones/${pathId(zoneId)}/access-grants`, options),
+      token,
+    );
+  }
+  revokeZoneAccessGrant(token: string, siteId: string, zoneId: string, grantId: string) {
+    return this.request<ZoneAccessGrantResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}/access-grants/${pathId(grantId)}/revoke`,
+      token,
+    );
+  }
+  listZoneEntryDecisions(
+    token: string,
+    siteId: string,
+    options: ZoneEntryDecisionListOptions = {},
+  ) {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.zoneId !== undefined) query.set('zoneId', options.zoneId);
+    if (options.status !== undefined) query.set('status', options.status);
+    const path = `/sites/${pathId(siteId)}/zone-entry-decisions`;
+    return this.request<Page<ZoneEntryDecisionResponse>>(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+    );
   }
 
   createCamera(

@@ -87,7 +87,7 @@ export function isConfirmedPpeDetection(detection: VideoTestDetection): boolean 
   return detection.alertState ? detection.alertState === 'CONFIRMED' : detection.active;
 }
 
-/** Derives the MF05 result without treating omitted PPE evidence as compliance. */
+/** Derives the MF04 result without treating omitted PPE evidence as compliance. */
 export function getPpeResultState(detections: VideoTestDetection[]): PpeResultState {
   if (detections.length === 0) return 'NO_TARGETS';
   const states = detections.map(resolvePpeAlertState);

@@ -1,10 +1,20 @@
-import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Check,
+  CreateDateColumn,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { AlertStatus, AlertType } from './enums.js';
 import { numericTransformer } from './numeric.transformer.js';
 import { SiteEntity } from './site.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 
 @Entity({ name: 'safety_alert' })
+@Check('chk_safety_alert_revision', 'revision >= 0')
 @Index('idx_alert_grouping', ['groupingKey', 'status'])
 @Index('idx_alert_site_last_detected', { synchronize: false })
 export class SafetyAlertEntity {
@@ -74,6 +84,12 @@ export class SafetyAlertEntity {
   @Column({ name: 'detection_count', type: 'integer', default: 1 })
   detectionCount!: number;
 
+  @Column({ type: 'integer', default: 0 })
+  revision!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
 }

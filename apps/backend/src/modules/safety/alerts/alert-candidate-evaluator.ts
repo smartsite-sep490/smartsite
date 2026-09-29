@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { ResolvedObservationContext } from '../../zones/observation-context-resolver.service.js';
 import { ZoneAuthorizationService } from '../../zones/zone-authorization.service.js';
+import type { ZoneAuthorizationResult } from '../../zones/zone-authorization.interface.js';
 
 export interface AlertCandidate {
   alertType: 'PPE_VIOLATION' | 'RESTRICTED_ZONE_INTRUSION';
@@ -71,6 +72,18 @@ export type ContextLookup =
   | Map<string, ResolvedObservationContext>
   | ((regionId: string, geometryVersion: number) => ResolvedObservationContext | undefined);
 
+export interface ZoneAuthorizationLookupInput {
+  trackId: number;
+  regionId: string;
+  geometryVersion: number;
+  context: ResolvedObservationContext;
+  candidateWorkerId?: string;
+}
+
+export type ZoneAuthorizationLookup = (
+  input: ZoneAuthorizationLookupInput,
+) => ZoneAuthorizationResult;
+
 function getContext(
   lookup: ContextLookup,
   regionId: string,
@@ -114,7 +127,11 @@ export class AlertCandidateEvaluator {
     private readonly zoneAuthService: ZoneAuthorizationService = new ZoneAuthorizationService(),
   ) {}
 
-  evaluate(event: EvaluationEvent, contextLookup: ContextLookup): AlertCandidate[] {
+  evaluate(
+    event: EvaluationEvent,
+    contextLookup: ContextLookup,
+    authorizationLookup?: ZoneAuthorizationLookup,
+  ): AlertCandidate[] {
     // 1. Map non-authoritative identity evidence by trackId
     const identityEvidenceByTrack = new Map<
       number,
@@ -201,7 +218,16 @@ export class AlertCandidateEvaluator {
           continue;
         }
 
-        const decision = this.zoneAuthService.authorizeZoneEntry(context.zone);
+        const identity = identityEvidenceByTrack.get(obs.trackId);
+        const decision = authorizationLookup
+          ? authorizationLookup({
+              trackId: obs.trackId,
+              regionId: obs.regionId,
+              geometryVersion: obs.geometryVersion,
+              context,
+              candidateWorkerId: identity?.candidateWorkerId,
+            })
+          : this.zoneAuthService.authorizeZoneEntry(context.zone);
         if (decision.status === 'ALLOWED') {
           continue;
         }
@@ -212,7 +238,6 @@ export class AlertCandidateEvaluator {
             ? 'ZONE_ENTRY_PROHIBITED'
             : 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE');
 
-        const identity = identityEvidenceByTrack.get(obs.trackId);
         const groupingKey = buildGroupingKey(
           candidateSubtype,
           context.cameraId,
@@ -234,6 +259,7 @@ export class AlertCandidateEvaluator {
           identityQualityScore: identity?.qualityScore,
           details: {
             reason: decision.reason,
+            reasonCode: decision.reasonCode,
             regionId: obs.regionId,
             geometryVersion: obs.geometryVersion,
             confidence: obs.confidence,

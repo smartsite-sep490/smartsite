@@ -70,22 +70,24 @@ pnpm --filter @smartsite/backend start
 NODE_ENV=production pnpm --filter @smartsite/backend start
 ```
 
-| Biến                                              | Mặc định local / ý nghĩa                                                                                                                                   |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                                        | `development`; nhận `development`, `test`, `production`.                                                                                                   |
-| `PORT`                                            | `3000`.                                                                                                                                                    |
-| `DATABASE_URL`                                    | PostgreSQL local của Compose; production bắt buộc cấp rõ ràng.                                                                                             |
-| `DATABASE_TIMEOUT_MS`                             | `2000`; timeout kết nối/readiness.                                                                                                                         |
-| `CORS_ORIGINS`                                    | `http://localhost:5173`; danh sách origin HTTP(S) chính xác, phân cách dấu phẩy. Production bắt buộc cấp; chuỗi rỗng tắt quyền đọc từ browser khác origin. |
-| `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng dài ít nhất 32 ký tự, không whitespace và không dùng token mặc định.                |
-| `AI_CONFIGURATION_CAMERA_IDS`                     | Danh sách UUID camera mà AI được tải cấu hình; mặc định rỗng và từ chối mọi camera.                                                                        |
-| `LOG_LEVEL`                                       | `info`; nhận `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                                                 |
-| `LOG_FORMAT`                                      | `pretty` chỉ hợp lệ ở development; test/production dùng `json`. Image runtime không chứa `pino-pretty`.                                                    |
-| `HTTP_RATE_LIMIT_TTL_MS`, `HTTP_RATE_LIMIT_LIMIT` | `60000`, `120`: cửa sổ và quota HTTP thông thường.                                                                                                         |
-| `AI_RATE_LIMIT_TTL_MS`, `AI_RATE_LIMIT_LIMIT`     | `60000`, `600`: quota riêng cho AI ingestion.                                                                                                              |
-| `ALERT_COOLDOWN_SECONDS`                          | `60`; cooldown nhóm cảnh báo hiện có.                                                                                                                      |
-| `MAX_PAST_EVENT_AGE_SECONDS`                      | `300`; giới hạn tuổi event.                                                                                                                                |
-| `MAX_FUTURE_CLOCK_SKEW_SECONDS`                   | `30`; sai lệch thời gian tương lai cho phép.                                                                                                               |
+| Biến                                              | Mặc định local / ý nghĩa                                                                                                                                          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                                        | `development`; nhận `development`, `test`, `production`.                                                                                                          |
+| `PORT`                                            | `3000`.                                                                                                                                                           |
+| `DATABASE_URL`                                    | PostgreSQL local của Compose; production bắt buộc cấp rõ ràng.                                                                                                    |
+| `DATABASE_TIMEOUT_MS`                             | `2000`; timeout kết nối/readiness.                                                                                                                                |
+| `CORS_ORIGINS`                                    | `http://localhost:5173`; danh sách origin HTTP(S) chính xác, phân cách dấu phẩy. Production bắt buộc cấp; chuỗi rỗng tắt quyền đọc từ browser khác origin.        |
+| `AUTH_JWT_SECRET`                                 | Secret ký JWT HS256; production bắt buộc giá trị riêng dài ít nhất 32 ký tự, không whitespace và không dùng secret local.                                         |
+| `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng dài ít nhất 32 ký tự, không whitespace và không dùng token mặc định.                       |
+| `AI_CONFIGURATION_CAMERA_IDS`                     | Danh sách UUID camera mà AI được tải cấu hình; mặc định rỗng và từ chối mọi camera.                                                                               |
+| `EVIDENCE_LOCAL_ROOT`                             | Thư mục tuyệt đối tùy chọn cho JPEG evidence local khi development/demo; phải là thư mục thật, không phải symlink/junction. Production dùng object storage riêng. |
+| `LOG_LEVEL`                                       | `info`; nhận `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                                                        |
+| `LOG_FORMAT`                                      | `pretty` chỉ hợp lệ ở development; test/production dùng `json`. Image runtime không chứa `pino-pretty`.                                                           |
+| `HTTP_RATE_LIMIT_TTL_MS`, `HTTP_RATE_LIMIT_LIMIT` | `60000`, `120`: cửa sổ và quota HTTP thông thường.                                                                                                                |
+| `AI_RATE_LIMIT_TTL_MS`, `AI_RATE_LIMIT_LIMIT`     | `60000`, `600`: quota riêng cho AI ingestion.                                                                                                                     |
+| `ALERT_COOLDOWN_SECONDS`                          | `60`; cooldown nhóm cảnh báo hiện có.                                                                                                                             |
+| `MAX_PAST_EVENT_AGE_SECONDS`                      | `300`; giới hạn tuổi event.                                                                                                                                       |
+| `MAX_FUTURE_CLOCK_SKEW_SECONDS`                   | `30`; sai lệch thời gian tương lai cho phép.                                                                                                                      |
 
 TTL/quota rate limit phải là chuỗi số nguyên dương an toàn; TTL tối đa `2147483647` ms để không tràn bộ đếm thời gian của Node. `DIRECT_URL` và `DATABASE_URL_UNPOOLED` chỉ chọn kết nối migration; `TEST_DATABASE_URL` chỉ dành cho integration test. Không dùng URL test làm fallback runtime. Không commit `.env`, `.env.test`, connection string thật hay service token.
 
@@ -95,7 +97,7 @@ Tạo service token production từ ít nhất 32 byte ngẫu nhiên, ví dụ `
 
 - Giữ prefix `/api/v1`; Swagger UI/schema chỉ mở trong development. JSON và urlencoded có giới hạn 1 MB.
 - Global `ValidationPipe` whitelist DTO và từ chối field lạ; không bật chuyển kiểu ngầm. Field cần chuyển kiểu phải khai báo rõ. Body AI vẫn là `unknown`, giữ nguyên đến Ajv/canonical contract validation và hashing; không dùng DTO transformation để thay raw payload.
-- Helmet bật security headers. CORS chỉ cho origin được cấu hình, cho phép gửi và đọc `X-Request-Id`, không bật credentials. Không bật `trust proxy`; cần cấu hình proxy được tin cậy trước khi triển khai sau ingress.
+- Helmet bật security headers. CORS chỉ cho origin được cấu hình, cho phép credentials và gửi/đọc `X-Request-Id`; không dùng wildcard origin. Không bật `trust proxy`; cần cấu hình proxy được tin cậy trước khi triển khai sau ingress.
 - Response header, error body và log dùng cùng `X-Request-Id`. Chấp nhận đúng một header khớp `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` (1–64 ký tự); header thiếu, không hợp lệ hoặc lặp lại được thay bằng UUID do server tạo.
 - Lỗi công khai có envelope dưới đây. `message` luôn là chuỗi; lỗi validation đặt chi tiết ổn định trong `issues` với JSON Pointer `path`. Chỉ `PublicHttpException` có kiểu mới được đưa message/code/chi tiết ra client; các `HttpException` khác dùng thông báo an toàn theo status. `timestamp` là UTC RFC 3339, `path` không chứa query string. Chỉ AI `issues` và readiness `status`, `service`, `database` được giữ lại; không trả lỗi SQL/driver, stack hay credentials.
 
@@ -117,11 +119,13 @@ Rate limit dùng bộ nhớ **của từng instance**, không chia sẻ giữa r
 
 `GET /api/v1/health/live` chỉ kiểm tra tiến trình. `GET /api/v1/health/ready` chạy `SELECT 1` có timeout, trả `503` khi database không sẵn sàng. `POST /api/v1/integrations/ai/events` yêu cầu Bearer token dịch vụ, bảo toàn raw event, kiểm tra idempotency và tạo/nhóm cảnh báo kỹ thuật khi đủ ngữ cảnh. Pool đóng khi shutdown. Health không chứng minh model, quyền người dùng hay camera đã sẵn sàng; xem [health contract](../../contracts/health-v1.md).
 
+Safety Alert detail chỉ trả metadata evidence đã tuyển chọn. Admin global hoặc Safety Officer đúng Site có thể tải JPEG qua `GET /api/v1/sites/:siteId/safety-alerts/:alertId/detections/:eventId/evidence/:evidenceIndex`. Route kiểm tra Site, alert-event mapping, URI, root/file containment, loại và kích thước file; response dùng `private, no-store` và không trả raw URI hay filesystem path. Adapter local bị tắt khi không cấu hình `EVIDENCE_LOCAL_ROOT`; xem [runbook MF05/MF06](../../docs/operations/mf05-mf06-local-demo.md).
+
 ## Database và migration
 
 TypeORM Data Mapper (`@nestjs/typeorm`, `typeorm`, `pg`) quản lý Site, Camera, Zone, observation region, raw AI event, Safety Alert và detection mapping. `synchronize: false` và `migrationsRun: false` ở mọi môi trường; không chạy migration trong lúc server boot. Thay đổi schema cần migration được review và integration test với PostgreSQL thật.
 
-API quản trị Site/Camera/Zone/Region yêu cầu tài khoản Admin active đã đổi mật khẩu tạm; Admin có quyền trên mọi Site trong mốc hiện tại. Worker chỉ dùng endpoint tài khoản của chính mình. Camera có `configurationVersion`; mỗi thao tác sửa Region hoặc trạng thái Camera phải gửi revision hiện tại và được thực hiện trong transaction. Sau khi Zone đã gắn Region, `type`, `restrictionPolicy` và `requiredPpe` bị khóa vĩnh viễn; tên vẫn sửa được. Snapshot chỉ gồm các Region active và được kiểm tra bằng contract Backend–AI trước khi trả. `siteId` trong service chỉ giới hạn dữ liệu, không chứng minh quyền người dùng.
+API quản trị Site/Camera/Zone/Region hiện vẫn yêu cầu tài khoản Admin global active đã đổi mật khẩu tạm. Camera có `configurationVersion`; mỗi thao tác sửa Region hoặc trạng thái Camera phải gửi revision hiện tại và được thực hiện trong transaction. Sau khi Zone đã gắn Region, `type`, `restrictionPolicy` và `requiredPpe` bị khóa vĩnh viễn; tên vẫn sửa được. Snapshot chỉ gồm các Region active và được kiểm tra bằng contract Backend–AI trước khi trả. `siteId` trong service chỉ giới hạn dữ liệu, không tự chứng minh quyền người dùng.
 
 ### Tài khoản và API cấu hình
 
@@ -132,13 +136,24 @@ pnpm --filter @smartsite/backend db:migrate:run
 pnpm --filter @smartsite/backend auth:bootstrap-admin
 ```
 
-Lệnh bootstrap hỏi username, tên và mật khẩu tạm qua terminal; mật khẩu không hiển thị và không truyền trong command line. Chỉ chạy được khi chưa có tài khoản. Admin đăng nhập qua `POST /api/v1/auth/login`, đổi mật khẩu tạm qua `POST /api/v1/auth/change-password`, rồi đăng nhập lại để gọi API quản trị. Token người dùng là Bearer token ngẫu nhiên, hết hạn tuyệt đối sau 8 giờ; logout, đổi/reset mật khẩu hoặc khóa tài khoản thu hồi phiên. Client giữ token ngoài URL; môi trường triển khai phải dùng HTTPS. Không có endpoint tự đăng ký.
+Mặc định lệnh bootstrap hỏi username, tên và mật khẩu tạm qua terminal; mật khẩu không hiển thị và không truyền trong command line. Nếu muốn chạy nhanh bằng `.env` local, đặt đủ ba biến sau trong `apps/backend/.env` rồi chạy lại lệnh bootstrap:
 
-`GET /api/v1/auth/me` và `POST /api/v1/auth/logout` dùng cho cả Admin và Worker. Admin cấp tài khoản qua `POST /api/v1/users`, xem danh sách/chi tiết, khóa/mở và đặt lại mật khẩu tạm. Các route quản trị nằm dưới `/api/v1/sites`; xem Swagger development để biết DTO, pagination và response. Danh sách có `offset=0`, `limit=20` mặc định và `limit` tối đa 100. Mutation Region trả `{ region, configurationVersion }` để dùng revision mới; revision cũ trả 409.
+```dotenv
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_DISPLAY_NAME=Initial Admin
+BOOTSTRAP_ADMIN_PASSWORD=Admin123!
+```
+
+Khi đủ cả ba biến, lệnh không hỏi tương tác; thiếu biến nào thì chỉ hỏi biến đó. Xóa `BOOTSTRAP_ADMIN_PASSWORD` khỏi `.env` ngay sau khi tạo Admin thành công và không commit `.env`. Chỉ chạy được khi chưa có Admin global đang hoạt động, kể cả sau migration giữ lại legacy Worker inactive. Admin đăng nhập qua `POST /api/v1/auth/login`, đổi mật khẩu tạm qua `POST /api/v1/auth/change-password`, rồi đăng nhập lại để gọi API quản trị. Access token là JWT HS256 15 phút, chỉ mang `sub`, `sid`, `typ`, `iat`, `exp`, `iss`, `aud`; quyền luôn được đọc lại từ PostgreSQL. Refresh session hết hạn tuyệt đối sau 30 ngày và rotate tại `POST /api/v1/auth/refresh`. Logout, đổi/reset mật khẩu, khóa tài khoản hoặc đổi role thu hồi session ngay. Không có endpoint tự đăng ký.
+Mật khẩu mới phải dài 8–128 ký tự, có ít nhất một chữ hoa, một số và một ký tự đặc biệt; chữ thường không bắt buộc. Password cũ của account hiện tại vẫn đăng nhập được cho tới khi được đổi hoặc reset.
+
+Web gửi `clientType=WEB`: access token trả trong JSON, refresh token chỉ ở cookie host-only `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth` và `Secure` ở production; login/refresh/logout yêu cầu Origin trong allowlist. Mobile gửi `clientType=MOBILE` và nhận cả hai token trong JSON để ứng dụng lưu refresh token bằng secure storage. Không được trộn cookie và refresh token JSON.
+
+`GET /api/v1/auth/me` trả account cùng `roleAssignments`. Admin cấp tài khoản qua `POST /api/v1/users`, thay nguyên tử toàn bộ role bằng `PUT /api/v1/users/:id/role-assignments`, xem danh sách/chi tiết, khóa/mở và đặt lại mật khẩu tạm. `ADMIN` có `siteId=null`; `SITE_MANAGER`, `SAFETY_OFFICER`, `SECURITY_OFFICER` bắt buộc có Site tồn tại. API chưa cho provision `CONTRACTOR_REPRESENTATIVE` hoặc `WORKER`. Một user có thể có role khác nhau ở nhiều Site; backend không có “active role”.
 
 AI đọc `GET /api/v1/integrations/ai/cameras/:cameraId/configuration` bằng service token hiện có. Biến `AI_CONFIGURATION_CAMERA_IDS` chứa danh sách UUID camera phân cách dấu phẩy; để rỗng thì từ chối mọi camera. Camera không được cấp hoặc không tồn tại trả 404, inactive trả 409, active không có Region trả `regions: []`. Endpoint này không đưa Zone policy, Worker hoặc RTSP credentials cho AI. Allowlist chỉ áp dụng cho việc tải cấu hình; ingestion event hiện giữ semantics cũ.
 
-Login giới hạn 5 lần/phút/IP, đổi mật khẩu 5 lần/phút/user; quota hiện lưu trong bộ nhớ mỗi instance. Quyền vào Zone theo Worker chưa được triển khai: tài khoản `WORKER` và một track từ camera không tự chứng minh cùng một người. `ADMIN` toàn hệ thống, `WORKER` chỉ có quyền tài khoản và phiên Bearer lưu trong PostgreSQL là lựa chọn tạm cho mốc này. Khi chốt actor/role nghiệp vụ, phải xem lại mô hình tài khoản, phạm vi quyền theo Site/Contractor/Zone và cả cơ chế xác thực/phiên trước khi mở thêm quyền; thay đổi đó cần migration, cập nhật API/client và kiểm thử tương thích. Phía AI cần xử lý snapshot rỗng, camera inactive và Region PPE không còn active trước khi tích hợp luồng thật.
+Login giới hạn 5 lần/phút/IP, refresh 10 lần/phút/IP và đổi mật khẩu 5 lần/phút/user; quota hiện lưu trong bộ nhớ mỗi instance. Role assignment theo Site đã có ở Auth/Users, nhưng các module nghiệp vụ phải kiểm tra đúng cặp `requiredRole + targetSiteId` khi mở quyền; tuyệt đối không ghép role của Site này với scope Site khác. Quyền Worker/Contractor, nhận diện người và quyền vào Zone vẫn chưa được triển khai.
 
 CLI dùng `src/database/typeorm.data-source.ts` với cấu hình **chỉ cho database**, không yêu cầu CORS, service token hay logging. Development đọc `apps/backend/.env`; test/production không đọc file này. Chọn nhóm URL trong process trước nhóm trong file; trong nhóm đã chọn, thứ tự là `DIRECT_URL > DATABASE_URL_UNPOOLED > DATABASE_URL`. Một `DATABASE_URL` được truyền vào process vì vậy thắng `DIRECT_URL` cũ trong file. URL Neon pooled bị từ chối cho migration; runtime vẫn dùng pooled `DATABASE_URL`.
 

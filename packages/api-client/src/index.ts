@@ -1,6 +1,6 @@
 export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
 export { SmartSiteManagementClient } from './management';
-export type { SafetyAlertListOptions } from './management';
+export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
 export type {
   AccountResponse,
   LoginResponse,
@@ -9,8 +9,17 @@ export type {
   SafetyAlertDetectionResponse,
   SafetyAlertResponse,
   SafetyAlertStatus,
+  SafetyAlertReviewTargetStatus,
+  SafetyAlertReviewResponse,
+  SafetyAlertReviewMutationResponse,
   SafetyAlertType,
   SiteResponse,
+  WorkerResponse,
+  ZoneResponse,
+  ZoneAccessEffect,
+  ZoneAccessGrantResponse,
+  ZoneEntryDecisionStatus,
+  ZoneEntryDecisionResponse,
 } from '@smartsite/contracts';
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 export type ApiErrorCode = 'http' | 'network' | 'invalid-response' | 'timeout' | 'cancelled';

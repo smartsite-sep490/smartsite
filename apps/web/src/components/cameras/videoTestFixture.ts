@@ -101,10 +101,10 @@ function latestRelevantEntry(
 function detectionFor(
   videoTimeline: VideoTestTimeline,
   timeline: AiVideoTimeline | null,
-  type: 'MF05' | 'MF06',
+  type: 'MF04' | 'MF05',
 ): VideoTestDetection {
   const match =
-    type === 'MF05'
+    type === 'MF04'
       ? latestRelevantEntry(
           timeline,
           videoTimeline.currentTime,
@@ -136,14 +136,14 @@ function detectionFor(
       observation.type === 'PERSON' && observation.trackId === match.observation.trackId,
   );
   const detail =
-    type === 'MF05'
+    type === 'MF04'
       ? `MISSING ${match.observation.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
       : 'ZONE ENTRY';
   const ppeStatus = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' } as Record<
     'HARD_HAT' | 'SAFETY_VEST',
     'PRESENT' | 'MISSING' | 'UNKNOWN'
   >;
-  if (type === 'MF05') {
+  if (type === 'MF04') {
     for (const observation of match.entry.event.observations) {
       if (
         observation.type === 'PPE' &&
@@ -174,7 +174,7 @@ export function getPpeVideoTestDetection(
   videoTimeline: VideoTestTimeline,
   timeline: AiVideoTimeline | null,
 ): VideoTestDetection {
-  return detectionFor(videoTimeline, timeline, 'MF05');
+  return detectionFor(videoTimeline, timeline, 'MF04');
 }
 
 /** Return every tracked person with PPE observations at the current video time. */
@@ -220,8 +220,8 @@ export function getPpeVideoTestDetections(
       confidence: missingItem?.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
       label: missingItem
-        ? `MF05 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
-        : 'MF05 PPE OK',
+        ? `MF04 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
+        : 'MF04 PPE OK',
       ppeStatus,
       regionId: missingItem?.regionId ?? trackObservations[0]?.regionId,
       timecode: formatTimecode(match.entry.videoTimeSeconds),
@@ -234,7 +234,7 @@ export function getZoneVideoTestDetection(
   videoTimeline: VideoTestTimeline,
   timeline: AiVideoTimeline | null,
 ): VideoTestDetection {
-  return detectionFor(videoTimeline, timeline, 'MF06');
+  return detectionFor(videoTimeline, timeline, 'MF05');
 }
 
 /** Return every zone-entry track visible at the current video time. */
@@ -265,7 +265,7 @@ export function getZoneVideoTestDetections(
       cameraExternalId: match.entry.event.cameraExternalId,
       confidence: observation.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
-      label: 'MF06 ZONE ENTRY',
+      label: 'MF05 ZONE ENTRY',
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       regionId: observation.regionId,
       timecode: formatTimecode(match.entry.videoTimeSeconds),

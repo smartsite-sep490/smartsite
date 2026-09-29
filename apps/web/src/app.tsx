@@ -8,7 +8,8 @@ import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
-import { IconRadio, IconUsers, IconKey, IconTrendingUp } from './components/icons';
+import { AccessControlView } from './components/access/AccessControlView';
+import { IconRadio, IconUsers, IconTrendingUp } from './components/icons';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -37,10 +38,10 @@ export function App() {
         <LiveMonitoringView onNavigate={(tab) => handleSelectTab(tab)} />
       )}
 
-      {/* Tab: Restricted Zones (MF06) */}
-      {currentTab === 'zones' && <RestrictedZoneView />}
+      {/* Tab: Restricted Zones (MF05) */}
+      {currentTab === 'zones' && <RestrictedZoneView apiUrl={apiUrl} />}
 
-      {/* Tab: PPE Monitoring (MF05) */}
+      {/* Tab: PPE Monitoring (MF04) */}
       {currentTab === 'ppe' && <PpeMonitoringView />}
 
       {/* Tab: Operational Dashboard */}
@@ -59,17 +60,7 @@ export function App() {
         </div>
       )}
 
-      {currentTab === 'access' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center">
-            <IconKey className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">Site Access Control</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Automated turnstile gates, biometric verification and dynamic QR credentials.
-          </p>
-        </div>
-      )}
+      {currentTab === 'access' && <AccessControlView apiUrl={apiUrl} />}
 
       {currentTab === 'incidents' && <SafetyAlertsView apiUrl={apiUrl} />}
 

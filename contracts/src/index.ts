@@ -27,7 +27,12 @@ export type {
 
 export type {
   AccountResponse,
+  AuthClientType,
   LoginResponse,
+  ProvisionableRoleAssignment,
+  ProvisionableUserRole,
+  RoleAssignmentResponse,
+  UserRole,
   Page,
   SiteResponse,
   CameraResponse,
@@ -38,5 +43,14 @@ export type {
   SafetyAlertStatus,
   SafetyAlertResponse,
   SafetyAlertDetectionResponse,
+  SafetyAlertEvidenceResponse,
   SafetyAlertDetailResponse,
+  SafetyAlertReviewTargetStatus,
+  SafetyAlertReviewResponse,
+  SafetyAlertReviewMutationResponse,
+  WorkerResponse,
+  ZoneAccessEffect,
+  ZoneAccessGrantResponse,
+  ZoneEntryDecisionStatus,
+  ZoneEntryDecisionResponse,
 } from './management-api.js';

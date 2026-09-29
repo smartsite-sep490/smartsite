@@ -19,12 +19,21 @@ import { CameraConfigurationService } from '../src/modules/cameras/camera-config
 import { UserRole } from '../src/database/entities/user.entity.js';
 import { AlertStatus, AlertType, EventProcessingStatus } from '../src/database/entities/enums.js';
 import { SafetyAlertQueryService } from '../src/modules/safety/alerts/safety-alert-query.service.js';
+import { SafetyAlertReviewService } from '../src/modules/safety/alerts/safety-alert-review.service.js';
+import { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
 
 test('HTTP separates Admin, Worker and AI configuration credentials', async (t) => {
   const cameraId = randomUUID();
   const deniedCameraId = randomUUID();
   const siteId = randomUUID();
   const serviceToken = 'test-ai-service-token-only';
+  const jwt = (value: string) => `${value.repeat(16)}.${value.repeat(16)}.${value.repeat(16)}`;
+  const adminToken = jwt('A');
+  const temporaryAdminToken = jwt('T');
+  const workerToken = jwt('W');
+  const safetyOfficerToken = jwt('S');
+  const otherSiteSafetyOfficerToken = jwt('X');
+  const otherSiteId = randomUUID();
   const config = new ConfigService<BackendEnvironment, true>(
     validateEnvironment({
       NODE_ENV: 'test',
@@ -40,29 +49,40 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   };
   const fakeAuth = {
     authenticate: async (token: string) => {
-      const role =
-        token === 'A'.repeat(43) || token === 'T'.repeat(43) ? UserRole.ADMIN : UserRole.WORKER;
+      const roleAssignments =
+        token === adminToken || token === temporaryAdminToken
+          ? [{ role: UserRole.ADMIN, siteId: null }]
+          : token === safetyOfficerToken
+            ? [{ role: UserRole.SAFETY_OFFICER, siteId }]
+            : token === otherSiteSafetyOfficerToken
+              ? [{ role: UserRole.SAFETY_OFFICER, siteId: otherSiteId }]
+              : [{ role: UserRole.SECURITY_OFFICER, siteId }];
       return {
         user: {
           id: randomUUID(),
           username: 'tester',
           displayName: 'Tester',
-          role,
+          roleAssignments,
           isActive: true,
-          mustChangePassword: token === 'T'.repeat(43),
+          mustChangePassword: token === temporaryAdminToken,
         },
-        tokenHash: 'fake-hash',
+        sessionId: randomUUID(),
+        clientType: 'MOBILE',
       };
     },
     login: async () => ({
-      accessToken: 'A'.repeat(43),
+      accessToken: adminToken,
       tokenType: 'Bearer',
-      expiresAt: new Date(Date.now() + 1000).toISOString(),
-      user: { role: UserRole.ADMIN },
+      accessTokenExpiresAt: new Date(Date.now() + 1000).toISOString(),
+      refreshToken: `${randomUUID()}.${'R'.repeat(43)}`,
+      refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      user: { roleAssignments: [{ role: UserRole.ADMIN, siteId: null }] },
     }),
   };
   const site = { id: siteId, code: 'SITE', name: 'Site', createdAt: new Date() };
   const alertId = randomUUID();
+  const alertEventId = randomUUID();
+  const evidenceJpeg = Buffer.from([0xff, 0xd8, 0x01, 0xff, 0xd9]);
   const alert = {
     id: alertId,
     siteId,
@@ -74,9 +94,12 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     firstDetectedAt: new Date('2026-09-27T01:00:00Z'),
     lastDetectedAt: new Date('2026-09-27T01:01:00Z'),
     detectionCount: 3,
+    revision: 0,
     createdAt: new Date('2026-09-27T01:00:00Z'),
+    updatedAt: new Date('2026-09-27T01:00:00Z'),
   };
   let alertListArguments: unknown[] | undefined;
+  const siteListArguments: unknown[][] = [];
   let configurationReads = 0;
   let cameraExternalId = 'CAM-1';
   const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -91,7 +114,13 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     .overrideProvider(AuthService)
     .useValue(fakeAuth)
     .overrideProvider(SiteConfigurationService)
-    .useValue({ list: async () => ({ items: [site], total: 1 }) })
+    .useValue({
+      list: async (...args: unknown[]) => {
+        siteListArguments.push(args);
+        return { items: [site], total: 1 };
+      },
+      get: async (requestedSiteId: string) => ({ ...site, id: requestedSiteId }),
+    })
     .overrideProvider(CameraConfigurationService)
     .useValue({
       buildConfigurationForCamera: async () => {
@@ -114,13 +143,63 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
         alert,
         detections: [
           {
-            eventId: randomUUID(),
+            eventId: alertEventId,
             cameraExternalId: 'CAM-1',
             capturedAt: new Date('2026-09-27T01:01:00Z'),
             processingStatus: EventProcessingStatus.PROCESSED,
+            evidence: [{ index: 0, kind: 'FRAME', available: true }],
           },
         ],
         detectionsTotal: 1,
+        reviews: [],
+        reviewsTotal: 0,
+      }),
+    })
+    .overrideProvider(SafetyAlertEvidenceService)
+    .useValue({
+      read: async (
+        requestedSiteId: string,
+        requestedAlertId: string,
+        requestedEventId: string,
+        requestedIndex: string,
+      ) => {
+        assert.deepEqual(
+          [requestedSiteId, requestedAlertId, requestedEventId, requestedIndex],
+          [siteId, alertId, alertEventId, '0'],
+        );
+        return { bytes: evidenceJpeg, fileName: `${alertEventId}.jpg` };
+      },
+    })
+    .overrideProvider(SafetyAlertReviewService)
+    .useValue({
+      review: async (
+        requestedSiteId: string,
+        requestedAlertId: string,
+        actorUserId: string,
+        input: {
+          commandId: string;
+          expectedRevision: number;
+          targetStatus: AlertStatus;
+          reason: string;
+        },
+      ) => ({
+        alert: {
+          ...alert,
+          status: input.targetStatus,
+          revision: input.expectedRevision + 1,
+        },
+        review: {
+          id: input.commandId,
+          alertId: requestedAlertId,
+          siteId: requestedSiteId,
+          actorUserId,
+          fromStatus: AlertStatus.PENDING_REVIEW,
+          toStatus: input.targetStatus,
+          reason: input.reason,
+          alertRevision: input.expectedRevision + 1,
+          createdAt: new Date('2026-09-27T01:02:00Z'),
+        },
+        replayed: false,
       }),
     })
     .compile();
@@ -136,14 +215,34 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     fetch(`${url}/api/v1/sites`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-  assert.equal((await getSites('A'.repeat(43))).status, 200);
-  assert.equal((await getSites('W'.repeat(43))).status, 403);
-  assert.equal((await getSites('T'.repeat(43))).status, 403);
+  assert.equal((await getSites(adminToken)).status, 200);
+  assert.equal((await getSites(workerToken)).status, 200);
+  assert.equal((await getSites(temporaryAdminToken)).status, 403);
   assert.equal((await getSites(serviceToken)).status, 401);
+  assert.deepEqual(siteListArguments, [
+    [0, 20, undefined],
+    [0, 20, [siteId]],
+  ]);
+  assert.equal(
+    (
+      await fetch(`${url}/api/v1/sites/${siteId}`, {
+        headers: { Authorization: `Bearer ${workerToken}` },
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await fetch(`${url}/api/v1/sites/${otherSiteId}`, {
+        headers: { Authorization: `Bearer ${workerToken}` },
+      })
+    ).status,
+    403,
+  );
   const alertsUrl = `${url}/api/v1/sites/${siteId}/safety-alerts`;
   const alertList = await fetch(
     `${alertsUrl}?offset=2&limit=5&status=PENDING_REVIEW&type=PPE_VIOLATION`,
-    { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } },
+    { headers: { Authorization: `Bearer ${adminToken}` } },
   );
   assert.equal(alertList.status, 200);
   assert.equal(alertList.headers.get('cache-control'), 'no-store');
@@ -158,7 +257,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   ]);
   assert.equal(((await alertList.json()) as { total: number }).total, 1);
   const alertDetail = await fetch(`${alertsUrl}/${alertId}`, {
-    headers: { Authorization: `Bearer ${'A'.repeat(43)}` },
+    headers: { Authorization: `Bearer ${adminToken}` },
   });
   assert.equal(alertDetail.status, 200);
   assert.equal(alertDetail.headers.get('cache-control'), 'no-store');
@@ -166,8 +265,77 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   assert.equal(alertDetailBody.id, alertId);
   assert.equal(alertDetailBody.detectionsTotal, 1);
   assert.equal('rawPayload' in alertDetailBody, false);
+  assert.doesNotMatch(JSON.stringify(alertDetailBody), /local:\/\/|SmartSiteData/);
+  const evidenceResponse = await fetch(
+    `${alertsUrl}/${alertId}/detections/${alertEventId}/evidence/0`,
+    { headers: { Authorization: `Bearer ${safetyOfficerToken}` } },
+  );
+  assert.equal(evidenceResponse.status, 200);
+  assert.equal(evidenceResponse.headers.get('content-type'), 'image/jpeg');
+  assert.equal(evidenceResponse.headers.get('cache-control'), 'private, no-store');
+  assert.equal(evidenceResponse.headers.get('x-content-type-options'), 'nosniff');
+  assert.deepEqual(Buffer.from(await evidenceResponse.arrayBuffer()), evidenceJpeg);
   assert.equal(
-    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${'W'.repeat(43)}` } })).status,
+    (
+      await fetch(`${alertsUrl}/${alertId}/detections/${alertEventId}/evidence/0`, {
+        headers: { Authorization: `Bearer ${otherSiteSafetyOfficerToken}` },
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${workerToken}` } })).status,
+    403,
+  );
+  assert.equal(
+    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${safetyOfficerToken}` } })).status,
+    200,
+  );
+  assert.equal(
+    (
+      await fetch(alertsUrl, {
+        headers: { Authorization: `Bearer ${otherSiteSafetyOfficerToken}` },
+      })
+    ).status,
+    403,
+  );
+  const reviewCommandId = randomUUID();
+  const reviewResult = await fetch(`${alertsUrl}/${alertId}/reviews`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${safetyOfficerToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      commandId: reviewCommandId,
+      expectedRevision: 0,
+      targetStatus: AlertStatus.CONFIRMED,
+      reason: 'Confirmed by the assigned Safety Officer.',
+    }),
+  });
+  assert.equal(reviewResult.status, 201);
+  assert.equal(reviewResult.headers.get('cache-control'), 'no-store');
+  const reviewBody = (await reviewResult.json()) as {
+    review: { id: string; toStatus: string };
+  };
+  assert.equal(reviewBody.review.id, reviewCommandId);
+  assert.equal(reviewBody.review.toStatus, AlertStatus.CONFIRMED);
+  assert.equal(
+    (
+      await fetch(`${alertsUrl}/${alertId}/reviews`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${otherSiteSafetyOfficerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          commandId: randomUUID(),
+          expectedRevision: 0,
+          targetStatus: AlertStatus.CONFIRMED,
+          reason: 'This reviewer belongs to another Site.',
+        }),
+      })
+    ).status,
     403,
   );
   assert.equal(
@@ -177,7 +345,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   const login = await fetch(`${url}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'tester', password: 'password' }),
+    body: JSON.stringify({ username: 'tester', password: 'password', clientType: 'MOBILE' }),
   });
   assert.equal(login.status, 200);
   assert.equal(login.headers.get('cache-control'), 'no-store');
@@ -187,7 +355,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
         await fetch(`${url}/api/v1/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: 'tester', password: 'password' }),
+          body: JSON.stringify({ username: 'tester', password: 'password', clientType: 'MOBILE' }),
         })
       ).status,
       200,
@@ -195,7 +363,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   const limited = await fetch(`${url}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'tester', password: 'password' }),
+    body: JSON.stringify({ username: 'tester', password: 'password', clientType: 'MOBILE' }),
   });
   assert.equal(limited.status, 429);
   assert.equal(
@@ -246,7 +414,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   );
   assert.equal(configurationReads, 5);
   assert.equal(
-    (await fetch(aiUrl, { headers: { Authorization: `Bearer ${'A'.repeat(43)}` } })).status,
+    (await fetch(aiUrl, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
     401,
   );
   const denied = await fetch(
