@@ -1,12 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@smartsite/api-client';
 import {
+  buildEvidenceQueryKey,
   evidenceErrorMessage,
   formatEvidenceAltText,
   formatEvidenceKind,
 } from './safetyAlertEvidenceUtils';
 
 describe('safetyAlertEvidenceUtils', () => {
+  describe('buildEvidenceQueryKey', () => {
+    it('isolates cached evidence by API endpoint and authenticated user', () => {
+      const first = buildEvidenceQueryKey(
+        'https://api-a.example',
+        'user-a',
+        'site-1',
+        'alert-1',
+        'event-1',
+        0,
+      );
+      const otherUser = buildEvidenceQueryKey(
+        'https://api-a.example',
+        'user-b',
+        'site-1',
+        'alert-1',
+        'event-1',
+        0,
+      );
+      const otherApi = buildEvidenceQueryKey(
+        'https://api-b.example',
+        'user-a',
+        'site-1',
+        'alert-1',
+        'event-1',
+        0,
+      );
+
+      expect(first).not.toEqual(otherUser);
+      expect(first).not.toEqual(otherApi);
+      expect(first).not.toContain('access-token');
+    });
+  });
+
   describe('formatEvidenceKind', () => {
     it('formats known standard evidence kinds correctly', () => {
       expect(formatEvidenceKind('FRAME')).toBe('Frame');

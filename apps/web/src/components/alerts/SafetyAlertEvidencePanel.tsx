@@ -5,6 +5,7 @@ import {
   type SafetyAlertDetectionResponse,
 } from '@smartsite/api-client';
 import {
+  buildEvidenceQueryKey,
   evidenceErrorMessage,
   formatEvidenceAltText,
   formatEvidenceKind,
@@ -12,6 +13,8 @@ import {
 
 export interface SafetyAlertEvidencePanelProps {
   client: SmartSiteManagementClient;
+  apiUrl: string;
+  sessionScope: string;
   token: string;
   siteId: string;
   alertId: string;
@@ -20,20 +23,14 @@ export interface SafetyAlertEvidencePanelProps {
 
 export function SafetyAlertEvidencePanel({
   client,
+  apiUrl,
+  sessionScope,
   token,
   siteId,
   alertId,
   detection,
 }: SafetyAlertEvidencePanelProps) {
   const [selectedEvidenceIndex, setSelectedEvidenceIndex] = useState<number | null>(null);
-  const [prevScope, setPrevScope] = useState(`${alertId}:${detection.eventId}`);
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-
-  // Reset selected evidence during render when alert or detection changes to prevent displaying stale images
-  if (prevScope !== `${alertId}:${detection.eventId}`) {
-    setPrevScope(`${alertId}:${detection.eventId}`);
-    setSelectedEvidenceIndex(null);
-  }
 
   const evidenceList = detection.evidence ?? [];
   const selectedItem =
@@ -45,7 +42,14 @@ export function SafetyAlertEvidencePanel({
 
   // Fetch only when the user explicitly clicks an available evidence item
   const evidenceQuery = useQuery({
-    queryKey: ['safety-alert-evidence', siteId, alertId, detection.eventId, selectedEvidenceIndex],
+    queryKey: buildEvidenceQueryKey(
+      apiUrl,
+      sessionScope,
+      siteId,
+      alertId,
+      detection.eventId,
+      selectedEvidenceIndex,
+    ),
     queryFn: () => {
       if (selectedEvidenceIndex === null) {
         throw new Error('No evidence item selected.');
@@ -65,31 +69,9 @@ export function SafetyAlertEvidencePanel({
       Boolean(detection.eventId) &&
       selectedEvidenceIndex !== null &&
       isSelectedAvailable,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    gcTime: 0,
   });
-
-  // Manage Object URL lifecycle: create on new Blob, revoke on change or unmount
-  useEffect(() => {
-    const blob = evidenceQuery.data;
-    if (!blob) {
-      return;
-    }
-
-    const url = URL.createObjectURL(blob);
-    let active = true;
-
-    queueMicrotask(() => {
-      if (active) {
-        setObjectUrl(url);
-      }
-    });
-
-    return () => {
-      active = false;
-      URL.revokeObjectURL(url);
-      setObjectUrl(null);
-    };
-  }, [evidenceQuery.data]);
 
   const handleToggle = (index: number) => {
     setSelectedEvidenceIndex((current) => (current === index ? null : index));
@@ -180,17 +162,17 @@ export function SafetyAlertEvidencePanel({
             </div>
           )}
 
-          {evidenceQuery.isSuccess && objectUrl && selectedItem && (
+          {evidenceQuery.isSuccess && evidenceQuery.data && selectedItem && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-center overflow-hidden rounded border border-slate-100 bg-slate-950/5">
-                <img
-                  src={objectUrl}
+                <EvidenceImage
+                  key={`${detection.eventId}:${selectedItem.index}:${evidenceQuery.dataUpdatedAt}`}
+                  blob={evidenceQuery.data}
                   alt={formatEvidenceAltText(
                     selectedItem.kind,
                     detection.cameraExternalId,
                     detection.capturedAt,
                   )}
-                  className="max-h-72 w-auto object-contain"
                 />
               </div>
               <div className="flex items-center justify-between px-0.5 text-[11px] text-slate-500">
@@ -212,4 +194,17 @@ export function SafetyAlertEvidencePanel({
       )}
     </div>
   );
+}
+
+function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
+  const [objectUrl] = useState(() => URL.createObjectURL(blob));
+
+  useEffect(
+    () => () => {
+      URL.revokeObjectURL(objectUrl);
+    },
+    [objectUrl],
+  );
+
+  return <img src={objectUrl} alt={alt} className="max-h-72 w-auto object-contain" />;
 }

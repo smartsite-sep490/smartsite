@@ -1,5 +1,24 @@
 import { ApiError } from '@smartsite/api-client';
 
+export function buildEvidenceQueryKey(
+  apiUrl: string,
+  sessionScope: string,
+  siteId: string,
+  alertId: string,
+  eventId: string,
+  evidenceIndex: number | null,
+) {
+  return [
+    'safety-alert-evidence',
+    apiUrl,
+    sessionScope,
+    siteId,
+    alertId,
+    eventId,
+    evidenceIndex,
+  ] as const;
+}
+
 export function formatEvidenceKind(kind: string): string {
   switch (kind.toUpperCase()) {
     case 'FRAME':

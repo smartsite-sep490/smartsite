@@ -119,6 +119,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
       queryClient.removeQueries({ queryKey: ['sites', apiUrl, userId] });
       queryClient.removeQueries({ queryKey: ['safety-alerts', apiUrl, userId] });
       queryClient.removeQueries({ queryKey: ['safety-alert', apiUrl, userId] });
+      queryClient.removeQueries({ queryKey: ['safety-alert-evidence', apiUrl, userId] });
     },
     [apiUrl, queryClient],
   );
@@ -523,7 +524,10 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                   <h3 className="text-sm font-bold text-slate-900">Source observations</h3>
                   <div className="mt-2 max-h-80 space-y-2 overflow-auto">
                     {detail.data.detections.map((detection) => (
-                      <div key={detection.eventId} className="rounded-lg bg-slate-50 p-3 text-xs">
+                      <div
+                        key={`${detail.data.id}:${detection.eventId}`}
+                        className="rounded-lg bg-slate-50 p-3 text-xs"
+                      >
                         <div className="flex justify-between gap-3">
                           <span className="font-mono font-semibold text-slate-700">
                             {detection.cameraExternalId}
@@ -538,6 +542,8 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                         </p>
                         <SafetyAlertEvidencePanel
                           client={client}
+                          apiUrl={apiUrl}
+                          sessionScope={sessionScope}
                           token={token}
                           siteId={selectedSiteId}
                           alertId={detail.data.id}
