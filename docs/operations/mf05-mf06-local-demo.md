@@ -1,13 +1,16 @@
 # MF05/MF06 local end-to-end demo
 
-This runbook creates a local Site, Camera, one full-frame PPE Region and one restricted Region, then runs the companion `smartsite-ai` YOLO11s worker against a permitted video, laptop camera or RTSP source. It does not create Safety Officer review actions or decide identity/authorization for `AUTHORIZATION_REQUIRED` Zones.
+This runbook creates a local Site, Camera, one full-frame PPE Region and one restricted Region, then runs the companion `smartsite-ai` YOLO11s worker against a permitted video, laptop camera or RTSP source. It also connects exact-frame JPEG evidence to the scoped Safety Alert review API. It does not decide identity/authorization for `AUTHORIZATION_REQUIRED` Zones.
 
 ## 1. Start the application
 
-From the `smartsite` repository:
+From the `smartsite` repository, create one canonical real directory for local evidence. Do not use a symlink or junction. The Compose override mounts it read-only into the Backend container; this adapter is for development and demonstrations, not production storage.
 
 ```powershell
-docker compose -f infra/compose.yaml up -d --build postgres backend web --wait
+$evidenceRoot = '<absolute-real-directory-for-local-demo-evidence>'
+New-Item -ItemType Directory -Force $evidenceRoot | Out-Null
+$env:EVIDENCE_LOCAL_HOST_ROOT = (Resolve-Path $evidenceRoot).Path
+docker compose -f infra/compose.yaml -f infra/compose.evidence.yaml up -d --build postgres backend web --wait
 ```
 
 On a new local database, create the first Admin interactively:
@@ -64,6 +67,7 @@ uv run --frozen --extra cuda126 smartsite-ai-camera-worker `
   --ppe-region-id $demo.ppeRegionId `
   --model-spec $modelSpec `
   --outbox $outbox `
+  --evidence-dir $evidenceRoot `
   --target-fps 10
 ```
 
@@ -73,7 +77,7 @@ Use `--source 0 --live` for the laptop camera. Put credentialed RTSP URLs in `SM
 
 ## 4. Inspect the result
 
-Open <http://127.0.0.1:5173>, choose **Safety Alerts**, and sign in with the changed Admin password. Select `DEMO-SITE` and inspect `PPE_VIOLATION` or `RESTRICTED_ZONE_INTRUSION` alerts and their source observations.
+Open <http://127.0.0.1:5173>, choose **Safety Alerts**, and sign in with the changed Admin password. Select `DEMO-SITE` and inspect `PPE_VIOLATION` or `RESTRICTED_ZONE_INTRUSION` alerts, their source observations and available exact-frame evidence. The browser receives the JPEG through the authenticated Backend route; it never receives the local filesystem path or raw `local://` URI.
 
 The worker exit JSON must show zero pending and terminal outbox entries. A video can produce no alert when the model does not emit explicit negative-PPE evidence or no tracked person remains inside the restricted polygon for the confirmation window. This is an evidence rule, not a worker failure.
 
@@ -82,5 +86,6 @@ The worker exit JSON must show zero pending and terminal outbox entries. A video
 ```powershell
 Remove-Item Env:AI_CONFIGURATION_CAMERA_IDS -ErrorAction SilentlyContinue
 Remove-Item Env:SMARTSITE_AI_BACKEND_SERVICE_TOKEN -ErrorAction SilentlyContinue
-docker compose -f infra/compose.yaml down
+docker compose -f infra/compose.yaml -f infra/compose.evidence.yaml down
+Remove-Item Env:EVIDENCE_LOCAL_HOST_ROOT -ErrorAction SilentlyContinue
 ```

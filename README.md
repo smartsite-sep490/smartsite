@@ -241,7 +241,8 @@ Implemented:
 - TypeORM MF05/MF06 domain schema and reviewed migration;
 - authenticated AI event ingestion with raw-event preservation, idempotency, context validation, and durable alert grouping.
 - JWT access/rotating-refresh authentication, global Admin plus Site-scoped role assignments, Admin configuration APIs, and camera-scoped AI configuration reads.
-- Site-scoped, Admin-only read APIs and a read-only Web queue for MF05/MF06 safety alerts, including curated source-observation summaries without exposing raw AI payloads.
+- Site-scoped Admin/Safety Officer alert read and review APIs, including curated source-observation/evidence metadata without exposing raw AI payloads or storage URIs.
+- authenticated exact-frame JPEG access through a bounded local development adapter; the Web contract remains storage-neutral for a later object-storage adapter.
 - companion AI worker support for finite video, laptop camera, and RTSP sources through the locked YOLO11s detection, tracking, PPE, and restricted-zone pipeline.
 
 Not yet implemented in this foundation:
@@ -250,9 +251,8 @@ Not yet implemented in this foundation:
 - full workforce, attendance, and incident workflows;
 - production Neon integration;
 - production multi-camera operations and benchmark evidence;
-- scoped Safety Officer access and the MF05/MF06 confirm, dismiss, and request-evidence workflow;
 - MF06 worker identity and Site/Zone permission resolution;
-- evidence storage;
+- production object evidence storage and retention;
 - OpenAI API calls.
 
 These capabilities are intentionally developed through dedicated feature pull requests after the foundation is merged.

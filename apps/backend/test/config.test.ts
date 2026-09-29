@@ -16,6 +16,18 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
   );
   assert.deepEqual(config.CORS_ORIGINS, ['http://localhost:5173']);
   assert.equal(config.AUTH_JWT_SECRET, 'smartsite_local_dev_jwt_secret_only_32_bytes');
+  assert.equal(config.EVIDENCE_LOCAL_ROOT, undefined);
+});
+
+test('local evidence root is optional but must be a trimmed absolute path', () => {
+  const absoluteRoot = path.resolve('local-evidence');
+  assert.equal(
+    validateEnvironment({ EVIDENCE_LOCAL_ROOT: absoluteRoot }).EVIDENCE_LOCAL_ROOT,
+    absoluteRoot,
+  );
+  for (const EVIDENCE_LOCAL_ROOT of ['', ' ', 'relative/evidence', '.\\evidence']) {
+    assert.throws(() => validateEnvironment({ EVIDENCE_LOCAL_ROOT }), /EVIDENCE_LOCAL_ROOT/);
+  }
 });
 
 test('development accepts optional Admin bootstrap settings from environment', () => {

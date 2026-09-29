@@ -20,6 +20,7 @@ import { UserRole } from '../src/database/entities/user.entity.js';
 import { AlertStatus, AlertType, EventProcessingStatus } from '../src/database/entities/enums.js';
 import { SafetyAlertQueryService } from '../src/modules/safety/alerts/safety-alert-query.service.js';
 import { SafetyAlertReviewService } from '../src/modules/safety/alerts/safety-alert-review.service.js';
+import { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
 
 test('HTTP separates Admin, Worker and AI configuration credentials', async (t) => {
   const cameraId = randomUUID();
@@ -80,6 +81,8 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   };
   const site = { id: siteId, code: 'SITE', name: 'Site', createdAt: new Date() };
   const alertId = randomUUID();
+  const alertEventId = randomUUID();
+  const evidenceJpeg = Buffer.from([0xff, 0xd8, 0x01, 0xff, 0xd9]);
   const alert = {
     id: alertId,
     siteId,
@@ -140,16 +143,32 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
         alert,
         detections: [
           {
-            eventId: randomUUID(),
+            eventId: alertEventId,
             cameraExternalId: 'CAM-1',
             capturedAt: new Date('2026-09-27T01:01:00Z'),
             processingStatus: EventProcessingStatus.PROCESSED,
+            evidence: [{ index: 0, kind: 'FRAME', available: true }],
           },
         ],
         detectionsTotal: 1,
         reviews: [],
         reviewsTotal: 0,
       }),
+    })
+    .overrideProvider(SafetyAlertEvidenceService)
+    .useValue({
+      read: async (
+        requestedSiteId: string,
+        requestedAlertId: string,
+        requestedEventId: string,
+        requestedIndex: string,
+      ) => {
+        assert.deepEqual(
+          [requestedSiteId, requestedAlertId, requestedEventId, requestedIndex],
+          [siteId, alertId, alertEventId, '0'],
+        );
+        return { bytes: evidenceJpeg, fileName: `${alertEventId}.jpg` };
+      },
     })
     .overrideProvider(SafetyAlertReviewService)
     .useValue({
@@ -246,6 +265,24 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   assert.equal(alertDetailBody.id, alertId);
   assert.equal(alertDetailBody.detectionsTotal, 1);
   assert.equal('rawPayload' in alertDetailBody, false);
+  assert.doesNotMatch(JSON.stringify(alertDetailBody), /local:\/\/|SmartSiteData/);
+  const evidenceResponse = await fetch(
+    `${alertsUrl}/${alertId}/detections/${alertEventId}/evidence/0`,
+    { headers: { Authorization: `Bearer ${safetyOfficerToken}` } },
+  );
+  assert.equal(evidenceResponse.status, 200);
+  assert.equal(evidenceResponse.headers.get('content-type'), 'image/jpeg');
+  assert.equal(evidenceResponse.headers.get('cache-control'), 'private, no-store');
+  assert.equal(evidenceResponse.headers.get('x-content-type-options'), 'nosniff');
+  assert.deepEqual(Buffer.from(await evidenceResponse.arrayBuffer()), evidenceJpeg);
+  assert.equal(
+    (
+      await fetch(`${alertsUrl}/${alertId}/detections/${alertEventId}/evidence/0`, {
+        headers: { Authorization: `Bearer ${otherSiteSafetyOfficerToken}` },
+      })
+    ).status,
+    403,
+  );
   assert.equal(
     (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${workerToken}` } })).status,
     403,

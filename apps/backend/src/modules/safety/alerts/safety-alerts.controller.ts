@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Header, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Post,
+  Query,
+  Req,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -7,6 +18,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiProduces,
   ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -24,6 +36,7 @@ import type { SafetyAlertReviewEntity } from '../../../database/entities/safety-
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { SafetyAlertAccessGuard } from './safety-alert-access.guard.js';
+import { SafetyAlertEvidenceService } from './safety-alert-evidence.service.js';
 import {
   ReviewSafetyAlertCommand,
   SafetyAlertReviewService,
@@ -71,6 +84,7 @@ function detectionResponse(detection: SafetyAlertDetectionSummary) {
     cameraExternalId: detection.cameraExternalId,
     capturedAt: detection.capturedAt,
     processingStatus: detection.processingStatus,
+    evidence: detection.evidence,
   };
 }
 
@@ -88,6 +102,7 @@ export class SafetyAlertsController {
   constructor(
     private readonly alerts: SafetyAlertQueryService,
     private readonly reviews: SafetyAlertReviewService,
+    private readonly evidence: SafetyAlertEvidenceService,
   ) {}
 
   @Get()
@@ -117,6 +132,28 @@ export class SafetyAlertsController {
       reviews: result.reviews.map(reviewResponse),
       reviewsTotal: result.reviewsTotal,
     };
+  }
+
+  @Get(':alertId/detections/:eventId/evidence/:evidenceIndex')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @ApiProduces('image/jpeg')
+  @ApiOkResponse({
+    description: 'Exact JPEG frame associated with the selected alert detection.',
+    content: { 'image/jpeg': { schema: { type: 'string', format: 'binary' } } },
+  })
+  async getEvidence(
+    @Param('siteId') siteId: string,
+    @Param('alertId') alertId: string,
+    @Param('eventId') eventId: string,
+    @Param('evidenceIndex') evidenceIndex: string,
+  ) {
+    const result = await this.evidence.read(siteId, alertId, eventId, evidenceIndex);
+    return new StreamableFile(result.bytes, {
+      type: 'image/jpeg',
+      disposition: `inline; filename="${result.fileName}"`,
+      length: result.bytes.length,
+    });
   }
 
   @Post(':alertId/reviews')

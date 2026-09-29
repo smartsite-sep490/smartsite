@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, test } from 'node:test';
+import { ConfigService } from '@nestjs/config';
+import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { AiObservationEventEntity } from '../../src/database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../../src/database/entities/alert-detection-mapping.entity.js';
@@ -12,6 +17,7 @@ import {
 import { SafetyAlertEntity } from '../../src/database/entities/safety-alert.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
 import { SafetyAlertQueryService } from '../../src/modules/safety/alerts/safety-alert-query.service.js';
+import { SafetyAlertEvidenceService } from '../../src/modules/safety/alerts/safety-alert-evidence.service.js';
 import dataSource from '../support/test-data-source.js';
 
 after(async () => {
@@ -24,6 +30,10 @@ test('Safety alert read model filters by Site and returns only curated event sum
   const otherSiteId = randomUUID();
   const alertId = randomUUID();
   const eventIds = [randomUUID(), randomUUID()];
+  const streamSessionId = randomUUID();
+  const evidenceRoot = await mkdtemp(join(tmpdir(), 'smartsite-evidence-integration-'));
+  const evidenceFile = `${streamSessionId}_11_${eventIds[0]}.jpg`;
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
   const siteRepository = dataSource.getRepository(SiteEntity);
   const alertRepository = dataSource.getRepository(SafetyAlertEntity);
   const eventRepository = dataSource.getRepository(AiObservationEventEntity);
@@ -54,9 +64,17 @@ test('Safety alert read model filters by Site and returns only curated event sum
         payloadHash: 'a'.repeat(64),
         cameraExternalId: 'CAM-GATE-01',
         resolvedCameraId: null,
-        streamSessionId: randomUUID(),
+        streamSessionId,
         capturedAt: new Date('2026-09-27T01:00:01Z'),
-        rawPayload: { secretInternalField: 'must-not-leak' },
+        rawPayload: {
+          secretInternalField: 'must-not-leak',
+          evidence: [
+            {
+              kind: 'FRAME',
+              uri: `local://evidence/${streamSessionId}/11/${eventIds[0]}.jpg`,
+            },
+          ],
+        },
         processingStatus: EventProcessingStatus.PROCESSED,
         processingNote: null,
       },
@@ -73,8 +91,13 @@ test('Safety alert read model filters by Site and returns only curated event sum
       },
     ]);
     await mappingRepository.save(eventIds.map((eventId) => ({ alertId, eventId })));
+    await writeFile(join(evidenceRoot, evidenceFile), jpeg);
 
-    const service = new SafetyAlertQueryService(dataSource);
+    const config = new ConfigService<BackendEnvironment, true>(
+      validateEnvironment({ NODE_ENV: 'test', EVIDENCE_LOCAL_ROOT: evidenceRoot }),
+    );
+    const evidenceService = new SafetyAlertEvidenceService(dataSource, config);
+    const service = new SafetyAlertQueryService(dataSource, evidenceService);
     const page = await service.list(siteId, 0, 20, {
       status: AlertStatus.PENDING_REVIEW,
       type: AlertType.PPE_VIOLATION,
@@ -90,6 +113,14 @@ test('Safety alert read model filters by Site and returns only curated event sum
       [eventIds[1], eventIds[0]],
     );
     assert.equal('rawPayload' in detail.detections[0]!, false);
+    const evidence = await evidenceService.read(siteId, alertId, eventIds[0]!, '0');
+    assert.equal(evidence.fileName, evidenceFile);
+    assert.deepEqual(evidence.bytes, jpeg);
+    await assert.rejects(
+      evidenceService.read(otherSiteId, alertId, eventIds[0]!, '0'),
+      (error: unknown) =>
+        error instanceof PublicHttpException && error.publicPayload.code === 'NOT_FOUND',
+    );
     await assert.rejects(
       service.get(otherSiteId, alertId),
       (error: unknown) =>
@@ -100,5 +131,6 @@ test('Safety alert read model filters by Site and returns only curated event sum
     await alertRepository.delete({ id: alertId });
     await eventRepository.delete(eventIds);
     await siteRepository.delete([siteId, otherSiteId]);
+    await rm(evidenceRoot, { recursive: true, force: true });
   }
 });

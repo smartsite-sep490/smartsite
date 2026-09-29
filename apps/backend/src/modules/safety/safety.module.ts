@@ -8,6 +8,7 @@ import { SafetyAlertQueryService } from './alerts/safety-alert-query.service.js'
 import { SafetyAlertsController } from './alerts/safety-alerts.controller.js';
 import { SafetyAlertAccessGuard } from './alerts/safety-alert-access.guard.js';
 import { SafetyAlertReviewService } from './alerts/safety-alert-review.service.js';
+import { SafetyAlertEvidenceService } from './alerts/safety-alert-evidence.service.js';
 
 @Module({
   imports: [DatabaseModule, AuthModule, ZonesModule],
@@ -17,6 +18,7 @@ import { SafetyAlertReviewService } from './alerts/safety-alert-review.service.j
     DurableGroupingService,
     SafetyAlertQueryService,
     SafetyAlertReviewService,
+    SafetyAlertEvidenceService,
     SafetyAlertAccessGuard,
   ],
   exports: [AlertCandidateEvaluator, DurableGroupingService],

@@ -43,6 +43,7 @@ export type {
   SafetyAlertStatus,
   SafetyAlertResponse,
   SafetyAlertDetectionResponse,
+  SafetyAlertEvidenceResponse,
   SafetyAlertDetailResponse,
   SafetyAlertReviewTargetStatus,
   SafetyAlertReviewResponse,

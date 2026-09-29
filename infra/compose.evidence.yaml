@@ -1,0 +1,9 @@
+services:
+  backend:
+    environment:
+      EVIDENCE_LOCAL_ROOT: /var/lib/smartsite/evidence
+    volumes:
+      - type: bind
+        source: ${EVIDENCE_LOCAL_HOST_ROOT:?Set EVIDENCE_LOCAL_HOST_ROOT to the canonical evidence directory}
+        target: /var/lib/smartsite/evidence
+        read_only: true
