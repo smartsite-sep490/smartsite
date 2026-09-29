@@ -52,6 +52,15 @@ function samePolygon(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+export function hasGlobalAdminRole(user) {
+  return (
+    Array.isArray(user?.roleAssignments) &&
+    user.roleAssignments.some(
+      (assignment) => assignment?.role === 'ADMIN' && assignment?.siteId === null,
+    )
+  );
+}
+
 function assertZone(zone, expected, label) {
   if (
     zone.type !== expected.type ||
@@ -245,13 +254,20 @@ export class DemoApiClient {
   }
 
   login(username, password) {
-    return this.request('POST', '/auth/login', undefined, { username, password });
+    return this.request('POST', '/auth/login', undefined, {
+      username,
+      password,
+      clientType: 'MOBILE',
+    });
   }
   changePassword(token, currentPassword, newPassword) {
     return this.request('POST', '/auth/change-password', token, { currentPassword, newPassword });
   }
-  logout(token) {
-    return this.request('POST', '/auth/logout', token);
+  logout(refreshToken) {
+    return this.request('POST', '/auth/logout', undefined, {
+      clientType: 'MOBILE',
+      refreshToken,
+    });
   }
   listSites(token) {
     return this.listAll('/sites', token);
@@ -322,9 +338,11 @@ async function main() {
     process.env.SMARTSITE_DEMO_BACKEND_URL ?? 'http://127.0.0.1:3000',
   );
   let accessToken;
+  let refreshToken;
   try {
     let session = await client.login(username, password);
     accessToken = session.accessToken;
+    refreshToken = session.refreshToken;
     if (session.user.mustChangePassword) {
       const replacement = process.env.SMARTSITE_DEMO_ADMIN_NEW_PASSWORD;
       if (!replacement) {
@@ -333,19 +351,21 @@ async function main() {
         );
       }
       await client.changePassword(accessToken, password, replacement);
-      await client.logout(accessToken).catch(() => undefined);
+      await client.logout(refreshToken).catch(() => undefined);
       accessToken = undefined;
+      refreshToken = undefined;
       password = replacement;
       session = await client.login(username, password);
       accessToken = session.accessToken;
+      refreshToken = session.refreshToken;
     }
-    if (session.user.role !== 'ADMIN') {
+    if (!hasGlobalAdminRole(session.user)) {
       throw new Error('The demo setup requires an Admin account.');
     }
     const result = await ensureDemoConfiguration(client, accessToken);
     console.log(JSON.stringify(result, null, 2));
   } finally {
-    if (accessToken) await client.logout(accessToken).catch(() => undefined);
+    if (refreshToken) await client.logout(refreshToken).catch(() => undefined);
   }
 }
 
