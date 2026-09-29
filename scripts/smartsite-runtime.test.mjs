@@ -296,6 +296,27 @@ test('matches a tracked PID only when its creation time and command fingerprint 
   assert.equal(processIdentityMatches(undefined, expected), false);
 });
 
+test('failed cleanup requires an explicit stop before another start even when AI PIDs exited', () => {
+  assert.throws(
+    () =>
+      decideStart({ stage: 'cleanup-required', source: 'mp4', processes: {} }, 'mp4', () => false),
+    /cleanup.*stop/i,
+  );
+  assert.throws(
+    () =>
+      decideStart(
+        {
+          stage: 'cleanup-required',
+          source: 'mp4',
+          processes: { aiApi: { pid: 101 }, aiSource: { pid: 102 } },
+        },
+        'mp4',
+        () => true,
+      ),
+    /cleanup.*stop/i,
+  );
+});
+
 test(
   'Windows process inspection script returns a real creation timestamp for the current process',
   { skip: process.platform !== 'win32' },

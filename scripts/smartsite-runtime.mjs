@@ -411,7 +411,8 @@ async function start(config, source, build) {
         cwd: config.aiRepo,
         env: aiEnvironment.api,
         logsRoot: paths.logsRoot,
-        discardOutput: source === 'tapo',
+        // Uvicorn WebSocket access logs include the URL's local credential.
+        discardOutput: true,
       });
       await writeJsonAtomically(paths.statePath, makeState('starting-ai-api'));
     }

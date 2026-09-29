@@ -54,13 +54,16 @@ pnpm demo:runtime -- stop --config D:\SmartSiteData\runtime\control.json
 Use `laptop` for camera device `0`, or `tapo` after the workstation and camera are reachable on the
 same LAN. Starting the same live profile twice is idempotent. Starting a different profile while a
 runtime is live fails and requires an explicit `stop` first.
+If startup cleanup fails, the controller preserves a `cleanup-required` state and requires `stop`
+before another start.
 
 `status` distinguishes process state from HTTP health. AI API readiness proves only that FastAPI is
 ready. For MP4, YOLO11s and the replay source are opened when the Web realtime client connects. A
 finite MP4 worker normally exits at EOF; running `start --source mp4` again replays that source without
 restarting the healthy API.
 
-Logs for non-credentialed MP4/laptop sources are written under `<dataRoot>/control/logs`. Operator
+Worker logs for non-credentialed MP4/laptop sources are written under `<dataRoot>/control/logs`. API
+output is discarded because Uvicorn WebSocket access logs include the local credential in the URL. Operator
 output is scrubbed for RTSP credentials, Bearer headers, tokens and passwords. Tapo AI child output
 is discarded because native OpenCV/FFmpeg diagnostics cannot be guaranteed to redact an RTSP URI.
 Use the credential-safe source probe and controller health output for that profile. `stop` terminates

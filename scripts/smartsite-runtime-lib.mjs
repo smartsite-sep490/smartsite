@@ -317,6 +317,9 @@ export function validateRuntimeInputs(config, demoConfiguration, sourceManifest)
 }
 
 export function decideStart(state, source, isProcessAlive) {
+  if (state?.stage === 'cleanup-required') {
+    throw new Error('runtime cleanup is incomplete; run stop before starting again');
+  }
   if (!SOURCES.has(source)) {
     throw new Error('source must be one of mp4, laptop, tapo');
   }
