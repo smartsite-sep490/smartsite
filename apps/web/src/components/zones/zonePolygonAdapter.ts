@@ -25,6 +25,54 @@ export interface ResolvedPolygonState {
   points: NormalizedPoint[];
   isDraft: boolean;
   isAuthoritative: boolean;
+  staleDraftVersion: number | null;
+}
+
+export interface ScopedZoneDraft {
+  baseConfigurationVersion: number;
+  points: NormalizedPoint[];
+  savedAt: string;
+}
+
+export interface LoadLocalDraftResult {
+  status: 'valid' | 'stale' | 'none';
+  points: NormalizedPoint[] | null;
+  baseConfigurationVersion: number | null;
+  staleVersion?: number;
+}
+
+export interface ResolveActivePolygonOptions {
+  siteId?: string;
+  cameraId?: string;
+  regionId?: string;
+  cameraConfigurationVersion?: number;
+  backendPolygon?: unknown;
+  fallback?: NormalizedPoint[];
+}
+
+export interface SavePolygonMutationVariables {
+  userId: string;
+  token?: string;
+  siteId: string;
+  cameraId: string;
+  regionId: string;
+  cameraLabel: string;
+  expectedConfigurationVersion: number;
+  points: NormalizedPoint[];
+}
+
+export interface ActiveScope {
+  userId: string | null;
+  siteId: string;
+  cameraId: string;
+  regionId: string;
+}
+
+export interface MutationCallbackPlan {
+  invalidateSiteCamerasKey: [string, string, string, string, string];
+  invalidateCameraRegionsKey: [string, string, string, string, string, string];
+  draftScopeToClear: { siteId: string; cameraId: string; regionId: string };
+  shouldUpdateVisibleUi: boolean;
 }
 
 function isValidCoordinatePair(value: unknown): value is [number, number] {
@@ -139,13 +187,19 @@ export function saveLocalDraft(
   siteId: string,
   cameraId: string,
   regionId: string = 'default',
+  baseConfigurationVersion: number,
   points: NormalizedPoint[],
 ): void {
   try {
     const storage = getStorage();
     if (!storage) return;
     const key = getDraftStorageKey(siteId, cameraId, regionId);
-    storage.setItem(key, JSON.stringify(points));
+    const draft: ScopedZoneDraft = {
+      baseConfigurationVersion,
+      points,
+      savedAt: new Date().toISOString(),
+    };
+    storage.setItem(key, JSON.stringify(draft));
   } catch {
     // Ignore browser storage write failures
   }
@@ -155,22 +209,84 @@ export function loadLocalDraft(
   siteId: string,
   cameraId: string,
   regionId: string = 'default',
-): NormalizedPoint[] | null {
+  currentConfigurationVersion?: number,
+): LoadLocalDraftResult {
+  const emptyResult: LoadLocalDraftResult = {
+    status: 'none',
+    points: null,
+    baseConfigurationVersion: null,
+  };
+
   try {
     const storage = getStorage();
-    if (!storage) return null;
+    if (!storage) return emptyResult;
     const key = getDraftStorageKey(siteId, cameraId, regionId);
     const item = storage.getItem(key);
-    if (!item) return null;
+    if (!item) return emptyResult;
 
-    const parsed = JSON.parse(item) as unknown;
-    if (Array.isArray(parsed) && parsed.length >= 3 && parsed.every(isValidCoordinatePair)) {
-      return parsed.map(([x, y]) => [x, y]);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(item);
+    } catch {
+      // Malformed JSON: reject and clean up
+      storage.removeItem(key);
+      return emptyResult;
     }
+
+    // Migration-safe parsing:
+    // Reject legacy unversioned array format: [[x, y], ...]
+    if (Array.isArray(parsed)) {
+      storage.removeItem(key);
+      return emptyResult;
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !('baseConfigurationVersion' in parsed) ||
+      !('points' in parsed)
+    ) {
+      storage.removeItem(key);
+      return emptyResult;
+    }
+
+    const rawVersion = (parsed as { baseConfigurationVersion: unknown }).baseConfigurationVersion;
+    const rawPoints = (parsed as { points: unknown }).points;
+
+    if (
+      typeof rawVersion !== 'number' ||
+      !Number.isInteger(rawVersion) ||
+      rawVersion < 0 ||
+      !Array.isArray(rawPoints) ||
+      rawPoints.length < 3 ||
+      !rawPoints.every(isValidCoordinatePair)
+    ) {
+      // Corrupted / malformed record: reject and clean up
+      storage.removeItem(key);
+      return emptyResult;
+    }
+
+    const version = rawVersion;
+    const points: NormalizedPoint[] = rawPoints.map(([x, y]) => [x, y]);
+
+    // Check remote version change if currentConfigurationVersion provided
+    if (currentConfigurationVersion !== undefined && version !== currentConfigurationVersion) {
+      return {
+        status: 'stale',
+        points: null,
+        baseConfigurationVersion: version,
+        staleVersion: version,
+      };
+    }
+
+    return {
+      status: 'valid',
+      points,
+      baseConfigurationVersion: version,
+    };
   } catch {
-    // Ignore storage parse errors
+    return emptyResult;
   }
-  return null;
 }
 
 export function clearLocalDraft(
@@ -192,22 +308,28 @@ export function resolveActivePolygon({
   siteId,
   cameraId,
   regionId,
+  cameraConfigurationVersion,
   backendPolygon,
   fallback = DEFAULT_ZONE_POLYGON,
-}: {
-  siteId?: string;
-  cameraId?: string;
-  regionId?: string;
-  backendPolygon?: unknown;
-  fallback?: NormalizedPoint[];
-}): ResolvedPolygonState {
+}: ResolveActivePolygonOptions): ResolvedPolygonState {
   if (siteId && cameraId) {
-    const draft = loadLocalDraft(siteId, cameraId, regionId);
-    if (draft) {
+    const draftResult = loadLocalDraft(siteId, cameraId, regionId, cameraConfigurationVersion);
+    if (draftResult.status === 'valid' && draftResult.points) {
       return {
-        points: draft,
+        points: draftResult.points,
         isDraft: true,
         isAuthoritative: false,
+        staleDraftVersion: null,
+      };
+    }
+    if (draftResult.status === 'stale') {
+      // Remote version changed: load authoritative server polygon, never silently apply stale draft!
+      const authoritativePoints = backendPolygonToPoints(backendPolygon, fallback);
+      return {
+        points: authoritativePoints,
+        isDraft: false,
+        isAuthoritative: true,
+        staleDraftVersion: draftResult.staleVersion ?? null,
       };
     }
   }
@@ -217,5 +339,43 @@ export function resolveActivePolygon({
     points: authoritativePoints,
     isDraft: false,
     isAuthoritative: true,
+    staleDraftVersion: null,
+  };
+}
+
+export function isMutationScopeActive(
+  activeScope: ActiveScope | null | undefined,
+  variables: SavePolygonMutationVariables,
+): boolean {
+  if (!activeScope || !activeScope.userId) return false;
+  return (
+    activeScope.userId === variables.userId &&
+    activeScope.siteId === variables.siteId &&
+    activeScope.cameraId === variables.cameraId &&
+    activeScope.regionId === variables.regionId
+  );
+}
+
+export function planMutationCompletion(
+  apiUrl: string,
+  variables: SavePolygonMutationVariables,
+  activeScope: ActiveScope | null | undefined,
+): MutationCallbackPlan {
+  return {
+    invalidateSiteCamerasKey: ['zone-admin', apiUrl, variables.userId, variables.siteId, 'cameras'],
+    invalidateCameraRegionsKey: [
+      'zone-admin',
+      apiUrl,
+      variables.userId,
+      variables.siteId,
+      variables.cameraId,
+      'regions',
+    ],
+    draftScopeToClear: {
+      siteId: variables.siteId,
+      cameraId: variables.cameraId,
+      regionId: variables.regionId,
+    },
+    shouldUpdateVisibleUi: isMutationScopeActive(activeScope, variables),
   };
 }

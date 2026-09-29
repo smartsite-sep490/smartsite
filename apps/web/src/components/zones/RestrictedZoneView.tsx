@@ -43,9 +43,13 @@ import {
   clearLocalDraft,
   formatConflictMessage,
   isConflictError,
+  planMutationCompletion,
   preparePolygonSave,
   resolveActivePolygon,
   saveLocalDraft,
+  type ActiveScope,
+  type RegionMutationResponse,
+  type SavePolygonMutationVariables,
 } from './zonePolygonAdapter';
 
 interface ZoneReviewItem {
@@ -83,6 +87,14 @@ export function RestrictedZoneView({
   const [requestedRegionId, setRequestedRegionId] = useState('');
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [isDraftMode, setIsDraftMode] = useState(false);
+  const [staleDraftInfo, setStaleDraftInfo] = useState<{ version: number } | null>(null);
+
+  const activeScopeRef = useRef<ActiveScope>({
+    userId: null,
+    siteId: '',
+    cameraId: '',
+    regionId: '',
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -101,6 +113,7 @@ export function RestrictedZoneView({
     const resolved = resolveActivePolygon({
       siteId: 'demo-site',
       cameraId: 'camera-04',
+      cameraConfigurationVersion: 0,
       fallback: DEFAULT_ZONE_POLYGON,
     });
     return resolved.points;
@@ -361,6 +374,7 @@ export function RestrictedZoneView({
     setRequestedRegionId('');
     setConflictMessage(null);
     setIsDraftMode(false);
+    setStaleDraftInfo(null);
     if (current) void client.logout('WEB').catch(() => undefined);
   };
 
@@ -420,6 +434,15 @@ export function RestrictedZoneView({
     [selectableRegions, selectedRegionId],
   );
 
+  useEffect(() => {
+    activeScopeRef.current = {
+      userId: session?.user.id ?? null,
+      siteId: selectedSiteId,
+      cameraId: selectedCameraId,
+      regionId: selectedRegionId,
+    };
+  }, [session?.user.id, selectedSiteId, selectedCameraId, selectedRegionId]);
+
   const currentScopeKey = session
     ? `${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
     : 'fallback-camera-04';
@@ -432,70 +455,111 @@ export function RestrictedZoneView({
       siteId: selectedSiteId || undefined,
       cameraId: selectedCameraId || undefined,
       regionId: selectedRegion?.id,
+      cameraConfigurationVersion: selectedCamera?.configurationVersion,
       backendPolygon: selectedRegion?.polygon,
       fallback: DEFAULT_ZONE_POLYGON,
     });
     setZonePolygon(resolved.points);
     setIsDraftMode(resolved.isDraft);
+    setStaleDraftInfo(
+      resolved.staleDraftVersion !== null ? { version: resolved.staleDraftVersion } : null,
+    );
     setIsEditingZone(false);
   }
 
-  const savePolygonMutation = useMutation({
-    mutationFn: async () => {
-      if (!session || !apiToken) throw new Error('Sign in as Admin before saving to backend.');
-      if (!selectedSiteId || !selectedCamera || !selectedRegion) {
-        throw new Error('Select a site, camera, and region first.');
+  const savePolygonMutation = useMutation<
+    RegionMutationResponse,
+    unknown,
+    SavePolygonMutationVariables
+  >({
+    mutationFn: async (vars: SavePolygonMutationVariables) => {
+      const token = vars.token || activeSession.current?.token;
+      if (!token || !activeSession.current || activeSession.current.userId !== vars.userId) {
+        throw new Error('Sign in as Admin before saving to backend.');
       }
-      const payload = preparePolygonSave(selectedCamera, zonePolygon);
-      return client.updatePolygon(
-        apiToken,
-        selectedSiteId,
-        selectedCamera.id,
-        selectedRegion.id,
-        payload,
+      const payload = preparePolygonSave(
+        { configurationVersion: vars.expectedConfigurationVersion },
+        vars.points,
       );
+      return client.updatePolygon(token, vars.siteId, vars.cameraId, vars.regionId, payload);
     },
-    onSuccess: async (mutationResult) => {
-      setConflictMessage(null);
-      clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion?.id);
-      setIsDraftMode(false);
-      setIsEditingZone(false);
-      setSaveStatusMessage(
-        `Saved polygon to ${selectedCamera?.code || 'camera'} (version ${mutationResult.configurationVersion}).`,
+    onSuccess: async (mutationResult, vars) => {
+      const plan = planMutationCompletion(apiUrl, vars, activeScopeRef.current);
+
+      // Always clear the draft and invalidate queries for the saved scope
+      clearLocalDraft(
+        plan.draftScopeToClear.siteId,
+        plan.draftScopeToClear.cameraId,
+        plan.draftScopeToClear.regionId,
       );
-      setTimeout(() => setSaveStatusMessage(null), 5000);
-      await queryClient.invalidateQueries({
-        queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
-      });
-    },
-    onError: async (error) => {
-      if (isConflictError(error)) {
-        const msg = formatConflictMessage(selectedCamera?.externalId || selectedCamera?.code);
-        setConflictMessage(msg);
-        await queryClient.invalidateQueries({
-          queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
-        });
-      } else {
-        setSaveStatusMessage(error instanceof Error ? error.message : 'Save failed');
+      await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
+      await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
+
+      // Only update visible UI if the operator is still on the same scope
+      if (plan.shouldUpdateVisibleUi) {
+        setConflictMessage(null);
+        setStaleDraftInfo(null);
+        setIsDraftMode(false);
+        setIsEditingZone(false);
+        setSaveStatusMessage(
+          `Saved polygon to ${vars.cameraLabel} (version ${mutationResult.configurationVersion}).`,
+        );
         setTimeout(() => setSaveStatusMessage(null), 5000);
+      }
+    },
+    onError: async (error, vars) => {
+      const plan = planMutationCompletion(apiUrl, vars, activeScopeRef.current);
+
+      if (isConflictError(error)) {
+        await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
+        await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
+      }
+
+      if (plan.shouldUpdateVisibleUi) {
+        if (isConflictError(error)) {
+          setConflictMessage(formatConflictMessage(vars.cameraLabel));
+        } else {
+          setSaveStatusMessage(error instanceof Error ? error.message : 'Save failed');
+          setTimeout(() => setSaveStatusMessage(null), 5000);
+        }
       }
     },
   });
 
+  const handleSaveToBackend = () => {
+    if (!session || !apiToken) return;
+    if (!selectedSiteId || !selectedCamera || !selectedRegion) return;
+    const vars: SavePolygonMutationVariables = {
+      userId: session.user.id,
+      token: apiToken,
+      siteId: selectedSiteId,
+      cameraId: selectedCamera.id,
+      regionId: selectedRegion.id,
+      cameraLabel: selectedCamera.code || selectedCamera.name || 'camera',
+      expectedConfigurationVersion: selectedCamera.configurationVersion,
+      points: zonePolygon,
+    };
+    savePolygonMutation.mutate(vars);
+  };
+
   const saveDraft = () => {
-    if (session && selectedSiteId && selectedCameraId) {
-      saveLocalDraft(selectedSiteId, selectedCameraId, selectedRegion?.id, zonePolygon);
+    if (session && selectedSiteId && selectedCameraId && selectedCamera) {
+      saveLocalDraft(
+        selectedSiteId,
+        selectedCameraId,
+        selectedRegion?.id,
+        selectedCamera.configurationVersion,
+        zonePolygon,
+      );
       setIsDraftMode(true);
-      setSaveStatusMessage('Saved local draft (unsaved on server).');
+      setStaleDraftInfo(null);
+      setSaveStatusMessage(
+        `Saved local draft for ${selectedCamera.code} v${selectedCamera.configurationVersion} (unsaved on server).`,
+      );
     } else {
-      saveLocalDraft('demo-site', 'camera-04', 'default', zonePolygon);
+      saveLocalDraft('demo-site', 'camera-04', 'default', 0, zonePolygon);
       setIsDraftMode(true);
+      setStaleDraftInfo(null);
       setSaveStatusMessage('Saved to browser local storage (camera-04 draft).');
     }
     setIsEditingZone(false);
@@ -509,11 +573,13 @@ export function RestrictedZoneView({
       setZonePolygon(authoritative);
       setIsDraftMode(false);
       setConflictMessage(null);
+      setStaleDraftInfo(null);
       setSaveStatusMessage('Restored authoritative server polygon.');
     } else {
       clearLocalDraft('demo-site', 'camera-04', 'default');
       setZonePolygon(DEFAULT_ZONE_POLYGON);
       setIsDraftMode(false);
+      setStaleDraftInfo(null);
       setSaveStatusMessage('Reset to default region.');
     }
     setTimeout(() => setSaveStatusMessage(null), 4000);
@@ -811,6 +877,38 @@ export function RestrictedZoneView({
         </div>
       )}
 
+      {/* Stale Draft Warning Banner */}
+      {staleDraftInfo && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+        >
+          <div className="flex items-start gap-3">
+            <IconAlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                Outdated Local Draft Detected
+              </h4>
+              <p className="mt-0.5 text-xs text-amber-700">
+                An unsaved local draft created against camera configuration version v{staleDraftInfo.version} was detected, but the camera is now at version v{selectedCamera?.configurationVersion ?? 0}. Authoritative server geometry was loaded to protect against overwriting updates.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedSiteId && selectedCameraId) {
+                clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion?.id);
+              }
+              setStaleDraftInfo(null);
+            }}
+            className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-800 whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+          >
+            Discard Stale Draft
+          </button>
+        </div>
+      )}
+
       {/* HTTP 409 Conflict Banner */}
       {conflictMessage && (
         <div
@@ -961,7 +1059,7 @@ export function RestrictedZoneView({
                   <>
                     {session && selectedCamera && selectedRegion ? (
                       <button
-                        onClick={() => savePolygonMutation.mutate()}
+                        onClick={handleSaveToBackend}
                         disabled={savePolygonMutation.isPending}
                         className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
                       >

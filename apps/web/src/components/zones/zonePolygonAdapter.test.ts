@@ -12,6 +12,8 @@ import {
   loadLocalDraft,
   clearLocalDraft,
   DEFAULT_ZONE_POLYGON,
+  isMutationScopeActive,
+  planMutationCompletion,
 } from './zonePolygonAdapter';
 
 describe('zonePolygonAdapter', () => {
@@ -201,21 +203,75 @@ describe('zonePolygonAdapter', () => {
       vi.unstubAllGlobals();
     });
 
-    it('saves and loads draft only for the exact siteId, cameraId, and regionId', () => {
+    it('saves and loads draft with baseConfigurationVersion for matching camera version', () => {
       const points: [number, number][] = [
         [0.2, 0.3],
         [0.7, 0.3],
         [0.7, 0.8],
       ];
-      saveLocalDraft('site-A', 'cam-1', 'reg-1', points);
+      saveLocalDraft('site-A', 'cam-1', 'reg-1', 4, points);
 
-      expect(loadLocalDraft('site-A', 'cam-1', 'reg-1')).toEqual(points);
+      const loaded = loadLocalDraft('site-A', 'cam-1', 'reg-1', 4);
+      expect(loaded.status).toBe('valid');
+      expect(loaded.points).toEqual(points);
+      expect(loaded.baseConfigurationVersion).toBe(4);
+
       // Different region
-      expect(loadLocalDraft('site-A', 'cam-1', 'reg-2')).toBeNull();
+      expect(loadLocalDraft('site-A', 'cam-1', 'reg-2', 4).status).toBe('none');
       // Different camera
-      expect(loadLocalDraft('site-A', 'cam-2', 'reg-1')).toBeNull();
+      expect(loadLocalDraft('site-A', 'cam-2', 'reg-1', 4).status).toBe('none');
       // Different site
-      expect(loadLocalDraft('site-B', 'cam-1', 'reg-1')).toBeNull();
+      expect(loadLocalDraft('site-B', 'cam-1', 'reg-1', 4).status).toBe('none');
+    });
+
+    it('detects remote version change: flags draft as stale and does not return points as valid', () => {
+      const points: [number, number][] = [
+        [0.2, 0.3],
+        [0.7, 0.3],
+        [0.7, 0.8],
+      ];
+      // Saved against camera version 4
+      saveLocalDraft('site-A', 'cam-1', 'reg-1', 4, points);
+
+      // Server updated camera to version 5
+      const loaded = loadLocalDraft('site-A', 'cam-1', 'reg-1', 5);
+      expect(loaded.status).toBe('stale');
+      expect(loaded.staleVersion).toBe(4);
+      expect(loaded.points).toBeNull();
+    });
+
+    it('migration-safe parsing: rejects and cleans up legacy raw array records', () => {
+      // Legacy unversioned draft format: raw point array
+      fakeStorage.set(
+        'smartsite.restricted-zone.draft:site-A:cam-1:reg-1',
+        JSON.stringify([
+          [0.1, 0.1],
+          [0.9, 0.1],
+          [0.9, 0.9],
+        ]),
+      );
+
+      const loaded = loadLocalDraft('site-A', 'cam-1', 'reg-1', 1);
+      expect(loaded.status).toBe('none');
+      expect(loaded.points).toBeNull();
+      // Verifies storage was cleaned up
+      expect(fakeStorage.has('smartsite.restricted-zone.draft:site-A:cam-1:reg-1')).toBe(false);
+    });
+
+    it('migration-safe parsing: rejects and cleans up malformed JSON or corrupted records', () => {
+      fakeStorage.set('smartsite.restricted-zone.draft:site-A:cam-1:reg-1', 'invalid json{');
+      const loaded = loadLocalDraft('site-A', 'cam-1', 'reg-1', 1);
+      expect(loaded.status).toBe('none');
+      expect(loaded.points).toBeNull();
+      expect(fakeStorage.has('smartsite.restricted-zone.draft:site-A:cam-1:reg-1')).toBe(false);
+
+      // Missing points or invalid version
+      fakeStorage.set(
+        'smartsite.restricted-zone.draft:site-A:cam-1:reg-1',
+        JSON.stringify({ baseConfigurationVersion: 'invalid', points: [] }),
+      );
+      expect(loadLocalDraft('site-A', 'cam-1', 'reg-1', 1).status).toBe('none');
+      expect(fakeStorage.has('smartsite.restricted-zone.draft:site-A:cam-1:reg-1')).toBe(false);
     });
 
     it('clears draft for a specific camera region', () => {
@@ -224,9 +280,9 @@ describe('zonePolygonAdapter', () => {
         [0.7, 0.3],
         [0.7, 0.8],
       ];
-      saveLocalDraft('site-A', 'cam-1', 'reg-1', points);
+      saveLocalDraft('site-A', 'cam-1', 'reg-1', 2, points);
       clearLocalDraft('site-A', 'cam-1', 'reg-1');
-      expect(loadLocalDraft('site-A', 'cam-1', 'reg-1')).toBeNull();
+      expect(loadLocalDraft('site-A', 'cam-1', 'reg-1', 2).status).toBe('none');
     });
 
     it('resolveActivePolygon treats backend polygon as authoritative when no matching draft exists', () => {
@@ -238,7 +294,7 @@ describe('zonePolygonAdapter', () => {
         ],
       };
       // Save draft for another camera
-      saveLocalDraft('site-A', 'cam-999', 'reg-999', [
+      saveLocalDraft('site-A', 'cam-999', 'reg-999', 1, [
         [0.9, 0.9],
         [0.9, 0.95],
         [0.95, 0.95],
@@ -248,6 +304,7 @@ describe('zonePolygonAdapter', () => {
         siteId: 'site-A',
         cameraId: 'cam-1',
         regionId: 'reg-1',
+        cameraConfigurationVersion: 1,
         backendPolygon,
       });
 
@@ -258,9 +315,10 @@ describe('zonePolygonAdapter', () => {
       ]);
       expect(state.isDraft).toBe(false);
       expect(state.isAuthoritative).toBe(true);
+      expect(state.staleDraftVersion).toBeNull();
     });
 
-    it('resolveActivePolygon detects matching local draft and flags it as unsaved draft', () => {
+    it('resolveActivePolygon loads draft when baseConfigurationVersion matches camera version', () => {
       const backendPolygon = {
         coordinates: [
           [0.3, 0.3],
@@ -273,18 +331,180 @@ describe('zonePolygonAdapter', () => {
         [0.7, 0.4],
         [0.7, 0.7],
       ];
-      saveLocalDraft('site-A', 'cam-1', 'reg-1', draftPoints);
+      saveLocalDraft('site-A', 'cam-1', 'reg-1', 3, draftPoints);
 
       const state = resolveActivePolygon({
         siteId: 'site-A',
         cameraId: 'cam-1',
         regionId: 'reg-1',
+        cameraConfigurationVersion: 3,
         backendPolygon,
       });
 
       expect(state.points).toEqual(draftPoints);
       expect(state.isDraft).toBe(true);
       expect(state.isAuthoritative).toBe(false);
+      expect(state.staleDraftVersion).toBeNull();
+    });
+
+    it('resolveActivePolygon surfaces stale draft on remote version change and never silently applies it', () => {
+      const backendPolygon = {
+        coordinates: [
+          [0.3, 0.3],
+          [0.6, 0.3],
+          [0.6, 0.6],
+        ],
+      };
+      const draftPoints: [number, number][] = [
+        [0.4, 0.4],
+        [0.7, 0.4],
+        [0.7, 0.7],
+      ];
+      // Saved on version 2
+      saveLocalDraft('site-A', 'cam-1', 'reg-1', 2, draftPoints);
+
+      // Server is now on version 3
+      const state = resolveActivePolygon({
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+        cameraConfigurationVersion: 3,
+        backendPolygon,
+      });
+
+      // Must load server authoritative points, NOT draft points!
+      expect(state.points).toEqual([
+        [0.3, 0.3],
+        [0.6, 0.3],
+        [0.6, 0.6],
+      ]);
+      expect(state.isDraft).toBe(false);
+      expect(state.isAuthoritative).toBe(true);
+      // Surfaces stale draft version so UI can notify operator explicitly
+      expect(state.staleDraftVersion).toBe(2);
+    });
+  });
+
+  describe('concurrency and mutation scope race conditions', () => {
+    const mutationVars = {
+      userId: 'user-admin-1',
+      siteId: 'site-A',
+      cameraId: 'cam-1',
+      regionId: 'reg-1',
+      cameraLabel: 'CAM-01',
+      expectedConfigurationVersion: 3,
+      points: [
+        [0.1, 0.1],
+        [0.8, 0.1],
+        [0.8, 0.8],
+      ] as [number, number][],
+    };
+
+    it('isMutationScopeActive returns true when active scope matches mutation variables exactly', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      };
+      expect(isMutationScopeActive(activeScope, mutationVars)).toBe(true);
+    });
+
+    it('isMutationScopeActive returns false when operator switched camera during save in flight', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-A',
+        cameraId: 'cam-2', // switched to cam-2
+        regionId: 'reg-1',
+      };
+      expect(isMutationScopeActive(activeScope, mutationVars)).toBe(false);
+    });
+
+    it('isMutationScopeActive returns false when operator switched region during save in flight', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-2', // switched to reg-2
+      };
+      expect(isMutationScopeActive(activeScope, mutationVars)).toBe(false);
+    });
+
+    it('isMutationScopeActive returns false when operator switched site during save in flight', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-B', // switched to site-B
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      };
+      expect(isMutationScopeActive(activeScope, mutationVars)).toBe(false);
+    });
+
+    it('isMutationScopeActive returns false when operator logged out during save in flight', () => {
+      expect(isMutationScopeActive(null, mutationVars)).toBe(false);
+      expect(
+        isMutationScopeActive(
+          { userId: null, siteId: 'site-A', cameraId: 'cam-1', regionId: 'reg-1' },
+          mutationVars,
+        ),
+      ).toBe(false);
+      expect(
+        isMutationScopeActive(
+          { userId: 'user-other', siteId: 'site-A', cameraId: 'cam-1', regionId: 'reg-1' },
+          mutationVars,
+        ),
+      ).toBe(false);
+    });
+
+    it('planMutationCompletion always targets the saved scope for cache invalidation and draft clearing', () => {
+      // Operator switched to cam-2 while cam-1 save was pending
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-A',
+        cameraId: 'cam-2',
+        regionId: 'reg-1',
+      };
+
+      const plan = planMutationCompletion('http://localhost:3000', mutationVars, activeScope);
+
+      // Invalidation MUST target cam-1 (the scope of the mutation), not cam-2!
+      expect(plan.invalidateSiteCamerasKey).toEqual([
+        'zone-admin',
+        'http://localhost:3000',
+        'user-admin-1',
+        'site-A',
+        'cameras',
+      ]);
+      expect(plan.invalidateCameraRegionsKey).toEqual([
+        'zone-admin',
+        'http://localhost:3000',
+        'user-admin-1',
+        'site-A',
+        'cam-1',
+        'regions',
+      ]);
+
+      // Draft cleared MUST target cam-1, preserving cam-2's draft!
+      expect(plan.draftScopeToClear).toEqual({
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      });
+
+      // UI state of cam-2 must NOT be touched by cam-1's completion
+      expect(plan.shouldUpdateVisibleUi).toBe(false);
+    });
+
+    it('planMutationCompletion updates visible UI when scope still matches upon completion', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      };
+
+      const plan = planMutationCompletion('http://localhost:3000', mutationVars, activeScope);
+      expect(plan.shouldUpdateVisibleUi).toBe(true);
     });
   });
 });
