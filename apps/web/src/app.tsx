@@ -39,7 +39,7 @@ export function App() {
       )}
 
       {/* Tab: Restricted Zones (MF05) */}
-      {currentTab === 'zones' && <RestrictedZoneView />}
+      {currentTab === 'zones' && <RestrictedZoneView apiUrl={apiUrl} />}
 
       {/* Tab: PPE Monitoring (MF04) */}
       {currentTab === 'ppe' && <PpeMonitoringView />}
