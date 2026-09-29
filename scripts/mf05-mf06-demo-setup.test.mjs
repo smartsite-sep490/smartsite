@@ -20,8 +20,16 @@ test('recognizes only a global Admin role assignment', () => {
     }),
     false,
   );
+  assert.equal(
+    hasGlobalAdminRole({
+      roleAssignments: [{ role: 'ADMIN', siteId: 'site-1' }],
+    }),
+    false,
+  );
   assert.equal(hasGlobalAdminRole({ roleAssignments: [] }), false);
   assert.equal(hasGlobalAdminRole({}), false);
+  assert.equal(hasGlobalAdminRole(null), false);
+  assert.equal(hasGlobalAdminRole(undefined), false);
 });
 
 class FakeClient {
