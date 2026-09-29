@@ -3,13 +3,14 @@
  * carry technical evidence and the Backend's final access outcome separately.
  */
 export type FaceVerificationTechnicalOutcome =
-  | 'MATCHED'
-  | 'UNKNOWN'
-  | 'LOW_CONFIDENCE'
-  | 'QUALITY_FAILED'
-  | 'AI_UNAVAILABLE';
+  'MATCHED' | 'UNKNOWN' | 'LOW_CONFIDENCE' | 'QUALITY_FAILED' | 'AI_UNAVAILABLE';
 
 export type GateAuthorizationOutcome = 'ALLOWED' | 'DENIED' | 'MANUAL_REVIEW';
+
+export type FaceProfileStatus = 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+
+export type WorkerSiteZoneAssignmentStatus =
+  'PENDING' | 'SAFETY_REVIEWED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 export type FaceGateReasonCode =
   | 'MATCH_CONFIRMED'
@@ -18,11 +19,17 @@ export type FaceGateReasonCode =
   | 'FACE_QUALITY_FAILED'
   | 'FACE_SERVICE_UNAVAILABLE'
   | 'AUTHORIZATION_UNAVAILABLE'
+  | 'AUTHORIZATION_DATA_UNAVAILABLE'
   | 'WORKER_INACTIVE'
   | 'CONTRACTOR_INACTIVE'
+  | 'CONTRACTOR_SITE_PARTICIPATION_INVALID'
+  | 'FACE_PROFILE_REVOKED'
+  | 'FACE_PROFILE_REENROLL_REQUIRED'
   | 'ASSIGNMENT_MISSING'
+  | 'ASSIGNMENT_NOT_APPROVED'
   | 'ASSIGNMENT_EXPIRED'
-  | 'SITE_MISMATCH';
+  | 'SITE_MISMATCH'
+  | 'VALID_ASSIGNMENT';
 
 export interface FaceGateDecisionResponse {
   technicalOutcome: FaceVerificationTechnicalOutcome;

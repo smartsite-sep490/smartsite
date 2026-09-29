@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn, Unique } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
+import { ContractorEntity } from './contractor.entity.js';
 
 @Entity({ name: 'worker' })
 @Unique('uq_worker_site_external_id', ['siteId', 'externalId'])
@@ -10,6 +11,11 @@ export class WorkerEntity {
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'fk_worker_site', onDelete: 'RESTRICT' })
   siteId!: string;
+
+  /** Nullable only for legacy MF06 workers; gate authorization rejects it. */
+  @Column({ name: 'contractor_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorEntity, { name: 'fk_worker_contractor', onDelete: 'RESTRICT' })
+  contractorId!: string | null;
 
   @Column({ name: 'external_id', type: 'varchar', length: 128 })
   externalId!: string;

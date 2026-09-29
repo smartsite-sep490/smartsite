@@ -28,8 +28,10 @@ export type {
 export type {
   FaceGateDecisionResponse,
   FaceGateReasonCode,
+  FaceProfileStatus,
   FaceVerificationTechnicalOutcome,
   GateAuthorizationOutcome,
+  WorkerSiteZoneAssignmentStatus,
 } from './identity-access-api.js';
 
 export type {
