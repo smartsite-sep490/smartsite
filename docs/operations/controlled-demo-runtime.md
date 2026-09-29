@@ -72,6 +72,14 @@ PostgreSQL volume and evidence remain intact.
 
 ## Limitations
 
+The synchronized MP4 preview requires an AI build that supplies `previewVersion: 1`, JPEG pixels,
+and detections in one WebSocket message. Web paints those pixels and normalized boxes on one canvas;
+it does not use the separately playing fixture as a realtime background. Old metadata-only AI
+responses are rejected with an explicit unavailable state. Image decoding holds one active image
+and at most one latest pending frame; a five-second frame stall clears the realtime preview.
+The local timeline remains a separately labeled fallback. This preview is transient and does not
+replace the retained evidence served by the Backend alert-review endpoints.
+
 - The local Compose profile is a demonstration environment, not a production deployment.
 - A Tapo source cannot be claimed live until the source probe succeeds on the current network.
 - The realtime WebSocket overlay and the durable event worker are separate AI consumers. The
