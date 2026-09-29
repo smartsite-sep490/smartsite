@@ -30,6 +30,25 @@ test('local evidence root is optional but must be a trimmed absolute path', () =
   }
 });
 
+test('AI identity URL is optional and accepts only credential-free HTTP(S) origins', () => {
+  assert.equal(validateEnvironment({}).SMARTSITE_AI_IDENTITY_URL, undefined);
+  assert.equal(
+    validateEnvironment({ SMARTSITE_AI_IDENTITY_URL: 'http://127.0.0.1:8000' })
+      .SMARTSITE_AI_IDENTITY_URL,
+    'http://127.0.0.1:8000',
+  );
+  for (const SMARTSITE_AI_IDENTITY_URL of [
+    'not-a-url',
+    'ftp://ai.internal:8000',
+    'http://user:password@ai.internal:8000',
+  ]) {
+    assert.throws(
+      () => validateEnvironment({ SMARTSITE_AI_IDENTITY_URL }),
+      /SMARTSITE_AI_IDENTITY_URL/,
+    );
+  }
+});
+
 test('development accepts optional Admin bootstrap settings from environment', () => {
   const config = validateEnvironment({
     BOOTSTRAP_ADMIN_USERNAME: 'admin',

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { IsNotEmpty, IsString, MaxLength, Matches } from 'class-validator';
 import { DataSource, In, type EntityManager } from 'typeorm';
 import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
@@ -19,6 +19,8 @@ import {
   type FaceEnrollmentAdapter,
   type FaceEnrollmentCompletion,
 } from './face-enrollment.adapter.js';
+
+export const FACE_ENROLLMENT_ADAPTER = Symbol('FACE_ENROLLMENT_ADAPTER');
 
 const MAX_JPEG_BYTES = 5 * 1024 * 1024;
 
@@ -41,6 +43,7 @@ export class FaceEnrollmentService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly workforce: ContractorOperationsService,
+    @Inject(FACE_ENROLLMENT_ADAPTER)
     private readonly adapter: FaceEnrollmentAdapter = new UnavailableFaceEnrollmentAdapter(),
   ) {}
 
