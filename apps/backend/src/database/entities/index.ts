@@ -16,6 +16,8 @@ import { ContractorEntity } from './contractor.entity.js';
 import { ContractorSiteParticipationEntity } from './contractor-site-participation.entity.js';
 import { ContractorRepresentativeGrantEntity } from './contractor-representative-grant.entity.js';
 import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.entity.js';
+import { FaceProfileEntity } from './face-profile.entity.js';
+import { FaceEnrollmentSessionEntity } from './face-enrollment-session.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -37,6 +39,8 @@ export * from './contractor.entity.js';
 export * from './contractor-site-participation.entity.js';
 export * from './contractor-representative-grant.entity.js';
 export * from './worker-site-zone-assignment.entity.js';
+export * from './face-profile.entity.js';
+export * from './face-enrollment-session.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -57,4 +61,6 @@ export const ENTITIES = [
   ContractorSiteParticipationEntity,
   ContractorRepresentativeGrantEntity,
   WorkerSiteZoneAssignmentEntity,
+  FaceProfileEntity,
+  FaceEnrollmentSessionEntity,
 ] as const;

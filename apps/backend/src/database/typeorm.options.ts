@@ -8,6 +8,7 @@ import { ScopedJwtAuthentication1790553600000 } from './migrations/1790553600000
 import { Mf06ZoneAuthorization1790553600000 } from './migrations/1790553600000-Mf06ZoneAuthorization.js';
 import { SafetyAlertReviews1790640000000 } from './migrations/1790640000000-SafetyAlertReviews.js';
 import { IdentityAccessScope1790726400000 } from './migrations/1790726400000-IdentityAccessScope.js';
+import { FaceEnrollmentMetadata1790812800000 } from './migrations/1790812800000-FaceEnrollmentMetadata.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -32,6 +33,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf06ZoneAuthorization1790553600000,
       SafetyAlertReviews1790640000000,
       IdentityAccessScope1790726400000,
+      FaceEnrollmentMetadata1790812800000,
     ],
     logging: false,
     extra: {
