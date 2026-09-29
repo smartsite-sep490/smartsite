@@ -72,7 +72,6 @@ export interface MutationCallbackPlan {
   invalidateSiteCamerasKey: [string, string, string, string, string];
   invalidateCameraRegionsKey: [string, string, string, string, string, string];
   draftScopeToClear: { siteId: string; cameraId: string; regionId: string };
-  shouldUpdateVisibleUi: boolean;
 }
 
 function isValidCoordinatePair(value: unknown): value is [number, number] {
@@ -359,7 +358,6 @@ export function isMutationScopeActive(
 export function planMutationCompletion(
   apiUrl: string,
   variables: SavePolygonMutationVariables,
-  activeScope: ActiveScope | null | undefined,
 ): MutationCallbackPlan {
   return {
     invalidateSiteCamerasKey: ['zone-admin', apiUrl, variables.userId, variables.siteId, 'cameras'],
@@ -376,6 +374,5 @@ export function planMutationCompletion(
       cameraId: variables.cameraId,
       regionId: variables.regionId,
     },
-    shouldUpdateVisibleUi: isMutationScopeActive(activeScope, variables),
   };
 }

@@ -43,6 +43,7 @@ import {
   clearLocalDraft,
   formatConflictMessage,
   isConflictError,
+  isMutationScopeActive,
   planMutationCompletion,
   preparePolygonSave,
   resolveActivePolygon,
@@ -120,6 +121,33 @@ export function RestrictedZoneView({
   });
   const [isEditingZone, setIsEditingZone] = useState(false);
   const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearStatusMessage = useCallback(() => {
+    if (statusTimerRef.current !== null) {
+      clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = null;
+    }
+    setSaveStatusMessage(null);
+  }, []);
+
+  const showStatusMessage = useCallback((message: string, durationMs = 4000) => {
+    if (statusTimerRef.current !== null) {
+      clearTimeout(statusTimerRef.current);
+    }
+    setSaveStatusMessage(message);
+    statusTimerRef.current = setTimeout(() => {
+      statusTimerRef.current = null;
+      setSaveStatusMessage(null);
+    }, durationMs);
+  }, []);
+
+  const clearTransientFeedback = useCallback(() => {
+    clearStatusMessage();
+    setConflictMessage(null);
+  }, [clearStatusMessage]);
+
+  useEffect(() => clearStatusMessage, [clearStatusMessage]);
   const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
   const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'ACTIVE_ONLY'>('ALL');
@@ -366,13 +394,14 @@ export function RestrictedZoneView({
   const handleLogout = () => {
     const current = activeSession.current;
     activeSession.current = null;
+    activeScopeRef.current = { userId: null, siteId: '', cameraId: '', regionId: '' };
+    clearTransientFeedback();
     if (current) removeSessionQueries(current.userId);
     login.reset();
     setSession(null);
     setRequestedSiteId('');
     setRequestedCameraId('');
     setRequestedRegionId('');
-    setConflictMessage(null);
     setIsDraftMode(false);
     setStaleDraftInfo(null);
     if (current) void client.logout('WEB').catch(() => undefined);
@@ -446,11 +475,20 @@ export function RestrictedZoneView({
   const currentScopeKey = session
     ? `${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
     : 'fallback-camera-04';
+  const currentIdentityScopeKey = session
+    ? `${session.user.id}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}`
+    : 'fallback-camera-04';
 
   const [prevScopeKey, setPrevScopeKey] = useState(currentScopeKey);
+  const [prevIdentityScopeKey, setPrevIdentityScopeKey] = useState(currentIdentityScopeKey);
 
   if (prevScopeKey !== currentScopeKey) {
     setPrevScopeKey(currentScopeKey);
+    if (prevIdentityScopeKey !== currentIdentityScopeKey) {
+      setPrevIdentityScopeKey(currentIdentityScopeKey);
+      setConflictMessage(null);
+      setSaveStatusMessage(null);
+    }
     const resolved = resolveActivePolygon({
       siteId: selectedSiteId || undefined,
       cameraId: selectedCameraId || undefined,
@@ -484,7 +522,7 @@ export function RestrictedZoneView({
       return client.updatePolygon(token, vars.siteId, vars.cameraId, vars.regionId, payload);
     },
     onSuccess: async (mutationResult, vars) => {
-      const plan = planMutationCompletion(apiUrl, vars, activeScopeRef.current);
+      const plan = planMutationCompletion(apiUrl, vars);
 
       // Always clear the draft and invalidate queries for the saved scope
       clearLocalDraft(
@@ -495,32 +533,32 @@ export function RestrictedZoneView({
       await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
       await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
 
-      // Only update visible UI if the operator is still on the same scope
-      if (plan.shouldUpdateVisibleUi) {
+      // Invalidation is asynchronous. Re-evaluate the live scope after every
+      // await so a completion from camera A cannot modify camera B's UI.
+      if (isMutationScopeActive(activeScopeRef.current, vars)) {
         setConflictMessage(null);
         setStaleDraftInfo(null);
         setIsDraftMode(false);
         setIsEditingZone(false);
-        setSaveStatusMessage(
+        showStatusMessage(
           `Saved polygon to ${vars.cameraLabel} (version ${mutationResult.configurationVersion}).`,
+          5000,
         );
-        setTimeout(() => setSaveStatusMessage(null), 5000);
       }
     },
     onError: async (error, vars) => {
-      const plan = planMutationCompletion(apiUrl, vars, activeScopeRef.current);
+      const plan = planMutationCompletion(apiUrl, vars);
 
       if (isConflictError(error)) {
         await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
         await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
       }
 
-      if (plan.shouldUpdateVisibleUi) {
+      if (isMutationScopeActive(activeScopeRef.current, vars)) {
         if (isConflictError(error)) {
           setConflictMessage(formatConflictMessage(vars.cameraLabel));
         } else {
-          setSaveStatusMessage(error instanceof Error ? error.message : 'Save failed');
-          setTimeout(() => setSaveStatusMessage(null), 5000);
+          showStatusMessage(error instanceof Error ? error.message : 'Save failed', 5000);
         }
       }
     },
@@ -543,27 +581,30 @@ export function RestrictedZoneView({
   };
 
   const saveDraft = () => {
-    if (session && selectedSiteId && selectedCameraId && selectedCamera) {
+    if (session) {
+      if (!selectedSiteId || !selectedCameraId || !selectedCamera || !selectedRegion) {
+        showStatusMessage('Wait for a Site, Camera, and Region before saving a local draft.');
+        return;
+      }
       saveLocalDraft(
         selectedSiteId,
         selectedCameraId,
-        selectedRegion?.id,
+        selectedRegion.id,
         selectedCamera.configurationVersion,
         zonePolygon,
       );
       setIsDraftMode(true);
       setStaleDraftInfo(null);
-      setSaveStatusMessage(
+      showStatusMessage(
         `Saved local draft for ${selectedCamera.code} v${selectedCamera.configurationVersion} (unsaved on server).`,
       );
     } else {
       saveLocalDraft('demo-site', 'camera-04', 'default', 0, zonePolygon);
       setIsDraftMode(true);
       setStaleDraftInfo(null);
-      setSaveStatusMessage('Saved to browser local storage (camera-04 draft).');
+      showStatusMessage('Saved to browser local storage (camera-04 draft).');
     }
     setIsEditingZone(false);
-    setTimeout(() => setSaveStatusMessage(null), 4000);
   };
 
   const resetToAuthoritative = () => {
@@ -574,15 +615,14 @@ export function RestrictedZoneView({
       setIsDraftMode(false);
       setConflictMessage(null);
       setStaleDraftInfo(null);
-      setSaveStatusMessage('Restored authoritative server polygon.');
+      showStatusMessage('Restored authoritative server polygon.');
     } else {
       clearLocalDraft('demo-site', 'camera-04', 'default');
       setZonePolygon(DEFAULT_ZONE_POLYGON);
       setIsDraftMode(false);
       setStaleDraftInfo(null);
-      setSaveStatusMessage('Reset to default region.');
+      showStatusMessage('Reset to default region.');
     }
-    setTimeout(() => setSaveStatusMessage(null), 4000);
   };
 
   const activeCameraContext = useMemo(() => {
@@ -608,8 +648,7 @@ export function RestrictedZoneView({
     link.download = draft.filename;
     link.click();
     URL.revokeObjectURL(blobUrl);
-    setSaveStatusMessage(`Exported ${draft.filename} (${draft.label})`);
-    setTimeout(() => setSaveStatusMessage(null), 5000);
+    showStatusMessage(`Exported ${draft.filename} (${draft.label})`, 5000);
   };
 
   useEffect(() => {
@@ -808,7 +847,15 @@ export function RestrictedZoneView({
               <select
                 value={selectedSiteId}
                 onChange={(e) => {
-                  setRequestedSiteId(e.target.value);
+                  const siteId = e.target.value;
+                  activeScopeRef.current = {
+                    userId: session.user.id,
+                    siteId,
+                    cameraId: '',
+                    regionId: '',
+                  };
+                  clearTransientFeedback();
+                  setRequestedSiteId(siteId);
                   setRequestedCameraId('');
                   setRequestedRegionId('');
                 }}
@@ -830,7 +877,15 @@ export function RestrictedZoneView({
               <select
                 value={selectedCameraId}
                 onChange={(e) => {
-                  setRequestedCameraId(e.target.value);
+                  const cameraId = e.target.value;
+                  activeScopeRef.current = {
+                    userId: session.user.id,
+                    siteId: selectedSiteId,
+                    cameraId,
+                    regionId: '',
+                  };
+                  clearTransientFeedback();
+                  setRequestedCameraId(cameraId);
                   setRequestedRegionId('');
                 }}
                 disabled={cameras.isPending || !cameras.data?.items.length}
@@ -850,7 +905,17 @@ export function RestrictedZoneView({
               </label>
               <select
                 value={selectedRegionId}
-                onChange={(e) => setRequestedRegionId(e.target.value)}
+                onChange={(e) => {
+                  const regionId = e.target.value;
+                  activeScopeRef.current = {
+                    userId: session.user.id,
+                    siteId: selectedSiteId,
+                    cameraId: selectedCameraId,
+                    regionId,
+                  };
+                  clearTransientFeedback();
+                  setRequestedRegionId(regionId);
+                }}
                 disabled={regions.isPending || selectableRegions.length === 0}
                 className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
               >

@@ -458,14 +458,7 @@ describe('zonePolygonAdapter', () => {
 
     it('planMutationCompletion always targets the saved scope for cache invalidation and draft clearing', () => {
       // Operator switched to cam-2 while cam-1 save was pending
-      const activeScope = {
-        userId: 'user-admin-1',
-        siteId: 'site-A',
-        cameraId: 'cam-2',
-        regionId: 'reg-1',
-      };
-
-      const plan = planMutationCompletion('http://localhost:3000', mutationVars, activeScope);
+      const plan = planMutationCompletion('http://localhost:3000', mutationVars);
 
       // Invalidation MUST target cam-1 (the scope of the mutation), not cam-2!
       expect(plan.invalidateSiteCamerasKey).toEqual([
@@ -491,20 +484,9 @@ describe('zonePolygonAdapter', () => {
         regionId: 'reg-1',
       });
 
-      // UI state of cam-2 must NOT be touched by cam-1's completion
-      expect(plan.shouldUpdateVisibleUi).toBe(false);
-    });
-
-    it('planMutationCompletion updates visible UI when scope still matches upon completion', () => {
-      const activeScope = {
-        userId: 'user-admin-1',
-        siteId: 'site-A',
-        cameraId: 'cam-1',
-        regionId: 'reg-1',
-      };
-
-      const plan = planMutationCompletion('http://localhost:3000', mutationVars, activeScope);
-      expect(plan.shouldUpdateVisibleUi).toBe(true);
+      // Visibility is intentionally absent from the cached plan. Callbacks must
+      // recompute it from the latest scope after every awaited invalidation.
+      expect(plan).not.toHaveProperty('shouldUpdateVisibleUi');
     });
   });
 });
