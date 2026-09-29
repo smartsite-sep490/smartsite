@@ -52,6 +52,15 @@ function samePolygon(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+export function hasGlobalAdminRole(user) {
+  return (
+    Array.isArray(user?.roleAssignments) &&
+    user.roleAssignments.some(
+      (assignment) => assignment?.role === 'ADMIN' && assignment?.siteId === null,
+    )
+  );
+}
+
 function assertZone(zone, expected, label) {
   if (
     zone.type !== expected.type ||
@@ -339,7 +348,7 @@ async function main() {
       session = await client.login(username, password);
       accessToken = session.accessToken;
     }
-    if (session.user.role !== 'ADMIN') {
+    if (!hasGlobalAdminRole(session.user)) {
       throw new Error('The demo setup requires an Admin account.');
     }
     const result = await ensureDemoConfiguration(client, accessToken);

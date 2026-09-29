@@ -4,7 +4,25 @@ import {
   DemoApiClient,
   demoConfiguration,
   ensureDemoConfiguration,
+  hasGlobalAdminRole,
 } from './mf05-mf06-demo-setup.mjs';
+
+test('recognizes only a global Admin role assignment', () => {
+  assert.equal(
+    hasGlobalAdminRole({
+      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+    }),
+    true,
+  );
+  assert.equal(
+    hasGlobalAdminRole({
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-1' }],
+    }),
+    false,
+  );
+  assert.equal(hasGlobalAdminRole({ roleAssignments: [] }), false);
+  assert.equal(hasGlobalAdminRole({}), false);
+});
 
 class FakeClient {
   constructor() {
