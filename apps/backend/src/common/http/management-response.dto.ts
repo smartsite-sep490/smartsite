@@ -96,11 +96,20 @@ export class SafetyAlertResponseDto {
   @ApiProperty({ format: 'date-time' }) updatedAt!: string;
 }
 
+export class SafetyAlertEvidenceResponseDto {
+  @ApiProperty({ minimum: 0, maximum: 255 }) index!: number;
+  @ApiProperty({ enum: ['FRAME', 'CROP', 'SNAPSHOT'] }) kind!: 'FRAME' | 'CROP' | 'SNAPSHOT';
+  @ApiProperty({ required: false, minimum: 0 }) trackId?: number;
+  @ApiProperty() available!: boolean;
+}
+
 export class SafetyAlertDetectionResponseDto {
   @ApiProperty({ format: 'uuid' }) eventId!: string;
   @ApiProperty() cameraExternalId!: string;
   @ApiProperty({ format: 'date-time' }) capturedAt!: string;
   @ApiProperty({ enum: EventProcessingStatus }) processingStatus!: EventProcessingStatus;
+  @ApiProperty({ type: [SafetyAlertEvidenceResponseDto] })
+  evidence!: SafetyAlertEvidenceResponseDto[];
 }
 
 export class SafetyAlertDetailResponseDto extends SafetyAlertResponseDto {

@@ -129,6 +129,14 @@ export interface SafetyAlertDetectionResponse {
   capturedAt: string;
   processingStatus:
     'PROCESSED' | 'SKIPPED_CLOCK_SKEW' | 'SKIPPED_NO_CANDIDATE' | 'SKIPPED_UNKNOWN_CAMERA';
+  evidence: SafetyAlertEvidenceResponse[];
+}
+
+export interface SafetyAlertEvidenceResponse {
+  index: number;
+  kind: 'FRAME' | 'CROP' | 'SNAPSHOT';
+  trackId?: number;
+  available: boolean;
 }
 
 export interface SafetyAlertDetailResponse extends SafetyAlertResponse {

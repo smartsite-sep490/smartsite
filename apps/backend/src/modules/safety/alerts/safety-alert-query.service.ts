@@ -6,6 +6,10 @@ import { AlertDetectionMappingEntity } from '../../../database/entities/alert-de
 import { AlertStatus, AlertType, EventProcessingStatus } from '../../../database/entities/enums.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
 import { SafetyAlertReviewEntity } from '../../../database/entities/safety-alert-review.entity.js';
+import {
+  SafetyAlertEvidenceService,
+  type SafetyAlertEvidenceSummary,
+} from './safety-alert-evidence.service.js';
 
 const DETAIL_DETECTION_LIMIT = 100;
 const DETAIL_REVIEW_LIMIT = 100;
@@ -20,6 +24,7 @@ export interface SafetyAlertDetectionSummary {
   cameraExternalId: string;
   capturedAt: Date;
   processingStatus: EventProcessingStatus;
+  evidence: SafetyAlertEvidenceSummary[];
 }
 
 export interface SafetyAlertDetail {
@@ -42,7 +47,10 @@ function optionalEnum<T extends string>(
 
 @Injectable()
 export class SafetyAlertQueryService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly evidence: SafetyAlertEvidenceService,
+  ) {}
 
   async list(
     siteId: string,
@@ -77,7 +85,7 @@ export class SafetyAlertQueryService {
 
     const mappings = this.dataSource.getRepository(AlertDetectionMappingEntity);
     const reviews = this.dataSource.getRepository(SafetyAlertReviewEntity);
-    const [detections, detectionsTotal, reviewItems, reviewsTotal] = await Promise.all([
+    const [detectionRows, detectionsTotal, reviewItems, reviewsTotal] = await Promise.all([
       mappings
         .createQueryBuilder('mapping')
         .innerJoin(AiObservationEventEntity, 'event', 'event.eventId = mapping.eventId')
@@ -85,6 +93,7 @@ export class SafetyAlertQueryService {
         .addSelect('event.cameraExternalId', 'cameraExternalId')
         .addSelect('event.capturedAt', 'capturedAt')
         .addSelect('event.processingStatus', 'processingStatus')
+        .addSelect('event.rawPayload', 'rawPayload')
         .where('mapping.alertId = :alertId', { alertId: id })
         .orderBy('event.capturedAt', 'DESC')
         .addOrderBy('event.eventId', 'ASC')
@@ -94,6 +103,7 @@ export class SafetyAlertQueryService {
           cameraExternalId: string;
           capturedAt: Date;
           processingStatus: EventProcessingStatus;
+          rawPayload: unknown;
         }>(),
       mappings.countBy({ alertId: id }),
       reviews.find({
@@ -103,6 +113,10 @@ export class SafetyAlertQueryService {
       }),
       reviews.countBy({ alertId: id, siteId: scope }),
     ]);
+    const detections = detectionRows.map(({ rawPayload, ...detection }) => ({
+      ...detection,
+      evidence: this.evidence.summarize(rawPayload, detection.eventId),
+    }));
     return { alert, detections, detectionsTotal, reviews: reviewItems, reviewsTotal };
   }
 }

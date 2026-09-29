@@ -79,6 +79,44 @@ export class SmartSiteManagementClient {
     return payload as T;
   }
 
+  private async requestBlob(path: string, token: string): Promise<Blob> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+        headers: {
+          Accept: 'image/jpeg',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      throw new ApiError('network', 'Could not connect to the backend.');
+    }
+    if (!response.ok) {
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+      }
+      const error = parseBackendErrorEnvelope(payload, response.status);
+      throw new ApiError(
+        'http',
+        error?.message ?? `Backend returned HTTP ${response.status}.`,
+        response.status,
+        error,
+      );
+    }
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
+    if (contentType !== 'image/jpeg') {
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned an invalid evidence type.',
+        response.status,
+      );
+    }
+    return response.blob();
+  }
+
   private listPath(path: string, options: PageOptions = {}) {
     const query = new URLSearchParams();
     if (options.offset !== undefined) query.set('offset', String(options.offset));
@@ -189,6 +227,18 @@ export class SmartSiteManagementClient {
     return this.request<SafetyAlertDetailResponse>(
       'GET',
       `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}`,
+      token,
+    );
+  }
+  getSafetyAlertEvidence(
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    evidenceIndex: number,
+  ) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/evidence/${pathId(String(evidenceIndex))}`,
       token,
     );
   }

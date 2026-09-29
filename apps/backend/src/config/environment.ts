@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isAbsolute } from 'node:path';
 import {
   isValidPassword,
   PASSWORD_MAX_LENGTH,
@@ -172,6 +173,13 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_TTL_MS: integer(60000, 1, MAX_TIMER_MS),
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
+    EVIDENCE_LOCAL_ROOT: z
+      .string({ error: 'must be a string' })
+      .trim()
+      .min(1, 'must not be empty')
+      .max(2048, 'must contain at most 2048 characters')
+      .refine(isAbsolute, 'must be an absolute path')
+      .optional(),
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);

@@ -70,23 +70,24 @@ pnpm --filter @smartsite/backend start
 NODE_ENV=production pnpm --filter @smartsite/backend start
 ```
 
-| Biến                                              | Mặc định local / ý nghĩa                                                                                                                                   |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                                        | `development`; nhận `development`, `test`, `production`.                                                                                                   |
-| `PORT`                                            | `3000`.                                                                                                                                                    |
-| `DATABASE_URL`                                    | PostgreSQL local của Compose; production bắt buộc cấp rõ ràng.                                                                                             |
-| `DATABASE_TIMEOUT_MS`                             | `2000`; timeout kết nối/readiness.                                                                                                                         |
-| `CORS_ORIGINS`                                    | `http://localhost:5173`; danh sách origin HTTP(S) chính xác, phân cách dấu phẩy. Production bắt buộc cấp; chuỗi rỗng tắt quyền đọc từ browser khác origin. |
-| `AUTH_JWT_SECRET`                                 | Secret ký JWT HS256; production bắt buộc giá trị riêng dài ít nhất 32 ký tự, không whitespace và không dùng secret local.                                  |
-| `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng dài ít nhất 32 ký tự, không whitespace và không dùng token mặc định.                |
-| `AI_CONFIGURATION_CAMERA_IDS`                     | Danh sách UUID camera mà AI được tải cấu hình; mặc định rỗng và từ chối mọi camera.                                                                        |
-| `LOG_LEVEL`                                       | `info`; nhận `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                                                 |
-| `LOG_FORMAT`                                      | `pretty` chỉ hợp lệ ở development; test/production dùng `json`. Image runtime không chứa `pino-pretty`.                                                    |
-| `HTTP_RATE_LIMIT_TTL_MS`, `HTTP_RATE_LIMIT_LIMIT` | `60000`, `120`: cửa sổ và quota HTTP thông thường.                                                                                                         |
-| `AI_RATE_LIMIT_TTL_MS`, `AI_RATE_LIMIT_LIMIT`     | `60000`, `600`: quota riêng cho AI ingestion.                                                                                                              |
-| `ALERT_COOLDOWN_SECONDS`                          | `60`; cooldown nhóm cảnh báo hiện có.                                                                                                                      |
-| `MAX_PAST_EVENT_AGE_SECONDS`                      | `300`; giới hạn tuổi event.                                                                                                                                |
-| `MAX_FUTURE_CLOCK_SKEW_SECONDS`                   | `30`; sai lệch thời gian tương lai cho phép.                                                                                                               |
+| Biến                                              | Mặc định local / ý nghĩa                                                                                                                                          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                                        | `development`; nhận `development`, `test`, `production`.                                                                                                          |
+| `PORT`                                            | `3000`.                                                                                                                                                           |
+| `DATABASE_URL`                                    | PostgreSQL local của Compose; production bắt buộc cấp rõ ràng.                                                                                                    |
+| `DATABASE_TIMEOUT_MS`                             | `2000`; timeout kết nối/readiness.                                                                                                                                |
+| `CORS_ORIGINS`                                    | `http://localhost:5173`; danh sách origin HTTP(S) chính xác, phân cách dấu phẩy. Production bắt buộc cấp; chuỗi rỗng tắt quyền đọc từ browser khác origin.        |
+| `AUTH_JWT_SECRET`                                 | Secret ký JWT HS256; production bắt buộc giá trị riêng dài ít nhất 32 ký tự, không whitespace và không dùng secret local.                                         |
+| `SMARTSITE_AI_SERVICE_TOKEN`                      | Token giả local trong `.env.example`; production bắt buộc secret riêng dài ít nhất 32 ký tự, không whitespace và không dùng token mặc định.                       |
+| `AI_CONFIGURATION_CAMERA_IDS`                     | Danh sách UUID camera mà AI được tải cấu hình; mặc định rỗng và từ chối mọi camera.                                                                               |
+| `EVIDENCE_LOCAL_ROOT`                             | Thư mục tuyệt đối tùy chọn cho JPEG evidence local khi development/demo; phải là thư mục thật, không phải symlink/junction. Production dùng object storage riêng. |
+| `LOG_LEVEL`                                       | `info`; nhận `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                                                        |
+| `LOG_FORMAT`                                      | `pretty` chỉ hợp lệ ở development; test/production dùng `json`. Image runtime không chứa `pino-pretty`.                                                           |
+| `HTTP_RATE_LIMIT_TTL_MS`, `HTTP_RATE_LIMIT_LIMIT` | `60000`, `120`: cửa sổ và quota HTTP thông thường.                                                                                                                |
+| `AI_RATE_LIMIT_TTL_MS`, `AI_RATE_LIMIT_LIMIT`     | `60000`, `600`: quota riêng cho AI ingestion.                                                                                                                     |
+| `ALERT_COOLDOWN_SECONDS`                          | `60`; cooldown nhóm cảnh báo hiện có.                                                                                                                             |
+| `MAX_PAST_EVENT_AGE_SECONDS`                      | `300`; giới hạn tuổi event.                                                                                                                                       |
+| `MAX_FUTURE_CLOCK_SKEW_SECONDS`                   | `30`; sai lệch thời gian tương lai cho phép.                                                                                                                      |
 
 TTL/quota rate limit phải là chuỗi số nguyên dương an toàn; TTL tối đa `2147483647` ms để không tràn bộ đếm thời gian của Node. `DIRECT_URL` và `DATABASE_URL_UNPOOLED` chỉ chọn kết nối migration; `TEST_DATABASE_URL` chỉ dành cho integration test. Không dùng URL test làm fallback runtime. Không commit `.env`, `.env.test`, connection string thật hay service token.
 
@@ -117,6 +118,8 @@ Pino ghi log có request ID và ngữ cảnh vận hành đã làm sạch đệ 
 Rate limit dùng bộ nhớ **của từng instance**, không chia sẻ giữa replica. Health live/ready được miễn; AI dùng quota riêng, không bị áp đồng thời quota HTTP mặc định. Khi vượt quota trả `429` và `Retry-After`. Các mức 120/600 mỗi phút là cấu hình khởi điểm, không phải throughput đã benchmark; cần điều chỉnh theo số camera, retry/backpressure, ingress và số replica thực tế.
 
 `GET /api/v1/health/live` chỉ kiểm tra tiến trình. `GET /api/v1/health/ready` chạy `SELECT 1` có timeout, trả `503` khi database không sẵn sàng. `POST /api/v1/integrations/ai/events` yêu cầu Bearer token dịch vụ, bảo toàn raw event, kiểm tra idempotency và tạo/nhóm cảnh báo kỹ thuật khi đủ ngữ cảnh. Pool đóng khi shutdown. Health không chứng minh model, quyền người dùng hay camera đã sẵn sàng; xem [health contract](../../contracts/health-v1.md).
+
+Safety Alert detail chỉ trả metadata evidence đã tuyển chọn. Admin global hoặc Safety Officer đúng Site có thể tải JPEG qua `GET /api/v1/sites/:siteId/safety-alerts/:alertId/detections/:eventId/evidence/:evidenceIndex`. Route kiểm tra Site, alert-event mapping, URI, root/file containment, loại và kích thước file; response dùng `private, no-store` và không trả raw URI hay filesystem path. Adapter local bị tắt khi không cấu hình `EVIDENCE_LOCAL_ROOT`; xem [runbook MF05/MF06](../../docs/operations/mf05-mf06-local-demo.md).
 
 ## Database và migration
 

@@ -8,6 +8,11 @@ import { AlertStatus, AlertType, EventProcessingStatus } from '../src/database/e
 import { SafetyAlertEntity } from '../src/database/entities/safety-alert.entity.js';
 import { SafetyAlertReviewEntity } from '../src/database/entities/safety-alert-review.entity.js';
 import { SafetyAlertQueryService } from '../src/modules/safety/alerts/safety-alert-query.service.js';
+import type { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
+
+const noEvidence = {
+  summarize: () => [],
+} as unknown as SafetyAlertEvidenceService;
 
 function alert(overrides: Partial<SafetyAlertEntity> = {}): SafetyAlertEntity {
   return Object.assign(new SafetyAlertEntity(), {
@@ -47,7 +52,7 @@ test('SafetyAlertQueryService lists a scoped, filtered and stable page', async (
       return alertRepository;
     },
   } as unknown as DataSource;
-  const service = new SafetyAlertQueryService(dataSource);
+  const service = new SafetyAlertQueryService(dataSource, noEvidence);
 
   const result = await service.list(siteId, 5, 10, {
     status: AlertStatus.PENDING_REVIEW,
@@ -68,7 +73,7 @@ test('SafetyAlertQueryService lists a scoped, filtered and stable page', async (
 });
 
 test('SafetyAlertQueryService rejects invalid IDs, pagination and filters before database access', async () => {
-  const service = new SafetyAlertQueryService(undefined as unknown as DataSource);
+  const service = new SafetyAlertQueryService(undefined as unknown as DataSource, noEvidence);
   const invalid = (error: unknown) =>
     error instanceof PublicHttpException && error.publicPayload.code === 'VALIDATION_FAILED';
 
@@ -87,6 +92,9 @@ test('SafetyAlertQueryService returns curated detections without raw event paylo
     cameraExternalId: 'CAM-GATE-01',
     capturedAt: new Date('2026-09-27T01:01:00Z'),
     processingStatus: EventProcessingStatus.PROCESSED,
+    rawPayload: {
+      evidence: [{ kind: 'FRAME', uri: `local://evidence/${randomUUID()}/1/${randomUUID()}.jpg` }],
+    },
   };
   const queryBuilder = {
     innerJoin() {
@@ -135,12 +143,26 @@ test('SafetyAlertQueryService returns curated detections without raw event paylo
       throw new Error(`unexpected repository: ${String(entity)}`);
     },
   } as unknown as DataSource;
-  const service = new SafetyAlertQueryService(dataSource);
+  const evidence = [{ index: 0, kind: 'FRAME' as const, available: false }];
+  const service = new SafetyAlertQueryService(dataSource, {
+    summarize: (rawPayload: unknown) => {
+      assert.equal(rawPayload, detection.rawPayload);
+      return evidence;
+    },
+  } as unknown as SafetyAlertEvidenceService);
 
   const result = await service.get(siteId, alertId);
 
   assert.equal(result.alert, stored);
-  assert.deepEqual(result.detections, [detection]);
+  assert.deepEqual(result.detections, [
+    {
+      eventId: detection.eventId,
+      cameraExternalId: detection.cameraExternalId,
+      capturedAt: detection.capturedAt,
+      processingStatus: detection.processingStatus,
+      evidence,
+    },
+  ]);
   assert.equal(result.detectionsTotal, 1);
   assert.deepEqual(result.reviews, []);
   assert.equal(result.reviewsTotal, 0);
@@ -154,7 +176,7 @@ test('SafetyAlertQueryService hides an alert outside the requested Site', async 
       return { findOneBy: async () => null };
     },
   } as unknown as DataSource;
-  const service = new SafetyAlertQueryService(dataSource);
+  const service = new SafetyAlertQueryService(dataSource, noEvidence);
 
   await assert.rejects(
     service.get(randomUUID(), randomUUID()),

@@ -137,6 +137,38 @@ describe('management client', () => {
     }
   });
 
+  it('fetches alert evidence as an authenticated JPEG blob', async () => {
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(jpeg, {
+          status: 200,
+          headers: { 'Content-Type': 'image/jpeg' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test/');
+      const result = await client.getSafetyAlertEvidence(
+        'evidence-token',
+        'site/1',
+        'alert/1',
+        'event/1',
+        2,
+      );
+      expect(result.type).toBe('image/jpeg');
+      expect(new Uint8Array(await result.arrayBuffer())).toEqual(jpeg);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/safety-alerts/alert%2F1/detections/event%2F1/evidence/2',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        headers: { Authorization: 'Bearer evidence-token', Accept: 'image/jpeg' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('submits a Site-scoped alert review command with optimistic revision', async () => {
     const fetchMock = vi.fn(
       async () =>
