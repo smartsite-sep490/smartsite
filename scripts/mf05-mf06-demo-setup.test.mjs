@@ -232,3 +232,38 @@ test('reads every management page before deciding whether a demo record exists',
     ['0', '100'],
   );
 });
+
+test('uses the current MOBILE authentication wire contract', async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
+    return new Response(
+      String(url).endsWith('/auth/login')
+        ? JSON.stringify({ accessToken: 'access-token', refreshToken: 'refresh-token' })
+        : undefined,
+      {
+        status: String(url).endsWith('/auth/login') ? 200 : 204,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  };
+
+  const client = new DemoApiClient('http://127.0.0.1:3000');
+  await client.login('admin', 'password');
+  await client.logout('refresh-token');
+
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    username: 'admin',
+    password: 'password',
+    clientType: 'MOBILE',
+  });
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    clientType: 'MOBILE',
+    refreshToken: 'refresh-token',
+  });
+  assert.equal(requests[1].init.headers.Authorization, undefined);
+});
