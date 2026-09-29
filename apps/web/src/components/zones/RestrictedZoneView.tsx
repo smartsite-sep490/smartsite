@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  SmartSiteManagementClient,
+  type LoginResponse,
+} from '@smartsite/api-client';
 import {
   IconX,
   IconAlertTriangle,
@@ -8,6 +13,8 @@ import {
   IconVolume,
   IconMaximize,
   IconGrid,
+  IconKey,
+  IconCheck,
 } from '../icons';
 import {
   getZoneVideoTestDetections,
@@ -30,39 +37,16 @@ import {
   type NormalizedPoint,
   type Size2D,
 } from '../cameras/monitoringUtils';
-
-const DEFAULT_ZONE_POLYGON: NormalizedPoint[] = [
-  [0.63, 0.2],
-  [0.98, 0.2],
-  [0.98, 0.9],
-  [0.63, 0.9],
-];
-
-const ZONE_STORAGE_KEY = 'smartsite.restricted-zone.camera-04';
-
-function getSavedZonePolygon(): NormalizedPoint[] {
-  try {
-    const saved = window.localStorage.getItem(ZONE_STORAGE_KEY);
-    if (!saved) return DEFAULT_ZONE_POLYGON;
-    const parsed = JSON.parse(saved) as unknown;
-    if (
-      Array.isArray(parsed) &&
-      parsed.length >= 3 &&
-      parsed.every(
-        (point) =>
-          Array.isArray(point) &&
-          point.length === 2 &&
-          typeof point[0] === 'number' &&
-          typeof point[1] === 'number',
-      )
-    ) {
-      return parsed as NormalizedPoint[];
-    }
-  } catch {
-    // Ignore malformed local test data and use the default zone.
-  }
-  return DEFAULT_ZONE_POLYGON;
-}
+import {
+  DEFAULT_ZONE_POLYGON,
+  backendPolygonToPoints,
+  clearLocalDraft,
+  formatConflictMessage,
+  isConflictError,
+  preparePolygonSave,
+  resolveActivePolygon,
+  saveLocalDraft,
+} from './zonePolygonAdapter';
 
 interface ZoneReviewItem {
   id: string;
@@ -77,7 +61,29 @@ interface ZoneReviewItem {
   time: string;
 }
 
-export function RestrictedZoneView() {
+export interface RestrictedZoneViewProps {
+  apiUrl?: string;
+}
+
+export function RestrictedZoneView({
+  apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+}: RestrictedZoneViewProps) {
+  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const queryClient = useQueryClient();
+  const activeSession = useRef<{ token: string; userId: string } | null>(null);
+  const lifecycleGeneration = useRef(0);
+
+  const [session, setSession] = useState<LoginResponse | null>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const [requestedSiteId, setRequestedSiteId] = useState('');
+  const [requestedCameraId, setRequestedCameraId] = useState('');
+  const [requestedRegionId, setRequestedRegionId] = useState('');
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  const [isDraftMode, setIsDraftMode] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -91,7 +97,14 @@ export function RestrictedZoneView() {
   const [liveZoneDetections, setLiveZoneDetections] = useState<VideoTestDetection[] | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const [socketRuntimeError, setSocketRuntimeError] = useState<string | null>(null);
-  const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(getSavedZonePolygon);
+  const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(() => {
+    const resolved = resolveActivePolygon({
+      siteId: 'demo-site',
+      cameraId: 'camera-04',
+      fallback: DEFAULT_ZONE_POLYGON,
+    });
+    return resolved.points;
+  });
   const [isEditingZone, setIsEditingZone] = useState(false);
   const [saveStatusMessage, setSaveStatusMessage] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
@@ -103,15 +116,15 @@ export function RestrictedZoneView() {
   const [videoNaturalSize, setVideoNaturalSize] = useState<Size2D>({ width: 1920, height: 1080 });
 
   const rawUrl = import.meta.env.VITE_AI_WS_URL;
-  const token =
+  const aiWsToken =
     import.meta.env.VITE_AI_BACKEND_SERVICE_TOKEN ??
     import.meta.env.VITE_AI_WS_TOKEN ??
     import.meta.env.VITE_AI_SERVICE_TOKEN ??
     '';
 
   const wsConfig = useMemo(() => {
-    return buildAiWebSocketUrl(rawUrl, token);
-  }, [rawUrl, token]);
+    return buildAiWebSocketUrl(rawUrl, aiWsToken);
+  }, [rawUrl, aiWsToken]);
 
   const socketError = wsConfig.error ?? socketRuntimeError;
 
@@ -289,27 +302,240 @@ export function RestrictedZoneView() {
     );
   };
 
-  const saveZone = () => {
-    window.localStorage.setItem(ZONE_STORAGE_KEY, JSON.stringify(zonePolygon));
+  const removeSessionQueries = useCallback(
+    (userId: string) => {
+      queryClient.removeQueries({ queryKey: ['zone-admin', apiUrl, userId] });
+    },
+    [apiUrl, queryClient],
+  );
+
+  const login = useMutation({
+    mutationFn: async () => {
+      const generation = lifecycleGeneration.current;
+      const result = await client.login(username, password);
+      const isGlobalAdmin = result.user.roleAssignments.some(
+        ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+      );
+      if (!isGlobalAdmin) {
+        await client.logout('WEB').catch(() => undefined);
+        throw new Error('A global Admin role is required.');
+      }
+      if (result.user.mustChangePassword) {
+        await client.logout('WEB').catch(() => undefined);
+        throw new Error('Change the temporary password before managing camera zones.');
+      }
+      if (generation !== lifecycleGeneration.current) {
+        await client.logout('WEB').catch(() => undefined);
+        throw new Error('The sign-in request was cancelled.');
+      }
+      activeSession.current = { token: result.accessToken, userId: result.user.id };
+      setSession(result);
+      setPassword('');
+      setLoginError(null);
+    },
+    onError: (err) => {
+      setLoginError(err instanceof Error ? err.message : 'Sign in failed');
+    },
+  });
+
+  useEffect(() => {
+    lifecycleGeneration.current += 1;
+    return () => {
+      lifecycleGeneration.current += 1;
+      const current = activeSession.current;
+      activeSession.current = null;
+      if (!current) return;
+      removeSessionQueries(current.userId);
+      void client.logout('WEB').catch(() => undefined);
+    };
+  }, [client, removeSessionQueries]);
+
+  const handleLogout = () => {
+    const current = activeSession.current;
+    activeSession.current = null;
+    if (current) removeSessionQueries(current.userId);
+    login.reset();
+    setSession(null);
+    setRequestedSiteId('');
+    setRequestedCameraId('');
+    setRequestedRegionId('');
+    setConflictMessage(null);
+    setIsDraftMode(false);
+    if (current) void client.logout('WEB').catch(() => undefined);
+  };
+
+  const apiToken = session?.accessToken ?? '';
+  const sessionScope = session?.user.id ?? '';
+
+  const sites = useQuery({
+    queryKey: ['zone-admin', apiUrl, sessionScope, 'sites'],
+    queryFn: () => client.listSites(apiToken, { limit: 100 }),
+    enabled: apiToken.length > 0,
+  });
+
+  const selectedSiteId =
+    sites.data?.items.some((site) => site.id === requestedSiteId)
+      ? requestedSiteId
+      : (sites.data?.items[0]?.id ?? '');
+
+  const cameras = useQuery({
+    queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
+    queryFn: () => client.listCameras(apiToken, selectedSiteId, { limit: 100 }),
+    enabled: apiToken.length > 0 && selectedSiteId.length > 0,
+  });
+
+  const selectedCameraId =
+    cameras.data?.items.some((cam) => cam.id === requestedCameraId)
+      ? requestedCameraId
+      : (cameras.data?.items[0]?.id ?? '');
+
+  const selectedCamera = useMemo(
+    () => cameras.data?.items.find((c) => c.id === selectedCameraId),
+    [cameras.data?.items, selectedCameraId],
+  );
+
+  const regions = useQuery({
+    queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
+    queryFn: () => client.listRegions(apiToken, selectedSiteId, selectedCameraId, { limit: 100 }),
+    enabled: apiToken.length > 0 && selectedSiteId.length > 0 && selectedCameraId.length > 0,
+  });
+
+  const activeRegions = useMemo(
+    () => regions.data?.items.filter((r) => r.isActive) ?? [],
+    [regions.data?.items],
+  );
+
+  const selectableRegions = useMemo(
+    () => (activeRegions.length > 0 ? activeRegions : (regions.data?.items ?? [])),
+    [activeRegions, regions.data?.items],
+  );
+
+  const selectedRegionId =
+    selectableRegions.some((r) => r.id === requestedRegionId)
+      ? requestedRegionId
+      : (selectableRegions[0]?.id ?? '');
+
+  const selectedRegion = useMemo(
+    () => selectableRegions.find((r) => r.id === selectedRegionId),
+    [selectableRegions, selectedRegionId],
+  );
+
+  const currentScopeKey = session
+    ? `${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
+    : 'fallback-camera-04';
+
+  const [prevScopeKey, setPrevScopeKey] = useState(currentScopeKey);
+
+  if (prevScopeKey !== currentScopeKey) {
+    setPrevScopeKey(currentScopeKey);
+    const resolved = resolveActivePolygon({
+      siteId: selectedSiteId || undefined,
+      cameraId: selectedCameraId || undefined,
+      regionId: selectedRegion?.id,
+      backendPolygon: selectedRegion?.polygon,
+      fallback: DEFAULT_ZONE_POLYGON,
+    });
+    setZonePolygon(resolved.points);
+    setIsDraftMode(resolved.isDraft);
     setIsEditingZone(false);
-    setSaveStatusMessage('Saved to browser local storage (camera-04 draft).');
+  }
+
+  const savePolygonMutation = useMutation({
+    mutationFn: async () => {
+      if (!session || !apiToken) throw new Error('Sign in as Admin before saving to backend.');
+      if (!selectedSiteId || !selectedCamera || !selectedRegion) {
+        throw new Error('Select a site, camera, and region first.');
+      }
+      const payload = preparePolygonSave(selectedCamera, zonePolygon);
+      return client.updatePolygon(
+        apiToken,
+        selectedSiteId,
+        selectedCamera.id,
+        selectedRegion.id,
+        payload,
+      );
+    },
+    onSuccess: async (mutationResult) => {
+      setConflictMessage(null);
+      clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion?.id);
+      setIsDraftMode(false);
+      setIsEditingZone(false);
+      setSaveStatusMessage(
+        `Saved polygon to ${selectedCamera?.code || 'camera'} (version ${mutationResult.configurationVersion}).`,
+      );
+      setTimeout(() => setSaveStatusMessage(null), 5000);
+      await queryClient.invalidateQueries({
+        queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
+      });
+    },
+    onError: async (error) => {
+      if (isConflictError(error)) {
+        const msg = formatConflictMessage(selectedCamera?.externalId || selectedCamera?.code);
+        setConflictMessage(msg);
+        await queryClient.invalidateQueries({
+          queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
+        });
+      } else {
+        setSaveStatusMessage(error instanceof Error ? error.message : 'Save failed');
+        setTimeout(() => setSaveStatusMessage(null), 5000);
+      }
+    },
+  });
+
+  const saveDraft = () => {
+    if (session && selectedSiteId && selectedCameraId) {
+      saveLocalDraft(selectedSiteId, selectedCameraId, selectedRegion?.id, zonePolygon);
+      setIsDraftMode(true);
+      setSaveStatusMessage('Saved local draft (unsaved on server).');
+    } else {
+      saveLocalDraft('demo-site', 'camera-04', 'default', zonePolygon);
+      setIsDraftMode(true);
+      setSaveStatusMessage('Saved to browser local storage (camera-04 draft).');
+    }
+    setIsEditingZone(false);
     setTimeout(() => setSaveStatusMessage(null), 4000);
   };
 
-  const resetZone = () => {
-    setZonePolygon(DEFAULT_ZONE_POLYGON);
-    window.localStorage.removeItem(ZONE_STORAGE_KEY);
-    setSaveStatusMessage('Reset to default region.');
+  const resetToAuthoritative = () => {
+    if (session && selectedSiteId && selectedCameraId && selectedRegion) {
+      clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion.id);
+      const authoritative = backendPolygonToPoints(selectedRegion.polygon, DEFAULT_ZONE_POLYGON);
+      setZonePolygon(authoritative);
+      setIsDraftMode(false);
+      setConflictMessage(null);
+      setSaveStatusMessage('Restored authoritative server polygon.');
+    } else {
+      clearLocalDraft('demo-site', 'camera-04', 'default');
+      setZonePolygon(DEFAULT_ZONE_POLYGON);
+      setIsDraftMode(false);
+      setSaveStatusMessage('Reset to default region.');
+    }
     setTimeout(() => setSaveStatusMessage(null), 4000);
   };
 
   const activeCameraContext = useMemo(() => {
+    if (selectedCamera) {
+      const regionLabel = selectedRegion
+        ? `Region ${selectedRegion.id.slice(0, 8)}`
+        : 'Restricted Zone';
+      return {
+        camera: `${selectedCamera.code} · ${selectedCamera.name}`,
+        workArea: regionLabel,
+      };
+    }
     const rawCamera = testDetection?.cameraExternalId || aiTimeline?.cameraExternalId;
     return resolveCameraAndWorkArea(rawCamera, testDetection?.regionId, 'CAM-04');
-  }, [testDetection, aiTimeline]);
+  }, [selectedCamera, selectedRegion, testDetection, aiTimeline]);
 
   const exportZone = () => {
-    const draft = exportZoneBrowserDraft(zonePolygon, activeCameraContext.camera);
+    const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
+    const draft = exportZoneBrowserDraft(zonePolygon, cameraLabel);
     const blobUrl = URL.createObjectURL(new Blob([draft.content], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = blobUrl;
@@ -422,6 +648,194 @@ export function RestrictedZoneView() {
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
+      {/* Admin Session & Backend Camera/Region Configuration Bar */}
+      {!session ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
+                  <IconKey className="h-4 w-4" />
+                </span>
+                <h2 className="text-sm font-bold text-slate-900">Backend Camera Configuration</h2>
+              </div>
+              <p className="mt-1 text-xs text-slate-500 max-w-xl">
+                Sign in as a global Admin to load camera regions and save authoritative polygons to the Backend API. Fallback test video and realtime AI feed remain available below.
+              </p>
+            </div>
+            <form
+              onSubmit={(e: FormEvent) => {
+                e.preventDefault();
+                login.mutate();
+              }}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input
+                required
+                type="text"
+                autoComplete="username"
+                placeholder="Admin username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+              />
+              <input
+                required
+                type="password"
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+              />
+              <button
+                type="submit"
+                disabled={login.isPending}
+                className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60 cursor-pointer shadow-xs transition-colors"
+              >
+                {login.isPending ? 'Signing in…' : 'Sign in as Admin'}
+              </button>
+            </form>
+          </div>
+          {loginError && (
+            <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
+              {loginError}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                <IconCheck className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+                    Admin Session Active
+                  </span>
+                  <span className="text-xs font-semibold text-slate-900">
+                    · {session.user.displayName} ({session.user.username})
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Global Admin role verified. Polygons saved here synchronize directly with Backend camera configuration.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
+
+          {/* Selectors Grid: Site, Camera, Region, Version */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Site
+              </label>
+              <select
+                value={selectedSiteId}
+                onChange={(e) => {
+                  setRequestedSiteId(e.target.value);
+                  setRequestedCameraId('');
+                  setRequestedRegionId('');
+                }}
+                disabled={sites.isPending || !sites.data?.items.length}
+                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+              >
+                {sites.data?.items.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.code} · {site.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Camera
+              </label>
+              <select
+                value={selectedCameraId}
+                onChange={(e) => {
+                  setRequestedCameraId(e.target.value);
+                  setRequestedRegionId('');
+                }}
+                disabled={cameras.isPending || !cameras.data?.items.length}
+                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+              >
+                {cameras.data?.items.map((camera) => (
+                  <option key={camera.id} value={camera.id}>
+                    {camera.code} · {camera.name} (v{camera.configurationVersion})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Region / Zone
+              </label>
+              <select
+                value={selectedRegionId}
+                onChange={(e) => setRequestedRegionId(e.target.value)}
+                disabled={regions.isPending || selectableRegions.length === 0}
+                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+              >
+                {selectableRegions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    Region {region.id.slice(0, 8)} (v{region.version}) {region.isActive ? '· Active' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 sm:pt-0">
+              {isDraftMode ? (
+                <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  Unsaved Local Draft
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  Server Synced (v{selectedCamera?.configurationVersion ?? 0})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HTTP 409 Conflict Banner */}
+      {conflictMessage && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+        >
+          <div className="flex items-start gap-3">
+            <IconAlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-red-800">
+                Configuration Version Conflict (HTTP 409)
+              </h4>
+              <p className="mt-0.5 text-xs text-red-700">{conflictMessage}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={resetToAuthoritative}
+            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+          >
+            Load Server Version
+          </button>
+        </div>
+      )}
+
       {/* Main Section: Camera Video Viewport (829px) + Verification Card (355px) */}
       <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
         {/* Left: Camera Video Feed */}
@@ -530,29 +944,45 @@ export function RestrictedZoneView() {
             <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
               <div className="flex items-center gap-2">
                 {!isEditingZone ? (
-                  <button
-                    onClick={() => setIsEditingZone(true)}
-                    className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950"
-                  >
-                    EDIT ZONE
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsEditingZone(true)}
+                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
+                    >
+                      EDIT ZONE
+                    </button>
+                    {isDraftMode && (
+                      <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm shadow-xs">
+                        UNSAVED DRAFT
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <>
+                    {session && selectedCamera && selectedRegion ? (
+                      <button
+                        onClick={() => savePolygonMutation.mutate()}
+                        disabled={savePolygonMutation.isPending}
+                        className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+                      >
+                        {savePolygonMutation.isPending ? 'SAVING TO BACKEND…' : 'SAVE TO BACKEND'}
+                      </button>
+                    ) : null}
                     <button
-                      onClick={saveZone}
-                      className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700"
+                      onClick={saveDraft}
+                      className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 cursor-pointer"
                     >
-                      SAVE ZONE (LOCAL)
+                      SAVE LOCAL DRAFT
                     </button>
                     <button
-                      onClick={resetZone}
-                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950"
+                      onClick={resetToAuthoritative}
+                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
-                      RESET
+                      {session && selectedRegion ? 'RESET TO SERVER' : 'RESET'}
                     </button>
                     <button
                       onClick={exportZone}
-                      className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B]"
+                      className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B] cursor-pointer"
                     >
                       EXPORT DRAFT JSON
                     </button>
