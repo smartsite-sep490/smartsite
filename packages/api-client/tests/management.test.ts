@@ -137,6 +137,38 @@ describe('management client', () => {
     }
   });
 
+  it('submits a Site-scoped alert review command with optimistic revision', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ replayed: false, alert: {}, review: {} }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.reviewSafetyAlert('review-token', 'site/1', 'alert/1', {
+        commandId: '00000000-0000-4000-8000-000000000001',
+        expectedRevision: 3,
+        targetStatus: 'CONFIRMED',
+        reason: 'Confirmed across three consecutive observations.',
+      });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/safety-alerts/alert%2F1/reviews',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer review-token' }),
+        body: JSON.stringify({
+          commandId: '00000000-0000-4000-8000-000000000001',
+          expectedRevision: 3,
+          targetStatus: 'CONFIRMED',
+          reason: 'Confirmed across three consecutive observations.',
+        }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('constructs worker and zone access endpoints with encoded scope IDs', async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),

@@ -104,6 +104,22 @@ export interface SafetyAlertResponse {
   firstDetectedAt: string;
   lastDetectedAt: string;
   detectionCount: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SafetyAlertReviewTargetStatus = 'CONFIRMED' | 'DISMISSED' | 'NEEDS_MORE_EVIDENCE';
+
+export interface SafetyAlertReviewResponse {
+  id: string;
+  alertId: string;
+  siteId: string;
+  actorUserId: string;
+  fromStatus: SafetyAlertStatus;
+  toStatus: SafetyAlertReviewTargetStatus;
+  reason: string;
+  alertRevision: number;
   createdAt: string;
 }
 
@@ -118,6 +134,14 @@ export interface SafetyAlertDetectionResponse {
 export interface SafetyAlertDetailResponse extends SafetyAlertResponse {
   detectionsTotal: number;
   detections: SafetyAlertDetectionResponse[];
+  reviewsTotal: number;
+  reviews: SafetyAlertReviewResponse[];
+}
+
+export interface SafetyAlertReviewMutationResponse {
+  alert: SafetyAlertResponse;
+  review: SafetyAlertReviewResponse;
+  replayed: boolean;
 }
 
 export interface WorkerResponse {

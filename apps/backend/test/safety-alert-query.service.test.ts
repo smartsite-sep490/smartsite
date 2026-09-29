@@ -6,6 +6,7 @@ import { PublicHttpException } from '../src/common/http/public-http-exception.js
 import { AlertDetectionMappingEntity } from '../src/database/entities/alert-detection-mapping.entity.js';
 import { AlertStatus, AlertType, EventProcessingStatus } from '../src/database/entities/enums.js';
 import { SafetyAlertEntity } from '../src/database/entities/safety-alert.entity.js';
+import { SafetyAlertReviewEntity } from '../src/database/entities/safety-alert-review.entity.js';
 import { SafetyAlertQueryService } from '../src/modules/safety/alerts/safety-alert-query.service.js';
 
 function alert(overrides: Partial<SafetyAlertEntity> = {}): SafetyAlertEntity {
@@ -23,7 +24,9 @@ function alert(overrides: Partial<SafetyAlertEntity> = {}): SafetyAlertEntity {
     firstDetectedAt: new Date('2026-09-27T01:00:00Z'),
     lastDetectedAt: new Date('2026-09-27T01:01:00Z'),
     detectionCount: 2,
+    revision: 0,
     createdAt: new Date('2026-09-27T01:00:00Z'),
+    updatedAt: new Date('2026-09-27T01:00:00Z'),
     ...overrides,
   });
 }
@@ -124,6 +127,11 @@ test('SafetyAlertQueryService returns curated detections without raw event paylo
           createQueryBuilder: () => queryBuilder,
           countBy: async () => 1,
         };
+      if (entity === SafetyAlertReviewEntity)
+        return {
+          find: async () => [],
+          countBy: async () => 0,
+        };
       throw new Error(`unexpected repository: ${String(entity)}`);
     },
   } as unknown as DataSource;
@@ -134,6 +142,8 @@ test('SafetyAlertQueryService returns curated detections without raw event paylo
   assert.equal(result.alert, stored);
   assert.deepEqual(result.detections, [detection]);
   assert.equal(result.detectionsTotal, 1);
+  assert.deepEqual(result.reviews, []);
+  assert.equal(result.reviewsTotal, 0);
   assert.equal('rawPayload' in result.detections[0]!, false);
 });
 

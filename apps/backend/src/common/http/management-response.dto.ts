@@ -91,7 +91,9 @@ export class SafetyAlertResponseDto {
   @ApiProperty({ format: 'date-time' }) firstDetectedAt!: string;
   @ApiProperty({ format: 'date-time' }) lastDetectedAt!: string;
   @ApiProperty() detectionCount!: number;
+  @ApiProperty() revision!: number;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
+  @ApiProperty({ format: 'date-time' }) updatedAt!: string;
 }
 
 export class SafetyAlertDetectionResponseDto {
@@ -105,6 +107,30 @@ export class SafetyAlertDetailResponseDto extends SafetyAlertResponseDto {
   @ApiProperty({ type: [SafetyAlertDetectionResponseDto] })
   detections!: SafetyAlertDetectionResponseDto[];
   @ApiProperty() detectionsTotal!: number;
+  @ApiProperty({ type: () => [SafetyAlertReviewResponseDto] })
+  reviews!: SafetyAlertReviewResponseDto[];
+  @ApiProperty() reviewsTotal!: number;
+}
+
+export class SafetyAlertReviewResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) alertId!: string;
+  @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid' }) actorUserId!: string;
+  @ApiProperty({ enum: AlertStatus }) fromStatus!: AlertStatus;
+  @ApiProperty({
+    enum: [AlertStatus.CONFIRMED, AlertStatus.DISMISSED, AlertStatus.NEEDS_MORE_EVIDENCE],
+  })
+  toStatus!: AlertStatus;
+  @ApiProperty() reason!: string;
+  @ApiProperty() alertRevision!: number;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class SafetyAlertReviewMutationResponseDto {
+  @ApiProperty({ type: SafetyAlertResponseDto }) alert!: SafetyAlertResponseDto;
+  @ApiProperty({ type: SafetyAlertReviewResponseDto }) review!: SafetyAlertReviewResponseDto;
+  @ApiProperty() replayed!: boolean;
 }
 
 export class SafetyAlertPageResponseDto {

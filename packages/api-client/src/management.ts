@@ -9,6 +9,8 @@ import type {
   RegionResponse,
   SafetyAlertDetailResponse,
   SafetyAlertResponse,
+  SafetyAlertReviewMutationResponse,
+  SafetyAlertReviewTargetStatus,
   SafetyAlertStatus,
   SafetyAlertType,
   SiteResponse,
@@ -188,6 +190,24 @@ export class SmartSiteManagementClient {
       'GET',
       `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}`,
       token,
+    );
+  }
+  reviewSafetyAlert(
+    token: string,
+    siteId: string,
+    alertId: string,
+    input: {
+      commandId: string;
+      expectedRevision: number;
+      targetStatus: SafetyAlertReviewTargetStatus;
+      reason: string;
+    },
+  ) {
+    return this.request<SafetyAlertReviewMutationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/reviews`,
+      token,
+      input,
     );
   }
   renameSite(token: string, siteId: string, name: string) {
