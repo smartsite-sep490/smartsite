@@ -131,6 +131,10 @@ To include the sibling AI repository, clone `smartsite-ai` next to this reposito
 docker compose -f infra/compose.yaml --profile ai up -d --build --wait
 ```
 
+For the MF05/MF06 presentation runtime with hidden AI processes, PID identity tracking, named camera
+sources and secret-safe process handling, see
+[Controlled local demo runtime](docs/operations/controlled-demo-runtime.md).
+
 The AI API is then available at http://localhost:8000.
 
 ### Mobile Development

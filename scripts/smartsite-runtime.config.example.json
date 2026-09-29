@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1",
+  "dataRoot": "D:/SmartSiteData/runtime",
+  "aiRepo": "D:/SmartSite/smartsite-ai",
+  "pythonPath": "D:/SmartSiteData/envs/smartsite-ai/Scripts/python.exe",
+  "demoConfigurationPath": "D:/SmartSiteData/runtime/demo-configuration.json",
+  "modelSpecPath": "D:/SmartSiteData/runtime/yolo11s-ppe-artifact.json",
+  "evidenceRoot": "D:/SmartSiteData/runtime/evidence",
+  "sourceManifests": {
+    "mp4": "D:/SmartSiteData/runtime/camera-runtime-mp4.json",
+    "laptop": "D:/SmartSiteData/runtime/camera-runtime-laptop.json",
+    "tapo": "D:/SmartSiteData/runtime/camera-runtime-tapo.json"
+  },
+  "tapoCredentialPath": "D:/SmartSiteData/secrets/tapo-camera.local.txt",
+  "backendServiceCredentialPath": "D:/SmartSiteData/secrets/backend-service.local.txt",
+  "backendUrl": "http://127.0.0.1:3000",
+  "webUrl": "http://127.0.0.1:5173",
+  "aiUrl": "http://127.0.0.1:8000"
+}

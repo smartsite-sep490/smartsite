@@ -52,7 +52,7 @@ services:
       HTTP_RATE_LIMIT_LIMIT: '120'
       AI_RATE_LIMIT_TTL_MS: '60000'
       AI_RATE_LIMIT_LIMIT: '600'
-      SMARTSITE_AI_SERVICE_TOKEN: smartsite_local_dev_service_token_only
+      SMARTSITE_AI_SERVICE_TOKEN: ${SMARTSITE_AI_SERVICE_TOKEN:-smartsite_local_dev_service_token_only}
       # Keep empty by default (deny all). Set this to the comma-separated Camera UUIDs
       # returned by `pnpm demo:setup` before recreating the Backend container.
       AI_CONFIGURATION_CAMERA_IDS: ${AI_CONFIGURATION_CAMERA_IDS:-}
@@ -91,6 +91,9 @@ services:
       dockerfile: infra/docker/web.Dockerfile
       args:
         VITE_API_URL: http://localhost:3000
+        VITE_AI_WS_URL: ws://127.0.0.1:8000/ws/realtime
+        # Local demo only: Vite embeds this value in the browser bundle.
+        VITE_AI_BACKEND_SERVICE_TOKEN: ${SMARTSITE_AI_SERVICE_TOKEN:-smartsite_local_dev_service_token_only}
     ports:
       - '127.0.0.1:5173:8080'
     depends_on:
