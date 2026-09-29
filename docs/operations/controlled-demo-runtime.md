@@ -77,6 +77,9 @@ and detections in one WebSocket message. Web paints those pixels and normalized 
 it does not use the separately playing fixture as a realtime background. Old metadata-only AI
 responses are rejected with an explicit unavailable state. Image decoding holds one active image
 and at most one latest pending frame; a five-second frame stall clears the realtime preview.
+The deadline starts when the socket opens, including when no first frame arrives. Socket
+construction failures produce a generic unavailable message, and queued callbacks from a closed
+connection are ignored before reconnect starts.
 The local timeline remains a separately labeled fallback. This preview is transient and does not
 replace the retained evidence served by the Backend alert-review endpoints.
 
