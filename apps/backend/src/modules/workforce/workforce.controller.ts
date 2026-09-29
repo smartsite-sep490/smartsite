@@ -30,6 +30,7 @@ function workerResponse(worker: WorkerEntity) {
   return {
     id: worker.id,
     siteId: worker.siteId,
+    contractorId: worker.contractorId,
     externalId: worker.externalId,
     displayName: worker.displayName,
     isActive: worker.isActive,

@@ -1,3 +1,5 @@
+import type { WorkerSiteZoneAssignmentStatus } from './identity-access-api.js';
+
 export type UserRole =
   | 'ADMIN'
   | 'SITE_MANAGER'
@@ -6,7 +8,7 @@ export type UserRole =
   | 'SECURITY_OFFICER'
   | 'WORKER';
 export type ProvisionableUserRole =
-  'ADMIN' | 'SITE_MANAGER' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+  'ADMIN' | 'SITE_MANAGER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export interface ProvisionableRoleAssignment {
@@ -155,9 +157,49 @@ export interface SafetyAlertReviewMutationResponse {
 export interface WorkerResponse {
   id: string;
   siteId: string;
+  contractorId: string | null;
   externalId: string;
   displayName: string;
   isActive: boolean;
+  createdAt: string;
+}
+
+export interface ContractorResponse {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ContractorParticipationResponse {
+  id: string;
+  contractorId: string;
+  siteId: string;
+  validFrom: string;
+  validUntil: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ContractorRepresentativeGrantResponse {
+  id: string;
+  userId: string;
+  contractorId: string;
+  createdAt: string;
+}
+
+export interface WorkerSiteZoneAssignmentResponse {
+  id: string;
+  workerId: string;
+  siteId: string;
+  zoneIds: string[];
+  status: WorkerSiteZoneAssignmentStatus;
+  validFrom: string;
+  validUntil: string | null;
+  requestedByUserId: string;
+  safetyReviewedByUserId: string | null;
+  siteManagerDecidedByUserId: string | null;
   createdAt: string;
 }
 

@@ -16,6 +16,10 @@ import type {
   SiteResponse,
   ZoneResponse,
   WorkerResponse,
+  ContractorResponse,
+  ContractorParticipationResponse,
+  ContractorRepresentativeGrantResponse,
+  WorkerSiteZoneAssignmentResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
@@ -272,6 +276,69 @@ export class SmartSiteManagementClient {
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/workers`, options),
       token,
+    );
+  }
+
+  createContractor(token: string, input: { code: string; name: string }) {
+    return this.request<ContractorResponse>('POST', '/contractors', token, input);
+  }
+  createContractorParticipation(
+    token: string,
+    contractorId: string,
+    input: { siteId: string; validFrom: string; validUntil: string | null },
+  ) {
+    return this.request<ContractorParticipationResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/participations`,
+      token,
+      input,
+    );
+  }
+  grantContractorRepresentative(token: string, contractorId: string, userId: string) {
+    return this.request<ContractorRepresentativeGrantResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/representative-grants`,
+      token,
+      { userId },
+    );
+  }
+  createContractorWorker(
+    token: string,
+    contractorId: string,
+    input: { siteId: string; externalId: string; displayName: string },
+  ) {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/workers`,
+      token,
+      input,
+    );
+  }
+  createWorkerSiteZoneAssignment(
+    token: string,
+    workerId: string,
+    input: { siteId: string; zoneIds: string[]; validFrom: string; validUntil: string | null },
+  ) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/site-zone-assignment-requests`,
+      token,
+      input,
+    );
+  }
+  safetyReviewWorkerSiteZoneAssignment(token: string, requestId: string) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(requestId)}/safety-review`,
+      token,
+    );
+  }
+  decideWorkerSiteZoneAssignment(token: string, requestId: string, approve: boolean) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(requestId)}/site-manager-decision`,
+      token,
+      { approve },
     );
   }
 
