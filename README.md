@@ -133,6 +133,12 @@ docker compose -f infra/compose.yaml --profile ai up -d --build --wait
 
 The AI API is then available at http://localhost:8000.
 
+For the face-enrollment transport demo, Compose wires the Backend's
+`SMARTSITE_AI_IDENTITY_URL` to `http://ai:8000` and supplies a matching
+service token. It accepts three authenticated JPEG uploads. Completion remains
+honestly `AI_UNAVAILABLE` until a reviewed face model and private template store
+exist; it never creates a simulated biometric profile or grants access.
+
 ### Mobile Development
 
 See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instructions.
