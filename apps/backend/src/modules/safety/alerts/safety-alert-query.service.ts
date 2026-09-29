@@ -5,8 +5,10 @@ import { AiObservationEventEntity } from '../../../database/entities/ai-observat
 import { AlertDetectionMappingEntity } from '../../../database/entities/alert-detection-mapping.entity.js';
 import { AlertStatus, AlertType, EventProcessingStatus } from '../../../database/entities/enums.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
+import { SafetyAlertReviewEntity } from '../../../database/entities/safety-alert-review.entity.js';
 
 const DETAIL_DETECTION_LIMIT = 100;
+const DETAIL_REVIEW_LIMIT = 100;
 
 export interface SafetyAlertListFilters {
   status?: string;
@@ -24,6 +26,8 @@ export interface SafetyAlertDetail {
   alert: SafetyAlertEntity;
   detections: SafetyAlertDetectionSummary[];
   detectionsTotal: number;
+  reviews: SafetyAlertReviewEntity[];
+  reviewsTotal: number;
 }
 
 function optionalEnum<T extends string>(
@@ -72,7 +76,8 @@ export class SafetyAlertQueryService {
     if (!alert) return missing();
 
     const mappings = this.dataSource.getRepository(AlertDetectionMappingEntity);
-    const [detections, detectionsTotal] = await Promise.all([
+    const reviews = this.dataSource.getRepository(SafetyAlertReviewEntity);
+    const [detections, detectionsTotal, reviewItems, reviewsTotal] = await Promise.all([
       mappings
         .createQueryBuilder('mapping')
         .innerJoin(AiObservationEventEntity, 'event', 'event.eventId = mapping.eventId')
@@ -91,7 +96,13 @@ export class SafetyAlertQueryService {
           processingStatus: EventProcessingStatus;
         }>(),
       mappings.countBy({ alertId: id }),
+      reviews.find({
+        where: { alertId: id, siteId: scope },
+        order: { createdAt: 'ASC', id: 'ASC' },
+        take: DETAIL_REVIEW_LIMIT,
+      }),
+      reviews.countBy({ alertId: id, siteId: scope }),
     ]);
-    return { alert, detections, detectionsTotal };
+    return { alert, detections, detectionsTotal, reviews: reviewItems, reviewsTotal };
   }
 }

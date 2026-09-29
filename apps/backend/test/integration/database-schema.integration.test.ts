@@ -92,6 +92,8 @@ safety_alert|first_detected_at|timestamptz|NO||||
 safety_alert|last_detected_at|timestamptz|NO||||
 safety_alert|detection_count|int4|NO||32|0|1
 safety_alert|created_at|timestamptz|NO||||now()
+safety_alert|revision|int4|NO||32|0|0
+safety_alert|updated_at|timestamptz|NO||||now()
 site|id|uuid|NO||||
 site|code|varchar|NO|64|||
 site|name|varchar|NO|255|||
