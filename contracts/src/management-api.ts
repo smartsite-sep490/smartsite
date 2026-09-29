@@ -203,6 +203,31 @@ export interface WorkerSiteZoneAssignmentResponse {
   createdAt: string;
 }
 
+export type FaceEnrollmentSessionStatus =
+  'PENDING' | 'COLLECTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface FaceEnrollmentSessionResponse {
+  id: string;
+  workerId: string;
+  consentVersion: string;
+  status: FaceEnrollmentSessionStatus;
+  acceptedSampleCount: number;
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface FaceProfileResponse {
+  id: string;
+  workerId: string;
+  modelVersion: string;
+  status: 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+  consentVersion: string;
+  consentedAt: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
 export type ZoneAccessEffect = 'ALLOW' | 'DENY';
 
 export interface ZoneAccessGrantResponse {

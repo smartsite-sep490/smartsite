@@ -20,6 +20,8 @@ import type {
   ContractorParticipationResponse,
   ContractorRepresentativeGrantResponse,
   WorkerSiteZoneAssignmentResponse,
+  FaceEnrollmentSessionResponse,
+  FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
@@ -60,6 +62,36 @@ export class SmartSiteManagementClient {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         ...(credentials ? { credentials } : {}),
+      });
+    } catch {
+      throw new ApiError('network', 'Could not connect to the backend.');
+    }
+    if (response.status === 204) return undefined as T;
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+    }
+    if (!response.ok) {
+      const error = parseBackendErrorEnvelope(payload, response.status);
+      throw new ApiError(
+        'http',
+        error?.message ?? `Backend returned HTTP ${response.status}.`,
+        response.status,
+        error,
+      );
+    }
+    return payload as T;
+  }
+
+  private async requestFormData<T>(method: string, path: string, token: string, body: FormData) {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+        method,
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+        body,
       });
     } catch {
       throw new ApiError('network', 'Could not connect to the backend.');
@@ -339,6 +371,45 @@ export class SmartSiteManagementClient {
       `/site-zone-assignment-requests/${pathId(requestId)}/site-manager-decision`,
       token,
       { approve },
+    );
+  }
+  startFaceEnrollment(token: string, workerId: string, consentVersion: string) {
+    return this.request<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-enrollments`,
+      token,
+      { consentVersion },
+    );
+  }
+  uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob) {
+    const form = new FormData();
+    form.append('sample', sample, 'face-sample.jpg');
+    return this.requestFormData<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/samples`,
+      token,
+      form,
+    );
+  }
+  completeFaceEnrollment(token: string, sessionId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/complete`,
+      token,
+    );
+  }
+  getFaceProfile(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'GET',
+      `/workers/${pathId(workerId)}/face-profile`,
+      token,
+    );
+  }
+  revokeFaceProfile(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-profile/revoke`,
+      token,
     );
   }
 

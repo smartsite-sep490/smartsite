@@ -218,6 +218,19 @@ export class ContractorOperationsService {
       this.forbidden();
   }
 
+  async requireWorkerEnrollmentAccess(
+    manager: EntityManager,
+    actor: WorkforceActor,
+    workerIdValue: string,
+  ): Promise<WorkerEntity> {
+    const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: uuid(workerIdValue) });
+    if (!worker) missing();
+    if (!worker.isActive || !worker.contractorId) this.forbidden();
+    await this.requireContractorRepresentative(manager, actor, worker.contractorId, worker.siteId);
+    await this.requireActiveParticipation(manager, worker.contractorId, worker.siteId, new Date());
+    return worker;
+  }
+
   async createContractor(actor: WorkforceActor, input: CreateContractorCommand) {
     this.assertAdmin(actor);
     const value = command(CreateContractorCommand, input);

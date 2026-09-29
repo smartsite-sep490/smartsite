@@ -187,6 +187,30 @@ export class WorkerPageResponseDto {
   @ApiProperty() total!: number;
 }
 
+export class FaceEnrollmentSessionResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty() consentVersion!: string;
+  @ApiProperty({ enum: ['PENDING', 'COLLECTING', 'COMPLETED', 'FAILED', 'CANCELLED'] }) status!:
+    'PENDING' | 'COLLECTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  @ApiProperty({ minimum: 0, maximum: 3 }) acceptedSampleCount!: number;
+  @ApiProperty({ format: 'date-time' }) startedAt!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) completedAt!: string | null;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class FaceProfileResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty() modelVersion!: string;
+  @ApiProperty({ enum: ['ACTIVE', 'REVOKED', 'NEEDS_REENROLL'] }) status!:
+    'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+  @ApiProperty() consentVersion!: string;
+  @ApiProperty({ format: 'date-time' }) consentedAt!: string;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) revokedAt!: string | null;
+}
+
 export class ZoneAccessGrantResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;
