@@ -26,6 +26,13 @@ export type {
 } from './camera-region-configuration.js';
 
 export type {
+  FaceGateDecisionResponse,
+  FaceGateReasonCode,
+  FaceVerificationTechnicalOutcome,
+  GateAuthorizationOutcome,
+} from './identity-access-api.js';
+
+export type {
   AccountResponse,
   AuthClientType,
   LoginResponse,
