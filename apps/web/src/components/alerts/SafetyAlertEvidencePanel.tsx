@@ -183,7 +183,7 @@ export function SafetyAlertEvidencePanel({
                 <button
                   type="button"
                   onClick={() => setSelectedEvidenceIndex(null)}
-                  className="font-semibold text-[#A3A09C] hover:text-[#2F3437]"
+                  className="font-semibold text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
                 >
                   Close image
                 </button>

@@ -573,7 +573,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                       maxLength={1000}
                       rows={3}
                       placeholder="Example: Worker is clearly visible without a hard hat across the linked observations."
-                      className="mt-3 w-full rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+                      className="mt-3 w-full rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
                     />
                     {review.error && (
                       <p

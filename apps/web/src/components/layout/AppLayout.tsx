@@ -83,15 +83,12 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
             }`}
           >
             {/* Brand Logo */}
-            <div
-              className="flex items-center gap-3 cursor-pointer"
+            <button
+              type="button"
+              className="flex items-center gap-3 cursor-pointer text-left bg-transparent border-0 p-0 focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-2 rounded-md"
               onClick={() => onSelectTab('landing')}
               title="SmartSite Homepage"
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') onSelectTab('landing');
-              }}
+              aria-label="SmartSite Homepage"
             >
               <div className="w-9 h-9 rounded-md bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
                 <IconHardHat className="w-5 h-5" />
@@ -102,7 +99,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                   <span className="text-[var(--accent)]">Site</span>
                 </div>
               )}
-            </div>
+            </button>
 
             {/* Toggle Button for Sidebar to/nhỏ */}
             <button
@@ -211,12 +208,12 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
           <div className="flex items-center gap-4">
             {/* Search Input */}
             <div className="relative w-56 hidden md:block">
-              <IconSearch className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+              <IconSearch className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search SmartSite"
                 aria-label="Search SmartSite"
-                className="w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-muted)]"
+                className="w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-secondary)]"
               />
             </div>
 

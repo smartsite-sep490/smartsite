@@ -71,8 +71,10 @@ export function ActionDrawer({
               <h3 className="font-bold text-[#111111] tracking-tight">{title}</h3>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-md text-[#A3A09C] hover:text-[#2F3437] hover:bg-[#F7F6F3] transition-colors active:scale-95"
+              aria-label="Close drawer"
+              className="p-1.5 rounded-md text-[#6B6B6B] hover:text-[#2F3437] hover:bg-[#F7F6F3] transition-colors active:scale-95 cursor-pointer"
             >
               <IconX className="w-5 h-5" />
             </button>

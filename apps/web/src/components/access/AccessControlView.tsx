@@ -448,7 +448,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 value={workerExternalId}
                 onChange={(event) => setWorkerExternalId(event.target.value)}
                 placeholder="WKR-001"
-                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal placeholder:text-[#6B6B6B]"
               />
             </label>
             <label className="text-xs font-bold text-[#6B6B6B]">
@@ -459,7 +459,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 value={workerDisplayName}
                 onChange={(event) => setWorkerDisplayName(event.target.value)}
                 placeholder="Nguyen Van A"
-                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal placeholder:text-[#6B6B6B]"
               />
             </label>
             {createWorker.error && (
@@ -559,7 +559,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               />
             </label>
             <label className="text-xs font-bold text-[#6B6B6B] sm:col-span-2">
-              Valid until <span className="font-normal text-[#A3A09C]">(optional)</span>
+              Valid until <span className="font-normal text-[#6B6B6B]">(optional)</span>
               <input
                 type="datetime-local"
                 disabled={!canManageGrants}

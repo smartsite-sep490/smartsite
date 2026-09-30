@@ -688,23 +688,25 @@ export function RestrictedZoneView({
                 type="text"
                 autoComplete="username"
                 placeholder="Admin username"
+                aria-label="Admin username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
               />
               <input
                 required
                 type="password"
                 autoComplete="current-password"
                 placeholder="Password"
+                aria-label="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
               />
               <button
                 type="submit"
                 disabled={login.isPending}
-                className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60 cursor-pointer  transition-colors"
+                className="rounded-lg bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#333333] disabled:opacity-60 cursor-pointer transition-colors"
               >
                 {login.isPending ? 'Signing in…' : 'Sign in as Admin'}
               </button>
@@ -1164,12 +1166,14 @@ export function RestrictedZoneView({
           )}
 
           {/* Bottom Camera Controls Bar Overlay */}
-          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
+          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={togglePlayback}
                 disabled={isLive}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
                 title={
                   isLive
                     ? 'Playback controls apply to timeline replay only'
@@ -1181,9 +1185,11 @@ export function RestrictedZoneView({
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
+                type="button"
                 onClick={toggleMuted}
                 disabled={isLive}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
                 title={isLive ? 'Realtime preview has no audio' : 'Sound'}
               >
                 <IconVolume className="w-4 h-4" />
@@ -1192,15 +1198,20 @@ export function RestrictedZoneView({
 
             <div className="flex items-center gap-3">
               <button
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Grid"
+                type="button"
+                disabled
+                className="p-1.5 rounded text-white/40 cursor-not-allowed"
+                title="Multi-camera grid view is currently unavailable"
+                aria-label="Grid view unavailable"
               >
                 <IconGrid className="w-4 h-4" />
               </button>
               <button
+                type="button"
                 onClick={() => void videoRef.current?.requestFullscreen()}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
                 title="Fullscreen"
+                aria-label="Enter fullscreen"
               >
                 <IconMaximize className="w-4 h-4" />
               </button>
@@ -1484,7 +1495,7 @@ export function RestrictedZoneView({
               ))}
               {displayedEvents.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-[#A3A09C] text-xs">
+                  <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
                     No zone events match the selected criteria.
                   </td>
                 </tr>
@@ -1506,8 +1517,10 @@ export function RestrictedZoneView({
                 <h3 className="font-bold text-[#2F3437]">Review & Action</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedIncident(null)}
-                className="text-[#A3A09C] hover:text-[#6B6B6B]"
+                aria-label="Close review dialog"
+                className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
               >
                 <IconX className="w-5 h-5" />
               </button>

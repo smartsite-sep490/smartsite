@@ -9,8 +9,8 @@
  * Contrast notes (WCAG AA on white #fff):
  *   --text-heading  #111111  15.9:1  ✓ any size
  *   --text-body     #2F3437  11.8:1  ✓ any size
- *   --text-secondary #6B6B6B  5.36:1 ✓ small text (timestamps, counts, availability)
- *   --text-muted    #A3A09C  2.85:1  ✗ small — decorative/disabled/placeholder ONLY
+ *   --text-secondary #6B6B6B  5.36:1 ✓ small text (timestamps, counts, availability, placeholders, hints)
+ *   --text-muted    #A3A09C  2.85:1  ✗ small — decorative/disabled ONLY
  */
 
 :root {
@@ -27,8 +27,8 @@
   /* ── Text hierarchy ──────────────────────────────────── */
   --text-heading: #111111; /* page titles, primary actions */
   --text-body: #2f3437; /* readable body copy */
-  --text-secondary: #6b6b6b; /* timestamps, counts, meta — AA compliant */
-  --text-muted: #a3a09c; /* placeholder, disabled, decorative ONLY */
+  --text-secondary: #6b6b6b; /* timestamps, counts, meta, placeholders, hints — AA compliant */
+  --text-muted: #a3a09c; /* disabled, decorative ONLY */
 
   /* ── Accent ──────────────────────────────────────────── */
   --accent: #f66b17; /* brand orange, sparingly */

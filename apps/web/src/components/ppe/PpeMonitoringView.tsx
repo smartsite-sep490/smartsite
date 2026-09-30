@@ -411,12 +411,14 @@ export function PpeMonitoringView() {
           )}
 
           {/* Bottom Camera Controls */}
-          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
+          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={togglePlayback}
                 disabled={isLive}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
                 title={
                   isLive
                     ? 'Playback controls apply to timeline replay only'
@@ -428,9 +430,11 @@ export function PpeMonitoringView() {
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
+                type="button"
                 onClick={toggleMuted}
                 disabled={isLive}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
                 title={isLive ? 'Realtime preview has no audio' : 'Sound'}
               >
                 <IconVolume className="w-4 h-4" />
@@ -439,15 +443,20 @@ export function PpeMonitoringView() {
 
             <div className="flex items-center gap-3">
               <button
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Grid"
+                type="button"
+                disabled
+                className="p-1.5 rounded text-white/40 cursor-not-allowed"
+                title="Multi-camera grid view is currently unavailable"
+                aria-label="Grid view unavailable"
               >
                 <IconGrid className="w-4 h-4" />
               </button>
               <button
+                type="button"
                 onClick={() => void videoRef.current?.requestFullscreen()}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
                 title="Fullscreen"
+                aria-label="Enter fullscreen"
               >
                 <IconMaximize className="w-4 h-4" />
               </button>
@@ -534,7 +543,7 @@ export function PpeMonitoringView() {
               </p>
               <div className="space-y-2">
                 {ppeDetections.length === 0 ? (
-                  <p className="text-xs text-[#A3A09C] italic">
+                  <p className="text-xs text-[#6B6B6B] italic">
                     No tracked individuals in current frame
                   </p>
                 ) : (
@@ -802,7 +811,7 @@ export function PpeMonitoringView() {
               ))}
               {displayedEvents.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-[#A3A09C] text-xs">
+                  <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
                     No PPE events match the selected criteria.
                   </td>
                 </tr>
@@ -824,8 +833,10 @@ export function PpeMonitoringView() {
                 <h3 className="font-bold text-[#2F3437]">Violation Review</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedReview(null)}
-                className="text-[#A3A09C] hover:text-[#6B6B6B] cursor-pointer"
+                aria-label="Close review dialog"
+                className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
               >
                 <IconX className="w-5 h-5" />
               </button>

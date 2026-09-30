@@ -76,14 +76,14 @@ export function EventDetailPanel({
         {/* Result Alert Box */}
         <div className="pt-2">
           <div className={`border-l-[3px] p-3 rounded-r-md ${resultColors[resultStatus]}`}>
-            <p className="text-[9px] font-bold uppercase tracking-widest opacity-60 mb-1">RESULT</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest mb-1">RESULT</p>
             <div className="flex items-center gap-1.5 text-xs font-bold mb-1">
               {resultStatus === 'error' && <IconAlertTriangle className="w-3.5 h-3.5" />}
               {resultStatus === 'warning' && <IconAlertTriangle className="w-3.5 h-3.5" />}
               {resultStatus === 'success' && <IconCheck className="w-3.5 h-3.5" />}
               <span className="uppercase tracking-wide">{resultTitle}</span>
             </div>
-            <p className="text-xs font-medium opacity-80 leading-relaxed">{resultMessage}</p>
+            <p className="text-xs font-medium leading-relaxed">{resultMessage}</p>
           </div>
         </div>
       </div>

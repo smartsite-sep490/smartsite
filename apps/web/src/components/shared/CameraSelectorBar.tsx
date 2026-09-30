@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { IconBuilding2, IconChevronDown, IconCamera } from '../icons';
 
 export interface CameraModel {
@@ -26,6 +26,7 @@ export function CameraSelectorBar({
 }: CameraSelectorBarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
 
   const activeCamera = cameras.find((c) => c.id === activeCameraId) || cameras[0];
 
@@ -52,19 +53,26 @@ export function CameraSelectorBar({
         {/* Camera Dropdown Container */}
         <div className="relative" ref={dropdownRef}>
           <button
+            type="button"
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#F7F6F3] transition-colors"
+            aria-label="Select camera"
+            aria-expanded={isOpen}
+            aria-controls={menuId}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#F7F6F3] transition-colors cursor-pointer"
           >
             <IconCamera className="w-4 h-4 text-[#2F3437]" />
             <span className="text-xs font-bold text-[#111111]">
               {activeCamera?.name || activeCamera?.id}
             </span>
-            <IconChevronDown className="w-3 h-3 text-[#A3A09C]" />
+            <IconChevronDown className="w-3 h-3 text-[#6B6B6B]" />
           </button>
 
           {/* Dropdown Menu */}
           {isOpen && (
-            <div className="absolute top-full left-0 mt-1 w-[320px] bg-white border border-[#EAEAEA] rounded-lg shadow-sm z-50 overflow-hidden">
+            <div
+              id={menuId}
+              className="absolute top-full left-0 mt-1 w-[320px] bg-white border border-[#EAEAEA] rounded-lg shadow-sm z-50 overflow-hidden"
+            >
               <div className="p-2 border-b border-[#EAEAEA] bg-[#FBFBFA]">
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest px-2">
                   Available Cameras
