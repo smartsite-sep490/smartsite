@@ -135,3 +135,53 @@ test('ZoneAuthorizationService: expired, future and revoked grants do not author
   assert.equal(result.candidateSubtype, 'ZONE_ENTRY_UNAUTHORIZED');
   assert.equal(result.reasonCode, 'NO_VALID_ALLOW');
 });
+
+test('ZoneAuthorizationService: a candidate identity cannot use an allow grant without a verified worker', () => {
+  const service = new ZoneAuthorizationService();
+  const result = service.authorizeZoneEntry(
+    createZone(ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED),
+    {
+      candidateWorkerId: 'WORKER-001',
+      evaluatedAt: new Date('2026-09-28T08:00:00.000Z'),
+      authorizationDataAvailable: true,
+      grants: [
+        {
+          effect: 'ALLOW',
+          validFrom: new Date('2026-09-28T07:00:00.000Z'),
+          validUntil: new Date('2026-09-28T09:00:00.000Z'),
+          revokedAt: null,
+        },
+      ],
+    },
+  );
+
+  assert.equal(result.status, 'UNAVAILABLE');
+  assert.equal(result.candidateSubtype, 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE');
+  assert.equal(result.reasonCode, 'IDENTITY_UNAVAILABLE');
+  assert.equal(result.workerId, undefined);
+});
+
+test('ZoneAuthorizationService: an allow grant expires exactly at validUntil', () => {
+  const service = new ZoneAuthorizationService();
+  const result = service.authorizeZoneEntry(
+    createZone(ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED),
+    {
+      candidateWorkerId: 'WORKER-001',
+      workerId: '33333333-3333-4333-8333-333333333333',
+      evaluatedAt: new Date('2026-09-28T08:00:00.000Z'),
+      authorizationDataAvailable: true,
+      grants: [
+        {
+          effect: 'ALLOW',
+          validFrom: new Date('2026-09-28T07:00:00.000Z'),
+          validUntil: new Date('2026-09-28T08:00:00.000Z'),
+          revokedAt: null,
+        },
+      ],
+    },
+  );
+
+  assert.equal(result.status, 'DENIED');
+  assert.equal(result.candidateSubtype, 'ZONE_ENTRY_UNAUTHORIZED');
+  assert.equal(result.reasonCode, 'NO_VALID_ALLOW');
+});

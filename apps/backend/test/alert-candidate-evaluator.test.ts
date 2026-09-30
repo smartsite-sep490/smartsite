@@ -173,6 +173,16 @@ test('Case 6: PPE MISSING SAFETY_VEST when Zone requires SAFETY_VEST returns PPE
   );
 });
 
+test('MF06: ZONE_ENTRY in a NONE policy zone does not create an intrusion candidate', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({ restrictionPolicy: ZoneRestrictionPolicy.NONE });
+  const event = createBaseEvent([
+    { type: 'ZONE_ENTRY', trackId: 103, regionId, geometryVersion, confidence: 0.92 },
+  ]);
+
+  assert.deepEqual(evaluator.evaluate(event, context), []);
+});
+
 test('Case 7: ZONE_ENTRY in PROHIBITED_FOR_ALL returns ZONE_ENTRY_PROHIBITED', () => {
   const evaluator = new AlertCandidateEvaluator();
   const context = createTestContext({
