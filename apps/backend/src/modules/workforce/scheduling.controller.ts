@@ -1,4 +1,4 @@
-import { Body, Controller, Logger, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -13,6 +13,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
+import { pagination } from '../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
@@ -213,5 +214,59 @@ export class SchedulingController {
       status: result.status,
     });
     return result;
+  }
+
+  @Get('shift-change-requests')
+  @ApiOkResponse()
+  async listShiftChanges(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.scheduling.listShiftChangeRequests(
+      request.user!,
+      siteId,
+      String(value.offset),
+      String(value.limit),
+    );
+    return { items: result.items, total: result.total };
+  }
+
+  @Get('shift-swap-requests')
+  @ApiOkResponse()
+  async listShiftSwaps(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.scheduling.listShiftSwapRequests(
+      request.user!,
+      siteId,
+      String(value.offset),
+      String(value.limit),
+    );
+    return { items: result.items, total: result.total };
+  }
+
+  @Get('absence-requests')
+  @ApiOkResponse()
+  async listAbsences(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.scheduling.listAbsenceRequests(
+      request.user!,
+      siteId,
+      String(value.offset),
+      String(value.limit),
+    );
+    return { items: result.items, total: result.total };
   }
 }

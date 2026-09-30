@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, type FindOptionsWhere } from 'typeorm';
 import { command, knownUnique, missing, page, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
@@ -9,6 +9,7 @@ import { SiteEntity } from '../../database/entities/site.entity.js';
 import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
+import { AuthenticatedUser } from '../auth/auth.service.js';
 import {
   AssignContractorRepresentativeDto,
   CreateContractorDto,
@@ -109,15 +110,113 @@ export class WorkforceConfigurationService {
     }
   }
 
+  async listContractors(
+    user: AuthenticatedUser,
+    siteId: string,
+    offset = 0,
+    limit = 50,
+  ): Promise<{ items: ContractorEntity[]; total: number }> {
+    const scopedSiteId = uuid(siteId);
+    // Authorization check
+    let contractorIdScope: string | undefined;
+    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
+      // Must be CONTRACTOR_REPRESENTATIVE or WORKER
+      const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+      if (rep) {
+        contractorIdScope = rep.contractorId;
+      } else {
+        const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+        if (worker && worker.contractorId) {
+          contractorIdScope = worker.contractorId;
+        } else {
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        }
+      }
+    }
+
+    const pagination = page(offset, limit);
+    const where: FindOptionsWhere<ContractorEntity> = { siteId: scopedSiteId };
+    if (contractorIdScope) where.id = contractorIdScope;
+
+    const [items, total] = await this.dataSource.getRepository(ContractorEntity).findAndCount({
+      where,
+      order: { name: 'ASC' },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
+    return { items, total };
+  }
+
   async list(
+    user: AuthenticatedUser,
     siteId: string,
     offset = 0,
     limit = 20,
   ): Promise<{ items: WorkerEntity[]; total: number }> {
+    const scopedSiteId = uuid(siteId);
+
+    // Authorization check
+    let contractorIdScope: string | undefined;
+    let workerIdScope: string | undefined;
+    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
+      const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+      if (rep) {
+        contractorIdScope = rep.contractorId;
+      } else {
+        const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+        if (worker) {
+          workerIdScope = worker.id;
+        } else {
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        }
+      }
+    }
+
     const pagination = page(offset, limit);
+    const where: FindOptionsWhere<WorkerEntity> = { siteId: scopedSiteId };
+    if (contractorIdScope) where.contractorId = contractorIdScope;
+    if (workerIdScope) where.id = workerIdScope;
+
     const [items, total] = await this.dataSource.getRepository(WorkerEntity).findAndCount({
-      where: { siteId: uuid(siteId) },
+      where,
       order: { externalId: 'ASC', id: 'ASC' },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
+    return { items, total };
+  }
+
+  async listCoworkers(
+    user: AuthenticatedUser,
+    siteId: string,
+    offset = 0,
+    limit = 50,
+  ): Promise<{ items: Partial<WorkerEntity>[]; total: number }> {
+    const scopedSiteId = uuid(siteId);
+
+    let contractorIdScope: string | undefined;
+    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
+      const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+      if (rep) {
+        contractorIdScope = rep.contractorId;
+      } else {
+        const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+        if (worker && worker.contractorId) {
+          contractorIdScope = worker.contractorId;
+        } else {
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        }
+      }
+    }
+
+    const pagination = page(offset, limit);
+    const where: FindOptionsWhere<WorkerEntity> = { siteId: scopedSiteId, isActive: true };
+    if (contractorIdScope) where.contractorId = contractorIdScope;
+
+    const [items, total] = await this.dataSource.getRepository(WorkerEntity).findAndCount({
+      where,
+      select: { id: true, displayName: true, externalId: true },
+      order: { displayName: 'ASC' },
       skip: pagination.offset,
       take: pagination.limit,
     });

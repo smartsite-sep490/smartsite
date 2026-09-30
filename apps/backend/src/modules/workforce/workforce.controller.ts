@@ -46,7 +46,7 @@ function workerResponse(worker: WorkerEntity) {
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard)
 @Controller('sites/:siteId/workers')
 export class WorkforceController {
   private readonly logger = new Logger(WorkforceController.name);
@@ -54,6 +54,7 @@ export class WorkforceController {
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
   @Post()
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse({ type: WorkerResponseDto })
   async create(
     @Req() request: AuthenticatedRequest,
@@ -73,13 +74,26 @@ export class WorkforceController {
   @Get()
   @ApiOkResponse({ type: WorkerPageResponseDto })
   async list(
+    @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
     const value = pagination(offset, limit);
-    const result = await this.workforce.list(siteId, value.offset, value.limit);
+    const result = await this.workforce.list(request.user!, siteId, value.offset, value.limit);
     return { items: result.items.map(workerResponse), total: result.total };
   }
 
+  @Get('coworkers')
+  @ApiOkResponse()
+  async listCoworkers(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.workforce.listCoworkers(request.user!, siteId, value.offset, value.limit);
+    return { items: result.items, total: result.total };
+  }
 }

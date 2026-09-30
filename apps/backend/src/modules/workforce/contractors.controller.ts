@@ -1,4 +1,4 @@
-import { Body, Controller, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -6,7 +6,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
-  ApiServiceUnavailableResponse,
+  ApiOkResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
@@ -42,8 +42,7 @@ function contractorResponse(contractor: ContractorEntity) {
 @ApiNotFoundResponse({ type: ErrorResponseDto })
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
-@ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard)
 @Controller('sites/:siteId/contractors')
 export class ContractorsController {
   private readonly logger = new Logger(ContractorsController.name);
@@ -51,6 +50,7 @@ export class ContractorsController {
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
   @Post()
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async create(
     @Req() request: AuthenticatedRequest,
@@ -68,6 +68,7 @@ export class ContractorsController {
   }
 
   @Post(':contractorId/representatives')
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async assignRepresentative(
     @Req() request: AuthenticatedRequest,
@@ -83,5 +84,15 @@ export class ContractorsController {
       resourceId: assignment.id,
     });
     return assignment;
+  }
+
+  @Get()
+  @ApiOkResponse()
+  async list(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    const result = await this.workforce.listContractors(request.user!, siteId);
+    return { items: result.items.map(contractorResponse), total: result.total };
   }
 }

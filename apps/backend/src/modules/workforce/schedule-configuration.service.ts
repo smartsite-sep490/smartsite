@@ -8,6 +8,10 @@ import { ShiftEntity } from '../../database/entities/shift.entity.js';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../database/entities/worker-schedule.entity.js';
+import { UserRole } from '../../database/entities/user.entity.js';
+import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
+import { AuthenticatedUser } from '../auth/auth.service.js';
+import { page } from '../../common/configuration/commands.js';
 import {
   CreateScheduleVersionDto,
   CreateShiftDto,
@@ -24,6 +28,12 @@ function invalid(message: string): never {
 @Injectable()
 export class ScheduleConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
+
+  private assertSiteAccess(user: AuthenticatedUser, siteId: string) {
+    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || r.siteId === siteId)) {
+      throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+    }
+  }
 
   async createShift(siteId: string, input: CreateShiftDto): Promise<ShiftEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
@@ -120,5 +130,78 @@ export class ScheduleConfigurationService {
         ]);
       }
     });
+  }
+
+  async listShifts(
+    user: AuthenticatedUser,
+    siteId: string,
+  ): Promise<{ items: ShiftEntity[]; total: number }> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertSiteAccess(user, scopedSiteId);
+    const [items, total] = await this.dataSource.getRepository(ShiftEntity).findAndCount({
+      where: { siteId: scopedSiteId },
+      order: { startsAt: 'ASC', name: 'ASC' },
+    });
+    return { items, total };
+  }
+
+  async listScheduleVersions(
+    user: AuthenticatedUser,
+    siteId: string,
+  ): Promise<{ items: ScheduleVersionEntity[]; total: number }> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertSiteAccess(user, scopedSiteId);
+    const [items, total] = await this.dataSource.getRepository(ScheduleVersionEntity).findAndCount({
+      where: { siteId: scopedSiteId },
+      order: { version: 'DESC' },
+    });
+    return { items, total };
+  }
+
+  async listWorkerSchedules(
+    user: AuthenticatedUser,
+    siteId: string,
+    offset = '0',
+    limit = '50',
+  ): Promise<{ items: WorkerScheduleEntity[]; total: number }> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const pagination = page(Number(offset), Number(limit));
+
+    // Authorization check
+    let contractorIdScope: string | undefined;
+    let workerIdScope: string | undefined;
+    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
+      // Must be CONTRACTOR_REPRESENTATIVE or WORKER
+      const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+      if (rep) {
+        contractorIdScope = rep.contractorId;
+      } else {
+        const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+        if (worker) {
+          workerIdScope = worker.id;
+        } else {
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        }
+      }
+    }
+
+    const query = this.dataSource.getRepository(WorkerScheduleEntity).createQueryBuilder('schedule')
+      .where('schedule.site_id = :siteId', { siteId: scopedSiteId });
+
+    if (contractorIdScope) {
+      query.innerJoin('worker', 'w', 'schedule.worker_id = w.id')
+           .andWhere('w.contractor_id = :contractorId', { contractorId: contractorIdScope });
+    }
+    if (workerIdScope)
+      query.andWhere('schedule.worker_id = :workerId', { workerId: workerIdScope });
+
+    const [items, total] = await query
+      .orderBy('schedule.workDate', 'DESC')
+      .addOrderBy('schedule.id', 'ASC')
+      .skip(pagination.offset)
+      .take(pagination.limit)
+      .getManyAndCount();
+
+    return { items, total };
   }
 }

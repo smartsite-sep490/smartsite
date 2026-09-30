@@ -1,4 +1,4 @@
-import { Body, Controller, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -6,6 +6,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiOkResponse,
   ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -30,7 +31,7 @@ import { ScheduleConfigurationService } from './schedule-configuration.service.j
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard)
 @Controller('sites/:siteId')
 export class ScheduleConfigurationController {
   private readonly logger = new Logger(ScheduleConfigurationController.name);
@@ -38,6 +39,7 @@ export class ScheduleConfigurationController {
   constructor(private readonly schedules: ScheduleConfigurationService) {}
 
   @Post('shifts')
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createShift(
     @Req() request: AuthenticatedRequest,
@@ -50,6 +52,7 @@ export class ScheduleConfigurationController {
   }
 
   @Post('schedule-versions')
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createScheduleVersion(
     @Req() request: AuthenticatedRequest,
@@ -67,6 +70,7 @@ export class ScheduleConfigurationController {
   }
 
   @Post('schedule-versions/:scheduleVersionId/worker-schedules')
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createWorkerSchedule(
     @Req() request: AuthenticatedRequest,
@@ -82,5 +86,37 @@ export class ScheduleConfigurationController {
       resourceId: schedule.id,
     });
     return schedule;
+  }
+
+  @Get('shifts')
+  @ApiOkResponse()
+  async listShifts(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    const result = await this.schedules.listShifts(request.user!, siteId);
+    return { items: result.items, total: result.total };
+  }
+
+  @Get('schedule-versions')
+  @ApiOkResponse()
+  async listScheduleVersions(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    const result = await this.schedules.listScheduleVersions(request.user!, siteId);
+    return { items: result.items, total: result.total };
+  }
+
+  @Get('worker-schedules')
+  @ApiOkResponse()
+  async listWorkerSchedules(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const result = await this.schedules.listWorkerSchedules(request.user!, siteId, offset, limit);
+    return { items: result.items, total: result.total };
   }
 }

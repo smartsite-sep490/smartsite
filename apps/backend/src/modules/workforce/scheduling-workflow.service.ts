@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
-import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
+import { command, conflict, missing, page, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { AbsenceRequestEntity } from '../../database/entities/absence-request.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
@@ -569,5 +569,93 @@ export class SchedulingWorkflowService {
       request.reviewedAt = new Date();
       return manager.getRepository(AbsenceRequestEntity).save(request);
     });
+  }
+
+  private async getRequestScope(actor: AuthenticatedUser, siteId: string) {
+    if (actor.roleAssignments.some(a => a.role === UserRole.ADMIN || (a.role === UserRole.SITE_MANAGER && a.siteId === siteId))) {
+      return { type: 'ALL' };
+    }
+    const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId, userId: actor.id });
+    if (rep) {
+      return { type: 'CONTRACTOR', contractorId: rep.contractorId };
+    }
+    const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId, userId: actor.id, isActive: true });
+    if (worker) {
+      return { type: 'WORKER', workerId: worker.id };
+    }
+    this.forbidden();
+  }
+
+  async listShiftChangeRequests(actor: AuthenticatedUser, siteId: string, offset = '0', limit = '50') {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const pagination = page(Number(offset), Number(limit));
+    const scope = await this.getRequestScope(actor, scopedSiteId);
+
+    const query = this.dataSource.getRepository(ShiftChangeRequestEntity).createQueryBuilder('req')
+      .where('req.site_id = :siteId', { siteId: scopedSiteId });
+
+    if (scope.type === 'CONTRACTOR') {
+      query.innerJoin('worker', 'w', 'req.worker_id = w.id')
+           .andWhere('w.contractor_id = :contractorId', { contractorId: scope.contractorId });
+    } else if (scope.type === 'WORKER') {
+      query.andWhere('req.worker_id = :workerId', { workerId: scope.workerId });
+    }
+
+    const [items, total] = await query
+      .orderBy('req.createdAt', 'DESC')
+      .addOrderBy('req.id', 'ASC')
+      .skip(pagination.offset)
+      .take(pagination.limit)
+      .getManyAndCount();
+    return { items, total };
+  }
+
+  async listShiftSwapRequests(actor: AuthenticatedUser, siteId: string, offset = '0', limit = '50') {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const pagination = page(Number(offset), Number(limit));
+    const scope = await this.getRequestScope(actor, scopedSiteId);
+
+    const query = this.dataSource.getRepository(ShiftSwapRequestEntity).createQueryBuilder('req')
+      .where('req.site_id = :siteId', { siteId: scopedSiteId });
+
+    if (scope.type === 'CONTRACTOR') {
+      query.innerJoin('worker', 'wReq', 'req.requester_worker_id = wReq.id')
+           .innerJoin('worker', 'wCow', 'req.coworker_worker_id = wCow.id')
+           .andWhere('(wReq.contractor_id = :contractorId OR wCow.contractor_id = :contractorId)', { contractorId: scope.contractorId });
+    } else if (scope.type === 'WORKER') {
+      query.andWhere('(req.requester_worker_id = :workerId OR req.coworker_worker_id = :workerId)', { workerId: scope.workerId });
+    }
+
+    const [items, total] = await query
+      .orderBy('req.createdAt', 'DESC')
+      .addOrderBy('req.id', 'ASC')
+      .skip(pagination.offset)
+      .take(pagination.limit)
+      .getManyAndCount();
+    return { items, total };
+  }
+
+  async listAbsenceRequests(actor: AuthenticatedUser, siteId: string, offset = '0', limit = '50') {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const pagination = page(Number(offset), Number(limit));
+    const scope = await this.getRequestScope(actor, scopedSiteId);
+
+    const query = this.dataSource.getRepository(AbsenceRequestEntity).createQueryBuilder('req')
+      .where('req.site_id = :siteId', { siteId: scopedSiteId });
+
+    if (scope.type === 'CONTRACTOR') {
+      query.innerJoin('worker', 'w', 'req.worker_id = w.id')
+           .andWhere('w.contractor_id = :contractorId', { contractorId: scope.contractorId });
+    } else if (scope.type === 'WORKER') {
+      query.andWhere('req.worker_id = :workerId', { workerId: scope.workerId });
+    }
+
+    const [items, total] = await query
+      .orderBy('req.createdAt', 'DESC')
+      .addOrderBy('req.id', 'ASC')
+      .skip(pagination.offset)
+      .take(pagination.limit)
+      .getManyAndCount();
+    return { items, total };
   }
 }
