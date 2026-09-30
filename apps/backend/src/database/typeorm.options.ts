@@ -8,6 +8,8 @@ import { ScopedJwtAuthentication1790553600000 } from './migrations/1790553600000
 import { Mf06ZoneAuthorization1790553600000 } from './migrations/1790553600000-Mf06ZoneAuthorization.js';
 import { SafetyAlertReviews1790640000000 } from './migrations/1790640000000-SafetyAlertReviews.js';
 import { WorkforceTimeScheduling1790726400000 } from './migrations/1790726400000-WorkforceTimeScheduling.js';
+import { Mf07WorkforceAccessScope1790812800000 } from './migrations/1790812800000-Mf07WorkforceAccessScope.js';
+import { Mf07AbsenceScheduleVersion1790899200000 } from './migrations/1790899200000-Mf07AbsenceScheduleVersion.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -32,6 +34,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf06ZoneAuthorization1790553600000,
       SafetyAlertReviews1790640000000,
       WorkforceTimeScheduling1790726400000,
+      Mf07WorkforceAccessScope1790812800000,
+      Mf07AbsenceScheduleVersion1790899200000,
     ],
     logging: false,
     extra: {

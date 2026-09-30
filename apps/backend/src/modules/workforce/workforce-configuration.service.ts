@@ -1,10 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { command, knownUnique, missing, page, uuid } from '../../common/configuration/commands.js';
+import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
+import { ContractorEntity } from '../../database/entities/contractor.entity.js';
 import { SiteEntity } from '../../database/entities/site.entity.js';
+import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
+import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -23,27 +28,128 @@ export class CreateWorkerCommand {
   @MaxLength(255)
   @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
   displayName!: string;
+
+  @IsOptional()
+  @IsUUID()
+  contractorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+}
+
+export class CreateContractorCommand {
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
+  code!: string;
+
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
+  name!: string;
+}
+
+export class AssignContractorRepresentativeCommand {
+  @IsUUID()
+  userId!: string;
 }
 
 @Injectable()
 export class WorkforceConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
+  private async assertWorkerAssignment(siteId: string, contractorId: string, userId: string) {
+    const [contractor, user, assignment] = await Promise.all([
+      this.dataSource
+        .getRepository(ContractorEntity)
+        .findOneBy({ id: contractorId, siteId, isActive: true }),
+      this.dataSource.getRepository(UserEntity).findOneBy({ id: userId, isActive: true }),
+      this.dataSource
+        .getRepository(UserRoleAssignmentEntity)
+        .findOneBy({ userId, role: UserRole.WORKER, siteId }),
+    ]);
+    if (!contractor || !user || !assignment) missing();
+  }
+
   async create(siteId: string, input: CreateWorkerCommand): Promise<WorkerEntity> {
     const scopedSiteId = uuid(siteId);
     const value = command(CreateWorkerCommand, input);
     const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
     if (!site) missing();
+    if (!!value.contractorId !== !!value.userId)
+      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: 'Worker contractor and user assignments must be set together',
+      });
+    if (value.contractorId && value.userId)
+      await this.assertWorkerAssignment(scopedSiteId, value.contractorId, value.userId);
     try {
       return await this.dataSource.getRepository(WorkerEntity).save({
         id: randomUUID(),
         siteId: scopedSiteId,
+        contractorId: value.contractorId ?? null,
+        userId: value.userId ?? null,
         externalId: value.externalId,
         displayName: value.displayName,
         isActive: true,
       });
     } catch (error) {
-      knownUnique(error, ['uq_worker_site_external_id']);
+      knownUnique(error, ['uq_worker_site_external_id', 'uq_worker_site_user']);
+    }
+  }
+
+  async createContractor(siteId: string, input: CreateContractorCommand): Promise<ContractorEntity> {
+    const scopedSiteId = uuid(siteId);
+    const value = command(CreateContractorCommand, input);
+    const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
+    if (!site) missing();
+    try {
+      return await this.dataSource.getRepository(ContractorEntity).save({
+        id: randomUUID(),
+        siteId: scopedSiteId,
+        code: value.code,
+        name: value.name,
+        isActive: true,
+      });
+    } catch (error) {
+      knownUnique(error, ['uq_contractor_site_code']);
+    }
+  }
+
+  async assignRepresentative(
+    siteId: string,
+    contractorId: string,
+    input: AssignContractorRepresentativeCommand,
+  ): Promise<ContractorRepresentativeAssignmentEntity> {
+    const scopedSiteId = uuid(siteId);
+    const scopedContractorId = uuid(contractorId);
+    const value = command(AssignContractorRepresentativeCommand, input);
+    const [contractor, user, assignment] = await Promise.all([
+      this.dataSource
+        .getRepository(ContractorEntity)
+        .findOneBy({ id: scopedContractorId, siteId: scopedSiteId, isActive: true }),
+      this.dataSource.getRepository(UserEntity).findOneBy({ id: value.userId, isActive: true }),
+      this.dataSource.getRepository(UserRoleAssignmentEntity).findOneBy({
+        userId: value.userId,
+        role: UserRole.CONTRACTOR_REPRESENTATIVE,
+        siteId: scopedSiteId,
+      }),
+    ]);
+    if (!contractor || !user || !assignment) missing();
+    try {
+      return await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).save({
+        id: randomUUID(),
+        siteId: scopedSiteId,
+        contractorId: scopedContractorId,
+        userId: value.userId,
+      });
+    } catch (error) {
+      knownUnique(error, ['uq_contractor_representative_assignment']);
     }
   }
 

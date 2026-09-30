@@ -8,6 +8,8 @@ import { AlertDetectionMappingEntity } from './alert-detection-mapping.entity.js
 import { UserEntity } from './user.entity.js';
 import { AuthSessionEntity } from './auth-session.entity.js';
 import { UserRoleAssignmentEntity } from './user-role-assignment.entity.js';
+import { ContractorEntity } from './contractor.entity.js';
+import { ContractorRepresentativeAssignmentEntity } from './contractor-representative-assignment.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 import { ZoneAccessGrantEntity } from './zone-access-grant.entity.js';
 import { ZoneEntryDecisionEntity } from './zone-entry-decision.entity.js';
@@ -35,6 +37,8 @@ export * from './alert-detection-mapping.entity.js';
 export * from './user.entity.js';
 export * from './auth-session.entity.js';
 export * from './user-role-assignment.entity.js';
+export * from './contractor.entity.js';
+export * from './contractor-representative-assignment.entity.js';
 export * from './worker.entity.js';
 export * from './zone-access-grant.entity.js';
 export * from './zone-entry-decision.entity.js';
@@ -61,6 +65,8 @@ export const ENTITIES = [
   UserEntity,
   AuthSessionEntity,
   UserRoleAssignmentEntity,
+  ContractorEntity,
+  ContractorRepresentativeAssignmentEntity,
   WorkerEntity,
   ZoneAccessGrantEntity,
   ZoneEntryDecisionEntity,

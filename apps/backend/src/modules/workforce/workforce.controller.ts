@@ -30,6 +30,8 @@ function workerResponse(worker: WorkerEntity) {
   return {
     id: worker.id,
     siteId: worker.siteId,
+    contractorId: worker.contractorId,
+    userId: worker.userId,
     externalId: worker.externalId,
     displayName: worker.displayName,
     isActive: worker.isActive,
@@ -81,4 +83,5 @@ export class WorkforceController {
     const result = await this.workforce.list(siteId, value.offset, value.limit);
     return { items: result.items.map(workerResponse), total: result.total };
   }
+
 }

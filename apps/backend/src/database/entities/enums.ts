@@ -86,4 +86,5 @@ export enum AbsenceRequestStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   CANCELLED = 'CANCELLED',
+  CONFLICTED = 'CONFLICTED',
 }

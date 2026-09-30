@@ -1,5 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { AbsenceRequestStatus } from './enums.js';
+import { ScheduleVersionEntity } from './schedule-version.entity.js';
 import { ShiftEntity } from './shift.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
@@ -10,7 +11,7 @@ import { WorkerScheduleEntity } from './worker-schedule.entity.js';
 @Index('idx_absence_request_site_status', ['siteId', 'status', 'createdAt'])
 @Check(
   'chk_absence_request_status',
-  "status IN ('PENDING_MANAGER', 'APPROVED', 'REJECTED', 'CANCELLED')",
+  "status IN ('PENDING_MANAGER', 'APPROVED', 'REJECTED', 'CANCELLED', 'CONFLICTED')",
 )
 @Check('chk_absence_request_reason_length', 'char_length(reason) BETWEEN 5 AND 1000')
 @Check(
@@ -39,6 +40,13 @@ export class AbsenceRequestEntity {
   @Column({ name: 'shift_id', type: 'uuid' })
   @ForeignKey(() => ShiftEntity, { name: 'fk_absence_request_shift', onDelete: 'RESTRICT' })
   shiftId!: string;
+
+  @Column({ name: 'expected_schedule_version_id', type: 'uuid' })
+  @ForeignKey(() => ScheduleVersionEntity, {
+    name: 'fk_absence_request_expected_version',
+    onDelete: 'RESTRICT',
+  })
+  expectedScheduleVersionId!: string;
 
   @Column({ name: 'replacement_worker_id', type: 'uuid', nullable: true })
   @ForeignKey(() => WorkerEntity, {
