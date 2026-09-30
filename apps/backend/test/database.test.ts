@@ -91,6 +91,42 @@ test('workforce scheduling schema identifies dated worker assignments for MF03 a
   assert.match(migration, /fk_shift_swap_requester_schedule/);
   assert.match(migration, /fk_shift_swap_coworker_schedule/);
   assert.match(migration, /fk_absence_request_worker_schedule/);
+
+  const absenceVersionMigration = fs.readFileSync(
+    path.resolve(
+      backendRoot,
+      'src/database/migrations/1790899200000-Mf07AbsenceScheduleVersion.ts',
+    ),
+    'utf8',
+  );
+  assert.match(absenceVersionMigration, /expected_schedule_version_id uuid/);
+  assert.match(absenceVersionMigration, /fk_absence_request_expected_version/);
+
+  const scheduleVersionMigration = fs.readFileSync(
+    path.resolve(backendRoot, 'src/database/migrations/1790985600000-ScheduleVersionUnique.ts'),
+    'utf8',
+  );
+  assert.match(scheduleVersionMigration, /uq_schedule_version_site_version UNIQUE/);
+});
+
+test('MF07 workforce access scope binds workers and contractor representatives explicitly', () => {
+  const backendRoot = path.resolve(
+    import.meta.dirname,
+    import.meta.dirname.includes('.test-build') ? '../..' : '..',
+  );
+  const migrationPath = path.resolve(
+    backendRoot,
+    'src/database/migrations/1790812800000-Mf07WorkforceAccessScope.ts',
+  );
+  const migration = fs.readFileSync(migrationPath, 'utf8');
+
+  assert.match(migration, /CREATE TABLE contractor/);
+  assert.match(migration, /CREATE TABLE contractor_representative_assignment/);
+  assert.match(migration, /uq_contractor_representative_assignment UNIQUE \(contractor_id, user_id\)/);
+  assert.match(migration, /ALTER TABLE worker ADD COLUMN contractor_id uuid/);
+  assert.match(migration, /ALTER TABLE worker ADD COLUMN user_id uuid/);
+  assert.match(migration, /uq_worker_site_user/);
+  assert.match(migration, /FOREIGN KEY \(user_id\) REFERENCES app_user\(id\)/);
 });
 
 test('migration configuration validates only database fields in production', () => {

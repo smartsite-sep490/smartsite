@@ -1,7 +1,8 @@
-import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn, Unique } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
 
 @Entity({ name: 'schedule_version' })
+@Unique('uq_schedule_version_site_version', ['siteId', 'version'])
 @Index('idx_schedule_version_site_effective', ['siteId', 'effectiveFrom', 'version'])
 @Check('chk_schedule_version_positive', 'version >= 1')
 @Check('chk_schedule_version_effective_interval', 'effective_until IS NULL OR effective_until > effective_from')
