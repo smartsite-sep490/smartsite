@@ -18,6 +18,7 @@ import {
   UnavailableFaceEnrollmentAdapter,
   type FaceEnrollmentAdapter,
   type FaceEnrollmentCompletion,
+  type FaceSampleQuality,
 } from './face-enrollment.adapter.js';
 
 export const FACE_ENROLLMENT_ADAPTER = Symbol('FACE_ENROLLMENT_ADAPTER');
@@ -174,6 +175,24 @@ export class FaceEnrollmentService {
     });
   }
 
+  async assessSampleQuality(
+    actor: WorkforceActor,
+    workerIdValue: string,
+    sample: UploadedFaceSample | undefined,
+  ): Promise<FaceSampleQuality> {
+    this.validateJpeg(sample);
+    await this.dataSource.transaction(async (manager) => {
+      await this.workforce.requireWorkerEnrollmentAccess(manager, actor, workerIdValue);
+    });
+    const result = await this.adapter.assessSampleQuality(sample.buffer);
+    if (result.status === 'AI_UNAVAILABLE')
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Face quality check is temporarily unavailable',
+      });
+    return result;
+  }
+
   async complete(actor: WorkforceActor, sessionIdValue: string): Promise<FaceProfileEntity> {
     const sessionId = uuid(sessionIdValue);
     const session = await this.dataSource.transaction(async (manager) =>
@@ -181,8 +200,16 @@ export class FaceEnrollmentService {
     );
     if (session.acceptedSampleCount !== 3)
       conflict('Face enrollment requires three accepted samples');
-    const completion = await this.adapter.completeEnrollment(session.id);
-    this.validateCompletion(completion);
+    let completion: FaceEnrollmentCompletion;
+    try {
+      completion = await this.adapter.completeEnrollment(session.id);
+      this.validateCompletion(completion);
+    } catch (error) {
+      // A quality/model failure must not leave the session active forever;
+      // callers can capture a fresh three-sample session and retry.
+      await this.markSessionFailed(actor, session.id);
+      throw error;
+    }
     return this.dataSource.transaction(async (manager) => {
       const current = await this.requireOpenSession(manager, actor, session.id, true);
       if (current.acceptedSampleCount !== 3)
@@ -213,6 +240,19 @@ export class FaceEnrollmentService {
       await manager.getRepository(FaceEnrollmentSessionEntity).save(current);
       return manager.getRepository(FaceProfileEntity).save(profile);
     });
+  }
+
+  private async markSessionFailed(actor: WorkforceActor, sessionId: string): Promise<void> {
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const current = await this.requireOpenSession(manager, actor, sessionId, true);
+        current.status = FaceEnrollmentSessionStatus.FAILED;
+        current.completedAt = new Date();
+        await manager.getRepository(FaceEnrollmentSessionEntity).save(current);
+      });
+    } catch {
+      // Preserve the adapter/validation error returned to the caller.
+    }
   }
 
   private validateCompletion(completion: FaceEnrollmentCompletion): void {

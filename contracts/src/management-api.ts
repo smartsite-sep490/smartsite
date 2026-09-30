@@ -217,6 +217,11 @@ export interface FaceEnrollmentSessionResponse {
   createdAt: string;
 }
 
+export interface FaceEnrollmentQualityResponse {
+  status: 'ACCEPTED' | 'QUALITY_FAILED';
+  reasonCode: string;
+}
+
 export interface FaceProfileResponse {
   id: string;
   workerId: string;

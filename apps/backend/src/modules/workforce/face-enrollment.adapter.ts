@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 
@@ -16,7 +17,13 @@ export interface FaceEnrollmentCompletion {
   modelVersion: string;
 }
 
+export interface FaceSampleQuality {
+  status: 'ACCEPTED' | 'QUALITY_FAILED' | 'AI_UNAVAILABLE';
+  reasonCode?: string;
+}
+
 export interface FaceEnrollmentAdapter {
+  assessSampleQuality(jpeg: Buffer): Promise<FaceSampleQuality>;
   submitSample(input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult>;
   completeEnrollment(sessionId: string): Promise<FaceEnrollmentCompletion>;
 }
@@ -43,15 +50,16 @@ interface SampleResponse {
 
 interface CompletionResponse {
   status: string;
-  modelVersion?: string;
-  profileReference?: string;
+  modelVersion?: string | null;
+  profileReference?: string | null;
+  reasonCode?: string;
 }
 
 interface VerificationResponse {
   status: FaceVerificationEvidence['status'];
-  modelVersion?: string;
-  candidateProfileReference?: string;
-  scoreBand?: FaceVerificationEvidence['scoreBand'];
+  modelVersion?: string | null;
+  candidateProfileReference?: string | null;
+  scoreBand?: FaceVerificationEvidence['scoreBand'] | null;
 }
 
 /**
@@ -66,6 +74,15 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
     private readonly timeoutMs = 8_000,
   ) {}
 
+  async assessSampleQuality(jpeg: Buffer): Promise<FaceSampleQuality> {
+    const evidence = await this.verify({ verificationId: randomUUID(), jpeg });
+    if (evidence.status === 'QUALITY_FAILED')
+      return { status: 'QUALITY_FAILED', reasonCode: 'FACE_QUALITY_INSUFFICIENT' };
+    if (evidence.status === 'AI_UNAVAILABLE')
+      return { status: 'AI_UNAVAILABLE', reasonCode: 'FACE_MODEL_UNAVAILABLE' };
+    return { status: 'ACCEPTED', reasonCode: 'FACE_QUALITY_ACCEPTED' };
+  }
+
   async submitSample(input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult> {
     const response = await this.request(
       `/v1/identity/enrollments/${encodeURIComponent(input.sessionId)}/samples/${input.sampleIndex}`,
@@ -79,12 +96,16 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
     const response = await this.request(
       `/v1/identity/enrollments/${encodeURIComponent(sessionId)}/complete`,
     );
-    if (
-      !isCompletionResponse(response) ||
-      response.status !== 'ENROLLED' ||
-      !response.modelVersion ||
-      !response.profileReference
-    )
+    if (!isCompletionResponse(response)) this.unavailable();
+    if (response.status === 'QUALITY_FAILED') {
+      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message:
+          'Face samples did not contain one clear face. Re-capture with one face centered, well lit, and unobstructed.',
+      });
+    }
+    if (response.status === 'AI_UNAVAILABLE') this.unavailable();
+    if (response.status !== 'ENROLLED' || !response.modelVersion || !response.profileReference)
       this.unavailable();
     return {
       modelVersion: response.modelVersion,
@@ -104,7 +125,14 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
         (!response.modelVersion || !response.candidateProfileReference || !response.scoreBand)
       )
         return { status: 'AI_UNAVAILABLE' };
-      return response;
+      return {
+        status: response.status,
+        ...(response.modelVersion ? { modelVersion: response.modelVersion } : {}),
+        ...(response.candidateProfileReference
+          ? { candidateProfileReference: response.candidateProfileReference }
+          : {}),
+        ...(response.scoreBand ? { scoreBand: response.scoreBand } : {}),
+      };
     } catch {
       return { status: 'AI_UNAVAILABLE' };
     }
@@ -153,8 +181,13 @@ function isCompletionResponse(value: unknown): value is CompletionResponse {
   return (
     isRecord(value) &&
     typeof value.status === 'string' &&
-    (value.modelVersion === undefined || typeof value.modelVersion === 'string') &&
-    (value.profileReference === undefined || typeof value.profileReference === 'string')
+    (value.modelVersion === undefined ||
+      value.modelVersion === null ||
+      typeof value.modelVersion === 'string') &&
+    (value.profileReference === undefined ||
+      value.profileReference === null ||
+      typeof value.profileReference === 'string') &&
+    (value.reasonCode === undefined || typeof value.reasonCode === 'string')
   );
 }
 
@@ -165,10 +198,14 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
     ['MATCHED', 'UNKNOWN', 'LOW_CONFIDENCE', 'QUALITY_FAILED', 'AI_UNAVAILABLE'].includes(
       value.status,
     ) &&
-    (value.modelVersion === undefined || typeof value.modelVersion === 'string') &&
+    (value.modelVersion === undefined ||
+      value.modelVersion === null ||
+      typeof value.modelVersion === 'string') &&
     (value.candidateProfileReference === undefined ||
+      value.candidateProfileReference === null ||
       typeof value.candidateProfileReference === 'string') &&
     (value.scoreBand === undefined ||
+      value.scoreBand === null ||
       value.scoreBand === 'LOW' ||
       value.scoreBand === 'MEDIUM' ||
       value.scoreBand === 'HIGH')
@@ -181,6 +218,10 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
  */
 @Injectable()
 export class UnavailableFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVerificationAdapter {
+  async assessSampleQuality(_jpeg: Buffer): Promise<FaceSampleQuality> {
+    return { status: 'AI_UNAVAILABLE', reasonCode: 'FACE_MODEL_NOT_CONFIGURED' };
+  }
+
   async submitSample(_input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult> {
     throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
       code: 'SERVICE_UNAVAILABLE',

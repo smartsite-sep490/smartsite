@@ -199,6 +199,12 @@ export class FaceEnrollmentSessionResponseDto {
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
 }
 
+export class FaceEnrollmentQualityResponseDto {
+  @ApiProperty({ enum: ['ACCEPTED', 'QUALITY_FAILED'] })
+  status!: 'ACCEPTED' | 'QUALITY_FAILED';
+  @ApiProperty() reasonCode!: string;
+}
+
 export class FaceProfileResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) workerId!: string;

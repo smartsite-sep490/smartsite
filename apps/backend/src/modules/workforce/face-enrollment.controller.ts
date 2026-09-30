@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Logger,
   Param,
   Post,
@@ -28,6 +30,7 @@ import {
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import {
   FaceEnrollmentSessionResponseDto,
+  FaceEnrollmentQualityResponseDto,
   FaceProfileResponseDto,
 } from '../../common/http/management-response.dto.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
@@ -125,6 +128,18 @@ export class FaceEnrollmentController {
     @UploadedFile() sample: UploadedFaceSample | undefined,
   ) {
     return sessionResponse(await this.enrollment.submitSample(request.user!, sessionId, sample));
+  }
+
+  @Post('workers/:workerId/face-enrollment-quality')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: FaceEnrollmentQualityResponseDto })
+  @UseInterceptors(FileInterceptor('sample', { limits: { files: 1, fileSize: 5 * 1024 * 1024 } }))
+  async assessSampleQuality(
+    @Req() request: AuthenticatedRequest,
+    @Param('workerId') workerId: string,
+    @UploadedFile() sample: UploadedFaceSample | undefined,
+  ) {
+    return this.enrollment.assessSampleQuality(request.user!, workerId, sample);
   }
 
   @Post('face-enrollments/:sessionId/complete')

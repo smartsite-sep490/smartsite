@@ -21,6 +21,7 @@ import type {
   ContractorRepresentativeGrantResponse,
   WorkerSiteZoneAssignmentResponse,
   FaceEnrollmentSessionResponse,
+  FaceEnrollmentQualityResponse,
   FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
@@ -387,6 +388,16 @@ export class SmartSiteManagementClient {
     return this.requestFormData<FaceEnrollmentSessionResponse>(
       'POST',
       `/face-enrollments/${pathId(sessionId)}/samples`,
+      token,
+      form,
+    );
+  }
+  checkFaceEnrollmentQuality(token: string, workerId: string, sample: Blob) {
+    const form = new FormData();
+    form.append('sample', sample, 'face-quality-check.jpg');
+    return this.requestFormData<FaceEnrollmentQualityResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-enrollment-quality`,
       token,
       form,
     );
