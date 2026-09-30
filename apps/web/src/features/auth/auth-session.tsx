@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
 import { createContext, useContext, useState } from 'react';
 
 // Create a context for the auth state so we don't have to prop-drill the token
@@ -59,7 +59,7 @@ export function useLogin(apiUrl: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ username, password }: any) => {
+    mutationFn: async ({ username, password }: { username: string; password: string }) => {
       const client = new SmartSiteManagementClient(apiUrl);
       return client.login(username, password, 'WEB');
     },
@@ -85,5 +85,24 @@ export function useLogout(apiUrl: string) {
       queryClient.setQueryData(['auth', 'session'], null);
       queryClient.clear(); // Clear all cached data on logout
     },
+  });
+}
+
+/**
+ * useCurrentUser — fetches the authenticated user profile via GET /auth/me.
+ *
+ * Use this anywhere you need the user's role assignments or display name.
+ * It will correctly re-fetch after a hard refresh once the accessToken is restored
+ * by useRestoreSession. Never use useQuery(['auth','session']) without a queryFn
+ * to read user data.
+ */
+export function useCurrentUser(apiUrl: string) {
+  const { accessToken } = useAuth();
+  return useQuery<AccountResponse>({
+    queryKey: ['auth', 'me', apiUrl],
+    queryFn: () => new SmartSiteManagementClient(apiUrl).me(accessToken!),
+    enabled: !!accessToken,
+    staleTime: 5 * 60 * 1000, // 5 min — role assignments rarely change during a session
+    retry: false,
   });
 }

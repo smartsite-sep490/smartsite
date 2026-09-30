@@ -19,7 +19,7 @@ import {
   IconLogOut,
 } from '../icons';
 
-import { useLogout } from '../../features/auth/auth-session';
+import { useLogout, useCurrentUser } from '../../features/auth/auth-session';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -45,6 +45,21 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
   // Sidebar state: expanded (to) vs collapsed (nhỏ)
   const [isCollapsed, setIsCollapsed] = useState(false);
   const logoutMutation = useLogout(apiUrl);
+
+  // useCurrentUser calls /auth/me using the live accessToken; works after hard refresh.
+  const { data: currentUser } = useCurrentUser(apiUrl);
+  const displayName = currentUser?.username || 'User';
+  const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
+  const userRole = roles.includes('ADMIN')
+    ? 'System Admin'
+    : roles.includes('SITE_MANAGER')
+    ? 'Site Manager'
+    : roles.includes('CONTRACTOR_REPRESENTATIVE')
+    ? 'Contractor Rep'
+    : roles.includes('WORKER')
+    ? 'Worker'
+    : 'Authenticated User';
+  const userInitials = displayName.slice(0, 2).toUpperCase();
 
   const navGroups = [
     {
@@ -230,11 +245,11 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
             {/* User Profile */}
             <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">
               <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
-                SC
+                {userInitials}
               </div>
               <div className="text-left leading-tight hidden sm:block">
-                <p className="font-semibold text-xs text-[#041D2E]">SmartSite</p>
-                <p className="text-[11px] text-[#62748E]">Demo workspace</p>
+                <p className="font-semibold text-xs text-[#041D2E]">{displayName}</p>
+                <p className="text-[11px] text-[#62748E]">{userRole}</p>
               </div>
             </div>
 
@@ -242,7 +257,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
             <button
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
-              className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-colors relative cursor-pointer"
+              className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
               title="Logout"
             >
               <IconLogOut className="w-4 h-4" />

@@ -142,8 +142,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   });
 
   const shiftId = randomUUID();
+  const secondShiftId = randomUUID();
   await dataSource.getRepository(ShiftEntity).save({
     id: shiftId, siteId: siteA, name: 'S1', startsAt: '2026-01-01T08:00:00Z', endsAt: '2026-01-01T16:00:00Z', timezone: 'UTC'
+  });
+  await dataSource.getRepository(ShiftEntity).save({
+    id: secondShiftId, siteId: siteA, name: 'S2', startsAt: '2026-01-01T16:00:00Z', endsAt: '2026-01-02T00:00:00Z', timezone: 'UTC'
   });
   const versionId = randomUUID();
   await dataSource.getRepository(ScheduleVersionEntity).save({
@@ -154,7 +158,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     .getRepository(WorkerScheduleEntity)
     .save([
       { id: randomUUID(), siteId: siteA, scheduleVersionId: versionId, workerId: workerAEntityId, shiftId, workDate: '2026-01-01', isActive: true },
-      { id: randomUUID(), siteId: siteA, scheduleVersionId: versionId, workerId: workerBEntityId, shiftId, workDate: '2026-01-01', isActive: true },
+      { id: randomUUID(), siteId: siteA, scheduleVersionId: versionId, workerId: workerBEntityId, shiftId: secondShiftId, workDate: '2026-01-01', isActive: true },
     ]);
   const [workerASchedule, workerBSchedule] = schedules;
   if (!workerASchedule || !workerBSchedule) throw new Error('MF07 schedule fixture was not created');
@@ -168,7 +172,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   await dataSource.getRepository(ShiftSwapRequestEntity).save({
     id: randomUUID(), siteId: siteA, requesterWorkerId: workerAEntityId,
     requesterWorkerScheduleId: workerASchedule.id, coworkerWorkerId: workerBEntityId,
-    coworkerWorkerScheduleId: workerBSchedule.id, requesterShiftId: shiftId, coworkerShiftId: shiftId,
+    coworkerWorkerScheduleId: workerBSchedule.id, requesterShiftId: shiftId, coworkerShiftId: secondShiftId,
     expectedScheduleVersionId: versionId, status: ShiftRequestStatus.PENDING_COWORKER,
     requestedByUserId: workerAUser.id, reason: 'Need to swap today', coworkerConfirmedAt: null,
     reviewedByUserId: null, reviewedAt: null, appliedAt: null,
@@ -220,6 +224,75 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   assert.equal(res4.status, 200);
   assert.equal(res4.json.items.length, 1);
   assert.equal(res4.json.items[0].workerId, workerAEntityId);
+
+  const eligibleShifts = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerASchedule.id}/eligible-shifts`,
+    workerTokenA,
+  );
+  assert.equal(eligibleShifts.status, 200);
+  assert.deepEqual(eligibleShifts.json.items.map((item: { id: string }) => item.id), [secondShiftId]);
+  assert.deepEqual(Object.keys(eligibleShifts.json.items[0]).sort(), [
+    'endsAt',
+    'id',
+    'name',
+    'startsAt',
+    'timezone',
+  ]);
+
+  const swapCandidates = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerASchedule.id}/swap-candidates`,
+    workerTokenA,
+  );
+  assert.equal(swapCandidates.status, 200);
+  assert.equal(swapCandidates.json.total, 1);
+  assert.equal(swapCandidates.json.items[0].candidateWorkerId, workerBEntityId);
+  assert.equal(swapCandidates.json.items[0].candidateWorkerDisplayName, 'Worker B');
+  assert.equal(swapCandidates.json.items[0].candidateWorkerScheduleId, workerBSchedule.id);
+  assert.equal(swapCandidates.json.items[0].workDate, '2026-01-01');
+  assert.equal(swapCandidates.json.items[0].currentShift.id, secondShiftId);
+  assert.deepEqual(Object.keys(swapCandidates.json.items[0]).sort(), [
+    'candidateWorkerDisplayName',
+    'candidateWorkerId',
+    'candidateWorkerScheduleId',
+    'currentShift',
+    'workDate',
+  ]);
+  assert.deepEqual(Object.keys(swapCandidates.json.items[0].currentShift).sort(), [
+    'endsAt',
+    'id',
+    'name',
+    'startsAt',
+    'timezone',
+  ]);
+
+  // A Worker cannot use another Worker's schedule as the source schedule.
+  const crossWorkerCandidateRead = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerBSchedule.id}/swap-candidates`,
+    workerTokenA,
+  );
+  assert.equal(crossWorkerCandidateRead.status, 403);
+
+  // A Site Manager in another Site cannot use this Site's schedule options.
+  const crossSiteCandidateRead = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerASchedule.id}/eligible-shifts`,
+    mgrTokenB,
+  );
+  assert.equal(crossSiteCandidateRead.status, 403);
+
+  // Inactive source schedules are rejected, while no active candidate returns an empty list.
+  workerBSchedule.isActive = false;
+  await dataSource.getRepository(WorkerScheduleEntity).save(workerBSchedule);
+  const inactiveSourceRead = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerBSchedule.id}/swap-candidates`,
+    mgrTokenA,
+  );
+  assert.equal(inactiveSourceRead.status, 409);
+  const emptyCandidates = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerASchedule.id}/swap-candidates`,
+    workerTokenA,
+  );
+  assert.equal(emptyCandidates.status, 200);
+  assert.deepEqual(emptyCandidates.json, { items: [], total: 0 });
 
   // 5. Worker cannot enumerate another Contractor’s workers
   const res5 = await fetchJson(`/sites/${siteA}/workers`, workerTokenA);

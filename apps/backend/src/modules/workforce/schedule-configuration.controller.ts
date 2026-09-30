@@ -13,6 +13,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
+import {
+  EligibleShiftPageResponseDto,
+  SwapCandidatePageResponseDto,
+} from '../../common/http/management-response.dto.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
@@ -118,5 +122,25 @@ export class ScheduleConfigurationController {
   ) {
     const result = await this.schedules.listWorkerSchedules(request.user!, siteId, offset, limit);
     return { items: result.items, total: result.total };
+  }
+
+  @Get('worker-schedules/:workerScheduleId/eligible-shifts')
+  @ApiOkResponse({ type: EligibleShiftPageResponseDto })
+  async listEligibleShifts(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerScheduleId') workerScheduleId: string,
+  ) {
+    return this.schedules.listEligibleShifts(request.user!, siteId, workerScheduleId);
+  }
+
+  @Get('worker-schedules/:workerScheduleId/swap-candidates')
+  @ApiOkResponse({ type: SwapCandidatePageResponseDto })
+  async listSwapCandidates(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerScheduleId') workerScheduleId: string,
+  ) {
+    return this.schedules.listSwapCandidates(request.user!, siteId, workerScheduleId);
   }
 }

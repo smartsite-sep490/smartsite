@@ -9,10 +9,11 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
-import { IconRadio, IconUsers, IconTrendingUp } from './components/icons';
+import { IconRadio, IconTrendingUp } from './components/icons';
 import { useAuth, useRestoreSession } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
+import { WorkforceView } from './components/workforce/WorkforceView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -81,18 +82,8 @@ export function App() {
       {/* Tab: Operational Dashboard */}
       {effectiveTab === 'dashboard' && <DashboardView onNavigate={(tab) => handleSelectTab(tab)} />}
 
-      {/* Placeholder tabs for remaining modules */}
-      {effectiveTab === 'workforce' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] mx-auto flex items-center justify-center">
-            <IconUsers className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">Workforce Management</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Worker roster, site assignments, trade qualifications and active safety certifications.
-          </p>
-        </div>
-      )}
+      {/* Tab: Workforce Management (MF07) */}
+      {effectiveTab === 'workforce' && <WorkforceView apiUrl={apiUrl} />}
 
       {effectiveTab === 'access' && <AccessControlView apiUrl={apiUrl} />}
 

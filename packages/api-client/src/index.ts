@@ -20,6 +20,19 @@ export type {
   ZoneAccessGrantResponse,
   ZoneEntryDecisionStatus,
   ZoneEntryDecisionResponse,
+  ContractorResponse,
+  ShiftResponse,
+  ScheduleVersionResponse,
+  WorkerScheduleResponse,
+  EligibleShiftResponse,
+  EligibleShiftListResponse,
+  SwapCandidateShiftResponse,
+  SwapCandidateResponse,
+  SwapCandidateListResponse,
+  SchedulingRequestStatus,
+  ShiftChangeRequestResponse,
+  ShiftSwapRequestResponse,
+  AbsenceRequestResponse,
 } from '@smartsite/contracts';
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 export type ApiErrorCode = 'http' | 'network' | 'invalid-response' | 'timeout' | 'cancelled';

@@ -22,64 +22,32 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
 
   useGSAP(
     () => {
-      // Initial state: Start as Orb
-      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 0 });
-      gsap.set('.register-form-content', { opacity: 0, display: 'none', scale: 0.95 });
-      gsap.set('.register-loading-content', { opacity: 1, display: 'flex', scale: 1 });
+      // Start as form panel directly to avoid square->rectangle jump
+      gsap.set(panelRef.current, { width: 440, height: 560, opacity: 0, scale: 0.95 });
+      gsap.set('.register-form-content', { opacity: 0 });
+      gsap.set('.register-loading-content', { display: 'none' });
 
       // Cinematic entrance
       gsap.to('.register-bg-overlay', { opacity: 1, duration: 1.5, ease: 'power2.out' });
       
       const tl = gsap.timeline({ delay: 0.05 });
-      tl.to(panelRef.current, { opacity: 1, duration: 0.2 })
-        .to('.register-loading-content', {
-          opacity: 0,
-          scale: 0.9,
-          duration: 0.15,
-          onComplete: () => {
-            gsap.set('.register-loading-content', { display: 'none' });
-            gsap.set('.register-form-content', { display: 'flex' });
-          }
-        }, '+=0.1')
-        .to(panelRef.current, {
-          width: 440,
-          height: 560,
-          duration: 0.45,
-          ease: 'back.out(1.2)'
-        }, 'expand')
+      tl.to(panelRef.current, { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.2)' })
         .to('.register-form-content', {
           opacity: 1,
-          scale: 1,
-          duration: 0.25
-        }, 'expand+=0.2');
+          duration: 0.3
+        }, '-=0.1');
     },
     { scope: containerRef }
   );
 
   const handleNavigateLogin = () => {
     const tl = gsap.timeline();
-    tl.to('.register-form-content', {
+    tl.to(panelRef.current, {
       opacity: 0,
       scale: 0.95,
-      duration: 0.15,
-      onComplete: () => {
-        gsap.set('.register-form-content', { display: 'none' });
-        gsap.set('.register-loading-content', { display: 'flex' });
-      },
-    })
-    .to(panelRef.current, {
-      width: 240,
-      height: 240,
-      duration: 0.4,
-      ease: 'back.inOut(1.2)',
-    }, 'morph')
-    .to('.register-loading-content', {
-      opacity: 1,
-      scale: 1,
-      duration: 0.2,
-      ease: 'power2.out',
-    }, 'morph+=0.2')
-    .to({}, { duration: 0.1, onComplete: onBackToLogin });
+      duration: 0.3,
+      onComplete: onBackToLogin
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -29,6 +29,72 @@ function invalid(message: string): never {
 export class ScheduleConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
+  private forbidden(): never {
+    throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+      code: 'FORBIDDEN',
+      message: 'Forbidden',
+    });
+  }
+
+  private assertPasswordChanged(user: AuthenticatedUser): void {
+    if (user.mustChangePassword)
+      throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Password change required',
+      });
+  }
+
+  private isGlobalAdmin(user: AuthenticatedUser): boolean {
+    return user.roleAssignments.some(
+      (assignment) => assignment.role === UserRole.ADMIN && assignment.siteId === null,
+    );
+  }
+
+  private hasSiteRole(user: AuthenticatedUser, role: UserRole, siteId: string): boolean {
+    return user.roleAssignments.some(
+      (assignment) => assignment.role === role && assignment.siteId === siteId,
+    );
+  }
+
+  private async activeScheduleForReader(
+    user: AuthenticatedUser,
+    siteId: string,
+    workerScheduleId: string,
+  ): Promise<{ schedule: WorkerScheduleEntity; worker: WorkerEntity }> {
+    this.assertPasswordChanged(user);
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const scopedWorkerScheduleId = uuid(workerScheduleId);
+    const isManager = this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, scopedSiteId);
+    const isWorker = this.hasSiteRole(user, UserRole.WORKER, scopedSiteId);
+    if (!isManager && !isWorker) this.forbidden();
+
+    const schedule = await this.dataSource.getRepository(WorkerScheduleEntity).findOneBy({
+      id: scopedWorkerScheduleId,
+      siteId: scopedSiteId,
+    });
+    if (!schedule) missing();
+
+    const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({
+      id: schedule.workerId,
+      siteId: scopedSiteId,
+    });
+    if (!worker) missing();
+    if (!isManager && (worker.userId !== user.id || !worker.isActive)) this.forbidden();
+    if (!schedule.isActive) conflict('Worker schedule is inactive');
+    if (!worker.isActive) conflict('Worker is inactive');
+    return { schedule, worker };
+  }
+
+  private shiftView(shift: ShiftEntity) {
+    return {
+      id: shift.id,
+      name: shift.name,
+      startsAt: shift.startsAt.toISOString(),
+      endsAt: shift.endsAt.toISOString(),
+      timezone: shift.timezone,
+    };
+  }
+
   private assertSiteAccess(user: AuthenticatedUser, siteId: string) {
     if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || r.siteId === siteId)) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
@@ -203,5 +269,92 @@ export class ScheduleConfigurationService {
       .getManyAndCount();
 
     return { items, total };
+  }
+
+  async listEligibleShifts(
+    user: AuthenticatedUser,
+    siteId: string,
+    workerScheduleId: string,
+  ) {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const { schedule } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    const shifts = await this.dataSource.getRepository(ShiftEntity).find({
+      where: { siteId: scopedSiteId },
+      order: { startsAt: 'ASC', name: 'ASC', id: 'ASC' },
+    });
+    const items = shifts
+      .filter((shift) => shift.id !== schedule.shiftId)
+      .map((shift) => this.shiftView(shift));
+    return { items, total: items.length };
+  }
+
+  async listSwapCandidates(
+    user: AuthenticatedUser,
+    siteId: string,
+    workerScheduleId: string,
+  ) {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const { schedule } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    type SwapCandidateRow = {
+      candidateWorkerId: string;
+      candidateWorkerDisplayName: string;
+      candidateWorkerScheduleId: string;
+      workDate: string;
+      currentShiftId: string;
+      currentShiftName: string;
+      currentShiftStartsAt: Date;
+      currentShiftEndsAt: Date;
+      currentShiftTimezone: string;
+    };
+
+    const rows = await this.dataSource
+      .getRepository(WorkerScheduleEntity)
+      .createQueryBuilder('candidateSchedule')
+      .innerJoin(
+        WorkerEntity,
+        'candidateWorker',
+        'candidateWorker.id = candidateSchedule.worker_id AND candidateWorker.site_id = candidateSchedule.site_id',
+      )
+      .innerJoin(
+        ShiftEntity,
+        'candidateShift',
+        'candidateShift.id = candidateSchedule.shift_id AND candidateShift.site_id = candidateSchedule.site_id',
+      )
+      .select('candidateWorker.id', 'candidateWorkerId')
+      .addSelect('candidateWorker.display_name', 'candidateWorkerDisplayName')
+      .addSelect('candidateSchedule.id', 'candidateWorkerScheduleId')
+      .addSelect('candidateSchedule.work_date', 'workDate')
+      .addSelect('candidateShift.id', 'currentShiftId')
+      .addSelect('candidateShift.name', 'currentShiftName')
+      .addSelect('candidateShift.starts_at', 'currentShiftStartsAt')
+      .addSelect('candidateShift.ends_at', 'currentShiftEndsAt')
+      .addSelect('candidateShift.timezone', 'currentShiftTimezone')
+      .where('candidateSchedule.site_id = :siteId', { siteId: scopedSiteId })
+      .andWhere('candidateSchedule.schedule_version_id = :scheduleVersionId', {
+        scheduleVersionId: schedule.scheduleVersionId,
+      })
+      .andWhere('candidateSchedule.work_date = :workDate', { workDate: schedule.workDate })
+      .andWhere('candidateSchedule.worker_id <> :workerId', { workerId: schedule.workerId })
+      .andWhere('candidateSchedule.shift_id <> :shiftId', { shiftId: schedule.shiftId })
+      .andWhere('candidateSchedule.is_active = true')
+      .andWhere('candidateWorker.is_active = true')
+      .orderBy('candidateWorker.display_name', 'ASC')
+      .addOrderBy('candidateSchedule.id', 'ASC')
+      .getRawMany<SwapCandidateRow>();
+
+    const items = rows.map((row) => ({
+      candidateWorkerId: row.candidateWorkerId,
+      candidateWorkerDisplayName: row.candidateWorkerDisplayName,
+      candidateWorkerScheduleId: row.candidateWorkerScheduleId,
+      workDate: row.workDate,
+      currentShift: {
+        id: row.currentShiftId,
+        name: row.currentShiftName,
+        startsAt: new Date(row.currentShiftStartsAt).toISOString(),
+        endsAt: new Date(row.currentShiftEndsAt).toISOString(),
+        timezone: row.currentShiftTimezone,
+      },
+    }));
+    return { items, total: items.length };
   }
 }

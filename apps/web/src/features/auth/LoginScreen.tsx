@@ -24,64 +24,32 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
 
   useGSAP(
     () => {
-      // Initial state: Start as Orb
-      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 0 });
-      gsap.set('.login-form-content', { opacity: 0, display: 'none', scale: 0.95 });
-      gsap.set('.login-loading-content', { opacity: 1, display: 'flex', scale: 1 });
+      // Start as form panel directly to avoid square->rectangle jump
+      gsap.set(panelRef.current, { width: 440, height: 560, opacity: 0, scale: 0.95 });
+      gsap.set('.login-form-content', { opacity: 0 });
+      gsap.set('.login-loading-content', { display: 'none' });
 
       // Cinematic entrance
       gsap.to('.login-bg-overlay', { opacity: 1, duration: 1.5, ease: 'power2.out' });
       
       const tl = gsap.timeline({ delay: 0.05 });
-      tl.to(panelRef.current, { opacity: 1, duration: 0.2 })
-        .to('.login-loading-content', {
-          opacity: 0,
-          scale: 0.9,
-          duration: 0.15,
-          onComplete: () => {
-            gsap.set('.login-loading-content', { display: 'none' });
-            gsap.set('.login-form-content', { display: 'flex' });
-          }
-        }, '+=0.1')
-        .to(panelRef.current, {
-          width: 440,
-          height: 560,
-          duration: 0.45,
-          ease: 'back.out(1.2)'
-        }, 'expand')
+      tl.to(panelRef.current, { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.2)' })
         .to('.login-form-content', {
           opacity: 1,
-          scale: 1,
-          duration: 0.25
-        }, 'expand+=0.2');
+          duration: 0.3
+        }, '-=0.1');
     },
     { scope: containerRef }
   );
 
   const handleNavigateRegister = () => {
     const tl = gsap.timeline();
-    tl.to('.login-form-content', {
+    tl.to(panelRef.current, {
       opacity: 0,
       scale: 0.95,
-      duration: 0.15,
-      onComplete: () => {
-        gsap.set('.login-form-content', { display: 'none' });
-        gsap.set('.login-loading-content', { display: 'flex' });
-      },
-    })
-    .to(panelRef.current, {
-      width: 240,
-      height: 240,
-      duration: 0.4,
-      ease: 'back.inOut(1.2)',
-    }, 'morph')
-    .to('.login-loading-content', {
-      opacity: 1,
-      scale: 1,
-      duration: 0.2,
-      ease: 'power2.out',
-    }, 'morph+=0.2')
-    .to({}, { duration: 0.1, onComplete: onNavigateToRegister });
+      duration: 0.3,
+      onComplete: onNavigateToRegister
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -136,13 +104,14 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
           // Turn orb to green/success
           gsap.to('.orb-core', { backgroundColor: '#10B981', boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)' });
         },
-        onError: (err: any) => {
+        onError: (err: unknown) => {
           let msg = 'An unexpected error occurred.';
-          if (err?.status === 401) {
+          const errorObj = err as { status?: number; message?: string; type?: string };
+          if (errorObj?.status === 401) {
             msg = 'Invalid credentials.';
-          } else if (err?.status === 429) {
+          } else if (errorObj?.status === 429) {
             msg = 'Too many attempts.';
-          } else if (err?.message === 'Network Error' || err?.type === 'network') {
+          } else if (errorObj?.message === 'Network Error' || errorObj?.type === 'network') {
             msg = 'Connection failed.';
           }
 

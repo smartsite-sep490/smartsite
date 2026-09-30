@@ -259,4 +259,55 @@ describe('management client', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('constructs shift swap request payload with correct MF07 field names', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_COWORKER' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.createShiftSwapRequest('token', 'site-1', {
+        requesterWorkerScheduleId: 'ws-1',
+        coworkerWorkerScheduleId: 'ws-2',
+        reason: 'Family emergency'
+      });
+
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+        body: JSON.stringify({
+          requesterWorkerScheduleId: 'ws-1',
+          coworkerWorkerScheduleId: 'ws-2',
+          reason: 'Family emergency'
+        }),
+      });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('constructs MF07 worker schedule discovery endpoints with encoded IDs', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listEligibleShifts('token', 'site/1', 'schedule/1');
+      await client.listSwapCandidates('token', 'site/1', 'schedule/1');
+
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        'https://api.example.test/api/v1/sites/site%2F1/worker-schedules/schedule%2F1/eligible-shifts',
+        'https://api.example.test/api/v1/sites/site%2F1/worker-schedules/schedule%2F1/swap-candidates',
+      ]);
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
