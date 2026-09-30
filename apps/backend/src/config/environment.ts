@@ -163,10 +163,16 @@ export const backendEnvironmentSchema = z
       .string({ error: 'must be an absolute HTTP(S) URL without credentials' })
       .url('must be an absolute HTTP(S) URL without credentials')
       .refine((value) => {
-        const parsed = new URL(value);
-        return (
-          ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password
-        );
+        try {
+          const parsed = new URL(value);
+          return (
+            ['http:', 'https:'].includes(parsed.protocol) &&
+            !parsed.username &&
+            !parsed.password
+          );
+        } catch {
+          return false;
+        }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
