@@ -35,16 +35,16 @@ export function ActionDrawer({
   if (!shouldRender) return null;
 
   const badgeColors = {
-    error: 'bg-red-100 text-red-700',
-    warning: 'bg-orange-100 text-orange-700',
-    info: 'bg-slate-100 text-slate-700',
+    error: 'bg-[#FDEBEC] text-[#9F2F2D]',
+    warning: 'bg-[#FBF3DB] text-[#956400]',
+    info: 'bg-[#F7F6F3] text-[#6B6B6B]',
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden pointer-events-none flex justify-end">
       {/* Backdrop */}
       <div
-        className={`absolute inset-0 bg-black/30 backdrop-blur-sm pointer-events-auto transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`absolute inset-0 bg-black/30 pointer-events-auto transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
           isOpen ? 'opacity-100' : 'opacity-0'
         }`}
         onClick={onClose}
@@ -52,14 +52,14 @@ export function ActionDrawer({
 
       {/* Drawer Panel */}
       <div
-        className={`relative w-full max-w-md h-full bg-slate-50 border-l border-slate-200 pointer-events-auto p-1.5 shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`relative w-full max-w-md h-full bg-[#FBFBFA] border-l border-[#EAEAEA] pointer-events-auto transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        {/* Inner Core (Double-bezel style) */}
-        <div className="bg-white h-full rounded-[calc(2rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,1)] border border-slate-100 flex flex-col overflow-hidden">
+        {/* Inner Core */}
+        <div className="bg-white h-full border border-[#EAEAEA] rounded-lg m-1.5 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md z-10">
+          <div className="px-6 py-5 border-b border-[#EAEAEA] flex items-center justify-between bg-white z-10">
             <div className="flex items-center gap-2">
               {badge && (
                 <span
@@ -68,11 +68,11 @@ export function ActionDrawer({
                   {badge}
                 </span>
               )}
-              <h3 className="font-bold text-slate-900 tracking-tight">{title}</h3>
+              <h3 className="font-bold text-[#111111] tracking-tight">{title}</h3>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors active:scale-95"
+              className="p-1.5 rounded-md text-[#A3A09C] hover:text-[#2F3437] hover:bg-[#F7F6F3] transition-colors active:scale-95"
             >
               <IconX className="w-5 h-5" />
             </button>

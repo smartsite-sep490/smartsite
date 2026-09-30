@@ -68,12 +68,12 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
   ];
 
   return (
-    <div className="min-h-screen bg-[#F9FAFC] text-[#182232] font-sans flex">
-      {/* Left Sidebar: Collapsible directly on the sidebar */}
+    <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
+      {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
           isCollapsed ? 'w-20' : 'w-64'
-        } bg-[#041D2E] text-white flex flex-col justify-between shrink-0 select-none border-r border-[#031724] transition-all duration-300 ease-in-out sticky top-0 h-screen z-30`}
+        } bg-[var(--surface-sidebar)] text-white flex flex-col justify-between shrink-0 select-none border-r border-[var(--border-sidebar)] transition-all duration-300 ease-in-out sticky top-0 h-screen z-30`}
       >
         <div>
           {/* Brand & Collapse/Expand Toggle Header */}
@@ -87,14 +87,19 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
               className="flex items-center gap-3 cursor-pointer"
               onClick={() => onSelectTab('landing')}
               title="SmartSite Homepage"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') onSelectTab('landing');
+              }}
             >
-              <div className="w-9 h-9 rounded-lg bg-[#F66B17] flex items-center justify-center text-white shadow-sm shrink-0">
+              <div className="w-9 h-9 rounded-md bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
                 <IconHardHat className="w-5 h-5" />
               </div>
               {!isCollapsed && (
                 <div className="text-xl font-bold tracking-tight whitespace-nowrap overflow-hidden transition-opacity duration-200">
                   <span className="text-white">Smart</span>
-                  <span className="text-[#F66B17]">Site</span>
+                  <span className="text-[var(--accent)]">Site</span>
                 </div>
               )}
             </div>
@@ -102,8 +107,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
             {/* Toggle Button for Sidebar to/nhỏ */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              title={isCollapsed ? 'Mở rộng sidebar' : 'Thu nhỏ sidebar'}
+              className="p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {isCollapsed ? (
@@ -116,7 +120,7 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
 
           {/* Navigation Section */}
           <div className="px-3 py-3 flex-1 overflow-y-auto custom-scrollbar">
-            <nav className="space-y-6">
+            <nav className="space-y-6" aria-label="Main navigation">
               {navGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1">
                   {!isCollapsed && (
@@ -132,20 +136,22 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                         key={item.id}
                         onClick={() => onSelectTab(item.id as ActiveTab)}
                         title={isCollapsed ? item.label : undefined}
+                        aria-label={isCollapsed ? item.label : undefined}
+                        aria-current={isActive ? 'page' : undefined}
                         className={`w-full flex items-center ${
                           isCollapsed
                             ? 'justify-center px-0 py-2.5'
                             : 'justify-between px-3.5 py-2.5'
-                        } rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
+                        } rounded-md text-xs font-medium transition-all cursor-pointer relative ${
                           isActive
-                            ? 'bg-white/10 text-white font-semibold shadow-inner'
+                            ? 'bg-white/10 text-white font-semibold'
                             : 'text-white/70 hover:bg-white/5 hover:text-white'
                         }`}
                       >
                         <div className={`flex items-center ${isCollapsed ? '' : 'gap-3'}`}>
                           <Icon
                             className={`w-4 h-4 shrink-0 ${
-                              isActive ? 'text-[#F66B17]' : 'text-white/60'
+                              isActive ? 'text-white' : 'text-white/60'
                             }`}
                           />
                           {!isCollapsed && (
@@ -153,10 +159,10 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                           )}
                         </div>
                         {isActive && !isCollapsed && (
-                          <span className="w-1.5 h-4 rounded-full bg-[#F66B17]" />
+                          <span className="w-1.5 h-4 rounded-full bg-white/80" />
                         )}
                         {isActive && isCollapsed && (
-                          <span className="absolute left-1 w-1 h-5 rounded-full bg-[#F66B17]" />
+                          <span className="absolute left-1 w-1 h-5 rounded-full bg-white/80" />
                         )}
                       </button>
                     );
@@ -171,12 +177,13 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
         <div className="p-3 border-t border-white/10">
           <button
             onClick={() => onSelectTab('landing')}
+            aria-label="Public SmartSite Homepage"
             title={isCollapsed ? 'Public SmartSite Homepage' : undefined}
             className={`w-full flex items-center ${
               isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2'
-            } rounded-lg text-xs font-medium text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer`}
+            } rounded-md text-xs font-medium text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer`}
           >
-            <IconHome className="w-4 h-4 text-[#F66B17] shrink-0" />
+            <IconHome className="w-4 h-4 shrink-0" />
             {!isCollapsed && (
               <span className="whitespace-nowrap overflow-hidden">Public SmartSite Homepage</span>
             )}
@@ -185,50 +192,50 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#F9FAFC]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-canvas)]">
         {/* Top Header Bar */}
-        <header className="h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-xs">
+        <header className="h-16 bg-white border-b border-[var(--border)] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20">
           {/* Left: Location Selector */}
           <div className="flex items-center gap-4">
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-[#F9FAFC] text-xs font-semibold text-[#182232] hover:bg-slate-100 transition-colors cursor-pointer">
-              <IconBuilding2 className="w-4 h-4 text-[#62748E]" />
+            <button
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-canvas)] text-xs font-semibold text-[var(--text-body)] hover:bg-[var(--surface-bone)] transition-colors cursor-pointer"
+              aria-label="Select site location"
+            >
+              <IconBuilding2 className="w-4 h-4 text-[var(--text-secondary)]" />
               <span>Tower A</span>
-              <IconChevronDown className="w-3.5 h-3.5 text-[#62748E]" />
+              <IconChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
             </button>
           </div>
 
-          {/* Right: Search, Notification, Status, Profile */}
+          {/* Right: Search, Notification, Profile */}
           <div className="flex items-center gap-4">
             {/* Search Input */}
             <div className="relative w-56 hidden md:block">
-              <IconSearch className="w-4 h-4 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
+              <IconSearch className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search SmartSite"
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] text-xs text-[#182232] focus:outline-none focus:border-[#F66B17] focus:bg-white transition-all placeholder:text-[#94A3B8]"
+                aria-label="Search SmartSite"
+                className="w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-muted)]"
               />
             </div>
 
-            {/* Notification Bell */}
-            <button className="p-2 rounded-lg hover:bg-slate-100 text-[#62748E] transition-colors relative cursor-pointer">
+            {/* Notification Bell — no fake unread count */}
+            <button
+              className="p-2 rounded-md hover:bg-[var(--surface-bone)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+              aria-label="Notifications"
+            >
               <IconBell className="w-4 h-4" />
-              <span className="w-2 h-2 rounded-full bg-[#F66B17] absolute top-1.5 right-1.5" />
             </button>
 
-            {/* Status Pill */}
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#DCF7E1] text-xs font-semibold text-[#008C47]">
-              <span className="w-2 h-2 rounded-full bg-[#008C47] animate-ping" />
-              <span>All Systems Online</span>
-            </div>
-
             {/* User Profile */}
-            <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">
-              <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
+            <div className="flex items-center gap-2.5 pl-3 border-l border-[var(--border)]">
+              <div className="w-8 h-8 rounded-full bg-[var(--surface-sidebar)] text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 SC
               </div>
               <div className="text-left leading-tight hidden sm:block">
-                <p className="font-semibold text-xs text-[#041D2E]">SmartSite</p>
-                <p className="text-[11px] text-[#62748E]">Demo workspace</p>
+                <p className="font-semibold text-xs text-[var(--text-body)]">SmartSite</p>
+                <p className="text-[11px] text-[var(--text-secondary)]">Demo workspace</p>
               </div>
             </div>
           </div>

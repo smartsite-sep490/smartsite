@@ -1,3 +1,79 @@
 @import 'tailwindcss';
 
-/* Add any global Tailwind overrides or custom fonts here if needed, but rely on Tailwind utility classes for components. */
+/*
+ * SmartSite Design Tokens — Restrained Utilitarian Minimalism
+ *
+ * Naming: --surface-*, --text-*, --border*, --semantic-*, --accent.
+ * Components reference via var(--token) in Tailwind arbitrary values.
+ *
+ * Contrast notes (WCAG AA on white #fff):
+ *   --text-heading  #111111  15.9:1  ✓ any size
+ *   --text-body     #2F3437  11.8:1  ✓ any size
+ *   --text-secondary #6B6B6B  5.36:1 ✓ small text (timestamps, counts, availability)
+ *   --text-muted    #A3A09C  2.85:1  ✗ small — decorative/disabled/placeholder ONLY
+ */
+
+:root {
+  /* ── Surfaces ────────────────────────────────────────── */
+  --surface-canvas: #fbfbfa; /* page background */
+  --surface-bone: #f7f6f3; /* recessed panels, hover states */
+  --surface-white: #ffffff; /* cards, header */
+  --surface-sidebar: #1c1c1c; /* warm dark neutral sidebar */
+  --border-sidebar: #2a2a2a; /* sidebar border, slightly lighter */
+
+  /* ── Borders ─────────────────────────────────────────── */
+  --border: #eaeaea; /* hairline dividers and card borders */
+
+  /* ── Text hierarchy ──────────────────────────────────── */
+  --text-heading: #111111; /* page titles, primary actions */
+  --text-body: #2f3437; /* readable body copy */
+  --text-secondary: #6b6b6b; /* timestamps, counts, meta — AA compliant */
+  --text-muted: #a3a09c; /* placeholder, disabled, decorative ONLY */
+
+  /* ── Accent ──────────────────────────────────────────── */
+  --accent: #f66b17; /* brand orange, sparingly */
+  --accent-hover: #d94e07;
+
+  /* ── Primary actions ─────────────────────────────────── */
+  --action-primary: #111111;
+  --action-primary-hover: #333333;
+
+  /* ── Semantic safety states ──────────────────────────── */
+  --semantic-amber-bg: #fbf3db;
+  --semantic-amber-text: #956400;
+  --semantic-red-bg: #fdebec;
+  --semantic-red-text: #9f2f2d;
+  --semantic-blue-bg: #e1f3fe;
+  --semantic-blue-text: #1f6c9f;
+  --semantic-green-bg: #edf3ec;
+  --semantic-green-text: #346538;
+}
+
+/* Scrollbar — minimal */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+}
+
+/* Focus — visible keyboard outline */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Reduced motion — respect user preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -662,16 +662,16 @@ export function RestrictedZoneView({
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Admin Session & Backend Camera/Region Configuration Bar */}
       {!session ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
                   <IconKey className="h-4 w-4" />
                 </span>
-                <h2 className="text-sm font-bold text-slate-900">Backend Camera Configuration</h2>
+                <h2 className="text-sm font-bold text-[#2F3437]">Backend Camera Configuration</h2>
               </div>
-              <p className="mt-1 text-xs text-slate-500 max-w-xl">
+              <p className="mt-1 text-xs text-[#6B6B6B] max-w-xl">
                 Sign in as a global Admin to load camera regions and save authoritative polygons to
                 the Backend API. Fallback test video and realtime AI feed remain available below.
               </p>
@@ -690,7 +690,7 @@ export function RestrictedZoneView({
                 placeholder="Admin username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
               />
               <input
                 required
@@ -699,12 +699,12 @@ export function RestrictedZoneView({
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
               />
               <button
                 type="submit"
                 disabled={login.isPending}
-                className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60 cursor-pointer shadow-xs transition-colors"
+                className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60 cursor-pointer  transition-colors"
               >
                 {login.isPending ? 'Signing in…' : 'Sign in as Admin'}
               </button>
@@ -717,8 +717,8 @@ export function RestrictedZoneView({
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4  space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#EAEAEA]">
             <div className="flex items-center gap-3">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                 <IconCheck className="h-4 w-4" />
@@ -728,11 +728,11 @@ export function RestrictedZoneView({
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
                     Admin Session Active
                   </span>
-                  <span className="text-xs font-semibold text-slate-900">
+                  <span className="text-xs font-semibold text-[#2F3437]">
                     · {session.user.displayName} ({session.user.username})
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[#6B6B6B]">
                   Global Admin role verified. Polygons saved here synchronize directly with Backend
                   camera configuration.
                 </p>
@@ -741,7 +741,7 @@ export function RestrictedZoneView({
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1 text-xs font-semibold text-[#2F3437] hover:bg-[#FBFBFA] transition-colors cursor-pointer"
             >
               Sign out
             </button>
@@ -750,7 +750,7 @@ export function RestrictedZoneView({
           {/* Selectors Grid: Site, Camera, Region, Version */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 Site
               </label>
               <select
@@ -769,7 +769,7 @@ export function RestrictedZoneView({
                   setRequestedRegionId('');
                 }}
                 disabled={sites.isPending || !sites.data?.items.length}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {sites.data?.items.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -780,7 +780,7 @@ export function RestrictedZoneView({
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 Camera
               </label>
               <select
@@ -798,7 +798,7 @@ export function RestrictedZoneView({
                   setRequestedRegionId('');
                 }}
                 disabled={cameras.isPending || !cameras.data?.items.length}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {cameras.data?.items.map((camera) => (
                   <option key={camera.id} value={camera.id}>
@@ -809,7 +809,7 @@ export function RestrictedZoneView({
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 Region / Zone
               </label>
               <select
@@ -826,7 +826,7 @@ export function RestrictedZoneView({
                   setRequestedRegionId(regionId);
                 }}
                 disabled={regions.isPending || selectableRegions.length === 0}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {selectableRegions.map((region) => (
                   <option key={region.id} value={region.id}>
@@ -856,7 +856,7 @@ export function RestrictedZoneView({
       {staleDraftInfo && (
         <div
           role="alert"
-          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
         >
           <div className="flex items-start gap-3">
             <IconAlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -880,7 +880,7 @@ export function RestrictedZoneView({
               }
               setStaleDraftInfo(null);
             }}
-            className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-800 whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+            className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-800 whitespace-nowrap cursor-pointer transition-colors "
           >
             Discard Stale Draft
           </button>
@@ -891,7 +891,7 @@ export function RestrictedZoneView({
       {conflictMessage && (
         <div
           role="alert"
-          className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+          className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
         >
           <div className="flex items-start gap-3">
             <IconAlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -905,7 +905,7 @@ export function RestrictedZoneView({
           <button
             type="button"
             onClick={resetToAuthoritative}
-            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 whitespace-nowrap cursor-pointer transition-colors "
           >
             Load Server Version
           </button>
@@ -1050,7 +1050,7 @@ export function RestrictedZoneView({
                       EDIT ZONE
                     </button>
                     {isDraftMode && (
-                      <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm shadow-xs">
+                      <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm ">
                         UNSAVED DRAFT
                       </span>
                     )}
@@ -1209,14 +1209,14 @@ export function RestrictedZoneView({
         </div>
 
         {/* Right: Sidebar Verification Card (355px) */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
           <div className="p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between pb-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
                 DETECTION DETAILS
               </span>
-              <span className="font-mono text-[11px] font-semibold text-slate-500">
+              <span className="font-mono text-[11px] font-semibold text-[#6B6B6B]">
                 {testDetection?.eventId ?? 'NO-DETECTION'}
               </span>
             </div>
@@ -1224,20 +1224,20 @@ export function RestrictedZoneView({
             {/* 2-Column Metadata Grid */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Identity
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
                     ? 'Unknown — not identified'
                     : 'No person detected'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Track ID
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {zoneDetections
                     .filter((detection) => detection.trackId !== null)
                     .map((detection) => `Track #${detection.trackId}`)
@@ -1245,34 +1245,34 @@ export function RestrictedZoneView({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Camera
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {activeCameraContext.camera}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Zone
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1 truncate">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1 truncate">
                   {activeCameraContext.workArea}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Detected
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Detection Confidence
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
                     ? '—'
                     : `${Math.round(testDetection.confidence * 100)}%`}
@@ -1280,45 +1280,45 @@ export function RestrictedZoneView({
               </div>
             </div>
 
-            <div className="h-px bg-slate-100 w-full" />
+            <div className="h-px bg-[#F7F6F3] w-full" />
 
             {/* Verification Heading */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
                 VERIFICATION
               </p>
 
               {/* Verification items */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
                   <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Identity</p>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="font-semibold text-[#2F3437] text-xs">Identity</p>
+                    <p className="text-[11px] text-[#6B6B6B]">
                       {testDetection?.trackId !== null && testDetection?.trackId !== undefined
                         ? 'Unknown — not identified'
                         : 'No person detected'}
                     </p>
                   </div>
-                  <IconClock className="w-5 h-5 text-slate-400" />
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
                   <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Site Assignment</p>
-                    <p className="text-[11px] text-slate-500">Not evaluated</p>
+                    <p className="font-semibold text-[#2F3437] text-xs">Site Assignment</p>
+                    <p className="text-[11px] text-[#6B6B6B]">Not evaluated</p>
                   </div>
-                  <IconClock className="w-5 h-5 text-slate-400" />
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
                   <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Zone Permission</p>
-                    <p className="text-[11px] text-slate-500">Backend evaluation required</p>
+                    <p className="font-semibold text-[#2F3437] text-xs">Zone Permission</p>
+                    <p className="text-[11px] text-[#6B6B6B]">Backend evaluation required</p>
                   </div>
-                  <IconClock className="w-5 h-5 text-slate-400" />
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-slate-500">
+                <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-[#6B6B6B]">
                   <span>Permission validity</span>
                   <span className="font-bold text-slate-300">—</span>
                 </div>
@@ -1329,15 +1329,15 @@ export function RestrictedZoneView({
             <div className="pt-1">
               <div
                 className={`border-l-[3px] pl-3 ${
-                  testDetection?.active ? 'border-red-500' : 'border-slate-300'
+                  testDetection?.active ? 'border-red-500' : 'border-[#EAEAEA]'
                 }`}
               >
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">
                   RESULT
                 </p>
                 <div
                   className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
-                    testDetection?.active ? 'text-red-500' : 'text-slate-500'
+                    testDetection?.active ? 'text-red-500' : 'text-[#6B6B6B]'
                   }`}
                 >
                   {testDetection?.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
@@ -1349,7 +1349,7 @@ export function RestrictedZoneView({
                         : 'SCANNING VIDEO'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-[#6B6B6B]">
                   {testDetection?.active
                     ? 'Technical zone-entry observation; Backend decides authorization and violation.'
                     : isLive
@@ -1368,7 +1368,7 @@ export function RestrictedZoneView({
               className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-sm transition-colors cursor-pointer ${
                 testDetection?.active
                   ? 'bg-[#F66B17] hover:bg-[#E05A0B] text-white'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-[#F7F6F3] text-[#A3A09C] cursor-not-allowed'
               }`}
             >
               Review Incident
@@ -1381,7 +1381,7 @@ export function RestrictedZoneView({
                   );
                 }
               }}
-              className="w-full py-2.5 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-lg bg-white border border-[#EAEAEA] text-[#2F3437] font-semibold text-sm hover:bg-[#FBFBFA] transition-colors cursor-pointer"
             >
               {activeFilterWorker !== null
                 ? `Clear Worker Filter (#${activeFilterWorker})`
@@ -1394,11 +1394,11 @@ export function RestrictedZoneView({
       </div>
 
       {/* Bottom Table Section: Recent Zone Events */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Zone Replay Observations</h3>
-            <p className="text-xs text-slate-500 mt-1">
+            <h3 className="text-lg font-bold text-[#2F3437]">Zone Replay Observations</h3>
+            <p className="text-xs text-[#6B6B6B] mt-1">
               Observations from the sample video timeline. Live safety alerts are available in
               Safety Alerts.
               {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
@@ -1410,7 +1410,7 @@ export function RestrictedZoneView({
               className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                 zoneFilter === 'ALL'
                   ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
               }`}
             >
               All Events ({events.length})
@@ -1420,7 +1420,7 @@ export function RestrictedZoneView({
               className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                 zoneFilter === 'ACTIVE_ONLY'
                   ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
               }`}
             >
               Zone Entries (
@@ -1439,7 +1439,7 @@ export function RestrictedZoneView({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+              <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-3">Time</th>
                 <th className="py-3 px-3">Person / Worker</th>
                 <th className="py-3 px-3">Zone</th>
@@ -1450,15 +1450,15 @@ export function RestrictedZoneView({
                 <th className="py-3 px-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[#EAEAEA]">
               {displayedEvents.map((evt) => (
-                <tr key={evt.rowKey} className="hover:bg-slate-50 transition-colors group">
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.time}</td>
-                  <td className="py-3 px-3 font-semibold text-slate-900">{evt.person}</td>
-                  <td className="py-3 px-3 text-slate-600">{evt.zone}</td>
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.camera}</td>
-                  <td className="py-3 px-3 text-slate-600">{evt.identity}</td>
-                  <td className="py-3 px-3 text-slate-600">{evt.authorization}</td>
+                <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
+                  <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
+                  <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
+                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
+                  <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
+                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
+                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.authorization}</td>
                   <td className="py-3 px-3">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1475,7 +1475,7 @@ export function RestrictedZoneView({
                   <td className="py-3 px-3 text-right">
                     <button
                       onClick={() => setSelectedIncident(evt)}
-                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200"
                     >
                       Review
                     </button>
@@ -1484,7 +1484,7 @@ export function RestrictedZoneView({
               ))}
               {displayedEvents.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-6 text-center text-[#A3A09C] text-xs">
                     No zone events match the selected criteria.
                   </td>
                 </tr>
@@ -1503,32 +1503,32 @@ export function RestrictedZoneView({
                 <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-mono uppercase tracking-wider">
                   {selectedIncident.id}
                 </span>
-                <h3 className="font-bold text-slate-900">Review & Action</h3>
+                <h3 className="font-bold text-[#2F3437]">Review & Action</h3>
               </div>
               <button
                 onClick={() => setSelectedIncident(null)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-[#A3A09C] hover:text-[#6B6B6B]"
               >
                 <IconX className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4 text-sm text-slate-600">
+            <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
                 You are reviewing a restricted zone intrusion at{' '}
-                <strong className="text-slate-900">
+                <strong className="text-[#2F3437]">
                   {selectedIncident.zone} ({selectedIncident.camera})
                 </strong>
                 . AI detected worker{' '}
-                <strong className="text-slate-900">{selectedIncident.person}</strong> with status:{' '}
-                <strong className="text-slate-900">{selectedIncident.authorization}</strong>.
+                <strong className="text-[#2F3437]">{selectedIncident.person}</strong> with status:{' '}
+                <strong className="text-[#2F3437]">{selectedIncident.authorization}</strong>.
               </p>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                <p className="font-bold text-slate-700 text-xs uppercase tracking-wider">
+              <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
+                <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
                   Review Status: Local Preview
                 </p>
-                <p className="text-slate-600 text-xs">
+                <p className="text-[#6B6B6B] text-xs">
                   Backend guard dispatch and authorization override APIs are pending integration.
                 </p>
               </div>
@@ -1544,7 +1544,7 @@ export function RestrictedZoneView({
               </button>
               <button
                 onClick={() => setSelectedIncident(null)}
-                className="py-2 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors"
+                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors"
               >
                 Dismiss Preview
               </button>

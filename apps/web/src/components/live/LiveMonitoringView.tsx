@@ -66,13 +66,13 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
     {
       header: 'Time',
       key: 'time',
-      render: (item) => <span className="font-mono text-slate-500 text-xs">{item.time}</span>,
+      render: (item) => <span className="font-mono text-[#6B6B6B] text-xs">{item.time}</span>,
     },
     {
       header: 'Type',
       key: 'type',
       render: (item) => (
-        <span className="font-bold text-[11px] text-slate-500 uppercase tracking-widest">
+        <span className="font-bold text-[11px] text-[#6B6B6B] uppercase tracking-widest">
           {item.type}
         </span>
       ),
@@ -80,17 +80,17 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
     {
       header: 'Person',
       key: 'person',
-      render: (item) => <span className="font-semibold text-slate-900">{item.person}</span>,
+      render: (item) => <span className="font-semibold text-[#2F3437]">{item.person}</span>,
     },
     {
       header: 'Camera',
       key: 'camera',
-      render: (item) => <span className="font-mono text-slate-500 text-xs">{item.camera}</span>,
+      render: (item) => <span className="font-mono text-[#6B6B6B] text-xs">{item.camera}</span>,
     },
     {
       header: 'Detection',
       key: 'issue',
-      render: (item) => <span className="font-medium text-slate-900">{item.issue}</span>,
+      render: (item) => <span className="font-medium text-[#2F3437]">{item.issue}</span>,
     },
     {
       header: 'Result',
@@ -110,7 +110,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
       render: (item) => (
         <button
           onClick={() => onNavigate(item.targetTab)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all active:scale-[0.98]"
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200 transition-all active:scale-[0.98]"
         >
           View Details
         </button>
@@ -122,8 +122,8 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Live Monitoring</h1>
-        <p className="text-sm text-slate-500 mt-2 max-w-2xl leading-relaxed">
+        <h1 className="text-3xl font-bold text-[#2F3437] tracking-tight">Live Monitoring</h1>
+        <p className="text-sm text-[#6B6B6B] mt-2 max-w-2xl leading-relaxed">
           Operational workspace displaying real-time safety detections across all cameras. Multiple
           AI models run concurrently to detect PPE compliance and Restricted Zone access.
         </p>

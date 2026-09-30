@@ -79,16 +79,16 @@ export function SafetyAlertEvidencePanel({
 
   if (evidenceList.length === 0) {
     return (
-      <div className="mt-2 border-t border-slate-200/80 pt-2 text-[11px] text-slate-400">
+      <div className="mt-2 border-t border-[#EAEAEA] pt-2 text-[11px] text-[#6B6B6B]">
         No evidence image retained for this observation.
       </div>
     );
   }
 
   return (
-    <div className="mt-2 border-t border-slate-200/80 pt-2">
+    <div className="mt-2 border-t border-[#EAEAEA] pt-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
           Evidence
         </span>
         <div className="flex flex-wrap gap-1.5">
@@ -101,7 +101,7 @@ export function SafetyAlertEvidencePanel({
               return (
                 <span
                   key={item.index}
-                  className="inline-flex items-center rounded border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-400 cursor-not-allowed"
+                  className="inline-flex items-center rounded border border-[#EAEAEA] bg-[#F7F6F3] px-2 py-0.5 text-[11px] font-medium text-[#A3A09C] cursor-not-allowed"
                   title="Evidence is not available on storage"
                 >
                   {kindLabel}
@@ -118,8 +118,8 @@ export function SafetyAlertEvidencePanel({
                 onClick={() => handleToggle(item.index)}
                 className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold transition-colors ${
                   isSelected
-                    ? 'bg-slate-900 text-white hover:bg-slate-800'
-                    : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-100'
+                    ? 'bg-[#111111] text-white hover:bg-[#333333]'
+                    : 'border border-[#EAEAEA] bg-white text-[#2F3437] hover:border-[#2F3437]/20 hover:bg-[#F7F6F3]'
                 }`}
               >
                 {isSelected ? 'Hide' : 'View'} {kindLabel}
@@ -131,15 +131,15 @@ export function SafetyAlertEvidencePanel({
       </div>
 
       {selectedEvidenceIndex !== null && isSelectedAvailable && (
-        <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+        <div className="mt-2 rounded-md border border-[#EAEAEA] bg-white p-2">
           {evidenceQuery.isPending && (
             <div
               role="status"
               aria-busy="true"
-              className="flex items-center justify-center gap-2 py-6 text-xs text-slate-500"
+              className="flex items-center justify-center gap-2 py-6 text-xs text-[#6B6B6B]"
             >
               <span
-                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent"
+                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#EAEAEA] border-t-transparent"
                 aria-hidden="true"
               />
               <span>Loading evidence image…</span>
@@ -149,13 +149,13 @@ export function SafetyAlertEvidencePanel({
           {evidenceQuery.isError && (
             <div
               role="alert"
-              className="flex flex-wrap items-center justify-between gap-2 rounded bg-red-50 p-2 text-xs text-red-700"
+              className="flex flex-wrap items-center justify-between gap-2 rounded bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
             >
               <span>{evidenceErrorMessage(evidenceQuery.error)}</span>
               <button
                 type="button"
                 onClick={() => void evidenceQuery.refetch()}
-                className="font-bold text-red-800 underline hover:no-underline"
+                className="font-bold text-[#9F2F2D] underline hover:no-underline"
               >
                 Retry
               </button>
@@ -164,7 +164,7 @@ export function SafetyAlertEvidencePanel({
 
           {evidenceQuery.isSuccess && evidenceQuery.data && selectedItem && (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-center overflow-hidden rounded border border-slate-100 bg-slate-950/5">
+              <div className="flex items-center justify-center overflow-hidden rounded border border-[#EAEAEA] bg-[#F7F6F3]">
                 <EvidenceImage
                   key={`${detection.eventId}:${selectedItem.index}:${evidenceQuery.dataUpdatedAt}`}
                   blob={evidenceQuery.data}
@@ -175,7 +175,7 @@ export function SafetyAlertEvidencePanel({
                   )}
                 />
               </div>
-              <div className="flex items-center justify-between px-0.5 text-[11px] text-slate-500">
+              <div className="flex items-center justify-between px-0.5 text-[11px] text-[#6B6B6B]">
                 <span>
                   {formatEvidenceKind(selectedItem.kind)}
                   {selectedItem.trackId !== undefined ? ` · Track #${selectedItem.trackId}` : ''}
@@ -183,7 +183,7 @@ export function SafetyAlertEvidencePanel({
                 <button
                   type="button"
                   onClick={() => setSelectedEvidenceIndex(null)}
-                  className="font-semibold text-slate-400 hover:text-slate-700"
+                  className="font-semibold text-[#A3A09C] hover:text-[#2F3437]"
                 >
                   Close image
                 </button>

@@ -39,7 +39,7 @@ function decisionTone(status: ZoneEntryDecisionStatus) {
 function stateTone(state: ReturnType<typeof grantState>) {
   if (state === 'ACTIVE') return 'bg-emerald-50 text-emerald-700';
   if (state === 'SCHEDULED') return 'bg-blue-50 text-blue-700';
-  return 'bg-slate-100 text-slate-600';
+  return 'bg-[#F7F6F3] text-[#6B6B6B]';
 }
 
 function defaultLocalDateTime() {
@@ -64,11 +64,11 @@ async function loadAllWorkers(
 }
 
 function WorkerName({ worker }: { worker?: WorkerResponse }) {
-  if (!worker) return <span className="font-mono text-xs text-slate-500">Unknown worker</span>;
+  if (!worker) return <span className="font-mono text-xs text-[#6B6B6B]">Unknown worker</span>;
   return (
     <span>
-      <span className="block font-semibold text-slate-900">{worker.displayName}</span>
-      <span className="block text-xs text-slate-500">{worker.externalId}</span>
+      <span className="block font-semibold text-[#2F3437]">{worker.displayName}</span>
+      <span className="block text-xs text-[#6B6B6B]">{worker.externalId}</span>
     </span>
   );
 }
@@ -272,28 +272,28 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
   if (!session) {
     return (
-      <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+      <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7 shadow-sm">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
           <IconKey className="h-6 w-6" />
         </div>
         <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF05</p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-950">Site access authorization</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <h1 className="mt-1 text-2xl font-bold text-[#111111]">Site access authorization</h1>
+        <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
           Sign in as Admin to manage Workers, Zone permissions and audit AI-assisted entry
           decisions.
         </p>
         <form className="mt-6 space-y-4" onSubmit={submitLogin}>
-          <label className="block text-sm font-semibold text-slate-700">
+          <label className="block text-sm font-semibold text-[#2F3437]">
             Username
             <input
               required
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100"
+              className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] px-3 py-2.5 font-normal outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100"
             />
           </label>
-          <label className="block text-sm font-semibold text-slate-700">
+          <label className="block text-sm font-semibold text-[#2F3437]">
             Password
             <input
               required
@@ -301,7 +301,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100"
+              className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] px-3 py-2.5 font-normal outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100"
             />
           </label>
           {login.error && (
@@ -328,10 +328,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">
             MF05 · Restricted Zone
           </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#111111]">
             Site access & authorization
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6B6B6B]">
             Backend policy remains authoritative. An AI identity candidate never becomes permission
             until a trusted Worker identity is verified.
           </p>
@@ -339,14 +339,14 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         <button
           type="button"
           onClick={logout}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#FBFBFA]"
         >
           Sign out {session.user.displayName}
         </button>
       </header>
 
-      <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+      <section className="grid gap-4 rounded-lg border border-[#EAEAEA] bg-white p-4 md:grid-cols-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
           Site
           <select
             value={siteId}
@@ -357,7 +357,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               setGrantOffset(0);
               setDecisionOffset(0);
             }}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800"
+            className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2.5 text-sm font-semibold text-[#2F3437]"
           >
             {sites.data?.items.map((site) => (
               <option key={site.id} value={site.id}>
@@ -366,7 +366,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
           Restricted Zone
           <select
             value={zoneId}
@@ -376,7 +376,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               setDecisionOffset(0);
             }}
             disabled={!zones.data?.items.length}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100"
+            className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2.5 text-sm font-semibold text-[#2F3437] disabled:bg-[#F7F6F3]"
           >
             {zones.data?.items.map((zone) => (
               <option key={zone.id} value={zone.id}>
@@ -397,50 +397,50 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       )}
 
       <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="rounded-lg border border-[#EAEAEA] bg-white p-5">
           <div className="flex items-center gap-3">
             <span className="rounded-lg bg-blue-50 p-2 text-blue-700">
               <IconUsers />
             </span>
-            <span className="text-sm font-semibold text-slate-500">Active Workers</span>
+            <span className="text-sm font-semibold text-[#6B6B6B]">Active Workers</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-slate-950">
+          <p className="mt-4 text-3xl font-bold text-[#111111]">
             {workers.data?.items.filter((worker) => worker.isActive).length ?? '—'}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="rounded-lg border border-[#EAEAEA] bg-white p-5">
           <div className="flex items-center gap-3">
             <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
               <IconKey />
             </span>
-            <span className="text-sm font-semibold text-slate-500">Rules in selected Zone</span>
+            <span className="text-sm font-semibold text-[#6B6B6B]">Rules in selected Zone</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-slate-950">{grants.data?.total ?? '—'}</p>
+          <p className="mt-4 text-3xl font-bold text-[#111111]">{grants.data?.total ?? '—'}</p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="rounded-lg border border-[#EAEAEA] bg-white p-5">
           <div className="flex items-center gap-3">
             <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
               <IconClock />
             </span>
-            <span className="text-sm font-semibold text-slate-500">Recent decisions</span>
+            <span className="text-sm font-semibold text-[#6B6B6B]">Recent decisions</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-slate-950">{decisions.data?.total ?? '—'}</p>
+          <p className="mt-4 text-3xl font-bold text-[#111111]">{decisions.data?.total ?? '—'}</p>
         </div>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <section className="rounded-lg border border-[#EAEAEA] bg-white p-5">
           <div>
-            <h2 className="text-lg font-bold text-slate-950">Worker roster</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-bold text-[#111111]">Worker roster</h2>
+            <p className="mt-1 text-sm text-[#6B6B6B]">
               Create the Worker record used by trusted identity verification.
             </p>
           </div>
           <form
             onSubmit={submitWorker}
-            className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"
+            className="mt-5 grid gap-3 rounded-xl bg-[#FBFBFA] p-4 sm:grid-cols-2"
           >
-            <label className="text-xs font-bold text-slate-600">
+            <label className="text-xs font-bold text-[#6B6B6B]">
               Worker code
               <input
                 required
@@ -448,10 +448,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 value={workerExternalId}
                 onChange={(event) => setWorkerExternalId(event.target.value)}
                 placeholder="WKR-001"
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
               />
             </label>
-            <label className="text-xs font-bold text-slate-600">
+            <label className="text-xs font-bold text-[#6B6B6B]">
               Display name
               <input
                 required
@@ -459,7 +459,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 value={workerDisplayName}
                 onChange={(event) => setWorkerDisplayName(event.target.value)}
                 placeholder="Nguyen Van A"
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
               />
             </label>
             {createWorker.error && (
@@ -476,32 +476,32 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             </button>
           </form>
           <div className="mt-4 max-h-80 space-y-2 overflow-auto">
-            {workers.isPending && <p className="text-sm text-slate-500">Loading Workers…</p>}
+            {workers.isPending && <p className="text-sm text-[#6B6B6B]">Loading Workers…</p>}
             {workers.data?.items.map((worker) => (
               <div
                 key={worker.id}
-                className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3"
+                className="flex items-center justify-between rounded-xl border border-[#EAEAEA] px-4 py-3"
               >
                 <WorkerName worker={worker} />
                 <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${worker.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${worker.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F7F6F3] text-[#6B6B6B]'}`}
                 >
                   {worker.isActive ? 'ACTIVE' : 'INACTIVE'}
                 </span>
               </div>
             ))}
             {workers.data?.items.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+              <p className="rounded-xl border border-dashed border-[#EAEAEA] p-6 text-center text-sm text-[#6B6B6B]">
                 No Worker has been configured for this Site.
               </p>
             )}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <section className="rounded-lg border border-[#EAEAEA] bg-white p-5">
           <div>
-            <h2 className="text-lg font-bold text-slate-950">Zone permissions</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-bold text-[#111111]">Zone permissions</h2>
+            <p className="mt-1 text-sm text-[#6B6B6B]">
               Explicit DENY takes priority when Backend evaluates entry at event time.
             </p>
           </div>
@@ -514,16 +514,16 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           )}
           <form
             onSubmit={submitGrant}
-            className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"
+            className="mt-5 grid gap-3 rounded-xl bg-[#FBFBFA] p-4 sm:grid-cols-2"
           >
-            <label className="text-xs font-bold text-slate-600 sm:col-span-2">
+            <label className="text-xs font-bold text-[#6B6B6B] sm:col-span-2">
               Worker
               <select
                 required
                 disabled={!canManageGrants}
                 value={grantWorkerId}
                 onChange={(event) => setGrantWorkerId(event.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
               >
                 <option value="">Select Worker</option>
                 {workers.data?.items
@@ -535,19 +535,19 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                   ))}
               </select>
             </label>
-            <label className="text-xs font-bold text-slate-600">
+            <label className="text-xs font-bold text-[#6B6B6B]">
               Effect
               <select
                 disabled={!canManageGrants}
                 value={grantEffect}
                 onChange={(event) => setGrantEffect(event.target.value as ZoneAccessEffect)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
               >
                 <option value="ALLOW">ALLOW</option>
                 <option value="DENY">DENY</option>
               </select>
             </label>
-            <label className="text-xs font-bold text-slate-600">
+            <label className="text-xs font-bold text-[#6B6B6B]">
               Valid from
               <input
                 required
@@ -555,18 +555,18 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 type="datetime-local"
                 value={validFrom}
                 onChange={(event) => setValidFrom(event.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
               />
             </label>
-            <label className="text-xs font-bold text-slate-600 sm:col-span-2">
-              Valid until <span className="font-normal text-slate-400">(optional)</span>
+            <label className="text-xs font-bold text-[#6B6B6B] sm:col-span-2">
+              Valid until <span className="font-normal text-[#A3A09C]">(optional)</span>
               <input
                 type="datetime-local"
                 disabled={!canManageGrants}
                 value={validUntil}
                 min={validFrom}
                 onChange={(event) => setValidUntil(event.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                className="mt-1.5 w-full rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-normal"
               />
             </label>
             {createGrant.error && (
@@ -584,7 +584,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           </form>
           <div className="mt-4 max-h-80 space-y-2 overflow-auto">
             {grants.isPending && zoneId && (
-              <p className="text-sm text-slate-500">Loading permissions…</p>
+              <p className="text-sm text-[#6B6B6B]">Loading permissions…</p>
             )}
             {grants.error && (
               <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -599,7 +599,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             {grants.data?.items.map((grant) => {
               const state = grantState(grant, now);
               return (
-                <div key={grant.id} className="rounded-xl border border-slate-200 p-4">
+                <div key={grant.id} className="rounded-xl border border-[#EAEAEA] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <WorkerName worker={workerById.get(grant.workerId)} />
                     <div className="flex items-center gap-2">
@@ -615,7 +615,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                       </span>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-[#6B6B6B]">
                     {formatDate(grant.validFrom)} → {formatDate(grant.validUntil)}
                   </p>
                   {state !== 'REVOKED' && (
@@ -632,7 +632,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               );
             })}
             {grants.data?.items.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+              <p className="rounded-xl border border-dashed border-[#EAEAEA] p-6 text-center text-sm text-[#6B6B6B]">
                 No access rule exists for the selected Zone.
               </p>
             )}
@@ -642,7 +642,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                   type="button"
                   disabled={grantOffset === 0 || grants.isFetching}
                   onClick={() => setGrantOffset((value) => Math.max(0, value - pageSize))}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                  className="rounded-lg border border-[#EAEAEA] px-3 py-2 text-xs font-bold text-[#2F3437] disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -652,7 +652,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                     grantOffset + grants.data.items.length >= grants.data.total || grants.isFetching
                   }
                   onClick={() => setGrantOffset((value) => value + pageSize)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                  className="rounded-lg border border-[#EAEAEA] px-3 py-2 text-xs font-bold text-[#2F3437] disabled:opacity-50"
                 >
                   Next
                 </button>
@@ -662,15 +662,15 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+      <section className="rounded-lg border border-[#EAEAEA] bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-950">Entry decision audit</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-bold text-[#111111]">Entry decision audit</h2>
+            <p className="mt-1 text-sm text-[#6B6B6B]">
               ALLOWED, DENIED and fail-closed unavailable outcomes produced by Backend.
             </p>
           </div>
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
             Status
             <select
               value={decisionStatus}
@@ -678,7 +678,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 setDecisionStatus(event.target.value as typeof decisionStatus);
                 setDecisionOffset(0);
               }}
-              className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-800"
+              className="ml-2 rounded-lg border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-[#2F3437]"
             >
               <option value="ALL">All decisions</option>
               {decisionStatuses.map((status) => (
@@ -697,7 +697,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-[#EAEAEA] text-xs uppercase tracking-wider text-[#6B6B6B]">
                 <th className="px-3 py-3">Decision</th>
                 <th className="px-3 py-3">Worker evidence</th>
                 <th className="px-3 py-3">Track</th>
@@ -707,7 +707,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             </thead>
             <tbody>
               {decisions.data?.items.map((decision) => (
-                <tr key={decision.id} className="border-b border-slate-100 last:border-0">
+                <tr key={decision.id} className="border-b border-[#EAEAEA] last:border-0">
                   <td className="px-3 py-4">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${decisionTone(decision.status)}`}
@@ -732,28 +732,28 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-4 font-mono text-xs text-slate-600">
+                  <td className="px-3 py-4 font-mono text-xs text-[#6B6B6B]">
                     #{decision.trackId}
                   </td>
-                  <td className="px-3 py-4 text-slate-700">
+                  <td className="px-3 py-4 text-[#2F3437]">
                     {decision.reasonCode.replaceAll('_', ' ')}
                   </td>
-                  <td className="px-3 py-4 text-slate-500">{formatDate(decision.evaluatedAt)}</td>
+                  <td className="px-3 py-4 text-[#6B6B6B]">{formatDate(decision.evaluatedAt)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {decisions.isPending && (
-            <p className="p-6 text-center text-sm text-slate-500">Loading entry decisions…</p>
+            <p className="p-6 text-center text-sm text-[#6B6B6B]">Loading entry decisions…</p>
           )}
           {decisions.data?.items.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-500">
+            <p className="p-6 text-center text-sm text-[#6B6B6B]">
               No decision matches the current Site, Zone and status.
             </p>
           )}
           {decisions.data && decisions.data.total > pageSize && (
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-3">
-              <span className="mr-auto text-xs text-slate-500">
+            <div className="flex items-center justify-end gap-2 border-t border-[#EAEAEA] p-3">
+              <span className="mr-auto text-xs text-[#6B6B6B]">
                 {decisionOffset + 1}–
                 {Math.min(decisionOffset + decisions.data.items.length, decisions.data.total)} of{' '}
                 {decisions.data.total}
@@ -762,7 +762,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 type="button"
                 disabled={decisionOffset === 0 || decisions.isFetching}
                 onClick={() => setDecisionOffset((value) => Math.max(0, value - pageSize))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                className="rounded-lg border border-[#EAEAEA] px-3 py-2 text-xs font-bold text-[#2F3437] disabled:opacity-50"
               >
                 Previous
               </button>
@@ -773,7 +773,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                   decisions.isFetching
                 }
                 onClick={() => setDecisionOffset((value) => value + pageSize)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                className="rounded-lg border border-[#EAEAEA] px-3 py-2 text-xs font-bold text-[#2F3437] disabled:opacity-50"
               >
                 Next
               </button>

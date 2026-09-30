@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@gsap/react": "2.1.2",
+    "@phosphor-icons/react": "2.1.10",
     "@smartsite/api-client": "workspace:*",
     "@tanstack/react-query": "5.103.1",
     "gsap": "3.15.0",

@@ -26,23 +26,23 @@ export function CameraMonitoringView({
   };
 
   return (
-    <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232]">
+    <div className="space-y-6 max-w-[1202px] mx-auto text-[#2F3437]">
       {/* Top Header & Sub-Navigation Bar */}
-      <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-lg border border-[#EAEAEA] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#041D2E] text-[#F66B17] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-md bg-[#111111] text-white flex items-center justify-center shrink-0">
               <IconCamera className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-[#041D2E]">Camera Monitoring</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCF7E1] text-[#008C47] border border-[#008C47]/20 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#008C47] animate-pulse" />
+                <h1 className="text-xl font-bold text-[#111111]">Camera Monitoring</h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EDF3EC] text-[#346538] border border-[#346538]/20 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#346538]" />
                   Live AI Active
                 </span>
               </div>
-              <p className="text-xs text-[#62748E] mt-0.5">
+              <p className="text-xs text-[#6B6B6B] mt-0.5">
                 Real-time computer vision stream analysis for safety compliance & perimeter security
               </p>
             </div>
@@ -50,25 +50,25 @@ export function CameraMonitoringView({
         </div>
 
         {/* Sub-navbar Segmented Switcher */}
-        <div className="flex bg-[#F1F5F9] p-1 rounded-xl border border-[#E2E8F0] self-start md:self-auto shrink-0">
+        <div className="flex bg-[#F7F6F3] p-1 rounded-lg border border-[#EAEAEA] self-start md:self-auto shrink-0">
           <button
             type="button"
             onClick={() => handleTabChange('ppe')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'ppe'
-                ? 'bg-white text-[#041D2E] shadow-xs border border-slate-200/80'
-                : 'text-[#62748E] hover:text-[#041D2E]'
+                ? 'bg-white text-[#111111] border border-[#EAEAEA]'
+                : 'text-[#6B6B6B] hover:text-[#2F3437]'
             }`}
           >
             <IconHardHat
-              className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-[#F66B17]' : 'text-[#62748E]'}`}
+              className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-[#2F3437]' : 'text-[#6B6B6B]'}`}
             />
             <span>PPE Monitoring</span>
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 activeTab === 'ppe'
-                  ? 'bg-[#F66B17]/10 text-[#F66B17] font-bold'
-                  : 'bg-slate-200 text-slate-600'
+                  ? 'bg-[#F7F6F3] text-[#2F3437] font-bold'
+                  : 'bg-[#EAEAEA] text-[#6B6B6B]'
               }`}
             >
               MF04
@@ -78,21 +78,21 @@ export function CameraMonitoringView({
           <button
             type="button"
             onClick={() => handleTabChange('zones')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'zones'
-                ? 'bg-white text-[#041D2E] shadow-xs border border-slate-200/80'
-                : 'text-[#62748E] hover:text-[#041D2E]'
+                ? 'bg-white text-[#111111] border border-[#EAEAEA]'
+                : 'text-[#6B6B6B] hover:text-[#2F3437]'
             }`}
           >
             <IconShield
-              className={`w-4 h-4 ${activeTab === 'zones' ? 'text-[#F66B17]' : 'text-[#62748E]'}`}
+              className={`w-4 h-4 ${activeTab === 'zones' ? 'text-[#2F3437]' : 'text-[#6B6B6B]'}`}
             />
             <span>Restricted Zones</span>
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 activeTab === 'zones'
-                  ? 'bg-[#F66B17]/10 text-[#F66B17] font-bold'
-                  : 'bg-slate-200 text-slate-600'
+                  ? 'bg-[#F7F6F3] text-[#2F3437] font-bold'
+                  : 'bg-[#EAEAEA] text-[#6B6B6B]'
               }`}
             >
               MF05
