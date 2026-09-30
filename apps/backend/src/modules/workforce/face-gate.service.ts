@@ -115,23 +115,23 @@ export class FaceGateService {
         siteId,
         evaluatedAt: now,
       });
-      if (authorization.authorization === 'MANUAL_REVIEW') {
-        return { decision: decideFaceGate({ technicalOutcome: 'MATCHED' }) };
-      }
-      const decision = decideFaceGate({
-        technicalOutcome: 'MATCHED',
-        authorization: authorization.authorization,
-        reasonCode: authorization.reasonCode,
-      });
+      const decision =
+        authorization.authorization === 'MANUAL_REVIEW'
+          ? decideFaceGate({ technicalOutcome: 'MATCHED' })
+          : decideFaceGate({
+              technicalOutcome: 'MATCHED',
+              authorization: authorization.authorization,
+              reasonCode: authorization.reasonCode,
+            });
       return {
         decision,
-        ...(worker && contractor
+        ...(worker
           ? {
               worker: {
                 id: worker.id,
                 externalId: worker.externalId,
                 displayName: worker.displayName,
-                contractorName: contractor.name,
+                contractorName: contractor?.name ?? 'Chưa gán nhà thầu',
                 assignmentStatus: assignment?.status ?? 'MISSING',
               },
             }

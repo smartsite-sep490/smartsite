@@ -192,6 +192,25 @@ export class ContractorOperationsService {
     if (!this.isAdmin(actor) && !this.hasSiteRole(actor, siteId, role)) this.forbidden();
   }
 
+  /**
+   * Site-roster workers are created by the administrative workforce surface and
+   * intentionally have no contractor yet.  Face enrollment is still an
+   * operator action, so keep it limited to the global administrator or a
+   * trusted operator assigned to that worker's site.
+   */
+  private assertWorkerEnrollmentOperator(actor: WorkforceActor, siteId: string): void {
+    this.assertPasswordChanged(actor);
+    if (this.isAdmin(actor)) return;
+    const allowed = actor.roleAssignments.some(
+      ({ role, siteId: assignedSiteId }) =>
+        assignedSiteId === siteId &&
+        (role === UserRole.SITE_MANAGER ||
+          role === UserRole.SAFETY_OFFICER ||
+          role === UserRole.SECURITY_OFFICER),
+    );
+    if (!allowed) this.forbidden();
+  }
+
   private async requireActiveParticipation(
     manager: EntityManager,
     contractorId: string,
@@ -225,7 +244,11 @@ export class ContractorOperationsService {
   ): Promise<WorkerEntity> {
     const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: uuid(workerIdValue) });
     if (!worker) missing();
-    if (!worker.isActive || !worker.contractorId) this.forbidden();
+    if (!worker.isActive) this.forbidden();
+    if (!worker.contractorId) {
+      this.assertWorkerEnrollmentOperator(actor, worker.siteId);
+      return worker;
+    }
     await this.requireContractorRepresentative(manager, actor, worker.contractorId, worker.siteId);
     await this.requireActiveParticipation(manager, worker.contractorId, worker.siteId, new Date());
     return worker;

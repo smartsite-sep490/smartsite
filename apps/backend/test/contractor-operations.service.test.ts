@@ -45,6 +45,7 @@ function serviceFor({ hasGrant }: { hasGrant: boolean }) {
         };
       if (target === WorkerEntity)
         return {
+          findOneBy: async () => null,
           save: async (value: Record<string, unknown>) => {
             savedWorkers.push(value);
             return value;
@@ -58,6 +59,17 @@ function serviceFor({ hasGrant }: { hasGrant: boolean }) {
       callback(manager),
   } as never);
   return { service, savedWorkers };
+}
+
+function enrollmentServiceFor(worker: Partial<WorkerEntity>, actor: WorkforceActor) {
+  const manager = {
+    getRepository(target: unknown) {
+      if (target === WorkerEntity) return { findOneBy: async () => worker };
+      throw new Error('Unexpected repository');
+    },
+  } as unknown as EntityManager;
+  const service = new ContractorOperationsService({} as never);
+  return service.requireWorkerEnrollmentAccess(manager, actor, worker.id!);
 }
 
 test('ContractorOperationsService creates a worker only inside the actor contractor grant and active Site participation', async () => {
@@ -87,4 +99,33 @@ test('ContractorOperationsService denies a representative without a grant for th
       error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
   );
   assert.equal(savedWorkers.length, 0);
+});
+
+test('ContractorOperationsService allows a global admin to enroll an unassigned site worker', async () => {
+  const worker = {
+    id: '00000000-0000-4000-8000-000000000010',
+    siteId: IDs.site,
+    contractorId: null,
+    isActive: true,
+  } as WorkerEntity;
+  const result = await enrollmentServiceFor(worker, {
+    id: IDs.actor,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  });
+  assert.equal(result, worker);
+});
+
+test('ContractorOperationsService denies enrollment of an unassigned site worker to an unrelated role', async () => {
+  const worker = {
+    id: '00000000-0000-4000-8000-000000000010',
+    siteId: IDs.site,
+    contractorId: null,
+    isActive: true,
+  } as WorkerEntity;
+  await assert.rejects(
+    enrollmentServiceFor(worker, representative()),
+    (error: unknown) =>
+      error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+  );
 });
