@@ -82,6 +82,9 @@ construction failures produce a generic unavailable message, and queued callback
 connection are ignored before reconnect starts.
 The local timeline remains a separately labeled fallback. This preview is transient and does not
 replace the retained evidence served by the Backend alert-review endpoints.
+The controller excludes the Backend ingestion URL from the preview API environment, while retaining
+its local WebSocket authentication token. Only the durable worker delivers events and retains images;
+opening or replaying the diagnostic preview must not create additional business alerts.
 
 - The local Compose profile is a demonstration environment, not a production deployment.
 - A Tapo source cannot be claimed live until the source probe succeeds on the current network.

@@ -374,3 +374,25 @@ test('allowlists child environment keys and keeps exclusive sources out of the r
   assert.equal(split.api.SMARTSITE_AI_CAMERA_TAPO_SOURCE, undefined);
   assert.equal(split.api.SMARTSITE_AI_BACKEND_SERVICE_TOKEN, 'local-token');
 });
+
+test('keeps durable ingestion with the worker while diagnostic preview stays read-only', () => {
+  for (const profile of ['mp4', 'laptop', 'tapo']) {
+    const combined = {
+      SMARTSITE_AI_BACKEND_INGESTION_URL: 'http://127.0.0.1:3000',
+      SMARTSITE_AI_BACKEND_SERVICE_TOKEN: 'local-token',
+      SMARTSITE_AI_REALTIME_SOURCE: 'D:/sample.mp4',
+    };
+    const split = splitAiEnvironments(combined, profile, {
+      cameras: [{ source: { kind: 'path', value: 'D:/sample.mp4' } }],
+    });
+    assert.equal(
+      split.worker.SMARTSITE_AI_BACKEND_INGESTION_URL,
+      combined.SMARTSITE_AI_BACKEND_INGESTION_URL,
+    );
+    assert.equal(split.worker.SMARTSITE_AI_BACKEND_SERVICE_TOKEN, 'local-token');
+    // An explicit empty value also overrides an ingestion URL in the AI .env.
+    assert.equal(split.api.SMARTSITE_AI_BACKEND_INGESTION_URL, '');
+    assert.equal(split.api.SMARTSITE_AI_BACKEND_SERVICE_TOKEN, 'local-token');
+    assert.equal(combined.SMARTSITE_AI_BACKEND_INGESTION_URL, 'http://127.0.0.1:3000');
+  }
+});
