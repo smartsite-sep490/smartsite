@@ -8,8 +8,22 @@ import {
   type ZoneAccessEffect,
   type ZoneEntryDecisionStatus,
 } from '@smartsite/api-client';
-import { IconAlertTriangle, IconCheck, IconClock, IconKey, IconUsers, IconX } from '../icons';
+import {
+  IconAlertTriangle,
+  IconCamera,
+  IconCheck,
+  IconClock,
+  IconKey,
+  IconShield,
+  IconUsers,
+  IconX,
+} from '../icons';
 import { grantState, toUtcIso, zoneDecisionLabel } from './accessControlUtils';
+import { SecurityGateDeskView } from './SecurityGateDeskView';
+import { WorkerEnrollmentView } from './WorkerEnrollmentView';
+import { VisitorAccessView } from './VisitorAccessView';
+
+export type AccessSubTab = 'gate-desk' | 'worker-enrollment' | 'zone-grants' | 'visitor-passes';
 
 interface AccessControlViewProps {
   apiUrl: string;
@@ -93,6 +107,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const [grantOffset, setGrantOffset] = useState(0);
   const [decisionOffset, setDecisionOffset] = useState(0);
   const [clockTick, setClockTick] = useState(Date.now);
+  const [accessSubTab, setAccessSubTab] = useState<AccessSubTab>('gate-desk');
 
   const removeSessionQueries = useCallback(
     (userId: string) => {
@@ -326,10 +341,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">
-            MF05 · Restricted Zone
+            Identity & Site Access
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-            Site access & authorization
+            Site access & identity control
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
             Backend policy remains authoritative. An AI identity candidate never becomes permission
@@ -345,7 +360,84 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         </button>
       </header>
 
-      <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+      {/* Sub-navigation tabs */}
+      <div className="flex flex-wrap border-b border-slate-200 gap-1 text-xs sm:text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => setAccessSubTab('gate-desk')}
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 transition-colors ${
+            accessSubTab === 'gate-desk'
+              ? 'border-[#F66B17] text-[#F66B17]'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <IconCamera className="h-4 w-4" /> Security Gate Desk (MF02)
+        </button>
+        <button
+          type="button"
+          onClick={() => setAccessSubTab('worker-enrollment')}
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 transition-colors ${
+            accessSubTab === 'worker-enrollment'
+              ? 'border-[#F66B17] text-[#F66B17]'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <IconUsers className="h-4 w-4" /> Worker Biometrics (MF01)
+        </button>
+        <button
+          type="button"
+          onClick={() => setAccessSubTab('zone-grants')}
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 transition-colors ${
+            accessSubTab === 'zone-grants'
+              ? 'border-[#F66B17] text-[#F66B17]'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <IconShield className="h-4 w-4" /> Restricted Zones (MF05)
+        </button>
+        <button
+          type="button"
+          onClick={() => setAccessSubTab('visitor-passes')}
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 transition-colors ${
+            accessSubTab === 'visitor-passes'
+              ? 'border-[#F66B17] text-[#F66B17]'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <IconKey className="h-4 w-4" /> Visitor Passes (MF04 QR)
+        </button>
+      </div>
+
+      {accessSubTab === 'gate-desk' && (
+        <SecurityGateDeskView
+          apiUrl={apiUrl}
+          token={token}
+          selectedSiteId={siteId}
+          sites={sites.data?.items ?? []}
+          onSelectSite={setRequestedSiteId}
+        />
+      )}
+
+      {accessSubTab === 'worker-enrollment' && (
+        <WorkerEnrollmentView
+          apiUrl={apiUrl}
+          token={token}
+          siteId={siteId}
+          workers={workers.data?.items ?? []}
+        />
+      )}
+
+      {accessSubTab === 'visitor-passes' && (
+        <VisitorAccessView
+          apiUrl={apiUrl}
+          siteId={siteId}
+          siteName={sites.data?.items.find((s) => s.id === siteId)?.name}
+        />
+      )}
+
+      {accessSubTab === 'zone-grants' && (
+        <>
+          <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
         <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
           Site
           <select
@@ -781,6 +873,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           )}
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 }
