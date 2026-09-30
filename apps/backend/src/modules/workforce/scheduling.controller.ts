@@ -16,11 +16,11 @@ import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
-  CreateAbsenceRequestCommand,
-  CreateShiftChangeRequestCommand,
-  CreateShiftSwapRequestCommand,
-  SchedulingWorkflowService,
-} from './scheduling-workflow.service.js';
+  CreateAbsenceRequestDto,
+  CreateShiftChangeRequestDto,
+  CreateShiftSwapRequestDto,
+} from './dto/scheduling-request.dto.js';
+import { SchedulingWorkflowService } from './scheduling-workflow.service.js';
 
 @ApiTags('scheduling')
 @ApiBearerAuth('user-token')
@@ -43,7 +43,7 @@ export class SchedulingController {
   async createShiftChange(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateShiftChangeRequestCommand,
+    @Body() input: CreateShiftChangeRequestDto,
   ) {
     const result = await this.scheduling.createShiftChange(request.user!, siteId, input);
     this.logger.log({
@@ -96,7 +96,7 @@ export class SchedulingController {
   async createShiftSwap(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateShiftSwapRequestCommand,
+    @Body() input: CreateShiftSwapRequestDto,
   ) {
     const result = await this.scheduling.createShiftSwap(request.user!, siteId, input);
     this.logger.log({
@@ -167,7 +167,7 @@ export class SchedulingController {
   async createAbsence(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateAbsenceRequestCommand,
+    @Body() input: CreateAbsenceRequestDto,
   ) {
     const result = await this.scheduling.createAbsence(request.user!, siteId, input);
     this.logger.log({

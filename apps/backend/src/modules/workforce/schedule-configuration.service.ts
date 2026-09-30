@@ -1,16 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Transform } from 'class-transformer';
-import {
-  IsDateString,
-  IsISO8601,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Matches,
-  MaxLength,
-} from 'class-validator';
 import { DataSource } from 'typeorm';
 import { command, conflict, knownUnique, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -19,51 +8,11 @@ import { ShiftEntity } from '../../database/entities/shift.entity.js';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../database/entities/worker-schedule.entity.js';
-
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
-
-export class CreateShiftCommand {
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(160)
-  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  name!: string;
-
-  @IsISO8601({ strict: true })
-  startsAt!: string;
-
-  @IsISO8601({ strict: true })
-  endsAt!: string;
-
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  @Matches(/^[A-Za-z_]+(?:\/[A-Za-z_+-]+)+$/)
-  timezone!: string;
-}
-
-export class CreateScheduleVersionCommand {
-  @IsISO8601({ strict: true })
-  effectiveFrom!: string;
-
-  @IsOptional()
-  @IsISO8601({ strict: true })
-  effectiveUntil?: string;
-}
-
-export class CreateWorkerScheduleCommand {
-  @IsUUID()
-  workerId!: string;
-
-  @IsUUID()
-  shiftId!: string;
-
-  @IsDateString({ strict: true })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  workDate!: string;
-}
+import {
+  CreateScheduleVersionDto,
+  CreateShiftDto,
+  CreateWorkerScheduleDto,
+} from './dto/schedule-configuration.dto.js';
 
 function invalid(message: string): never {
   throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
@@ -76,9 +25,9 @@ function invalid(message: string): never {
 export class ScheduleConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async createShift(siteId: string, input: CreateShiftCommand): Promise<ShiftEntity> {
+  async createShift(siteId: string, input: CreateShiftDto): Promise<ShiftEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const value = command(CreateShiftCommand, input);
+    const value = command(CreateShiftDto, input);
     const startsAt = new Date(value.startsAt);
     const endsAt = new Date(value.endsAt);
     if (endsAt <= startsAt) invalid('Shift end must be after its start');
@@ -96,10 +45,10 @@ export class ScheduleConfigurationService {
 
   async createScheduleVersion(
     siteId: string,
-    input: CreateScheduleVersionCommand,
+    input: CreateScheduleVersionDto,
   ): Promise<ScheduleVersionEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const value = command(CreateScheduleVersionCommand, input);
+    const value = command(CreateScheduleVersionDto, input);
     const effectiveFrom = new Date(value.effectiveFrom);
     const effectiveUntil = value.effectiveUntil ? new Date(value.effectiveUntil) : null;
     if (effectiveUntil && effectiveUntil <= effectiveFrom)
@@ -131,11 +80,11 @@ export class ScheduleConfigurationService {
   async createWorkerSchedule(
     siteId: string,
     scheduleVersionId: string,
-    input: CreateWorkerScheduleCommand,
+    input: CreateWorkerScheduleDto,
   ): Promise<WorkerScheduleEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedScheduleVersionId = uuid(scheduleVersionId);
-    const value = command(CreateWorkerScheduleCommand, input);
+    const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {
       const [version, worker, shift] = await Promise.all([
         manager.getRepository(ScheduleVersionEntity).findOneBy({

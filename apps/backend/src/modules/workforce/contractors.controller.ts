@@ -16,8 +16,10 @@ import type { ContractorEntity } from '../../database/entities/contractor.entity
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
-  AssignContractorRepresentativeCommand,
-  CreateContractorCommand,
+  AssignContractorRepresentativeDto,
+  CreateContractorDto,
+} from './dto/workforce.dto.js';
+import {
   WorkforceConfigurationService,
 } from './workforce-configuration.service.js';
 
@@ -53,7 +55,7 @@ export class ContractorsController {
   async create(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateContractorCommand,
+    @Body() input: CreateContractorDto,
   ) {
     const contractor = await this.workforce.createContractor(siteId, input);
     this.logger.log({
@@ -71,7 +73,7 @@ export class ContractorsController {
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('contractorId') contractorId: string,
-    @Body() input: AssignContractorRepresentativeCommand,
+    @Body() input: AssignContractorRepresentativeDto,
   ) {
     const assignment = await this.workforce.assignRepresentative(siteId, contractorId, input);
     this.logger.log({

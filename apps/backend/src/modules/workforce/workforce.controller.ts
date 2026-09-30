@@ -21,10 +21,8 @@ import { pagination } from '../../common/http/pagination.js';
 import type { WorkerEntity } from '../../database/entities/worker.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
-import {
-  CreateWorkerCommand,
-  WorkforceConfigurationService,
-} from './workforce-configuration.service.js';
+import { CreateWorkerDto } from './dto/workforce.dto.js';
+import { WorkforceConfigurationService } from './workforce-configuration.service.js';
 
 function workerResponse(worker: WorkerEntity) {
   return {
@@ -60,7 +58,7 @@ export class WorkforceController {
   async create(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateWorkerCommand,
+    @Body() input: CreateWorkerDto,
   ) {
     const worker = await this.workforce.create(siteId, input);
     this.logger.log({

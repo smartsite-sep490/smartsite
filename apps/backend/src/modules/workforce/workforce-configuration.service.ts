@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { command, knownUnique, missing, page, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -11,53 +9,11 @@ import { SiteEntity } from '../../database/entities/site.entity.js';
 import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
-
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
-
-export class CreateWorkerCommand {
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(128)
-  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  externalId!: string;
-
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
-  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  displayName!: string;
-
-  @IsOptional()
-  @IsUUID()
-  contractorId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  userId?: string;
-}
-
-export class CreateContractorCommand {
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  code!: string;
-
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
-  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  name!: string;
-}
-
-export class AssignContractorRepresentativeCommand {
-  @IsUUID()
-  userId!: string;
-}
+import {
+  AssignContractorRepresentativeDto,
+  CreateContractorDto,
+  CreateWorkerDto,
+} from './dto/workforce.dto.js';
 
 @Injectable()
 export class WorkforceConfigurationService {
@@ -76,9 +32,9 @@ export class WorkforceConfigurationService {
     if (!contractor || !user || !assignment) missing();
   }
 
-  async create(siteId: string, input: CreateWorkerCommand): Promise<WorkerEntity> {
+  async create(siteId: string, input: CreateWorkerDto): Promise<WorkerEntity> {
     const scopedSiteId = uuid(siteId);
-    const value = command(CreateWorkerCommand, input);
+    const value = command(CreateWorkerDto, input);
     const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
     if (!site) missing();
     if (!!value.contractorId !== !!value.userId)
@@ -103,9 +59,9 @@ export class WorkforceConfigurationService {
     }
   }
 
-  async createContractor(siteId: string, input: CreateContractorCommand): Promise<ContractorEntity> {
+  async createContractor(siteId: string, input: CreateContractorDto): Promise<ContractorEntity> {
     const scopedSiteId = uuid(siteId);
-    const value = command(CreateContractorCommand, input);
+    const value = command(CreateContractorDto, input);
     const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
     if (!site) missing();
     try {
@@ -124,11 +80,11 @@ export class WorkforceConfigurationService {
   async assignRepresentative(
     siteId: string,
     contractorId: string,
-    input: AssignContractorRepresentativeCommand,
+    input: AssignContractorRepresentativeDto,
   ): Promise<ContractorRepresentativeAssignmentEntity> {
     const scopedSiteId = uuid(siteId);
     const scopedContractorId = uuid(contractorId);
-    const value = command(AssignContractorRepresentativeCommand, input);
+    const value = command(AssignContractorRepresentativeDto, input);
     const [contractor, user, assignment] = await Promise.all([
       this.dataSource
         .getRepository(ContractorEntity)

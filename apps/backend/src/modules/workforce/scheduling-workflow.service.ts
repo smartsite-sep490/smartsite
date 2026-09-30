@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 import { DataSource, type EntityManager } from 'typeorm';
 import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -15,42 +13,11 @@ import { UserRole } from '../../database/entities/user.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../database/entities/worker-schedule.entity.js';
 import type { AuthenticatedUser } from '../auth/auth.service.js';
-
-const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
-
-class RequestReasonCommand {
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(1000)
-  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  reason!: string;
-}
-
-export class CreateShiftChangeRequestCommand extends RequestReasonCommand {
-  @IsUUID()
-  workerScheduleId!: string;
-
-  @IsUUID()
-  toShiftId!: string;
-}
-
-export class CreateShiftSwapRequestCommand extends RequestReasonCommand {
-  @IsUUID()
-  requesterWorkerScheduleId!: string;
-
-  @IsUUID()
-  coworkerWorkerScheduleId!: string;
-}
-
-export class CreateAbsenceRequestCommand extends RequestReasonCommand {
-  @IsUUID()
-  workerScheduleId!: string;
-
-  @IsOptional()
-  @IsUUID()
-  replacementWorkerId?: string;
-}
+import {
+  CreateAbsenceRequestDto,
+  CreateShiftChangeRequestDto,
+  CreateShiftSwapRequestDto,
+} from './dto/scheduling-request.dto.js';
 
 @Injectable()
 export class SchedulingWorkflowService {
@@ -155,10 +122,10 @@ export class SchedulingWorkflowService {
   async createShiftChange(
     actor: AuthenticatedUser,
     siteId: string,
-    input: CreateShiftChangeRequestCommand,
+    input: CreateShiftChangeRequestDto,
   ): Promise<ShiftChangeRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const value = command(CreateShiftChangeRequestCommand, input);
+    const value = command(CreateShiftChangeRequestDto, input);
     return this.dataSource.transaction(async (manager) => {
       const schedule = await this.scheduleForSite(manager, scopedSiteId, value.workerScheduleId);
       const worker = await this.workerForSchedule(manager, schedule);
@@ -252,10 +219,10 @@ export class SchedulingWorkflowService {
   async createShiftSwap(
     actor: AuthenticatedUser,
     siteId: string,
-    input: CreateShiftSwapRequestCommand,
+    input: CreateShiftSwapRequestDto,
   ): Promise<ShiftSwapRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const value = command(CreateShiftSwapRequestCommand, input);
+    const value = command(CreateShiftSwapRequestDto, input);
     if (value.requesterWorkerScheduleId === value.coworkerWorkerScheduleId)
       conflict('Shift swap requires two different worker schedules');
     return this.dataSource.transaction(async (manager) => {
@@ -447,10 +414,10 @@ export class SchedulingWorkflowService {
   async createAbsence(
     actor: AuthenticatedUser,
     siteId: string,
-    input: CreateAbsenceRequestCommand,
+    input: CreateAbsenceRequestDto,
   ): Promise<AbsenceRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const value = command(CreateAbsenceRequestCommand, input);
+    const value = command(CreateAbsenceRequestDto, input);
     return this.dataSource.transaction(async (manager) => {
       const schedule = await this.scheduleForSite(manager, scopedSiteId, value.workerScheduleId);
       const worker = await this.workerForSchedule(manager, schedule);

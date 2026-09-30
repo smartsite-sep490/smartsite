@@ -7,10 +7,8 @@ import { UserRole } from '../src/database/entities/user.entity.js';
 import { WorkerEntity } from '../src/database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../src/database/entities/worker-schedule.entity.js';
 import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
-import {
-  SchedulingWorkflowService,
-  type CreateShiftChangeRequestCommand,
-} from '../src/modules/workforce/scheduling-workflow.service.js';
+import type { CreateShiftChangeRequestDto } from '../src/modules/workforce/dto/scheduling-request.dto.js';
+import { SchedulingWorkflowService } from '../src/modules/workforce/scheduling-workflow.service.js';
 
 function actor(
   id: string,
@@ -91,7 +89,7 @@ test('SchedulingWorkflowService denies a Worker who attempts to request a change
         workerScheduleId: scheduleId,
         toShiftId: randomUUID(),
         reason: 'Need a different shift',
-      } as CreateShiftChangeRequestCommand,
+      } as CreateShiftChangeRequestDto,
     ),
     publicCode('FORBIDDEN'),
   );

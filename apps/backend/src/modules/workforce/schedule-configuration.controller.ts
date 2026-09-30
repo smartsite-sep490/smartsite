@@ -15,11 +15,11 @@ import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
-  CreateScheduleVersionCommand,
-  CreateShiftCommand,
-  CreateWorkerScheduleCommand,
-  ScheduleConfigurationService,
-} from './schedule-configuration.service.js';
+  CreateScheduleVersionDto,
+  CreateShiftDto,
+  CreateWorkerScheduleDto,
+} from './dto/schedule-configuration.dto.js';
+import { ScheduleConfigurationService } from './schedule-configuration.service.js';
 
 @ApiTags('schedule configuration')
 @ApiBearerAuth('user-token')
@@ -42,7 +42,7 @@ export class ScheduleConfigurationController {
   async createShift(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateShiftCommand,
+    @Body() input: CreateShiftDto,
   ) {
     const shift = await this.schedules.createShift(siteId, input);
     this.logger.log({ actorId: request.user!.id, action: 'shift.create', siteId, resourceId: shift.id });
@@ -54,7 +54,7 @@ export class ScheduleConfigurationController {
   async createScheduleVersion(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateScheduleVersionCommand,
+    @Body() input: CreateScheduleVersionDto,
   ) {
     const version = await this.schedules.createScheduleVersion(siteId, input);
     this.logger.log({
@@ -72,7 +72,7 @@ export class ScheduleConfigurationController {
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('scheduleVersionId') scheduleVersionId: string,
-    @Body() input: CreateWorkerScheduleCommand,
+    @Body() input: CreateWorkerScheduleDto,
   ) {
     const schedule = await this.schedules.createWorkerSchedule(siteId, scheduleVersionId, input);
     this.logger.log({
