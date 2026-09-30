@@ -43,7 +43,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
         }, '+=0.1')
         .to(panelRef.current, {
           width: 440,
-          height: 600,
+          height: 560,
           duration: 0.45,
           ease: 'back.out(1.2)'
         }, 'expand')

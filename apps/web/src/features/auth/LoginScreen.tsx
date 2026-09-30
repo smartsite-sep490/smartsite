@@ -45,7 +45,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
         }, '+=0.1')
         .to(panelRef.current, {
           width: 440,
-          height: 520,
+          height: 560,
           duration: 0.45,
           ease: 'back.out(1.2)'
         }, 'expand')
@@ -170,7 +170,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
               panelRef.current,
               {
                 width: 440,
-                height: 520,
+                height: 560,
                 duration: 0.5,
                 ease: 'back.out(1.2)',
               },
