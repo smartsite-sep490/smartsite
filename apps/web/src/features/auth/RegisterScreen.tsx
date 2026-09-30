@@ -22,20 +22,65 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
 
   useGSAP(
     () => {
-      // Initial state
-      gsap.set(panelRef.current, { width: 440, opacity: 0, y: 30 });
+      // Initial state: Start as Orb
+      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 0 });
+      gsap.set('.register-form-content', { opacity: 0, display: 'none', scale: 0.95 });
+      gsap.set('.register-loading-content', { opacity: 1, display: 'flex', scale: 1 });
 
       // Cinematic entrance
       gsap.to('.register-bg-overlay', { opacity: 1, duration: 1.5, ease: 'power2.out' });
-      gsap.to(panelRef.current, {
-        y: 0,
-        opacity: 1,
-        duration: 1.2,
-        ease: 'cubic-bezier(0.32,0.72,0,1)',
-      });
+      
+      const tl = gsap.timeline({ delay: 0.05 });
+      tl.to(panelRef.current, { opacity: 1, duration: 0.2 })
+        .to('.register-loading-content', {
+          opacity: 0,
+          scale: 0.9,
+          duration: 0.15,
+          onComplete: () => {
+            gsap.set('.register-loading-content', { display: 'none' });
+            gsap.set('.register-form-content', { display: 'flex' });
+          }
+        }, '+=0.1')
+        .to(panelRef.current, {
+          width: 440,
+          height: 600,
+          duration: 0.45,
+          ease: 'back.out(1.2)'
+        }, 'expand')
+        .to('.register-form-content', {
+          opacity: 1,
+          scale: 1,
+          duration: 0.25
+        }, 'expand+=0.2');
     },
     { scope: containerRef }
   );
+
+  const handleNavigateLogin = () => {
+    const tl = gsap.timeline();
+    tl.to('.register-form-content', {
+      opacity: 0,
+      scale: 0.95,
+      duration: 0.15,
+      onComplete: () => {
+        gsap.set('.register-form-content', { display: 'none' });
+        gsap.set('.register-loading-content', { display: 'flex' });
+      },
+    })
+    .to(panelRef.current, {
+      width: 240,
+      height: 240,
+      duration: 0.4,
+      ease: 'back.inOut(1.2)',
+    }, 'morph')
+    .to('.register-loading-content', {
+      opacity: 1,
+      scale: 1,
+      duration: 0.2,
+      ease: 'power2.out',
+    }, 'morph+=0.2')
+    .to({}, { duration: 0.1, onComplete: onBackToLogin });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,7 +271,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
               <span className="text-white/40 text-xs font-medium">Already have an account? </span>
               <button 
                 type="button" 
-                onClick={onBackToLogin}
+                onClick={handleNavigateLogin}
                 className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
               >
                 Sign In
