@@ -16,7 +16,12 @@ import {
   IconChevronRight,
   IconCamera,
   IconShield,
+  IconLogOut,
 } from '../icons';
+
+import { useLogout } from '../../features/auth/auth-session';
+
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export type ActiveTab =
   | 'dashboard'
@@ -39,6 +44,7 @@ interface AppLayoutProps {
 export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps) {
   // Sidebar state: expanded (to) vs collapsed (nhỏ)
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const logoutMutation = useLogout(apiUrl);
 
   const navGroups = [
     {
@@ -231,6 +237,16 @@ export function AppLayout({ currentTab, onSelectTab, children }: AppLayoutProps)
                 <p className="text-[11px] text-[#62748E]">Demo workspace</p>
               </div>
             </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-colors relative cursor-pointer"
+              title="Logout"
+            >
+              <IconLogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
 
