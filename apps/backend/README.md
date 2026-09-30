@@ -175,6 +175,14 @@ pnpm --filter @smartsite/backend typeorm migration:run -d dist/database/typeorm.
 
 Docker Compose chạy service `migrate` trước Backend. Staging/production phải chạy migration có kiểm soát trước khi deploy phiên bản cần schema mới. Kiểm tra đường rollback và tương thích dữ liệu; `revert` chỉ hoàn tác migration gần nhất, không thay backup.
 
+Migration `ZoneEntryTrackIdRange1790812800001` mở rộng `zone_entry_decision.track_id` từ
+PostgreSQL `integer` sang `bigint`, với CHECK `0..9007199254740991` đúng contract observation
+v1. Chạy migration này trước khi deploy Backend dùng transformer mới. API vẫn trả `trackId`
+kiểu số JSON; thay đổi lưu trữ không xác nhận Worker hay thay chính sách quyền Zone.
+Downgrade về `integer` sẽ bị PostgreSQL từ chối nếu còn Track ID lớn hơn `2147483647`;
+lệnh thất bại nguyên tử, không xóa hoặc cắt giá trị để ép rollback. Khi đã có các ID đó,
+ưu tiên forward fix hoặc quy trình restore đã được duyệt, không coi `revert` luôn khả dụng.
+
 ### Neon local
 
 Không tự tạo Neon project. Đăng nhập Neon CLI, liên kết đúng project rồi kéo riêng biến PostgreSQL vào file mà Backend development thực sự nạp:

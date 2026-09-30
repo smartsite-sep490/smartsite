@@ -236,5 +236,23 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
       'ALLOWED',
       'UNAVAILABLE',
     ]);
+
+    // Immutable v1 accepts zero and Track IDs beyond PostgreSQL INTEGER.
+    for (const trackId of [0, 2147483648, Number.MAX_SAFE_INTEGER]) {
+      const input = { eventId, siteId, zoneId, trackId, evaluatedAt: capturedAt };
+      await source.transaction(async (manager) => {
+        await service.record(manager, input, unknown);
+        await service.record(manager, input, unknown);
+      });
+      const rows = await source.getRepository(ZoneEntryDecisionEntity).findBy({ eventId, trackId });
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.trackId, trackId);
+      assert.equal(typeof rows[0]!.trackId, 'number');
+    }
+    const largeDecisions = await access.listDecisions(siteId, { zoneId, offset: 0, limit: 20 });
+    assert.equal(largeDecisions.total, 5);
+    for (const { trackId } of largeDecisions.items) {
+      assert.equal(typeof JSON.parse(JSON.stringify({ trackId })).trackId, 'number');
+    }
   });
 });

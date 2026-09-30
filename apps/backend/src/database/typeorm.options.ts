@@ -7,6 +7,7 @@ import { SafetyAlertReadIndex1790467200000 } from './migrations/1790467200000-Sa
 import { ScopedJwtAuthentication1790553600000 } from './migrations/1790553600000-ScopedJwtAuthentication.js';
 import { Mf06ZoneAuthorization1790553600000 } from './migrations/1790553600000-Mf06ZoneAuthorization.js';
 import { SafetyAlertReviews1790640000000 } from './migrations/1790640000000-SafetyAlertReviews.js';
+import { ZoneEntryTrackIdRange1790812800001 } from './migrations/1790812800001-ZoneEntryTrackIdRange.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -30,6 +31,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ScopedJwtAuthentication1790553600000,
       Mf06ZoneAuthorization1790553600000,
       SafetyAlertReviews1790640000000,
+      ZoneEntryTrackIdRange1790812800001,
     ],
     logging: false,
     extra: {

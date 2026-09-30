@@ -19,6 +19,7 @@ export type ZoneEntryDecisionStatus = 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
 @Unique('uq_zone_entry_decision_event_track_zone', ['eventId', 'trackId', 'zoneId'])
 @Index('idx_zone_entry_decision_site_time', ['siteId', 'evaluatedAt', 'id'])
 @Check('chk_zone_entry_decision_status', "status IN ('ALLOWED', 'DENIED', 'UNAVAILABLE')")
+@Check('chk_zone_entry_decision_track_id', 'track_id BETWEEN 0 AND 9007199254740991')
 export class ZoneEntryDecisionEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_zone_entry_decision_id' })
   id!: string;
@@ -45,7 +46,25 @@ export class ZoneEntryDecisionEntity {
   @Column({ name: 'candidate_worker_id', type: 'varchar', length: 128, nullable: true })
   candidateWorkerId!: string | null;
 
-  @Column({ name: 'track_id', type: 'integer' })
+  @Column({
+    name: 'track_id',
+    type: 'bigint',
+    transformer: {
+      to: (value: number): string => {
+        if (!Number.isSafeInteger(value) || value < 0)
+          throw new RangeError('Invalid zone entry track ID');
+        return String(value);
+      },
+      from: (value: string): number => {
+        // PostgreSQL returns BIGINT as a decimal string; reject lossy/coerced values.
+        if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,15})$/.test(value))
+          throw new RangeError('Invalid zone entry track ID');
+        const parsed = Number(value);
+        if (!Number.isSafeInteger(parsed)) throw new RangeError('Invalid zone entry track ID');
+        return parsed;
+      },
+    },
+  })
   trackId!: number;
 
   @Column({ type: 'varchar', length: 16 })
