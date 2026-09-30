@@ -39,7 +39,7 @@ export class AttendancePairEntity {
   @Column({ name: 'check_out_at', type: 'timestamptz', nullable: true })
   checkOutAt!: Date | null;
 
-  @Column({ name: 'raw_event_refs', type: 'jsonb', default: () => "'[]'::jsonb" })
+  @Column({ name: 'raw_event_refs', type: 'jsonb', default: () => "'[]'" })
   rawEventRefs!: unknown[];
 
   @Column({ type: 'varchar', length: 16 })
