@@ -7,7 +7,11 @@ COPY . .
 RUN pnpm --filter @smartsite/web... install --frozen-lockfile
 RUN pnpm --filter @smartsite/contracts build
 ARG VITE_API_URL=http://localhost:3000
+ARG VITE_AI_WS_URL=
+ARG VITE_AI_BACKEND_SERVICE_TOKEN=
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_AI_WS_URL=$VITE_AI_WS_URL
+ENV VITE_AI_BACKEND_SERVICE_TOKEN=$VITE_AI_BACKEND_SERVICE_TOKEN
 RUN pnpm --filter @smartsite/web build
 
 FROM nginxinc/nginx-unprivileged:1.28-alpine AS runtime
