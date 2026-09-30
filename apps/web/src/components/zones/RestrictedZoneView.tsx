@@ -1238,11 +1238,10 @@ export function RestrictedZoneView({
                   Track ID
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
-                  {activeZoneDetections.length === 0
-                    ? '—'
-                    : activeZoneDetections
-                        .map((detection) => `Track #${detection.trackId}`)
-                        .join(', ')}
+                  {zoneDetections
+                    .filter((detection) => detection.trackId !== null)
+                    .map((detection) => `Track #${detection.trackId}`)
+                    .join(', ') || '—'}
                 </p>
               </div>
               <div>

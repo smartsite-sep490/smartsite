@@ -84,4 +84,13 @@ describe.each([
     expect(markup).not.toContain('Worker ID');
     expect(markup).not.toContain('Recognition Confidence');
   });
+
+  it('retains the track identifier for a person outside the restricted zone', () => {
+    state.preview = preview(true);
+    state.preview.frame.detections[0]!.active = false;
+    state.preview.frame.zoneDetections[0]!.active = false;
+    const text = render().replace(/<[^>]*>/g, ' ');
+    expect(text).toMatch(/Track ID\s+Track #7/);
+    expect(text).toContain('Unknown — not identified');
+  });
 });
