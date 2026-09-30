@@ -1229,13 +1229,13 @@ export function RestrictedZoneView({
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? `Worker (Track #${testDetection.trackId})`
-                    : 'Unassigned'}
+                    ? 'Unknown — not identified'
+                    : 'No person detected'}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker ID
+                  Track ID
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {activeZoneDetections.length === 0
@@ -1271,7 +1271,7 @@ export function RestrictedZoneView({
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Recognition Confidence
+                  Detection Confidence
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
@@ -1296,8 +1296,8 @@ export function RestrictedZoneView({
                     <p className="font-semibold text-slate-900 text-xs">Identity</p>
                     <p className="text-[11px] text-slate-500">
                       {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                        ? `Track #${testDetection.trackId}`
-                        : 'Unknown'}
+                        ? 'Unknown — not identified'
+                        : 'No person detected'}
                     </p>
                   </div>
                   <IconClock className="w-5 h-5 text-slate-400" />

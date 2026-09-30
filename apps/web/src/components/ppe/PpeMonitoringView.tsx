@@ -472,12 +472,12 @@ export function PpeMonitoringView() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker
+                  Identity
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? `Worker (Track #${testDetection.trackId})`
-                    : 'Unassigned'}
+                    ? 'Unknown — not identified'
+                    : 'No person detected'}
                 </p>
               </div>
               <div>
@@ -515,7 +515,7 @@ export function PpeMonitoringView() {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Recognition Confidence
+                  Detection Confidence
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
