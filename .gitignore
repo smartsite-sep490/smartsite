@@ -67,6 +67,11 @@ Thumbs.db
 .superpowers/
 *.tsbuildinfo
 
+# Local build/test snapshots
+.web-build-*.err
+.web-build-*.out
+apps/backend/.focused-workforce-*/
+
 # Local planning and working documentation
 docs/superpowers/
 docs/local/
