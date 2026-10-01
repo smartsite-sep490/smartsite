@@ -177,7 +177,7 @@ export class ObservationIdentityContextService {
         head.eventId === eventIdValue &&
         head.payloadHash === event.payloadHash &&
         !!persistedRef &&
-        observationSubjectRefMatchesEvent(persistedRef, event, index, consistent) &&
+        observationSubjectRefMatchesEvent(persistedRef, event, index) &&
         !!decision &&
         decision.id === head.currentDecisionId &&
         decision.revision === head.revision &&

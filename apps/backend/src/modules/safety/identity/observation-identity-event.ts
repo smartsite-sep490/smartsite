@@ -3,6 +3,11 @@ import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-capt
 import type { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 
 export function reviewEventIsConsistent(event: AiObservationEventEntity): boolean {
+  return event.resolvedCameraId !== null && reviewRawEventIsConsistent(event);
+}
+
+/** Historical raw evidence can remain intact after Camera's foreign key is SET NULL. */
+export function reviewRawEventIsConsistent(event: AiObservationEventEntity): boolean {
   const raw = event.rawPayload;
   if (
     !validateObservationEvent(raw).isValid ||
@@ -21,7 +26,6 @@ export function reviewEventIsConsistent(event: AiObservationEventEntity): boolea
     captured.getTime() === event.capturedAt.getTime() &&
     header.eventId.toLowerCase() === event.eventId.toLowerCase() &&
     header.cameraExternalId === event.cameraExternalId &&
-    header.streamSessionId.toLowerCase() === event.streamSessionId.toLowerCase() &&
-    event.resolvedCameraId !== null
+    header.streamSessionId.toLowerCase() === event.streamSessionId.toLowerCase()
   );
 }

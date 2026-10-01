@@ -70,6 +70,38 @@ for (const operation of ['replay', 'resolve', 'clear', 'history'] as const) {
   });
 }
 
+test('Camera deletion never bypasses original PERSON matching in historical review', async () => {
+  const f = await observationIdentityFixture();
+  try {
+    const command = f.resolve();
+    await f.decide(command);
+    const heads = dataSource.getRepository(ObservationIdentityResolutionEntity);
+    const head = await heads.findOneByOrFail({ eventId: f.eventId, personObservationIndex: 0 });
+    await dataSource.getRepository(CameraEntity).delete({ id: head.subjectRef.cameraId });
+    await heads.update({ id: head.id }, { subjectRef: { ...head.subjectRef, trackId: 8 } });
+    const operations = [
+      () => f.service.listDecisions(f.siteId, f.alertIds[0]!, f.eventId, 0),
+      () => f.decide(command),
+      () =>
+        f.decide({
+          commandId: randomUUID(),
+          action: 'CLEAR',
+          expectedRevision: 1,
+          expectedEventHash: f.hash,
+          reason: 'Withdraw mismatched historical review.',
+        }),
+    ];
+    for (const operation of operations)
+      await assert.rejects(
+        operation,
+        publicError('CONFLICT', 'Observation identity scope is inconsistent'),
+      );
+    assert.equal((await heads.findOneByOrFail({ id: head.id })).revision, 1);
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test('Camera SET NULL retains historical replay/history/CLEAR but never permits a new resolution', async () => {
   const f = await observationIdentityFixture();
   try {

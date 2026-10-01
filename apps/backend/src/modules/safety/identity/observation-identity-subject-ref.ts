@@ -2,7 +2,7 @@ import { isUUID } from 'class-validator';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
 import type { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
-import { reviewEventIsConsistent } from './observation-identity-event.js';
+import { reviewRawEventIsConsistent } from './observation-identity-event.js';
 import { selectObservationSubject } from './observation-identity-subject.js';
 import type { ObservationSubjectRef } from './observation-identity.types.js';
 
@@ -65,7 +65,6 @@ export function observationSubjectRefMatchesEvent(
   ref: ObservationSubjectRef,
   event: AiObservationEventEntity,
   index: number,
-  consistent = reviewEventIsConsistent(event),
 ): boolean {
   if (
     ref.eventId !== event.eventId.toLowerCase() ||
@@ -77,14 +76,14 @@ export function observationSubjectRefMatchesEvent(
     parseNormalizedCapturedAt(ref.capturedAt)?.getTime() !== event.capturedAt.getTime()
   )
     return false;
-  if (!consistent) return true;
+  if (!reviewRawEventIsConsistent(event)) return true;
   const selected = selectObservationSubject(event.rawPayload, index);
   if (!selected.eligible) return false;
   const expected: ObservationSubjectRef = {
     eventId: event.eventId.toLowerCase(),
     personObservationIndex: index,
     payloadHash: event.payloadHash,
-    cameraId: event.resolvedCameraId!,
+    cameraId: event.resolvedCameraId?.toLowerCase() ?? ref.cameraId,
     cameraExternalId: event.cameraExternalId,
     streamSessionId: event.streamSessionId.toLowerCase(),
     capturedAt: (event.rawPayload as { capturedAt: string }).capturedAt,
