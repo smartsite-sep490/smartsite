@@ -5,6 +5,8 @@ import { access, lstat, readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { isUUID } from 'class-validator';
 import { DataSource } from 'typeorm';
+import { createHash } from 'node:crypto';
+import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
 import type { BackendEnvironment } from '../../../config/environment.js';
 import { invalid, missing, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
@@ -29,6 +31,10 @@ export interface SafetyAlertEvidenceSummary {
 export interface SafetyAlertEvidenceContent {
   bytes: Buffer;
   fileName: string;
+}
+
+export interface SafetyAlertIdentityFrameContent extends SafetyAlertEvidenceContent {
+  sha256: string;
 }
 
 interface ParsedEvidenceItem {
@@ -134,19 +140,85 @@ export class SafetyAlertEvidenceService {
     eventId: string,
     rawIndex: string,
   ): Promise<SafetyAlertEvidenceContent> {
-    const scope = uuid(siteId);
-    const alert = uuid(alertId);
     const event = uuid(eventId);
     const index = evidenceIndex(rawIndex);
 
+    const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
+    const item = parseEvidenceItem(evidenceItems(observationEvent.rawPayload)[index]);
+    if (!item) return missing();
+    const local = parseLocalEvidenceUri(item.uri, event);
+    if (!local) return missing();
+    return this.readLocalJpeg(local);
+  }
+
+  /** New review commands require immutable full-frame evidence, not a track-scoped crop. */
+  async readFrameForIdentityReview(
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    rawIndex: string,
+    expectedEventHash: string,
+  ): Promise<SafetyAlertIdentityFrameContent> {
+    const event = uuid(eventId);
+    const index = evidenceIndex(rawIndex);
+    const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
+    const raw = observationEvent.rawPayload;
+    if (!validateObservationEvent(raw).isValid) return this.reviewConflict();
+    const payload = raw as { eventId: string; streamSessionId: string; cameraExternalId: string };
+    if (
+      observationEvent.payloadHash !== expectedEventHash ||
+      computeCanonicalPayloadHash(raw) !== observationEvent.payloadHash ||
+      payload.eventId.toLowerCase() !== event.toLowerCase() ||
+      payload.streamSessionId.toLowerCase() !== observationEvent.streamSessionId.toLowerCase() ||
+      payload.cameraExternalId !== observationEvent.cameraExternalId ||
+      observationEvent.resolvedCameraId === null
+    )
+      return this.reviewConflict();
+    // Historical Site ownership comes from alert mappings, never today's Camera configuration.
+    const conflictingSiteMapping = await this.dataSource
+      .getRepository(AlertDetectionMappingEntity)
+      .createQueryBuilder('mapping')
+      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
+      .where('mapping.eventId = :eventId', { eventId: event })
+      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
+      .getExists();
+    if (conflictingSiteMapping) return this.reviewConflict();
+    const item = parseEvidenceItem(evidenceItems(raw)[index]);
+    if (!item || item.kind !== 'FRAME') return missing();
+    const local = parseLocalEvidenceUri(item.uri, event);
+    if (!local || local.streamSessionId.toLowerCase() !== payload.streamSessionId.toLowerCase())
+      return missing();
+    const content = await this.readLocalJpeg(local);
+    return { ...content, sha256: createHash('sha256').update(content.bytes).digest('hex') };
+  }
+
+  private reviewConflict(): never {
+    throw new PublicHttpException(HttpStatus.CONFLICT, {
+      code: 'CONFLICT',
+      message: 'Observation identity evidence is inconsistent',
+    });
+  }
+
+  private async loadScopedEvent(
+    siteId: string,
+    alertId: string,
+    eventId: string,
+  ): Promise<{
+    alert: SafetyAlertEntity;
+    observationEvent: AiObservationEventEntity;
+  }> {
+    const scope = uuid(siteId);
+    const alertIdValue = uuid(alertId);
+    const event = uuid(eventId);
+
     const alertExists = await this.dataSource
       .getRepository(SafetyAlertEntity)
-      .findOneBy({ id: alert, siteId: scope });
+      .findOneBy({ id: alertIdValue, siteId: scope });
     if (!alertExists) return missing();
 
     const mapping = await this.dataSource
       .getRepository(AlertDetectionMappingEntity)
-      .findOneBy({ alertId: alert, eventId: event });
+      .findOneBy({ alertId: alertIdValue, eventId: event });
     if (!mapping) return missing();
 
     const observationEvent = await this.dataSource
@@ -154,11 +226,7 @@ export class SafetyAlertEvidenceService {
       .findOneBy({ eventId: event });
     if (!observationEvent) return missing();
 
-    const item = parseEvidenceItem(evidenceItems(observationEvent.rawPayload)[index]);
-    if (!item) return missing();
-    const local = parseLocalEvidenceUri(item.uri, event);
-    if (!local) return missing();
-    return this.readLocalJpeg(local);
+    return { alert: alertExists, observationEvent };
   }
 
   private async readLocalJpeg(local: ParsedLocalEvidenceUri): Promise<SafetyAlertEvidenceContent> {
