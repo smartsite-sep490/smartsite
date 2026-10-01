@@ -15,6 +15,7 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -24,18 +25,16 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
 
   useGSAP(
     () => {
-      // Start as form panel directly to avoid square->rectangle jump
-      gsap.set(panelRef.current, { width: 440, height: 560, opacity: 0, scale: 0.95 });
-      gsap.set('.login-form-content', { opacity: 0 });
+      // Start as a small square (solid, no opacity 0, to make morph seamless)
+      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 1, scale: 1 });
+      gsap.set('.login-form-content', { opacity: 0, scale: 0.95 });
       gsap.set('.login-loading-content', { display: 'none' });
 
-      // Cinematic entrance
-      gsap.to('.login-bg-overlay', { opacity: 1, duration: 1.5, ease: 'power2.out' });
-      
-      const tl = gsap.timeline({ delay: 0.05 });
-      tl.to(panelRef.current, { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.2)' })
+      const tl = gsap.timeline({ delay: 0.01 });
+      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' })
         .to('.login-form-content', {
           opacity: 1,
+          scale: 1,
           duration: 0.3
         }, '-=0.1');
     },
@@ -44,12 +43,14 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
 
   const handleNavigateRegister = () => {
     const tl = gsap.timeline();
-    tl.to(panelRef.current, {
-      opacity: 0,
-      scale: 0.95,
-      duration: 0.3,
-      onComplete: onNavigateToRegister
-    });
+    tl.to('.login-form-content', { opacity: 0, scale: 0.95, duration: 0.2 })
+      .to(panelRef.current, {
+        width: 240,
+        height: 240,
+        duration: 0.4,
+        ease: 'back.in(1.2)',
+        onComplete: onNavigateToRegister
+      }, '-=0.1');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -163,6 +164,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
     <div
       ref={containerRef}
       className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#020810]"
+      style={{ perspective: 1200 }}
     >
       {/* Background with abstract dark glow */}
       <div className="absolute inset-0 overflow-hidden">
@@ -245,16 +247,34 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
               {/* Password Input */}
               <div>
                 <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">Password</label>
-                <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
+                <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl pl-4 pr-3 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
+                    className="bg-transparent text-white w-full pr-8 focus:outline-none text-sm placeholder:text-white/20"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors focus:outline-none cursor-pointer"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>

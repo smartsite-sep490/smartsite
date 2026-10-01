@@ -22,18 +22,16 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
 
   useGSAP(
     () => {
-      // Start as form panel directly to avoid square->rectangle jump
-      gsap.set(panelRef.current, { width: 440, height: 560, opacity: 0, scale: 0.95 });
-      gsap.set('.register-form-content', { opacity: 0 });
+      // Start as a small square (solid, no opacity 0, to make morph seamless)
+      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 1, scale: 1 });
+      gsap.set('.register-form-content', { opacity: 0, scale: 0.95 });
       gsap.set('.register-loading-content', { display: 'none' });
-
-      // Cinematic entrance
-      gsap.to('.register-bg-overlay', { opacity: 1, duration: 1.5, ease: 'power2.out' });
       
-      const tl = gsap.timeline({ delay: 0.05 });
-      tl.to(panelRef.current, { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.2)' })
+      const tl = gsap.timeline({ delay: 0.01 });
+      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' })
         .to('.register-form-content', {
           opacity: 1,
+          scale: 1,
           duration: 0.3
         }, '-=0.1');
     },
@@ -42,12 +40,14 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
 
   const handleNavigateLogin = () => {
     const tl = gsap.timeline();
-    tl.to(panelRef.current, {
-      opacity: 0,
-      scale: 0.95,
-      duration: 0.3,
-      onComplete: onBackToLogin
-    });
+    tl.to('.register-form-content', { opacity: 0, scale: 0.95, duration: 0.2 })
+      .to(panelRef.current, {
+        width: 240,
+        height: 240,
+        duration: 0.4,
+        ease: 'back.in(1.2)',
+        onComplete: onBackToLogin
+      }, '-=0.1');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -95,13 +95,13 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
   };
 
   return (
-    <div ref={containerRef} className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#020810]">
+    <div ref={containerRef} className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#020810]" style={{ perspective: 1200 }}>
       {/* Background with abstract dark glow */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-[#F66B17] opacity-[0.03] blur-[150px] rounded-full pointer-events-none" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-[#041D2E] opacity-50 blur-[120px] rounded-full pointer-events-none" />
       </div>
-      <div className="register-bg-overlay opacity-0 absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] opacity-[0.02] pointer-events-none mix-blend-overlay" />
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] opacity-[0.02] pointer-events-none mix-blend-overlay" />
 
       {/* Top Nav */}
       <div className="absolute top-0 inset-x-0 h-24 flex items-center px-8 z-20">
