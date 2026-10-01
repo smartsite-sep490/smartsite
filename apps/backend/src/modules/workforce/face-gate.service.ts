@@ -13,7 +13,7 @@ import {
 } from '../../database/entities/face-profile.entity.js';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
-import { WorkerSiteZoneAssignmentEntity } from '../../database/entities/worker-site-zone-assignment.entity.js';
+import { WorkerGatePermissionEntity } from '../../database/entities/worker-gate-permission.entity.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import type { WorkforceActor } from './contractor-operations.service.js';
@@ -217,15 +217,14 @@ export class FaceGateService {
           })
         : null;
       const assignments = worker
-        ? await manager.getRepository(WorkerSiteZoneAssignmentEntity).find({
-            where: { workerId: worker.id, siteId },
+        ? await manager.getRepository(WorkerGatePermissionEntity).find({
+            where: { workerId: worker.id, siteId, gateId, revokedAt: IsNull() },
             order: { validFrom: 'DESC' },
           })
         : [];
       const assignment = assignments.find(
         (entry) =>
-          (entry.gateId === null || entry.gateId === gateId) &&
-          entry.status === 'APPROVED' &&
+          entry.gateId === gateId &&
           entry.validFrom.getTime() <= now.getTime() &&
           (entry.validUntil === null || entry.validUntil.getTime() > now.getTime()),
       );
@@ -238,7 +237,7 @@ export class FaceGateService {
           participation.validFrom.getTime() <= now.getTime() &&
           (participation.validUntil === null || participation.validUntil.getTime() > now.getTime()),
         faceProfileStatus: profile.status,
-        assignment,
+        assignment: assignment ? { ...assignment, status: 'APPROVED' } : undefined,
         siteId,
         gateId,
         evaluatedAt: now,
@@ -262,7 +261,7 @@ export class FaceGateService {
                 externalId: worker.externalId,
                 displayName: worker.displayName,
                 contractorName: contractor?.name ?? 'Chưa gán nhà thầu',
-                assignmentStatus: assignment?.status ?? 'MISSING',
+                assignmentStatus: assignment ? 'APPROVED' : 'MISSING',
               },
             }
           : {}),

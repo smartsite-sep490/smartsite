@@ -30,6 +30,8 @@ import type {
   FaceGateVerificationResponse,
   GateAccessLogResponse,
   EnrollmentCaptureTarget,
+  WorkerGatePermissionsResponse,
+  SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
@@ -424,6 +426,26 @@ export class SmartSiteManagementClient {
       'GET',
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/access-logs`,
       token,
+    );
+  }
+  getWorkerGatePermissions(token: string, siteId: string, workerId: string) {
+    return this.request<WorkerGatePermissionsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
+      token,
+    );
+  }
+  setWorkerGatePermissions(
+    token: string,
+    siteId: string,
+    workerId: string,
+    input: SetWorkerGatePermissionsCommand,
+  ) {
+    return this.request<WorkerGatePermissionsResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
+      token,
+      input,
     );
   }
   uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob) {

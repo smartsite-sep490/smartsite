@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
+import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import {
   IconAlertTriangle,
   IconCamera,
@@ -42,11 +43,7 @@ export interface SecurityGateDeskViewProps {
   onSelectSite: (siteId: string) => void;
 }
 
-const mockGates = [
-  { id: 'gate-north-01', name: 'Gate 1 — Main North Entrance' },
-  { id: 'gate-west-02', name: 'Gate 2 — West Turnstile' },
-  { id: 'gate-logistics-03', name: 'Gate 3 — Logistics & Vehicles' },
-];
+const gates = SITE_GATES;
 
 export function SecurityGateDeskView({
   apiUrl,
@@ -59,7 +56,7 @@ export function SecurityGateDeskView({
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   // Gate selection & direction
-  const [selectedGateId, setSelectedGateId] = useState(mockGates[0]?.id ?? '');
+  const [selectedGateId, setSelectedGateId] = useState<string>(gates[0]?.id ?? '');
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
 
   // Camera state
@@ -105,7 +102,7 @@ export function SecurityGateDeskView({
     method: 'FACE',
     outcome: log.decision.authorization,
     reasonCode: log.decision.reasonCode,
-    gateName: mockGates.find((gate) => gate.id === log.gateId)?.name ?? log.gateId,
+    gateName: gates.find((gate) => gate.id === log.gateId)?.name ?? log.gateId,
   }));
 
   // Safe preview URL update helper
@@ -316,7 +313,7 @@ export function SecurityGateDeskView({
               }}
               className="mt-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:border-[#F66B17] focus:outline-none"
             >
-              {mockGates.map((gate) => (
+              {gates.map((gate) => (
                 <option key={gate.id} value={gate.id}>
                   {gate.name}
                 </option>

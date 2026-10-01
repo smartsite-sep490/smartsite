@@ -12,6 +12,8 @@ import { FaceEnrollmentController } from './face-enrollment.controller.js';
 import { FaceEnrollmentService } from './face-enrollment.service.js';
 import { FaceGateController } from './face-gate.controller.js';
 import { FaceGateService } from './face-gate.service.js';
+import { WorkerGatePermissionsService } from './worker-gate-permissions.service.js';
+import { WorkerGatePermissionsController } from './worker-gate-permissions.controller.js';
 import { FACE_ENROLLMENT_ADAPTER } from './face-enrollment.service.js';
 import {
   HttpFaceEnrollmentAdapter,
@@ -26,12 +28,14 @@ import {
     WorkerAssignmentController,
     FaceEnrollmentController,
     FaceGateController,
+    WorkerGatePermissionsController,
   ],
   providers: [
     WorkforceConfigurationService,
     ContractorOperationsService,
     FaceEnrollmentService,
     FaceGateService,
+    WorkerGatePermissionsService,
     {
       provide: FACE_ENROLLMENT_ADAPTER,
       inject: [ConfigService],

@@ -145,6 +145,8 @@ exist; it never creates a simulated biometric profile or grants access.
 
 ### Account-linked face enrollment
 
+The Access Control **Quyền vào cửa** tab replaces the Restricted Zones tab. Admin selects a site worker and the fixed Gate Desk catalog (Gate 1/2/3), then saves or revokes explicit gate permissions in PostgreSQL. Empty selection revokes all gates; saves are immediate with no expiry and require the last snapshot to prevent stale concurrent writes. Existing approved assignments with explicit gate IDs migrate with their original validity intervals. Site-wide/Zone assignments do not implicitly allow every gate. Gate checks still require an active linked account, active face profile and valid contractor participation. Restricted-zone APIs remain separate and unchanged.
+
 Face Enrollment is account-first: search/select an existing active account for the current site,
 then enroll its face. `POST /api/v1/sites/:siteId/workers/for-account` idempotently prepares the
 internal worker linkage; it never creates a login account or grants entry permissions.

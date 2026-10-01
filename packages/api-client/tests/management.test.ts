@@ -2,6 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 
 describe('management client', () => {
+  it('reads and atomically replaces worker gate permissions with an expected snapshot', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
+      void _url;
+      void _init;
+      return new Response(JSON.stringify({ workerId: 'worker/a', items: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.getWorkerGatePermissions('synthetic-token', 'site/a', 'worker/a');
+      await client.setWorkerGatePermissions('synthetic-token', 'site/a', 'worker/a', {
+        gateIds: ['gate-north-01'],
+        expectedPermissionIds: [],
+      });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2Fa/workers/worker%2Fa/gate-permissions',
+      );
+      expect(fetchMock.mock.calls[1]?.[1].method).toBe('PUT');
+      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1].body))).toEqual({
+        gateIds: ['gate-north-01'],
+        expectedPermissionIds: [],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('prepares an existing account and sends gate direction/photo to Backend, then reads DB logs', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       void _url;
