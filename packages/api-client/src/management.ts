@@ -440,7 +440,7 @@ export class SmartSiteManagementClient {
     token: string,
     workerId: string,
     sample: Blob,
-    target: EnrollmentCaptureTarget = 'front',
+    target: EnrollmentCaptureTarget,
   ) {
     const form = new FormData();
     form.append('sample', sample, 'face-quality-check.jpg');

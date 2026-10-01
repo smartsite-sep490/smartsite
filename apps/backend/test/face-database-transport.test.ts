@@ -9,6 +9,7 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
   let captured: { authorization?: string; body?: unknown } = {};
   let qualityReason = 'FACE_QUALITY_ACCEPTED';
   let qualityStatus = 'UNKNOWN';
+  let completionStatus = 'ENROLLED';
   const server = createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += String(chunk);
@@ -22,7 +23,8 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
     } else if (request.url?.endsWith('/complete'))
       response.end(
         JSON.stringify({
-          status: 'ENROLLED',
+          status: completionStatus,
+          reasonCode: qualityReason,
           modelVersion: 'synthetic-v1',
           profileReference: 'fp_demo',
           ...(includeTemplate ? { encryptedTemplate: ciphertext } : {}),
@@ -77,6 +79,21 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
     qualityStatus = 'UNKNOWN';
     qualityReason = 'NO_ENROLLMENTS';
     assert.equal((await adapter.assessSampleQuality(jpeg, 'front')).status, 'AI_UNAVAILABLE'); // old service cannot acknowledge pose quality
+    completionStatus = 'QUALITY_FAILED';
+    qualityReason = 'FACE_POSE_LEFT_REQUIRED';
+    await assert.rejects(adapter.completeEnrollment('synthetic-session'), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /góc trái/);
+      assert.equal(error.message.includes('one clear face'), false);
+      return true;
+    });
+    qualityReason = 'service-secret-untrusted';
+    await assert.rejects(adapter.completeEnrollment('synthetic-session'), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message.includes('service-secret-untrusted'), false);
+      return true;
+    });
+    completionStatus = 'ENROLLED';
     includeTemplate = false;
     await assert.rejects(adapter.completeEnrollment('synthetic-session'));
   } finally {

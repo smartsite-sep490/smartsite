@@ -185,7 +185,7 @@ export class FaceEnrollmentService {
     actor: WorkforceActor,
     workerIdValue: string,
     sample: UploadedFaceSample | undefined,
-    target: EnrollmentCaptureTarget = 'front',
+    target: EnrollmentCaptureTarget,
   ): Promise<FaceSampleQuality> {
     this.validateJpeg(sample);
     await this.dataSource.transaction(async (manager) => {

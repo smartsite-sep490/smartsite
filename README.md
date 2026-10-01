@@ -171,6 +171,7 @@ account, profile metadata, and completed session. A matching face resolves the w
 gate permissions still depend on the Backend's contractor and assignment policy.
 
 Each guided capture has an explicit 3-second countdown, a frozen photo preview and a server quality result.
+The capture target is required: missing or invalid `target` is rejected rather than silently checked as front-facing. Older browser clients must refresh before enrollment. Completion failures preserve allowlisted quality reasons, including the failed pose and inconsistent samples; the UI does not claim a measured 15-degree yaw.
 Only an accepted photo enables the next angle; failed checks explain lighting, sharpness, framing or
 relative pose. The AI rechecks front/left/right and sample consistency before producing a template.
 Quality/landmark thresholds are demo heuristics, not calibrated yaw measurements or liveness protection.

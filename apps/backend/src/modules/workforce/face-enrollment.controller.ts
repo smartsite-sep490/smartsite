@@ -18,7 +18,7 @@ import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
 
 class FaceQualityCommand {
   @IsIn(['front', 'left', 'right'])
-  target: EnrollmentCaptureTarget = 'front';
+  target!: EnrollmentCaptureTarget;
 }
 import {
   ApiBearerAuth,

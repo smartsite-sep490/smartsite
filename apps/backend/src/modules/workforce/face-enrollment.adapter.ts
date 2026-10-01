@@ -25,7 +25,7 @@ export interface FaceSampleQuality {
 }
 
 export interface FaceEnrollmentAdapter {
-  assessSampleQuality(jpeg: Buffer, target?: EnrollmentCaptureTarget): Promise<FaceSampleQuality>;
+  assessSampleQuality(jpeg: Buffer, target: EnrollmentCaptureTarget): Promise<FaceSampleQuality>;
   submitSample(input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult>;
   completeEnrollment(sessionId: string): Promise<FaceEnrollmentCompletion>;
 }
@@ -83,7 +83,7 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
 
   async assessSampleQuality(
     jpeg: Buffer,
-    target: EnrollmentCaptureTarget = 'front',
+    target: EnrollmentCaptureTarget,
   ): Promise<FaceSampleQuality> {
     const evidence = await this.verify({
       verificationId: randomUUID(),
@@ -117,8 +117,14 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
     if (response.status === 'QUALITY_FAILED') {
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
-        message:
-          'Face samples did not contain one clear face. Re-capture with one face centered, well lit, and unobstructed.',
+        message: completionQualityMessage(response.reasonCode),
+        issues: [
+          {
+            code: safeQualityReason(response.reasonCode),
+            path: 'samples',
+            message: completionQualityMessage(response.reasonCode),
+          },
+        ],
       });
     }
     if (response.status === 'AI_UNAVAILABLE') this.unavailable();
@@ -228,7 +234,34 @@ const QUALITY_REASONS = new Set([
   'FACE_POSE_FRONT_REQUIRED',
   'FACE_POSE_LEFT_REQUIRED',
   'FACE_POSE_RIGHT_REQUIRED',
+  'FACE_SAMPLES_INCONSISTENT',
 ]);
+function completionQualityMessage(reason: unknown): string {
+  const messages: Record<string, string> = {
+    FACE_POSE_FRONT_REQUIRED: 'Ảnh nhìn thẳng chưa đúng hướng. Chụp lại mẫu nhìn thẳng.',
+    FACE_POSE_LEFT_REQUIRED:
+      'Ảnh góc trái vẫn nhìn thẳng hoặc quay sai hướng. Quay nhẹ đầu sang trái của bạn và chụp lại mẫu trái.',
+    FACE_POSE_RIGHT_REQUIRED:
+      'Ảnh góc phải vẫn nhìn thẳng hoặc quay sai hướng. Quay nhẹ đầu sang phải của bạn và chụp lại mẫu phải.',
+    FACE_NOT_FOUND:
+      'Không tìm thấy mặt trong một mẫu ảnh. Quay nhẹ hơn và giữ toàn bộ mặt trong khung.',
+    FACE_MULTIPLE_FOUND: 'Một mẫu ảnh có nhiều khuôn mặt. Chỉ để người đăng ký trong khung.',
+    FACE_BLURRY: 'Một mẫu ảnh bị mờ. Giữ yên đầu rồi chụp lại.',
+    FACE_TOO_DARK: 'Một mẫu ảnh quá tối. Tăng ánh sáng rồi chụp lại.',
+    FACE_TOO_BRIGHT: 'Một mẫu ảnh quá sáng. Tránh ánh sáng chiếu trực tiếp rồi chụp lại.',
+    FACE_SAMPLES_INCONSISTENT:
+      'Chưa xác nhận được cả ba ảnh thuộc cùng một người. Giữ ánh sáng ổn định và chỉ quay nhẹ đầu khi chụp.',
+    FACE_TURN_TOO_FAR:
+      'Một mẫu ảnh quay đầu quá xa. Quay nhẹ hơn, không cần quay sang ngang hoàn toàn.',
+    FACE_HEAD_TILTED:
+      'Đầu đang nghiêng sang vai. Giữ đầu ngay ngắn và quay sang bên, không nghiêng đầu.',
+  };
+  const safe = safeQualityReason(reason);
+  return (
+    messages[safe] ??
+    'Một mẫu ảnh chưa đủ chất lượng để đăng ký. Chụp lại, giữ mặt rõ, đủ sáng và trong khung.'
+  );
+}
 function safeQualityReason(value: unknown): string {
   return typeof value === 'string' && QUALITY_REASONS.has(value)
     ? value

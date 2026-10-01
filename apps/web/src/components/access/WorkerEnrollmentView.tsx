@@ -842,7 +842,7 @@ export function WorkerEnrollmentView({
             {/* Slot 2: Left */}
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-800">2. Left 15°</span>
+                <span className="font-semibold text-slate-800">2. Quay nhẹ sang trái</span>
                 {samples.left ? (
                   <span className="font-bold text-emerald-600">
                     ✓ Ready ({samples.left.sizeKb}KB)
@@ -872,7 +872,7 @@ export function WorkerEnrollmentView({
             {/* Slot 3: Right */}
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-800">3. Right 15°</span>
+                <span className="font-semibold text-slate-800">3. Quay nhẹ sang phải</span>
                 {samples.right ? (
                   <span className="font-bold text-emerald-600">
                     ✓ Ready ({samples.right.sizeKb}KB)
@@ -952,7 +952,7 @@ export function WorkerEnrollmentView({
 
             {/* Left Review */}
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-              <p className="text-xs font-semibold text-slate-700">2. Left 15°</p>
+              <p className="text-xs font-semibold text-slate-700">2. Quay nhẹ sang trái</p>
               {samples.left ? (
                 <div className="mt-2 space-y-2">
                   <img
@@ -976,7 +976,7 @@ export function WorkerEnrollmentView({
 
             {/* Right Review */}
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-              <p className="text-xs font-semibold text-slate-700">3. Right 15°</p>
+              <p className="text-xs font-semibold text-slate-700">3. Quay nhẹ sang phải</p>
               {samples.right ? (
                 <div className="mt-2 space-y-2">
                   <img
