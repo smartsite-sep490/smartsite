@@ -190,6 +190,16 @@ audit để ép rollback. Trigger chặn `UPDATE`/`DELETE` quyết định; tài
 runtime phải không có quyền `TRUNCATE` hoặc DDL. Trigger không bảo vệ trước database
 owner/superuser. Chỉ fixture giả trong database test riêng được dọn bằng `TRUNCATE`.
 
+API review danh tính theo từng PERSON observation hiện chưa được đăng ký trong
+`SafetyModule`: phải thống nhất reader/export từ registry Worker trước khi bật.
+Các test HTTP dùng module và reader riêng cho fixture; đây không phải bằng chứng
+endpoint đã hoạt động trên môi trường ứng dụng. Review thủ công chỉ có phạm vi
+`EXACT_OBSERVATION`, không xác minh track trực tiếp, cấp quyền Zone, tính lại quyết
+định vào vùng đã lưu hoặc mở lại alert. Nếu ảnh hết hạn hay Camera đã bị xóa,
+lịch sử/replay/CLEAR vẫn dùng snapshot hợp lệ đã lưu; RESOLVE mới bị chặn khi
+không còn bằng chứng phù hợp. Management response validators dùng browser-safe
+entry `@smartsite/contracts/management` trong Web/API client.
+
 ### Neon local
 
 Không tự tạo Neon project. Đăng nhập Neon CLI, liên kết đúng project rồi kéo riêng biến PostgreSQL vào file mà Backend development thực sự nạp:

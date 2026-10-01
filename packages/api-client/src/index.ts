@@ -2,6 +2,13 @@ export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
 export { SmartSiteManagementClient } from './management';
 export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
 export type {
+  ObservationIdentityContextResponse,
+  ObservationIdentityDecisionCommand,
+  ObservationIdentityDecisionResponse,
+  ObservationIdentityMutationResponse,
+  ObservationIdentityWorkerResponse,
+} from '@smartsite/contracts/management';
+export type {
   AccountResponse,
   LoginResponse,
   Page,

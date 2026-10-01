@@ -9,6 +9,7 @@ import type { ObservationIdentityResolutionService } from '../src/modules/safety
 import type { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
 import type { ZoneAccessManagementService } from '../src/modules/zones/zone-access-management.service.js';
 import type { WorkerReferenceReader } from '../src/modules/safety/identity/worker-reference.port.js';
+import { identityContextResponse } from '../src/modules/safety/identity/observation-identity-response.dto.js';
 
 function fixture(withReader = true) {
   const siteId = randomUUID(),
@@ -147,6 +148,88 @@ function fixture(withReader = true) {
   };
 }
 
+test('identity Worker picker scopes the observation before reading and projects only Worker reference fields', async () => {
+  const siteId = randomUUID(),
+    alertId = randomUUID(),
+    eventId = randomUUID(),
+    workerId = randomUUID();
+  let calls = 0,
+    scoped = false;
+  const records = {
+    async readContextRecords() {
+      scoped = true;
+      throw new PublicHttpException(HttpStatus.NOT_FOUND, {
+        code: 'NOT_FOUND',
+        message: 'Synthetic inaccessible observation',
+      });
+    },
+  };
+  const reader = {
+    async listForReview() {
+      calls++;
+      assert.ok(scoped);
+      return {
+        items: [
+          {
+            id: workerId,
+            siteId,
+            externalId: 'W-1',
+            displayName: 'Synthetic',
+            isActive: false,
+            embedding: 'private',
+          },
+        ],
+        total: 1,
+      };
+    },
+  };
+  const service = new ObservationIdentityContextService(
+    records as unknown as ObservationIdentityResolutionService,
+    {} as SafetyAlertEvidenceService,
+    {} as ZoneAccessManagementService,
+    reader as unknown as WorkerReferenceReader,
+  );
+  await assert.rejects(
+    () => service.listWorkers(siteId, alertId, eventId),
+    (e) => e instanceof PublicHttpException && e.getStatus() === 404,
+  );
+  assert.equal(calls, 0);
+  records.readContextRecords = async () => {
+    scoped = true;
+    return {} as never;
+  };
+  assert.deepEqual(await service.listWorkers(siteId, alertId, eventId), {
+    items: [{ id: workerId, siteId, externalId: 'W-1', displayName: 'Synthetic', isActive: false }],
+    total: 1,
+  });
+  reader.listForReview = async () => ({
+    items: [
+      {
+        id: workerId,
+        siteId: randomUUID(),
+        externalId: 'W-1',
+        displayName: 'Synthetic',
+        isActive: false,
+        embedding: 'private',
+      },
+    ],
+    total: 1,
+  });
+  await assert.rejects(
+    () => service.listWorkers(siteId, alertId, eventId),
+    (e) => e instanceof PublicHttpException && e.getStatus() === 503,
+  );
+  const unavailable = new ObservationIdentityContextService(
+    records as unknown as ObservationIdentityResolutionService,
+    {} as SafetyAlertEvidenceService,
+    {} as ZoneAccessManagementService,
+  );
+  await assert.rejects(
+    () => unavailable.listWorkers(siteId, alertId, eventId),
+    (e) => e instanceof PublicHttpException && e.getStatus() === 503,
+  );
+});
+
 test('context returns both PERSONs without selecting a default Worker or leaking raw media fields', async () => {
   const f = fixture();
   const context = await f.get();
@@ -265,6 +348,82 @@ test('context preserves raw indices and blocks duplicate PERSON tracks without r
     ),
   );
   assert.deepEqual(f.zoneCalls, []);
+});
+
+test('corrupt raw and inconsistent persisted ref project an unavailable subject without foreign attribution or a wire failure', async () => {
+  const f = fixture();
+  f.manual();
+  f.state.event.rawPayload = { corrupt: true };
+  (f.state.heads[0]!.head.subjectRef as { payloadHash: string }).payloadHash = 'a'.repeat(64);
+  const context = await f.get(),
+    subject = context.subjects[0]!;
+  assert.equal(subject.subjectRef, null);
+  assert.equal(subject.trackId, null);
+  assert.equal(subject.latestManualDecision, null);
+  assert.equal(subject.resolveBlockReason, 'STATE_INCONSISTENT');
+  assert.equal(subject.clearBlockReason, 'STATE_INCONSISTENT');
+  assert.deepEqual(f.zoneCalls, []);
+  assert.doesNotThrow(() => identityContextResponse(context));
+});
+
+test('persisted review must match the original PERSON reference and immutable event headers', async () => {
+  for (const change of [
+    (ref: Record<string, unknown>) => {
+      ref.trackId = 8;
+    },
+    (ref: Record<string, unknown>) => {
+      ref.cameraId = randomUUID();
+    },
+    (ref: Record<string, unknown>) => {
+      ref.streamSessionId = randomUUID();
+    },
+    (ref: Record<string, unknown>) => {
+      ref.cameraExternalId = 'OTHER-CAMERA';
+    },
+    (ref: Record<string, unknown>) => {
+      ref.capturedAt = '2026-10-02T00:00:00Z';
+    },
+    (ref: Record<string, unknown>) => {
+      ref.personBoundingBox = {
+        x1: 0.2,
+        y1: 0.1,
+        x2: 0.8,
+        y2: 0.9,
+        coordinateSpace: 'NORMALIZED_0_1',
+      };
+    },
+  ]) {
+    const f = fixture();
+    f.manual();
+    change(f.state.heads[0]!.head.subjectRef as Record<string, unknown>);
+    const subject = (await f.get()).subjects[0]!;
+    assert.equal(subject.latestManualDecision, null);
+    assert.equal(subject.resolveBlockReason, 'STATE_INCONSISTENT');
+    assert.equal(subject.canClear, false);
+  }
+});
+
+test('persisted UUID casing does not invalidate the same event/camera/session subject', async () => {
+  const f = fixture();
+  f.manual();
+  const ref = f.state.heads[0]!.head.subjectRef as Record<string, string>;
+  for (const field of ['eventId', 'cameraId', 'streamSessionId'])
+    ref[field] = ref[field]!.toUpperCase();
+  const subject = (await f.get()).subjects[0]!;
+  assert.equal(subject.canResolve, true);
+  assert.equal(subject.canClear, true);
+  assert.notEqual(subject.latestManualDecision, null);
+});
+
+test('historical review remains clearable when Camera deletion nulls the event FK', async () => {
+  const f = fixture();
+  f.manual();
+  (f.state.event as { resolvedCameraId: string | null }).resolvedCameraId = null;
+  const subject = (await f.get()).subjects[0]!;
+  assert.equal(subject.canResolve, false);
+  assert.equal(subject.canClear, true);
+  assert.notEqual(subject.latestManualDecision, null);
+  assert.equal(subject.subjectRefSource, 'PERSISTED_REVIEW');
 });
 
 test('persisted subject refs project only known fields and never leak additional stored metadata', async () => {

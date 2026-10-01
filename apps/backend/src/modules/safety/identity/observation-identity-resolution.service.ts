@@ -22,6 +22,10 @@ import { selectObservationSubject } from './observation-identity-subject.js';
 import type { ObservationSubjectRef } from './observation-identity.types.js';
 import type { WorkerReferenceReader } from './worker-reference.port.js';
 import { reviewEventIsConsistent } from './observation-identity-event.js';
+import {
+  observationSubjectRefMatchesEvent,
+  projectObservationSubjectRef,
+} from './observation-identity-subject-ref.js';
 
 export interface ObservationIdentityDecisionResult {
   decision: ObservationIdentityDecisionEntity;
@@ -91,8 +95,10 @@ export class ObservationIdentityResolutionService {
 
     return this.dataSource.transaction(async (manager) => {
       await this.lock(manager, `identity-command:${command.commandId}`);
-      await this.loadScopedEvent(manager, scope);
-      const recorded = await this.replay(manager, scope, command, hash);
+      const lockedEvent = await this.loadScopedEvent(manager, scope);
+      if (lockedEvent.payloadHash !== command.expectedEventHash)
+        conflict('Observation identity event hash has changed');
+      const recorded = await this.replay(manager, scope, command, hash, lockedEvent);
       if (recorded) return recorded;
       await this.lock(manager, `identity-subject:${scope.eventId}:${scope.personObservationIndex}`);
       const event = await this.loadScopedEvent(manager, scope);
@@ -105,6 +111,7 @@ export class ObservationIdentityResolutionService {
       });
       if (head && (head.siteId !== scope.siteId || head.payloadHash !== command.expectedEventHash))
         conflict('Observation identity scope is inconsistent');
+      if (head) this.assertHeadSubjectScope(head, event, scope.personObservationIndex);
       if ((head?.revision ?? 0) !== command.expectedRevision)
         conflict('Observation identity revision is stale');
 
@@ -191,7 +198,7 @@ export class ObservationIdentityResolutionService {
       personObservationIndex,
     });
     const paging = page(offset, limit);
-    await this.loadScopedEvent(this.dataSource.manager, scope);
+    const event = await this.loadScopedEvent(this.dataSource.manager, scope);
     const head = await this.dataSource
       .getRepository(ObservationIdentityResolutionEntity)
       .findOneBy({
@@ -200,6 +207,7 @@ export class ObservationIdentityResolutionService {
         siteId: scope.siteId,
       });
     if (!head) return { items: [], total: 0 };
+    this.assertHeadSubjectScope(head, event, scope.personObservationIndex);
     const [items, total] = await this.dataSource
       .getRepository(ObservationIdentityDecisionEntity)
       .findAndCount({
@@ -261,7 +269,7 @@ export class ObservationIdentityResolutionService {
       const event = await this.loadScopedEvent(manager, scope);
       if (event.payloadHash !== command.expectedEventHash)
         conflict('Observation identity event hash has changed');
-      return this.replay(manager, scope, command, hash);
+      return this.replay(manager, scope, command, hash, event);
     });
   }
 
@@ -270,6 +278,7 @@ export class ObservationIdentityResolutionService {
     scope: ObservationIdentityCommandScope,
     command: ObservationIdentityDecisionCommand,
     hash: string,
+    event: AiObservationEventEntity,
   ): Promise<ObservationIdentityDecisionResult | null> {
     const decision = await manager
       .getRepository(ObservationIdentityDecisionEntity)
@@ -285,7 +294,22 @@ export class ObservationIdentityResolutionService {
     });
     if (!head || head.payloadHash !== command.expectedEventHash)
       conflict('Observation identity scope is inconsistent');
+    this.assertHeadSubjectScope(head, event, scope.personObservationIndex);
     return { decision, latestHead: head, replayed: true };
+  }
+
+  private assertHeadSubjectScope(
+    head: ObservationIdentityResolutionEntity,
+    event: AiObservationEventEntity,
+    index: number,
+  ): void {
+    const ref = projectObservationSubjectRef(head.subjectRef);
+    if (
+      head.payloadHash !== event.payloadHash ||
+      !ref ||
+      !observationSubjectRefMatchesEvent(ref, event, index)
+    )
+      conflict('Observation identity scope is inconsistent');
   }
 
   private async loadScopedEvent(

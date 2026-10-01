@@ -1,7 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { isUUID } from 'class-validator';
-import { uuid } from '../../../common/configuration/commands.js';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import {
+  parseObservationIdentityWorkerPage,
+  type ObservationIdentityWorkerResponse,
+  type Page,
+} from '@smartsite/contracts/management';
+import { page, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
+import {
+  observationSubjectRefMatchesEvent,
+  projectObservationSubjectRef,
+} from './observation-identity-subject-ref.js';
 import type { ObservationIdentityDecisionEntity } from '../../../database/entities/observation-identity-decision.entity.js';
 import type { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import {
@@ -74,6 +82,45 @@ export class ObservationIdentityContextService {
     private readonly workers?: WorkerReferenceReader,
   ) {}
 
+  async listWorkers(
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    offset = 0,
+    limit = 20,
+  ): Promise<Page<ObservationIdentityWorkerResponse>> {
+    const site = uuid(siteId).toLowerCase(),
+      alert = uuid(alertId).toLowerCase(),
+      event = uuid(eventId).toLowerCase();
+    const paging = page(offset, limit);
+    await this.resolutions.readContextRecords(site, alert, event);
+    if (!this.workers)
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Worker reference reader is unavailable',
+      });
+    const result = await this.workers.listForReview(site, paging.offset, paging.limit);
+    const response = parseObservationIdentityWorkerPage(
+      {
+        items: result.items.map(({ id, siteId, externalId, displayName, isActive }) => ({
+          id,
+          siteId,
+          externalId,
+          displayName,
+          isActive,
+        })),
+        total: result.total,
+      },
+      site,
+    );
+    if (!response || response.items.length > paging.limit)
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Worker reference reader is unavailable',
+      });
+    return response;
+  }
+
   async get(siteId: string, alertId: string, eventId: string): Promise<ObservationIdentityContext> {
     const site = uuid(siteId).toLowerCase(),
       alert = uuid(alertId).toLowerCase(),
@@ -118,26 +165,26 @@ export class ObservationIdentityContextService {
       const record = byIndex.get(index),
         head = record?.head,
         decision = record?.decision ?? null;
-      const persistedRef = head ? this.projectPersistedRef(head.subjectRef) : null;
+      const persistedRef = head ? projectObservationSubjectRef(head.subjectRef) : null;
       const selection = selectObservationSubject(consistent ? event.rawPayload : null, index);
-      const ref =
+      const rawRef =
         consistent && selection.eligible
           ? this.ref(event, index, selection.trackId, selection.personBoundingBox)
-          : persistedRef;
+          : null;
       const snapshotValid =
         !!head &&
         head.siteId === site &&
         head.eventId === eventIdValue &&
         head.payloadHash === event.payloadHash &&
         !!persistedRef &&
-        persistedRef.payloadHash === head.payloadHash &&
-        persistedRef.personObservationIndex === index &&
-        persistedRef.eventId === eventIdValue &&
+        observationSubjectRefMatchesEvent(persistedRef, event, index, consistent) &&
         !!decision &&
         decision.id === head.currentDecisionId &&
         decision.revision === head.revision &&
         decision.resolutionId === head.id &&
         decision.siteId === site;
+      // Invalid stored metadata is never a fallback identity or Zone attribution source.
+      const ref = rawRef ?? (snapshotValid ? persistedRef : null);
       const revision = head?.revision ?? 0;
       const resolveBlockReason: ResolveBlockReason =
         head && !snapshotValid
@@ -219,59 +266,6 @@ export class ObservationIdentityContextService {
     };
   }
 
-  private projectPersistedRef(value: unknown): ObservationSubjectRef | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const ref = value as ObservationSubjectRef;
-    if (
-      typeof ref.eventId !== 'string' ||
-      !isUUID(ref.eventId) ||
-      typeof ref.cameraId !== 'string' ||
-      !isUUID(ref.cameraId) ||
-      typeof ref.streamSessionId !== 'string' ||
-      !isUUID(ref.streamSessionId) ||
-      typeof ref.payloadHash !== 'string' ||
-      !/^[0-9a-f]{64}$/.test(ref.payloadHash) ||
-      !Number.isInteger(ref.personObservationIndex) ||
-      ref.personObservationIndex < 0 ||
-      ref.personObservationIndex > 255 ||
-      typeof ref.cameraExternalId !== 'string' ||
-      ref.cameraExternalId.length < 1 ||
-      ref.cameraExternalId.length > 128 ||
-      ref.cameraExternalId.includes('\u0000') ||
-      typeof ref.capturedAt !== 'string' ||
-      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt](?:[01][0-9]|2[0-3]):[0-5][0-9]:(?:[0-5][0-9]|60)(?:\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/.test(
-        ref.capturedAt,
-      ) ||
-      !ref.personBoundingBox ||
-      typeof ref.personBoundingBox !== 'object'
-    )
-      return null;
-    const { x1, y1, x2, y2, coordinateSpace } = ref.personBoundingBox;
-    const selected = selectObservationSubject(
-      {
-        observations: [
-          {
-            type: 'PERSON',
-            trackId: ref.trackId,
-            boundingBox: { x1, y1, x2, y2, coordinateSpace },
-          },
-        ],
-      },
-      0,
-    );
-    if (!selected.eligible) return null;
-    return {
-      eventId: ref.eventId,
-      personObservationIndex: ref.personObservationIndex,
-      payloadHash: ref.payloadHash,
-      cameraId: ref.cameraId,
-      cameraExternalId: ref.cameraExternalId,
-      streamSessionId: ref.streamSessionId,
-      capturedAt: ref.capturedAt,
-      trackId: selected.trackId,
-      personBoundingBox: selected.personBoundingBox,
-    };
-  }
   private ref(
     event: AiObservationEventEntity,
     index: number,
