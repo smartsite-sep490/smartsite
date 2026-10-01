@@ -80,6 +80,9 @@ export class SmartSiteManagementClient {
       throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
     }
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+      }
       const error = parseBackendErrorEnvelope(payload, response.status);
       throw new ApiError(
         'http',
@@ -104,6 +107,9 @@ export class SmartSiteManagementClient {
       throw new ApiError('network', 'Could not connect to the backend.');
     }
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+      }
       let payload: unknown;
       try {
         payload = await response.json();
@@ -524,6 +530,13 @@ export class SmartSiteManagementClient {
     return this.request<Page<ShiftResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/shifts`, options),
+      token,
+    );
+  }
+  deleteShift(token: string, siteId: string, shiftId: string) {
+    return this.request<void>(
+      'DELETE',
+      `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}`,
       token,
     );
   }

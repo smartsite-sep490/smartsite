@@ -2,6 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 
 describe('management client', () => {
+  it('deletes a site-scoped shift with bearer auth', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.deleteShift('shift-token', 'site/1', 'shift/1');
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/shifts/shift%2F1',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer shift-token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('sends a token only to the requested endpoint and sends revision in mutation body', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       void _url;
@@ -283,6 +301,58 @@ describe('management client', () => {
         }),
       });
       expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('constructs shift change request payload and handles approve/reject mutations', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ id: 'change-1', status: 'PENDING_MANAGER' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.createShiftChangeRequest('token', 'site-1', {
+        workerScheduleId: 'ws-1',
+        toShiftId: 'shift-2',
+        reason: 'Personal reason',
+      });
+      await client.approveShiftChangeRequest('token', 'site-1', 'change-1');
+      await client.rejectShiftChangeRequest('token', 'site-1', 'change-1');
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests');
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({
+          workerScheduleId: 'ws-1',
+          toShiftId: 'shift-2',
+          reason: 'Personal reason',
+        }),
+      });
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests/change-1/approve');
+      expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PATCH' });
+      expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests/change-1/reject');
+      expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: 'PATCH' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('handles shift swap confirm, approve, and reject mutations', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_MANAGER' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.confirmShiftSwapRequest('token', 'site-1', 'swap-1');
+      await client.approveShiftSwapRequest('token', 'site-1', 'swap-1');
+      await client.rejectShiftSwapRequest('token', 'site-1', 'swap-1');
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/confirm');
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/approve');
+      expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/reject');
     } finally {
       vi.unstubAllGlobals();
     }

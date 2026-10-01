@@ -155,6 +155,8 @@ export interface SafetyAlertReviewMutationResponse {
 export interface WorkerResponse {
   id: string;
   siteId: string;
+  contractorId: string | null;
+  userId: string | null;
   externalId: string;
   displayName: string;
   isActive: boolean;
