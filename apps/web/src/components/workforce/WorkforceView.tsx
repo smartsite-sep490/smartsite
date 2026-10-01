@@ -228,47 +228,32 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
   // ── 6. Main view ──────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 py-24 min-h-[100dvh]">
-      <div className="mb-12">
-        <div className="inline-block rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium bg-slate-100 text-slate-600 mb-6">
-          Operations
-        </div>
-        <h1 className="text-5xl lg:text-6xl font-black tracking-tighter leading-none text-[#0A1118]">
-          Workforce
-        </h1>
-        <p className="text-lg text-slate-500 mt-4 max-w-[40ch]">
-          Manage schedules, review change requests, and optimize site staffing
-          instantly.
-        </p>
-      </div>
-
-      {/* Tab bar */}
-      <div className="flex gap-4 mb-12 border-b border-slate-200 pb-4 overflow-x-auto">
-        {showSchedule && (
+    <div className="max-w-[1400px] mx-auto space-y-6 pb-12">
+      {/* Show tab switcher only when user has access to BOTH Worker Schedule & Manager Review */}
+      {showSchedule && showReview && (
+        <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-[#DCE6EF] w-fit shadow-xs">
           <button
             onClick={() => setUserSelectedTab('schedule')}
-            className={`text-sm font-bold tracking-wide transition-colors ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'schedule'
-                ? 'text-[#0A1118]'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'bg-[#071A2B] text-white shadow-xs'
+                : 'text-[#607A96] hover:bg-[#F5F8FB]'
             }`}
           >
-            My Schedule
+            My Schedule &amp; Requests
           </button>
-        )}
-        {showReview && (
           <button
             onClick={() => setUserSelectedTab('review')}
-            className={`text-sm font-bold tracking-wide transition-colors ${
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'review'
-                ? 'text-[#0A1118]'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'bg-[#071A2B] text-white shadow-xs'
+                : 'text-[#607A96] hover:bg-[#F5F8FB]'
             }`}
           >
             Manager Review
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Tab content */}
       <div>
