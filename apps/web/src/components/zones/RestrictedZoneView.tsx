@@ -66,10 +66,19 @@ interface ZoneReviewItem {
 
 export interface RestrictedZoneViewProps {
   apiUrl?: string;
+  onNavigate?: (
+    tab: 'incidents',
+    context?: {
+      alertType?: 'RESTRICTED_ZONE_INTRUSION';
+      siteId?: string;
+      alertId?: string;
+    },
+  ) => void;
 }
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  onNavigate,
 }: RestrictedZoneViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
@@ -1404,106 +1413,146 @@ export function RestrictedZoneView({
         </div>
       </div>
 
-      {/* Bottom Table Section: Recent Zone Events */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-[#2F3437]">Zone Replay Observations</h3>
-            <p className="text-xs text-[#6B6B6B] mt-1">
-              Observations from the sample video timeline. Live safety alerts are available in
-              Safety Alerts.
-              {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setZoneFilter('ALL')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                zoneFilter === 'ALL'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-              }`}
-            >
-              All Events ({events.length})
-            </button>
-            <button
-              onClick={() => setZoneFilter('ACTIVE_ONLY')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                zoneFilter === 'ACTIVE_ONLY'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-              }`}
-            >
-              Zone Entries (
-              {
-                events.filter(
-                  (e) =>
-                    e.result.toLowerCase().includes('entry') ||
-                    e.result.toLowerCase().includes('violation'),
-                ).length
-              }
-              )
-            </button>
+      {/* Live AI Observations status or Replay Observations Table */}
+      {isLive ? (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
+                <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
+                  Live Zone Observations Active
+                </h3>
+              </div>
+              <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
+                Technical zone-entry detections are rendered directly on the live camera feed above.
+                Sample replay timeline rows are hidden during live monitoring. Durable safety alerts
+                require Backend worker ingestion; review persisted records in Safety Alerts.
+              </p>
+            </div>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })}
+                className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                View in Safety Alerts →
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-3">Time</th>
-                <th className="py-3 px-3">Person / Worker</th>
-                <th className="py-3 px-3">Zone</th>
-                <th className="py-3 px-3">Camera</th>
-                <th className="py-3 px-3">Identity</th>
-                <th className="py-3 px-3">Authorization</th>
-                <th className="py-3 px-3">Result</th>
-                <th className="py-3 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EAEAEA]">
-              {displayedEvents.map((evt) => (
-                <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
-                  <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
-                  <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
-                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
-                  <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
-                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
-                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.authorization}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                        evt.result === 'Violation'
-                          ? 'bg-red-50 text-red-600'
-                          : evt.result === 'Access Valid'
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {evt.result}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => setSelectedIncident(evt)}
-                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200"
-                    >
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {displayedEvents.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
-                    No zone events match the selected criteria.
-                  </td>
-                </tr>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#2F3437]">Zone Replay Observations</h3>
+              <p className="text-xs text-[#6B6B6B] mt-1">
+                Observations from the sample video timeline. Live safety alerts are available in
+                Safety Alerts.
+                {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })
+                  }
+                  className="px-2.5 py-1.5 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  View in Safety Alerts →
+                </button>
               )}
-            </tbody>
-          </table>
+              <button
+                onClick={() => setZoneFilter('ALL')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  zoneFilter === 'ALL'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                All Events ({events.length})
+              </button>
+              <button
+                onClick={() => setZoneFilter('ACTIVE_ONLY')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  zoneFilter === 'ACTIVE_ONLY'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                Zone Entries (
+                {
+                  events.filter(
+                    (e) =>
+                      e.result.toLowerCase().includes('entry') ||
+                      e.result.toLowerCase().includes('violation'),
+                  ).length
+                }
+                )
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">Time</th>
+                  <th className="py-3 px-3">Person / Worker</th>
+                  <th className="py-3 px-3">Zone</th>
+                  <th className="py-3 px-3">Camera</th>
+                  <th className="py-3 px-3">Identity</th>
+                  <th className="py-3 px-3">Authorization</th>
+                  <th className="py-3 px-3">Result</th>
+                  <th className="py-3 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EAEAEA]">
+                {displayedEvents.map((evt) => (
+                  <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.authorization}</td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                          evt.result === 'Violation'
+                            ? 'bg-red-50 text-red-600'
+                            : evt.result === 'Access Valid'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-amber-50 text-amber-600'
+                        }`}
+                      >
+                        {evt.result}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => setSelectedIncident(evt)}
+                        className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200"
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {displayedEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
+                      No zone events match the selected criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Incident Review Modal with Bound Data */}
       {selectedIncident && (
@@ -1539,25 +1588,40 @@ export function RestrictedZoneView({
 
               <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
                 <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
-                  Review Status: Local Preview
+                  Technical Evidence Preview
                 </p>
-                <p className="text-[#6B6B6B] text-xs">
-                  Backend guard dispatch and authorization override APIs are pending integration.
+                <p className="text-[#6B6B6B] text-xs leading-relaxed">
+                  AI zone detections are preliminary observations. To inspect session-scoped
+                  evidence frames or record an auditable safety decision, navigate to Safety Alerts.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
+              {onNavigate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedIncident(null);
+                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' });
+                  }}
+                  className="py-2 px-4 rounded-lg bg-[#DF2225] hover:bg-[#B8191C] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
+                >
+                  Review in Safety Alerts
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title="Safety alerts navigation not configured"
+                  className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
+                >
+                  Review in Alerts
+                </button>
+              )}
               <button
-                disabled
-                title="Guard alert dispatch API pending integration"
-                className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors"
-              >
-                Alert Guard (API Pending)
-              </button>
-              <button
+                type="button"
                 onClick={() => setSelectedIncident(null)}
-                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors"
+                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
               >
                 Dismiss Preview
               </button>

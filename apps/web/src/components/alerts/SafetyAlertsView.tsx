@@ -12,8 +12,12 @@ import {
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
 
-interface SafetyAlertsViewProps {
+export interface SafetyAlertsViewProps {
   apiUrl: string;
+  initialSiteId?: string;
+  initialAlertId?: string;
+  initialStatus?: 'ALL' | SafetyAlertStatus;
+  initialType?: 'ALL' | SafetyAlertType;
 }
 
 const statusOptions: readonly SafetyAlertStatus[] = [
@@ -44,8 +48,10 @@ function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Your session is no longer valid. Sign in again.';
     if (error.status === 403) return 'This account cannot view the selected Site alerts.';
+    if (error.status === 404) return 'The requested safety alert or site was not found.';
     if (error.status === 409)
       return 'This alert changed while you were reviewing it. The latest record has been loaded; review it before submitting again.';
+    if (error.code === 'network') return 'Could not connect to the backend.';
     return error.message;
   }
   return error instanceof Error ? error.message : 'The request could not be completed.';
@@ -99,23 +105,54 @@ function AlertRow({
   );
 }
 
-export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
+export function SafetyAlertsView({
+  apiUrl,
+  initialSiteId,
+  initialAlertId,
+  initialStatus,
+  initialType,
+}: SafetyAlertsViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const [session, setSession] = useState<LoginResponse | null>(null);
   const [sessionScope, setSessionScope] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [requestedSiteId, setRequestedSiteId] = useState('');
-  const [requestedAlertId, setRequestedAlertId] = useState('');
-  const [status, setStatus] = useState<'ALL' | SafetyAlertStatus>('ALL');
-  const [type, setType] = useState<'ALL' | SafetyAlertType>('ALL');
+  const [requestedSiteId, setRequestedSiteId] = useState(initialSiteId ?? '');
+  const [requestedAlertId, setRequestedAlertId] = useState(initialAlertId ?? '');
+  const [status, setStatus] = useState<'ALL' | SafetyAlertStatus>(initialStatus ?? 'ALL');
+  const [type, setType] = useState<'ALL' | SafetyAlertType>(initialType ?? 'ALL');
   const [offset, setOffset] = useState(0);
   const [reviewReason, setReviewReason] = useState('');
   const activeSession = useRef<{ token: string; userId: string; sessionScope: string } | null>(
     null,
   );
   const lifecycleGeneration = useRef(0);
+
+  // Minimal appropriate mount semantics: adjust filters when navigation initial* props change without useEffect
+  const [prevInitialType, setPrevInitialType] = useState(initialType);
+  if (prevInitialType !== initialType) {
+    setPrevInitialType(initialType);
+    setType(initialType ?? 'ALL');
+  }
+
+  const [prevInitialStatus, setPrevInitialStatus] = useState(initialStatus);
+  if (prevInitialStatus !== initialStatus) {
+    setPrevInitialStatus(initialStatus);
+    setStatus(initialStatus ?? 'ALL');
+  }
+
+  const [prevInitialSiteId, setPrevInitialSiteId] = useState(initialSiteId);
+  if (prevInitialSiteId !== initialSiteId) {
+    setPrevInitialSiteId(initialSiteId);
+    setRequestedSiteId(initialSiteId ?? '');
+  }
+
+  const [prevInitialAlertId, setPrevInitialAlertId] = useState(initialAlertId);
+  if (prevInitialAlertId !== initialAlertId) {
+    setPrevInitialAlertId(initialAlertId);
+    setRequestedAlertId(initialAlertId ?? '');
+  }
 
   const removeSessionQueries = useCallback(
     (scope: string) => {
@@ -442,8 +479,11 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
               </div>
               <button
                 type="button"
-                onClick={() => void alerts.refetch()}
-                className="text-sm font-semibold text-[#F66B17] hover:text-[#D94E07]"
+                onClick={() => {
+                  void alerts.refetch();
+                  if (selectedAlertId) void detail.refetch();
+                }}
+                className="text-sm font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
               >
                 Refresh
               </button>
@@ -495,7 +535,18 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
           </section>
 
           <aside className="min-h-80 rounded-lg border border-[#EAEAEA] bg-white p-5">
-            <h2 className="text-lg font-bold text-[#111111]">Alert detail</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-[#111111]">Alert detail</h2>
+              {selectedAlertId && (
+                <button
+                  type="button"
+                  onClick={() => void detail.refetch()}
+                  className="text-xs font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
+                >
+                  Refresh detail
+                </button>
+              )}
+            </div>
             {!selectedAlertId && (
               <p className="mt-4 text-sm text-[#6B6B6B]">Select an alert to inspect its sources.</p>
             )}

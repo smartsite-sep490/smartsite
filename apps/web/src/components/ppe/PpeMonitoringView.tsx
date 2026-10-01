@@ -43,7 +43,18 @@ interface PpeReviewItem {
   time: string;
 }
 
-export function PpeMonitoringView() {
+export interface PpeMonitoringViewProps {
+  onNavigate?: (
+    tab: 'incidents',
+    context?: {
+      alertType?: 'PPE_VIOLATION';
+      siteId?: string;
+      alertId?: string;
+    },
+  ) => void;
+}
+
+export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pausedViolationRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -715,111 +726,149 @@ export function PpeMonitoringView() {
         </div>
       </div>
 
-      {/* Recent PPE Events Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-[#2F3437]">PPE Replay Observations</h3>
-            <p className="text-xs text-[#6B6B6B] mt-1">
-              Observations from the sample video timeline. Live safety alerts are available in
-              Safety Alerts.
-              {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
-            </p>
-          </div>
-          {/* Functional event filter controls (no misleading "Last 24 hours" label) */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => setPpeFilter('ALL')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                ppeFilter === 'ALL'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-              }`}
-            >
-              All Events ({ppeEvents.length})
-            </button>
-            <button
-              onClick={() => setPpeFilter('HARD_HAT')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                ppeFilter === 'HARD_HAT'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-              }`}
-            >
-              Missing Helmet ({ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length})
-            </button>
-            <button
-              onClick={() => setPpeFilter('SAFETY_VEST')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                ppeFilter === 'SAFETY_VEST'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-              }`}
-            >
-              Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
-            </button>
+      {/* Live AI Observations status or Replay Observations Table */}
+      {isLive ? (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
+                <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
+                  Live AI Observations Active
+                </h3>
+              </div>
+              <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
+                Technical PPE detections are rendered directly on the live camera feed above. Sample
+                replay timeline rows are hidden during live monitoring. Durable safety alerts
+                require Backend worker ingestion; review persisted records in Safety Alerts.
+              </p>
+            </div>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('incidents', { alertType: 'PPE_VIOLATION' })}
+                className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-[#F66B17]/40 bg-orange-50 text-[#F66B17] hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                View in Safety Alerts →
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-3">Time</th>
-                <th className="py-3 px-3">Worker</th>
-                <th className="py-3 px-3">Camera</th>
-                <th className="py-3 px-3">Work Area</th>
-                <th className="py-3 px-3">Issue</th>
-                <th className="py-3 px-3">Confidence</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EAEAEA]">
-              {displayedEvents.map((evt) => (
-                <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
-                  <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
-                  <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.worker}</td>
-                  <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs font-semibold">
-                    {evt.camera}
-                  </td>
-                  <td className="py-3 px-3 text-[#6B6B6B]">{evt.workArea}</td>
-                  <td className="py-3 px-3 font-medium text-[#2F3437]">{evt.issue}</td>
-                  <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.confidence}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                        evt.status === 'Open'
-                          ? 'bg-red-50 text-red-600'
-                          : evt.status === 'Logged'
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {evt.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => setSelectedReview(evt)}
-                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-[#EAEAEA] cursor-pointer"
-                    >
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {displayedEvents.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
-                    No PPE events match the selected criteria.
-                  </td>
-                </tr>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#2F3437]">PPE Replay Observations</h3>
+              <p className="text-xs text-[#6B6B6B] mt-1">
+                Observations from the sample video timeline. Live safety alerts are available in
+                Safety Alerts.
+                {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
+              </p>
+            </div>
+            {/* Functional event filter controls and Safety Alerts navigation */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('incidents', { alertType: 'PPE_VIOLATION' })}
+                  className="px-2.5 py-1.5 rounded-lg border border-[#F66B17]/40 bg-orange-50 text-[#F66B17] hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  View in Safety Alerts →
+                </button>
               )}
-            </tbody>
-          </table>
+              <button
+                onClick={() => setPpeFilter('ALL')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  ppeFilter === 'ALL'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                All Events ({ppeEvents.length})
+              </button>
+              <button
+                onClick={() => setPpeFilter('HARD_HAT')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  ppeFilter === 'HARD_HAT'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                Missing Helmet ({ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length})
+              </button>
+              <button
+                onClick={() => setPpeFilter('SAFETY_VEST')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  ppeFilter === 'SAFETY_VEST'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">Time</th>
+                  <th className="py-3 px-3">Worker</th>
+                  <th className="py-3 px-3">Camera</th>
+                  <th className="py-3 px-3">Work Area</th>
+                  <th className="py-3 px-3">Issue</th>
+                  <th className="py-3 px-3">Confidence</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EAEAEA]">
+                {displayedEvents.map((evt) => (
+                  <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.worker}</td>
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs font-semibold">
+                      {evt.camera}
+                    </td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.workArea}</td>
+                    <td className="py-3 px-3 font-medium text-[#2F3437]">{evt.issue}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.confidence}</td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                          evt.status === 'Open'
+                            ? 'bg-red-50 text-red-600'
+                            : evt.status === 'Logged'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-amber-50 text-amber-600'
+                        }`}
+                      >
+                        {evt.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => setSelectedReview(evt)}
+                        className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-[#EAEAEA] cursor-pointer"
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {displayedEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
+                      No PPE events match the selected criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Review Modal with Bound Data from Selected Row or Detection */}
       {selectedReview && (
@@ -853,26 +902,41 @@ export function PpeMonitoringView() {
               </p>
               <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
                 <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
-                  Review Status: Local Preview
+                  Technical Evidence Preview
                 </p>
-                <p className="text-[#6B6B6B] text-xs">
-                  Backend review and dispatch API endpoints are not yet integrated. Actions below
-                  are recorded in preview state only.
+                <p className="text-[#6B6B6B] text-xs leading-relaxed">
+                  AI detections are preliminary observations. To review durable records, inspect
+                  session-scoped evidence images, or record an auditable safety decision (Confirm,
+                  Dismiss, or Request Evidence), open the Safety Alerts queue.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
+              {onNavigate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReview(null);
+                    onNavigate('incidents', { alertType: 'PPE_VIOLATION' });
+                  }}
+                  className="py-2 px-4 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
+                >
+                  Review in Safety Alerts
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title="Safety alerts navigation not configured"
+                  className="py-2 px-4 rounded-lg bg-[#F66B17]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
+                >
+                  Review in Alerts
+                </button>
+              )}
               <button
-                disabled
-                title="Review dispatch API endpoint pending integration"
-                className="py-2 px-4 rounded-lg bg-[#F66B17]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors"
-              >
-                Dispatch (API Pending)
-              </button>
-              <button
+                type="button"
                 onClick={() => setSelectedReview(null)}
-                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-[#EAEAEA] text-[#2F3437] font-bold text-sm transition-colors cursor-pointer"
+                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-[#EAEAEA] text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
               >
                 Dismiss Preview
               </button>

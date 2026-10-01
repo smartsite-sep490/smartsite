@@ -446,4 +446,111 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     expect(secondScope).not.toBe(mockSafetyOfficerLoginResponse.user.id);
     expect(secondScope).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   });
+
+  it('accepts initialType navigation prop and filters alert listing accordingly', async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
+      mockAdminLoginResponse,
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    const listAlertsSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+      .mockResolvedValue({
+        items: [mockAlert],
+        total: 1,
+      });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockResolvedValue(
+      mockAlertDetail,
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" initialType="PPE_VIOLATION" />
+      </QueryClientProvider>,
+    );
+
+    await user.type(screen.getByLabelText(/Username/i), 'admin');
+    await user.type(screen.getByLabelText(/Password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await screen.findByRole('heading', { name: 'Safety alerts' });
+
+    // Alert type select dropdown should be set to PPE_VIOLATION
+    const typeSelect = screen.getByLabelText(/Alert type/i) as HTMLSelectElement;
+    expect(typeSelect.value).toBe('PPE_VIOLATION');
+
+    expect(listAlertsSpy).toHaveBeenCalledWith(
+      mockAdminLoginResponse.accessToken,
+      'site-alpha',
+      expect.objectContaining({ type: 'PPE_VIOLATION' }),
+    );
+  });
+
+  it('renders a clear error message when login fails due to a network connection error', async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockRejectedValue(
+      new (await import('@smartsite/api-client')).ApiError(
+        'network',
+        'Could not connect to the backend.',
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" />
+      </QueryClientProvider>,
+    );
+
+    await user.type(screen.getByLabelText(/Username/i), 'admin');
+    await user.type(screen.getByLabelText(/Password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    const errorAlert = await screen.findByRole('alert');
+    expect(errorAlert.textContent).toContain('Could not connect to the backend');
+  });
+
+  it('updates filter from initialType to ALL when prop is cleared without unmounting or losing session', async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
+      mockAdminLoginResponse,
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+      items: [mockAlert],
+      total: 1,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockResolvedValue(
+      mockAlertDetail,
+    );
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" initialType="PPE_VIOLATION" />
+      </QueryClientProvider>,
+    );
+
+    await user.type(screen.getByLabelText(/Username/i), 'admin');
+    await user.type(screen.getByLabelText(/Password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await screen.findByRole('heading', { name: 'Safety alerts' });
+
+    const typeSelect = screen.getByLabelText(/Alert type/i) as HTMLSelectElement;
+    expect(typeSelect.value).toBe('PPE_VIOLATION');
+
+    // Re-render với initialType = undefined (mô phỏng App xóa context khi bấm sidebar incidents)
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" initialType={undefined} />
+      </QueryClientProvider>,
+    );
+
+    expect(typeSelect.value).toBe('ALL');
+    // Session đăng nhập vẫn còn nguyên vẹn, không bị mất
+    expect(screen.queryByRole('heading', { name: 'Safety alert queue' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Safety alerts' })).not.toBeNull();
+  });
 });

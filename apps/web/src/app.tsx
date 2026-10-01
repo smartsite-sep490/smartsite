@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getBackendHealth } from '@smartsite/api-client';
+import {
+  getBackendHealth,
+  type SafetyAlertStatus,
+  type SafetyAlertType,
+} from '@smartsite/api-client';
 import { AppLayout, ActiveTab } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
@@ -13,8 +17,16 @@ import { IconRadio, IconUsers, IconTrendingUp } from './components/icons';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+interface AlertsNavigationContext {
+  alertType?: SafetyAlertType;
+  siteId?: string;
+  alertId?: string;
+  status?: SafetyAlertStatus;
+}
+
 export function App() {
   const [currentTab, setCurrentTab] = useState<ActiveTab>('landing');
+  const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check
   useQuery({
@@ -22,7 +34,10 @@ export function App() {
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
   });
 
-  const handleSelectTab = (tab: ActiveTab) => {
+  const handleSelectTab = (tab: ActiveTab, context?: AlertsNavigationContext) => {
+    if (tab === 'incidents') {
+      setAlertsContext(context);
+    }
     setCurrentTab(tab);
   };
 
@@ -39,10 +54,14 @@ export function App() {
       )}
 
       {/* Tab: Restricted Zones (MF05) */}
-      {currentTab === 'zones' && <RestrictedZoneView apiUrl={apiUrl} />}
+      {currentTab === 'zones' && (
+        <RestrictedZoneView apiUrl={apiUrl} onNavigate={(tab, ctx) => handleSelectTab(tab, ctx)} />
+      )}
 
       {/* Tab: PPE Monitoring (MF04) */}
-      {currentTab === 'ppe' && <PpeMonitoringView />}
+      {currentTab === 'ppe' && (
+        <PpeMonitoringView onNavigate={(tab, ctx) => handleSelectTab(tab, ctx)} />
+      )}
 
       {/* Tab: Operational Dashboard */}
       {currentTab === 'dashboard' && <DashboardView onNavigate={(tab) => handleSelectTab(tab)} />}
@@ -62,7 +81,16 @@ export function App() {
 
       {currentTab === 'access' && <AccessControlView apiUrl={apiUrl} />}
 
-      {currentTab === 'incidents' && <SafetyAlertsView apiUrl={apiUrl} />}
+      {currentTab === 'incidents' && (
+        <SafetyAlertsView
+          key={JSON.stringify(alertsContext ?? {})}
+          apiUrl={apiUrl}
+          initialSiteId={alertsContext?.siteId}
+          initialAlertId={alertsContext?.alertId}
+          initialStatus={alertsContext?.status}
+          initialType={alertsContext?.alertType}
+        />
+      )}
 
       {currentTab === 'iot' && (
         <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
