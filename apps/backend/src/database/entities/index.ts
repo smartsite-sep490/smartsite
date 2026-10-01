@@ -12,6 +12,14 @@ import { WorkerEntity } from './worker.entity.js';
 import { ZoneAccessGrantEntity } from './zone-access-grant.entity.js';
 import { ZoneEntryDecisionEntity } from './zone-entry-decision.entity.js';
 import { SafetyAlertReviewEntity } from './safety-alert-review.entity.js';
+import { ContractorEntity } from './contractor.entity.js';
+import { ContractorSiteParticipationEntity } from './contractor-site-participation.entity.js';
+import { ContractorRepresentativeGrantEntity } from './contractor-representative-grant.entity.js';
+import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.entity.js';
+import { FaceProfileEntity } from './face-profile.entity.js';
+import { FaceEnrollmentSessionEntity } from './face-enrollment-session.entity.js';
+import { GateAccessLogEntity } from './gate-access-log.entity.js';
+import { WorkerGatePermissionEntity } from './worker-gate-permission.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -29,6 +37,14 @@ export * from './worker.entity.js';
 export * from './zone-access-grant.entity.js';
 export * from './zone-entry-decision.entity.js';
 export * from './safety-alert-review.entity.js';
+export * from './contractor.entity.js';
+export * from './contractor-site-participation.entity.js';
+export * from './contractor-representative-grant.entity.js';
+export * from './worker-site-zone-assignment.entity.js';
+export * from './face-profile.entity.js';
+export * from './face-enrollment-session.entity.js';
+export * from './gate-access-log.entity.js';
+export * from './worker-gate-permission.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -45,4 +61,12 @@ export const ENTITIES = [
   ZoneAccessGrantEntity,
   ZoneEntryDecisionEntity,
   SafetyAlertReviewEntity,
+  ContractorEntity,
+  ContractorSiteParticipationEntity,
+  ContractorRepresentativeGrantEntity,
+  WorkerSiteZoneAssignmentEntity,
+  FaceProfileEntity,
+  FaceEnrollmentSessionEntity,
+  GateAccessLogEntity,
+  WorkerGatePermissionEntity,
 ] as const;

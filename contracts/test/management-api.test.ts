@@ -28,7 +28,7 @@ test('account responses represent every persisted role without widening role mut
   };
   const provisionableRolesStayRestricted: Equal<
     ProvisionableRoleAssignment['role'],
-    'ADMIN' | 'SITE_MANAGER' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER'
+    'ADMIN' | 'SITE_MANAGER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER'
   > = true;
 
   assert.deepEqual(

@@ -11,6 +11,12 @@ export { validateObservationEvent } from './validation/schema-validator.js';
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
 export type { ValidationResult } from './validation/schema-validator.js';
+export { SITE_GATES } from './gate-permissions-api.js';
+export type {
+  WorkerGatePermissionResponse,
+  WorkerGatePermissionsResponse,
+  SetWorkerGatePermissionsCommand,
+} from './gate-permissions-api.js';
 
 export {
   MAX_CAMERA_REGION_PAYLOAD_BYTES,
@@ -24,6 +30,18 @@ export type {
   CameraRegionConfiguration,
   NormalizedCoordinate,
 } from './camera-region-configuration.js';
+
+export type {
+  GateFacePresenceResponse,
+  FaceGateDecisionResponse,
+  FaceGateVerificationResponse,
+  GateAccessLogResponse,
+  FaceGateReasonCode,
+  FaceProfileStatus,
+  FaceVerificationTechnicalOutcome,
+  GateAuthorizationOutcome,
+  WorkerSiteZoneAssignmentStatus,
+} from './identity-access-api.js';
 
 export type {
   AccountResponse,
@@ -49,6 +67,15 @@ export type {
   SafetyAlertReviewResponse,
   SafetyAlertReviewMutationResponse,
   WorkerResponse,
+  ContractorResponse,
+  ContractorParticipationResponse,
+  ContractorRepresentativeGrantResponse,
+  WorkerSiteZoneAssignmentResponse,
+  FaceEnrollmentSessionResponse,
+  FaceEnrollmentSessionStatus,
+  FaceEnrollmentQualityResponse,
+  EnrollmentCaptureTarget,
+  FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionStatus,

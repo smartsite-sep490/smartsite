@@ -4,7 +4,9 @@ ENV PATH=$PNPM_HOME:$PATH
 RUN npm install --global pnpm@12.4.2
 WORKDIR /workspace
 COPY . .
-RUN pnpm --filter @smartsite/web... install --frozen-lockfile
+# The web app imports workspace contracts directly for access-control states;
+# install its full local dependency closure before compiling it.
+RUN pnpm --filter @smartsite/contracts --filter @smartsite/api-client --filter @smartsite/web install --frozen-lockfile
 RUN pnpm --filter @smartsite/contracts build
 ARG VITE_API_URL=http://localhost:3000
 ARG VITE_AI_WS_URL=

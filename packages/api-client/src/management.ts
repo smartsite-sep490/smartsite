@@ -16,10 +16,23 @@ import type {
   SiteResponse,
   ZoneResponse,
   WorkerResponse,
+  ContractorResponse,
+  ContractorParticipationResponse,
+  ContractorRepresentativeGrantResponse,
+  WorkerSiteZoneAssignmentResponse,
+  FaceEnrollmentSessionResponse,
+  FaceEnrollmentQualityResponse,
+  FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
   ZoneEntryDecisionStatus,
+  FaceGateVerificationResponse,
+  GateFacePresenceResponse,
+  GateAccessLogResponse,
+  EnrollmentCaptureTarget,
+  WorkerGatePermissionsResponse,
+  SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
@@ -56,6 +69,36 @@ export class SmartSiteManagementClient {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         ...(credentials ? { credentials } : {}),
+      });
+    } catch {
+      throw new ApiError('network', 'Could not connect to the backend.');
+    }
+    if (response.status === 204) return undefined as T;
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+    }
+    if (!response.ok) {
+      const error = parseBackendErrorEnvelope(payload, response.status);
+      throw new ApiError(
+        'http',
+        error?.message ?? `Backend returned HTTP ${response.status}.`,
+        response.status,
+        error,
+      );
+    }
+    return payload as T;
+  }
+
+  private async requestFormData<T>(method: string, path: string, token: string, body: FormData) {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+        method,
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+        body,
       });
     } catch {
       throw new ApiError('network', 'Could not connect to the backend.');
@@ -267,10 +310,200 @@ export class SmartSiteManagementClient {
   createWorker(token: string, siteId: string, input: { externalId: string; displayName: string }) {
     return this.request<WorkerResponse>('POST', `/sites/${pathId(siteId)}/workers`, token, input);
   }
+
+  linkWorkerAccount(token: string, siteId: string, workerId: string, userId: string) {
+    return this.request<WorkerResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/account`,
+      token,
+      { userId },
+    );
+  }
+  prepareFaceAccount(token: string, siteId: string, userId: string) {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/for-account`,
+      token,
+      { userId },
+    );
+  }
   listWorkers(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<WorkerResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/workers`, options),
+      token,
+    );
+  }
+
+  createContractor(token: string, input: { code: string; name: string }) {
+    return this.request<ContractorResponse>('POST', '/contractors', token, input);
+  }
+  createContractorParticipation(
+    token: string,
+    contractorId: string,
+    input: { siteId: string; validFrom: string; validUntil: string | null },
+  ) {
+    return this.request<ContractorParticipationResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/participations`,
+      token,
+      input,
+    );
+  }
+  grantContractorRepresentative(token: string, contractorId: string, userId: string) {
+    return this.request<ContractorRepresentativeGrantResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/representative-grants`,
+      token,
+      { userId },
+    );
+  }
+  createContractorWorker(
+    token: string,
+    contractorId: string,
+    input: { siteId: string; externalId: string; displayName: string },
+  ) {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/workers`,
+      token,
+      input,
+    );
+  }
+  createWorkerSiteZoneAssignment(
+    token: string,
+    workerId: string,
+    input: { siteId: string; zoneIds: string[]; validFrom: string; validUntil: string | null },
+  ) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/site-zone-assignment-requests`,
+      token,
+      input,
+    );
+  }
+  safetyReviewWorkerSiteZoneAssignment(token: string, requestId: string) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(requestId)}/safety-review`,
+      token,
+    );
+  }
+  decideWorkerSiteZoneAssignment(token: string, requestId: string, approve: boolean) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(requestId)}/site-manager-decision`,
+      token,
+      { approve },
+    );
+  }
+  startFaceEnrollment(token: string, workerId: string, consentVersion: string) {
+    return this.request<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-enrollments`,
+      token,
+      { consentVersion },
+    );
+  }
+  verifyFaceGate(
+    token: string,
+    siteId: string,
+    gateId: string,
+    frame: Blob,
+    direction: 'IN' | 'OUT',
+  ) {
+    const form = new FormData();
+    form.append('frame', frame, 'scan-frame.jpg');
+    form.append('direction', direction);
+    return this.requestFormData<FaceGateVerificationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-verifications`,
+      token,
+      form,
+    );
+  }
+  listGateAccessLogs(token: string, siteId: string, gateId: string) {
+    return this.request<{ items: GateAccessLogResponse[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/access-logs`,
+      token,
+    );
+  }
+  observeGateFace(token: string, siteId: string, gateId: string, sessionId: string, frame: Blob) {
+    const form = new FormData();
+    form.append('frame', frame, 'presence.jpg');
+    form.append('sessionId', sessionId);
+    return this.requestFormData<GateFacePresenceResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-presence`,
+      token,
+      form,
+    );
+  }
+  getWorkerGatePermissions(token: string, siteId: string, workerId: string) {
+    return this.request<WorkerGatePermissionsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
+      token,
+    );
+  }
+  setWorkerGatePermissions(
+    token: string,
+    siteId: string,
+    workerId: string,
+    input: SetWorkerGatePermissionsCommand,
+  ) {
+    return this.request<WorkerGatePermissionsResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
+      token,
+      input,
+    );
+  }
+  uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob) {
+    const form = new FormData();
+    form.append('sample', sample, 'face-sample.jpg');
+    return this.requestFormData<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/samples`,
+      token,
+      form,
+    );
+  }
+  checkFaceEnrollmentQuality(
+    token: string,
+    workerId: string,
+    sample: Blob,
+    target: EnrollmentCaptureTarget,
+  ) {
+    const form = new FormData();
+    form.append('sample', sample, 'face-quality-check.jpg');
+    form.append('target', target);
+    return this.requestFormData<FaceEnrollmentQualityResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-enrollment-quality`,
+      token,
+      form,
+    );
+  }
+  completeFaceEnrollment(token: string, sessionId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/complete`,
+      token,
+    );
+  }
+  getFaceProfile(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'GET',
+      `/workers/${pathId(workerId)}/face-profile`,
+      token,
+    );
+  }
+  revokeFaceProfile(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-profile/revoke`,
       token,
     );
   }
