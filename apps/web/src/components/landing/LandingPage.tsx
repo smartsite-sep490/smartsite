@@ -655,9 +655,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
 
               <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-white text-[10px] font-bold tracking-widest">
-                  LIVE • 10:42:16
+                <span className="text-slate-300 text-[10px] font-bold tracking-widest uppercase">
+                  Illustrative example
                 </span>
               </div>
 
@@ -665,7 +664,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-80 border-[3px] border-[#F66B17] group cursor-pointer transition-colors hover:bg-[#F66B17]/10">
                 <div className="absolute -top-[28px] left-[-3px] bg-[#F66B17] px-3 py-1">
                   <span className="text-white text-[10px] font-bold tracking-widest">
-                    WORKER #1024 • 97%
+                    SAMPLE TRACK #1024 • 97%
                   </span>
                 </div>
               </div>
@@ -676,9 +675,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
             {/* Right side: PPE Checklist & Result */}
             <div className="lg:w-1/3 bg-[#0B1521] p-8 flex flex-col h-full border-l border-white/5">
-              <div className="mb-6">
+              <div className="mb-6 flex items-center justify-between">
                 <span className="text-[#F66B17] text-[10px] font-bold tracking-widest uppercase">
                   PPE CHECK
+                </span>
+                <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">
+                  Illustrative example
                 </span>
               </div>
 
@@ -687,12 +689,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                   <span className="text-white text-sm font-semibold">Helmet</span>
                   <IconCheck className="w-5 h-5 text-emerald-500" />
                 </div>
-                <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4">
-                  <span className="text-white text-sm font-semibold">Safety Vest</span>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
-                </div>
                 <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4 bg-red-500/5 -mx-8 px-8 border-l-[3px] border-l-red-500">
-                  <span className="text-white text-sm font-semibold">Gloves</span>
+                  <span className="text-white text-sm font-semibold">Safety Vest</span>
                   <IconX className="w-5 h-5 text-red-500" />
                 </div>
               </div>
@@ -705,7 +703,10 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                   <div className="text-red-500 text-xl font-black tracking-tight mb-1">
                     PPE VIOLATION
                   </div>
-                  <div className="text-slate-400 text-xs">Missing required PPE: Gloves</div>
+                  <div className="text-slate-400 text-xs">Missing required PPE: Safety Vest</div>
+                  <div className="text-slate-500 text-[10px] mt-1">
+                    Model scope: Hardhat &amp; Safety Vest detection
+                  </div>
                 </div>
 
                 <button
