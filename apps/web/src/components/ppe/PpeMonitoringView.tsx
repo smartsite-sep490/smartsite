@@ -1,3 +1,5 @@
+import { useRealtimePreview } from '../cameras/useRealtimePreview';
+import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconCheck,
@@ -13,7 +15,6 @@ import {
   getPpeVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
-  type VideoTestDetection,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 import {
@@ -53,9 +54,6 @@ export function PpeMonitoringView() {
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
-  const [liveDetections, setLiveDetections] = useState<VideoTestDetection[] | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [socketRuntimeError, setSocketRuntimeError] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
   const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
   const [ppeFilter, setPpeFilter] = useState<'ALL' | 'HARD_HAT' | 'SAFETY_VEST'>('ALL');
@@ -76,6 +74,12 @@ export function PpeMonitoringView() {
     return buildAiWebSocketUrl(rawUrl, token);
   }, [rawUrl, token]);
 
+  const {
+    preview,
+    connected: socketConnected,
+    error: socketRuntimeError,
+  } = useRealtimePreview(wsConfig.url);
+  const liveDetections = preview?.frame.detections ?? null;
   const socketError = wsConfig.error ?? socketRuntimeError;
 
   // Update real-time clock every second
@@ -101,114 +105,6 @@ export function PpeMonitoringView() {
     };
   }, []);
 
-  // AI Realtime WebSocket connection with auth token
-  useEffect(() => {
-    if (!wsConfig.url) {
-      return;
-    }
-
-    let unmounted = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let currentSocket: WebSocket | null = null;
-
-    const connect = () => {
-      if (unmounted) return;
-      try {
-        const socket = new WebSocket(wsConfig.url!);
-        currentSocket = socket;
-
-        socket.onopen = () => {
-          if (unmounted) return;
-          setSocketConnected(true);
-          setSocketRuntimeError(null);
-        };
-
-        socket.onmessage = (message) => {
-          if (unmounted) return;
-          try {
-            const payload = JSON.parse(message.data) as {
-              type?: string;
-              message?: string;
-              cameraExternalId?: string;
-              detections?: Array<{
-                trackId: number;
-                confidence: number;
-                boundingBox: VideoTestDetection['boundingBox'];
-                ppeStatus: VideoTestDetection['ppeStatus'];
-                alertState?: VideoTestDetection['alertState'];
-                confirmedMissingItems?: VideoTestDetection['confirmedMissingItems'];
-                active: boolean;
-                label: string;
-                regionId?: string;
-              }>;
-            };
-
-            if (payload.type === 'error') {
-              setSocketRuntimeError(payload.message ?? 'Realtime AI socket error');
-              return;
-            }
-
-            if (payload.type !== 'frame' || !payload.detections) return;
-
-            setSocketRuntimeError(null);
-            setLiveDetections(
-              payload.detections.map((detection) => ({
-                active: detection.active,
-                alertState: detection.alertState,
-                boundingBox: detection.boundingBox,
-                cameraExternalId: payload.cameraExternalId,
-                confidence: detection.confidence,
-                confirmedMissingItems: detection.confirmedMissingItems,
-                eventId: `REALTIME-TRACK-${detection.trackId}`,
-                label: `MF04 ${detection.label}`,
-                ppeStatus: detection.ppeStatus,
-                regionId: detection.regionId,
-                timecode: 'LIVE',
-                trackId: detection.trackId,
-              })),
-            );
-          } catch {
-            // Keep last frame on malformed message
-          }
-        };
-
-        socket.onerror = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setSocketRuntimeError('WebSocket connection error');
-          setLiveDetections(null);
-        };
-
-        socket.onclose = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setLiveDetections(null);
-          // Auto-reconnect when still mounted
-          reconnectTimeout = setTimeout(connect, 3000);
-        };
-      } catch (err) {
-        if (unmounted) return;
-        setSocketConnected(false);
-        setSocketRuntimeError(err instanceof Error ? err.message : 'Failed to connect WebSocket');
-        setLiveDetections(null);
-      }
-    };
-
-    connect();
-
-    return () => {
-      unmounted = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (currentSocket) {
-        currentSocket.onopen = null;
-        currentSocket.onmessage = null;
-        currentSocket.onerror = null;
-        currentSocket.onclose = null;
-        currentSocket.close();
-      }
-    };
-  }, [wsConfig.url]);
-
   const fallbackDetections = useMemo(
     () => getPpeVideoTestDetections(videoTimeline, aiTimeline),
     [videoTimeline, aiTimeline],
@@ -232,11 +128,18 @@ export function PpeMonitoringView() {
   // Derive cameraExternalId and human-readable work area directly from active detection or timeline
   const activeCameraContext = useMemo(() => {
     return resolveCameraAndWorkArea(
-      testDetection?.cameraExternalId || aiTimeline?.cameraExternalId,
+      preview?.frame.cameraExternalId ||
+        testDetection?.cameraExternalId ||
+        aiTimeline?.cameraExternalId,
       testDetection?.regionId,
       'Chưa có mã camera',
     );
-  }, [testDetection?.cameraExternalId, testDetection?.regionId, aiTimeline?.cameraExternalId]);
+  }, [
+    preview?.frame.cameraExternalId,
+    testDetection?.cameraExternalId,
+    testDetection?.regionId,
+    aiTimeline?.cameraExternalId,
+  ]);
 
   // Snapshot PPE: only auto-pause when playing timeline fixture; do not pause local video on websocket frames
   useEffect(() => {
@@ -395,8 +298,10 @@ export function PpeMonitoringView() {
               onLoadedMetadata={(event) => updateVideoTimeline(event.currentTarget)}
               onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
               aria-label="PPE test video"
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
             />
+
+            {preview && <RealtimePreviewCanvas preview={preview} mode="ppe" />}
 
             {/* AI Status Badge */}
             <div
@@ -430,31 +335,32 @@ export function PpeMonitoringView() {
             <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
 
             {/* Render every tracked worker in the current frame */}
-            {ppeDetections.map((detection) =>
-              detection.boundingBox ? (
-                <div
-                  key={`${detection.eventId}-${detection.trackId}`}
-                  className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
-                    isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
-                  }`}
-                  data-testid="mf04-test-detection"
-                  style={{
-                    top: `${detection.boundingBox.y1 * 100}%`,
-                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
-                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
-                    left: `${detection.boundingBox.x1 * 100}%`,
-                  }}
-                >
+            {!isLive &&
+              ppeDetections.map((detection) =>
+                detection.boundingBox ? (
                   <div
-                    className={`absolute -top-[18px] left-[-1.6px] whitespace-nowrap px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-sm ${
-                      isConfirmedPpeDetection(detection) ? 'bg-[#F66B17]' : 'bg-emerald-600'
+                    key={`${detection.eventId}-${detection.trackId}`}
+                    className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
+                      isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
                     }`}
+                    data-testid="mf04-test-detection"
+                    style={{
+                      top: `${detection.boundingBox.y1 * 100}%`,
+                      width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                      height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                      left: `${detection.boundingBox.x1 * 100}%`,
+                    }}
                   >
-                    {detection.label} · TRACK #{detection.trackId}
+                    <div
+                      className={`absolute -top-[18px] left-[-1.6px] whitespace-nowrap px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-sm ${
+                        isConfirmedPpeDetection(detection) ? 'bg-[#F66B17]' : 'bg-emerald-600'
+                      }`}
+                    >
+                      {detection.label} · TRACK #{detection.trackId}
+                    </div>
                   </div>
-                </div>
-              ) : null,
-            )}
+                ) : null,
+              )}
 
             {/* Empty live frame indicator */}
             {isLive && ppeDetections.length === 0 && (
@@ -509,15 +415,23 @@ export function PpeMonitoringView() {
             <div className="flex items-center gap-3">
               <button
                 onClick={togglePlayback}
+                disabled={isLive}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title={isPlaying ? 'Pause' : 'Play'}
+                title={
+                  isLive
+                    ? 'Playback controls apply to timeline replay only'
+                    : isPlaying
+                      ? 'Pause'
+                      : 'Play'
+                }
               >
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
                 onClick={toggleMuted}
+                disabled={isLive}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Sound"
+                title={isLive ? 'Realtime preview has no audio' : 'Sound'}
               >
                 <IconVolume className="w-4 h-4" />
               </button>
@@ -558,17 +472,17 @@ export function PpeMonitoringView() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker
+                  Identity
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? `Worker (Track #${testDetection.trackId})`
-                    : 'Unassigned'}
+                    ? 'Unknown — not identified'
+                    : 'No person detected'}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker ID
+                  Track ID
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {ppeDetections.map((detection) => `Track #${detection.trackId}`).join(', ') ||
@@ -601,7 +515,7 @@ export function PpeMonitoringView() {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Recognition Confidence
+                  Detection Confidence
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
@@ -742,7 +656,7 @@ export function PpeMonitoringView() {
               </div>
             </div>
 
-            {violationSnapshot && (
+            {!isLive && violationSnapshot && (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 p-3"
                 data-testid="mf04-evidence-capture"
@@ -796,9 +710,10 @@ export function PpeMonitoringView() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Recent PPE Events</h3>
+            <h3 className="text-lg font-bold text-slate-900">PPE Replay Observations</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Latest camera detections and verification outcomes.
+              Observations from the sample video timeline. Live safety alerts are available in
+              Safety Alerts.
               {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
             </p>
           </div>

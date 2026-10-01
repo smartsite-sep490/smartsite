@@ -1,9 +1,8 @@
+import { useRealtimePreview } from '../cameras/useRealtimePreview';
+import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  SmartSiteManagementClient,
-  type LoginResponse,
-} from '@smartsite/api-client';
+import { SmartSiteManagementClient, type LoginResponse } from '@smartsite/api-client';
 import {
   IconX,
   IconAlertTriangle,
@@ -20,7 +19,6 @@ import {
   getZoneVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
-  type VideoTestDetection,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 import {
@@ -107,9 +105,6 @@ export function RestrictedZoneView({
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
-  const [liveZoneDetections, setLiveZoneDetections] = useState<VideoTestDetection[] | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [socketRuntimeError, setSocketRuntimeError] = useState<string | null>(null);
   const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(() => {
     const resolved = resolveActivePolygon({
       siteId: 'demo-site',
@@ -154,7 +149,7 @@ export function RestrictedZoneView({
   const activeZonePoint = useRef<number | null>(null);
 
   const [containerSize, setContainerSize] = useState<Size2D>({ width: 829, height: 466 });
-  const [videoNaturalSize, setVideoNaturalSize] = useState<Size2D>({ width: 1920, height: 1080 });
+  const [fixtureNaturalSize, setVideoNaturalSize] = useState<Size2D>({ width: 1920, height: 1080 });
 
   const rawUrl = import.meta.env.VITE_AI_WS_URL;
   const aiWsToken =
@@ -167,6 +162,17 @@ export function RestrictedZoneView({
     return buildAiWebSocketUrl(rawUrl, aiWsToken);
   }, [rawUrl, aiWsToken]);
 
+  const {
+    preview,
+    connected: socketConnected,
+    error: socketRuntimeError,
+  } = useRealtimePreview(wsConfig.url);
+  const liveZoneDetections = preview?.frame.zoneDetections ?? null;
+  const videoNaturalSize = useMemo(
+    () =>
+      preview ? { width: preview.frame.width, height: preview.frame.height } : fixtureNaturalSize,
+    [preview, fixtureNaturalSize],
+  );
   const socketError = wsConfig.error ?? socketRuntimeError;
 
   // Update clock every second
@@ -194,109 +200,6 @@ export function RestrictedZoneView({
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
-
-  // AI Realtime WebSocket connection with auth token
-  useEffect(() => {
-    if (!wsConfig.url) {
-      return;
-    }
-
-    let unmounted = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let currentSocket: WebSocket | null = null;
-
-    const connect = () => {
-      if (unmounted) return;
-      try {
-        const socket = new WebSocket(wsConfig.url!);
-        currentSocket = socket;
-
-        socket.onopen = () => {
-          if (unmounted) return;
-          setSocketConnected(true);
-          setSocketRuntimeError(null);
-        };
-
-        socket.onmessage = (message) => {
-          if (unmounted) return;
-          try {
-            const payload = JSON.parse(message.data) as {
-              type?: string;
-              message?: string;
-              cameraExternalId?: string;
-              zoneDetections?: Array<{
-                trackId: number;
-                confidence: number;
-                boundingBox: VideoTestDetection['boundingBox'];
-                active: boolean;
-                label: string;
-                regionId?: string;
-              }>;
-            };
-
-            if (payload.type === 'error') {
-              setSocketRuntimeError(payload.message ?? 'Realtime AI socket error');
-              return;
-            }
-
-            if (payload.type !== 'frame' || !payload.zoneDetections) return;
-
-            setSocketRuntimeError(null);
-            setLiveZoneDetections(
-              payload.zoneDetections.map((detection) => ({
-                active: detection.active,
-                boundingBox: detection.boundingBox,
-                cameraExternalId: payload.cameraExternalId,
-                confidence: detection.confidence,
-                eventId: `REALTIME-ZONE-TRACK-${detection.trackId}`,
-                label: `MF05 ${detection.label}`,
-                ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
-                regionId: detection.regionId,
-                timecode: 'LIVE',
-                trackId: detection.trackId,
-              })),
-            );
-          } catch {
-            // Keep last frame on malformed message
-          }
-        };
-
-        socket.onerror = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setSocketRuntimeError('WebSocket connection error');
-          setLiveZoneDetections(null);
-        };
-
-        socket.onclose = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setLiveZoneDetections(null);
-          // Auto-reconnect when still mounted
-          reconnectTimeout = setTimeout(connect, 3000);
-        };
-      } catch (err) {
-        if (unmounted) return;
-        setSocketConnected(false);
-        setSocketRuntimeError(err instanceof Error ? err.message : 'Failed to connect WebSocket');
-        setLiveZoneDetections(null);
-      }
-    };
-
-    connect();
-
-    return () => {
-      unmounted = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (currentSocket) {
-        currentSocket.onopen = null;
-        currentSocket.onmessage = null;
-        currentSocket.onerror = null;
-        currentSocket.onclose = null;
-        currentSocket.close();
-      }
-    };
-  }, [wsConfig.url]);
 
   const fallbackDetections = useMemo(
     () => getZoneVideoTestDetections(videoTimeline, aiTimeline),
@@ -416,10 +319,9 @@ export function RestrictedZoneView({
     enabled: apiToken.length > 0,
   });
 
-  const selectedSiteId =
-    sites.data?.items.some((site) => site.id === requestedSiteId)
-      ? requestedSiteId
-      : (sites.data?.items[0]?.id ?? '');
+  const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
+    ? requestedSiteId
+    : (sites.data?.items[0]?.id ?? '');
 
   const cameras = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
@@ -427,10 +329,9 @@ export function RestrictedZoneView({
     enabled: apiToken.length > 0 && selectedSiteId.length > 0,
   });
 
-  const selectedCameraId =
-    cameras.data?.items.some((cam) => cam.id === requestedCameraId)
-      ? requestedCameraId
-      : (cameras.data?.items[0]?.id ?? '');
+  const selectedCameraId = cameras.data?.items.some((cam) => cam.id === requestedCameraId)
+    ? requestedCameraId
+    : (cameras.data?.items[0]?.id ?? '');
 
   const selectedCamera = useMemo(
     () => cameras.data?.items.find((c) => c.id === selectedCameraId),
@@ -453,10 +354,9 @@ export function RestrictedZoneView({
     [activeRegions, regions.data?.items],
   );
 
-  const selectedRegionId =
-    selectableRegions.some((r) => r.id === requestedRegionId)
-      ? requestedRegionId
-      : (selectableRegions[0]?.id ?? '');
+  const selectedRegionId = selectableRegions.some((r) => r.id === requestedRegionId)
+    ? requestedRegionId
+    : (selectableRegions[0]?.id ?? '');
 
   const selectedRegion = useMemo(
     () => selectableRegions.find((r) => r.id === selectedRegionId),
@@ -626,6 +526,13 @@ export function RestrictedZoneView({
   };
 
   const activeCameraContext = useMemo(() => {
+    if (preview) {
+      return resolveCameraAndWorkArea(
+        preview.frame.cameraExternalId,
+        testDetection?.regionId,
+        'Chưa có mã camera',
+      );
+    }
     if (selectedCamera) {
       const regionLabel = selectedRegion
         ? `Region ${selectedRegion.id.slice(0, 8)}`
@@ -637,7 +544,7 @@ export function RestrictedZoneView({
     }
     const rawCamera = testDetection?.cameraExternalId || aiTimeline?.cameraExternalId;
     return resolveCameraAndWorkArea(rawCamera, testDetection?.regionId, 'CAM-04');
-  }, [selectedCamera, selectedRegion, testDetection, aiTimeline]);
+  }, [preview, selectedCamera, selectedRegion, testDetection, aiTimeline]);
 
   const exportZone = () => {
     const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
@@ -765,7 +672,8 @@ export function RestrictedZoneView({
                 <h2 className="text-sm font-bold text-slate-900">Backend Camera Configuration</h2>
               </div>
               <p className="mt-1 text-xs text-slate-500 max-w-xl">
-                Sign in as a global Admin to load camera regions and save authoritative polygons to the Backend API. Fallback test video and realtime AI feed remain available below.
+                Sign in as a global Admin to load camera regions and save authoritative polygons to
+                the Backend API. Fallback test video and realtime AI feed remain available below.
               </p>
             </div>
             <form
@@ -825,7 +733,8 @@ export function RestrictedZoneView({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Global Admin role verified. Polygons saved here synchronize directly with Backend camera configuration.
+                  Global Admin role verified. Polygons saved here synchronize directly with Backend
+                  camera configuration.
                 </p>
               </div>
             </div>
@@ -921,7 +830,8 @@ export function RestrictedZoneView({
               >
                 {selectableRegions.map((region) => (
                   <option key={region.id} value={region.id}>
-                    Region {region.id.slice(0, 8)} (v{region.version}) {region.isActive ? '· Active' : ''}
+                    Region {region.id.slice(0, 8)} (v{region.version}){' '}
+                    {region.isActive ? '· Active' : ''}
                   </option>
                 ))}
               </select>
@@ -955,7 +865,10 @@ export function RestrictedZoneView({
                 Outdated Local Draft Detected
               </h4>
               <p className="mt-0.5 text-xs text-amber-700">
-                An unsaved local draft created against camera configuration version v{staleDraftInfo.version} was detected, but the camera is now at version v{selectedCamera?.configurationVersion ?? 0}. Authoritative server geometry was loaded to protect against overwriting updates.
+                An unsaved local draft created against camera configuration version v
+                {staleDraftInfo.version} was detected, but the camera is now at version v
+                {selectedCamera?.configurationVersion ?? 0}. Authoritative server geometry was
+                loaded to protect against overwriting updates.
               </p>
             </div>
           </div>
@@ -1027,8 +940,10 @@ export function RestrictedZoneView({
               }}
               onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
               aria-label="Restricted-zone test video"
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
             />
+
+            {preview && <RealtimePreviewCanvas preview={preview} mode="zone" />}
 
             {/* AI Status Badge */}
             <div
@@ -1055,11 +970,23 @@ export function RestrictedZoneView({
               className="absolute inset-0 w-full h-full"
               viewBox="0 0 1 1"
               preserveAspectRatio="none"
-              onPointerMove={isEditingZone ? updateZonePoint : undefined}
+              onPointerMove={
+                isEditingZone &&
+                (!preview || selectedCamera?.externalId === preview.frame.cameraExternalId)
+                  ? updateZonePoint
+                  : undefined
+              }
               onPointerUp={() => {
                 activeZonePoint.current = null;
               }}
               aria-label="Restricted zone editor"
+              style={{
+                visibility:
+                  isLive &&
+                  (!isEditingZone || selectedCamera?.externalId !== preview?.frame.cameraExternalId)
+                    ? 'hidden'
+                    : 'visible',
+              }}
             >
               <polygon
                 points={displayPolygon.map(([x, y]) => `${x},${y}`).join(' ')}
@@ -1110,6 +1037,14 @@ export function RestrictedZoneView({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsEditingZone(true)}
+                      disabled={
+                        isLive && selectedCamera?.externalId !== preview?.frame.cameraExternalId
+                      }
+                      title={
+                        isLive
+                          ? 'Select the matching Backend camera before editing this preview'
+                          : 'Edit zone draft'
+                      }
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
                       EDIT ZONE
@@ -1160,24 +1095,25 @@ export function RestrictedZoneView({
             </div>
 
             {/* Render one bounding box per active zone-entry track */}
-            {activeZoneDetections.map((detection) =>
-              detection.boundingBox ? (
-                <div
-                  key={`${detection.eventId}-${detection.trackId}`}
-                  className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
-                  style={{
-                    left: `${detection.boundingBox.x1 * 100}%`,
-                    top: `${detection.boundingBox.y1 * 100}%`,
-                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
-                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
-                  }}
-                >
-                  <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                    {detection.label} · TRACK #{detection.trackId}
+            {!isLive &&
+              activeZoneDetections.map((detection) =>
+                detection.boundingBox ? (
+                  <div
+                    key={`${detection.eventId}-${detection.trackId}`}
+                    className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
+                    style={{
+                      left: `${detection.boundingBox.x1 * 100}%`,
+                      top: `${detection.boundingBox.y1 * 100}%`,
+                      width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                      height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                    }}
+                  >
+                    <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
+                      {detection.label} · TRACK #{detection.trackId}
+                    </div>
                   </div>
-                </div>
-              ) : null,
-            )}
+                ) : null,
+              )}
 
             {/* Empty live frame indicator */}
             {isLive && zoneDetections.length === 0 && (
@@ -1232,15 +1168,23 @@ export function RestrictedZoneView({
             <div className="flex items-center gap-3">
               <button
                 onClick={togglePlayback}
+                disabled={isLive}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title={isPlaying ? 'Pause' : 'Play'}
+                title={
+                  isLive
+                    ? 'Playback controls apply to timeline replay only'
+                    : isPlaying
+                      ? 'Pause'
+                      : 'Play'
+                }
               >
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
                 onClick={toggleMuted}
+                disabled={isLive}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Sound"
+                title={isLive ? 'Realtime preview has no audio' : 'Sound'}
               >
                 <IconVolume className="w-4 h-4" />
               </button>
@@ -1285,20 +1229,19 @@ export function RestrictedZoneView({
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? `Worker (Track #${testDetection.trackId})`
-                    : 'Unassigned'}
+                    ? 'Unknown — not identified'
+                    : 'No person detected'}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker ID
+                  Track ID
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
-                  {activeZoneDetections.length === 0
-                    ? '—'
-                    : activeZoneDetections
-                        .map((detection) => `Track #${detection.trackId}`)
-                        .join(', ')}
+                  {zoneDetections
+                    .filter((detection) => detection.trackId !== null)
+                    .map((detection) => `Track #${detection.trackId}`)
+                    .join(', ') || '—'}
                 </p>
               </div>
               <div>
@@ -1327,7 +1270,7 @@ export function RestrictedZoneView({
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Recognition Confidence
+                  Detection Confidence
                 </p>
                 <p className="font-semibold text-slate-900 text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
@@ -1352,8 +1295,8 @@ export function RestrictedZoneView({
                     <p className="font-semibold text-slate-900 text-xs">Identity</p>
                     <p className="text-[11px] text-slate-500">
                       {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                        ? `Track #${testDetection.trackId}`
-                        : 'Unknown'}
+                        ? 'Unknown — not identified'
+                        : 'No person detected'}
                     </p>
                   </div>
                   <IconClock className="w-5 h-5 text-slate-400" />
@@ -1454,9 +1397,10 @@ export function RestrictedZoneView({
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Recent Zone Events</h3>
+            <h3 className="text-lg font-bold text-slate-900">Zone Replay Observations</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Latest camera detections and verification outcomes.
+              Observations from the sample video timeline. Live safety alerts are available in
+              Safety Alerts.
               {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
             </p>
           </div>
