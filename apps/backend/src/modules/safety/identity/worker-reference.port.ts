@@ -10,7 +10,7 @@ export interface WorkerReference {
   isActive: boolean;
 }
 
-/** Implemented by the existing Workforce owner; no second registry or face/grant lookup. */
+/** Backed by the exported existing Workforce service; no second registry or face/grant lookup. */
 export interface WorkerReferenceReader {
   findForReview(
     manager: EntityManager,

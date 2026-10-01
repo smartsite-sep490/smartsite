@@ -14,13 +14,12 @@ import { validateEnvironment, type BackendEnvironment } from '../src/config/envi
 import { createLoggerParams } from '../src/observability/logger.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
-import { AuthModule } from '../src/modules/auth/auth.module.js';
-import { ObservationIdentityController } from '../src/modules/safety/identity/observation-identity.controller.js';
 import { ObservationIdentityContextService } from '../src/modules/safety/identity/observation-identity-context.service.js';
 import { ObservationIdentityResolutionService } from '../src/modules/safety/identity/observation-identity-resolution.service.js';
-import { ObservationIdentityAccessGuard } from '../src/modules/safety/identity/observation-identity-access.guard.js';
+import { WORKER_REFERENCE_READER } from '../src/modules/safety/identity/worker-reference.port.js';
+import { WorkforceConfigurationService } from '../src/modules/workforce/workforce-configuration.service.js';
 
-test('normal application keeps identity endpoints gated until the approved Worker reader registration', async (t) => {
+test('normal application registers identity routes with the existing Workforce reader and requires authentication', async (t) => {
   const config = new ConfigService<BackendEnvironment, true>(
     validateEnvironment({ NODE_ENV: 'test', LOG_FORMAT: 'json' }),
   );
@@ -48,7 +47,7 @@ test('normal application keeps identity endpoints gated until the approved Worke
   t.after(() => app.close());
   const prefix = `${await app.getUrl()}/api/v1/sites/${randomUUID()}/safety-alerts/${randomUUID()}/detections/${randomUUID()}/identity-subjects`;
   for (const suffix of ['', '/workers', '/0/decisions'])
-    assert.equal((await fetch(`${prefix}${suffix}`)).status, 404);
+    assert.equal((await fetch(`${prefix}${suffix}`)).status, 401);
   assert.equal(
     (
       await fetch(`${prefix}/0/decisions`, {
@@ -57,11 +56,12 @@ test('normal application keeps identity endpoints gated until the approved Worke
         body: '{}',
       })
     ).status,
-    404,
+    401,
   );
+  assert.equal(module.get(WORKER_REFERENCE_READER), module.get(WorkforceConfigurationService));
 });
 
-test('identity HTTP requires same-Site Safety Officer for context/picker/history/command; runtime registration stays gated', async (t) => {
+test('identity HTTP requires same-Site Safety Officer for registered context/picker/history/command', async (t) => {
   const siteId = randomUUID(),
     alertId = randomUUID(),
     eventId = randomUUID(),
@@ -121,15 +121,11 @@ test('identity HTTP requires same-Site Safety Officer for context/picker/history
       throw new Error('Synthetic unhandled internal failure');
     },
   };
-  const module = await Test.createTestingModule({
-    imports: [AppModule, AuthModule],
-    controllers: [ObservationIdentityController],
-    providers: [
-      ObservationIdentityAccessGuard,
-      { provide: ObservationIdentityContextService, useValue: services },
-      { provide: ObservationIdentityResolutionService, useValue: decisions },
-    ],
-  })
+  const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(ObservationIdentityContextService)
+    .useValue(services)
+    .overrideProvider(ObservationIdentityResolutionService)
+    .useValue(decisions)
     .overrideProvider(ConfigService)
     .useValue(config)
     .overrideProvider(PARAMS_PROVIDER_TOKEN)

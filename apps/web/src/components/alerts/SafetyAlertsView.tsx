@@ -103,6 +103,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const [session, setSession] = useState<LoginResponse | null>(null);
+  const [sessionScope, setSessionScope] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [requestedSiteId, setRequestedSiteId] = useState('');
@@ -111,15 +112,29 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
   const [type, setType] = useState<'ALL' | SafetyAlertType>('ALL');
   const [offset, setOffset] = useState(0);
   const [reviewReason, setReviewReason] = useState('');
-  const activeSession = useRef<{ token: string; userId: string } | null>(null);
+  const activeSession = useRef<{ token: string; userId: string; sessionScope: string } | null>(
+    null,
+  );
   const lifecycleGeneration = useRef(0);
 
   const removeSessionQueries = useCallback(
-    (userId: string) => {
-      queryClient.removeQueries({ queryKey: ['sites', apiUrl, userId] });
-      queryClient.removeQueries({ queryKey: ['safety-alerts', apiUrl, userId] });
-      queryClient.removeQueries({ queryKey: ['safety-alert', apiUrl, userId] });
-      queryClient.removeQueries({ queryKey: ['safety-alert-evidence', apiUrl, userId] });
+    (scope: string) => {
+      // Cancel sensitive in-flight queries
+      void queryClient.cancelQueries({ queryKey: ['safety-alert-evidence', apiUrl, scope] });
+      void queryClient.cancelQueries({ queryKey: ['observation-identity-context', apiUrl, scope] });
+      void queryClient.cancelQueries({ queryKey: ['observation-identity-workers', apiUrl, scope] });
+      void queryClient.cancelQueries({
+        queryKey: ['observation-identity-decisions', apiUrl, scope],
+      });
+
+      // Evict all session and identity data from TanStack cache
+      queryClient.removeQueries({ queryKey: ['sites', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['safety-alerts', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['safety-alert', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['safety-alert-evidence', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['observation-identity-context', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['observation-identity-workers', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['observation-identity-decisions', apiUrl, scope] });
     },
     [apiUrl, queryClient],
   );
@@ -144,8 +159,14 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
         void client.logout().catch(() => undefined);
         return;
       }
-      activeSession.current = { token: result.accessToken, userId: result.user.id };
+      const freshScope = crypto.randomUUID();
+      activeSession.current = {
+        token: result.accessToken,
+        userId: result.user.id,
+        sessionScope: freshScope,
+      };
       setSession(result);
+      setSessionScope(freshScope);
       setPassword('');
       // Do not retain LoginResponse in TanStack mutation data because it contains the access token.
     },
@@ -158,13 +179,12 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
       const current = activeSession.current;
       activeSession.current = null;
       if (!current) return;
-      removeSessionQueries(current.userId);
+      removeSessionQueries(current.sessionScope);
       void client.logout().catch(() => undefined);
     };
   }, [client, removeSessionQueries]);
 
   const token = session?.accessToken ?? '';
-  const sessionScope = session?.user.id ?? '';
   const sites = useQuery({
     queryKey: ['sites', apiUrl, sessionScope],
     queryFn: () => client.listSites(token, { limit: 100 }),
@@ -252,9 +272,10 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
   const handleLogout = () => {
     const current = activeSession.current;
     activeSession.current = null;
-    if (current) removeSessionQueries(current.userId);
+    if (current) removeSessionQueries(current.sessionScope);
     login.reset();
     setSession(null);
+    setSessionScope('');
     setRequestedSiteId('');
     setRequestedAlertId('');
     setOffset(0);
@@ -522,7 +543,9 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                 </dl>
                 <div>
                   <h3 className="text-sm font-bold text-[#2F3437]">Source observations</h3>
-                  <div className="mt-2 max-h-80 space-y-2 overflow-auto">
+                  <div
+                    className={`mt-2 space-y-2 ${safetyOfficerSiteIds.has(selectedSiteId) ? '' : 'max-h-80 overflow-auto'}`}
+                  >
                     {detail.data.detections.map((detection) => (
                       <div
                         key={`${detail.data.id}:${detection.eventId}`}
@@ -548,6 +571,7 @@ export function SafetyAlertsView({ apiUrl }: SafetyAlertsViewProps) {
                           siteId={selectedSiteId}
                           alertId={detail.data.id}
                           detection={detection}
+                          canReviewIdentity={safetyOfficerSiteIds.has(selectedSiteId)}
                         />
                       </div>
                     ))}

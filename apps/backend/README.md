@@ -51,6 +51,26 @@ AppModule
 
 Controller chỉ xử lý HTTP. Module gọi provider được export của module khác, không đọc persistence nội bộ. Chỉ thêm module khi có hành vi thật; không thêm repository tổng quát, base service hay folder chờ tính năng. Quy tắc chi tiết ở [AGENTS.md](AGENTS.md).
 
+## Review danh tính trong một quan sát
+
+`SafetyModule` đăng ký API review thủ công tại
+`GET /api/v1/sites/:siteId/safety-alerts/:alertId/detections/:eventId/identity-subjects`,
+picker `/workers`, và history/command `/:personObservationIndex/decisions`.
+Mọi route yêu cầu tài khoản active đã đổi mật khẩu tạm và vai trò Safety Officer đúng Site;
+Admin đơn thuần không có quyền review danh tính.
+
+Reader dùng `WorkforceConfigurationService` được export hiện có, đọc Worker theo UUID + Site.
+RESOLVE khóa Worker trong chính transaction lưu quyết định; picker phân trang chỉ trả
+`id`, `siteId`, `externalId`, `displayName`, `isActive`. Không tạo danh bạ thứ hai hoặc gọi face model.
+Review chỉ thuộc một PERSON trong một event; correction/CLEAR giữ audit và không cấp quyền
+Zone, sửa quyết định vào vùng gốc, hay truyền danh tính sang Track/event/camera khác.
+
+Trước khi triển khai source này, chạy migration theo quy trình triển khai đã duyệt và xác nhận
+hai bảng observation identity tồn tại; ứng dụng không tự migrate lúc startup.
+Không revert migration chứa audit nếu chưa có backup và kế hoạch khôi phục được duyệt.
+Triển khai với dữ liệu thật còn cần chốt retention/access policy; kiểm chứng local sử dụng
+dữ liệu synthetic và database riêng, không tự apply migration lên Neon.
+
 ## Cấu hình môi trường
 
 Zod kiểm tra cấu hình trước khi khởi động; `BackendEnvironment` được suy ra từ schema. Service dùng `ConfigService<BackendEnvironment, true>`, không tự đọc `process.env` hay đặt fallback chưa kiểm tra. Khi thêm biến, cập nhật schema, `.env.example`, tài liệu và regression test cùng nhau.

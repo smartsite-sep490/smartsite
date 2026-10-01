@@ -41,7 +41,7 @@ export interface ObservationIdentityContextRecords {
   }[];
 }
 
-/** Internal application service. HTTP identity authorization is required before registration. */
+/** HTTP callers require the dedicated identity-review guard before invoking this service. */
 @Injectable()
 export class ObservationIdentityResolutionService {
   constructor(

@@ -19,7 +19,6 @@ import {
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
-import { AuthModule } from '../../src/modules/auth/auth.module.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import {
@@ -34,11 +33,7 @@ import {
   AiObservationEventEntity,
   AlertDetectionMappingEntity,
 } from '../../src/database/entities/index.js';
-import { ObservationIdentityController } from '../../src/modules/safety/identity/observation-identity.controller.js';
-import { ObservationIdentityAccessGuard } from '../../src/modules/safety/identity/observation-identity-access.guard.js';
-import { ObservationIdentityContextService } from '../../src/modules/safety/identity/observation-identity-context.service.js';
-import { ObservationIdentityResolutionService } from '../../src/modules/safety/identity/observation-identity-resolution.service.js';
-import { ZoneAccessManagementService } from '../../src/modules/zones/zone-access-management.service.js';
+import { SafetyAlertEvidenceService } from '../../src/modules/safety/alerts/safety-alert-evidence.service.js';
 import { createTestConfig } from '../support/config.js';
 import { observationIdentityFixture } from '../support/observation-identity-fixture.js';
 import dataSource from '../support/test-data-source.js';
@@ -70,34 +65,10 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
       isActive: true,
     });
     const config = createTestConfig({ LOG_FORMAT: 'json', HTTP_RATE_LIMIT_LIMIT: '1000' });
-    const reader = {
-      ...f.reader,
-      async listForReview(siteId: string, offset: number, limit: number) {
-        const [items, total] = await dataSource.getRepository(WorkerEntity).findAndCount({
-          where: { siteId },
-          order: { externalId: 'ASC', id: 'ASC' },
-          skip: offset,
-          take: limit,
-        });
-        return { items, total };
-      },
-    };
-    const service = new ObservationIdentityResolutionService(dataSource, f.evidence, reader);
-    const context = new ObservationIdentityContextService(
-      service,
-      f.evidence,
-      new ZoneAccessManagementService(dataSource),
-      reader,
-    );
-    const module = await Test.createTestingModule({
-      imports: [AppModule, AuthModule],
-      controllers: [ObservationIdentityController],
-      providers: [
-        ObservationIdentityAccessGuard,
-        { provide: ObservationIdentityResolutionService, useValue: service },
-        { provide: ObservationIdentityContextService, useValue: context },
-      ],
-    })
+    // Exercise actual AppModule registration and the existing Workforce service, not a fixture reader.
+    const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(SafetyAlertEvidenceService)
+      .useValue(f.evidence)
       .overrideProvider(ConfigService)
       .useValue(config)
       .overrideProvider(PARAMS_PROVIDER_TOKEN)
@@ -117,6 +88,8 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     const username = await dataSource.getRepository(UserEntity).findOneByOrFail({ id: actorId });
     const admin = await dataSource.getRepository(UserEntity).findOneByOrFail({ id: adminId });
     const actor = await auth.login(username.username, password, AuthClientType.MOBILE);
+    const secondSession = await auth.login(username.username, password, AuthClientType.MOBILE);
+    assert.notEqual(secondSession.accessToken, actor.accessToken);
     const administrator = await auth.login(admin.username, password, AuthClientType.MOBILE);
     const prefix = `${await app.getUrl()}/api/v1/sites/${f.siteId}/safety-alerts/${f.alertIds[0]!}/detections/${f.eventId}/identity-subjects`;
     const headers = {
@@ -166,8 +139,32 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     const inactive = await post(f.resolve(0, f.workerIds[1]!));
     assert.equal(inactive.status, 409);
     assert.equal(((await inactive.json()) as { message: string }).message, 'Worker is inactive');
-    const command = f.resolve();
-    const created = await post(command);
+    // Two authenticated sessions with the same revision must not silently overwrite each other.
+    const competingCommands = [f.resolve(), f.resolve()];
+    const competingResponses = await Promise.all([
+      post(competingCommands[0]),
+      fetch(`${prefix}/0/decisions`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          Authorization: `Bearer ${secondSession.accessToken}`,
+        },
+        body: JSON.stringify(competingCommands[1]),
+      }),
+    ]);
+    assert.deepEqual(competingResponses.map((response) => response.status).sort(), [201, 409]);
+    const winner = competingResponses.findIndex((response) => response.status === 201);
+    const command = competingCommands[winner]!;
+    const created = competingResponses[winner]!;
+    const conflictResponse = competingResponses[1 - winner]!;
+    const competingConflict = (await conflictResponse.json()) as {
+      code: string;
+      message: string;
+      requestId: string;
+    };
+    assert.equal(competingConflict.code, 'CONFLICT');
+    assert.equal(competingConflict.message, 'Observation identity revision is stale');
+    assert.equal(typeof competingConflict.requestId, 'string');
     assert.equal(created.status, 201);
     const recorded = parseObservationIdentityMutationResponse(await created.json());
     assert.ok(recorded, 'Real HTTP command response must satisfy the browser contract');
@@ -175,6 +172,12 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     assert.equal(recorded.recordedDecision.subjectRef.personObservationIndex, 0);
     assert.equal(recorded.latestRevision, 1);
     assert.equal(recorded.replayed, false);
+    const initialHistory = parseObservationIdentityDecisionPage(
+      await (await get(`${prefix}/0/decisions`)).json(),
+    );
+    assert.ok(initialHistory);
+    assert.equal(initialHistory.total, 1, 'The losing session must not append an audit decision');
+    assert.equal(initialHistory.items[0]!.id, command.commandId);
     for (const secret of ['commandHash', 'resolutionId', 'rawPayload', 'local://', 'passwordHash'])
       assert.ok(!JSON.stringify(recorded).includes(secret));
     const stale = await post(f.resolve());
@@ -256,6 +259,20 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     assert.equal(replay.replayed, true);
     assert.equal(replay.recordedDecision.revision, 1);
     assert.equal(replay.latestRevision, 3);
+    const secondSessionRetry = await fetch(`${prefix}/0/decisions`, {
+      method: 'POST',
+      headers: { ...headers, Authorization: `Bearer ${secondSession.accessToken}` },
+      body: JSON.stringify(command),
+    });
+    assert.equal(secondSessionRetry.status, 201);
+    const secondSessionReplay = parseObservationIdentityMutationResponse(
+      await secondSessionRetry.json(),
+    );
+    assert.ok(secondSessionReplay);
+    assert.equal(secondSessionReplay.replayed, true);
+    assert.equal(secondSessionReplay.recordedDecision.id, command.commandId);
+    assert.equal(secondSessionReplay.recordedDecision.revision, 1);
+    assert.equal(secondSessionReplay.latestRevision, 3);
     const history = parseObservationIdentityDecisionPage(
       await (await get(`${prefix}/0/decisions`)).json(),
     );

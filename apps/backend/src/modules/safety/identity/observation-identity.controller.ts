@@ -57,7 +57,7 @@ function scope(siteId: string, alertId: string, eventId: string): [string, strin
   return [uuid(siteId).toLowerCase(), uuid(alertId).toLowerCase(), uuid(eventId).toLowerCase()];
 }
 
-/** Not registered in SafetyModule until Workforce supplies the approved reader/export. */
+/** Observation-only manual review; same-Site SO capability is independent of alert access. */
 @ApiTags('observation-identity-review')
 @ApiBearerAuth('user-token')
 @ApiBadRequestResponse({ type: ErrorResponseDto })
