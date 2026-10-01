@@ -9,6 +9,13 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DataSource } from 'typeorm';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import {
+  parseObservationIdentityContextResponse,
+  parseObservationIdentityDecisionPage,
+  parseObservationIdentityMutationResponse,
+  parseObservationIdentityWorkerPage,
+} from '@smartsite/contracts/management';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
@@ -25,6 +32,7 @@ import {
   AuthSessionEntity,
   AuthClientType,
   AiObservationEventEntity,
+  AlertDetectionMappingEntity,
 } from '../../src/database/entities/index.js';
 import { ObservationIdentityController } from '../../src/modules/safety/identity/observation-identity.controller.js';
 import { ObservationIdentityAccessGuard } from '../../src/modules/safety/identity/observation-identity-access.guard.js';
@@ -41,6 +49,7 @@ after(async () => {
 
 test('identity HTTP with real sessions and PostgreSQL preserves subject scope, correction audit, expiry replay and revocation', async () => {
   const f = await observationIdentityFixture();
+  const laterEventId = randomUUID();
   let app: NestExpressApplication | undefined;
   try {
     const [actorId, adminId] = f.actorIds as [string, string];
@@ -127,9 +136,8 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     assert.equal((await get(prefix.replace(f.eventId, randomUUID()))).status, 404);
     const initialContext = await get();
     assert.equal(initialContext.status, 200);
-    const initial = (await initialContext.json()) as {
-      subjects: { revision: number; canResolve: boolean; latestManualDecision: unknown }[];
-    };
+    const initial = parseObservationIdentityContextResponse(await initialContext.json());
+    assert.ok(initial, 'Real HTTP context must satisfy the browser contract');
     assert.deepEqual(
       initial.subjects.map((s) => [s.revision, s.canResolve, s.latestManualDecision]),
       [
@@ -139,7 +147,8 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     );
     const workers = await get(`${prefix}/workers?offset=0&limit=1`);
     assert.equal(workers.status, 200);
-    const picker = (await workers.json()) as { items: Record<string, unknown>[]; total: number };
+    const picker = parseObservationIdentityWorkerPage(await workers.json(), f.siteId);
+    assert.ok(picker, 'Real HTTP picker must satisfy the browser contract and Site scope');
     assert.equal(picker.total, 2);
     assert.equal(picker.items.length, 1);
     assert.deepEqual(Object.keys(picker.items[0]!).sort(), [
@@ -160,16 +169,8 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     const command = f.resolve();
     const created = await post(command);
     assert.equal(created.status, 201);
-    const recorded = (await created.json()) as {
-      recordedDecision: {
-        id: string;
-        revision: number;
-        subjectRef: { personObservationIndex: number };
-        workerId: string;
-      };
-      latestRevision: number;
-      replayed: boolean;
-    };
+    const recorded = parseObservationIdentityMutationResponse(await created.json());
+    assert.ok(recorded, 'Real HTTP command response must satisfy the browser contract');
     assert.equal(recorded.recordedDecision.id, command.commandId);
     assert.equal(recorded.recordedDecision.subjectRef.personObservationIndex, 0);
     assert.equal(recorded.latestRevision, 1);
@@ -183,10 +184,51 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
       'Observation identity revision is stale',
     );
     assert.deepEqual(await (await get(`${prefix}/1/decisions`)).json(), { items: [], total: 0 });
+    await dataSource
+      .getRepository(WorkerEntity)
+      .update({ id: f.workerIds[1]! }, { isActive: true });
+    const correctedResponse = await post(f.resolve(1, f.workerIds[1]!));
+    assert.equal(correctedResponse.status, 201);
+    const corrected = parseObservationIdentityMutationResponse(await correctedResponse.json());
+    assert.ok(corrected);
+    assert.equal(corrected.recordedDecision.workerId, f.workerIds[1]);
+    assert.equal(corrected.latestRevision, 2);
+    const sharedContext = parseObservationIdentityContextResponse(
+      await (await get(prefix.replace(f.alertIds[0]!, f.alertIds[1]!))).json(),
+    );
+    assert.ok(sharedContext);
+    assert.equal(sharedContext.subjects[0]!.latestManualDecision?.workerId, f.workerIds[1]);
+    assert.equal(sharedContext.subjects[0]!.revision, 2);
+    assert.equal(sharedContext.subjects[1]!.latestManualDecision, null);
+    assert.equal(sharedContext.subjects[1]!.revision, 0);
+    // The same camera/session/Track IDs in another event are not manual identity proof.
+    const laterRaw = { ...f.raw, eventId: laterEventId, evidence: [] };
+    const originalEvent = await dataSource
+      .getRepository(AiObservationEventEntity)
+      .findOneByOrFail({ eventId: f.eventId });
+    await dataSource.getRepository(AiObservationEventEntity).insert({
+      ...originalEvent,
+      eventId: laterEventId,
+      rawPayload: laterRaw,
+      payloadHash: computeCanonicalPayloadHash(laterRaw),
+    });
+    await dataSource
+      .getRepository(AlertDetectionMappingEntity)
+      .insert({ alertId: f.alertIds[0]!, eventId: laterEventId });
+    const laterContext = parseObservationIdentityContextResponse(
+      await (await get(prefix.replace(f.eventId, laterEventId))).json(),
+    );
+    assert.ok(laterContext);
+    assert.deepEqual(
+      laterContext.subjects.map((subject) => [subject.revision, subject.latestManualDecision]),
+      [
+        [0, null],
+        [0, null],
+      ],
+    );
     await unlink(f.filePath);
-    const expired = (await (await get()).json()) as {
-      subjects: { canResolve: boolean; canClear: boolean }[];
-    };
+    const expired = parseObservationIdentityContextResponse(await (await get()).json());
+    assert.ok(expired);
     assert.deepEqual(
       expired.subjects.map((s) => [s.canResolve, s.canClear]),
       [
@@ -196,28 +238,35 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     );
     const clear = {
       commandId: randomUUID(),
-      expectedRevision: 1,
+      expectedRevision: 2,
       expectedEventHash: f.hash,
       action: 'CLEAR',
       reason: 'Incorrect synthetic identity withdrawn.',
     };
-    assert.equal((await post(clear)).status, 201);
+    const clearResponse = await post(clear);
+    assert.equal(clearResponse.status, 201);
+    const cleared = parseObservationIdentityMutationResponse(await clearResponse.json());
+    assert.ok(cleared);
+    assert.equal(cleared.recordedDecision.workerId, null);
+    assert.equal(cleared.latestRevision, 3);
     const retry = await post(command);
     assert.equal(retry.status, 201);
-    const replay = (await retry.json()) as typeof recorded;
+    const replay = parseObservationIdentityMutationResponse(await retry.json());
+    assert.ok(replay);
     assert.equal(replay.replayed, true);
     assert.equal(replay.recordedDecision.revision, 1);
-    assert.equal(replay.latestRevision, 2);
-    const history = (await (await get(`${prefix}/0/decisions`)).json()) as {
-      items: { revision: number; action: string; subjectRef: { personObservationIndex: number } }[];
-      total: number;
-    };
-    assert.equal(history.total, 2);
+    assert.equal(replay.latestRevision, 3);
+    const history = parseObservationIdentityDecisionPage(
+      await (await get(`${prefix}/0/decisions`)).json(),
+    );
+    assert.ok(history);
+    assert.equal(history.total, 3);
     assert.deepEqual(
       history.items.map((d) => [d.revision, d.action, d.subjectRef.personObservationIndex]),
       [
         [1, 'RESOLVE', 0],
-        [2, 'CLEAR', 0],
+        [2, 'RESOLVE', 0],
+        [3, 'CLEAR', 0],
       ],
     );
     assert.equal(
@@ -234,15 +283,8 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
       .update({ eventId: f.eventId }, { rawPayload: { corrupt: true } });
     const corruptResponse = await get();
     assert.equal(corruptResponse.status, 200);
-    const corrupt = (await corruptResponse.json()) as {
-      subjects: {
-        subjectRef: unknown;
-        trackId: unknown;
-        latestManualDecision: unknown;
-        resolveBlockReason: string;
-        clearBlockReason: string;
-      }[];
-    };
+    const corrupt = parseObservationIdentityContextResponse(await corruptResponse.json());
+    assert.ok(corrupt, 'Unavailable/corrupt-state context must still satisfy the browser contract');
     assert.deepEqual(
       corrupt.subjects.map((s) => [
         s.subjectRef,
@@ -270,6 +312,8 @@ test('identity HTTP with real sessions and PostgreSQL preserves subject scope, c
     await dataSource
       .getRepository(UserRoleAssignmentEntity)
       .delete(f.actorIds.map((userId) => ({ userId })));
+    await dataSource.getRepository(AlertDetectionMappingEntity).delete({ eventId: laterEventId });
+    await dataSource.getRepository(AiObservationEventEntity).delete({ eventId: laterEventId });
     await f.cleanup();
     if (app) await app.close();
   }
