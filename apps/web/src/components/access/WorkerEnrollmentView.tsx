@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { IconCamera, IconCheck, IconShield, IconUsers } from '../icons';
 import { captureFrameBlob, createSafePreviewUrl, revokeSafePreviewUrl } from './faceGateUtils';
-import { CAPTURE_GUIDANCE, enrollmentQualityMessage } from './enrollmentCapture';
 import { GateCameraSession } from './gateCameraSession';
 import { inspectGateCamera } from './gateCameraReadiness';
 

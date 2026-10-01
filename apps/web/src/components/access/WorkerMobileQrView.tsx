@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { IconAlertTriangle, IconCheck, IconClock, IconKey, IconRefresh, IconUser, IconX } from '../icons';
+import { IconAlertTriangle, IconClock, IconKey, IconX } from '../icons';
 
 export interface WorkerMobileQrViewProps {
   workerName: string;

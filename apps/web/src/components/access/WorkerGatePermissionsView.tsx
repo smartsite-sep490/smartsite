@@ -10,7 +10,6 @@ import {
   IconRefresh,
   IconSearch,
   IconShield,
-  IconUser,
   IconUsers,
 } from '../icons';
 

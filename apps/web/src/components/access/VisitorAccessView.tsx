@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import {
   IconAlertTriangle,
   IconCheck,
-  IconClock,
   IconKey,
-  IconShield,
-  IconUser,
   IconUsers,
   IconX,
 } from '../icons';
@@ -33,7 +30,7 @@ export interface VisitorAccessViewProps {
   siteName?: string;
 }
 
-export function VisitorAccessView({ apiUrl, siteId, siteName = 'Construction Site' }: VisitorAccessViewProps) {
+export function VisitorAccessView({ siteId }: VisitorAccessViewProps) {
   // Visitor registry list
   const [visitors, setVisitors] = useState<VisitorRecord[]>([
     {
