@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { DataSource, IsNull } from 'typeorm';
+import type { FaceGateVerificationResponse, GateAccessLogResponse } from '@smartsite/contracts';
+import { GateAccessLogEntity } from '../../database/entities/gate-access-log.entity.js';
+import { uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ContractorEntity } from '../../database/entities/contractor.entity.js';
 import { ContractorSiteParticipationEntity } from '../../database/entities/contractor-site-participation.entity.js';
@@ -38,17 +41,74 @@ export class FaceGateService {
     siteId: string,
     gateId: string,
     frame: UploadedFaceSample | undefined,
-  ) {
-    this.validateFrame(frame);
-    const operatorAllowed = actor.roleAssignments.some(
+    direction: 'IN' | 'OUT' = 'IN',
+  ): Promise<FaceGateVerificationResponse> {
+    await this.requireOperator(actor, siteId, gateId);
+    if (direction !== 'IN' && direction !== 'OUT')
+      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid gate direction',
+      });
+    const result = await this.evaluate(siteId, gateId, frame);
+    // A decision is acknowledged only after its audit record is durably stored.
+    const log = await this.dataSource.getRepository(GateAccessLogEntity).save({
+      id: randomUUID(),
+      siteId,
+      gateId,
+      operatorUserId: actor.id,
+      direction,
+      workerId: result.worker?.id ?? null,
+      userId: result.worker?.userId ?? null,
+      workerName: result.worker?.displayName ?? null,
+      workerExternalId: result.worker?.externalId ?? null,
+      contractorName: result.worker?.contractorName ?? null,
+      username: result.worker?.username ?? null,
+      decision: result.decision,
+    });
+    return { ...result, log: this.logResponse(log) };
+  }
+
+  async listLogs(
+    actor: WorkforceActor,
+    siteId: string,
+    gateId: string,
+  ): Promise<{ items: GateAccessLogResponse[] }> {
+    await this.requireOperator(actor, siteId, gateId);
+    const logs = await this.dataSource.getRepository(GateAccessLogEntity).find({
+      where: { siteId, gateId },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: 50,
+    });
+    return { items: logs.map((log) => this.logResponse(log)) };
+  }
+
+  private logResponse(log: GateAccessLogEntity): GateAccessLogResponse {
+    return {
+      id: log.id,
+      createdAt: log.createdAt.toISOString(),
+      gateId: log.gateId,
+      direction: log.direction,
+      workerId: log.workerId,
+      userId: log.userId,
+      workerName: log.workerName,
+      workerExternalId: log.workerExternalId,
+      contractorName: log.contractorName,
+      username: log.username,
+      decision: log.decision,
+    };
+  }
+
+  private async requireOperator(actor: WorkforceActor, siteId: string, gateId: string) {
+    uuid(siteId);
+    const allowed = actor.roleAssignments.some(
       ({ role, siteId: assignedSiteId }) =>
         (role === UserRole.ADMIN && assignedSiteId === null) ||
         (assignedSiteId === siteId &&
-          (role === UserRole.SAFETY_OFFICER ||
-            role === UserRole.SITE_MANAGER ||
-            role === UserRole.SECURITY_OFFICER)),
+          [UserRole.SAFETY_OFFICER, UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER].includes(
+            role,
+          )),
     );
-    if (actor.mustChangePassword || !operatorAllowed)
+    if (actor.mustChangePassword || !allowed)
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
         code: 'FORBIDDEN',
         message: 'Gate operator access is required',
@@ -58,6 +118,15 @@ export class FaceGateService {
         code: 'VALIDATION_FAILED',
         message: 'Invalid gate identifier',
       });
+    if (!(await this.dataSource.getRepository(SiteEntity).existsBy({ id: siteId })))
+      throw new PublicHttpException(HttpStatus.NOT_FOUND, {
+        code: 'NOT_FOUND',
+        message: 'Not found',
+      });
+  }
+
+  private async evaluate(siteId: string, gateId: string, frame: UploadedFaceSample | undefined) {
+    this.validateFrame(frame);
     // Only authorized site operators may scan; account linkage does not grant
     // gate access. Authorization of the identified worker remains server-side.
     const templates = await this.dataSource
@@ -153,6 +222,8 @@ export class FaceGateService {
         : [];
       const assignment = assignments.find(
         (entry) =>
+          (entry.gateId === null || entry.gateId === gateId) &&
+          entry.status === 'APPROVED' &&
           entry.validFrom.getTime() <= now.getTime() &&
           (entry.validUntil === null || entry.validUntil.getTime() > now.getTime()),
       );
@@ -167,6 +238,7 @@ export class FaceGateService {
         faceProfileStatus: profile.status,
         assignment,
         siteId,
+        gateId,
         evaluatedAt: now,
       });
       const decision =

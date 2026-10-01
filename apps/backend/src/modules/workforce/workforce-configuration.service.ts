@@ -43,6 +43,41 @@ export class CreateWorkerCommand {
 export class WorkforceConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /** Account-first enrollment: idempotently resolve/create the internal worker. */
+  async forAccount(siteIdValue: string, input: LinkWorkerAccountCommand) {
+    const siteId = uuid(siteIdValue);
+    const value = command(LinkWorkerAccountCommand, input);
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager
+        .getRepository(UserEntity)
+        .createQueryBuilder('user')
+        .setLock('pessimistic_write')
+        .where('user.id = :id AND user.is_active = TRUE', { id: value.userId })
+        .getOne();
+      const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
+        { userId: value.userId, siteId },
+        { userId: value.userId, siteId: IsNull(), role: UserRole.ADMIN },
+      ]);
+      if (!user || !assignment) conflict('An active account assigned to this site is required');
+      if (!(await manager.getRepository(SiteEntity).existsBy({ id: siteId }))) missing();
+      const existing = await manager
+        .getRepository(WorkerEntity)
+        .findOneBy({ siteId, userId: user.id });
+      if (existing) {
+        if (!existing.isActive) conflict('The linked worker is inactive');
+        return existing;
+      }
+      return manager.getRepository(WorkerEntity).save({
+        id: randomUUID(),
+        siteId,
+        userId: user.id,
+        externalId: `ACC-${user.id}`,
+        displayName: user.displayName,
+        isActive: true,
+      });
+    });
+  }
+
   async linkAccount(siteIdValue: string, workerIdValue: string, input: LinkWorkerAccountCommand) {
     const siteId = uuid(siteIdValue);
     const workerId = uuid(workerIdValue);

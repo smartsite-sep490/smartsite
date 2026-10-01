@@ -18,6 +18,7 @@ import { ContractorRepresentativeGrantEntity } from './contractor-representative
 import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.entity.js';
 import { FaceProfileEntity } from './face-profile.entity.js';
 import { FaceEnrollmentSessionEntity } from './face-enrollment-session.entity.js';
+import { GateAccessLogEntity } from './gate-access-log.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -41,6 +42,7 @@ export * from './contractor-representative-grant.entity.js';
 export * from './worker-site-zone-assignment.entity.js';
 export * from './face-profile.entity.js';
 export * from './face-enrollment-session.entity.js';
+export * from './gate-access-log.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -63,4 +65,5 @@ export const ENTITIES = [
   WorkerSiteZoneAssignmentEntity,
   FaceProfileEntity,
   FaceEnrollmentSessionEntity,
+  GateAccessLogEntity,
 ] as const;

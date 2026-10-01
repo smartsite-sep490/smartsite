@@ -10,6 +10,7 @@ import { SafetyAlertReviews1790640000000 } from './migrations/1790640000000-Safe
 import { IdentityAccessScope1790726400000 } from './migrations/1790726400000-IdentityAccessScope.js';
 import { FaceEnrollmentMetadata1790812800000 } from './migrations/1790812800000-FaceEnrollmentMetadata.js';
 import { AccountFaceTemplates1790899200000 } from './migrations/1790899200000-AccountFaceTemplates.js';
+import { GateAccessLogs1790985600000 } from './migrations/1790985600000-GateAccessLogs.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -36,6 +37,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       IdentityAccessScope1790726400000,
       FaceEnrollmentMetadata1790812800000,
       AccountFaceTemplates1790899200000,
+      GateAccessLogs1790985600000,
     ],
     logging: false,
     extra: {

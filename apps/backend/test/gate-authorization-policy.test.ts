@@ -4,6 +4,19 @@ import { authorizeGateEntry } from '../src/modules/workforce/gate-authorization-
 
 const evaluatedAt = new Date('2026-09-29T08:00:00.000Z');
 
+test('a gate-specific assignment permits Gate 1 but not another gate', () => {
+  const assignment = { ...subject().assignment, gateId: 'gate-north-01' };
+  assert.equal(
+    authorizeGateEntry(subject({ assignment, gateId: 'gate-north-01' })).authorization,
+    'ALLOWED',
+  );
+  assert.deepEqual(authorizeGateEntry(subject({ assignment, gateId: 'gate-west-02' })), {
+    authorization: 'DENIED',
+    reasonCode: 'GATE_MISMATCH',
+  });
+  assert.equal(authorizeGateEntry(subject({ assignment })).authorization, 'DENIED');
+});
+
 function subject(overrides: Partial<Parameters<typeof authorizeGateEntry>[0]> = {}) {
   return {
     workerActive: true,

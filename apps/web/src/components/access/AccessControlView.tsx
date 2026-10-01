@@ -410,6 +410,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
       {accessSubTab === 'gate-desk' && (
         <SecurityGateDeskView
+          key={`${sessionScope}:${siteId}`}
+          sessionScope={sessionScope}
           apiUrl={apiUrl}
           token={token}
           selectedSiteId={siteId}
@@ -425,7 +427,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           token={token}
           sessionScope={sessionScope}
           siteId={siteId}
-          workers={workers.data?.items ?? []}
         />
       )}
 

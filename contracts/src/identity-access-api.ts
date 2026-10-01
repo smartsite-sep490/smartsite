@@ -29,6 +29,7 @@ export type FaceGateReasonCode =
   | 'ASSIGNMENT_NOT_APPROVED'
   | 'ASSIGNMENT_EXPIRED'
   | 'SITE_MISMATCH'
+  | 'GATE_MISMATCH'
   | 'VALID_ASSIGNMENT';
 
 export interface FaceGateDecisionResponse {
@@ -41,6 +42,7 @@ export interface FaceGateDecisionResponse {
 
 export interface FaceGateVerificationResponse {
   decision: FaceGateDecisionResponse;
+  log?: GateAccessLogResponse;
   worker?: {
     id: string;
     userId: string;
@@ -50,4 +52,18 @@ export interface FaceGateVerificationResponse {
     contractorName: string;
     assignmentStatus: string;
   };
+}
+
+export interface GateAccessLogResponse {
+  id: string;
+  createdAt: string;
+  gateId: string;
+  direction: 'IN' | 'OUT';
+  workerId: string | null;
+  userId: string | null;
+  workerName: string | null;
+  workerExternalId: string | null;
+  contractorName: string | null;
+  username: string | null;
+  decision: FaceGateDecisionResponse;
 }

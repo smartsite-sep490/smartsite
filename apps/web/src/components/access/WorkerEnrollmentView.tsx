@@ -9,7 +9,6 @@ export interface WorkerEnrollmentViewProps {
   token?: string;
   siteId: string;
   sessionScope: string;
-  workers: Array<{ id: string; externalId: string; displayName: string; userId?: string | null }>;
 }
 
 type EnrollmentStep = 'consent' | 'capture-front' | 'capture-left' | 'capture-right' | 'review';
@@ -22,8 +21,6 @@ interface CapturedSample {
 }
 
 type CaptureTarget = 'front' | 'left' | 'right';
-
-type WorkerOption = { id: string; externalId: string; displayName: string; userId?: string | null };
 
 const CONSENT_VERSION = 'v1.0-2026';
 
@@ -39,11 +36,11 @@ export function WorkerEnrollmentView({
   token,
   siteId,
   sessionScope,
-  workers,
 }: WorkerEnrollmentViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const [accountId, setAccountId] = useState('');
+  const [accountSearch, setAccountSearch] = useState('');
   const accounts = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, siteId, 'face-enrollment-accounts'],
     enabled: !!token && !!siteId,
@@ -66,41 +63,40 @@ export function WorkerEnrollmentView({
     },
   });
 
-  // Selected worker & profile state
-  const [requestedWorkerId, setSelectedWorkerId] = useState('');
-  const selectedWorkerId = requestedWorkerId || workers[0]?.id || '';
+  // The selected existing account owns enrollment; worker records are internal.
+  const linkedWorkerKey = [
+    'access-control',
+    apiUrl,
+    sessionScope,
+    siteId,
+    'face-enrollment-account-worker',
+    accountId,
+  ];
   const linkedWorker = useQuery({
-    queryKey: [
-      'access-control',
-      apiUrl,
-      sessionScope,
-      siteId,
-      'face-enrollment-worker',
-      selectedWorkerId,
-    ],
-    enabled: !!token && !!siteId && !!selectedWorkerId,
+    queryKey: linkedWorkerKey,
+    enabled: !!token && !!siteId && !!accountId,
     queryFn: async () => {
       for (let offset = 0; ; offset += 100) {
         const page = await client.listWorkers(token!, siteId, { offset, limit: 100 });
-        const worker = page.items.find((item) => item.id === selectedWorkerId);
+        const worker = page.items.find((item) => item.userId === accountId);
         if (worker) return worker;
         if (offset + page.items.length >= page.total || page.items.length === 0) return null;
       }
     },
   });
+  const selectedWorkerId = linkedWorker.data?.id ?? '';
   const linkAccount = useMutation({
-    mutationFn: () => client.linkWorkerAccount(token!, siteId, selectedWorkerId, accountId),
-    onSuccess: async () => {
+    mutationFn: (userId: string) => client.prepareFaceAccount(token!, siteId, userId),
+    onSuccess: async (worker, userId) => {
+      queryClient.setQueryData(
+        ['access-control', apiUrl, sessionScope, siteId, 'face-enrollment-account-worker', userId],
+        worker,
+      );
       await queryClient.invalidateQueries({
-        queryKey: ['access-control', apiUrl, sessionScope, siteId],
+        queryKey: ['access-control', apiUrl, sessionScope, siteId, 'workers'],
       });
     },
   });
-  const [createdWorkers, setCreatedWorkers] = useState<WorkerOption[]>([]);
-  const [newWorkerExternalId, setNewWorkerExternalId] = useState('');
-  const [newWorkerDisplayName, setNewWorkerDisplayName] = useState('');
-  const [isCreatingWorker, setIsCreatingWorker] = useState(false);
-  const [createWorkerError, setCreateWorkerError] = useState<string | null>(null);
   const profile = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, siteId, selectedWorkerId, 'face-profile'],
     enabled: !!token && !!selectedWorkerId,
@@ -143,13 +139,6 @@ export function WorkerEnrollmentView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-
-  const workerOptions = useMemo(() => {
-    const workersById = new Map<string, WorkerOption>();
-    workers.forEach((worker) => workersById.set(worker.id, worker));
-    createdWorkers.forEach((worker) => workersById.set(worker.id, worker));
-    return [...workersById.values()];
-  }, [createdWorkers, workers]);
 
   // Revoke all preview URLs helper
   const revokeAllSamples = useCallback(() => {
@@ -348,50 +337,10 @@ export function WorkerEnrollmentView({
     };
   }, [cameraActive, checkAndCaptureCurrentFrame, currentStep]);
 
-  const handleCreateWorker = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const externalId = newWorkerExternalId.trim();
-    const displayName = newWorkerDisplayName.trim();
-    if (!externalId || !displayName) {
-      setCreateWorkerError('Nhập mã nhân công và họ tên trước khi đăng ký khuôn mặt.');
-      return;
-    }
-    if (!token || !siteId) {
-      setCreateWorkerError('Bạn cần đăng nhập và chọn công trường trước.');
-      return;
-    }
-
-    setIsCreatingWorker(true);
-    setCreateWorkerError(null);
-    try {
-      const worker = await client.createWorker(token, siteId, { externalId, displayName });
-      setCreatedWorkers((previous) => [
-        ...previous.filter((entry) => entry.id !== worker.id),
-        worker,
-      ]);
-      setSelectedWorkerId(worker.id);
-      setNewWorkerExternalId('');
-      setNewWorkerDisplayName('');
-      revokeAllSamples();
-      setCurrentStep('consent');
-      setConsentAcknowledged(false);
-      setSubmissionSuccess(false);
-      setSubmissionError(null);
-      setQualityMessage(null);
-      setStatusMessage(
-        `Đã tạo hồ sơ cho ${worker.displayName}. Tiếp tục xác nhận và chụp khuôn mặt.`,
-      );
-    } catch (err) {
-      setCreateWorkerError(err instanceof Error ? err.message : 'Không thể tạo hồ sơ nhân công.');
-    } finally {
-      setIsCreatingWorker(false);
-    }
-  };
-
   // Submit enrollment with 3 in-memory samples
   const handleSubmitEnrollment = async () => {
     if (!selectedWorkerId || !token || !linkedWorker.data?.userId) {
-      setSubmissionError('Tạo hoặc chọn nhân công trước khi gửi đăng ký khuôn mặt.');
+      setSubmissionError('Chọn account có sẵn trước khi đăng ký khuôn mặt.');
       return;
     }
     if (!samples.front || !samples.left || !samples.right) {
@@ -474,46 +423,83 @@ export function WorkerEnrollmentView({
     setQualityMessage(null);
   };
 
-  const selectedWorker = workerOptions.find((worker) => worker.id === selectedWorkerId);
+  const selectedWorker = linkedWorker.data;
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <label htmlFor="face-account" className="block text-sm font-semibold">
-          Account liên kết với khuôn mặt
+        <h2 className="text-sm font-bold">Đăng ký khuôn mặt cho account có sẵn</h2>
+        <p className="mt-1 text-xs text-slate-600">
+          Tìm và chọn account đang hoạt động tại công trình. Không tạo account hoặc nhập nhân công
+          riêng ở đây.
+        </p>
+        <label htmlFor="face-account-search" className="mt-3 block text-xs font-semibold">
+          Tìm account
         </label>
-        {linkedWorker.data?.userId ? (
-          <p className="mt-2 text-sm">
-            Đã liên kết:{' '}
-            {accounts.data?.find((user) => user.id === linkedWorker.data?.userId)?.username ??
-              linkedWorker.data.userId}
-          </p>
-        ) : (
-          <div className="mt-2 flex gap-2">
-            <select
-              id="face-account"
-              value={accountId}
-              onChange={(event) => setAccountId(event.target.value)}
-              disabled={accounts.isPending || accounts.isError || linkAccount.isPending}
-              className="rounded border p-2"
-            >
-              <option value="">Chọn account của công trình</option>
-              {accounts.data?.map((user) => (
+        <input
+          id="face-account-search"
+          value={accountSearch}
+          onChange={(event) => setAccountSearch(event.target.value)}
+          placeholder="Username hoặc họ tên"
+          className="mt-1 w-full rounded border p-2"
+          disabled={isSubmitting || currentStep !== 'consent'}
+        />
+        <label htmlFor="face-account" className="mt-3 block text-xs font-semibold">
+          Account đăng ký
+        </label>
+        <div className="mt-2 flex gap-2">
+          <select
+            id="face-account"
+            value={accountId}
+            onChange={(event) => {
+              handleResetWorkflow();
+              setStatusMessage(null);
+              linkAccount.reset();
+              setAccountId(event.target.value);
+            }}
+            disabled={
+              accounts.isPending ||
+              accounts.isError ||
+              linkAccount.isPending ||
+              isSubmitting ||
+              currentStep !== 'consent'
+            }
+            className="min-w-0 flex-1 rounded border p-2"
+          >
+            <option value="">Chọn account đã có trên hệ thống</option>
+            {accounts.data
+              ?.filter(
+                (user) =>
+                  user.id === accountId ||
+                  (user.username + ' ' + user.displayName)
+                    .toLocaleLowerCase()
+                    .includes(accountSearch.trim().toLocaleLowerCase()),
+              )
+              .map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.username} — {user.displayName}
                 </option>
               ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => linkAccount.mutate()}
-              disabled={!accountId || !selectedWorkerId || linkAccount.isPending}
-              className="rounded bg-orange-600 px-3 text-white disabled:opacity-50"
-            >
-              {linkAccount.isPending ? 'Đang liên kết…' : 'Liên kết'}
-            </button>
-          </div>
-        )}
+          </select>
+          <button
+            type="button"
+            onClick={() => linkAccount.mutate(accountId)}
+            disabled={
+              !accountId ||
+              linkedWorker.isPending ||
+              linkedWorker.isError ||
+              !!selectedWorkerId ||
+              linkAccount.isPending
+            }
+            className="rounded bg-orange-600 px-3 text-white disabled:opacity-50"
+          >
+            {linkAccount.isPending
+              ? 'Đang chuẩn bị…'
+              : selectedWorkerId
+                ? 'Đã chọn account'
+                : 'Dùng account này'}
+          </button>
+        </div>
         {accounts.isError && (
           <p role="alert">
             Không tải được account.{' '}
@@ -524,93 +510,32 @@ export function WorkerEnrollmentView({
         )}
         {linkedWorker.isError && (
           <p role="alert">
-            Không tải được hồ sơ liên kết.{' '}
+            Không tải được hồ sơ.{' '}
             <button type="button" onClick={() => void linkedWorker.refetch()}>
               Thử lại
             </button>
           </p>
         )}
         {accounts.data?.length === 0 && (
-          <p className="mt-2 text-sm">Tạo account và gán công trình trước khi đăng ký khuôn mặt.</p>
+          <p className="mt-2 text-sm">
+            Chưa có account phù hợp. Tạo account và gán công trình trong quản lý tài khoản trước.
+          </p>
         )}
         {linkAccount.error && <p role="alert">{linkAccount.error.message}</p>}
-      </section>
-      <section className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-xs">
-        <div>
-          <h2 className="text-sm font-bold text-slate-950">Tạo nhân công để đăng ký khuôn mặt</h2>
-          <p className="mt-1 text-xs text-slate-600">
-            Tự nhập mã và họ tên. Thông tin này sẽ được hiện tại Gate Desk khi khuôn mặt được nhận
-            diện.
-          </p>
-        </div>
-        <form
-          onSubmit={handleCreateWorker}
-          className="mt-4 grid gap-3 sm:grid-cols-[0.7fr_1fr_auto]"
-        >
-          <label className="text-xs font-semibold text-slate-700">
-            Mã nhân công
-            <input
-              required
-              maxLength={64}
-              value={newWorkerExternalId}
-              onChange={(event) => setNewWorkerExternalId(event.target.value)}
-              placeholder="WRK-001"
-              className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-700">
-            Họ và tên
-            <input
-              required
-              maxLength={255}
-              value={newWorkerDisplayName}
-              onChange={(event) => setNewWorkerDisplayName(event.target.value)}
-              placeholder="Nguyễn Văn A"
-              className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={isCreatingWorker || !siteId}
-            className="self-end rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {isCreatingWorker ? 'Đang tạo…' : 'Tạo & chọn'}
-          </button>
-        </form>
-        {createWorkerError && (
-          <p role="alert" className="mt-3 text-xs font-medium text-red-700">
-            {createWorkerError}
-          </p>
-        )}
       </section>
 
       {/* Header and Worker Status Bar */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <label
-              htmlFor="worker-select"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-500"
-            >
-              Select Worker
-            </label>
-            <select
-              id="worker-select"
-              value={selectedWorkerId}
-              onChange={(e) => {
-                setSelectedWorkerId(e.target.value);
-                handleResetWorkflow();
-              }}
-              disabled={workerOptions.length === 0 || linkAccount.isPending || isSubmitting}
-              className="mt-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:border-[#F66B17] focus:outline-none"
-            >
-              {workerOptions.length === 0 && <option value="">Tạo nhân công ở trên trước</option>}
-              {workerOptions.map((worker) => (
-                <option key={worker.id} value={worker.id}>
-                  {worker.displayName} ({worker.externalId})
-                </option>
-              ))}
-            </select>
+            <span className="block text-xs font-semibold text-slate-500">Account đã chọn</span>
+            <p className="mt-1 text-sm font-semibold">
+              {accounts.data?.find((user) => user.id === accountId)?.username ??
+                'Chưa chọn account'}
+            </p>
+            <p className="text-xs text-slate-500">
+              {selectedWorker?.displayName ?? 'Chọn account trước khi đăng ký khuôn mặt'}
+            </p>
           </div>
 
           <div className="pt-4">
@@ -765,6 +690,7 @@ export function WorkerEnrollmentView({
                 !consentAcknowledged ||
                 !selectedWorker ||
                 !linkedWorker.data?.userId ||
+                !linkedWorker.data?.isActive ||
                 linkedWorker.isPending ||
                 linkedWorker.isError
               }

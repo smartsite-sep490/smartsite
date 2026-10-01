@@ -27,6 +27,8 @@ import type {
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
   ZoneEntryDecisionStatus,
+  FaceGateVerificationResponse,
+  GateAccessLogResponse,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
@@ -313,6 +315,14 @@ export class SmartSiteManagementClient {
       { userId },
     );
   }
+  prepareFaceAccount(token: string, siteId: string, userId: string) {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/for-account`,
+      token,
+      { userId },
+    );
+  }
   listWorkers(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<WorkerResponse>>(
       'GET',
@@ -389,6 +399,30 @@ export class SmartSiteManagementClient {
       `/workers/${pathId(workerId)}/face-enrollments`,
       token,
       { consentVersion },
+    );
+  }
+  verifyFaceGate(
+    token: string,
+    siteId: string,
+    gateId: string,
+    frame: Blob,
+    direction: 'IN' | 'OUT',
+  ) {
+    const form = new FormData();
+    form.append('frame', frame, 'scan-frame.jpg');
+    form.append('direction', direction);
+    return this.requestFormData<FaceGateVerificationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-verifications`,
+      token,
+      form,
+    );
+  }
+  listGateAccessLogs(token: string, siteId: string, gateId: string) {
+    return this.request<{ items: GateAccessLogResponse[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/access-logs`,
+      token,
     );
   }
   uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob) {

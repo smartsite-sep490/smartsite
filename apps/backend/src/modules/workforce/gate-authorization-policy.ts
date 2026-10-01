@@ -12,11 +12,13 @@ export interface GateAuthorizationSubject {
   assignment?: {
     status: WorkerSiteZoneAssignmentStatus;
     siteId: string;
+    gateId?: string | null;
     validFrom: Date;
     validUntil: Date | null;
   };
   authorizationDataAvailable: boolean;
   siteId: string;
+  gateId?: string;
   evaluatedAt: Date;
 }
 
@@ -32,6 +34,7 @@ export interface GateAuthorizationDecision {
     | 'ASSIGNMENT_MISSING'
     | 'ASSIGNMENT_NOT_APPROVED'
     | 'SITE_MISMATCH'
+    | 'GATE_MISMATCH'
     | 'ASSIGNMENT_EXPIRED'
     | 'VALID_ASSIGNMENT';
 }
@@ -54,6 +57,8 @@ export function authorizeGateEntry(subject: GateAuthorizationSubject): GateAutho
     return { authorization: 'DENIED', reasonCode: 'ASSIGNMENT_NOT_APPROVED' };
   if (subject.assignment.siteId !== subject.siteId)
     return { authorization: 'DENIED', reasonCode: 'SITE_MISMATCH' };
+  if (subject.assignment.gateId && subject.assignment.gateId !== subject.gateId)
+    return { authorization: 'DENIED', reasonCode: 'GATE_MISMATCH' };
   if (
     subject.assignment.validFrom.getTime() > subject.evaluatedAt.getTime() ||
     (subject.assignment.validUntil !== null &&

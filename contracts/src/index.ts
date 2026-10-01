@@ -28,6 +28,7 @@ export type {
 export type {
   FaceGateDecisionResponse,
   FaceGateVerificationResponse,
+  GateAccessLogResponse,
   FaceGateReasonCode,
   FaceProfileStatus,
   FaceVerificationTechnicalOutcome,

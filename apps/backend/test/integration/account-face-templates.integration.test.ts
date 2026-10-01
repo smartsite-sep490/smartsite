@@ -13,6 +13,11 @@ import {
   UserRole,
   SiteEntity,
   WorkerEntity,
+  ContractorEntity,
+  ContractorSiteParticipationEntity,
+  WorkerSiteZoneAssignmentEntity,
+  WorkerSiteZoneAssignmentStatus,
+  GateAccessLogEntity,
 } from '../../src/database/entities/index.js';
 import type { FaceVerificationInput } from '../../src/modules/workforce/face-enrollment.adapter.js';
 import dataSource from '../support/test-data-source.js';
@@ -29,6 +34,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   const actorId = randomUUID();
   const workerId = randomUUID();
   const secondWorkerId = randomUUID();
+  const contractorId = randomUUID();
   const actor = {
     id: actorId,
     mustChangePassword: false,
@@ -82,6 +88,14 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
         .getRepository(WorkerEntity)
         .save({ id, siteId, externalId: id, displayName: 'Synthetic worker', isActive: true });
     const workforce = new WorkforceConfigurationService(dataSource);
+    const prepared = await Promise.all([
+      workforce.forAccount(siteId, { userId: accountId }),
+      workforce.forAccount(siteId, { userId: accountId }),
+    ]);
+    assert.equal(prepared[0]!.id, prepared[1]!.id);
+    assert.equal(prepared[0]!.userId, accountId);
+    await dataSource.getRepository(WorkerEntity).delete(prepared[0]!.id);
+    await assert.rejects(workforce.forAccount(siteId, { userId: randomUUID() }));
     const enrollment = new FaceEnrollmentService(
       dataSource,
       new ContractorOperationsService(dataSource),
@@ -97,6 +111,8 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       /account assigned/,
     );
     await workforce.linkAccount(siteId, workerId, { userId: accountId });
+    assert.equal((await workforce.forAccount(siteId, { userId: accountId })).id, workerId);
+    await assert.rejects(workforce.forAccount(otherSiteId, { userId: accountId }));
     await workforce.linkAccount(siteId, workerId, { userId: accountId }); // idempotent
     await assert.rejects(workforce.linkAccount(siteId, secondWorkerId, { userId: accountId }));
     const session = await enrollment.start(actor, workerId, { consentVersion: 'synthetic-v1' });
@@ -138,9 +154,68 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     assert.equal(verification?.templates?.length, 1);
     assert.equal(matched.worker?.userId, accountId);
     assert.notEqual(matched.decision.authorization, 'ALLOWED'); // account is not permission
+    assert.equal(matched.log?.workerId, workerId);
+    await dataSource
+      .getRepository(ContractorEntity)
+      .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });
+    await dataSource.getRepository(WorkerEntity).update(workerId, { contractorId });
+    await dataSource.getRepository(ContractorSiteParticipationEntity).save({
+      id: randomUUID(),
+      contractorId,
+      siteId,
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: null,
+      isActive: true,
+    });
+    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).save({
+      id: randomUUID(),
+      workerId,
+      siteId,
+      gateId: 'gate1',
+      zoneIds: [randomUUID()],
+      status: WorkerSiteZoneAssignmentStatus.APPROVED,
+      validFrom: new Date(Date.now() - 60_000),
+      validUntil: null,
+      requestedByUserId: actorId,
+    });
+    const allowed = await gate.verify(actor, siteId, 'gate1', frame, 'OUT');
+    assert.equal(allowed.decision.authorization, 'ALLOWED');
+    assert.equal(allowed.log?.direction, 'OUT');
+    assert.equal(allowed.log?.userId, accountId);
+    const savedLog = await dataSource
+      .getRepository(GateAccessLogEntity)
+      .findOneByOrFail({ id: allowed.log!.id });
+    assert.equal(savedLog.decision.authorization, 'ALLOWED');
+    const afterRestart = await new FaceGateService(dataSource, adapter).listLogs(
+      actor,
+      siteId,
+      'gate1',
+    );
+    assert.ok(afterRestart.items.some((log) => log.id === allowed.log?.id));
+    await assert.rejects(gate.verify({ ...actor, id: randomUUID() }, siteId, 'gate1', frame)); // cannot acknowledge ALLOWED when audit persistence fails
+    assert.equal(
+      (await gate.verify(actor, siteId, 'gate2', frame)).decision.authorization,
+      'DENIED',
+    );
+    await assert.rejects(
+      gate.listLogs(
+        { ...actor, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
+        siteId,
+        'gate1',
+      ),
+    );
+    await assert.rejects(
+      gate.listLogs(
+        { ...actor, roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: otherSiteId }] },
+        siteId,
+        'gate1',
+      ),
+    );
+    await assert.rejects(gate.verify(actor, siteId, 'gate1', frame, 'INVALID' as 'IN'));
     await gate.verify(actor, otherSiteId, 'gate1', frame);
     assert.equal(verification?.templates?.length, 0);
     await dataSource.getRepository(UserEntity).update(accountId, { isActive: false });
+    await assert.rejects(workforce.forAccount(siteId, { userId: accountId }));
     const disabled = await gate.verify(actor, siteId, 'gate1', frame);
     assert.equal(verification?.templates?.length, 0);
     assert.equal(disabled.worker, undefined);
@@ -156,9 +231,19 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await gate.verify(actor, siteId, 'gate1', frame);
     assert.equal(verification?.templates?.length, 0);
   } finally {
+    await dataSource.query('DELETE FROM gate_access_log WHERE site_id = ANY($1)', [
+      [siteId, otherSiteId],
+    ]);
+    await dataSource.query('DELETE FROM worker_site_zone_assignment WHERE worker_id = $1', [
+      workerId,
+    ]);
+    await dataSource.query('DELETE FROM contractor_site_participation WHERE contractor_id = $1', [
+      contractorId,
+    ]);
     await dataSource.query('DELETE FROM face_profile WHERE worker_id = $1', [workerId]);
     await dataSource.query('DELETE FROM face_enrollment_session WHERE worker_id = $1', [workerId]);
     await dataSource.query('DELETE FROM worker WHERE id = ANY($1)', [[workerId, secondWorkerId]]);
+    await dataSource.query('DELETE FROM contractor WHERE id = $1', [contractorId]);
     await dataSource.query('DELETE FROM app_user WHERE id = ANY($1)', [[accountId, actorId]]);
     await dataSource.query('DELETE FROM site WHERE id = ANY($1)', [[siteId, otherSiteId]]);
   }

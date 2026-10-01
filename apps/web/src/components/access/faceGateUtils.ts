@@ -5,11 +5,7 @@ import type {
 } from '@smartsite/contracts';
 
 export type GateUiDecisionType =
-  | 'ALLOWED'
-  | 'DENIED'
-  | 'MANUAL_REVIEW'
-  | 'FALLBACK_REQUIRED'
-  | 'RETRY';
+  'ALLOWED' | 'DENIED' | 'MANUAL_REVIEW' | 'FALLBACK_REQUIRED' | 'RETRY';
 
 export interface GateUiState {
   type: GateUiDecisionType;
@@ -49,7 +45,8 @@ export function resolveGateUiState(params: {
       canRecordInOut: false,
       canUseQrFallback: false,
       isRetry: true,
-      safeDescription: 'Cannot verify with backend service. Please check network connection and retry scan.',
+      safeDescription:
+        'Cannot verify with backend service. Please check network connection and retry scan.',
     };
   }
 
@@ -64,13 +61,17 @@ export function resolveGateUiState(params: {
   ) {
     return {
       type: 'FALLBACK_REQUIRED',
-      label: technicalOutcome === 'AI_UNAVAILABLE' ? 'AI Service Unavailable' : 'Face Verification Inconclusive',
+      label:
+        technicalOutcome === 'AI_UNAVAILABLE'
+          ? 'AI Service Unavailable'
+          : 'Face Verification Inconclusive',
       badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
       panelClass: 'border-amber-200 bg-amber-50/70',
       canRecordInOut: false,
       canUseQrFallback: true,
       isRetry: false,
-      safeDescription: 'Face scan was inconclusive. Please request the Worker to present their dynamic QR code for fallback verification.',
+      safeDescription:
+        'Face scan was inconclusive. Please request the Worker to present their dynamic QR code for fallback verification.',
     };
   }
 
@@ -84,7 +85,8 @@ export function resolveGateUiState(params: {
       canRecordInOut: true,
       canUseQrFallback: false,
       isRetry: false,
-      safeDescription: 'Worker identity and site zone assignment verified. Security Officer may record IN or OUT.',
+      safeDescription:
+        'Worker identity and site zone assignment verified. Security Officer may record IN or OUT.',
     };
   }
 
@@ -98,7 +100,8 @@ export function resolveGateUiState(params: {
       canRecordInOut: false,
       canUseQrFallback: false,
       isRetry: false,
-      safeDescription: 'Access denied by backend policy. QR fallback is not permitted for denied credentials.',
+      safeDescription:
+        'Access denied by backend policy. QR fallback is not permitted for denied credentials.',
     };
   }
 
@@ -112,7 +115,8 @@ export function resolveGateUiState(params: {
       canRecordInOut: false,
       canUseQrFallback: false,
       isRetry: false,
-      safeDescription: 'Worker record flagged for manual inspection. Security Officer must perform manual identity review before granting clearance.',
+      safeDescription:
+        'Worker record flagged for manual inspection. Security Officer must perform manual identity review before granting clearance.',
     };
   }
 
@@ -125,7 +129,8 @@ export function resolveGateUiState(params: {
     canRecordInOut: false,
     canUseQrFallback: false,
     isRetry: false,
-    safeDescription: 'Position face in frame and click "Scan face" to verify identity and access rights.',
+    safeDescription:
+      'Position face in frame and click "Scan face" to verify identity and access rights.',
   };
 }
 
@@ -166,6 +171,7 @@ export function getSafeReasonMessage(code?: FaceGateReasonCode | string | null):
     case 'ASSIGNMENT_EXPIRED':
       return 'Approved site assignment validity period has expired.';
     case 'SITE_MISMATCH':
+    case 'GATE_MISMATCH':
       return 'Worker is not authorized for this specific site.';
     default:
       return code ? `Decision code: ${code}` : 'Verification result recorded.';
@@ -213,7 +219,9 @@ export async function captureFrameBlob(
   }
 
   if (blob.size > maxBytes) {
-    throw new Error(`Captured frame size (${(blob.size / (1024 * 1024)).toFixed(1)}MB) exceeds limit.`);
+    throw new Error(
+      `Captured frame size (${(blob.size / (1024 * 1024)).toFixed(1)}MB) exceeds limit.`,
+    );
   }
 
   return blob;

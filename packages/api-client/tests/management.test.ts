@@ -2,6 +2,47 @@ import { describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 
 describe('management client', () => {
+  it('prepares an existing account and sends gate direction/photo to Backend, then reads DB logs', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
+      void _url;
+      void _init;
+      return new Response(JSON.stringify({ items: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.prepareFaceAccount('synthetic-token', 'site/a', 'account-id');
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2Fa/workers/for-account',
+      );
+      expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1].body))).toEqual({
+        userId: 'account-id',
+      });
+      await client.verifyFaceGate(
+        'synthetic-token',
+        'site/a',
+        'gate-1',
+        new Blob(['synthetic'], { type: 'image/jpeg' }),
+        'OUT',
+      );
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2Fa/gates/gate-1/face-verifications',
+      );
+      const form = fetchMock.mock.calls[1]?.[1].body as FormData;
+      expect(form.get('direction')).toBe('OUT');
+      expect(form.get('frame')).toBeInstanceOf(Blob);
+      await client.listGateAccessLogs('synthetic-token', 'site/a', 'gate-1');
+      expect(fetchMock.mock.calls[2]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2Fa/gates/gate-1/access-logs',
+      );
+      expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer synthetic-token' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('sends a token only to the requested endpoint and sends revision in mutation body', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       void _url;

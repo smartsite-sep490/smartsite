@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import {
   IconAlertTriangle,
@@ -34,6 +36,7 @@ export interface GateDeskEventRecord {
 export interface SecurityGateDeskViewProps {
   apiUrl: string;
   token?: string;
+  sessionScope: string;
   selectedSiteId: string;
   sites: Array<{ id: string; name: string }>;
   onSelectSite: (siteId: string) => void;
@@ -48,10 +51,13 @@ const mockGates = [
 export function SecurityGateDeskView({
   apiUrl,
   token,
+  sessionScope,
   selectedSiteId,
   sites,
   onSelectSite,
 }: SecurityGateDeskViewProps) {
+  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const queryClient = useQueryClient();
   // Gate selection & direction
   const [selectedGateId, setSelectedGateId] = useState(mockGates[0]?.id ?? '');
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
@@ -80,10 +86,27 @@ export function SecurityGateDeskView({
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrCodeInput, setQrCodeInput] = useState('');
   const [qrOfficerNotes, setQrOfficerNotes] = useState('');
-  const [qrProcessing, setQrProcessing] = useState(false);
+  const qrProcessing = false;
 
   // Recent Gate Events log
-  const [recentEvents, setRecentEvents] = useState<GateDeskEventRecord[]>([]);
+  const logQueryKey = ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId];
+  const accessLogs = useQuery({
+    queryKey: logQueryKey,
+    enabled: !!token && !!selectedSiteId,
+    queryFn: () => client.listGateAccessLogs(token!, selectedSiteId, selectedGateId),
+  });
+  const recentEvents: GateDeskEventRecord[] = (accessLogs.data?.items ?? []).map((log) => ({
+    id: log.id,
+    timestamp: new Date(log.createdAt).toLocaleString(),
+    workerName: log.workerName ?? 'Unknown',
+    workerExternalId: log.workerExternalId ?? '—',
+    contractorName: log.contractorName ?? '—',
+    direction: log.direction,
+    method: 'FACE',
+    outcome: log.decision.authorization,
+    reasonCode: log.decision.reasonCode,
+    gateName: mockGates.find((gate) => gate.id === log.gateId)?.name ?? log.gateId,
+  }));
 
   // Safe preview URL update helper
   const updateCapturedPreview = useCallback((blob: Blob | null) => {
@@ -182,40 +205,19 @@ export function SecurityGateDeskView({
       const frameBlob = await captureFrameBlob(video, { maxWidth: 1280, quality: 0.9 });
       updateCapturedPreview(frameBlob);
 
-      // 2. Transmit to backend face-verifications endpoint
-      // If live backend API is available, call it; otherwise evaluate fail-closed prototype policy
-      const gateUrl = `${apiUrl.replace(/\/+$/, '')}/api/v1/sites/${encodeURIComponent(selectedSiteId)}/gates/${encodeURIComponent(selectedGateId)}/face-verifications`;
-
-      const formData = new FormData();
-      formData.append('frame', frameBlob, 'scan-frame.jpg');
-      formData.append('direction', direction);
-
       try {
-        const response = await fetch(gateUrl, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: formData,
+        const data = await client.verifyFaceGate(
+          token!,
+          selectedSiteId,
+          selectedGateId,
+          frameBlob,
+          direction,
+        );
+        setLastDecision(data.decision);
+        setCandidateWorker(data.worker ?? null);
+        await queryClient.invalidateQueries({
+          queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
         });
-
-        if (response.ok) {
-          const data = (await response.json()) as FaceGateVerificationResponse;
-          setLastDecision(data.decision);
-          setCandidateWorker(data.worker ?? null);
-        } else if (response.status === 404 || response.status === 502 || response.status === 503) {
-          // Backend gate endpoint or AI service unavailable -> AI_UNAVAILABLE fail-closed state
-          setLastDecision({
-            technicalOutcome: 'AI_UNAVAILABLE',
-            authorization: 'DENIED',
-            reasonCode: 'FACE_SERVICE_UNAVAILABLE',
-            qrFallbackAllowed: true,
-          });
-          setCandidateWorker(null);
-        } else {
-          throw new Error(`HTTP ${response.status}`);
-        }
       } catch {
         // Network or connection failure
         setNetworkError(true);
@@ -230,6 +232,9 @@ export function SecurityGateDeskView({
     }
   }, [
     apiUrl,
+    client,
+    queryClient,
+    sessionScope,
     cameraActive,
     direction,
     isScanning,
@@ -253,62 +258,13 @@ export function SecurityGateDeskView({
     setNetworkError(false);
   };
 
-  // Record Gate Event (IN / OUT)
-  const handleRecordGateEvent = (
-    actionDirection: 'IN' | 'OUT',
-    method: 'FACE' | 'QR' | 'MANUAL',
-  ) => {
-    const activeGate = mockGates.find((g) => g.id === selectedGateId);
-    const newRecord: GateDeskEventRecord = {
-      id: `evt-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-      workerName: candidateWorker?.displayName ?? 'Verified Person',
-      workerExternalId: candidateWorker?.externalId ?? 'WRK-FALLBACK',
-      contractorName: candidateWorker?.contractorName ?? 'Authorized Contractor',
-      direction: actionDirection,
-      method,
-      outcome: 'ALLOWED',
-      reasonCode: lastDecision?.reasonCode ?? 'VALID_ASSIGNMENT',
-      gateName: activeGate?.name ?? 'Gate Desk',
-    };
-
-    setRecentEvents((prev) => [newRecord, ...prev.slice(0, 19)]);
-    handleResetScan();
+  // Face decisions are already saved by the Backend. Never fabricate clearance logs.
+  const handleRecordGateEvent = () => {
+    if (lastDecision?.authorization === 'ALLOWED') handleResetScan();
   };
 
-  // Confirm QR fallback entry
   const handleConfirmQrFallback = () => {
-    if (!qrCodeInput.trim()) return;
-    setQrProcessing(true);
-    setTimeout(() => {
-      const activeGate = mockGates.find((g) => g.id === selectedGateId);
-      const newRecord: GateDeskEventRecord = {
-        id: `evt-qr-${Date.now()}`,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        }),
-        workerName: 'Worker (QR Fallback Verified)',
-        workerExternalId: qrCodeInput.trim().toUpperCase(),
-        contractorName: 'Reviewed by Security Officer',
-        direction,
-        method: 'QR',
-        outcome: 'ALLOWED',
-        reasonCode: 'QR_FALLBACK_CONFIRMED',
-        gateName: activeGate?.name ?? 'Gate Desk',
-      };
-      setRecentEvents((prev) => [newRecord, ...prev.slice(0, 19)]);
-      setQrProcessing(false);
-      setQrModalOpen(false);
-      setQrCodeInput('');
-      setQrOfficerNotes('');
-      handleResetScan();
-    }, 400);
+    setQrOfficerNotes('QR clearance is not implemented. No access or log was granted.');
   };
 
   const uiState = resolveGateUiState({
@@ -353,7 +309,11 @@ export function SecurityGateDeskView({
             <select
               id="gate-selector"
               value={selectedGateId}
-              onChange={(e) => setSelectedGateId(e.target.value)}
+              disabled={isScanning}
+              onChange={(e) => {
+                handleResetScan();
+                setSelectedGateId(e.target.value);
+              }}
               className="mt-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:border-[#F66B17] focus:outline-none"
             >
               {mockGates.map((gate) => (
@@ -373,7 +333,11 @@ export function SecurityGateDeskView({
           <div className="inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5">
             <button
               type="button"
-              onClick={() => setDirection('IN')}
+              disabled={isScanning}
+              onClick={() => {
+                handleResetScan();
+                setDirection('IN');
+              }}
               className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
                 direction === 'IN'
                   ? 'bg-emerald-600 text-white shadow-xs'
@@ -384,7 +348,11 @@ export function SecurityGateDeskView({
             </button>
             <button
               type="button"
-              onClick={() => setDirection('OUT')}
+              disabled={isScanning}
+              onClick={() => {
+                handleResetScan();
+                setDirection('OUT');
+              }}
               className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
                 direction === 'OUT'
                   ? 'bg-blue-600 text-white shadow-xs'
@@ -545,20 +513,16 @@ export function SecurityGateDeskView({
             {/* Actions for Security Officer */}
             <div className="mt-5 space-y-2">
               {uiState.canRecordInOut && (
-                <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="mb-2 text-xs text-emerald-700">
+                    Quyết định {direction} đã được lưu trong DB.
+                  </p>
                   <button
                     type="button"
-                    onClick={() => handleRecordGateEvent('IN', 'FACE')}
-                    className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                    onClick={handleRecordGateEvent}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
                   >
-                    <IconCheck className="h-4 w-4" /> Record {direction === 'IN' ? 'IN' : 'ENTRY'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRecordGateEvent('OUT', 'FACE')}
-                    className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700"
-                  >
-                    <IconCheck className="h-4 w-4" /> Record {direction === 'OUT' ? 'OUT' : 'EXIT'}
+                    <IconCheck className="h-4 w-4" /> Quét tiếp
                   </button>
                 </div>
               )}
@@ -578,10 +542,10 @@ export function SecurityGateDeskView({
               {uiState.type === 'MANUAL_REVIEW' && (
                 <button
                   type="button"
-                  onClick={() => handleRecordGateEvent(direction, 'MANUAL')}
+                  disabled
                   className="w-full rounded-xl bg-blue-700 py-2.5 text-xs font-bold text-white hover:bg-blue-800"
                 >
-                  Confirm Manual Clearance ({direction})
+                  Manual clearance is not implemented
                 </button>
               )}
 
@@ -700,7 +664,9 @@ export function SecurityGateDeskView({
             <IconClock className="h-4 w-4 text-slate-500" />
             <h3 className="font-bold text-slate-900">Shift Gate Activity Log</h3>
           </div>
-          <span className="text-xs text-slate-500">{recentEvents.length} events logged</span>
+          <span className="text-xs text-slate-500">
+            {recentEvents.length} decisions saved in DB
+          </span>
         </div>
 
         <div className="mt-3 overflow-x-auto">
@@ -717,6 +683,30 @@ export function SecurityGateDeskView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {accessLogs.isPending && (
+                <tr>
+                  <td colSpan={7} className="p-3">
+                    Loading database logs…
+                  </td>
+                </tr>
+              )}
+              {accessLogs.isError && (
+                <tr>
+                  <td colSpan={7} role="alert" className="p-3">
+                    Could not load logs.{' '}
+                    <button type="button" onClick={() => void accessLogs.refetch()}>
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!accessLogs.isPending && !accessLogs.isError && recentEvents.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-3">
+                    No gate decisions yet.
+                  </td>
+                </tr>
+              )}
               {recentEvents.map((evt) => (
                 <tr key={evt.id} className="hover:bg-slate-50/80">
                   <td className="px-3 py-2 font-mono text-slate-500">{evt.timestamp}</td>
@@ -735,8 +725,10 @@ export function SecurityGateDeskView({
                   </td>
                   <td className="px-3 py-2 font-medium">{evt.method}</td>
                   <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                      <IconCheck className="h-3 w-3" /> {evt.outcome}
+                    <span
+                      className={`inline-flex items-center gap-1 font-semibold ${evt.outcome === 'ALLOWED' ? 'text-emerald-700' : 'text-red-700'}`}
+                    >
+                      {evt.outcome}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-slate-500">{evt.gateName}</td>

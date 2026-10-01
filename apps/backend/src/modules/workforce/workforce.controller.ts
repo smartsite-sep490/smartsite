@@ -67,6 +67,23 @@ export class WorkforceController {
 
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
+  @Post('for-account')
+  @ApiCreatedResponse({ type: WorkerResponseDto })
+  async forAccount(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Body() input: LinkWorkerAccountCommand,
+  ) {
+    const worker = await this.workforce.forAccount(siteId, input);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'worker.account.prepare',
+      resourceId: worker.id,
+      siteId,
+    });
+    return workerResponse(worker);
+  }
+
   @Put(':workerId/account')
   @ApiOkResponse({ type: WorkerResponseDto })
   async linkAccount(
