@@ -11,6 +11,7 @@ import { WorkforceTimeScheduling1790726400000 } from './migrations/1790726400000
 import { Mf07WorkforceAccessScope1790812800000 } from './migrations/1790812800000-Mf07WorkforceAccessScope.js';
 import { Mf07AbsenceScheduleVersion1790899200000 } from './migrations/1790899200000-Mf07AbsenceScheduleVersion.js';
 import { ScheduleVersionUnique1790985600000 } from './migrations/1790985600000-ScheduleVersionUnique.js';
+import { AllowMultipleWorkerShiftsPerDay1791072000000 } from './migrations/1791072000000-AllowMultipleWorkerShiftsPerDay.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -38,6 +39,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf07WorkforceAccessScope1790812800000,
       Mf07AbsenceScheduleVersion1790899200000,
       ScheduleVersionUnique1790985600000,
+      AllowMultipleWorkerShiftsPerDay1791072000000,
     ],
     logging: false,
     extra: {

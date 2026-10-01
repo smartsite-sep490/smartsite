@@ -12,7 +12,7 @@ import { WorkerEntity } from './worker.entity.js';
   'workDate',
 ])
 @Index('idx_worker_schedule_site_worker_date', ['siteId', 'workerId', 'workDate'])
-@Index('uq_worker_schedule_active_worker_date', ['scheduleVersionId', 'workerId', 'workDate'], {
+@Index('uq_worker_schedule_active_worker_shift_date', ['siteId', 'workerId', 'shiftId', 'workDate'], {
   unique: true,
   where: 'is_active = true',
 })

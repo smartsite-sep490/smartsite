@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { DataSource } from 'typeorm';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
+import { UserRole } from '../src/database/entities/user.entity.js';
+import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
 import type {
   CreateShiftDto,
   CreateWorkerScheduleDto,
@@ -14,10 +16,21 @@ function publicCode(code: string) {
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
 
+function adminActor(): AuthenticatedUser {
+  return {
+    id: randomUUID(),
+    username: 'test-admin',
+    displayName: 'Test Admin',
+    isActive: true,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  };
+}
+
 test('ScheduleConfigurationService validates shift input before database access', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
   await assert.rejects(
-    service.createShift(randomUUID(), {
+    service.createShift(adminActor(), randomUUID(), {
       name: 'Day shift',
       startsAt: 'not-a-date',
       endsAt: '2026-10-01T17:00:00.000Z',
@@ -30,7 +43,7 @@ test('ScheduleConfigurationService validates shift input before database access'
 test('ScheduleConfigurationService rejects a shift ending before it starts', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
   await assert.rejects(
-    service.createShift(randomUUID(), {
+    service.createShift(adminActor(), randomUUID(), {
       name: 'Invalid shift',
       startsAt: '2026-10-01T17:00:00.000Z',
       endsAt: '2026-10-01T08:00:00.000Z',
@@ -43,11 +56,40 @@ test('ScheduleConfigurationService rejects a shift ending before it starts', asy
 test('ScheduleConfigurationService validates worker schedule fields before database access', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
   await assert.rejects(
-    service.createWorkerSchedule(randomUUID(), randomUUID(), {
+    service.createWorkerSchedule(adminActor(), randomUUID(), randomUUID(), {
       workerId: randomUUID(),
       shiftId: randomUUID(),
       workDate: '01-10-2026',
     } as CreateWorkerScheduleDto),
     publicCode('VALIDATION_FAILED'),
+  );
+});
+
+test('ScheduleConfigurationService denies a Site Manager outside the assigned Site', async () => {
+  const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const assignedSiteId = randomUUID();
+  const otherSiteId = randomUUID();
+  const siteManager: AuthenticatedUser = {
+    id: randomUUID(),
+    username: 'site-manager',
+    displayName: 'Site Manager',
+    isActive: true,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: assignedSiteId }],
+  };
+
+  await assert.rejects(
+    service.createShift(siteManager, otherSiteId, {
+      name: 'Morning',
+      startsAt: '2026-10-01T01:00:00.000Z',
+      endsAt: '2026-10-01T09:00:00.000Z',
+      timezone: 'Asia/Ho_Chi_Minh',
+    }),
+    publicCode('FORBIDDEN'),
+  );
+
+  await assert.rejects(
+    service.deleteShift(siteManager, otherSiteId, randomUUID()),
+    publicCode('FORBIDDEN'),
   );
 });

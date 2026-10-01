@@ -175,6 +175,8 @@ export class RegionPageResponseDto {
 export class WorkerResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) contractorId!: string | null;
+  @ApiProperty({ format: 'uuid', nullable: true }) userId!: string | null;
   @ApiProperty() externalId!: string;
   @ApiProperty() displayName!: string;
   @ApiProperty() isActive!: boolean;

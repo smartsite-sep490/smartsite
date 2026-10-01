@@ -101,8 +101,19 @@ export class ScheduleConfigurationService {
     }
   }
 
-  async createShift(siteId: string, input: CreateShiftDto): Promise<ShiftEntity> {
+  private assertScheduleWriter(user: AuthenticatedUser, siteId: string): void {
+    this.assertPasswordChanged(user);
+    if (!this.isGlobalAdmin(user) && !this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
+      this.forbidden();
+  }
+
+  async createShift(
+    user: AuthenticatedUser,
+    siteId: string,
+    input: CreateShiftDto,
+  ): Promise<ShiftEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertScheduleWriter(user, scopedSiteId);
     const value = command(CreateShiftDto, input);
     const startsAt = new Date(value.startsAt);
     const endsAt = new Date(value.endsAt);
@@ -119,11 +130,39 @@ export class ScheduleConfigurationService {
     });
   }
 
+  async deleteShift(
+    user: AuthenticatedUser,
+    siteId: string,
+    shiftId: string,
+  ): Promise<void> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertScheduleWriter(user, scopedSiteId);
+    const scopedShiftId = uuid(shiftId);
+
+    await this.dataSource.transaction(async (manager) => {
+      const shiftRepository = manager.getRepository(ShiftEntity);
+      const scheduleRepository = manager.getRepository(WorkerScheduleEntity);
+      const shift = await shiftRepository.findOneBy({ id: scopedShiftId, siteId: scopedSiteId });
+      if (!shift) missing();
+
+      const assignedScheduleCount = await scheduleRepository.count({
+        where: { siteId: scopedSiteId, shiftId: scopedShiftId },
+      });
+      if (assignedScheduleCount > 0) {
+        conflict('Shift is already assigned to worker schedules and cannot be deleted');
+      }
+
+      await shiftRepository.remove(shift);
+    });
+  }
+
   async createScheduleVersion(
+    user: AuthenticatedUser,
     siteId: string,
     input: CreateScheduleVersionDto,
   ): Promise<ScheduleVersionEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertScheduleWriter(user, scopedSiteId);
     const value = command(CreateScheduleVersionDto, input);
     const effectiveFrom = new Date(value.effectiveFrom);
     const effectiveUntil = value.effectiveUntil ? new Date(value.effectiveUntil) : null;
@@ -154,11 +193,13 @@ export class ScheduleConfigurationService {
   }
 
   async createWorkerSchedule(
+    user: AuthenticatedUser,
     siteId: string,
     scheduleVersionId: string,
     input: CreateWorkerScheduleDto,
   ): Promise<WorkerScheduleEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertScheduleWriter(user, scopedSiteId);
     const scopedScheduleVersionId = uuid(scheduleVersionId);
     const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {
@@ -187,12 +228,12 @@ export class ScheduleConfigurationService {
           workerId: worker.id,
           shiftId: shift.id,
           workDate: value.workDate,
-          isActive: true,
+          isActive: value.isActive ?? true,
         });
       } catch (error) {
         knownUnique(error, [
           'uq_worker_schedule_version_worker_shift_date',
-          'uq_worker_schedule_active_worker_date',
+          'uq_worker_schedule_active_worker_shift_date',
         ]);
       }
     });
@@ -294,7 +335,9 @@ export class ScheduleConfigurationService {
     workerScheduleId: string,
   ) {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const { schedule } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    const { schedule, worker } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    // A worker without a contractor has no valid coworker scope. Fail closed.
+    if (!worker.contractorId) return { items: [], total: 0 };
     type SwapCandidateRow = {
       candidateWorkerId: string;
       candidateWorkerDisplayName: string;
@@ -323,7 +366,7 @@ export class ScheduleConfigurationService {
       .select('candidateWorker.id', 'candidateWorkerId')
       .addSelect('candidateWorker.display_name', 'candidateWorkerDisplayName')
       .addSelect('candidateSchedule.id', 'candidateWorkerScheduleId')
-      .addSelect('candidateSchedule.work_date', 'workDate')
+      .addSelect('CAST(candidateSchedule.work_date AS TEXT)', 'workDate')
       .addSelect('candidateShift.id', 'currentShiftId')
       .addSelect('candidateShift.name', 'currentShiftName')
       .addSelect('candidateShift.starts_at', 'currentShiftStartsAt')
@@ -338,6 +381,7 @@ export class ScheduleConfigurationService {
       .andWhere('candidateSchedule.shift_id <> :shiftId', { shiftId: schedule.shiftId })
       .andWhere('candidateSchedule.is_active = true')
       .andWhere('candidateWorker.is_active = true')
+      .andWhere('candidateWorker.contractor_id = :contractorId', { contractorId: worker.contractorId })
       .orderBy('candidateWorker.display_name', 'ASC')
       .addOrderBy('candidateSchedule.id', 'ASC')
       .getRawMany<SwapCandidateRow>();

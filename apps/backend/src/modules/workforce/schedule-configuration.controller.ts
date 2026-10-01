@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Logger, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -6,6 +19,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiServiceUnavailableResponse,
   ApiTags,
@@ -18,7 +32,7 @@ import {
   SwapCandidatePageResponseDto,
 } from '../../common/http/management-response.dto.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
-import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   CreateScheduleVersionDto,
   CreateShiftDto,
@@ -43,27 +57,37 @@ export class ScheduleConfigurationController {
   constructor(private readonly schedules: ScheduleConfigurationService) {}
 
   @Post('shifts')
-  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createShift(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: CreateShiftDto,
   ) {
-    const shift = await this.schedules.createShift(siteId, input);
+    const shift = await this.schedules.createShift(request.user!, siteId, input);
     this.logger.log({ actorId: request.user!.id, action: 'shift.create', siteId, resourceId: shift.id });
     return shift;
   }
 
+  @Delete('shifts/:shiftId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse()
+  async deleteShift(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('shiftId') shiftId: string,
+  ): Promise<void> {
+    await this.schedules.deleteShift(request.user!, siteId, shiftId);
+    this.logger.log({ actorId: request.user!.id, action: 'shift.delete', siteId, resourceId: shiftId });
+  }
+
   @Post('schedule-versions')
-  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createScheduleVersion(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: CreateScheduleVersionDto,
   ) {
-    const version = await this.schedules.createScheduleVersion(siteId, input);
+    const version = await this.schedules.createScheduleVersion(request.user!, siteId, input);
     this.logger.log({
       actorId: request.user!.id,
       action: 'schedule-version.create',
@@ -74,7 +98,6 @@ export class ScheduleConfigurationController {
   }
 
   @Post('schedule-versions/:scheduleVersionId/worker-schedules')
-  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createWorkerSchedule(
     @Req() request: AuthenticatedRequest,
@@ -82,7 +105,12 @@ export class ScheduleConfigurationController {
     @Param('scheduleVersionId') scheduleVersionId: string,
     @Body() input: CreateWorkerScheduleDto,
   ) {
-    const schedule = await this.schedules.createWorkerSchedule(siteId, scheduleVersionId, input);
+    const schedule = await this.schedules.createWorkerSchedule(
+      request.user!,
+      siteId,
+      scheduleVersionId,
+      input,
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker-schedule.create',

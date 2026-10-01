@@ -84,6 +84,19 @@ test('workforce scheduling schema identifies dated worker assignments for MF03 a
   assert.match(migration, /work_date date NOT NULL/);
   assert.match(migration, /uq_worker_schedule_active_worker_date/);
   assert.match(migration, /ON worker_schedule \(schedule_version_id, worker_id, work_date\)/);
+
+  const multipleShiftsMigration = fs.readFileSync(
+    path.resolve(
+      backendRoot,
+      'src/database/migrations/1791072000000-AllowMultipleWorkerShiftsPerDay.ts',
+    ),
+    'utf8',
+  );
+  assert.match(multipleShiftsMigration, /DROP INDEX IF EXISTS uq_worker_schedule_active_worker_date/);
+  assert.match(
+    multipleShiftsMigration,
+    /ON worker_schedule \(site_id, worker_id, shift_id, work_date\)/,
+  );
   assert.match(migration, /worker_schedule_id uuid NOT NULL/);
   assert.match(migration, /requester_worker_schedule_id uuid NOT NULL/);
   assert.match(migration, /coworker_worker_schedule_id uuid NOT NULL/);

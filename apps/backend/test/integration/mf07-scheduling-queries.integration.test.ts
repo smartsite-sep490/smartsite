@@ -127,10 +127,21 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   await dataSource.getRepository(WorkerEntity).save({
     id: workerBEntityId,
     siteId: siteA,
-    contractorId: contractorB,
+    contractorId: contractorA,
     userId: null,
     externalId: 'W_B',
     displayName: 'Worker B',
+    isActive: true,
+  });
+
+  const workerCEntityId = randomUUID();
+  await dataSource.getRepository(WorkerEntity).save({
+    id: workerCEntityId,
+    siteId: siteA,
+    contractorId: contractorB,
+    userId: null,
+    externalId: 'W_C',
+    displayName: 'Worker C',
     isActive: true,
   });
 
@@ -159,9 +170,10 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     .save([
       { id: randomUUID(), siteId: siteA, scheduleVersionId: versionId, workerId: workerAEntityId, shiftId, workDate: '2026-01-01', isActive: true },
       { id: randomUUID(), siteId: siteA, scheduleVersionId: versionId, workerId: workerBEntityId, shiftId: secondShiftId, workDate: '2026-01-01', isActive: true },
+      { id: randomUUID(), siteId: siteA, scheduleVersionId: versionId, workerId: workerCEntityId, shiftId: secondShiftId, workDate: '2026-01-01', isActive: true },
     ]);
-  const [workerASchedule, workerBSchedule] = schedules;
-  if (!workerASchedule || !workerBSchedule) throw new Error('MF07 schedule fixture was not created');
+  const [workerASchedule, workerBSchedule, workerCSchedule] = schedules;
+  if (!workerASchedule || !workerBSchedule || !workerCSchedule) throw new Error('MF07 schedule fixture was not created');
 
   await dataSource.getRepository(ShiftChangeRequestEntity).save({
     id: randomUUID(), siteId: siteA, workerId: workerAEntityId, workerScheduleId: workerASchedule.id,
@@ -204,33 +216,175 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     return { status: res.status, json };
   };
 
+  const postJson = async (path: string, token: string, body: unknown) => {
+    const res = await fetch(`${baseUrl}/api/v1${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => null);
+    return { status: res.status, json };
+  };
+
+  const deleteJson = async (path: string, token: string) => {
+    const res = await fetch(`${baseUrl}/api/v1${path}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json().catch(() => null);
+    return { status: res.status, json };
+  };
+
+  const duplicateChangeRequest = await postJson(
+    `/sites/${siteA}/shift-change-requests`,
+    workerTokenA,
+    {
+      workerScheduleId: workerASchedule.id,
+      toShiftId: secondShiftId,
+      reason: 'Request already pending',
+    },
+  );
+  assert.equal(duplicateChangeRequest.status, 409);
+
+  const duplicateSwapRequest = await postJson(
+    `/sites/${siteA}/shift-swap-requests`,
+    workerTokenA,
+    {
+      requesterWorkerScheduleId: workerASchedule.id,
+      coworkerWorkerScheduleId: workerBSchedule.id,
+      reason: 'Swap already pending',
+    },
+  );
+  assert.equal(duplicateSwapRequest.status, 409);
+
   // 1. allowed Site Manager access
   const res1 = await fetchJson(`/sites/${siteA}/worker-schedules`, mgrTokenA);
   assert.equal(res1.status, 200);
-  assert.equal(res1.json.items.length, 2);
+  assert.equal(res1.json.items.length, 3);
 
   // 2. denied cross-site access
   const res2 = await fetchJson(`/sites/${siteA}/worker-schedules`, mgrTokenB);
   assert.equal(res2.status, 403);
 
+  // Site Manager can configure schedules only in the assigned Site.
+  const managerShift = await postJson(`/sites/${siteA}/shifts`, mgrTokenA, {
+    name: `Manager Shift ${suffix}`,
+    startsAt: '2026-01-02T08:00:00.000Z',
+    endsAt: '2026-01-02T16:00:00.000Z',
+    timezone: 'UTC',
+  });
+  assert.equal(managerShift.status, 201);
+  const managerShiftId = (managerShift.json as { id: string }).id;
+
+  const unusedShift = await postJson(`/sites/${siteA}/shifts`, mgrTokenA, {
+    name: `Unused Shift ${suffix}`,
+    startsAt: '2026-01-03T08:00:00.000Z',
+    endsAt: '2026-01-03T16:00:00.000Z',
+    timezone: 'UTC',
+  });
+  assert.equal(unusedShift.status, 201);
+  const unusedShiftId = (unusedShift.json as { id: string }).id;
+  const deletedUnusedShift = await deleteJson(`/sites/${siteA}/shifts/${unusedShiftId}`, mgrTokenA);
+  assert.equal(deletedUnusedShift.status, 204);
+
+  const deniedCrossSiteDelete = await deleteJson(`/sites/${siteA}/shifts/${shiftId}`, mgrTokenB);
+  assert.equal(deniedCrossSiteDelete.status, 403);
+
+  const crossSiteShift = await postJson(`/sites/${siteA}/shifts`, mgrTokenB, {
+    name: `Denied Shift ${suffix}`,
+    startsAt: '2026-01-02T08:00:00.000Z',
+    endsAt: '2026-01-02T16:00:00.000Z',
+    timezone: 'UTC',
+  });
+  assert.equal(crossSiteShift.status, 403);
+
+  const workerShift = await postJson(`/sites/${siteA}/shifts`, workerTokenA, {
+    name: `Worker Shift ${suffix}`,
+    startsAt: '2026-01-02T08:00:00.000Z',
+    endsAt: '2026-01-02T16:00:00.000Z',
+    timezone: 'UTC',
+  });
+  assert.equal(workerShift.status, 403);
+
+  const managerVersion = await postJson(`/sites/${siteA}/schedule-versions`, mgrTokenA, {
+    effectiveFrom: '2026-01-01T00:00:00.000Z',
+  });
+  assert.equal(managerVersion.status, 201);
+  const managerVersionId = (managerVersion.json as { id: string }).id;
+
+  const managerSchedule = await postJson(
+    `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
+    mgrTokenA,
+    {
+      workerId: workerCEntityId,
+      shiftId: managerShiftId,
+      workDate: '2026-01-02',
+      isActive: true,
+    },
+  );
+  assert.equal(managerSchedule.status, 201);
+
+  // A worker may receive a second, different shift on the same day. The
+  // exact same shift remains unique across schedule versions at site scope.
+  const secondShiftSameDay = await postJson(
+    `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
+    mgrTokenA,
+    {
+      workerId: workerAEntityId,
+      shiftId: secondShiftId,
+      workDate: '2026-01-01',
+      isActive: true,
+    },
+  );
+  assert.equal(secondShiftSameDay.status, 201);
+
+  const duplicateShiftSameDay = await postJson(
+    `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
+    mgrTokenA,
+    {
+      workerId: workerAEntityId,
+      shiftId,
+      workDate: '2026-01-01',
+      isActive: true,
+    },
+  );
+  assert.equal(duplicateShiftSameDay.status, 409);
+
+  const protectedShiftDelete = await deleteJson(`/sites/${siteA}/shifts/${managerShiftId}`, mgrTokenA);
+  assert.equal(protectedShiftDelete.status, 409);
+
+  const crossSiteVersion = await postJson(`/sites/${siteA}/schedule-versions`, mgrTokenB, {
+    effectiveFrom: '2026-01-01T00:00:00.000Z',
+  });
+  assert.equal(crossSiteVersion.status, 403);
+
   // 3. Contractor Representative sees only their Contractor’s data
   const res3 = await fetchJson(`/sites/${siteA}/worker-schedules`, repTokenA);
   assert.equal(res3.status, 200);
-  assert.equal(res3.json.items.length, 1);
-  assert.equal(res3.json.items[0].workerId, workerAEntityId);
+  assert.equal(res3.json.items.length, 3);
+  assert.deepEqual(
+    res3.json.items.map((item: { workerId: string }) => item.workerId).sort(),
+    [workerAEntityId, workerAEntityId, workerBEntityId].sort(),
+  );
 
   // 4. Worker sees only own schedule
   const res4 = await fetchJson(`/sites/${siteA}/worker-schedules`, workerTokenA);
   assert.equal(res4.status, 200);
-  assert.equal(res4.json.items.length, 1);
-  assert.equal(res4.json.items[0].workerId, workerAEntityId);
+  assert.equal(res4.json.items.length, 2);
+  assert.deepEqual(
+    res4.json.items.map((item: { workerId: string }) => item.workerId),
+    [workerAEntityId, workerAEntityId],
+  );
 
   const eligibleShifts = await fetchJson(
     `/sites/${siteA}/worker-schedules/${workerASchedule.id}/eligible-shifts`,
     workerTokenA,
   );
   assert.equal(eligibleShifts.status, 200);
-  assert.deepEqual(eligibleShifts.json.items.map((item: { id: string }) => item.id), [secondShiftId]);
+  assert.deepEqual(eligibleShifts.json.items.map((item: { id: string }) => item.id), [secondShiftId, managerShiftId]);
   assert.deepEqual(Object.keys(eligibleShifts.json.items[0]).sort(), [
     'endsAt',
     'id',
@@ -280,8 +434,10 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   assert.equal(crossSiteCandidateRead.status, 403);
 
   // Inactive source schedules are rejected, while no active candidate returns an empty list.
-  workerBSchedule.isActive = false;
-  await dataSource.getRepository(WorkerScheduleEntity).save(workerBSchedule);
+  await dataSource.getRepository(WorkerScheduleEntity).update(
+    { id: workerBSchedule.id },
+    { isActive: false },
+  );
   const inactiveSourceRead = await fetchJson(
     `/sites/${siteA}/worker-schedules/${workerBSchedule.id}/swap-candidates`,
     mgrTokenA,
@@ -294,17 +450,17 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   assert.equal(emptyCandidates.status, 200);
   assert.deepEqual(emptyCandidates.json, { items: [], total: 0 });
 
-  // 5. Worker cannot enumerate another Contractor’s workers
+  // 5. Worker can only view their own Worker record; coworkers use the scoped coworkers endpoint below.
   const res5 = await fetchJson(`/sites/${siteA}/workers`, workerTokenA);
   assert.equal(res5.status, 200);
   assert.equal(res5.json.items.length, 1);
-  assert.equal(res5.json.items[0].id, workerAEntityId);
+  assert.deepEqual(res5.json.items.map((item: { id: string }) => item.id), [workerAEntityId]);
 
   // Worker can see coworkers (own contractor)
   const res6 = await fetchJson(`/sites/${siteA}/workers/coworkers`, workerTokenA);
   assert.equal(res6.status, 200);
-  assert.equal(res6.json.items.length, 1);
-  assert.equal(res6.json.items[0].id, workerAEntityId);
+  assert.equal(res6.json.items.length, 2);
+  assert.deepEqual(res6.json.items.map((item: { id: string }) => item.id).sort(), [workerAEntityId, workerBEntityId].sort());
 
   // 6. unaffiliated user receives FORBIDDEN
   const res7 = await fetchJson(`/sites/${siteA}/worker-schedules`, unaffiliatedToken);

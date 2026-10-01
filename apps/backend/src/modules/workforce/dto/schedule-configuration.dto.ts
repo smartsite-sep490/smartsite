@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
   IsDateString,
+  IsBoolean,
   IsISO8601,
   IsNotEmpty,
   IsOptional,
@@ -31,7 +32,7 @@ export class CreateShiftDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
-  @Matches(/^[A-Za-z_]+(?:\/[A-Za-z_+-]+)+$/)
+  @Matches(/^(?:UTC|[A-Za-z_]+(?:\/[A-Za-z_+-]+)+)$/)
   timezone!: string;
 }
 
@@ -54,4 +55,8 @@ export class CreateWorkerScheduleDto {
   @IsDateString({ strict: true })
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   workDate!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
