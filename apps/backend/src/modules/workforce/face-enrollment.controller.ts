@@ -13,6 +13,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { IsIn } from 'class-validator';
+import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
+
+class FaceQualityCommand {
+  @IsIn(['front', 'left', 'right'])
+  target: EnrollmentCaptureTarget = 'front';
+}
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -140,8 +147,9 @@ export class FaceEnrollmentController {
     @Req() request: AuthenticatedRequest,
     @Param('workerId') workerId: string,
     @UploadedFile() sample: UploadedFaceSample | undefined,
+    @Body() input: FaceQualityCommand,
   ) {
-    return this.enrollment.assessSampleQuality(request.user!, workerId, sample);
+    return this.enrollment.assessSampleQuality(request.user!, workerId, sample, input.target);
   }
 
   @Post('face-enrollments/:sessionId/complete')

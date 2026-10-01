@@ -31,11 +31,18 @@ describe('management client', () => {
       const form = fetchMock.mock.calls[1]?.[1].body as FormData;
       expect(form.get('direction')).toBe('OUT');
       expect(form.get('frame')).toBeInstanceOf(Blob);
+      await client.checkFaceEnrollmentQuality(
+        'synthetic-token',
+        'worker-1',
+        new Blob(['synthetic'], { type: 'image/jpeg' }),
+        'left',
+      );
+      expect((fetchMock.mock.calls[2]?.[1].body as FormData).get('target')).toBe('left');
       await client.listGateAccessLogs('synthetic-token', 'site/a', 'gate-1');
-      expect(fetchMock.mock.calls[2]?.[0]).toBe(
+      expect(fetchMock.mock.calls[3]?.[0]).toBe(
         'https://api.example.test/api/v1/sites/site%2Fa/gates/gate-1/access-logs',
       );
-      expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+      expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
         method: 'GET',
         headers: { Authorization: 'Bearer synthetic-token' },
       });

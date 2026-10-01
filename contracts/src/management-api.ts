@@ -218,6 +218,7 @@ export interface FaceEnrollmentSessionResponse {
   createdAt: string;
 }
 
+export type EnrollmentCaptureTarget = 'front' | 'left' | 'right';
 export interface FaceEnrollmentQualityResponse {
   status: 'ACCEPTED' | 'QUALITY_FAILED';
   reasonCode: string;

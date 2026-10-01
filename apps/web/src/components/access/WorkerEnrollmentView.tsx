@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { IconCamera, IconCheck, IconShield } from '../icons';
 import { captureFrameBlob, createSafePreviewUrl, revokeSafePreviewUrl } from './faceGateUtils';
+import { CAPTURE_GUIDANCE, enrollmentQualityMessage } from './enrollmentCapture';
 
 export interface WorkerEnrollmentViewProps {
   apiUrl: string;
@@ -124,6 +125,13 @@ export function WorkerEnrollmentView({
   const [qualityMessage, setQualityMessage] = useState<string | null>(null);
   const [isQualityChecking, setIsQualityChecking] = useState(false);
   const qualityCheckInFlightRef = useRef(false);
+  const captureGenerationRef = useRef(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [capturePhase, setCapturePhase] = useState<'ready' | 'checking' | 'accepted' | 'rejected'>(
+    'ready',
+  );
+  const candidatePreviewRef = useRef<string | null>(null);
+  const [candidatePreviewUrl, setCandidatePreviewUrl] = useState<string | null>(null);
 
   // Three guided captured samples held strictly in component memory
   const [samples, setSamples] = useState<{
@@ -166,6 +174,8 @@ export function WorkerEnrollmentView({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      captureGenerationRef.current += 1;
+      revokeSafePreviewUrl(candidatePreviewRef.current);
       stopCamera();
       revokeAllSamples();
     };
@@ -211,52 +221,14 @@ export function WorkerEnrollmentView({
     };
   }, [captureActive]);
 
-  // Capture current sample frame
-  const handleCaptureFrame = async (target: CaptureTarget, providedBlob?: Blob) => {
-    const video = videoRef.current;
-    if (!video || !cameraActive) return;
-
-    try {
-      const blob =
-        providedBlob ?? (await captureFrameBlob(video, { maxWidth: 1280, quality: 0.92 }));
-      if (!providedBlob && token && selectedWorkerId) {
-        const quality = await client.checkFaceEnrollmentQuality(token, selectedWorkerId, blob);
-        if (quality.status !== 'ACCEPTED') {
-          setQualityMessage(
-            'ChÆ°a Ä‘áº¡t: chá»‰ Ä‘á»ƒ má»™t ngÆ°á»i trong khung, Ä‘Æ°a máº·t vÃ o giá»¯a vÃ  Ä‘á»§ sÃ¡ng.',
-          );
-          return;
-        }
-      }
-      const previousUrl = samples[target]?.previewUrl;
-      const previewUrl = createSafePreviewUrl(blob, previousUrl);
-
-      const labels = {
-        front: 'Front (Straight)',
-        left: 'Turn 15° Left',
-        right: 'Turn 15° Right',
-      };
-
-      setSamples((prev) => ({
-        ...prev,
-        [target]: {
-          blob,
-          previewUrl,
-          label: labels[target],
-          sizeKb: Math.round(blob.size / 1024),
-        },
-      }));
-
-      // Auto advance to next guided capture step
-      if (target === 'front') setCurrentStep('capture-left');
-      else if (target === 'left') setCurrentStep('capture-right');
-      else if (target === 'right') {
-        stopCamera();
-        setCurrentStep('review');
-      }
-    } catch (err) {
-      setCameraError(err instanceof Error ? err.message : 'Failed to capture frame.');
-    }
+  const clearCaptureResult = () => {
+    captureGenerationRef.current += 1;
+    revokeSafePreviewUrl(candidatePreviewRef.current);
+    candidatePreviewRef.current = null;
+    setCandidatePreviewUrl(null);
+    setCapturePhase('ready');
+    setCountdown(null);
+    setQualityMessage(null);
   };
 
   const checkAndCaptureCurrentFrame = useCallback(async () => {
@@ -268,74 +240,99 @@ export function WorkerEnrollmentView({
       !cameraActive ||
       !token ||
       !selectedWorkerId ||
-      qualityCheckInFlightRef.current ||
-      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+      qualityCheckInFlightRef.current
     )
       return;
-
+    const generation = captureGenerationRef.current;
     qualityCheckInFlightRef.current = true;
     setIsQualityChecking(true);
-    setQualityMessage('Đang kiểm tra khuôn mặt…');
-    const stepAtStart = currentStep;
+    setCapturePhase('checking');
+    setQualityMessage('Máy đã chụp ảnh. Đang kiểm tra chất lượng và hướng mặt…');
     try {
       const blob = await captureFrameBlob(video, { maxWidth: 1280, quality: 0.92 });
-      const quality = await client.checkFaceEnrollmentQuality(token, selectedWorkerId, blob);
-      if (quality.status === 'ACCEPTED' && captureTargetForStep(stepAtStart) === target) {
-        const labels = {
-          front: 'Front (Straight)',
-          left: 'Turn 15 degrees Left',
-          right: 'Turn 15 degrees Right',
-        };
-        setSamples((previous) => {
-          const previewUrl = createSafePreviewUrl(blob, previous[target]?.previewUrl);
-          return {
-            ...previous,
-            [target]: {
-              blob,
-              previewUrl,
-              label: labels[target],
-              sizeKb: Math.round(blob.size / 1024),
-            },
-          };
-        });
-        setQualityMessage('Ảnh đạt yêu cầu, đã tự động lưu.');
-        if (target === 'front') setCurrentStep('capture-left');
-        else if (target === 'left') setCurrentStep('capture-right');
-        else {
-          stopCamera();
-          setCurrentStep('review');
-        }
-      } else {
-        setQualityMessage(
-          'Chưa đạt: chỉ để một người trong khung, đưa mặt vào giữa và đủ sáng. Đang tự thử lại…',
-        );
+      if (generation !== captureGenerationRef.current) return;
+      const url = createSafePreviewUrl(blob, candidatePreviewRef.current);
+      candidatePreviewRef.current = url;
+      setCandidatePreviewUrl(url);
+      const quality = await client.checkFaceEnrollmentQuality(
+        token,
+        selectedWorkerId,
+        blob,
+        target,
+      );
+      if (generation !== captureGenerationRef.current) return;
+      setQualityMessage(enrollmentQualityMessage(quality.reasonCode));
+      if (quality.status !== 'ACCEPTED' || quality.reasonCode !== 'FACE_QUALITY_ACCEPTED') {
+        setCapturePhase('rejected');
+        return;
       }
-    } catch (err) {
+      setSamples((previous) => ({
+        ...previous,
+        [target]: {
+          blob,
+          previewUrl: createSafePreviewUrl(blob, previous[target]?.previewUrl),
+          label: CAPTURE_GUIDANCE[target].title,
+          sizeKb: Math.round(blob.size / 1024),
+        },
+      }));
+      setCapturePhase('accepted');
+    } catch {
+      if (generation !== captureGenerationRef.current) return;
+      setCapturePhase('rejected');
       setQualityMessage(
-        err instanceof Error
-          ? `${err.message} Đang tự thử lại…`
-          : 'Chưa kiểm tra được ảnh. Đang tự thử lại…',
+        'Không kiểm tra được ảnh với máy chủ. Ảnh chưa được chấp nhận. Hãy kiểm tra kết nối rồi chụp lại.',
       );
     } finally {
       qualityCheckInFlightRef.current = false;
-      setIsQualityChecking(false);
+      if (generation === captureGenerationRef.current) setIsQualityChecking(false);
     }
-  }, [cameraActive, client, currentStep, selectedWorkerId, token, stopCamera]);
+  }, [cameraActive, client, currentStep, selectedWorkerId, token]);
 
   useEffect(() => {
-    if (!cameraActive || !captureTargetForStep(currentStep)) return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const poll = async () => {
-      await checkAndCaptureCurrentFrame();
-      if (!cancelled) timer = window.setTimeout(() => void poll(), 1_200);
-    };
-    timer = window.setTimeout(() => void poll(), 450);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [cameraActive, checkAndCaptureCurrentFrame, currentStep]);
+    if (countdown === null) return;
+    const timer = window.setTimeout(() => {
+      if (countdown > 1) setCountdown(countdown - 1);
+      else {
+        setCountdown(null);
+        void checkAndCaptureCurrentFrame();
+      }
+    }, 1_000);
+    return () => window.clearTimeout(timer);
+  }, [countdown, checkAndCaptureCurrentFrame]);
+
+  const beginCapture = () => {
+    const target = captureTargetForStep(currentStep);
+    if (!target || !cameraActive || qualityCheckInFlightRef.current || countdown !== null) return;
+    clearCaptureResult();
+    setSamples((previous) => {
+      revokeSafePreviewUrl(previous[target]?.previewUrl);
+      return { ...previous, [target]: null };
+    });
+    setCountdown(3);
+    setQualityMessage('Giữ yên đầu. Máy sẽ chụp sau 3 giây.');
+  };
+
+  const continueCapture = () => {
+    const target = captureTargetForStep(currentStep);
+    if (!target || capturePhase !== 'accepted' || !samples[target]) return;
+    clearCaptureResult();
+    if (target === 'front') setCurrentStep('capture-left');
+    else if (target === 'left') setCurrentStep('capture-right');
+    else {
+      stopCamera();
+      setCurrentStep('review');
+    }
+  };
+
+  const retakeCapture = (target: CaptureTarget) => {
+    if (isQualityChecking || countdown !== null) return;
+    clearCaptureResult();
+    setSamples((previous) => {
+      revokeSafePreviewUrl(previous[target]?.previewUrl);
+      return { ...previous, [target]: null };
+    });
+    setCurrentStep(`capture-${target}`);
+  };
 
   // Submit enrollment with 3 in-memory samples
   const handleSubmitEnrollment = async () => {
@@ -414,6 +411,8 @@ export function WorkerEnrollmentView({
 
   // Reset workflow
   const handleResetWorkflow = () => {
+    clearCaptureResult();
+    setIsQualityChecking(false);
     stopCamera();
     revokeAllSamples();
     setCurrentStep('consent');
@@ -694,7 +693,7 @@ export function WorkerEnrollmentView({
                 linkedWorker.isPending ||
                 linkedWorker.isError
               }
-              onClick={() => setCurrentStep('capture-front')}
+              onClick={() => retakeCapture('front')}
               className="rounded-xl bg-[#F66B17] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#e05b0d] disabled:opacity-50"
             >
               Begin Guided Captures →
@@ -715,8 +714,23 @@ export function WorkerEnrollmentView({
                 ref={videoRef}
                 playsInline
                 muted
-                className={`h-full w-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
+                className={`h-full w-full -scale-x-100 object-cover ${cameraActive && !candidatePreviewUrl ? 'block' : 'hidden'}`}
               />
+
+              {candidatePreviewUrl && (
+                <img
+                  src={candidatePreviewUrl}
+                  alt="Ảnh máy vừa chụp để kiểm tra chất lượng"
+                  className="h-full w-full -scale-x-100 object-cover"
+                />
+              )}
+              {countdown !== null && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+                  <span className="text-8xl font-bold text-white" aria-live="assertive">
+                    {countdown}
+                  </span>
+                </div>
+              )}
 
               {!cameraActive && (
                 <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-slate-400">
@@ -730,41 +744,61 @@ export function WorkerEnrollmentView({
               {cameraActive && (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-between p-6">
                   <div className="rounded-full bg-black/70 px-4 py-1.5 text-xs font-bold text-white backdrop-blur-xs">
-                    {currentStep === 'capture-front' && 'Step 1/3: Look Straight into the Camera'}
-                    {currentStep === 'capture-left' && 'Step 2/3: Turn Head Slightly Left (~15°)'}
-                    {currentStep === 'capture-right' && 'Step 3/3: Turn Head Slightly Right (~15°)'}
+                    {CAPTURE_GUIDANCE[captureTargetForStep(currentStep)!].title}
                   </div>
 
                   <div className="h-64 w-52 rounded-4xl border-2 border-dashed border-[#F66B17] shadow-inner" />
 
                   <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80">
-                    Ensure face is centered with good lighting
+                    {candidatePreviewUrl
+                      ? capturePhase === 'accepted'
+                        ? 'Ảnh đạt yêu cầu'
+                        : capturePhase === 'rejected'
+                          ? 'Ảnh chưa đạt — chụp lại'
+                          : 'Ảnh đã chụp — đang kiểm tra'
+                      : 'Đưa mặt vào khung, đủ sáng và giữ yên'}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Shutter Button */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={!cameraActive || isQualityChecking}
-                onClick={() => {
-                  if (currentStep === 'capture-front') void handleCaptureFrame('front');
-                  else if (currentStep === 'capture-left') void handleCaptureFrame('left');
-                  else if (currentStep === 'capture-right') void handleCaptureFrame('right');
-                }}
-                className="flex-1 rounded-xl bg-[#F66B17] py-3 text-center text-sm font-bold text-white shadow-xs hover:bg-[#e05b0d] disabled:opacity-50"
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p
+                role="status"
+                aria-live="polite"
+                className={`text-sm font-medium ${capturePhase === 'rejected' ? 'text-red-700' : capturePhase === 'accepted' ? 'text-emerald-700' : 'text-slate-700'}`}
               >
-                📸 Capture{' '}
-                {currentStep === 'capture-front'
-                  ? 'Front Sample'
-                  : currentStep === 'capture-left'
-                    ? 'Left Sample'
-                    : 'Right Sample'}
-              </button>
-              <p className="text-xs text-slate-500">
-                {qualityMessage ?? 'Đang tự kiểm tra; ảnh đạt yêu cầu sẽ được chụp tự động.'}
+                {qualityMessage ?? CAPTURE_GUIDANCE[captureTargetForStep(currentStep)!].detail}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={!cameraActive || isQualityChecking || countdown !== null}
+                  onClick={beginCapture}
+                  className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {countdown !== null
+                    ? `Giữ yên — ${countdown}`
+                    : isQualityChecking
+                      ? 'Đang kiểm tra ảnh…'
+                      : capturePhase === 'ready'
+                        ? 'Tôi đã sẵn sàng — Chụp sau 3 giây'
+                        : 'Chụp lại góc này'}
+                </button>
+                <button
+                  type="button"
+                  disabled={capturePhase !== 'accepted' || isQualityChecking}
+                  onClick={continueCapture}
+                  className="rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-40"
+                >
+                  {currentStep === 'capture-right'
+                    ? 'Ảnh đạt — Xem lại 3 ảnh'
+                    : 'Ảnh đạt — Sang góc tiếp theo'}
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Máy kiểm tra một khuôn mặt, kích thước/vị trí, độ sáng, độ nét và hướng tương đối từ
+                điểm trên mặt. Đây chưa phải xác minh người thật hoặc đo góc chính xác.
               </p>
             </div>
           </div>
@@ -796,7 +830,7 @@ export function WorkerEnrollmentView({
                   />
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('capture-front')}
+                    onClick={() => retakeCapture('front')}
                     className="text-xs font-semibold text-[#F66B17] hover:underline"
                   >
                     Retake
@@ -826,7 +860,7 @@ export function WorkerEnrollmentView({
                   />
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('capture-left')}
+                    onClick={() => retakeCapture('left')}
                     className="text-xs font-semibold text-[#F66B17] hover:underline"
                   >
                     Retake
@@ -856,7 +890,7 @@ export function WorkerEnrollmentView({
                   />
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('capture-right')}
+                    onClick={() => retakeCapture('right')}
                     className="text-xs font-semibold text-[#F66B17] hover:underline"
                   >
                     Retake
@@ -905,7 +939,7 @@ export function WorkerEnrollmentView({
                   <p className="text-[11px] text-slate-500">{samples.front.sizeKb} KB · JPEG</p>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('capture-front')}
+                    onClick={() => retakeCapture('front')}
                     className="text-xs font-semibold text-[#F66B17] hover:underline"
                   >
                     Retake
@@ -929,7 +963,7 @@ export function WorkerEnrollmentView({
                   <p className="text-[11px] text-slate-500">{samples.left.sizeKb} KB · JPEG</p>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('capture-left')}
+                    onClick={() => retakeCapture('left')}
                     className="text-xs font-semibold text-[#F66B17] hover:underline"
                   >
                     Retake
@@ -953,7 +987,7 @@ export function WorkerEnrollmentView({
                   <p className="text-[11px] text-slate-500">{samples.right.sizeKb} KB · JPEG</p>
                   <button
                     type="button"
-                    onClick={() => setCurrentStep('capture-right')}
+                    onClick={() => retakeCapture('right')}
                     className="text-xs font-semibold text-[#F66B17] hover:underline"
                   >
                     Retake
@@ -993,7 +1027,7 @@ export function WorkerEnrollmentView({
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setCurrentStep('capture-front')}
+                onClick={() => retakeCapture('front')}
                 className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Back to Captures

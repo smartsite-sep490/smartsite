@@ -149,10 +149,11 @@ Face Enrollment is account-first: search/select an existing active account for t
 then enroll its face. `POST /api/v1/sites/:siteId/workers/for-account` idempotently prepares the
 internal worker linkage; it never creates a login account or grants entry permissions.
 Gate-specific assignments use optional `gate_id` (null retains legacy site-wide behavior).
-Every completed face scan persists a decision in `gate_access_log` before acknowledging it.
+Only face scans resolved to a worker/account persist a decision in `gate_access_log` before acknowledging it.
+Unknown, low-confidence, poor-quality and unavailable scans without an identified account are not retained.
 Authorized site gate operators can read the latest 50 records through
 `GET /api/v1/sites/:siteId/gates/:gateId/access-logs`; Gate Desk shows these DB records,
-including denied/inconclusive scans. These are software access decisions, not proof of physical passage.
+including denied scans of identified people. These are software access decisions, not proof of physical passage.
 QR/manual clearance is not implemented and never fabricates successful access logs.
 
 Face templates now live as encrypted ciphertext in PostgreSQL `face_profile.encrypted_template`.
@@ -168,6 +169,11 @@ Each account may link to one worker per site. Changing an existing link to anoth
 Then capture three samples with consent. The Backend atomically saves the encrypted template,
 account, profile metadata, and completed session. A matching face resolves the worker and account;
 gate permissions still depend on the Backend's contractor and assignment policy.
+
+Each guided capture has an explicit 3-second countdown, a frozen photo preview and a server quality result.
+Only an accepted photo enables the next angle; failed checks explain lighting, sharpness, framing or
+relative pose. The AI rechecks front/left/right and sample consistency before producing a template.
+Quality/landmark thresholds are demo heuristics, not calibrated yaw measurements or liveness protection.
 
 Deploy the Backend migration `AccountFaceTemplates1790899200000` and both updated services together.
 Legacy file-backed active profiles become `NEEDS_REENROLL`; select their account and enroll again.

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { IsNotEmpty, IsString, MaxLength, Matches } from 'class-validator';
 import { DataSource, In, IsNull, type EntityManager } from 'typeorm';
@@ -184,12 +185,18 @@ export class FaceEnrollmentService {
     actor: WorkforceActor,
     workerIdValue: string,
     sample: UploadedFaceSample | undefined,
+    target: EnrollmentCaptureTarget = 'front',
   ): Promise<FaceSampleQuality> {
     this.validateJpeg(sample);
     await this.dataSource.transaction(async (manager) => {
       await this.workforce.requireWorkerEnrollmentAccess(manager, actor, workerIdValue);
     });
-    const result = await this.adapter.assessSampleQuality(sample.buffer);
+    if (!['front', 'left', 'right'].includes(target))
+      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid face capture target',
+      });
+    const result = await this.adapter.assessSampleQuality(sample.buffer, target);
     if (result.status === 'AI_UNAVAILABLE')
       throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
         code: 'SERVICE_UNAVAILABLE',

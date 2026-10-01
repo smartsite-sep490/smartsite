@@ -29,6 +29,7 @@ import type {
   ZoneEntryDecisionStatus,
   FaceGateVerificationResponse,
   GateAccessLogResponse,
+  EnrollmentCaptureTarget,
 } from '@smartsite/contracts';
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
@@ -435,9 +436,15 @@ export class SmartSiteManagementClient {
       form,
     );
   }
-  checkFaceEnrollmentQuality(token: string, workerId: string, sample: Blob) {
+  checkFaceEnrollmentQuality(
+    token: string,
+    workerId: string,
+    sample: Blob,
+    target: EnrollmentCaptureTarget = 'front',
+  ) {
     const form = new FormData();
     form.append('sample', sample, 'face-quality-check.jpg');
+    form.append('target', target);
     return this.requestFormData<FaceEnrollmentQualityResponse>(
       'POST',
       `/workers/${pathId(workerId)}/face-enrollment-quality`,

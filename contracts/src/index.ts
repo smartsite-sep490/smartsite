@@ -67,6 +67,7 @@ export type {
   FaceEnrollmentSessionResponse,
   FaceEnrollmentSessionStatus,
   FaceEnrollmentQualityResponse,
+  EnrollmentCaptureTarget,
   FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,

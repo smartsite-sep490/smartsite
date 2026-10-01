@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
 
 export interface FaceEnrollmentSampleInput {
   sessionId: string;
@@ -24,7 +25,7 @@ export interface FaceSampleQuality {
 }
 
 export interface FaceEnrollmentAdapter {
-  assessSampleQuality(jpeg: Buffer): Promise<FaceSampleQuality>;
+  assessSampleQuality(jpeg: Buffer, target?: EnrollmentCaptureTarget): Promise<FaceSampleQuality>;
   submitSample(input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult>;
   completeEnrollment(sessionId: string): Promise<FaceEnrollmentCompletion>;
 }
@@ -33,9 +34,11 @@ export interface FaceVerificationInput {
   verificationId: string;
   jpeg: Buffer;
   templates?: Array<{ profileReferenceHash: string; encryptedTemplate: string }>;
+  enrollmentTarget?: EnrollmentCaptureTarget;
 }
 
 export interface FaceVerificationEvidence {
+  reasonCode?: string;
   status: 'MATCHED' | 'UNKNOWN' | 'LOW_CONFIDENCE' | 'QUALITY_FAILED' | 'AI_UNAVAILABLE';
   modelVersion?: string;
   candidateProfileReference?: string;
@@ -59,6 +62,7 @@ interface CompletionResponse {
 }
 
 interface VerificationResponse {
+  reasonCode?: string;
   status: FaceVerificationEvidence['status'];
   modelVersion?: string | null;
   candidateProfileReference?: string | null;
@@ -77,13 +81,23 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
     private readonly timeoutMs = 8_000,
   ) {}
 
-  async assessSampleQuality(jpeg: Buffer): Promise<FaceSampleQuality> {
-    const evidence = await this.verify({ verificationId: randomUUID(), jpeg });
+  async assessSampleQuality(
+    jpeg: Buffer,
+    target: EnrollmentCaptureTarget = 'front',
+  ): Promise<FaceSampleQuality> {
+    const evidence = await this.verify({
+      verificationId: randomUUID(),
+      jpeg,
+      templates: [],
+      enrollmentTarget: target,
+    });
     if (evidence.status === 'QUALITY_FAILED')
-      return { status: 'QUALITY_FAILED', reasonCode: 'FACE_QUALITY_INSUFFICIENT' };
+      return { status: 'QUALITY_FAILED', reasonCode: safeQualityReason(evidence.reasonCode) };
     if (evidence.status === 'AI_UNAVAILABLE')
       return { status: 'AI_UNAVAILABLE', reasonCode: 'FACE_MODEL_UNAVAILABLE' };
-    return { status: 'ACCEPTED', reasonCode: 'FACE_QUALITY_ACCEPTED' };
+    if (evidence.status === 'UNKNOWN' && evidence.reasonCode === 'FACE_QUALITY_ACCEPTED')
+      return { status: 'ACCEPTED', reasonCode: 'FACE_QUALITY_ACCEPTED' };
+    return { status: 'AI_UNAVAILABLE', reasonCode: 'FACE_QUALITY_CHECK_UNSUPPORTED' };
   }
 
   async submitSample(input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult> {
@@ -133,6 +147,7 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
           : {
               jpegBase64: input.jpeg.toString('base64'),
               templates: input.templates,
+              ...(input.enrollmentTarget ? { enrollmentTarget: input.enrollmentTarget } : {}),
             },
       );
       if (!isVerificationResponse(response)) return { status: 'AI_UNAVAILABLE' };
@@ -143,6 +158,7 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
         return { status: 'AI_UNAVAILABLE' };
       return {
         status: response.status,
+        ...(response.reasonCode ? { reasonCode: safeQualityReason(response.reasonCode) } : {}),
         ...(response.modelVersion ? { modelVersion: response.modelVersion } : {}),
         ...(response.candidateProfileReference
           ? { candidateProfileReference: response.candidateProfileReference }
@@ -191,6 +207,32 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+const QUALITY_REASONS = new Set([
+  'FACE_QUALITY_ACCEPTED',
+  'FACE_IMAGE_INVALID',
+  'FACE_NOT_FOUND',
+  'FACE_MULTIPLE_FOUND',
+  'FACE_LANDMARKS_UNAVAILABLE',
+  'FACE_NOT_CLEAR',
+  'FACE_CLIPPED',
+  'FACE_TOO_SMALL',
+  'FACE_TOO_CLOSE',
+  'FACE_NOT_CENTERED',
+  'FACE_TOO_DARK',
+  'FACE_TOO_BRIGHT',
+  'FACE_BLURRY',
+  'FACE_HEAD_TILTED',
+  'FACE_TURN_TOO_FAR',
+  'FACE_POSE_FRONT_REQUIRED',
+  'FACE_POSE_LEFT_REQUIRED',
+  'FACE_POSE_RIGHT_REQUIRED',
+]);
+function safeQualityReason(value: unknown): string {
+  return typeof value === 'string' && QUALITY_REASONS.has(value)
+    ? value
+    : 'FACE_QUALITY_INSUFFICIENT';
 }
 
 function isSampleResponse(value: unknown): value is SampleResponse {

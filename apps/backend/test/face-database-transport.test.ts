@@ -7,6 +7,8 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
   const ciphertext = 'gAAAA' + 'a'.repeat(150) + '==';
   let includeTemplate = true;
   let captured: { authorization?: string; body?: unknown } = {};
+  let qualityReason = 'FACE_QUALITY_ACCEPTED';
+  let qualityStatus = 'UNKNOWN';
   const server = createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += String(chunk);
@@ -15,7 +17,9 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
       body: body ? (JSON.parse(body) as unknown) : null,
     };
     response.setHeader('content-type', 'application/json');
-    if (request.url?.endsWith('/complete'))
+    if ((captured.body as { enrollmentTarget?: string } | null)?.enrollmentTarget) {
+      response.end(JSON.stringify({ status: qualityStatus, reasonCode: qualityReason }));
+    } else if (request.url?.endsWith('/complete'))
       response.end(
         JSON.stringify({
           status: 'ENROLLED',
@@ -55,6 +59,24 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
     assert.equal(match.status, 'MATCHED');
     assert.deepEqual(captured.body, { jpegBase64: jpeg.toString('base64'), templates });
     assert.equal('encryptedTemplate' in match, false);
+    assert.deepEqual(await adapter.assessSampleQuality(jpeg, 'left'), {
+      status: 'ACCEPTED',
+      reasonCode: 'FACE_QUALITY_ACCEPTED',
+    });
+    assert.deepEqual(captured.body, {
+      jpegBase64: jpeg.toString('base64'),
+      templates: [],
+      enrollmentTarget: 'left',
+    });
+    qualityStatus = 'QUALITY_FAILED';
+    qualityReason = 'FACE_BLURRY';
+    assert.deepEqual(await adapter.assessSampleQuality(jpeg, 'right'), {
+      status: 'QUALITY_FAILED',
+      reasonCode: 'FACE_BLURRY',
+    });
+    qualityStatus = 'UNKNOWN';
+    qualityReason = 'NO_ENROLLMENTS';
+    assert.equal((await adapter.assessSampleQuality(jpeg, 'front')).status, 'AI_UNAVAILABLE'); // old service cannot acknowledge pose quality
     includeTemplate = false;
     await assert.rejects(adapter.completeEnrollment('synthetic-session'));
   } finally {

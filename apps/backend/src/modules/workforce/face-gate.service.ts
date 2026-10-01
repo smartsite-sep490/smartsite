@@ -50,6 +50,8 @@ export class FaceGateService {
         message: 'Invalid gate direction',
       });
     const result = await this.evaluate(siteId, gateId, frame);
+    // Unidentified scans carry no business identity and are not retained.
+    if (!result.worker) return result;
     // A decision is acknowledged only after its audit record is durably stored.
     const log = await this.dataSource.getRepository(GateAccessLogEntity).save({
       id: randomUUID(),

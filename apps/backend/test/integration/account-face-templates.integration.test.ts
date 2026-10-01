@@ -20,6 +20,7 @@ import {
   GateAccessLogEntity,
 } from '../../src/database/entities/index.js';
 import type { FaceVerificationInput } from '../../src/modules/workforce/face-enrollment.adapter.js';
+import type { FaceVerificationTechnicalOutcome } from '@smartsite/contracts';
 import dataSource from '../support/test-data-source.js';
 
 after(async () => {
@@ -43,6 +44,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   const cipher = 'gAAAA' + 'a'.repeat(150) + '=='; // synthetic ciphertext; no real biometric data
   let reference = '';
   let verification: FaceVerificationInput | undefined;
+  let technicalStatus: FaceVerificationTechnicalOutcome = 'MATCHED';
   const adapter = {
     async assessSampleQuality() {
       return { status: 'ACCEPTED' as const };
@@ -60,6 +62,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     },
     async verify(input: FaceVerificationInput) {
       verification = input;
+      if (technicalStatus !== 'MATCHED') return { status: technicalStatus };
       return {
         status: 'MATCHED' as const,
         candidateProfileReference: reference,
@@ -192,6 +195,25 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       'gate1',
     );
     assert.ok(afterRestart.items.some((log) => log.id === allowed.log?.id));
+    const countBeforeUnknown = await dataSource
+      .getRepository(GateAccessLogEntity)
+      .countBy({ siteId });
+    for (const status of [
+      'UNKNOWN',
+      'LOW_CONFIDENCE',
+      'QUALITY_FAILED',
+      'AI_UNAVAILABLE',
+    ] as const) {
+      technicalStatus = status;
+      const unknown = await gate.verify(actor, siteId, 'gate1', frame);
+      assert.equal(unknown.worker, undefined);
+      assert.equal(unknown.log, undefined);
+      assert.equal(
+        await dataSource.getRepository(GateAccessLogEntity).countBy({ siteId }),
+        countBeforeUnknown,
+      );
+    }
+    technicalStatus = 'MATCHED';
     await assert.rejects(gate.verify({ ...actor, id: randomUUID() }, siteId, 'gate1', frame)); // cannot acknowledge ALLOWED when audit persistence fails
     assert.equal(
       (await gate.verify(actor, siteId, 'gate2', frame)).decision.authorization,
