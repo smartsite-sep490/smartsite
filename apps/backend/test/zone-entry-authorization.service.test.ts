@@ -22,7 +22,9 @@ const evaluatedAt = new Date('2026-09-28T08:00:00.000Z');
 function worker(overrides: Partial<WorkerEntity> = {}): WorkerEntity {
   return {
     id: workerId,
+    userId: null,
     siteId,
+    contractorId: null,
     externalId: 'WORKER-001',
     displayName: 'Worker 001',
     isActive: true,

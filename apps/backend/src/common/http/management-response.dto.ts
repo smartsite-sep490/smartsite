@@ -175,6 +175,8 @@ export class RegionPageResponseDto {
 export class WorkerResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) contractorId!: string | null;
+  @ApiProperty({ format: 'uuid', nullable: true }) userId!: string | null;
   @ApiProperty() externalId!: string;
   @ApiProperty() displayName!: string;
   @ApiProperty() isActive!: boolean;
@@ -184,6 +186,37 @@ export class WorkerResponseDto {
 export class WorkerPageResponseDto {
   @ApiProperty({ type: [WorkerResponseDto] }) items!: WorkerResponseDto[];
   @ApiProperty() total!: number;
+}
+
+export class FaceEnrollmentSessionResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty() consentVersion!: string;
+  @ApiProperty({ enum: ['PENDING', 'COLLECTING', 'COMPLETED', 'FAILED', 'CANCELLED'] }) status!:
+    'PENDING' | 'COLLECTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  @ApiProperty({ minimum: 0, maximum: 3 }) acceptedSampleCount!: number;
+  @ApiProperty({ format: 'date-time' }) startedAt!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) completedAt!: string | null;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+}
+
+export class FaceEnrollmentQualityResponseDto {
+  @ApiProperty({ enum: ['ACCEPTED', 'QUALITY_FAILED'] })
+  status!: 'ACCEPTED' | 'QUALITY_FAILED';
+  @ApiProperty() reasonCode!: string;
+}
+
+export class FaceProfileResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) userId!: string | null;
+  @ApiProperty() modelVersion!: string;
+  @ApiProperty({ enum: ['ACTIVE', 'REVOKED', 'NEEDS_REENROLL'] }) status!:
+    'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+  @ApiProperty() consentVersion!: string;
+  @ApiProperty({ format: 'date-time' }) consentedAt!: string;
+  @ApiProperty({ format: 'date-time' }) createdAt!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) revokedAt!: string | null;
 }
 
 export class ZoneAccessGrantResponseDto {

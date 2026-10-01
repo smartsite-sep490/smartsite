@@ -354,6 +354,9 @@ importers:
       '@smartsite/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@smartsite/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@tanstack/react-query':
         specifier: 5.103.1
         version: 5.103.1(react@19.3.0)
