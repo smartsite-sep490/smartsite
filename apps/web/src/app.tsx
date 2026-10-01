@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getBackendHealth } from '@smartsite/api-client';
-import { AppLayout, ActiveTab } from './components/layout/AppLayout';
+import { AppLayout } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
@@ -10,27 +11,93 @@ import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
 import { IconRadio, IconTrendingUp } from './components/icons';
-import { useAuth, useRestoreSession } from './features/auth/auth-session';
+import { useAuth, useRestoreSession, useCurrentUser, SessionExpiredModal } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
 import { WorkforceView } from './components/workforce/WorkforceView';
+import { SiteSetupView } from './components/workforce/SiteSetupView';
+import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export function App() {
-  const [currentTab, setCurrentTab] = useState<ActiveTab | 'login' | 'register'>('landing');
+function ProtectedRoutes({ defaultAuthTab }: { defaultAuthTab: string }) {
   const { accessToken } = useAuth();
+  const navigate = useNavigate();
+
+  if (!accessToken) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <AppLayout>
+      <Routes>
+        <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
+        <Route path="/dashboard" element={<DashboardView onNavigate={(tab) => navigate(`/${tab}`)} />} />
+        <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+        <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
+        <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
+        <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
+        <Route path="/live-monitoring" element={<LiveMonitoringView onNavigate={(tab) => navigate(`/${tab}`)} />} />
+        <Route path="/ppe" element={<PpeMonitoringView />} />
+        <Route path="/zones" element={<RestrictedZoneView apiUrl={apiUrl} />} />
+        <Route path="/incidents" element={<SafetyAlertsView apiUrl={apiUrl} />} />
+        <Route
+          path="/iot"
+          element={
+            <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
+                <IconRadio className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold text-[#041D2E]">IoT Environmental Sensors</h2>
+              <p className="text-sm text-[#62748E] max-w-md mx-auto">
+                Environmental air quality, noise thresholds, crane wind speed and perimeter beams.
+              </p>
+            </div>
+          }
+        />
+        <Route
+          path="/progress"
+          element={
+            <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
+                <IconTrendingUp className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold text-[#041D2E]">Construction Progress Monitoring</h2>
+              <p className="text-sm text-[#62748E] max-w-md mx-auto">
+                4D BIM overlay, photogrammetry site scans and milestone progress tracking.
+              </p>
+            </div>
+          }
+        />
+        <Route path="*" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
+      </Routes>
+    </AppLayout>
+  );
+}
+
+function PublicOnlyRoute({ children, defaultAuthTab }: { children: React.ReactNode; defaultAuthTab: string }) {
+  const { accessToken } = useAuth();
+  if (accessToken) {
+    return <Navigate to={`/${defaultAuthTab}`} replace />;
+  }
+  return <>{children}</>;
+}
+
+export function App() {
+  const navigate = useNavigate();
+  const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
   const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
+  const { data: currentUser } = useCurrentUser(apiUrl);
+
+  const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
+  const isWorkerOnly = roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
+  const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
 
   // Backend live health check
   useQuery({
     queryKey: ['backend', apiUrl, 'health'],
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
   });
-
-  const handleSelectTab = (tab: ActiveTab | 'login' | 'register') => {
-    setCurrentTab(tab);
-  };
 
   if (isRestoringSession) {
     return (
@@ -40,79 +107,61 @@ export function App() {
     );
   }
 
-  // If viewing public landing page
-  if (!accessToken) {
-    if (currentTab === 'landing') {
-      return <LandingPage onEnterApp={() => handleSelectTab('login')} />;
-    }
-    if (currentTab === 'register') {
-      return (
-        <RegisterScreen 
-          onRegisterSuccess={() => handleSelectTab('login')} 
-          onBackToLogin={() => handleSelectTab('login')} 
-          onBackToSite={() => handleSelectTab('landing')} 
-        />
-      );
-    }
-    return (
-      <LoginScreen 
-        onLoginSuccess={() => handleSelectTab('dashboard')} 
-        onBack={() => handleSelectTab('landing')} 
-        onNavigateToRegister={() => handleSelectTab('register')}
-      />
-    );
-  }
-
-  // Treat 'landing', 'login', or 'register' as 'dashboard' if already authenticated
-  const effectiveTab = (currentTab === 'landing' || currentTab === 'login' || currentTab === 'register') ? 'dashboard' : currentTab;
-
   return (
-    <AppLayout currentTab={effectiveTab} onSelectTab={handleSelectTab}>
-      {/* Tab: Live Monitoring */}
-      {effectiveTab === 'live-monitoring' && (
-        <LiveMonitoringView onNavigate={(tab) => handleSelectTab(tab)} />
-      )}
+    <>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingPage
+              onEnterApp={(tab) => {
+                if (accessToken) {
+                  navigate(tab ? `/${tab}` : `/${defaultAuthTab}`);
+                } else {
+                  navigate('/login');
+                }
+              }}
+            />
+          }
+        />
 
-      {/* Tab: Restricted Zones (MF05) */}
-      {effectiveTab === 'zones' && <RestrictedZoneView apiUrl={apiUrl} />}
+        <Route
+          path="/login"
+          element={
+            <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
+              <LoginScreen
+                onLoginSuccess={() => navigate(`/${defaultAuthTab}`)}
+                onBack={() => navigate('/')}
+                onNavigateToRegister={() => navigate('/register')}
+              />
+            </PublicOnlyRoute>
+          }
+        />
 
-      {/* Tab: PPE Monitoring (MF04) */}
-      {effectiveTab === 'ppe' && <PpeMonitoringView />}
+        <Route
+          path="/register"
+          element={
+            <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
+              <RegisterScreen
+                onRegisterSuccess={() => navigate('/login')}
+                onBackToLogin={() => navigate('/login')}
+                onBackToSite={() => navigate('/')}
+              />
+            </PublicOnlyRoute>
+          }
+        />
 
-      {/* Tab: Operational Dashboard */}
-      {effectiveTab === 'dashboard' && <DashboardView onNavigate={(tab) => handleSelectTab(tab)} />}
+        <Route path="/*" element={<ProtectedRoutes defaultAuthTab={defaultAuthTab} />} />
+      </Routes>
 
-      {/* Tab: Workforce Management (MF07) */}
-      {effectiveTab === 'workforce' && <WorkforceView apiUrl={apiUrl} />}
-
-      {effectiveTab === 'access' && <AccessControlView apiUrl={apiUrl} />}
-
-      {effectiveTab === 'incidents' && <SafetyAlertsView apiUrl={apiUrl} />}
-
-      {effectiveTab === 'iot' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
-            <IconRadio className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">IoT Environmental Sensors</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Environmental air quality, noise thresholds, crane wind speed and perimeter beams.
-          </p>
-        </div>
-      )}
-
-      {effectiveTab === 'progress' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
-            <IconTrendingUp className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">Construction Progress Monitoring</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            4D BIM overlay, photogrammetry site scans and milestone progress tracking.
-          </p>
-        </div>
-      )}
-    </AppLayout>
+      <SessionExpiredModal
+        open={isSessionExpired}
+        onReLogin={() => {
+          dismissSessionExpired();
+          navigate('/login');
+        }}
+      />
+    </>
   );
 }
 
