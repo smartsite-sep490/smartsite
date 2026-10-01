@@ -15,6 +15,7 @@ export interface FaceEnrollmentSampleResult {
 export interface FaceEnrollmentCompletion {
   profileReference: string;
   modelVersion: string;
+  encryptedTemplate: string;
 }
 
 export interface FaceSampleQuality {
@@ -31,6 +32,7 @@ export interface FaceEnrollmentAdapter {
 export interface FaceVerificationInput {
   verificationId: string;
   jpeg: Buffer;
+  templates?: Array<{ profileReferenceHash: string; encryptedTemplate: string }>;
 }
 
 export interface FaceVerificationEvidence {
@@ -53,6 +55,7 @@ interface CompletionResponse {
   modelVersion?: string | null;
   profileReference?: string | null;
   reasonCode?: string;
+  encryptedTemplate?: string | null;
 }
 
 interface VerificationResponse {
@@ -105,11 +108,18 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
       });
     }
     if (response.status === 'AI_UNAVAILABLE') this.unavailable();
-    if (response.status !== 'ENROLLED' || !response.modelVersion || !response.profileReference)
+    if (
+      response.status !== 'ENROLLED' ||
+      !response.modelVersion ||
+      !response.profileReference ||
+      typeof response.encryptedTemplate !== 'string' ||
+      !/^[A-Za-z0-9_-]{100,32766}={0,2}$/.test(response.encryptedTemplate)
+    )
       this.unavailable();
     return {
       modelVersion: response.modelVersion,
       profileReference: response.profileReference,
+      encryptedTemplate: response.encryptedTemplate,
     };
   }
 
@@ -118,6 +128,12 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
       const response = await this.request(
         `/v1/identity/verifications/${encodeURIComponent(input.verificationId)}`,
         input.jpeg,
+        input.templates === undefined
+          ? undefined
+          : {
+              jpegBase64: input.jpeg.toString('base64'),
+              templates: input.templates,
+            },
       );
       if (!isVerificationResponse(response)) return { status: 'AI_UNAVAILABLE' };
       if (
@@ -138,7 +154,7 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
     }
   }
 
-  private async request(path: string, jpeg?: Buffer): Promise<unknown> {
+  private async request(path: string, jpeg?: Buffer, json?: unknown): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -147,9 +163,13 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
         headers: {
           authorization: `Bearer ${this.serviceToken}`,
           accept: 'application/json',
-          ...(jpeg ? { 'content-type': 'image/jpeg' } : {}),
+          ...(json
+            ? { 'content-type': 'application/json' }
+            : jpeg
+              ? { 'content-type': 'image/jpeg' }
+              : {}),
         },
-        ...(jpeg ? { body: new Uint8Array(jpeg) } : {}),
+        ...(json ? { body: JSON.stringify(json) } : jpeg ? { body: new Uint8Array(jpeg) } : {}),
         signal: controller.signal,
       });
       if (!response.ok) this.unavailable();
@@ -217,26 +237,28 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
  * identity contract is vendored and a model/enrollment store is configured.
  */
 @Injectable()
-export class UnavailableFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVerificationAdapter {
-  async assessSampleQuality(_jpeg: Buffer): Promise<FaceSampleQuality> {
+export class UnavailableFaceEnrollmentAdapter
+  implements FaceEnrollmentAdapter, FaceVerificationAdapter
+{
+  async assessSampleQuality(): Promise<FaceSampleQuality> {
     return { status: 'AI_UNAVAILABLE', reasonCode: 'FACE_MODEL_NOT_CONFIGURED' };
   }
 
-  async submitSample(_input: FaceEnrollmentSampleInput): Promise<FaceEnrollmentSampleResult> {
+  async submitSample(): Promise<FaceEnrollmentSampleResult> {
     throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
       code: 'SERVICE_UNAVAILABLE',
       message: 'Face verification is temporarily unavailable',
     });
   }
 
-  async completeEnrollment(_sessionId: string): Promise<FaceEnrollmentCompletion> {
+  async completeEnrollment(): Promise<FaceEnrollmentCompletion> {
     throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
       code: 'SERVICE_UNAVAILABLE',
       message: 'Face verification is temporarily unavailable',
     });
   }
 
-  async verify(_input: FaceVerificationInput): Promise<FaceVerificationEvidence> {
+  async verify(): Promise<FaceVerificationEvidence> {
     return { status: 'AI_UNAVAILABLE' };
   }
 }

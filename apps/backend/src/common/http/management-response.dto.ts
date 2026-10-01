@@ -176,6 +176,7 @@ export class WorkerResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;
   @ApiProperty({ format: 'uuid', nullable: true }) contractorId!: string | null;
+  @ApiProperty({ format: 'uuid', nullable: true }) userId!: string | null;
   @ApiProperty() externalId!: string;
   @ApiProperty() displayName!: string;
   @ApiProperty() isActive!: boolean;
@@ -208,6 +209,7 @@ export class FaceEnrollmentQualityResponseDto {
 export class FaceProfileResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) workerId!: string;
+  @ApiProperty({ format: 'uuid', nullable: true }) userId!: string | null;
   @ApiProperty() modelVersion!: string;
   @ApiProperty({ enum: ['ACTIVE', 'REVOKED', 'NEEDS_REENROLL'] }) status!:
     'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';

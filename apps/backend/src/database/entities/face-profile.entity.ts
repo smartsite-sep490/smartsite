@@ -8,11 +8,15 @@ export enum FaceProfileStatus {
   NEEDS_REENROLL = 'NEEDS_REENROLL',
 }
 
-/** Metadata only: template material remains in the AI service's private storage. */
+/** Encrypted templates are persisted here; the encryption key stays in the AI runtime. */
 @Entity({ name: 'face_profile' })
 @Index('uq_face_profile_worker', ['workerId'], { unique: true })
 @Index('uq_face_profile_reference_hash', ['profileReferenceHash'], { unique: true })
 @Check('chk_face_profile_status', "status IN ('ACTIVE', 'REVOKED', 'NEEDS_REENROLL')")
+@Check(
+  'chk_face_profile_database_template',
+  "status <> 'ACTIVE' OR (user_id IS NOT NULL AND encrypted_template IS NOT NULL AND length(encrypted_template) BETWEEN 100 AND 32768)",
+)
 export class FaceProfileEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_face_profile_id' })
   id!: string;
@@ -20,6 +24,13 @@ export class FaceProfileEntity {
   @Column({ name: 'worker_id', type: 'uuid' })
   @ForeignKey(() => WorkerEntity, { name: 'fk_face_profile_worker', onDelete: 'RESTRICT' })
   workerId!: string;
+
+  @Column({ name: 'user_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => UserEntity, { name: 'fk_face_profile_user', onDelete: 'RESTRICT' })
+  userId!: string | null;
+
+  @Column({ name: 'encrypted_template', type: 'text', nullable: true, select: false })
+  encryptedTemplate!: string | null;
 
   /** SHA-256 of the AI-private profile reference; never an embedding or raw template. */
   @Column({ name: 'profile_reference_hash', type: 'char', length: 64 })

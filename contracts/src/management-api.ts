@@ -158,6 +158,7 @@ export interface WorkerResponse {
   id: string;
   siteId: string;
   contractorId: string | null;
+  userId?: string | null;
   externalId: string;
   displayName: string;
   isActive: boolean;
@@ -225,6 +226,7 @@ export interface FaceEnrollmentQualityResponse {
 export interface FaceProfileResponse {
   id: string;
   workerId: string;
+  userId?: string | null;
   modelVersion: string;
   status: 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
   consentVersion: string;

@@ -1,23 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FaceProfileStatus } from '@smartsite/contracts';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import {
-  IconAlertTriangle,
-  IconCamera,
-  IconCheck,
-  IconClock,
-  IconRefresh,
-  IconShield,
-  IconUser,
-  IconX,
-} from '../icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
+import { IconCamera, IconCheck, IconShield } from '../icons';
 import { captureFrameBlob, createSafePreviewUrl, revokeSafePreviewUrl } from './faceGateUtils';
 
 export interface WorkerEnrollmentViewProps {
   apiUrl: string;
   token?: string;
   siteId: string;
-  workers: Array<{ id: string; externalId: string; displayName: string }>;
+  sessionScope: string;
+  workers: Array<{ id: string; externalId: string; displayName: string; userId?: string | null }>;
 }
 
 type EnrollmentStep = 'consent' | 'capture-front' | 'capture-left' | 'capture-right' | 'review';
@@ -31,7 +23,7 @@ interface CapturedSample {
 
 type CaptureTarget = 'front' | 'left' | 'right';
 
-type WorkerOption = { id: string; externalId: string; displayName: string };
+type WorkerOption = { id: string; externalId: string; displayName: string; userId?: string | null };
 
 const CONSENT_VERSION = 'v1.0-2026';
 
@@ -46,20 +38,82 @@ export function WorkerEnrollmentView({
   apiUrl,
   token,
   siteId,
+  sessionScope,
   workers,
 }: WorkerEnrollmentViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const queryClient = useQueryClient();
+  const [accountId, setAccountId] = useState('');
+  const accounts = useQuery({
+    queryKey: ['access-control', apiUrl, sessionScope, siteId, 'face-enrollment-accounts'],
+    enabled: !!token && !!siteId,
+    queryFn: async () => {
+      const items = [];
+      for (let offset = 0; ; offset += 100) {
+        const result = await client.listUsers(token!, { offset, limit: 100 });
+        items.push(...result.items);
+        if (offset + result.items.length >= result.total || result.items.length === 0) break;
+      }
+      return items.filter(
+        (user) =>
+          user.isActive &&
+          user.roleAssignments.some(
+            (assignment) =>
+              assignment.siteId === siteId ||
+              (assignment.role === 'ADMIN' && assignment.siteId === null),
+          ),
+      );
+    },
+  });
 
   // Selected worker & profile state
-  const [selectedWorkerId, setSelectedWorkerId] = useState(workers[0]?.id ?? '');
+  const [requestedWorkerId, setSelectedWorkerId] = useState('');
+  const selectedWorkerId = requestedWorkerId || workers[0]?.id || '';
+  const linkedWorker = useQuery({
+    queryKey: [
+      'access-control',
+      apiUrl,
+      sessionScope,
+      siteId,
+      'face-enrollment-worker',
+      selectedWorkerId,
+    ],
+    enabled: !!token && !!siteId && !!selectedWorkerId,
+    queryFn: async () => {
+      for (let offset = 0; ; offset += 100) {
+        const page = await client.listWorkers(token!, siteId, { offset, limit: 100 });
+        const worker = page.items.find((item) => item.id === selectedWorkerId);
+        if (worker) return worker;
+        if (offset + page.items.length >= page.total || page.items.length === 0) return null;
+      }
+    },
+  });
+  const linkAccount = useMutation({
+    mutationFn: () => client.linkWorkerAccount(token!, siteId, selectedWorkerId, accountId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['access-control', apiUrl, sessionScope, siteId],
+      });
+    },
+  });
   const [createdWorkers, setCreatedWorkers] = useState<WorkerOption[]>([]);
   const [newWorkerExternalId, setNewWorkerExternalId] = useState('');
   const [newWorkerDisplayName, setNewWorkerDisplayName] = useState('');
   const [isCreatingWorker, setIsCreatingWorker] = useState(false);
   const [createWorkerError, setCreateWorkerError] = useState<string | null>(null);
-  const [profileStatus, setProfileStatus] = useState<FaceProfileStatus | 'NOT_ENROLLED'>(
-    'NOT_ENROLLED',
-  );
+  const profile = useQuery({
+    queryKey: ['access-control', apiUrl, sessionScope, siteId, selectedWorkerId, 'face-profile'],
+    enabled: !!token && !!selectedWorkerId,
+    queryFn: async () => {
+      try {
+        return await client.getFaceProfile(token!, selectedWorkerId);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+  });
+  const profileStatus = profile.data?.status ?? 'NOT_ENROLLED';
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Enrollment workflow steps
@@ -97,10 +151,6 @@ export function WorkerEnrollmentView({
     return [...workersById.values()];
   }, [createdWorkers, workers]);
 
-  useEffect(() => {
-    if (!selectedWorkerId && workerOptions[0]) setSelectedWorkerId(workerOptions[0].id);
-  }, [selectedWorkerId, workerOptions]);
-
   // Revoke all preview URLs helper
   const revokeAllSamples = useCallback(() => {
     setSamples((prev) => {
@@ -112,32 +162,6 @@ export function WorkerEnrollmentView({
   }, []);
 
   // Camera start / stop
-  const startCamera = useCallback(async () => {
-    setCameraError(null);
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user',
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => undefined);
-      }
-      setCameraActive(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Webcam error';
-      setCameraError(`Camera could not be started: ${message}.`);
-      setCameraActive(false);
-    }
-  }, []);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -159,13 +183,44 @@ export function WorkerEnrollmentView({
   }, [stopCamera, revokeAllSamples]);
 
   // When step transitions into capture, ensure camera is active
+  const captureActive = captureTargetForStep(currentStep) !== null;
   useEffect(() => {
-    if (currentStep !== 'consent' && currentStep !== 'review') {
-      void startCamera();
-    } else {
-      stopCamera();
-    }
-  }, [currentStep, startCamera, stopCamera]);
+    if (!captureActive) return;
+    let cancelled = false;
+    let ownedStream: MediaStream | undefined;
+    void navigator.mediaDevices
+      .getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        audio: false,
+      })
+      .then(async (stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        ownedStream = stream;
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+        if (!cancelled) {
+          setCameraError(null);
+          setCameraActive(true);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCameraError(error instanceof Error ? error.message : 'Camera unavailable');
+          setCameraActive(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      ownedStream?.getTracks().forEach((track) => track.stop());
+      if (streamRef.current === ownedStream) streamRef.current = null;
+    };
+  }, [captureActive]);
 
   // Capture current sample frame
   const handleCaptureFrame = async (target: CaptureTarget, providedBlob?: Blob) => {
@@ -173,7 +228,8 @@ export function WorkerEnrollmentView({
     if (!video || !cameraActive) return;
 
     try {
-      const blob = providedBlob ?? (await captureFrameBlob(video, { maxWidth: 1280, quality: 0.92 }));
+      const blob =
+        providedBlob ?? (await captureFrameBlob(video, { maxWidth: 1280, quality: 0.92 }));
       if (!providedBlob && token && selectedWorkerId) {
         const quality = await client.checkFaceEnrollmentQuality(token, selectedWorkerId, blob);
         if (quality.status !== 'ACCEPTED') {
@@ -205,7 +261,10 @@ export function WorkerEnrollmentView({
       // Auto advance to next guided capture step
       if (target === 'front') setCurrentStep('capture-left');
       else if (target === 'left') setCurrentStep('capture-right');
-      else if (target === 'right') setCurrentStep('review');
+      else if (target === 'right') {
+        stopCamera();
+        setCurrentStep('review');
+      }
     } catch (err) {
       setCameraError(err instanceof Error ? err.message : 'Failed to capture frame.');
     }
@@ -253,7 +312,10 @@ export function WorkerEnrollmentView({
         setQualityMessage('Ảnh đạt yêu cầu, đã tự động lưu.');
         if (target === 'front') setCurrentStep('capture-left');
         else if (target === 'left') setCurrentStep('capture-right');
-        else setCurrentStep('review');
+        else {
+          stopCamera();
+          setCurrentStep('review');
+        }
       } else {
         setQualityMessage(
           'Chưa đạt: chỉ để một người trong khung, đưa mặt vào giữa và đủ sáng. Đang tự thử lại…',
@@ -269,7 +331,7 @@ export function WorkerEnrollmentView({
       qualityCheckInFlightRef.current = false;
       setIsQualityChecking(false);
     }
-  }, [cameraActive, client, currentStep, selectedWorkerId, token]);
+  }, [cameraActive, client, currentStep, selectedWorkerId, token, stopCamera]);
 
   useEffect(() => {
     if (!cameraActive || !captureTargetForStep(currentStep)) return;
@@ -316,8 +378,9 @@ export function WorkerEnrollmentView({
       setSubmissionSuccess(false);
       setSubmissionError(null);
       setQualityMessage(null);
-      setProfileStatus('NOT_ENROLLED');
-      setStatusMessage(`Đã tạo hồ sơ cho ${worker.displayName}. Tiếp tục xác nhận và chụp khuôn mặt.`);
+      setStatusMessage(
+        `Đã tạo hồ sơ cho ${worker.displayName}. Tiếp tục xác nhận và chụp khuôn mặt.`,
+      );
     } catch (err) {
       setCreateWorkerError(err instanceof Error ? err.message : 'Không thể tạo hồ sơ nhân công.');
     } finally {
@@ -327,7 +390,7 @@ export function WorkerEnrollmentView({
 
   // Submit enrollment with 3 in-memory samples
   const handleSubmitEnrollment = async () => {
-    if (!selectedWorkerId || !token) {
+    if (!selectedWorkerId || !token || !linkedWorker.data?.userId) {
       setSubmissionError('Tạo hoặc chọn nhân công trước khi gửi đăng ký khuôn mặt.');
       return;
     }
@@ -349,7 +412,16 @@ export function WorkerEnrollmentView({
       const profile = await client.completeFaceEnrollment(token, session.id);
       if (profile.status !== 'ACTIVE')
         throw new Error('Backend did not activate the face profile.');
-      setProfileStatus('ACTIVE');
+      await queryClient.invalidateQueries({
+        queryKey: [
+          'access-control',
+          apiUrl,
+          sessionScope,
+          siteId,
+          selectedWorkerId,
+          'face-profile',
+        ],
+      });
       setSubmissionSuccess(true);
       setStatusMessage('Face biometric profile successfully registered and active.');
     } catch (err) {
@@ -362,20 +434,38 @@ export function WorkerEnrollmentView({
   };
 
   // Revoke profile action
-  const handleRevokeProfile = () => {
+  const handleRevokeProfile = async () => {
     if (
       window.confirm(
         'Are you sure you want to revoke this biometric profile? The worker will need to re-enroll before using face gate.',
       )
     ) {
-      setProfileStatus('REVOKED');
-      setStatusMessage('FaceProfile has been revoked. Re-enrollment required.');
-      handleResetWorkflow();
+      if (!token) return;
+      try {
+        await client.revokeFaceProfile(token, selectedWorkerId);
+        await queryClient.invalidateQueries({
+          queryKey: [
+            'access-control',
+            apiUrl,
+            sessionScope,
+            siteId,
+            selectedWorkerId,
+            'face-profile',
+          ],
+        });
+        setStatusMessage('Face profile revoked. Its database template has been removed.');
+        handleResetWorkflow();
+      } catch (error) {
+        setSubmissionError(
+          error instanceof Error ? error.message : 'Could not revoke the face profile.',
+        );
+      }
     }
   };
 
   // Reset workflow
   const handleResetWorkflow = () => {
+    stopCamera();
     revokeAllSamples();
     setCurrentStep('consent');
     setConsentAcknowledged(false);
@@ -388,14 +478,75 @@ export function WorkerEnrollmentView({
 
   return (
     <div className="space-y-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <label htmlFor="face-account" className="block text-sm font-semibold">
+          Account liên kết với khuôn mặt
+        </label>
+        {linkedWorker.data?.userId ? (
+          <p className="mt-2 text-sm">
+            Đã liên kết:{' '}
+            {accounts.data?.find((user) => user.id === linkedWorker.data?.userId)?.username ??
+              linkedWorker.data.userId}
+          </p>
+        ) : (
+          <div className="mt-2 flex gap-2">
+            <select
+              id="face-account"
+              value={accountId}
+              onChange={(event) => setAccountId(event.target.value)}
+              disabled={accounts.isPending || accounts.isError || linkAccount.isPending}
+              className="rounded border p-2"
+            >
+              <option value="">Chọn account của công trình</option>
+              {accounts.data?.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.username} — {user.displayName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => linkAccount.mutate()}
+              disabled={!accountId || !selectedWorkerId || linkAccount.isPending}
+              className="rounded bg-orange-600 px-3 text-white disabled:opacity-50"
+            >
+              {linkAccount.isPending ? 'Đang liên kết…' : 'Liên kết'}
+            </button>
+          </div>
+        )}
+        {accounts.isError && (
+          <p role="alert">
+            Không tải được account.{' '}
+            <button type="button" onClick={() => void accounts.refetch()}>
+              Thử lại
+            </button>
+          </p>
+        )}
+        {linkedWorker.isError && (
+          <p role="alert">
+            Không tải được hồ sơ liên kết.{' '}
+            <button type="button" onClick={() => void linkedWorker.refetch()}>
+              Thử lại
+            </button>
+          </p>
+        )}
+        {accounts.data?.length === 0 && (
+          <p className="mt-2 text-sm">Tạo account và gán công trình trước khi đăng ký khuôn mặt.</p>
+        )}
+        {linkAccount.error && <p role="alert">{linkAccount.error.message}</p>}
+      </section>
       <section className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-xs">
         <div>
           <h2 className="text-sm font-bold text-slate-950">Tạo nhân công để đăng ký khuôn mặt</h2>
           <p className="mt-1 text-xs text-slate-600">
-            Tự nhập mã và họ tên. Thông tin này sẽ được hiện tại Gate Desk khi khuôn mặt được nhận diện.
+            Tự nhập mã và họ tên. Thông tin này sẽ được hiện tại Gate Desk khi khuôn mặt được nhận
+            diện.
           </p>
         </div>
-        <form onSubmit={handleCreateWorker} className="mt-4 grid gap-3 sm:grid-cols-[0.7fr_1fr_auto]">
+        <form
+          onSubmit={handleCreateWorker}
+          className="mt-4 grid gap-3 sm:grid-cols-[0.7fr_1fr_auto]"
+        >
           <label className="text-xs font-semibold text-slate-700">
             Mã nhân công
             <input
@@ -426,7 +577,11 @@ export function WorkerEnrollmentView({
             {isCreatingWorker ? 'Đang tạo…' : 'Tạo & chọn'}
           </button>
         </form>
-        {createWorkerError && <p role="alert" className="mt-3 text-xs font-medium text-red-700">{createWorkerError}</p>}
+        {createWorkerError && (
+          <p role="alert" className="mt-3 text-xs font-medium text-red-700">
+            {createWorkerError}
+          </p>
+        )}
       </section>
 
       {/* Header and Worker Status Bar */}
@@ -446,7 +601,7 @@ export function WorkerEnrollmentView({
                 setSelectedWorkerId(e.target.value);
                 handleResetWorkflow();
               }}
-              disabled={workerOptions.length === 0}
+              disabled={workerOptions.length === 0 || linkAccount.isPending || isSubmitting}
               className="mt-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:border-[#F66B17] focus:outline-none"
             >
               {workerOptions.length === 0 && <option value="">Tạo nhân công ở trên trước</option>}
@@ -480,7 +635,7 @@ export function WorkerEnrollmentView({
           {profileStatus === 'ACTIVE' && (
             <button
               type="button"
-              onClick={handleRevokeProfile}
+              onClick={() => void handleRevokeProfile()}
               className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
             >
               Revoke Profile
@@ -570,8 +725,9 @@ export function WorkerEnrollmentView({
 
           <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-700">
             <p>
-              SmartSite utilizes local, encrypted biometric templates derived from 3 guided camera
-              captures strictly for access verification at authorized site gates.
+              SmartSite stores encrypted biometric templates in PostgreSQL, linked to your account,
+              from 3 guided camera captures strictly for access verification at authorized site
+              gates.
             </p>
             <ul className="list-disc space-y-1 pl-4">
               <li>
@@ -605,7 +761,13 @@ export function WorkerEnrollmentView({
           <div className="mt-6 flex justify-end">
             <button
               type="button"
-              disabled={!consentAcknowledged || !selectedWorker}
+              disabled={
+                !consentAcknowledged ||
+                !selectedWorker ||
+                !linkedWorker.data?.userId ||
+                linkedWorker.isPending ||
+                linkedWorker.isError
+              }
               onClick={() => setCurrentStep('capture-front')}
               className="rounded-xl bg-[#F66B17] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#e05b0d] disabled:opacity-50"
             >

@@ -66,6 +66,7 @@ function sessionResponse(session: {
 function profileResponse(profile: {
   id: string;
   workerId: string;
+  userId: string | null;
   modelVersion: string;
   status: string;
   consentVersion: string;
@@ -76,6 +77,7 @@ function profileResponse(profile: {
   return {
     id: profile.id,
     workerId: profile.workerId,
+    userId: profile.userId,
     modelVersion: profile.modelVersion,
     status: profile.status,
     consentVersion: profile.consentVersion,

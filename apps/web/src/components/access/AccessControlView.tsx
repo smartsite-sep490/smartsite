@@ -420,8 +420,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
       {accessSubTab === 'worker-enrollment' && (
         <WorkerEnrollmentView
+          key={`${sessionScope}:${siteId}`}
           apiUrl={apiUrl}
           token={token}
+          sessionScope={sessionScope}
           siteId={siteId}
           workers={workers.data?.items ?? []}
         />
@@ -438,441 +440,446 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       {accessSubTab === 'zone-grants' && (
         <>
           <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-          Site
-          <select
-            value={siteId}
-            onChange={(event) => {
-              setRequestedSiteId(event.target.value);
-              setRequestedZoneId('');
-              setGrantWorkerId('');
-              setGrantOffset(0);
-              setDecisionOffset(0);
-            }}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800"
-          >
-            {sites.data?.items.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.code} · {site.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-          Restricted Zone
-          <select
-            value={zoneId}
-            onChange={(event) => {
-              setRequestedZoneId(event.target.value);
-              setGrantOffset(0);
-              setDecisionOffset(0);
-            }}
-            disabled={!zones.data?.items.length}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100"
-          >
-            {zones.data?.items.map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.code} · {zone.name} · {zone.restrictionPolicy}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      {(sites.error || zones.error || workers.error) && (
-        <p
-          role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-        >
-          {errorMessage(sites.error ?? zones.error ?? workers.error)}
-        </p>
-      )}
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center gap-3">
-            <span className="rounded-lg bg-blue-50 p-2 text-blue-700">
-              <IconUsers />
-            </span>
-            <span className="text-sm font-semibold text-slate-500">Active Workers</span>
-          </div>
-          <p className="mt-4 text-3xl font-bold text-slate-950">
-            {workers.data?.items.filter((worker) => worker.isActive).length ?? '—'}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center gap-3">
-            <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
-              <IconKey />
-            </span>
-            <span className="text-sm font-semibold text-slate-500">Rules in selected Zone</span>
-          </div>
-          <p className="mt-4 text-3xl font-bold text-slate-950">{grants.data?.total ?? '—'}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center gap-3">
-            <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
-              <IconClock />
-            </span>
-            <span className="text-sm font-semibold text-slate-500">Recent decisions</span>
-          </div>
-          <p className="mt-4 text-3xl font-bold text-slate-950">{decisions.data?.total ?? '—'}</p>
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">Worker roster</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Create the Worker record used by trusted identity verification.
-            </p>
-          </div>
-          <form
-            onSubmit={submitWorker}
-            className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"
-          >
-            <label className="text-xs font-bold text-slate-600">
-              Worker code
-              <input
-                required
-                maxLength={128}
-                value={workerExternalId}
-                onChange={(event) => setWorkerExternalId(event.target.value)}
-                placeholder="WKR-001"
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-              />
-            </label>
-            <label className="text-xs font-bold text-slate-600">
-              Display name
-              <input
-                required
-                maxLength={255}
-                value={workerDisplayName}
-                onChange={(event) => setWorkerDisplayName(event.target.value)}
-                placeholder="Nguyen Van A"
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-              />
-            </label>
-            {createWorker.error && (
-              <p role="alert" className="text-sm text-red-700 sm:col-span-2">
-                {errorMessage(createWorker.error)}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={createWorker.isPending || !siteId}
-              className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
-            >
-              {createWorker.isPending ? 'Creating…' : 'Add Worker'}
-            </button>
-          </form>
-          <div className="mt-4 max-h-80 space-y-2 overflow-auto">
-            {workers.isPending && <p className="text-sm text-slate-500">Loading Workers…</p>}
-            {workers.data?.items.map((worker) => (
-              <div
-                key={worker.id}
-                className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3"
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Site
+              <select
+                value={siteId}
+                onChange={(event) => {
+                  setRequestedSiteId(event.target.value);
+                  setRequestedZoneId('');
+                  setGrantWorkerId('');
+                  setGrantOffset(0);
+                  setDecisionOffset(0);
+                }}
+                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800"
               >
-                <WorkerName worker={worker} />
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${worker.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
-                >
-                  {worker.isActive ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-              </div>
-            ))}
-            {workers.data?.items.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                No Worker has been configured for this Site.
-              </p>
-            )}
-          </div>
-        </section>
+                {sites.data?.items.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.code} · {site.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Restricted Zone
+              <select
+                value={zoneId}
+                onChange={(event) => {
+                  setRequestedZoneId(event.target.value);
+                  setGrantOffset(0);
+                  setDecisionOffset(0);
+                }}
+                disabled={!zones.data?.items.length}
+                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:bg-slate-100"
+              >
+                {zones.data?.items.map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.code} · {zone.name} · {zone.restrictionPolicy}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">Zone permissions</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Explicit DENY takes priority when Backend evaluates entry at event time.
-            </p>
-          </div>
-          {selectedZone && !canManageGrants && (
-            <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              {selectedZone.restrictionPolicy === 'PROHIBITED_FOR_ALL'
-                ? 'This Zone denies every entry. An ALLOW rule cannot override PROHIBITED_FOR_ALL.'
-                : 'This Zone does not require individual access rules. Backend policy allows entry without a grant.'}
+          {(sites.error || zones.error || workers.error) && (
+            <p
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            >
+              {errorMessage(sites.error ?? zones.error ?? workers.error)}
             </p>
           )}
-          <form
-            onSubmit={submitGrant}
-            className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"
-          >
-            <label className="text-xs font-bold text-slate-600 sm:col-span-2">
-              Worker
-              <select
-                required
-                disabled={!canManageGrants}
-                value={grantWorkerId}
-                onChange={(event) => setGrantWorkerId(event.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-center gap-3">
+                <span className="rounded-lg bg-blue-50 p-2 text-blue-700">
+                  <IconUsers />
+                </span>
+                <span className="text-sm font-semibold text-slate-500">Active Workers</span>
+              </div>
+              <p className="mt-4 text-3xl font-bold text-slate-950">
+                {workers.data?.items.filter((worker) => worker.isActive).length ?? '—'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-center gap-3">
+                <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
+                  <IconKey />
+                </span>
+                <span className="text-sm font-semibold text-slate-500">Rules in selected Zone</span>
+              </div>
+              <p className="mt-4 text-3xl font-bold text-slate-950">{grants.data?.total ?? '—'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-center gap-3">
+                <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                  <IconClock />
+                </span>
+                <span className="text-sm font-semibold text-slate-500">Recent decisions</span>
+              </div>
+              <p className="mt-4 text-3xl font-bold text-slate-950">
+                {decisions.data?.total ?? '—'}
+              </p>
+            </div>
+          </section>
+
+          <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Worker roster</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Create the Worker record used by trusted identity verification.
+                </p>
+              </div>
+              <form
+                onSubmit={submitWorker}
+                className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"
               >
-                <option value="">Select Worker</option>
-                {workers.data?.items
-                  .filter((worker) => worker.isActive)
-                  .map((worker) => (
-                    <option key={worker.id} value={worker.id}>
-                      {worker.externalId} · {worker.displayName}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="text-xs font-bold text-slate-600">
-              Effect
-              <select
-                disabled={!canManageGrants}
-                value={grantEffect}
-                onChange={(event) => setGrantEffect(event.target.value as ZoneAccessEffect)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-              >
-                <option value="ALLOW">ALLOW</option>
-                <option value="DENY">DENY</option>
-              </select>
-            </label>
-            <label className="text-xs font-bold text-slate-600">
-              Valid from
-              <input
-                required
-                disabled={!canManageGrants}
-                type="datetime-local"
-                value={validFrom}
-                onChange={(event) => setValidFrom(event.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-              />
-            </label>
-            <label className="text-xs font-bold text-slate-600 sm:col-span-2">
-              Valid until <span className="font-normal text-slate-400">(optional)</span>
-              <input
-                type="datetime-local"
-                disabled={!canManageGrants}
-                value={validUntil}
-                min={validFrom}
-                onChange={(event) => setValidUntil(event.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
-              />
-            </label>
-            {createGrant.error && (
-              <p role="alert" className="text-sm text-red-700 sm:col-span-2">
-                {errorMessage(createGrant.error)}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={createGrant.isPending || !zoneId || !grantWorkerId || !canManageGrants}
-              className="rounded-lg bg-[#F66B17] px-4 py-2 text-sm font-bold text-white hover:bg-[#D9570C] disabled:opacity-50 sm:col-span-2"
-            >
-              {createGrant.isPending ? 'Saving…' : 'Create permission'}
-            </button>
-          </form>
-          <div className="mt-4 max-h-80 space-y-2 overflow-auto">
-            {grants.isPending && zoneId && (
-              <p className="text-sm text-slate-500">Loading permissions…</p>
-            )}
-            {grants.error && (
-              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                {errorMessage(grants.error)}
-              </p>
-            )}
-            {revokeGrant.error && (
-              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                {errorMessage(revokeGrant.error)}
-              </p>
-            )}
-            {grants.data?.items.map((grant) => {
-              const state = grantState(grant, now);
-              return (
-                <div key={grant.id} className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <WorkerName worker={workerById.get(grant.workerId)} />
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${grant.effect === 'ALLOW' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
-                      >
-                        {grant.effect}
-                      </span>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${stateTone(state)}`}
-                      >
-                        {state}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {formatDate(grant.validFrom)} → {formatDate(grant.validUntil)}
+                <label className="text-xs font-bold text-slate-600">
+                  Worker code
+                  <input
+                    required
+                    maxLength={128}
+                    value={workerExternalId}
+                    onChange={(event) => setWorkerExternalId(event.target.value)}
+                    placeholder="WKR-001"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                <label className="text-xs font-bold text-slate-600">
+                  Display name
+                  <input
+                    required
+                    maxLength={255}
+                    value={workerDisplayName}
+                    onChange={(event) => setWorkerDisplayName(event.target.value)}
+                    placeholder="Nguyen Van A"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                {createWorker.error && (
+                  <p role="alert" className="text-sm text-red-700 sm:col-span-2">
+                    {errorMessage(createWorker.error)}
                   </p>
-                  {state !== 'REVOKED' && (
+                )}
+                <button
+                  type="submit"
+                  disabled={createWorker.isPending || !siteId}
+                  className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"
+                >
+                  {createWorker.isPending ? 'Creating…' : 'Add Worker'}
+                </button>
+              </form>
+              <div className="mt-4 max-h-80 space-y-2 overflow-auto">
+                {workers.isPending && <p className="text-sm text-slate-500">Loading Workers…</p>}
+                {workers.data?.items.map((worker) => (
+                  <div
+                    key={worker.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3"
+                  >
+                    <WorkerName worker={worker} />
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${worker.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                    >
+                      {worker.isActive ? 'ACTIVE' : 'INACTIVE'}
+                    </span>
+                  </div>
+                ))}
+                {workers.data?.items.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                    No Worker has been configured for this Site.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Zone permissions</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Explicit DENY takes priority when Backend evaluates entry at event time.
+                </p>
+              </div>
+              {selectedZone && !canManageGrants && (
+                <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  {selectedZone.restrictionPolicy === 'PROHIBITED_FOR_ALL'
+                    ? 'This Zone denies every entry. An ALLOW rule cannot override PROHIBITED_FOR_ALL.'
+                    : 'This Zone does not require individual access rules. Backend policy allows entry without a grant.'}
+                </p>
+              )}
+              <form
+                onSubmit={submitGrant}
+                className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2"
+              >
+                <label className="text-xs font-bold text-slate-600 sm:col-span-2">
+                  Worker
+                  <select
+                    required
+                    disabled={!canManageGrants}
+                    value={grantWorkerId}
+                    onChange={(event) => setGrantWorkerId(event.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                  >
+                    <option value="">Select Worker</option>
+                    {workers.data?.items
+                      .filter((worker) => worker.isActive)
+                      .map((worker) => (
+                        <option key={worker.id} value={worker.id}>
+                          {worker.externalId} · {worker.displayName}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-slate-600">
+                  Effect
+                  <select
+                    disabled={!canManageGrants}
+                    value={grantEffect}
+                    onChange={(event) => setGrantEffect(event.target.value as ZoneAccessEffect)}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                  >
+                    <option value="ALLOW">ALLOW</option>
+                    <option value="DENY">DENY</option>
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-slate-600">
+                  Valid from
+                  <input
+                    required
+                    disabled={!canManageGrants}
+                    type="datetime-local"
+                    value={validFrom}
+                    onChange={(event) => setValidFrom(event.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                <label className="text-xs font-bold text-slate-600 sm:col-span-2">
+                  Valid until <span className="font-normal text-slate-400">(optional)</span>
+                  <input
+                    type="datetime-local"
+                    disabled={!canManageGrants}
+                    value={validUntil}
+                    min={validFrom}
+                    onChange={(event) => setValidUntil(event.target.value)}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+                {createGrant.error && (
+                  <p role="alert" className="text-sm text-red-700 sm:col-span-2">
+                    {errorMessage(createGrant.error)}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={createGrant.isPending || !zoneId || !grantWorkerId || !canManageGrants}
+                  className="rounded-lg bg-[#F66B17] px-4 py-2 text-sm font-bold text-white hover:bg-[#D9570C] disabled:opacity-50 sm:col-span-2"
+                >
+                  {createGrant.isPending ? 'Saving…' : 'Create permission'}
+                </button>
+              </form>
+              <div className="mt-4 max-h-80 space-y-2 overflow-auto">
+                {grants.isPending && zoneId && (
+                  <p className="text-sm text-slate-500">Loading permissions…</p>
+                )}
+                {grants.error && (
+                  <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    {errorMessage(grants.error)}
+                  </p>
+                )}
+                {revokeGrant.error && (
+                  <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    {errorMessage(revokeGrant.error)}
+                  </p>
+                )}
+                {grants.data?.items.map((grant) => {
+                  const state = grantState(grant, now);
+                  return (
+                    <div key={grant.id} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <WorkerName worker={workerById.get(grant.workerId)} />
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${grant.effect === 'ALLOW' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
+                          >
+                            {grant.effect}
+                          </span>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${stateTone(state)}`}
+                          >
+                            {state}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {formatDate(grant.validFrom)} → {formatDate(grant.validUntil)}
+                      </p>
+                      {state !== 'REVOKED' && (
+                        <button
+                          type="button"
+                          disabled={revokeGrant.isPending}
+                          onClick={() => revokeGrant.mutate(grant.id)}
+                          className="mt-3 text-xs font-bold text-red-700 hover:text-red-900"
+                        >
+                          Revoke permission
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {grants.data?.items.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                    No access rule exists for the selected Zone.
+                  </p>
+                )}
+                {grants.data && grants.data.total > pageSize && (
+                  <div className="flex items-center justify-end gap-2 pt-2">
                     <button
                       type="button"
-                      disabled={revokeGrant.isPending}
-                      onClick={() => revokeGrant.mutate(grant.id)}
-                      className="mt-3 text-xs font-bold text-red-700 hover:text-red-900"
+                      disabled={grantOffset === 0 || grants.isFetching}
+                      onClick={() => setGrantOffset((value) => Math.max(0, value - pageSize))}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
                     >
-                      Revoke permission
+                      Previous
                     </button>
-                  )}
-                </div>
-              );
-            })}
-            {grants.data?.items.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                No access rule exists for the selected Zone.
+                    <button
+                      type="button"
+                      disabled={
+                        grantOffset + grants.data.items.length >= grants.data.total ||
+                        grants.isFetching
+                      }
+                      onClick={() => setGrantOffset((value) => value + pageSize)}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Entry decision audit</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  ALLOWED, DENIED and fail-closed unavailable outcomes produced by Backend.
+                </p>
+              </div>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Status
+                <select
+                  value={decisionStatus}
+                  onChange={(event) => {
+                    setDecisionStatus(event.target.value as typeof decisionStatus);
+                    setDecisionOffset(0);
+                  }}
+                  className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-800"
+                >
+                  <option value="ALL">All decisions</option>
+                  {decisionStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {zoneDecisionLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {decisions.error && (
+              <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {errorMessage(decisions.error)}
               </p>
             )}
-            {grants.data && grants.data.total > pageSize && (
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  disabled={grantOffset === 0 || grants.isFetching}
-                  onClick={() => setGrantOffset((value) => Math.max(0, value - pageSize))}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    grantOffset + grants.data.items.length >= grants.data.total || grants.isFetching
-                  }
-                  onClick={() => setGrantOffset((value) => value + pageSize)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">Entry decision audit</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              ALLOWED, DENIED and fail-closed unavailable outcomes produced by Backend.
-            </p>
-          </div>
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Status
-            <select
-              value={decisionStatus}
-              onChange={(event) => {
-                setDecisionStatus(event.target.value as typeof decisionStatus);
-                setDecisionOffset(0);
-              }}
-              className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-800"
-            >
-              <option value="ALL">All decisions</option>
-              {decisionStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {zoneDecisionLabel(status)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {decisions.error && (
-          <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-            {errorMessage(decisions.error)}
-          </p>
-        )}
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
-                <th className="px-3 py-3">Decision</th>
-                <th className="px-3 py-3">Worker evidence</th>
-                <th className="px-3 py-3">Track</th>
-                <th className="px-3 py-3">Reason</th>
-                <th className="px-3 py-3">Evaluated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {decisions.data?.items.map((decision) => (
-                <tr key={decision.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-3 py-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${decisionTone(decision.status)}`}
-                    >
-                      {decision.status === 'ALLOWED' ? (
-                        <IconCheck className="h-3.5 w-3.5" />
-                      ) : decision.status === 'DENIED' ? (
-                        <IconX className="h-3.5 w-3.5" />
-                      ) : (
-                        <IconAlertTriangle className="h-3.5 w-3.5" />
-                      )}
-                      {zoneDecisionLabel(decision.status)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-4">
-                    <WorkerName
-                      worker={decision.workerId ? workerById.get(decision.workerId) : undefined}
-                    />
-                    {!decision.workerId && decision.candidateWorkerId && (
-                      <span className="mt-1 block text-xs text-amber-700">
-                        Candidate: {decision.candidateWorkerId}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-4 font-mono text-xs text-slate-600">
-                    #{decision.trackId}
-                  </td>
-                  <td className="px-3 py-4 text-slate-700">
-                    {decision.reasonCode.replaceAll('_', ' ')}
-                  </td>
-                  <td className="px-3 py-4 text-slate-500">{formatDate(decision.evaluatedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {decisions.isPending && (
-            <p className="p-6 text-center text-sm text-slate-500">Loading entry decisions…</p>
-          )}
-          {decisions.data?.items.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-500">
-              No decision matches the current Site, Zone and status.
-            </p>
-          )}
-          {decisions.data && decisions.data.total > pageSize && (
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-3">
-              <span className="mr-auto text-xs text-slate-500">
-                {decisionOffset + 1}–
-                {Math.min(decisionOffset + decisions.data.items.length, decisions.data.total)} of{' '}
-                {decisions.data.total}
-              </span>
-              <button
-                type="button"
-                disabled={decisionOffset === 0 || decisions.isFetching}
-                onClick={() => setDecisionOffset((value) => Math.max(0, value - pageSize))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={
-                  decisionOffset + decisions.data.items.length >= decisions.data.total ||
-                  decisions.isFetching
-                }
-                onClick={() => setDecisionOffset((value) => value + pageSize)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
-              >
-                Next
-              </button>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-3">Decision</th>
+                    <th className="px-3 py-3">Worker evidence</th>
+                    <th className="px-3 py-3">Track</th>
+                    <th className="px-3 py-3">Reason</th>
+                    <th className="px-3 py-3">Evaluated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {decisions.data?.items.map((decision) => (
+                    <tr key={decision.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${decisionTone(decision.status)}`}
+                        >
+                          {decision.status === 'ALLOWED' ? (
+                            <IconCheck className="h-3.5 w-3.5" />
+                          ) : decision.status === 'DENIED' ? (
+                            <IconX className="h-3.5 w-3.5" />
+                          ) : (
+                            <IconAlertTriangle className="h-3.5 w-3.5" />
+                          )}
+                          {zoneDecisionLabel(decision.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-4">
+                        <WorkerName
+                          worker={decision.workerId ? workerById.get(decision.workerId) : undefined}
+                        />
+                        {!decision.workerId && decision.candidateWorkerId && (
+                          <span className="mt-1 block text-xs text-amber-700">
+                            Candidate: {decision.candidateWorkerId}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-4 font-mono text-xs text-slate-600">
+                        #{decision.trackId}
+                      </td>
+                      <td className="px-3 py-4 text-slate-700">
+                        {decision.reasonCode.replaceAll('_', ' ')}
+                      </td>
+                      <td className="px-3 py-4 text-slate-500">
+                        {formatDate(decision.evaluatedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {decisions.isPending && (
+                <p className="p-6 text-center text-sm text-slate-500">Loading entry decisions…</p>
+              )}
+              {decisions.data?.items.length === 0 && (
+                <p className="p-6 text-center text-sm text-slate-500">
+                  No decision matches the current Site, Zone and status.
+                </p>
+              )}
+              {decisions.data && decisions.data.total > pageSize && (
+                <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-3">
+                  <span className="mr-auto text-xs text-slate-500">
+                    {decisionOffset + 1}–
+                    {Math.min(decisionOffset + decisions.data.items.length, decisions.data.total)}{' '}
+                    of {decisions.data.total}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={decisionOffset === 0 || decisions.isFetching}
+                    onClick={() => setDecisionOffset((value) => Math.max(0, value - pageSize))}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      decisionOffset + decisions.data.items.length >= decisions.data.total ||
+                      decisions.isFetching
+                    }
+                    onClick={() => setDecisionOffset((value) => value + pageSize)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </section>
+          </section>
         </>
       )}
     </div>

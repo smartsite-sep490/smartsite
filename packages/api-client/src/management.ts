@@ -304,6 +304,15 @@ export class SmartSiteManagementClient {
   createWorker(token: string, siteId: string, input: { externalId: string; displayName: string }) {
     return this.request<WorkerResponse>('POST', `/sites/${pathId(siteId)}/workers`, token, input);
   }
+
+  linkWorkerAccount(token: string, siteId: string, workerId: string, userId: string) {
+    return this.request<WorkerResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/account`,
+      token,
+      { userId },
+    );
+  }
   listWorkers(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<WorkerResponse>>(
       'GET',

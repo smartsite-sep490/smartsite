@@ -1,9 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { IsNotEmpty, IsString, MaxLength, Matches } from 'class-validator';
-import { DataSource, In, type EntityManager } from 'typeorm';
+import { DataSource, In, IsNull, type EntityManager } from 'typeorm';
 import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
+import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
+import type { WorkerEntity } from '../../database/entities/worker.entity.js';
 import {
   FaceEnrollmentSessionEntity,
   FaceEnrollmentSessionStatus,
@@ -81,6 +84,7 @@ export class FaceEnrollmentService {
         actor,
         workerIdValue,
       );
+      await this.requireLinkedAccount(manager, worker);
       const active = await manager.getRepository(FaceEnrollmentSessionEntity).findOne({
         where: {
           workerId: worker.id,
@@ -136,6 +140,7 @@ export class FaceEnrollmentService {
       profile.status = FaceProfileStatus.REVOKED;
       profile.revokedAt = new Date();
       profile.revokedByUserId = actor.id;
+      profile.encryptedTemplate = null;
       return manager.getRepository(FaceProfileEntity).save(profile);
     });
   }
@@ -226,7 +231,15 @@ export class FaceEnrollmentService {
       const now = new Date();
       const profile =
         existing ?? manager.getRepository(FaceProfileEntity).create({ id: randomUUID() });
+      const worker = await this.workforce.requireWorkerEnrollmentAccess(
+        manager,
+        actor,
+        current.workerId,
+      );
+      await this.requireLinkedAccount(manager, worker);
       profile.workerId = current.workerId;
+      profile.userId = worker.userId;
+      profile.encryptedTemplate = completion.encryptedTemplate;
       profile.profileReferenceHash = profileReferenceHash;
       profile.modelVersion = completion.modelVersion;
       profile.status = FaceProfileStatus.ACTIVE;
@@ -258,7 +271,8 @@ export class FaceEnrollmentService {
   private validateCompletion(completion: FaceEnrollmentCompletion): void {
     if (
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(completion.profileReference) ||
-      !/^[^\p{Cc}\p{Cs}]{1,128}$/u.test(completion.modelVersion)
+      !/^[^\p{Cc}\p{Cs}]{1,128}$/u.test(completion.modelVersion) ||
+      !/^[A-Za-z0-9_-]{100,32766}={0,2}$/.test(completion.encryptedTemplate)
     )
       throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
         code: 'SERVICE_UNAVAILABLE',
@@ -281,12 +295,29 @@ export class FaceEnrollmentService {
           .getOne()
       : await manager.getRepository(FaceEnrollmentSessionEntity).findOneBy({ id: sessionId });
     if (!session) missing();
-    await this.workforce.requireWorkerEnrollmentAccess(manager, actor, session.workerId);
+    const worker = await this.workforce.requireWorkerEnrollmentAccess(
+      manager,
+      actor,
+      session.workerId,
+    );
+    await this.requireLinkedAccount(manager, worker);
     if (
       session.status !== FaceEnrollmentSessionStatus.PENDING &&
       session.status !== FaceEnrollmentSessionStatus.COLLECTING
     )
       conflict('Face enrollment is not open');
     return session;
+  }
+
+  private async requireLinkedAccount(manager: EntityManager, worker: WorkerEntity) {
+    if (!worker.userId) conflict('Link an account before enrolling a face');
+    const user = await manager
+      .getRepository(UserEntity)
+      .findOneBy({ id: worker.userId, isActive: true });
+    const role = await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
+      { userId: worker.userId, siteId: worker.siteId },
+      { userId: worker.userId, siteId: IsNull(), role: UserRole.ADMIN },
+    ]);
+    if (!user || !role) conflict('The linked account must be active and assigned to this site');
   }
 }

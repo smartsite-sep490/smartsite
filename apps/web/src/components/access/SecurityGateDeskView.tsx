@@ -1,10 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type {
-  FaceGateDecisionResponse,
-  FaceGateReasonCode,
-  FaceVerificationTechnicalOutcome,
-  GateAuthorizationOutcome,
-} from '@smartsite/contracts';
+import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import {
   IconAlertTriangle,
   IconCamera,
@@ -12,7 +7,6 @@ import {
   IconClock,
   IconKey,
   IconRefresh,
-  IconShield,
   IconUser,
   IconX,
 } from '../icons';
@@ -65,6 +59,8 @@ export function SecurityGateDeskView({
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraMountedRef = useRef(false);
+  const cameraRequestRef = useRef(0);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
@@ -76,13 +72,9 @@ export function SecurityGateDeskView({
   const [isScanning, setIsScanning] = useState(false);
   const [networkError, setNetworkError] = useState(false);
   const [lastDecision, setLastDecision] = useState<FaceGateDecisionResponse | null>(null);
-  const [candidateWorker, setCandidateWorker] = useState<{
-    id: string;
-    externalId: string;
-    displayName: string;
-    contractorName: string;
-    assignmentStatus: string;
-  } | null>(null);
+  const [candidateWorker, setCandidateWorker] = useState<
+    FaceGateVerificationResponse['worker'] | null
+  >(null);
 
   // QR Fallback modal state
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -91,23 +83,7 @@ export function SecurityGateDeskView({
   const [qrProcessing, setQrProcessing] = useState(false);
 
   // Recent Gate Events log
-  const [recentEvents, setRecentEvents] = useState<GateDeskEventRecord[]>([
-    {
-      id: 'evt-init-01',
-      timestamp: new Date(Date.now() - 120_000).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      workerName: 'Nguyen Van An',
-      workerExternalId: 'WRK-2026-081',
-      contractorName: 'Delta Construction Corp',
-      direction: 'IN',
-      method: 'FACE',
-      outcome: 'ALLOWED',
-      reasonCode: 'VALID_ASSIGNMENT',
-      gateName: 'Gate 1 — Main North Entrance',
-    },
-  ]);
+  const [recentEvents, setRecentEvents] = useState<GateDeskEventRecord[]>([]);
 
   // Safe preview URL update helper
   const updateCapturedPreview = useCallback((blob: Blob | null) => {
@@ -125,36 +101,46 @@ export function SecurityGateDeskView({
   }, []);
 
   // Initialize and tear down webcam
-  const startCamera = useCallback(async () => {
-    setCameraError(null);
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
+  const startCamera = useCallback(() => {
+    const requestId = ++cameraRequestRef.current;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    return navigator.mediaDevices
+      .getUserMedia({
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
           facingMode: 'user',
         },
         audio: false,
+      })
+      .then(async (stream) => {
+        if (!cameraMountedRef.current || requestId !== cameraRequestRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        setCameraError(null);
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+        if (cameraMountedRef.current && requestId === cameraRequestRef.current)
+          setCameraActive(true);
+      })
+      .catch((err: unknown) => {
+        if (!cameraMountedRef.current || requestId !== cameraRequestRef.current) return;
+        const message = err instanceof Error ? err.message : 'Webcam access failed';
+        setCameraError(
+          `Camera unavailable: ${message}. Check browser permissions or device connection.`,
+        );
+        setCameraActive(false);
       });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => undefined);
-      }
-      setCameraActive(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Webcam access failed';
-      setCameraError(
-        `Camera unavailable: ${message}. Check browser permissions or device connection.`,
-      );
-      setCameraActive(false);
-    }
   }, []);
 
   const stopCamera = useCallback(() => {
+    cameraRequestRef.current += 1;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -167,8 +153,10 @@ export function SecurityGateDeskView({
 
   // Cleanup on unmount
   useEffect(() => {
+    cameraMountedRef.current = true;
     void startCamera();
     return () => {
+      cameraMountedRef.current = false;
       stopCamera();
       if (capturedPreviewUrlRef.current) {
         revokeSafePreviewUrl(capturedPreviewUrlRef.current);
@@ -213,16 +201,7 @@ export function SecurityGateDeskView({
         });
 
         if (response.ok) {
-          const data = (await response.json()) as {
-            decision: FaceGateDecisionResponse;
-            worker?: {
-              id: string;
-              externalId: string;
-              displayName: string;
-              contractorName: string;
-              assignmentStatus: string;
-            };
-          };
+          const data = (await response.json()) as FaceGateVerificationResponse;
           setLastDecision(data.decision);
           setCandidateWorker(data.worker ?? null);
         } else if (response.status === 404 || response.status === 502 || response.status === 503) {
@@ -243,7 +222,7 @@ export function SecurityGateDeskView({
         setLastDecision(null);
         setCandidateWorker(null);
       }
-    } catch (err) {
+    } catch {
       setNetworkError(true);
       setLastDecision(null);
     } finally {
@@ -547,6 +526,7 @@ export function SecurityGateDeskView({
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900">{candidateWorker.displayName}</h4>
+                    <p className="text-xs text-slate-600">Account: {candidateWorker.username}</p>
                     <p className="text-xs text-slate-500">
                       ID: <span className="font-mono">{candidateWorker.externalId}</span> ·{' '}
                       {candidateWorker.contractorName}

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Logger, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -23,6 +34,7 @@ import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   CreateWorkerCommand,
+  LinkWorkerAccountCommand,
   WorkforceConfigurationService,
 } from './workforce-configuration.service.js';
 
@@ -31,6 +43,7 @@ function workerResponse(worker: WorkerEntity) {
     id: worker.id,
     siteId: worker.siteId,
     contractorId: worker.contractorId,
+    userId: worker.userId,
     externalId: worker.externalId,
     displayName: worker.displayName,
     isActive: worker.isActive,
@@ -53,6 +66,24 @@ export class WorkforceController {
   private readonly logger = new Logger(WorkforceController.name);
 
   constructor(private readonly workforce: WorkforceConfigurationService) {}
+
+  @Put(':workerId/account')
+  @ApiOkResponse({ type: WorkerResponseDto })
+  async linkAccount(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerId') workerId: string,
+    @Body() input: LinkWorkerAccountCommand,
+  ) {
+    const worker = await this.workforce.linkAccount(siteId, workerId, input);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'worker.account.link',
+      resourceId: worker.id,
+      siteId,
+    });
+    return workerResponse(worker);
+  }
 
   @Post()
   @ApiCreatedResponse({ type: WorkerResponseDto })

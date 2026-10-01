@@ -1,21 +1,22 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ContractorEntity } from '../../database/entities/contractor.entity.js';
 import { ContractorSiteParticipationEntity } from '../../database/entities/contractor-site-participation.entity.js';
-import { FaceProfileEntity } from '../../database/entities/face-profile.entity.js';
+import {
+  FaceProfileEntity,
+  FaceProfileStatus,
+} from '../../database/entities/face-profile.entity.js';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerSiteZoneAssignmentEntity } from '../../database/entities/worker-site-zone-assignment.entity.js';
-import { UserRole } from '../../database/entities/user.entity.js';
+import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
+import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import type { WorkforceActor } from './contractor-operations.service.js';
 import { authorizeGateEntry } from './gate-authorization-policy.js';
 import { decideFaceGate } from './face-gate-policy.js';
-import {
-  FACE_ENROLLMENT_ADAPTER,
-  type UploadedFaceSample,
-} from './face-enrollment.service.js';
+import { FACE_ENROLLMENT_ADAPTER, type UploadedFaceSample } from './face-enrollment.service.js';
 import {
   UnavailableFaceEnrollmentAdapter,
   type FaceVerificationAdapter,
@@ -57,29 +58,82 @@ export class FaceGateService {
         code: 'VALIDATION_FAILED',
         message: 'Invalid gate identifier',
       });
-    // The gate console is an operator surface: any authenticated account with an
-    // assigned site may run it; authorization of the identified worker remains
-    // entirely server-side below.
-    const evidence = await this.adapter.verify({ verificationId: randomUUID(), jpeg: frame.buffer });
+    // Only authorized site operators may scan; account linkage does not grant
+    // gate access. Authorization of the identified worker remains server-side.
+    const templates = await this.dataSource
+      .getRepository(FaceProfileEntity)
+      .createQueryBuilder('profile')
+      .innerJoin(
+        WorkerEntity,
+        'worker',
+        'worker.id = profile.worker_id AND worker.user_id = profile.user_id',
+      )
+      .innerJoin(UserEntity, 'account', 'account.id = profile.user_id AND account.is_active = TRUE')
+      .select('profile.profile_reference_hash', 'profileReferenceHash')
+      .addSelect('profile.encrypted_template', 'encryptedTemplate')
+      .where('worker.site_id = :siteId AND worker.is_active = TRUE', { siteId })
+      .andWhere(
+        "EXISTS (SELECT 1 FROM user_role_assignment role WHERE role.user_id = account.id AND (role.site_id = worker.site_id OR (role.role = 'ADMIN' AND role.site_id IS NULL)))",
+      )
+      .andWhere('profile.status = :status AND profile.encrypted_template IS NOT NULL', {
+        status: FaceProfileStatus.ACTIVE,
+      })
+      .orderBy('profile.id', 'ASC')
+      .limit(1001)
+      .getRawMany<{ profileReferenceHash: string; encryptedTemplate: string }>();
+    if (templates.length > 1000)
+      return { decision: decideFaceGate({ technicalOutcome: 'AI_UNAVAILABLE' }) };
+    const evidence = await this.adapter.verify({
+      verificationId: randomUUID(),
+      jpeg: frame.buffer,
+      templates,
+    });
     if (evidence.status !== 'MATCHED' || !evidence.candidateProfileReference) {
       return { decision: decideFaceGate({ technicalOutcome: evidence.status }) };
     }
     return this.dataSource.transaction(async (manager) => {
       const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
       if (!site)
-        throw new PublicHttpException(HttpStatus.NOT_FOUND, { code: 'NOT_FOUND', message: 'Not found' });
+        throw new PublicHttpException(HttpStatus.NOT_FOUND, {
+          code: 'NOT_FOUND',
+          message: 'Not found',
+        });
       const profile = await manager.getRepository(FaceProfileEntity).findOneBy({
         profileReferenceHash: createHash('sha256')
           .update(evidence.candidateProfileReference!, 'utf8')
           .digest('hex'),
       });
-      if (!profile) {
+      if (
+        !profile ||
+        !templates.some(
+          (template) => template.profileReferenceHash === profile.profileReferenceHash,
+        )
+      ) {
         return { decision: decideFaceGate({ technicalOutcome: 'UNKNOWN' }) };
       }
       if (profile.modelVersion !== evidence.modelVersion) {
         return { decision: decideFaceGate({ technicalOutcome: 'MATCHED' }) };
       }
       const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: profile.workerId });
+      const account = profile.userId
+        ? await manager.getRepository(UserEntity).findOneBy({ id: profile.userId, isActive: true })
+        : null;
+      const accountRole = account
+        ? await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
+            { userId: account.id, siteId },
+            { userId: account.id, siteId: IsNull(), role: UserRole.ADMIN },
+          ])
+        : null;
+      if (
+        !worker ||
+        worker.siteId !== siteId ||
+        worker.userId !== profile.userId ||
+        !account ||
+        !accountRole ||
+        profile.status !== FaceProfileStatus.ACTIVE
+      ) {
+        return { decision: decideFaceGate({ technicalOutcome: 'UNKNOWN' }) };
+      }
       const contractor = worker?.contractorId
         ? await manager.getRepository(ContractorEntity).findOneBy({ id: worker.contractorId })
         : null;
@@ -129,6 +183,8 @@ export class FaceGateService {
           ? {
               worker: {
                 id: worker.id,
+                userId: account.id,
+                username: account.username,
                 externalId: worker.externalId,
                 displayName: worker.displayName,
                 contractorName: contractor?.name ?? 'Chưa gán nhà thầu',
@@ -140,7 +196,9 @@ export class FaceGateService {
     });
   }
 
-  private validateFrame(frame: UploadedFaceSample | undefined): asserts frame is UploadedFaceSample {
+  private validateFrame(
+    frame: UploadedFaceSample | undefined,
+  ): asserts frame is UploadedFaceSample {
     if (
       !frame ||
       !Buffer.isBuffer(frame.buffer) ||

@@ -143,6 +143,27 @@ service token. It accepts three authenticated JPEG uploads. Completion remains
 honestly `AI_UNAVAILABLE` until a reviewed face model and private template store
 exist; it never creates a simulated biometric profile or grants access.
 
+### Account-linked face enrollment
+
+Face templates now live as encrypted ciphertext in PostgreSQL `face_profile.encrypted_template`.
+`worker.user_id` links an explicitly selected account to the worker; `face_profile.user_id` records
+the account at enrollment. Raw photos are transient. The Fernet key stays in the AI runtime as
+`SMARTSITE_AI_IDENTITY_TEMPLATE_ENCRYPTION_KEY`, never in the database or browser.
+
+An Admin links an active site-assigned account (or global Admin) using the account selector in Face Enrollment
+or `PUT /api/v1/sites/:siteId/workers/:workerId/account` with `{ "userId": "<account UUID>" }`.
+Each account may link to one worker per site. Changing an existing link to another account is rejected.
+Then capture three samples with consent. The Backend atomically saves the encrypted template,
+account, profile metadata, and completed session. A matching face resolves the worker and account;
+gate permissions still depend on the Backend's contractor and assignment policy.
+
+Deploy the Backend migration `AccountFaceTemplates1790899200000` and both updated services together.
+Legacy file-backed active profiles become `NEEDS_REENROLL`; select their account and enroll again.
+Old local template files are preserved and are no longer read. Disabled accounts, removed site roles,
+inactive workers and revoked profiles are excluded from matching. Revocation clears DB ciphertext.
+AI restarts retain enrollment because the templates come from PostgreSQL, but all AI instances must
+use the same encryption key and compatible model. Losing/changing the key requires reenrollment.
+
 ### Mobile Development
 
 See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instructions.

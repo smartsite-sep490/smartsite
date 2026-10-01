@@ -38,3 +38,16 @@ export interface FaceGateDecisionResponse {
   /** QR is a fallback for an inconclusive face scan, never an authorization bypass. */
   qrFallbackAllowed: boolean;
 }
+
+export interface FaceGateVerificationResponse {
+  decision: FaceGateDecisionResponse;
+  worker?: {
+    id: string;
+    userId: string;
+    username: string;
+    externalId: string;
+    displayName: string;
+    contractorName: string;
+    assignmentStatus: string;
+  };
+}
