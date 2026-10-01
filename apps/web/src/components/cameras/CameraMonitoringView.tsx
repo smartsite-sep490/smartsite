@@ -37,9 +37,8 @@ export function CameraMonitoringView({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold text-[#111111]">Camera Monitoring</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EDF3EC] text-[#346538] border border-[#346538]/20 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#346538]" />
-                  Live AI Active
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]">
+                  Vision Workspace
                 </span>
               </div>
               <p className="text-xs text-[#6B6B6B] mt-0.5">
