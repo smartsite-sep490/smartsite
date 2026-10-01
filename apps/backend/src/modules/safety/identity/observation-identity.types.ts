@@ -6,6 +6,18 @@ export interface ObservationPersonBoundingBox {
   coordinateSpace: 'NORMALIZED_0_1';
 }
 
+export interface ObservationSubjectRef {
+  eventId: string;
+  personObservationIndex: number;
+  payloadHash: string;
+  cameraId: string;
+  cameraExternalId: string;
+  streamSessionId: string;
+  capturedAt: string;
+  trackId: number;
+  personBoundingBox: ObservationPersonBoundingBox;
+}
+
 export type ObservationSubjectUnavailableReason =
   | 'INVALID_SUBJECT_INDEX'
   | 'OBSERVATIONS_UNAVAILABLE'

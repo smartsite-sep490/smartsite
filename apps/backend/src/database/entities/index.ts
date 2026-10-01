@@ -12,6 +12,8 @@ import { WorkerEntity } from './worker.entity.js';
 import { ZoneAccessGrantEntity } from './zone-access-grant.entity.js';
 import { ZoneEntryDecisionEntity } from './zone-entry-decision.entity.js';
 import { SafetyAlertReviewEntity } from './safety-alert-review.entity.js';
+import { ObservationIdentityResolutionEntity } from './observation-identity-resolution.entity.js';
+import { ObservationIdentityDecisionEntity } from './observation-identity-decision.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -29,6 +31,8 @@ export * from './worker.entity.js';
 export * from './zone-access-grant.entity.js';
 export * from './zone-entry-decision.entity.js';
 export * from './safety-alert-review.entity.js';
+export * from './observation-identity-resolution.entity.js';
+export * from './observation-identity-decision.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -45,4 +49,6 @@ export const ENTITIES = [
   ZoneAccessGrantEntity,
   ZoneEntryDecisionEntity,
   SafetyAlertReviewEntity,
+  ObservationIdentityResolutionEntity,
+  ObservationIdentityDecisionEntity,
 ] as const;

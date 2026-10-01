@@ -183,6 +183,13 @@ Downgrade về `integer` sẽ bị PostgreSQL từ chối nếu còn Track ID l�
 lệnh thất bại nguyên tử, không xóa hoặc cắt giá trị để ép rollback. Khi đã có các ID đó,
 ưu tiên forward fix hoặc quy trình restore đã được duyệt, không coi `revert` luôn khả dụng.
 
+Migration `ObservationIdentityReview1790899200000` chỉ cho revert khi cả head và audit
+đều rỗng. Nếu đã có quyết định review, `down` từ chối trước mọi thay đổi schema trong
+cùng một statement; dùng forward fix hoặc backup/restore được duyệt. Không truncate
+audit để ép rollback. Trigger chặn `UPDATE`/`DELETE` quyết định; tài khoản database
+runtime phải không có quyền `TRUNCATE` hoặc DDL. Trigger không bảo vệ trước database
+owner/superuser. Chỉ fixture giả trong database test riêng được dọn bằng `TRUNCATE`.
+
 ### Neon local
 
 Không tự tạo Neon project. Đăng nhập Neon CLI, liên kết đúng project rồi kéo riêng biến PostgreSQL vào file mà Backend development thực sự nạp:

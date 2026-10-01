@@ -24,6 +24,8 @@ import {
   type ZoneEntryDecisionInput,
 } from '../../modules/zones/zone-entry-authorization.service.js';
 import type { ZoneAuthorizationResult } from '../../modules/zones/zone-authorization.interface.js';
+import { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
+export { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
 
 export interface AiIngestionResult {
   eventId: string;
@@ -40,42 +42,6 @@ interface ValidatedObservationEvent {
   frameDimensions: { width: number; height: number };
   observations: Array<Record<string, unknown>>;
   evidence: Array<Record<string, unknown>>;
-}
-
-/**
- * Normalizes an RFC 3339 date-time string into a valid ECMAScript Date.
- * The canonical contract accepts RFC 3339 timestamps with `T`/`t`, `Z`/`z`
- * or colon-delimited offsets, plus leap seconds (:60).
- *    ECMAScript Date returns NaN for seconds = 60.
- *
- * This function:
- * Leap seconds are normalized to :59 of the same minute for the queryable
- * PostgreSQL timestamp. The exact original timestamp remains in rawPayload and
- * is used for the canonical hash.
- *
- * Spec §15 requirement: The exact original payload and canonical RFC 8785 payloadHash
- * must remain untouched, preserving raw evidence while storing a safe, queryable
- * timestamptz in PostgreSQL.
- */
-export function parseNormalizedCapturedAt(dateString: string): Date | null {
-  if (!dateString || typeof dateString !== 'string') {
-    return null;
-  }
-
-  let normalized = dateString.trim();
-
-  // Normalize RFC 3339 leap second (:60) to :59.
-  normalized = normalized.replace(
-    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):60(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i,
-    (_match, prefix, fraction, tz) => `${prefix}:59${fraction ?? ''}${tz ?? ''}`,
-  );
-
-  const parsed = new Date(normalized);
-  if (Number.isFinite(parsed.getTime())) {
-    return parsed;
-  }
-
-  return null;
 }
 
 @Injectable()
