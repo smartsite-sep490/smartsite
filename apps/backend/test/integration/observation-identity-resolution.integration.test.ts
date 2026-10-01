@@ -20,6 +20,8 @@ import {
 } from '../../src/database/entities/index.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { ObservationIdentityResolutionService } from '../../src/modules/safety/identity/observation-identity-resolution.service.js';
+import { ObservationIdentityContextService } from '../../src/modules/safety/identity/observation-identity-context.service.js';
+import { ZoneAccessManagementService } from '../../src/modules/zones/zone-access-management.service.js';
 import { SafetyAlertEvidenceService } from '../../src/modules/safety/alerts/safety-alert-evidence.service.js';
 import { ObservationIdentityReview1790899200000 } from '../../src/database/migrations/1790899200000-ObservationIdentityReview.js';
 import { createTestConfig } from '../support/config.js';
@@ -579,7 +581,7 @@ test('maximum persisted revision cannot advance or overflow the audit integer', 
     const initial = await f.decide(f.resolve());
     const maxId = randomUUID();
     await dataSource.query(
-      `INSERT INTO observation_identity_decision(id,resolution_id,site_id,actor_user_id,revision,expected_revision,command_hash,action,worker_id,evidence_index,evidence_sha256,reason) VALUES($1,$2,$3,$4,2147483647,2147483646,$5,'RESOLVE',$6,0,$7,'Synthetic maximum revision fixture.')`,
+      `INSERT INTO observation_identity_decision(id,resolution_id,site_id,actor_user_id,revision,expected_revision,command_hash,action,worker_id,evidence_index,evidence_sha256,reason) VALUES($1,$2,$3,$4,2147483646,2147483645,$5,'RESOLVE',$6,0,$7,'Synthetic penultimate revision fixture.')`,
       [
         maxId,
         initial.latestHead.id,
@@ -591,9 +593,11 @@ test('maximum persisted revision cannot advance or overflow the audit integer', 
       ],
     );
     await dataSource.query(
-      'UPDATE observation_identity_resolution SET revision=2147483647,current_decision_id=$1 WHERE id=$2',
+      'UPDATE observation_identity_resolution SET revision=2147483646,current_decision_id=$1 WHERE id=$2',
       [maxId, initial.latestHead.id],
     );
+    const final = await f.decide(f.resolve(2147483646));
+    assert.equal(final.latestHead.revision, 2147483647);
     await assert.rejects(
       f.decide(f.resolve(2147483646)),
       publicError('CONFLICT', 'Observation identity revision is stale'),
@@ -607,6 +611,39 @@ test('maximum persisted revision cannot advance or overflow the audit integer', 
       )[0].revision,
       2147483647,
     );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('real scoped context snapshot returns latest manual head and preserves CLEAR after raw corruption', async () => {
+  const f = await fixture();
+  try {
+    const result = await f.decide(f.resolve());
+    const contextService = new ObservationIdentityContextService(
+      f.service,
+      f.evidence,
+      new ZoneAccessManagementService(dataSource),
+    );
+    const context = await contextService.get(f.siteId, f.alertIds[1]!, f.eventId);
+    assert.equal(context.subjects.length, 2);
+    assert.equal(context.subjects[0]?.latestManualDecision?.id, result.decision.id);
+    assert.equal(context.subjects[0]?.canClear, true);
+    assert.equal(context.subjects[0]?.resolveBlockReason, 'WORKER_READER_UNAVAILABLE');
+    assert.equal(context.subjects[1]?.latestManualDecision, null);
+    await dataSource
+      .getRepository(AiObservationEventEntity)
+      .update({ eventId: f.eventId }, { rawPayload: { corrupted: true } });
+    const corrupt = await contextService.get(f.siteId, f.alertIds[0]!, f.eventId);
+    assert.equal(corrupt.subjects.length, 1);
+    assert.equal(corrupt.subjects[0]?.subjectRefSource, 'PERSISTED_REVIEW');
+    assert.equal(corrupt.subjects[0]?.canClear, true);
+    assert.equal(corrupt.subjects[0]?.canResolve, false);
+    await assert.rejects(
+      contextService.get(f.otherSiteId, f.alertIds[0]!, f.eventId),
+      publicError('NOT_FOUND'),
+    );
+    assert.equal(JSON.stringify(corrupt).includes('local://'), false);
   } finally {
     await f.cleanup();
   }

@@ -1,9 +1,8 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
-import { DataSource, type EntityManager } from 'typeorm';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import { conflict, missing, page } from '../../../common/configuration/commands.js';
-import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../../../database/entities/alert-detection-mapping.entity.js';
@@ -22,11 +21,20 @@ import {
 import { selectObservationSubject } from './observation-identity-subject.js';
 import type { ObservationSubjectRef } from './observation-identity.types.js';
 import type { WorkerReferenceReader } from './worker-reference.port.js';
+import { reviewEventIsConsistent } from './observation-identity-event.js';
 
 export interface ObservationIdentityDecisionResult {
   decision: ObservationIdentityDecisionEntity;
   latestHead: ObservationIdentityResolutionEntity;
   replayed: boolean;
+}
+
+export interface ObservationIdentityContextRecords {
+  event: AiObservationEventEntity;
+  heads: {
+    head: ObservationIdentityResolutionEntity;
+    decision: ObservationIdentityDecisionEntity | null;
+  }[];
 }
 
 /** Internal application service. HTTP identity authorization is required before registration. */
@@ -203,6 +211,42 @@ export class ObservationIdentityResolutionService {
     return { items, total };
   }
 
+  /** Feature-internal snapshot, never an HTTP response: raw evidence is projected by context. */
+  async readContextRecords(
+    siteId: string,
+    alertId: string,
+    eventId: string,
+  ): Promise<ObservationIdentityContextRecords> {
+    const scope = normalizeObservationIdentitySubjectScope({
+      siteId,
+      alertId,
+      eventId,
+      personObservationIndex: 0,
+    });
+    return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
+      const event = await this.loadScopedEvent(manager, scope);
+      const heads = await manager.getRepository(ObservationIdentityResolutionEntity).find({
+        where: { eventId: scope.eventId, siteId: scope.siteId },
+        order: { personObservationIndex: 'ASC' },
+        take: 256,
+      });
+      const ids = heads.flatMap((head) => (head.currentDecisionId ? [head.currentDecisionId] : []));
+      const decisions = ids.length
+        ? await manager
+            .getRepository(ObservationIdentityDecisionEntity)
+            .findBy({ id: In(ids), siteId: scope.siteId })
+        : [];
+      const byId = new Map(decisions.map((decision) => [decision.id, decision]));
+      return {
+        event,
+        heads: heads.map((head) => ({
+          head,
+          decision: head.currentDecisionId ? (byId.get(head.currentDecisionId) ?? null) : null,
+        })),
+      };
+    });
+  }
+
   private async lock(manager: EntityManager, key: string): Promise<void> {
     await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key]);
   }
@@ -275,7 +319,7 @@ export class ObservationIdentityResolutionService {
   ): ObservationSubjectRef {
     const raw = event.rawPayload;
     if (
-      !validateObservationEvent(raw).isValid ||
+      !reviewEventIsConsistent(event) ||
       event.payloadHash !== expectedHash ||
       computeCanonicalPayloadHash(raw) !== expectedHash
     )
@@ -286,9 +330,6 @@ export class ObservationIdentityResolutionService {
       streamSessionId: string;
       capturedAt: string;
     };
-    const capturedAt = parseNormalizedCapturedAt(header.capturedAt);
-    if (!capturedAt || capturedAt.getTime() !== event.capturedAt.getTime())
-      conflict('Observation identity evidence is inconsistent');
     if (
       header.eventId.toLowerCase() !== scope.eventId ||
       header.cameraExternalId !== event.cameraExternalId ||
