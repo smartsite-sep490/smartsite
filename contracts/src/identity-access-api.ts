@@ -67,3 +67,7 @@ export interface GateAccessLogResponse {
   username: string | null;
   decision: FaceGateDecisionResponse;
 }
+export interface GateFacePresenceResponse {
+  state: 'NEW_FACE' | 'SAME_FACE' | 'WAITING' | 'QUALITY_FAILED' | 'AI_UNAVAILABLE';
+  reasonCode: string;
+}

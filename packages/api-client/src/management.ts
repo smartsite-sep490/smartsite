@@ -28,6 +28,7 @@ import type {
   ZoneEntryDecisionResponse,
   ZoneEntryDecisionStatus,
   FaceGateVerificationResponse,
+  GateFacePresenceResponse,
   GateAccessLogResponse,
   EnrollmentCaptureTarget,
   WorkerGatePermissionsResponse,
@@ -426,6 +427,17 @@ export class SmartSiteManagementClient {
       'GET',
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/access-logs`,
       token,
+    );
+  }
+  observeGateFace(token: string, siteId: string, gateId: string, sessionId: string, frame: Blob) {
+    const form = new FormData();
+    form.append('frame', frame, 'presence.jpg');
+    form.append('sessionId', sessionId);
+    return this.requestFormData<GateFacePresenceResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-presence`,
+      token,
+      form,
     );
   }
   getWorkerGatePermissions(token: string, siteId: string, workerId: string) {

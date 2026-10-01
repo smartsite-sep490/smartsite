@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { DataSource, IsNull } from 'typeorm';
-import type { FaceGateVerificationResponse, GateAccessLogResponse } from '@smartsite/contracts';
+import type {
+  FaceGateVerificationResponse,
+  GateAccessLogResponse,
+  GateFacePresenceResponse,
+} from '@smartsite/contracts';
 import { GateAccessLogEntity } from '../../database/entities/gate-access-log.entity.js';
 import { uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -68,6 +72,51 @@ export class FaceGateService {
       decision: result.decision,
     });
     return { ...result, log: this.logResponse(log) };
+  }
+  async observe(
+    actor: WorkforceActor,
+    siteId: string,
+    gateId: string,
+    sessionId: string,
+    frame: UploadedFaceSample | undefined,
+  ): Promise<GateFacePresenceResponse> {
+    await this.requireOperator(actor, siteId, gateId);
+    uuid(sessionId);
+    this.validateFrame(frame);
+    const evidence = await this.adapter.verify({
+      verificationId: randomUUID(),
+      jpeg: frame.buffer,
+      templates: [],
+      gatePresenceSession: createHash('sha256')
+        .update(`${actor.id}:${siteId}:${gateId}:${sessionId}`)
+        .digest('hex'),
+    });
+    const reason = evidence.reasonCode;
+    if (evidence.status === 'UNKNOWN' && reason === 'FACE_PRESENCE_NEW')
+      return { state: 'NEW_FACE', reasonCode: reason };
+    if (evidence.status === 'UNKNOWN' && reason === 'FACE_PRESENCE_SAME')
+      return { state: 'SAME_FACE', reasonCode: reason };
+    if (evidence.status === 'UNKNOWN' && reason === 'FACE_PRESENCE_STABILIZING')
+      return { state: 'WAITING', reasonCode: reason };
+    if (evidence.status === 'QUALITY_FAILED')
+      return {
+        state: 'QUALITY_FAILED',
+        reasonCode: [
+          'FACE_NOT_FOUND',
+          'FACE_MULTIPLE_FOUND',
+          'FACE_TOO_DARK',
+          'FACE_TOO_BRIGHT',
+          'FACE_BLURRY',
+          'FACE_TOO_SMALL',
+          'FACE_TOO_CLOSE',
+          'FACE_CLIPPED',
+          'FACE_NOT_CENTERED',
+          'FACE_MATCH_UNCERTAIN',
+        ].includes(reason ?? '')
+          ? reason!
+          : 'FACE_QUALITY_INSUFFICIENT',
+      };
+    return { state: 'AI_UNAVAILABLE', reasonCode: 'FACE_MODEL_UNAVAILABLE' };
   }
 
   async listLogs(

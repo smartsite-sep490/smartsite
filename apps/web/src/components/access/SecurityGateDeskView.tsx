@@ -3,14 +3,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { inspectGateCamera } from './gateCameraReadiness';
+import { GateCameraSession } from './gateCameraSession';
 import {
   IconAlertTriangle,
+  IconBuilding2,
   IconCamera,
   IconCheck,
   IconClock,
   IconKey,
   IconRefresh,
-  IconUser,
+  IconShield,
   IconX,
 } from '../icons';
 import {
@@ -19,6 +22,7 @@ import {
   getSafeReasonMessage,
   resolveGateUiState,
   revokeSafePreviewUrl,
+  retainGateWorker,
 } from './faceGateUtils';
 
 export interface GateDeskEventRecord {
@@ -45,6 +49,28 @@ export interface SecurityGateDeskViewProps {
 
 const gates = SITE_GATES;
 
+function getGateFaceMessage(reasonCode: string): string {
+  const map: Record<string, string> = {
+    FACE_QUALITY_ACCEPTED: 'Face quality accepted.',
+    FACE_NOT_FOUND: 'No face detected. Position face within viewfinder.',
+    FACE_MULTIPLE_FOUND: 'Multiple faces detected. Only one person at a time.',
+    FACE_TOO_SMALL: 'Face is too far. Step closer to the camera.',
+    FACE_TOO_CLOSE: 'Face is too close. Step back slightly.',
+    FACE_CLIPPED: 'Face clipped at edge. Center your face.',
+    FACE_NOT_CENTERED: 'Face off-center. Align with center frame.',
+    FACE_TOO_DARK: 'Lighting too dim. Face toward a light source.',
+    FACE_TOO_BRIGHT: 'Lighting too bright. Avoid strong direct glare.',
+    FACE_BLURRY: 'Image blurry. Hold still during scan.',
+    FACE_HEAD_TILTED: 'Head is tilted. Keep head upright.',
+    FACE_TURN_TOO_FAR: 'Turned too far. Face the camera directly.',
+    FACE_POSE_FRONT_REQUIRED: 'Look directly at the camera.',
+    FACE_NOT_CLEAR: 'Face not clearly visible. Hold still and remove coverings.',
+    FACE_LANDMARKS_UNAVAILABLE: 'Facial landmarks not clear. Remove coverings and pose directly.',
+    FACE_IMAGE_INVALID: 'Image unreadable. Hold still for retake.',
+  };
+  return map[reasonCode] ?? 'Face quality insufficient. Adjust position and hold still.';
+}
+
 export function SecurityGateDeskView({
   apiUrl,
   token,
@@ -61,11 +87,17 @@ export function SecurityGateDeskView({
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const cameraMountedRef = useRef(false);
-  const cameraRequestRef = useRef(0);
+  const cameraSessionRef = useRef<GateCameraSession | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [cameraDeviceId, setCameraDeviceId] = useState('');
+  const cameraDeviceRef = useRef('');
+  const scanGeneration = useRef(0);
+  const scanBusy = useRef(false);
+  const presenceSession = useRef('');
+  const [scanMessage, setScanMessage] = useState('Awaiting face…');
 
   // In-memory frame preview (never stored in localStorage/sessionStorage)
   const capturedPreviewUrlRef = useRef<string | null>(null);
@@ -122,84 +154,98 @@ export function SecurityGateDeskView({
 
   // Initialize and tear down webcam
   const startCamera = useCallback(() => {
-    const requestId = ++cameraRequestRef.current;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
-    return navigator.mediaDevices
-      .getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user',
-        },
-        audio: false,
-      })
-      .then(async (stream) => {
-        if (!cameraMountedRef.current || requestId !== cameraRequestRef.current) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        setCameraError(null);
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
-        }
-        if (cameraMountedRef.current && requestId === cameraRequestRef.current)
-          setCameraActive(true);
-      })
-      .catch((err: unknown) => {
-        if (!cameraMountedRef.current || requestId !== cameraRequestRef.current) return;
-        const message = err instanceof Error ? err.message : 'Webcam access failed';
-        setCameraError(
-          `Camera unavailable: ${message}. Check browser permissions or device connection.`,
-        );
-        setCameraActive(false);
-      });
+    setCameraActive(false);
+    setCameraError(null);
+    return cameraSessionRef.current?.start(cameraDeviceRef.current);
   }, []);
 
   const stopCamera = useCallback(() => {
-    cameraRequestRef.current += 1;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    scanGeneration.current += 1;
+    presenceSession.current = '';
+    cameraSessionRef.current?.stop();
     setCameraActive(false);
   }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     cameraMountedRef.current = true;
-    void startCamera();
+    const cameraSession = new GateCameraSession({
+      video: () => videoRef.current,
+      ready: (devices, deviceId) => {
+        setCameraError(null);
+        setCameraActive(true);
+        setCameraDevices(devices);
+        cameraDeviceRef.current = deviceId;
+        setCameraDeviceId(deviceId);
+      },
+      failed: (message) => {
+        scanGeneration.current += 1;
+        presenceSession.current = '';
+        setCameraActive(false);
+        setCameraError(message);
+        setIsScanning(false);
+        setScanMessage(message);
+      },
+    });
+    cameraSessionRef.current = cameraSession;
+    void cameraSession.start(cameraDeviceRef.current);
     return () => {
       cameraMountedRef.current = false;
-      stopCamera();
+      scanGeneration.current += 1;
+      presenceSession.current = '';
+      cameraSession.stop();
+      cameraSessionRef.current = null;
       if (capturedPreviewUrlRef.current) {
         revokeSafePreviewUrl(capturedPreviewUrlRef.current);
         capturedPreviewUrlRef.current = null;
       }
     };
-  }, [startCamera, stopCamera]);
+  }, [updateCapturedPreview]);
 
-  // One frame is sent after the camera has stabilized; there is no continuous browser polling.
+  // Presence checks do not create gate events; only a confirmed new face is verified.
   const handleScanFace = useCallback(async () => {
-    if (isScanning) return;
+    if (scanBusy.current || !token || !selectedSiteId) return;
     const video = videoRef.current;
     if (!video || !cameraActive) {
       setCameraError('Webcam feed is not running.');
       return;
     }
 
-    setIsScanning(true);
-    setNetworkError(false);
+    scanBusy.current = true;
+    const generation = scanGeneration.current;
 
     try {
-      // 1. Capture exactly one single JPEG frame in memory
+      const blocked = inspectGateCamera(video);
+      if (blocked) {
+        setScanMessage(blocked);
+        return;
+      }
       const frameBlob = await captureFrameBlob(video, { maxWidth: 1280, quality: 0.9 });
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
+      if (!presenceSession.current) presenceSession.current = crypto.randomUUID();
+      const presence = await client.observeGateFace(
+        token!,
+        selectedSiteId,
+        selectedGateId,
+        presenceSession.current,
+        frameBlob,
+      );
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
+      if (presence.state !== 'NEW_FACE') {
+        if (presence.state === 'SAME_FACE')
+          setScanMessage('Worker already scanned. Awaiting next worker or step out of frame.');
+        else if (presence.state === 'WAITING') {
+          setScanMessage('Face detected. Hold still to verify…');
+        } else if (presence.state === 'AI_UNAVAILABLE') {
+          setNetworkError(true);
+          setScanMessage('AI unavailable. Check connection and retry.');
+        } else {
+          setScanMessage(getGateFaceMessage(presence.reasonCode));
+        }
+        return;
+      }
+      setIsScanning(true);
+      setScanMessage('New face detected. Verifying gate access clearance…');
       updateCapturedPreview(frameBlob);
 
       try {
@@ -210,22 +256,24 @@ export function SecurityGateDeskView({
           frameBlob,
           direction,
         );
+        if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         setLastDecision(data.decision);
-        setCandidateWorker(data.worker ?? null);
+        // Historical display only: unknown scans never inherit this worker's identity or access.
+        setCandidateWorker((previous) => retainGateWorker(previous, data.worker));
         await queryClient.invalidateQueries({
           queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
         });
       } catch {
+        if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         // Network or connection failure
         setNetworkError(true);
-        setLastDecision(null);
-        setCandidateWorker(null);
       }
     } catch {
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       setNetworkError(true);
-      setLastDecision(null);
     } finally {
-      setIsScanning(false);
+      scanBusy.current = false;
+      if (generation === scanGeneration.current && cameraMountedRef.current) setIsScanning(false);
     }
   }, [
     apiUrl,
@@ -234,7 +282,6 @@ export function SecurityGateDeskView({
     sessionScope,
     cameraActive,
     direction,
-    isScanning,
     selectedGateId,
     selectedSiteId,
     token,
@@ -242,13 +289,28 @@ export function SecurityGateDeskView({
   ]);
 
   useEffect(() => {
-    if (!cameraActive || isScanning || lastDecision || networkError || !selectedSiteId) return;
-    const timer = window.setTimeout(() => void handleScanFace(), 1_200);
-    return () => window.clearTimeout(timer);
-  }, [cameraActive, handleScanFace, isScanning, lastDecision, networkError, selectedSiteId]);
+    if (!cameraActive || networkError || !selectedSiteId || !token) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      if (cancelled) return;
+      await handleScanFace();
+      if (!cancelled) timer = setTimeout(() => void tick(), 1_000);
+    };
+    timer = setTimeout(() => void tick(), 1_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      scanGeneration.current += 1;
+    };
+  }, [cameraActive, handleScanFace, networkError, selectedSiteId, token]);
 
   // Reset scan to prepare for next worker
   const handleResetScan = () => {
+    scanGeneration.current += 1;
+    presenceSession.current = '';
+    setIsScanning(false);
+    setScanMessage('Awaiting face…');
     updateCapturedPreview(null);
     setLastDecision(null);
     setCandidateWorker(null);
@@ -272,62 +334,77 @@ export function SecurityGateDeskView({
 
   return (
     <div className="space-y-6">
-      {/* Top Bar: Gate Selector & Directions */}
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <div>
-            <label
-              htmlFor="gate-site-select"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-500"
-            >
-              Active Site
-            </label>
-            <select
-              id="gate-site-select"
-              value={selectedSiteId}
-              onChange={(e) => onSelectSite(e.target.value)}
-              className="mt-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:border-[#F66B17] focus:outline-none"
-            >
-              {sites.map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.name}
-                </option>
-              ))}
-            </select>
+      {/* Top Bar: Gate Selector & Direction Command Strip */}
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100/80 text-[#F66B17]">
+              <IconBuilding2 className="h-4 w-4" />
+            </div>
+            <div>
+              <label
+                htmlFor="gate-site-select"
+                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+              >
+                Active Site
+              </label>
+              <select
+                id="gate-site-select"
+                value={selectedSiteId}
+                onChange={(e) => {
+                  handleResetScan();
+                  onSelectSite(e.target.value);
+                }}
+                className="mt-0.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none"
+              >
+                {sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="gate-selector"
-              className="block text-xs font-semibold uppercase tracking-wider text-slate-500"
-            >
-              Access Gate
-            </label>
-            <select
-              id="gate-selector"
-              value={selectedGateId}
-              disabled={isScanning}
-              onChange={(e) => {
-                handleResetScan();
-                setSelectedGateId(e.target.value);
-              }}
-              className="mt-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-800 focus:border-[#F66B17] focus:outline-none"
-            >
-              {gates.map((gate) => (
-                <option key={gate.id} value={gate.id}>
-                  {gate.name}
-                </option>
-              ))}
-            </select>
+          <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+              <IconKey className="h-4 w-4" />
+            </div>
+            <div>
+              <label
+                htmlFor="gate-selector"
+                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+              >
+                Access Gate
+              </label>
+              <select
+                id="gate-selector"
+                value={selectedGateId}
+                disabled={isScanning}
+                onChange={(e) => {
+                  handleResetScan();
+                  setSelectedGateId(e.target.value);
+                }}
+                className="mt-0.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none disabled:bg-slate-100"
+              >
+                {gates.map((gate) => (
+                  <option key={gate.id} value={gate.id}>
+                    {gate.name} ({gate.id})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Direction Switcher (IN vs OUT) */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Direction:
           </span>
-          <div className="inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/90 p-1 shadow-2xs">
             <button
               type="button"
               disabled={isScanning}
@@ -335,13 +412,14 @@ export function SecurityGateDeskView({
                 handleResetScan();
                 setDirection('IN');
               }}
-              className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
                 direction === 'IN'
-                  ? 'bg-emerald-600 text-white shadow-xs'
+                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              CHECK IN
+              <span className="h-2 w-2 rounded-full bg-emerald-300" />
+              <span>IN (CHECK IN)</span>
             </button>
             <button
               type="button"
@@ -350,13 +428,14 @@ export function SecurityGateDeskView({
                 handleResetScan();
                 setDirection('OUT');
               }}
-              className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
                 direction === 'OUT'
-                  ? 'bg-blue-600 text-white shadow-xs'
+                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              CHECK OUT
+              <span className="h-2 w-2 rounded-full bg-blue-300" />
+              <span>OUT (CHECK OUT)</span>
             </button>
           </div>
         </div>
@@ -366,6 +445,50 @@ export function SecurityGateDeskView({
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Left Column: Live Webcam Viewport (7 Cols) */}
         <div className="space-y-3 lg:col-span-7">
+          {/* Camera Device Selector & Status Banner */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <IconCamera className="h-4 w-4 text-[#F66B17]" />
+              <label
+                htmlFor="gate-camera-device-select"
+                className="text-xs font-bold uppercase tracking-wider text-slate-700"
+              >
+                Camera Device:
+              </label>
+              <select
+                id="gate-camera-device-select"
+                value={cameraDeviceId}
+                disabled={isScanning}
+                className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-semibold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:outline-none"
+                onChange={(event) => {
+                  cameraDeviceRef.current = event.target.value;
+                  setCameraDeviceId(event.target.value);
+                  handleResetScan();
+                  stopCamera();
+                  void startCamera();
+                }}
+              >
+                <option value="">Default Camera</option>
+                {cameraDevices.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Camera ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${cameraActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${cameraActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}
+                />
+                {cameraActive ? 'LIVE · 720p' : 'OFFLINE'}
+              </span>
+            </div>
+          </div>
+
           <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl border-2 border-slate-800 bg-slate-950 shadow-md">
             {/* Live Video Preview */}
             <video
@@ -375,6 +498,12 @@ export function SecurityGateDeskView({
               className={`h-full w-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
             />
 
+            {/* Tactical Viewfinder Corners */}
+            <div className="pointer-events-none absolute top-3 left-3 h-4 w-4 rounded-tl border-t-2 border-l-2 border-[#F66B17]/90" />
+            <div className="pointer-events-none absolute top-3 right-3 h-4 w-4 rounded-tr border-t-2 border-r-2 border-[#F66B17]/90" />
+            <div className="pointer-events-none absolute bottom-3 left-3 h-4 w-4 rounded-bl border-b-2 border-l-2 border-[#F66B17]/90" />
+            <div className="pointer-events-none absolute bottom-3 right-3 h-4 w-4 rounded-br border-b-2 border-r-2 border-[#F66B17]/90" />
+
             {/* Inactive or Error Overlay */}
             {!cameraActive && (
               <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-slate-400">
@@ -383,21 +512,35 @@ export function SecurityGateDeskView({
                 {cameraError && <p className="mt-2 max-w-sm text-xs text-red-400">{cameraError}</p>}
                 <button
                   type="button"
-                  onClick={startCamera}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  onClick={() => {
+                    handleResetScan();
+                    stopCamera();
+                    void startCamera();
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-xs font-bold text-white hover:bg-orange-700 shadow-sm transition-all"
                 >
                   <IconRefresh className="h-4 w-4" /> Restart Camera
                 </button>
               </div>
             )}
 
+            {/* Gate Overlay Tag */}
+            {cameraActive && (
+              <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-md border border-white/10">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>
+                  GATE: {gates.find((g) => g.id === selectedGateId)?.name ?? selectedGateId}
+                </span>
+              </div>
+            )}
+
             {/* Face Alignment Frame Guide */}
             {cameraActive && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-64 w-52 rounded-4xl border-2 border-dashed border-white/40 shadow-inner">
+                <div className="h-64 w-52 rounded-4xl border-2 border-dashed border-white/50 shadow-inner">
                   <div className="flex h-full items-end justify-center pb-2">
-                    <span className="rounded-full bg-black/60 px-2.5 py-0.5 text-[11px] font-medium text-white/80 backdrop-blur-xs">
-                      Align Face Here
+                    <span className="rounded-full bg-black/70 px-3 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur-xs border border-white/10">
+                      Align face within frame
                     </span>
                   </div>
                 </div>
@@ -406,13 +549,13 @@ export function SecurityGateDeskView({
 
             {/* In-Memory Snapshot Thumbnail Badge */}
             {capturedPreviewUrl && (
-              <div className="absolute top-3 right-3 rounded-lg border border-white/20 bg-black/70 p-1 backdrop-blur-xs">
+              <div className="absolute top-3.5 right-3.5 z-10 rounded-xl border border-white/20 bg-black/80 p-1.5 backdrop-blur-md shadow-lg">
                 <img
                   src={capturedPreviewUrl}
                   alt="Captured scan frame in memory"
-                  className="h-16 w-20 rounded object-cover"
+                  className="h-16 w-20 rounded-lg object-cover"
                 />
-                <span className="block text-center text-[9px] font-medium text-slate-300">
+                <span className="mt-1 block text-center text-[9px] font-bold tracking-wider text-slate-300 uppercase">
                   Last Frame
                 </span>
               </div>
@@ -420,32 +563,35 @@ export function SecurityGateDeskView({
 
             {/* Processing Indicator */}
             {isScanning && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs">
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#F66B17] border-t-transparent" />
-                <p className="mt-3 text-sm font-semibold text-white">Analyzing Single Frame…</p>
+                <p className="mt-3 text-sm font-bold text-white">Analyzing face…</p>
               </div>
             )}
           </div>
 
           {/* Automatic one-frame scan with an explicit next-scan control. */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 rounded-xl border border-orange-200 bg-orange-50 py-3.5 text-center text-sm font-bold text-orange-900">
-              {isScanning ? 'Processing Frame…' : '📷 Scan Face Frame'}
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-orange-200/90 bg-orange-50/70 p-3 shadow-2xs">
+            <div className="flex items-center gap-2.5 pl-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#F66B17] animate-pulse shrink-0" />
+              <span role="status" aria-live="polite" className="text-xs font-bold text-orange-950">
+                {scanMessage}
+              </span>
             </div>
 
             {(lastDecision || networkError) && (
               <button
                 type="button"
                 onClick={handleResetScan}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 shadow-2xs transition-all"
               >
-                Clear
+                Clear / New Scan
               </button>
             )}
           </div>
-          <p className="text-xs text-slate-500">
-            * One in-memory frame is sent after camera stabilization. Clear starts the next
-            automatic scan.
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            * Automatic face detection active; repeated scans for the same person or empty frames
+            are suppressed. Click Clear to reset session.
           </p>
         </div>
 
@@ -457,7 +603,7 @@ export function SecurityGateDeskView({
             {/* Header: Outcome Badge */}
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
               <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">
-                Gate Clearance Status
+                Last Scan Result
               </span>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${uiState.badgeClass}`}
@@ -484,23 +630,32 @@ export function SecurityGateDeskView({
 
             {/* Candidate Worker Card (if identified) */}
             {candidateWorker && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+                <p className="mb-3 text-[11px] font-semibold text-slate-500">
+                  Last identified worker — retained until another worker is identified. Not
+                  clearance for the person currently in camera.
+                </p>
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                    <IconUser className="h-5 w-5" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-slate-800 to-slate-700 text-sm font-bold text-white shadow-xs">
+                    {candidateWorker.displayName.slice(0, 2).toUpperCase()}
                   </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">{candidateWorker.displayName}</h4>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate font-bold text-slate-900">
+                      {candidateWorker.displayName}
+                    </h4>
                     <p className="text-xs text-slate-600">Account: {candidateWorker.username}</p>
                     <p className="text-xs text-slate-500">
-                      ID: <span className="font-mono">{candidateWorker.externalId}</span> ·{' '}
-                      {candidateWorker.contractorName}
+                      ID:{' '}
+                      <span className="font-mono font-bold text-slate-700">
+                        {candidateWorker.externalId}
+                      </span>{' '}
+                      · {candidateWorker.contractorName}
                     </p>
                   </div>
                 </div>
-                <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
-                  <span className="text-slate-500">Site Assignment:</span>
-                  <span className="font-semibold text-emerald-700">
+                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
+                  <span className="text-slate-500 font-medium">Site Assignment:</span>
+                  <span className="font-bold text-emerald-700">
                     {candidateWorker.assignmentStatus}
                   </span>
                 </div>
@@ -511,15 +666,15 @@ export function SecurityGateDeskView({
             <div className="mt-5 space-y-2">
               {uiState.canRecordInOut && (
                 <div>
-                  <p className="mb-2 text-xs text-emerald-700">
-                    Quyết định {direction} đã được lưu trong DB.
+                  <p className="mb-2 text-xs font-medium text-emerald-700">
+                    {direction} clearance recorded in database.
                   </p>
                   <button
                     type="button"
                     onClick={handleRecordGateEvent}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
                   >
-                    <IconCheck className="h-4 w-4" /> Quét tiếp
+                    <IconCheck className="h-4 w-4" /> Scan Next Worker
                   </button>
                 </div>
               )}
@@ -529,9 +684,9 @@ export function SecurityGateDeskView({
                 <button
                   type="button"
                   onClick={() => setQrModalOpen(true)}
-                  className="w-full rounded-xl border border-amber-300 bg-amber-100/80 py-2.5 text-xs font-bold text-amber-900 hover:bg-amber-200"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-100/90 py-3 text-xs font-bold text-amber-950 hover:bg-amber-200 transition-all"
                 >
-                  ⚡ Launch Dynamic QR Fallback
+                  <span>⚡ Launch Dynamic QR Fallback</span>
                 </button>
               )}
 
@@ -551,26 +706,32 @@ export function SecurityGateDeskView({
                 <button
                   type="button"
                   onClick={handleScanFace}
-                  className="w-full rounded-xl bg-red-600 py-2.5 text-xs font-bold text-white hover:bg-red-700"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold text-white hover:bg-red-700 transition-all"
                 >
-                  Retry Scan
+                  <IconRefresh className="h-4 w-4" /> Retry Scan
                 </button>
               )}
             </div>
           </div>
 
           {/* Quick Security Officer Guidelines */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-600">
-            <h5 className="font-bold text-slate-800">Security Officer SOP</h5>
-            <ul className="mt-2 list-disc space-y-1 pl-4">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs text-xs text-slate-600 space-y-2">
+            <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-100 pb-2">
+              <IconShield className="h-4 w-4 text-[#F66B17]" />
+              <h5>Security Officer Operating Guidelines (SOP)</h5>
+            </div>
+            <ul className="list-disc space-y-1 pl-4 text-slate-600">
               <li>
-                Webcam match provides technical candidate identity only; backend grants clearance.
+                Webcam match provides preliminary identity verification; backend authorizes access
+                based on zone permissions.
               </li>
               <li>
-                When result is Red (Denied), do not offer QR fallback without supervisor approval.
+                When clearance is DENIED (red), do not admit worker or initiate QR fallback without
+                supervisor authorization.
               </li>
               <li>
-                For inconclusive/unrecognized scans, request dynamic QR from worker mobile app.
+                For inconclusive face matches, request the worker present their dynamic QR pass via
+                the SmartSite mobile app.
               </li>
             </ul>
           </div>
@@ -579,10 +740,13 @@ export function SecurityGateDeskView({
 
       {/* QR Fallback Modal */}
       {qrModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-900">Worker Dynamic QR Fallback</h3>
+              <div className="flex items-center gap-2">
+                <IconKey className="h-5 w-5 text-[#F66B17]" />
+                <h3 className="font-bold text-slate-900">Worker Dynamic QR Fallback</h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setQrModalOpen(false)}
@@ -593,17 +757,18 @@ export function SecurityGateDeskView({
             </div>
 
             <div className="mt-4 space-y-4">
-              <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-                ⚠️ QR code is a fallback identity check. It does not automatically grant access
-                without Security Officer verification of assignment.
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
+                ⚠️ Dynamic QR is a fallback method when facial recognition is inconclusive. Security
+                officers must physically verify worker credentials and contractor badge before
+                granting entry.
               </div>
 
               <div>
                 <label
                   htmlFor="qr-code-input"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700"
                 >
-                  Scan or Enter Worker QR Payload
+                  Worker QR Code or Token
                 </label>
                 <input
                   id="qr-code-input"
@@ -611,32 +776,32 @@ export function SecurityGateDeskView({
                   placeholder="e.g. WKR-FALLBACK-9281-EXP..."
                   value={qrCodeInput}
                   onChange={(e) => setQrCodeInput(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-[#F66B17] focus:outline-none"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-mono focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="qr-notes-input"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700"
                 >
-                  Officer Confirmation Notes (Optional)
+                  Officer Notes (Optional)
                 </label>
                 <input
                   id="qr-notes-input"
                   type="text"
-                  placeholder="e.g. Visual badge verified"
+                  placeholder="e.g. Physically verified badge and contractor credentials"
                   value={qrOfficerNotes}
                   onChange={(e) => setQrOfficerNotes(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#F66B17] focus:outline-none"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setQrModalOpen(false)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
@@ -644,7 +809,7 @@ export function SecurityGateDeskView({
                   type="button"
                   disabled={!qrCodeInput.trim() || qrProcessing}
                   onClick={handleConfirmQrFallback}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-xs"
                 >
                   {qrProcessing ? 'Verifying…' : `Confirm ${direction} (QR)`}
                 </button>
@@ -655,43 +820,61 @@ export function SecurityGateDeskView({
       )}
 
       {/* Recent Gate Events Audit Trail */}
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <IconClock className="h-4 w-4 text-slate-500" />
-            <h3 className="font-bold text-slate-900">Shift Gate Activity Log</h3>
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              <IconClock className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900">Gate Access & Clearance Audit Trail</h3>
+              <p className="text-[11px] text-slate-500">
+                Verified clearance decisions logged to database
+              </p>
+            </div>
           </div>
-          <span className="text-xs text-slate-500">
-            {recentEvents.length} decisions saved in DB
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {recentEvents.length} entries recorded
           </span>
         </div>
 
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
-            <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-3 py-2.5">Time</th>
-                <th className="px-3 py-2.5">Worker Name</th>
-                <th className="px-3 py-2.5">Worker ID</th>
-                <th className="px-3 py-2.5">Direction</th>
-                <th className="px-3 py-2.5">Method</th>
-                <th className="px-3 py-2.5">Outcome</th>
-                <th className="px-3 py-2.5">Gate</th>
+                <th className="px-3.5 py-3">Timestamp</th>
+                <th className="px-3.5 py-3">Worker</th>
+                <th className="px-3.5 py-3">Worker ID</th>
+                <th className="px-3.5 py-3">Direction</th>
+                <th className="px-3.5 py-3">Method</th>
+                <th className="px-3.5 py-3">Clearance</th>
+                <th className="px-3.5 py-3">Gate</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {accessLogs.isPending && (
                 <tr>
-                  <td colSpan={7} className="p-3">
-                    Loading database logs…
+                  <td colSpan={7} className="p-6 text-center text-xs text-slate-500">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
+                      <span>Loading gate access logs…</span>
+                    </div>
                   </td>
                 </tr>
               )}
               {accessLogs.isError && (
                 <tr>
-                  <td colSpan={7} role="alert" className="p-3">
-                    Could not load logs.{' '}
-                    <button type="button" onClick={() => void accessLogs.refetch()}>
+                  <td
+                    colSpan={7}
+                    role="alert"
+                    className="p-4 text-center text-xs text-red-700 bg-red-50"
+                  >
+                    Unable to load access logs.{' '}
+                    <button
+                      type="button"
+                      onClick={() => void accessLogs.refetch()}
+                      className="font-bold underline hover:text-red-900"
+                    >
                       Retry
                     </button>
                   </td>
@@ -699,36 +882,52 @@ export function SecurityGateDeskView({
               )}
               {!accessLogs.isPending && !accessLogs.isError && recentEvents.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-3">
-                    No gate decisions yet.
+                  <td colSpan={7} className="p-8 text-center text-xs text-slate-400">
+                    No gate events recorded for this session yet.
                   </td>
                 </tr>
               )}
               {recentEvents.map((evt) => (
-                <tr key={evt.id} className="hover:bg-slate-50/80">
-                  <td className="px-3 py-2 font-mono text-slate-500">{evt.timestamp}</td>
-                  <td className="px-3 py-2 font-semibold text-slate-900">{evt.workerName}</td>
-                  <td className="px-3 py-2 font-mono text-slate-600">{evt.workerExternalId}</td>
-                  <td className="px-3 py-2">
+                <tr key={evt.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-3.5 py-2.5 font-mono text-slate-500">{evt.timestamp}</td>
+                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{evt.workerName}</td>
+                  <td className="px-3.5 py-2.5 font-mono text-slate-600">{evt.workerExternalId}</td>
+                  <td className="px-3.5 py-2.5">
                     <span
-                      className={`inline-block rounded px-2 py-0.5 font-bold ${
+                      className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
                         evt.direction === 'IN'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-blue-50 text-blue-700'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-blue-100 text-blue-800'
                       }`}
                     >
-                      {evt.direction}
+                      {evt.direction === 'IN' ? 'IN' : 'OUT'}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-medium">{evt.method}</td>
-                  <td className="px-3 py-2">
+                  <td className="px-3.5 py-2.5">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700">
+                      {evt.method}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5">
                     <span
-                      className={`inline-flex items-center gap-1 font-semibold ${evt.outcome === 'ALLOWED' ? 'text-emerald-700' : 'text-red-700'}`}
+                      className={`inline-flex items-center gap-1 font-bold ${
+                        evt.outcome === 'ALLOWED' ? 'text-emerald-700' : 'text-red-700'
+                      }`}
                     >
-                      {evt.outcome}
+                      {evt.outcome === 'ALLOWED' ? (
+                        <>
+                          <IconCheck className="h-3.5 w-3.5" />
+                          <span>ALLOWED</span>
+                        </>
+                      ) : (
+                        <>
+                          <IconX className="h-3.5 w-3.5" />
+                          <span>DENIED</span>
+                        </>
+                      )}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{evt.gateName}</td>
+                  <td className="px-3.5 py-2.5 font-medium text-slate-600">{evt.gateName}</td>
                 </tr>
               ))}
             </tbody>

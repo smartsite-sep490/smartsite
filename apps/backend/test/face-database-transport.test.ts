@@ -18,7 +18,9 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
       body: body ? (JSON.parse(body) as unknown) : null,
     };
     response.setHeader('content-type', 'application/json');
-    if ((captured.body as { enrollmentTarget?: string } | null)?.enrollmentTarget) {
+    if ((captured.body as { gatePresenceSession?: string } | null)?.gatePresenceSession) {
+      response.end(JSON.stringify({ status: 'UNKNOWN', reasonCode: 'FACE_PRESENCE_SAME' }));
+    } else if ((captured.body as { enrollmentTarget?: string } | null)?.enrollmentTarget) {
       response.end(JSON.stringify({ status: qualityStatus, reasonCode: qualityReason }));
     } else if (request.url?.endsWith('/complete'))
       response.end(
@@ -61,6 +63,18 @@ test('DB template transport requires encrypted enrollment and keeps candidates i
     assert.equal(match.status, 'MATCHED');
     assert.deepEqual(captured.body, { jpegBase64: jpeg.toString('base64'), templates });
     assert.equal('encryptedTemplate' in match, false);
+    const presence = await adapter.verify({
+      verificationId: 'synthetic-presence',
+      jpeg,
+      templates: [],
+      gatePresenceSession: 'a'.repeat(64),
+    });
+    assert.equal(presence.reasonCode, 'FACE_PRESENCE_SAME');
+    assert.deepEqual(captured.body, {
+      jpegBase64: jpeg.toString('base64'),
+      templates: [],
+      gatePresenceSession: 'a'.repeat(64),
+    });
     assert.deepEqual(await adapter.assessSampleQuality(jpeg, 'left'), {
       status: 'ACCEPTED',
       reasonCode: 'FACE_QUALITY_ACCEPTED',

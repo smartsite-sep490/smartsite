@@ -2,7 +2,16 @@ import type {
   FaceGateReasonCode,
   FaceVerificationTechnicalOutcome,
   GateAuthorizationOutcome,
+  FaceGateVerificationResponse,
 } from '@smartsite/contracts';
+
+/** Historical display only; never use a retained worker for authorization. Null explicitly clears it. */
+export function retainGateWorker(
+  previous: FaceGateVerificationResponse['worker'] | null,
+  next: FaceGateVerificationResponse['worker'] | null,
+): FaceGateVerificationResponse['worker'] | null {
+  return next === undefined ? previous : next;
+}
 
 export type GateUiDecisionType =
   'ALLOWED' | 'DENIED' | 'MANUAL_REVIEW' | 'FALLBACK_REQUIRED' | 'RETRY';

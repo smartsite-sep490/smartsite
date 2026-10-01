@@ -9,7 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { IsIn } from 'class-validator';
+import { IsIn, IsUUID } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
@@ -21,6 +21,10 @@ class GateVerificationCommand {
   @IsIn(['IN', 'OUT'])
   direction: 'IN' | 'OUT' = 'IN';
 }
+class GatePresenceCommand {
+  @IsUUID()
+  sessionId!: string;
+}
 
 @ApiTags('face-gate')
 @ApiBearerAuth('user-token')
@@ -28,6 +32,18 @@ class GateVerificationCommand {
 @Controller('sites/:siteId/gates/:gateId')
 export class FaceGateController {
   constructor(private readonly gate: FaceGateService) {}
+  @Post('face-presence')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('frame', { limits: { files: 1, fileSize: 5 * 1024 * 1024 } }))
+  observe(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('gateId') gateId: string,
+    @UploadedFile() frame: UploadedFaceSample | undefined,
+    @Body() input: GatePresenceCommand,
+  ) {
+    return this.gate.observe(request.user!, siteId, gateId, input.sessionId, frame);
+  }
 
   @Get('access-logs')
   listLogs(

@@ -32,6 +32,7 @@ export type {
 } from './camera-region-configuration.js';
 
 export type {
+  GateFacePresenceResponse,
   FaceGateDecisionResponse,
   FaceGateVerificationResponse,
   GateAccessLogResponse,

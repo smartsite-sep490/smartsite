@@ -152,6 +152,7 @@ then enroll its face. `POST /api/v1/sites/:siteId/workers/for-account` idempoten
 internal worker linkage; it never creates a login account or grants entry permissions.
 Gate-specific assignments use optional `gate_id` (null retains legacy site-wide behavior).
 Only face scans resolved to a worker/account persist a decision in `gate_access_log` before acknowledging it.
+Gate Desk first checks camera brightness locally, then polls an authenticated, non-persisting face-presence endpoint. Two stable observations trigger verification once; transient face continuity suppresses repeat scans until a different face appears or an observed empty frame persists for two seconds. Continuity is technical evidence, not identity or permission. The opt-in demo uses bounded AI RAM only (128 sessions, 30-second idle expiry); no presence JPEGs/embeddings are stored in DB/files. Camera selection/restart is available; covered/underlit cameras must be physically corrected. Clear explicitly starts a fresh test session. Real-camera continuity accuracy is not yet validated.
 Unknown, low-confidence, poor-quality and unavailable scans without an identified account are not retained.
 Authorized site gate operators can read the latest 50 records through
 `GET /api/v1/sites/:siteId/gates/:gateId/access-logs`; Gate Desk shows these DB records,
@@ -173,6 +174,7 @@ account, profile metadata, and completed session. A matching face resolves the w
 gate permissions still depend on the Backend's contractor and assignment policy.
 
 Each guided capture has an explicit 3-second countdown, a frozen photo preview and a server quality result.
+Enrollment and Gate Desk support camera selection/restart, release stale or disconnected streams, and reject dark/blank feeds before upload. Camera readiness is only a usability guard; server-side face and target-angle checks remain authoritative.
 The capture target is required: missing or invalid `target` is rejected rather than silently checked as front-facing. Older browser clients must refresh before enrollment. Completion failures preserve allowlisted quality reasons, including the failed pose and inconsistent samples; the UI does not claim a measured 15-degree yaw.
 Only an accepted photo enables the next angle; failed checks explain lighting, sharpness, framing or
 relative pose. The AI rechecks front/left/right and sample consistency before producing a template.

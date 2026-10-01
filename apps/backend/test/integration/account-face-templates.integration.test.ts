@@ -61,6 +61,10 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       };
     },
     async verify(input: FaceVerificationInput) {
+      if (input.gatePresenceSession) {
+        verification = input;
+        return { status: 'UNKNOWN' as const, reasonCode: 'FACE_PRESENCE_NEW' };
+      }
       verification = input;
       if (technicalStatus !== 'MATCHED') return { status: technicalStatus };
       return {
@@ -196,6 +200,27 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     const countBeforeUnknown = await dataSource
       .getRepository(GateAccessLogEntity)
       .countBy({ siteId });
+    const presenceSessionId = randomUUID();
+    const presence = await gate.observe(actor, siteId, 'gate1', presenceSessionId, frame);
+    assert.equal(presence.state, 'NEW_FACE');
+    assert.deepEqual(verification?.templates, []);
+    assert.match(verification?.gatePresenceSession ?? '', /^[a-f0-9]{64}$/);
+    const presenceScope = verification?.gatePresenceSession;
+    await gate.observe(actor, siteId, 'gate2', presenceSessionId, frame);
+    assert.notEqual(verification?.gatePresenceSession, presenceScope);
+    await assert.rejects(
+      gate.observe(
+        { ...actor, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
+        siteId,
+        'gate1',
+        presenceSessionId,
+        frame,
+      ),
+    );
+    assert.equal(
+      await dataSource.getRepository(GateAccessLogEntity).countBy({ siteId }),
+      countBeforeUnknown,
+    );
     for (const status of [
       'UNKNOWN',
       'LOW_CONFIDENCE',

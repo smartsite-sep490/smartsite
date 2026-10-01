@@ -4,9 +4,26 @@ import {
   getSafeReasonMessage,
   resolveGateUiState,
   revokeSafePreviewUrl,
+  retainGateWorker,
 } from './faceGateUtils';
 
 describe('faceGateUtils', () => {
+  it('retains the last identified worker until another is identified or explicitly cleared', () => {
+    const oldWorker = {
+      id: 'worker-a',
+      userId: 'account-a',
+      username: 'a',
+      externalId: 'A',
+      displayName: 'Worker A',
+      contractorName: 'Contractor',
+      assignmentStatus: 'ACTIVE',
+    };
+    const newWorker = { ...oldWorker, id: 'worker-b', displayName: 'Worker B' };
+    expect(retainGateWorker(oldWorker, undefined)).toBe(oldWorker);
+    expect(retainGateWorker(oldWorker, newWorker)).toBe(newWorker);
+    expect(retainGateWorker(oldWorker, null)).toBeNull();
+    expect(retainGateWorker(null, undefined)).toBeNull();
+  });
   describe('resolveGateUiState', () => {
     it('returns retry state when network error is indicated and prevents cached success', () => {
       const state = resolveGateUiState({

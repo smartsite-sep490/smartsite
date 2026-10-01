@@ -35,6 +35,7 @@ export interface FaceVerificationInput {
   jpeg: Buffer;
   templates?: Array<{ profileReferenceHash: string; encryptedTemplate: string }>;
   enrollmentTarget?: EnrollmentCaptureTarget;
+  gatePresenceSession?: string;
 }
 
 export interface FaceVerificationEvidence {
@@ -154,6 +155,9 @@ export class HttpFaceEnrollmentAdapter implements FaceEnrollmentAdapter, FaceVer
               jpegBase64: input.jpeg.toString('base64'),
               templates: input.templates,
               ...(input.enrollmentTarget ? { enrollmentTarget: input.enrollmentTarget } : {}),
+              ...(input.gatePresenceSession
+                ? { gatePresenceSession: input.gatePresenceSession }
+                : {}),
             },
       );
       if (!isVerificationResponse(response)) return { status: 'AI_UNAVAILABLE' };
@@ -216,6 +220,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const QUALITY_REASONS = new Set([
+  'FACE_PRESENCE_NEW',
+  'FACE_PRESENCE_SAME',
+  'FACE_PRESENCE_STABILIZING',
+  'FACE_MATCH_UNCERTAIN',
   'FACE_QUALITY_ACCEPTED',
   'FACE_IMAGE_INVALID',
   'FACE_NOT_FOUND',
