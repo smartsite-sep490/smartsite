@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -7,6 +7,7 @@ class RequestReasonDto {
   @Transform(trim)
   @IsString()
   @IsNotEmpty()
+  @MinLength(5)
   @MaxLength(1000)
   @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
   reason!: string;

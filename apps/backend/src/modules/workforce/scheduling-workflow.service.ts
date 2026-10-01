@@ -53,6 +53,49 @@ export class SchedulingWorkflowService {
       .getOne();
   }
 
+  private async lockedSchedules(
+    manager: EntityManager,
+    ids: string[],
+  ): Promise<Array<WorkerScheduleEntity | null>> {
+    const lockedById = new Map<string, WorkerScheduleEntity>();
+    for (const id of [...new Set(ids)].sort()) {
+      const schedule = await this.lockedSchedule(manager, id);
+      if (schedule) lockedById.set(schedule.id, schedule);
+    }
+    return ids.map((id) => lockedById.get(id) ?? null);
+  }
+
+  private async assertNoPendingRequests(
+    manager: EntityManager,
+    siteId: string,
+    scheduleIds: string[],
+  ): Promise<void> {
+    const pendingStatuses = [
+      ShiftRequestStatus.PENDING_COWORKER,
+      ShiftRequestStatus.PENDING_MANAGER,
+    ];
+    const pendingChange = await manager
+      .getRepository(ShiftChangeRequestEntity)
+      .createQueryBuilder('request')
+      .where('request.site_id = :siteId', { siteId })
+      .andWhere('request.worker_schedule_id IN (:...scheduleIds)', { scheduleIds })
+      .andWhere('request.status IN (:...pendingStatuses)', { pendingStatuses })
+      .getOne();
+    if (pendingChange) conflict('A request for this shift is already pending review');
+
+    const pendingSwap = await manager
+      .getRepository(ShiftSwapRequestEntity)
+      .createQueryBuilder('request')
+      .where('request.site_id = :siteId', { siteId })
+      .andWhere(
+        '(request.requester_worker_schedule_id IN (:...scheduleIds) OR request.coworker_worker_schedule_id IN (:...scheduleIds))',
+        { scheduleIds },
+      )
+      .andWhere('request.status IN (:...pendingStatuses)', { pendingStatuses })
+      .getOne();
+    if (pendingSwap) conflict('A request for this shift is already pending review');
+  }
+
   private async scheduleForSite(
     manager: EntityManager,
     siteId: string,
@@ -106,6 +149,24 @@ export class SchedulingWorkflowService {
     return shift ?? missing();
   }
 
+  private async assertShiftAvailable(
+    manager: EntityManager,
+    schedule: WorkerScheduleEntity,
+    targetShiftId: string,
+  ): Promise<void> {
+    const existing = await manager
+      .getRepository(WorkerScheduleEntity)
+      .createQueryBuilder('schedule')
+      .where('schedule.site_id = :siteId', { siteId: schedule.siteId })
+      .andWhere('schedule.worker_id = :workerId', { workerId: schedule.workerId })
+      .andWhere('schedule.shift_id = :shiftId', { shiftId: targetShiftId })
+      .andWhere('schedule.work_date = :workDate', { workDate: schedule.workDate })
+      .andWhere('schedule.is_active = true')
+      .andWhere('schedule.id <> :scheduleId', { scheduleId: schedule.id })
+      .getOne();
+    if (existing) conflict('Worker already has the target shift assigned on this date');
+  }
+
   private scheduleStillMatches(
     schedule: WorkerScheduleEntity | null,
     request: Pick<ShiftChangeRequestEntity, 'siteId' | 'workerId' | 'workerScheduleId' | 'fromShiftId' | 'expectedScheduleVersionId'>,
@@ -127,11 +188,14 @@ export class SchedulingWorkflowService {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const value = command(CreateShiftChangeRequestDto, input);
     return this.dataSource.transaction(async (manager) => {
-      const schedule = await this.scheduleForSite(manager, scopedSiteId, value.workerScheduleId);
+      const schedule = await this.lockedSchedule(manager, value.workerScheduleId);
+      if (!schedule || schedule.siteId !== scopedSiteId || !schedule.isActive) missing();
       const worker = await this.workerForSchedule(manager, schedule);
       await this.assertRequestAuthority(manager, actor, worker);
+      await this.assertNoPendingRequests(manager, scopedSiteId, [schedule.id]);
       await this.assertTargetShift(manager, scopedSiteId, value.toShiftId);
       if (schedule.shiftId === value.toShiftId) conflict('Shift change must select a different shift');
+      await this.assertShiftAvailable(manager, schedule, value.toShiftId);
       return manager.getRepository(ShiftChangeRequestEntity).save({
         id: randomUUID(),
         siteId: scopedSiteId,
@@ -177,6 +241,7 @@ export class SchedulingWorkflowService {
         return manager.getRepository(ShiftChangeRequestEntity).save(request);
       }
       await this.assertTargetShift(manager, scopedSiteId, request.toShiftId);
+      await this.assertShiftAvailable(manager, schedule, request.toShiftId);
       schedule.shiftId = request.toShiftId;
       await manager.getRepository(WorkerScheduleEntity).save(schedule);
       const now = new Date();
@@ -226,16 +291,19 @@ export class SchedulingWorkflowService {
     if (value.requesterWorkerScheduleId === value.coworkerWorkerScheduleId)
       conflict('Shift swap requires two different worker schedules');
     return this.dataSource.transaction(async (manager) => {
-      const requesterSchedule = await this.scheduleForSite(
-        manager,
-        scopedSiteId,
+      const [requesterSchedule, coworkerSchedule] = await this.lockedSchedules(manager, [
         value.requesterWorkerScheduleId,
-      );
-      const coworkerSchedule = await this.scheduleForSite(
-        manager,
-        scopedSiteId,
         value.coworkerWorkerScheduleId,
-      );
+      ]);
+      if (
+        !requesterSchedule ||
+        !coworkerSchedule ||
+        !requesterSchedule.isActive ||
+        !coworkerSchedule.isActive ||
+        requesterSchedule.siteId !== scopedSiteId ||
+        coworkerSchedule.siteId !== scopedSiteId
+      )
+        missing();
       const [requester, coworker] = await Promise.all([
         this.workerForSchedule(manager, requesterSchedule),
         this.workerForSchedule(manager, coworkerSchedule),
@@ -248,6 +316,14 @@ export class SchedulingWorkflowService {
         requesterSchedule.shiftId === coworkerSchedule.shiftId
       )
         conflict('Worker schedules cannot be swapped');
+      if (!requester.contractorId || requester.contractorId !== coworker.contractorId)
+        conflict('Workers must belong to the same contractor to swap shifts');
+      await this.assertNoPendingRequests(manager, scopedSiteId, [
+        requesterSchedule.id,
+        coworkerSchedule.id,
+      ]);
+      await this.assertShiftAvailable(manager, requesterSchedule, coworkerSchedule.shiftId);
+      await this.assertShiftAvailable(manager, coworkerSchedule, requesterSchedule.shiftId);
       return manager.getRepository(ShiftSwapRequestEntity).save({
         id: randomUUID(),
         siteId: scopedSiteId,
@@ -311,14 +387,11 @@ export class SchedulingWorkflowService {
     manager: EntityManager,
     request: ShiftSwapRequestEntity,
   ): Promise<[WorkerScheduleEntity | null, WorkerScheduleEntity | null]> {
-    const ids = [request.requesterWorkerScheduleId, request.coworkerWorkerScheduleId].sort();
-    const first = await this.lockedSchedule(manager, ids[0]!);
-    const second = await this.lockedSchedule(manager, ids[1]!);
-    const byId = new Map([[first?.id, first], [second?.id, second]]);
-    return [
-      byId.get(request.requesterWorkerScheduleId) ?? null,
-      byId.get(request.coworkerWorkerScheduleId) ?? null,
-    ];
+    const [requester = null, coworker = null] = await this.lockedSchedules(manager, [
+      request.requesterWorkerScheduleId,
+      request.coworkerWorkerScheduleId,
+    ]);
+    return [requester, coworker];
   }
 
   private swapSchedulesStillMatch(
@@ -371,6 +444,8 @@ export class SchedulingWorkflowService {
         request.status = ShiftRequestStatus.CONFLICTED;
         return manager.getRepository(ShiftSwapRequestEntity).save(request);
       }
+      await this.assertShiftAvailable(manager, requesterSchedule, request.coworkerShiftId);
+      await this.assertShiftAvailable(manager, coworkerSchedule, request.requesterShiftId);
       requesterSchedule.shiftId = request.coworkerShiftId;
       coworkerSchedule.shiftId = request.requesterShiftId;
       await manager.getRepository(WorkerScheduleEntity).save([requesterSchedule, coworkerSchedule]);
