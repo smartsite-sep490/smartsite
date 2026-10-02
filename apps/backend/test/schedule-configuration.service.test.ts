@@ -27,6 +27,17 @@ function adminActor(): AuthenticatedUser {
   };
 }
 
+function contractorRepresentativeActor(siteId: string): AuthenticatedUser {
+  return {
+    id: randomUUID(),
+    username: 'test-contractor-representative',
+    displayName: 'Test Contractor Representative',
+    isActive: true,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
+  };
+}
+
 test('ScheduleConfigurationService validates shift input before database access', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
   await assert.rejects(
@@ -55,13 +66,28 @@ test('ScheduleConfigurationService rejects a shift ending before it starts', asy
 
 test('ScheduleConfigurationService validates worker schedule fields before database access', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const siteId = randomUUID();
   await assert.rejects(
-    service.createWorkerSchedule(adminActor(), randomUUID(), randomUUID(), {
+    service.createWorkerSchedule(contractorRepresentativeActor(siteId), siteId, randomUUID(), {
       workerId: randomUUID(),
       shiftId: randomUUID(),
       workDate: '01-10-2026',
     } as CreateWorkerScheduleDto),
     publicCode('VALIDATION_FAILED'),
+  );
+});
+
+test('ScheduleConfigurationService does not allow a Global Admin to assign a worker schedule', async () => {
+  const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const siteId = randomUUID();
+
+  await assert.rejects(
+    service.createWorkerSchedule(adminActor(), siteId, randomUUID(), {
+      workerId: randomUUID(),
+      shiftId: randomUUID(),
+      workDate: '2026-10-01',
+    }),
+    publicCode('FORBIDDEN'),
   );
 });
 
@@ -90,6 +116,28 @@ test('ScheduleConfigurationService denies a Site Manager outside the assigned Si
 
   await assert.rejects(
     service.deleteShift(siteManager, otherSiteId, randomUUID()),
+    publicCode('FORBIDDEN'),
+  );
+});
+
+test('ScheduleConfigurationService does not allow a Site Manager to assign a worker schedule', async () => {
+  const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const siteId = randomUUID();
+  const siteManager: AuthenticatedUser = {
+    id: randomUUID(),
+    username: 'site-manager',
+    displayName: 'Site Manager',
+    isActive: true,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
+  };
+
+  await assert.rejects(
+    service.createWorkerSchedule(siteManager, siteId, randomUUID(), {
+      workerId: randomUUID(),
+      shiftId: randomUUID(),
+      workDate: '2026-10-01',
+    }),
     publicCode('FORBIDDEN'),
   );
 });

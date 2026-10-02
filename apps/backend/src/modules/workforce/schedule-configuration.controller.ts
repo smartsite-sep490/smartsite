@@ -31,12 +31,15 @@ import {
   EligibleShiftPageResponseDto,
   SwapCandidatePageResponseDto,
 } from '../../common/http/management-response.dto.js';
+import { pagination } from '../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   CreateScheduleVersionDto,
   CreateShiftDto,
   CreateWorkerScheduleDto,
+  AssignShiftToContractorDto,
+  ListWorkerSchedulesQueryDto,
 } from './dto/schedule-configuration.dto.js';
 import { ScheduleConfigurationService } from './schedule-configuration.service.js';
 
@@ -66,6 +69,29 @@ export class ScheduleConfigurationController {
     const shift = await this.schedules.createShift(request.user!, siteId, input);
     this.logger.log({ actorId: request.user!.id, action: 'shift.create', siteId, resourceId: shift.id });
     return shift;
+  }
+
+  @Post('shifts/:shiftId/contractors')
+  @ApiCreatedResponse()
+  async assignShiftToContractor(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('shiftId') shiftId: string,
+    @Body() input: AssignShiftToContractorDto,
+  ) {
+    const assignment = await this.schedules.assignShiftToContractor(
+      request.user!,
+      siteId,
+      shiftId,
+      input,
+    );
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'shift.contractor-assignment.create',
+      siteId,
+      resourceId: assignment.id,
+    });
+    return assignment;
   }
 
   @Delete('shifts/:shiftId')
@@ -130,6 +156,24 @@ export class ScheduleConfigurationController {
     return { items: result.items, total: result.total };
   }
 
+  @Get('shift-contractor-assignments')
+  @ApiOkResponse()
+  async listShiftContractorAssignments(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.schedules.listShiftContractorAssignments(
+      request.user!,
+      siteId,
+      String(value.offset),
+      String(value.limit),
+    );
+    return { items: result.items, total: result.total };
+  }
+
   @Get('schedule-versions')
   @ApiOkResponse()
   async listScheduleVersions(
@@ -145,10 +189,9 @@ export class ScheduleConfigurationController {
   async listWorkerSchedules(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Query('offset') offset?: string,
-    @Query('limit') limit?: string,
+    @Query() query: ListWorkerSchedulesQueryDto,
   ) {
-    const result = await this.schedules.listWorkerSchedules(request.user!, siteId, offset, limit);
+    const result = await this.schedules.listWorkerSchedules(request.user!, siteId, query);
     return { items: result.items, total: result.total };
   }
 

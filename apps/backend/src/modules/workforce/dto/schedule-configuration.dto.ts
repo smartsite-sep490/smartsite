@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsBoolean,
   IsISO8601,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -59,4 +60,45 @@ export class CreateWorkerScheduleDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class AssignShiftToContractorDto {
+  @IsUUID()
+  contractorId!: string;
+}
+
+export class ListWorkerSchedulesQueryDto {
+  @IsOptional()
+  @Matches(/^\d+$/)
+  offset?: string;
+
+  @IsOptional()
+  @Matches(/^\d+$/)
+  limit?: string;
+
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  fromDate?: string;
+
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  toDate?: string;
+
+  @IsOptional()
+  @IsUUID()
+  workerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  shiftId?: string;
+
+  @IsOptional()
+  @IsIn(['ALL', 'ACTIVE', 'INACTIVE'])
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
+
+  @IsOptional()
+  @IsString()
+  searchName?: string;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -13,8 +13,10 @@ import {
 } from '@nestjs/swagger';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import type { ContractorEntity } from '../../database/entities/contractor.entity.js';
+import type { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { pagination } from '../../common/http/pagination.js';
 import {
   AssignContractorRepresentativeDto,
   CreateContractorDto,
@@ -34,6 +36,16 @@ function contractorResponse(contractor: ContractorEntity) {
   };
 }
 
+function representativeAssignmentResponse(assignment: ContractorRepresentativeAssignmentEntity) {
+  return {
+    id: assignment.id,
+    siteId: assignment.siteId,
+    contractorId: assignment.contractorId,
+    userId: assignment.userId,
+    createdAt: assignment.createdAt,
+  };
+}
+
 @ApiTags('contractors')
 @ApiBearerAuth('user-token')
 @ApiBadRequestResponse({ type: ErrorResponseDto })
@@ -43,13 +55,13 @@ function contractorResponse(contractor: ContractorEntity) {
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @UseGuards(UserAuthGuard)
-@Controller('sites/:siteId/contractors')
+@Controller('sites/:siteId')
 export class ContractorsController {
   private readonly logger = new Logger(ContractorsController.name);
 
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
-  @Post()
+  @Post('contractors')
   @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async create(
@@ -67,7 +79,7 @@ export class ContractorsController {
     return contractorResponse(contractor);
   }
 
-  @Post(':contractorId/representatives')
+  @Post('contractors/:contractorId/representatives')
   @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async assignRepresentative(
@@ -86,7 +98,7 @@ export class ContractorsController {
     return assignment;
   }
 
-  @Get()
+  @Get('contractors')
   @ApiOkResponse()
   async list(
     @Req() request: AuthenticatedRequest,
@@ -94,5 +106,25 @@ export class ContractorsController {
   ) {
     const result = await this.workforce.listContractors(request.user!, siteId);
     return { items: result.items.map(contractorResponse), total: result.total };
+  }
+
+  @Get('contractor-representative-assignments')
+  @UseGuards(AdminGuard)
+  @ApiOkResponse()
+  async listRepresentativeAssignments(
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.workforce.listRepresentativeAssignments(
+      siteId,
+      value.offset,
+      value.limit,
+    );
+    return {
+      items: result.items.map(representativeAssignmentResponse),
+      total: result.total,
+    };
   }
 }

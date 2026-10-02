@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import { command, conflict, knownUnique, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ScheduleVersionEntity } from '../../database/entities/schedule-version.entity.js';
@@ -10,12 +10,16 @@ import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../database/entities/worker-schedule.entity.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
+import { ContractorShiftAssignmentEntity } from '../../database/entities/contractor-shift-assignment.entity.js';
+import { ContractorEntity } from '../../database/entities/contractor.entity.js';
 import { AuthenticatedUser } from '../auth/auth.service.js';
 import { page } from '../../common/configuration/commands.js';
 import {
   CreateScheduleVersionDto,
   CreateShiftDto,
   CreateWorkerScheduleDto,
+  AssignShiftToContractorDto,
+  ListWorkerSchedulesQueryDto,
 } from './dto/schedule-configuration.dto.js';
 
 function invalid(message: string): never {
@@ -66,7 +70,8 @@ export class ScheduleConfigurationService {
     const scopedWorkerScheduleId = uuid(workerScheduleId);
     const isManager = this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, scopedSiteId);
     const isWorker = this.hasSiteRole(user, UserRole.WORKER, scopedSiteId);
-    if (!isManager && !isWorker) this.forbidden();
+    const isRepresentative = this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId);
+    if (!isManager && !isWorker && !isRepresentative) this.forbidden();
 
     const schedule = await this.dataSource.getRepository(WorkerScheduleEntity).findOneBy({
       id: scopedWorkerScheduleId,
@@ -79,7 +84,15 @@ export class ScheduleConfigurationService {
       siteId: scopedSiteId,
     });
     if (!worker) missing();
-    if (!isManager && (worker.userId !== user.id || !worker.isActive)) this.forbidden();
+    if (!isManager && isRepresentative) {
+      if (!worker.contractorId) this.forbidden();
+      const representative = await this.dataSource
+        .getRepository(ContractorRepresentativeAssignmentEntity)
+        .findOneBy({ siteId: scopedSiteId, contractorId: worker.contractorId, userId: user.id });
+      if (!representative) this.forbidden();
+    } else if (!isManager && (worker.userId !== user.id || !worker.isActive)) {
+      this.forbidden();
+    }
     if (!schedule.isActive) conflict('Worker schedule is inactive');
     if (!worker.isActive) conflict('Worker is inactive');
     return { schedule, worker };
@@ -105,6 +118,56 @@ export class ScheduleConfigurationService {
     this.assertPasswordChanged(user);
     if (!this.isGlobalAdmin(user) && !this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
       this.forbidden();
+  }
+
+  private async contractorScopeForReader(
+    user: AuthenticatedUser,
+    siteId: string,
+  ): Promise<string | null> {
+    this.assertPasswordChanged(user);
+    if (this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
+      return null;
+
+    if (this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId)) {
+      const assignment = await this.dataSource
+        .getRepository(ContractorRepresentativeAssignmentEntity)
+        .findOneBy({ siteId, userId: user.id });
+      if (assignment) return assignment.contractorId;
+    }
+
+    if (this.hasSiteRole(user, UserRole.WORKER, siteId)) {
+      const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({
+        siteId,
+        userId: user.id,
+        isActive: true,
+      });
+      if (worker?.contractorId) return worker.contractorId;
+    }
+
+    this.forbidden();
+  }
+
+  private async assertWorkerScheduleWriter(
+    manager: EntityManager,
+    user: AuthenticatedUser,
+    siteId: string,
+    worker: WorkerEntity,
+    shiftId: string,
+  ): Promise<void> {
+    this.assertPasswordChanged(user);
+    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId))
+      this.forbidden();
+    if (!worker.contractorId) this.forbidden();
+
+    const representative = await manager
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .findOneBy({ siteId, contractorId: worker.contractorId, userId: user.id });
+    if (!representative) this.forbidden();
+
+    const shiftAssignment = await manager
+      .getRepository(ContractorShiftAssignmentEntity)
+      .findOneBy({ siteId, shiftId, contractorId: worker.contractorId });
+    if (!shiftAssignment) this.forbidden();
   }
 
   async createShift(
@@ -150,6 +213,13 @@ export class ScheduleConfigurationService {
       });
       if (assignedScheduleCount > 0) {
         conflict('Shift is already assigned to worker schedules and cannot be deleted');
+      }
+
+      const assignedContractorCount = await manager
+        .getRepository(ContractorShiftAssignmentEntity)
+        .count({ where: { siteId: scopedSiteId, shiftId: scopedShiftId } });
+      if (assignedContractorCount > 0) {
+        conflict('Shift is already assigned to contractors and cannot be deleted');
       }
 
       await shiftRepository.remove(shift);
@@ -199,7 +269,9 @@ export class ScheduleConfigurationService {
     input: CreateWorkerScheduleDto,
   ): Promise<WorkerScheduleEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    this.assertScheduleWriter(user, scopedSiteId);
+    this.assertPasswordChanged(user);
+    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId))
+      this.forbidden();
     const scopedScheduleVersionId = uuid(scheduleVersionId);
     const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {
@@ -216,6 +288,7 @@ export class ScheduleConfigurationService {
         manager.getRepository(ShiftEntity).findOneBy({ id: value.shiftId, siteId: scopedSiteId }),
       ]);
       if (!version || !worker || !shift) missing();
+      await this.assertWorkerScheduleWriter(manager, user, scopedSiteId, worker, shift.id);
       const fromDate = version.effectiveFrom.toISOString().slice(0, 10);
       const untilDate = version.effectiveUntil?.toISOString().slice(0, 10) ?? null;
       if (value.workDate < fromDate || (untilDate && value.workDate >= untilDate))
@@ -244,11 +317,83 @@ export class ScheduleConfigurationService {
     siteId: string,
   ): Promise<{ items: ShiftEntity[]; total: number }> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    this.assertSiteAccess(user, scopedSiteId);
-    const [items, total] = await this.dataSource.getRepository(ShiftEntity).findAndCount({
-      where: { siteId: scopedSiteId },
-      order: { startsAt: 'ASC', name: 'ASC' },
+    const contractorId = await this.contractorScopeForReader(user, scopedSiteId);
+    const query = this.dataSource
+      .getRepository(ShiftEntity)
+      .createQueryBuilder('shift')
+      .where('shift.site_id = :siteId', { siteId: scopedSiteId });
+    if (contractorId) {
+      query
+        .innerJoin(
+          ContractorShiftAssignmentEntity,
+          'assignment',
+          'assignment.shift_id = shift.id AND assignment.site_id = shift.site_id',
+        )
+        .andWhere('assignment.contractor_id = :contractorId', { contractorId });
+    }
+    const [items, total] = await query
+      .orderBy('shift.startsAt', 'ASC')
+      .addOrderBy('shift.name', 'ASC')
+      .getManyAndCount();
+    return { items, total };
+  }
+
+  async assignShiftToContractor(
+    user: AuthenticatedUser,
+    siteId: string,
+    shiftId: string,
+    input: AssignShiftToContractorDto,
+  ): Promise<ContractorShiftAssignmentEntity> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const scopedShiftId = uuid(shiftId);
+    this.assertScheduleWriter(user, scopedSiteId);
+    const value = command(AssignShiftToContractorDto, input);
+    const scopedContractorId = uuid(value.contractorId);
+
+    return this.dataSource.transaction(async (manager) => {
+      const [shift, contractor] = await Promise.all([
+        manager.getRepository(ShiftEntity).findOneBy({ id: scopedShiftId, siteId: scopedSiteId }),
+        manager.getRepository(ContractorEntity).findOneBy({
+          id: scopedContractorId,
+          siteId: scopedSiteId,
+          isActive: true,
+        }),
+      ]);
+      if (!shift || !contractor) missing();
+      try {
+        return await manager.getRepository(ContractorShiftAssignmentEntity).save({
+          id: randomUUID(),
+          siteId: scopedSiteId,
+          shiftId: shift.id,
+          contractorId: contractor.id,
+        });
+      } catch (error) {
+        knownUnique(error, ['uq_contractor_shift_assignment']);
+      }
     });
+  }
+
+  async listShiftContractorAssignments(
+    user: AuthenticatedUser,
+    siteId: string,
+    offset = '0',
+    limit = '50',
+  ): Promise<{ items: ContractorShiftAssignmentEntity[]; total: number }> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const contractorId = await this.contractorScopeForReader(user, scopedSiteId);
+    const pagination = page(Number(offset), Number(limit));
+    const query = this.dataSource
+      .getRepository(ContractorShiftAssignmentEntity)
+      .createQueryBuilder('assignment')
+      .where('assignment.site_id = :siteId', { siteId: scopedSiteId });
+    if (contractorId)
+      query.andWhere('assignment.contractor_id = :contractorId', { contractorId });
+    const [items, total] = await query
+      .orderBy('assignment.createdAt', 'DESC')
+      .addOrderBy('assignment.id', 'ASC')
+      .skip(pagination.offset)
+      .take(pagination.limit)
+      .getManyAndCount();
     return { items, total };
   }
 
@@ -268,11 +413,13 @@ export class ScheduleConfigurationService {
   async listWorkerSchedules(
     user: AuthenticatedUser,
     siteId: string,
-    offset = '0',
-    limit = '50',
+    input: ListWorkerSchedulesQueryDto = {},
   ): Promise<{ items: WorkerScheduleEntity[]; total: number }> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const pagination = page(Number(offset), Number(limit));
+    const pagination = page(Number(input.offset ?? '0'), Number(input.limit ?? '20'));
+    if (input.fromDate && input.toDate && input.fromDate > input.toDate) {
+      invalid('fromDate must be before or equal to toDate');
+    }
 
     // Authorization check
     let contractorIdScope: string | undefined;
@@ -301,9 +448,25 @@ export class ScheduleConfigurationService {
     }
     if (workerIdScope)
       query.andWhere('schedule.worker_id = :workerId', { workerId: workerIdScope });
+    if (input.workerId)
+      query.andWhere('schedule.worker_id = :requestedWorkerId', { requestedWorkerId: uuid(input.workerId) });
+    if (input.shiftId)
+      query.andWhere('schedule.shift_id = :shiftId', { shiftId: uuid(input.shiftId) });
+    if (input.fromDate)
+      query.andWhere('schedule.work_date >= :fromDate', { fromDate: input.fromDate });
+    if (input.toDate)
+      query.andWhere('schedule.work_date <= :toDate', { toDate: input.toDate });
+    if (input.status === 'ACTIVE') query.andWhere('schedule.is_active = true');
+    if (input.status === 'INACTIVE') query.andWhere('schedule.is_active = false');
+    if (input.searchName) {
+      if (!contractorIdScope) {
+        query.innerJoin('worker', 'w', 'schedule.worker_id = w.id');
+      }
+      query.andWhere('(w.display_name ILIKE :searchName OR w.external_id ILIKE :searchName)', { searchName: `%${input.searchName}%` });
+    }
 
     const [items, total] = await query
-      .orderBy('schedule.workDate', 'DESC')
+      .orderBy('schedule.workDate', 'ASC')
       .addOrderBy('schedule.id', 'ASC')
       .skip(pagination.offset)
       .take(pagination.limit)
@@ -318,11 +481,22 @@ export class ScheduleConfigurationService {
     workerScheduleId: string,
   ) {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const { schedule } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
-    const shifts = await this.dataSource.getRepository(ShiftEntity).find({
-      where: { siteId: scopedSiteId },
-      order: { startsAt: 'ASC', name: 'ASC', id: 'ASC' },
-    });
+    const { schedule, worker } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    if (!worker.contractorId) return { items: [], total: 0 };
+    const shifts = await this.dataSource
+      .getRepository(ShiftEntity)
+      .createQueryBuilder('shift')
+      .innerJoin(
+        ContractorShiftAssignmentEntity,
+        'assignment',
+        'assignment.shift_id = shift.id AND assignment.site_id = shift.site_id',
+      )
+      .where('shift.site_id = :siteId', { siteId: scopedSiteId })
+      .andWhere('assignment.contractor_id = :contractorId', { contractorId: worker.contractorId })
+      .orderBy('shift.startsAt', 'ASC')
+      .addOrderBy('shift.name', 'ASC')
+      .addOrderBy('shift.id', 'ASC')
+      .getMany();
     const items = shifts
       .filter((shift) => shift.id !== schedule.shiftId)
       .map((shift) => this.shiftView(shift));

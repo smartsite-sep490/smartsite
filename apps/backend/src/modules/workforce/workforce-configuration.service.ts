@@ -110,6 +110,23 @@ export class WorkforceConfigurationService {
     }
   }
 
+  async listRepresentativeAssignments(
+    siteId: string,
+    offset = 0,
+    limit = 50,
+  ): Promise<{ items: ContractorRepresentativeAssignmentEntity[]; total: number }> {
+    const pagination = page(offset, limit);
+    const [items, total] = await this.dataSource
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .findAndCount({
+        where: { siteId: uuid(siteId) },
+        order: { createdAt: 'ASC', id: 'ASC' },
+        skip: pagination.offset,
+        take: pagination.limit,
+      });
+    return { items, total };
+  }
+
   async listContractors(
     user: AuthenticatedUser,
     siteId: string,
