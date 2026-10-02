@@ -2,6 +2,8 @@
 import React from 'react';
 import type { SchedulingRequestStatus } from '@smartsite/api-client';
 
+export const WORKFORCE_POLL_INTERVAL_MS = 3_000;
+
 export function formatShiftTime(timeStr?: string): string {
   if (!timeStr) return '--:--';
   if (/^\d{2}:\d{2}/.test(timeStr)) {
@@ -112,6 +114,7 @@ export const SmartButton = ({
   size = 'default',
   disabled = false,
   type = 'button',
+  title,
   className = '',
 }: {
   children: React.ReactNode;
@@ -120,6 +123,7 @@ export const SmartButton = ({
   size?: 'default' | 'sm' | 'lg' | 'icon';
   disabled?: boolean;
   type?: 'button' | 'submit' | 'reset';
+  title?: string;
   className?: string;
 }) => {
   const base =
@@ -146,6 +150,7 @@ export const SmartButton = ({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
     >
       {children}
@@ -163,7 +168,7 @@ export const LabelBadge = ({ children, dotColor, className = '' }: { children: R
 export const StatusBadge = ({ status }: { status: SchedulingRequestStatus | string }) => {
   const styles: Record<string, { dot: string; label: string }> = {
     PENDING_COWORKER: { dot: 'bg-amber-400', label: 'Pending Coworker' },
-    PENDING_MANAGER: { dot: 'bg-amber-400', label: 'Pending Manager' },
+    PENDING_MANAGER: { dot: 'bg-amber-400', label: 'Pending Contractor Review' },
     APPROVED: { dot: 'bg-emerald-500', label: 'Approved' },
     APPLIED: { dot: 'bg-emerald-500', label: 'Applied' },
     REJECTED: { dot: 'bg-red-500', label: 'Rejected' },
