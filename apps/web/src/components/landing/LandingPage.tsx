@@ -346,13 +346,13 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 3. The Challenge Section */}
-      <section className="challenge-section py-24 px-6 bg-slate-50 border-t border-slate-100">
+      <section className="challenge-section py-24 px-6 bg-[#F7F6F3] border-t border-[#EAEAEA]">
         <div className="max-w-6xl mx-auto">
           <div className="challenge-header mb-16">
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
               The challenge
             </h2>
-            <h3 className="text-3xl md:text-5xl font-black text-slate-900 max-w-3xl leading-tight">
+            <h3 className="text-3xl md:text-5xl font-black text-[#2F3437] max-w-3xl leading-tight">
               Construction sites are complex.
               <br />
               Your systems shouldn't be.
@@ -360,26 +360,26 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </div>
 
           <div className="challenge-cards-container space-y-0 text-sm md:text-base hover:opacity-100 group">
-            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default">
+            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-[#EAEAEA] transition-all hover:bg-white hover:px-4 rounded-lg cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">01</div>
-              <div className="md:col-span-4 font-bold text-slate-900">DISCONNECTED WORKFORCE</div>
-              <div className="md:col-span-7 text-slate-500 leading-relaxed">
+              <div className="md:col-span-4 font-bold text-[#2F3437]">DISCONNECTED WORKFORCE</div>
+              <div className="md:col-span-7 text-[#787774] leading-relaxed">
                 Worker profiles, contractor assignments, certifications and site eligibility are
                 often managed separately.
               </div>
             </div>
-            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default">
+            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-[#EAEAEA] transition-all hover:bg-white hover:px-4 rounded-lg cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">02</div>
-              <div className="md:col-span-4 font-bold text-slate-900">SAFETY RISKS</div>
-              <div className="md:col-span-7 text-slate-500 leading-relaxed">
+              <div className="md:col-span-4 font-bold text-[#2F3437]">SAFETY RISKS</div>
+              <div className="md:col-span-7 text-[#787774] leading-relaxed">
                 Manual observation cannot continuously monitor every worker, camera and restricted
                 area.
               </div>
             </div>
-            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-y border-slate-200 transition-all hover:bg-white hover:shadow-lg hover:px-4 rounded-xl cursor-default">
+            <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-y border-[#EAEAEA] transition-all hover:bg-white hover:px-4 rounded-lg cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">03</div>
-              <div className="md:col-span-4 font-bold text-slate-900">FRAGMENTED SITE DATA</div>
-              <div className="md:col-span-7 text-slate-500 leading-relaxed">
+              <div className="md:col-span-4 font-bold text-[#2F3437]">FRAGMENTED SITE DATA</div>
+              <div className="md:col-span-7 text-[#787774] leading-relaxed">
                 Access control, safety events, cameras, IoT and project operations can become
                 disconnected.
               </div>
@@ -395,14 +395,14 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
               The SmartSite platform
             </h2>
-            <h3 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-6">
+            <h3 className="text-4xl md:text-5xl font-black text-[#2F3437] leading-tight mb-6">
               One platform.
               <br />
               Every part of your
               <br />
               site connected.
             </h3>
-            <p className="text-lg text-slate-500 leading-relaxed">
+            <p className="text-lg text-[#787774] leading-relaxed">
               SmartSite brings workforce, access, safety intelligence and site operations into one
               connected construction platform.
             </p>
@@ -424,22 +424,22 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
             {/* Orbiting nodes */}
             <div className="orbit-node absolute top-[8%] left-1/2 -translate-x-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Workforce
               </div>
             </div>
             <div className="orbit-node absolute bottom-[8%] left-1/2 -translate-x-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Operations
               </div>
             </div>
             <div className="orbit-node absolute left-[-2%] top-1/2 -translate-y-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Access
               </div>
             </div>
             <div className="orbit-node absolute right-[-2%] top-1/2 -translate-y-1/2">
-              <div className="px-4 py-2.5 bg-white rounded-lg border border-slate-200 shadow-xl text-xs font-bold text-slate-700 tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
+              <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
                 Safety AI
               </div>
             </div>
@@ -450,10 +450,10 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       {/* 5. Built Around Operations */}
       <section
         id="solutions"
-        className="solutions-section py-24 px-6 bg-slate-50 border-y border-slate-100 scroll-mt-10"
+        className="solutions-section py-24 px-6 bg-[#F7F6F3] border-y border-[#EAEAEA] scroll-mt-10"
       >
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight mb-20 max-w-2xl">
+          <h2 className="text-4xl md:text-5xl font-black text-[#2F3437] leading-tight mb-20 max-w-2xl">
             Built around how construction
             <br />
             sites actually operate.
@@ -461,31 +461,31 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-16">
             {/* Workforce Management */}
-            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+            <div className="solution-card flex gap-6 group p-6 rounded-lg bg-white border border-transparent transition-colors hover:border-[#EAEAEA]">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconUsers className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
                   Workforce Management
                 </div>
-                <h4 className="text-xl font-black text-slate-900 mb-6">
+                <h4 className="text-xl font-black text-[#2F3437] mb-6">
                   One verified workforce record
                 </h4>
                 <ul className="space-y-4">
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Worker profiles
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Contractor assignments
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Certificates
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Site assignments
                   </li>
@@ -494,31 +494,31 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Site Access */}
-            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+            <div className="solution-card flex gap-6 group p-6 rounded-lg bg-white border border-transparent transition-colors hover:border-[#EAEAEA]">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconKey className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
                   Site Access
                 </div>
-                <h4 className="text-xl font-black text-slate-900 mb-6">
+                <h4 className="text-xl font-black text-[#2F3437] mb-6">
                   Secure every arrival and departure
                 </h4>
                 <ul className="space-y-4">
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Face recognition
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Dynamic QR
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Assignment verification
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Entry / exit records
                   </li>
@@ -527,27 +527,27 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* AI Safety */}
-            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+            <div className="solution-card flex gap-6 group p-6 rounded-lg bg-white border border-transparent transition-colors hover:border-[#EAEAEA]">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconShield className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
                   AI Safety
                 </div>
-                <h4 className="text-xl font-black text-slate-900 mb-6">
+                <h4 className="text-xl font-black text-[#2F3437] mb-6">
                   Always-on safety intelligence
                 </h4>
                 <ul className="space-y-4">
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     PPE Monitoring
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Restricted Zone Monitoring
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Real-time safety alerts
                   </li>
@@ -556,31 +556,31 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             </div>
 
             {/* Incident Management */}
-            <div className="solution-card flex gap-6 group p-6 rounded-2xl bg-white border border-transparent transition-colors hover:border-slate-200">
+            <div className="solution-card flex gap-6 group p-6 rounded-lg bg-white border border-transparent transition-colors hover:border-[#EAEAEA]">
               <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center shrink-0">
                 <IconAlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
+                <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
                   Incident Management
                 </div>
-                <h4 className="text-xl font-black text-slate-900 mb-6">
+                <h4 className="text-xl font-black text-[#2F3437] mb-6">
                   Move evidence into action
                 </h4>
                 <ul className="space-y-4">
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Safety-event review
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Evidence
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Status tracking
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                  <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
                     Resolution workflow
                   </li>
@@ -655,9 +655,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
 
               <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-white text-[10px] font-bold tracking-widest">
-                  LIVE • 10:42:16
+                <span className="text-slate-300 text-[10px] font-bold tracking-widest uppercase">
+                  Illustrative example
                 </span>
               </div>
 
@@ -665,7 +664,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-80 border-[3px] border-[#F66B17] group cursor-pointer transition-colors hover:bg-[#F66B17]/10">
                 <div className="absolute -top-[28px] left-[-3px] bg-[#F66B17] px-3 py-1">
                   <span className="text-white text-[10px] font-bold tracking-widest">
-                    WORKER #1024 • 97%
+                    SAMPLE TRACK #1024 • 97%
                   </span>
                 </div>
               </div>
@@ -676,9 +675,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
             {/* Right side: PPE Checklist & Result */}
             <div className="lg:w-1/3 bg-[#0B1521] p-8 flex flex-col h-full border-l border-white/5">
-              <div className="mb-6">
+              <div className="mb-6 flex items-center justify-between">
                 <span className="text-[#F66B17] text-[10px] font-bold tracking-widest uppercase">
                   PPE CHECK
+                </span>
+                <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">
+                  Illustrative example
                 </span>
               </div>
 
@@ -687,12 +689,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                   <span className="text-white text-sm font-semibold">Helmet</span>
                   <IconCheck className="w-5 h-5 text-emerald-500" />
                 </div>
-                <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4">
-                  <span className="text-white text-sm font-semibold">Safety Vest</span>
-                  <IconCheck className="w-5 h-5 text-emerald-500" />
-                </div>
                 <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4 bg-red-500/5 -mx-8 px-8 border-l-[3px] border-l-red-500">
-                  <span className="text-white text-sm font-semibold">Gloves</span>
+                  <span className="text-white text-sm font-semibold">Safety Vest</span>
                   <IconX className="w-5 h-5 text-red-500" />
                 </div>
               </div>
@@ -705,7 +703,10 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                   <div className="text-red-500 text-xl font-black tracking-tight mb-1">
                     PPE VIOLATION
                   </div>
-                  <div className="text-slate-400 text-xs">Missing required PPE: Gloves</div>
+                  <div className="text-slate-400 text-xs">Missing required PPE: Safety Vest</div>
+                  <div className="text-slate-500 text-[10px] mt-1">
+                    Model scope: Hardhat &amp; Safety Vest detection
+                  </div>
                 </div>
 
                 <button
@@ -722,7 +723,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 7. How It Works */}
-      <section id="how-it-works" className="timeline-section py-24 px-6 bg-[#FAFAFA] scroll-mt-10">
+      <section id="how-it-works" className="timeline-section py-24 px-6 bg-[#F7F6F3] scroll-mt-10">
         <div className="max-w-7xl mx-auto">
           <div className="mb-20">
             <div className="text-[#F66B17] text-[10px] font-black tracking-widest uppercase mb-4">
@@ -739,11 +740,11 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               {/* Step 1 */}
               <div className="timeline-step relative pt-8 md:pt-0">
                 <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
-                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">01</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">SENSE</h4>
-                  <p className="text-slate-500 text-sm leading-relaxed pr-4">
+                  <p className="text-[#787774] text-sm leading-relaxed pr-4">
                     Cameras, gates and site systems collect operational events.
                   </p>
                 </div>
@@ -751,13 +752,13 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               {/* Step 2 */}
               <div className="timeline-step relative pt-8 md:pt-0">
                 <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
-                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">02</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
                     UNDERSTAND
                   </h4>
-                  <p className="text-slate-500 text-sm leading-relaxed pr-4">
+                  <p className="text-[#787774] text-sm leading-relaxed pr-4">
                     SmartSite identifies workers, equipment and safety conditions.
                   </p>
                 </div>
@@ -765,13 +766,13 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               {/* Step 3 */}
               <div className="timeline-step relative pt-8 md:pt-0">
                 <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
-                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">03</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
                     VERIFY
                   </h4>
-                  <p className="text-slate-500 text-sm leading-relaxed pr-4">
+                  <p className="text-[#787774] text-sm leading-relaxed pr-4">
                     The platform checks assignments, PPE requirements and zone permissions.
                   </p>
                 </div>
@@ -779,22 +780,22 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               {/* Step 4 */}
               <div className="timeline-step relative pt-8 md:pt-0">
                 <div className="timeline-line hidden md:block absolute top-[6px] left-2 w-[calc(100%+2rem)] lg:w-[calc(100%+3rem)] h-[3px] bg-[#F66B17] -z-10 origin-left" />
-                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">04</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">ALERT</h4>
-                  <p className="text-slate-500 text-sm leading-relaxed pr-4">
+                  <p className="text-[#787774] text-sm leading-relaxed pr-4">
                     Relevant violations or uncertain events generate classified alerts.
                   </p>
                 </div>
               </div>
               {/* Step 5 */}
               <div className="timeline-step relative pt-8 md:pt-0">
-                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#FAFAFA] z-10" />
+                <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">05</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">ACT</h4>
-                  <p className="text-slate-500 text-sm leading-relaxed pr-4">
+                  <p className="text-[#787774] text-sm leading-relaxed pr-4">
                     Responsible personnel review and resolve the event.
                   </p>
                 </div>
@@ -861,25 +862,25 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 {/* Stats Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
+                    <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
                       Workers On Site
                     </div>
                     <div className="text-3xl font-black text-slate-900">328</div>
                   </div>
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
+                    <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
                       Active Contractors
                     </div>
                     <div className="text-3xl font-black text-slate-900">14</div>
                   </div>
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
+                    <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
                       Safety Compliance
                     </div>
                     <div className="text-3xl font-black text-slate-900">96.8%</div>
                   </div>
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                    <div className="text-[10px] text-slate-500 font-bold mb-2 tracking-widest uppercase">
+                    <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
                       Open Alerts
                     </div>
                     <div className="text-3xl font-black text-slate-900">7</div>
@@ -931,7 +932,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 9. Lifecycle (Connected from the gate to the jobsite) */}
-      <section className="lifecycle-section py-24 px-6 bg-white border-t border-slate-100 scroll-mt-10">
+      <section className="lifecycle-section py-24 px-6 bg-white border-t border-[#EAEAEA] scroll-mt-10">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-16 md:items-center">
           <div className="lifecycle-text md:w-1/2">
             <h3 className="text-4xl md:text-5xl font-black text-[#041D2E] mb-6 leading-tight">
@@ -941,7 +942,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <br />
               jobsite.
             </h3>
-            <p className="text-slate-500 text-sm leading-relaxed max-w-sm">
+            <p className="text-[#787774] text-sm leading-relaxed max-w-sm">
               SmartSite connects events across the worker lifecycle instead of operating as isolated
               tools.
             </p>

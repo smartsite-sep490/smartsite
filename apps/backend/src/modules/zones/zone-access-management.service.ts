@@ -39,9 +39,51 @@ export interface ZoneEntryDecisionFilters {
   limit?: number;
 }
 
+export type OriginalZoneDecisionSummary = Pick<
+  ZoneEntryDecisionEntity,
+  'id' | 'zoneId' | 'status' | 'reasonCode' | 'evaluatedAt'
+>;
+
 @Injectable()
 export class ZoneAccessManagementService {
   constructor(private readonly dataSource: DataSource) {}
+
+  /** Historical policy outcomes only; manual identity review must not recalculate authorization. */
+  async listObservationDecisions(
+    siteId: string,
+    eventId: string,
+    trackId: number,
+    offset = 0,
+    limit = 20,
+  ): Promise<{ items: OriginalZoneDecisionSummary[]; total: number }> {
+    const scope = uuid(siteId);
+    const event = uuid(eventId);
+    const pagination = page(offset, limit);
+    if (!Number.isSafeInteger(trackId) || trackId < 0) {
+      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid observation Track ID',
+      });
+    }
+    const [decisions, total] = await this.dataSource
+      .getRepository(ZoneEntryDecisionEntity)
+      .findAndCount({
+        where: { siteId: scope, eventId: event, trackId },
+        order: { evaluatedAt: 'ASC', id: 'ASC' },
+        skip: pagination.offset,
+        take: pagination.limit,
+      });
+    return {
+      items: decisions.map(({ id, zoneId, status, reasonCode, evaluatedAt }) => ({
+        id,
+        zoneId,
+        status,
+        reasonCode,
+        evaluatedAt,
+      })),
+      total,
+    };
+  }
 
   async createGrant(
     siteId: string,

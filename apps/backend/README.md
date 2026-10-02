@@ -51,6 +51,26 @@ AppModule
 
 Controller chỉ xử lý HTTP. Module gọi provider được export của module khác, không đọc persistence nội bộ. Chỉ thêm module khi có hành vi thật; không thêm repository tổng quát, base service hay folder chờ tính năng. Quy tắc chi tiết ở [AGENTS.md](AGENTS.md).
 
+## Review danh tính trong một quan sát
+
+`SafetyModule` đăng ký API review thủ công tại
+`GET /api/v1/sites/:siteId/safety-alerts/:alertId/detections/:eventId/identity-subjects`,
+picker `/workers`, và history/command `/:personObservationIndex/decisions`.
+Mọi route yêu cầu tài khoản active đã đổi mật khẩu tạm và vai trò Safety Officer đúng Site;
+Admin đơn thuần không có quyền review danh tính.
+
+Reader dùng `WorkforceConfigurationService` được export hiện có, đọc Worker theo UUID + Site.
+RESOLVE khóa Worker trong chính transaction lưu quyết định; picker phân trang chỉ trả
+`id`, `siteId`, `externalId`, `displayName`, `isActive`. Không tạo danh bạ thứ hai hoặc gọi face model.
+Review chỉ thuộc một PERSON trong một event; correction/CLEAR giữ audit và không cấp quyền
+Zone, sửa quyết định vào vùng gốc, hay truyền danh tính sang Track/event/camera khác.
+
+Trước khi triển khai source này, chạy migration theo quy trình triển khai đã duyệt và xác nhận
+hai bảng observation identity tồn tại; ứng dụng không tự migrate lúc startup.
+Không revert migration chứa audit nếu chưa có backup và kế hoạch khôi phục được duyệt.
+Triển khai với dữ liệu thật còn cần chốt retention/access policy; kiểm chứng local sử dụng
+dữ liệu synthetic và database riêng, không tự apply migration lên Neon.
+
 ## Cấu hình môi trường
 
 Zod kiểm tra cấu hình trước khi khởi động; `BackendEnvironment` được suy ra từ schema. Service dùng `ConfigService<BackendEnvironment, true>`, không tự đọc `process.env` hay đặt fallback chưa kiểm tra. Khi thêm biến, cập nhật schema, `.env.example`, tài liệu và regression test cùng nhau.
@@ -174,6 +194,31 @@ pnpm --filter @smartsite/backend typeorm migration:run -d dist/database/typeorm.
 ```
 
 Docker Compose chạy service `migrate` trước Backend. Staging/production phải chạy migration có kiểm soát trước khi deploy phiên bản cần schema mới. Kiểm tra đường rollback và tương thích dữ liệu; `revert` chỉ hoàn tác migration gần nhất, không thay backup.
+
+Migration `ZoneEntryTrackIdRange1790812800001` mở rộng `zone_entry_decision.track_id` từ
+PostgreSQL `integer` sang `bigint`, với CHECK `0..9007199254740991` đúng contract observation
+v1. Chạy migration này trước khi deploy Backend dùng transformer mới. API vẫn trả `trackId`
+kiểu số JSON; thay đổi lưu trữ không xác nhận Worker hay thay chính sách quyền Zone.
+Downgrade về `integer` sẽ bị PostgreSQL từ chối nếu còn Track ID lớn hơn `2147483647`;
+lệnh thất bại nguyên tử, không xóa hoặc cắt giá trị để ép rollback. Khi đã có các ID đó,
+ưu tiên forward fix hoặc quy trình restore đã được duyệt, không coi `revert` luôn khả dụng.
+
+Migration `ObservationIdentityReview1790899200000` chỉ cho revert khi cả head và audit
+đều rỗng. Nếu đã có quyết định review, `down` từ chối trước mọi thay đổi schema trong
+cùng một statement; dùng forward fix hoặc backup/restore được duyệt. Không truncate
+audit để ép rollback. Trigger chặn `UPDATE`/`DELETE` quyết định; tài khoản database
+runtime phải không có quyền `TRUNCATE` hoặc DDL. Trigger không bảo vệ trước database
+owner/superuser. Chỉ fixture giả trong database test riêng được dọn bằng `TRUNCATE`.
+
+API review danh tính theo từng PERSON observation hiện chưa được đăng ký trong
+`SafetyModule`: phải thống nhất reader/export từ registry Worker trước khi bật.
+Các test HTTP dùng module và reader riêng cho fixture; đây không phải bằng chứng
+endpoint đã hoạt động trên môi trường ứng dụng. Review thủ công chỉ có phạm vi
+`EXACT_OBSERVATION`, không xác minh track trực tiếp, cấp quyền Zone, tính lại quyết
+định vào vùng đã lưu hoặc mở lại alert. Nếu ảnh hết hạn hay Camera đã bị xóa,
+lịch sử/replay/CLEAR vẫn dùng snapshot hợp lệ đã lưu; RESOLVE mới bị chặn khi
+không còn bằng chứng phù hợp. Management response validators dùng browser-safe
+entry `@smartsite/contracts/management` trong Web/API client.
 
 ### Neon local
 

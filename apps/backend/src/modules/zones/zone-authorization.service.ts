@@ -46,6 +46,29 @@ export class ZoneAuthorizationService implements IZoneAuthorizationService {
         }
 
         const evaluatedMs = subject.evaluatedAt.getTime();
+        // Invalid dates compare false in JavaScript, which can accidentally keep
+        // an expired/revoked grant active. A partial authority snapshot cannot allow.
+        if (
+          !Number.isFinite(evaluatedMs) ||
+          subject.grants.some((grant) => {
+            const fromMs = grant.validFrom.getTime();
+            const untilMs = grant.validUntil?.getTime();
+            const revokedMs = grant.revokedAt?.getTime();
+            return (
+              !Number.isFinite(fromMs) ||
+              (untilMs !== undefined && (!Number.isFinite(untilMs) || untilMs <= fromMs)) ||
+              (revokedMs !== undefined && !Number.isFinite(revokedMs))
+            );
+          })
+        ) {
+          return {
+            status: 'UNAVAILABLE',
+            candidateSubtype: 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+            reasonCode: 'AUTHORIZATION_DATA_UNAVAILABLE',
+            reason: 'Zone authorization time or grant validity is unavailable',
+            workerId: subject.workerId,
+          };
+        }
         const activeGrants = subject.grants.filter((grant) => {
           if (grant.revokedAt !== null && grant.revokedAt.getTime() <= evaluatedMs) return false;
           if (grant.validFrom.getTime() > evaluatedMs) return false;

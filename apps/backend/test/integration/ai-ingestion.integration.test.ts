@@ -17,6 +17,7 @@ import {
   ZoneEntity,
   ZoneRestrictionPolicy,
   ZoneType,
+  ZoneEntryDecisionEntity,
 } from '../../src/database/entities/index.js';
 import dataSource from '../support/test-data-source.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
@@ -59,6 +60,122 @@ function createSampleEvent(overrides: Record<string, unknown> = {}): Record<stri
     ...overrides,
   };
 }
+
+test('conflicting identity candidates preserve raw evidence without selecting a Worker in PostgreSQL', async () => {
+  await withDataSource(async (source) => {
+    const siteId = randomUUID();
+    const cameraId = randomUUID();
+    const zoneId = randomUUID();
+    const regionId = randomUUID();
+    const cameraExternalId = `CAM-IDENTITY-${randomUUID()}`;
+    await source.getRepository(SiteEntity).save({
+      id: siteId,
+      code: `SITE-${randomUUID()}`,
+      name: 'Synthetic conflicting identity site',
+    });
+    await source.getRepository(CameraEntity).save({
+      id: cameraId,
+      siteId,
+      externalId: cameraExternalId,
+      code: cameraExternalId,
+      name: 'Synthetic identity camera',
+      status: CameraStatus.ACTIVE,
+    });
+    await source.getRepository(ZoneEntity).save({
+      id: zoneId,
+      siteId,
+      code: `ZONE-${randomUUID()}`,
+      name: 'Synthetic auth-required zone',
+      type: ZoneType.RESTRICTED,
+      restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+      requiredPpe: ['HARD_HAT'],
+    });
+    await source.getRepository(CameraObservationRegionEntity).save({
+      id: regionId,
+      cameraId,
+      zoneId,
+      coordinateSpace: 'NORMALIZED_0_1',
+      version: 1,
+      isActive: true,
+      polygon: { type: 'Polygon', coordinates: [] },
+    });
+    const service = new AiIngestionService(
+      source,
+      new ObservationContextResolverService(),
+      new AlertCandidateEvaluator(),
+      new DurableGroupingService(createTestConfig()),
+      createTestConfig(),
+    );
+    const identities = [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 101,
+        status: 'CANDIDATE',
+        candidateWorkerId: 'SYNTHETIC-A',
+        similarityScore: 0.81,
+        qualityScore: 0.91,
+      },
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 101,
+        status: 'CANDIDATE',
+        candidateWorkerId: 'SYNTHETIC-B',
+        similarityScore: 0.82,
+        qualityScore: 0.92,
+      },
+    ];
+    for (const ordered of [identities, [...identities].reverse()]) {
+      const eventId = randomUUID();
+      const payload = createSampleEvent({
+        eventId,
+        cameraExternalId,
+        observations: [
+          { type: 'PERSON', trackId: 101, confidence: 0.95 },
+          ...ordered,
+          {
+            type: 'PPE',
+            trackId: 101,
+            ppeItem: 'HARD_HAT',
+            status: 'MISSING',
+            regionId,
+            geometryVersion: 1,
+            confidence: 0.9,
+          },
+          { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion: 1, confidence: 0.9 },
+        ],
+      });
+      const result = await service.ingestEvent(payload);
+      assert.equal(result.status, EventProcessingStatus.PROCESSED);
+      assert.equal(result.alertIds.length, 2);
+      for (const alertId of result.alertIds) {
+        const alert = await source
+          .getRepository(SafetyAlertEntity)
+          .findOneByOrFail({ id: alertId });
+        assert.equal(alert.candidateWorkerId, null);
+        assert.equal(alert.identitySimilarityScore, null);
+        assert.equal(alert.identityQualityScore, null);
+      }
+      const decision = await source
+        .getRepository(ZoneEntryDecisionEntity)
+        .findOneByOrFail({ eventId });
+      assert.equal(decision.status, 'UNAVAILABLE');
+      assert.equal(decision.candidateWorkerId, null);
+      assert.equal(decision.workerId, null);
+      const raw = await source.getRepository(AiObservationEventEntity).findOneByOrFail({ eventId });
+      assert.deepEqual(raw.rawPayload, payload);
+      const originalHash = raw.payloadHash;
+      const retry = await service.ingestEvent(payload);
+      assert.equal(retry.status, 'DUPLICATE_ACCEPTED');
+      assert.deepEqual(retry.alertIds, []);
+      const rawAfter = await source
+        .getRepository(AiObservationEventEntity)
+        .findOneByOrFail({ eventId });
+      assert.equal(rawAfter.payloadHash, originalHash);
+      assert.deepEqual(rawAfter.rawPayload, payload);
+      assert.equal(await source.getRepository(AlertDetectionMappingEntity).countBy({ eventId }), 2);
+    }
+  });
+});
 
 test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL result in exactly 1 PROCESSED and 4 DUPLICATE_ACCEPTED with no alert side effect', async () => {
   await withDataSource(async (source) => {

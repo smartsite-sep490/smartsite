@@ -11,6 +11,8 @@ export type ProvisionableUserRole =
   'ADMIN' | 'SITE_MANAGER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
 export type AuthClientType = 'WEB' | 'MOBILE';
 
+export * from './observation-identity-management.js';
+
 export interface ProvisionableRoleAssignment {
   role: ProvisionableUserRole;
   siteId: string | null;

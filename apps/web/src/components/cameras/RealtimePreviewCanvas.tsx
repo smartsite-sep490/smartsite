@@ -40,7 +40,7 @@ export function RealtimePreviewCanvas({
       if (!box) continue;
       const x = box.x1 * frame.width;
       const y = box.y1 * frame.height;
-      context.strokeStyle = detection.active ? '#F66B17' : '#34d399';
+      context.strokeStyle = detection.active ? '#F66B17' : '#d6d3d1';
       context.fillStyle = context.strokeStyle;
       context.strokeRect(x, y, (box.x2 - box.x1) * frame.width, (box.y2 - box.y1) * frame.height);
       context.fillText(`${detection.label} · #${detection.trackId}`, x, Math.max(16, y - 5));

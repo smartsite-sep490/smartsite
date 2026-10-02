@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import {
   command,
   conflict,
@@ -17,6 +17,28 @@ import { SiteEntity } from '../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
+/** Safe read projection; account, face, and contractor data stay in their owning workflows. */
+export type WorkerReviewReference = Pick<
+  WorkerEntity,
+  'id' | 'siteId' | 'externalId' | 'displayName' | 'isActive'
+>;
+const workerReviewFields = {
+  id: true,
+  siteId: true,
+  externalId: true,
+  displayName: true,
+  isActive: true,
+} as const;
+function workerReviewReference(worker: WorkerEntity): WorkerReviewReference {
+  return {
+    id: worker.id,
+    siteId: worker.siteId,
+    externalId: worker.externalId,
+    displayName: worker.displayName,
+    isActive: worker.isActive,
+  };
+}
 
 export class LinkWorkerAccountCommand {
   @IsUUID()
@@ -140,5 +162,36 @@ export class WorkforceConfigurationService {
       take: pagination.limit,
     });
     return { items, total };
+  }
+
+  /** Uses the caller's transaction so RESOLVE and a concurrent Worker disable serialize. */
+  async findForReview(
+    manager: EntityManager,
+    siteId: string,
+    workerId: string,
+    lockForResolution: boolean,
+  ): Promise<WorkerReviewReference | null> {
+    const worker = await manager.getRepository(WorkerEntity).findOne({
+      where: { id: uuid(workerId), siteId: uuid(siteId) },
+      select: workerReviewFields,
+      ...(lockForResolution ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+    });
+    return worker ? workerReviewReference(worker) : null;
+  }
+
+  async listForReview(
+    siteId: string,
+    offset = 0,
+    limit = 20,
+  ): Promise<{ items: WorkerReviewReference[]; total: number }> {
+    const pagination = page(offset, limit);
+    const [workers, total] = await this.dataSource.getRepository(WorkerEntity).findAndCount({
+      where: { siteId: uuid(siteId) },
+      select: workerReviewFields,
+      order: { externalId: 'ASC', id: 'ASC' },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
+    return { items: workers.map(workerReviewReference), total };
   }
 }

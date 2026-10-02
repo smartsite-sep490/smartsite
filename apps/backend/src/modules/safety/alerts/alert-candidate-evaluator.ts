@@ -84,6 +84,47 @@ export type ZoneAuthorizationLookup = (
   input: ZoneAuthorizationLookupInput,
 ) => ZoneAuthorizationResult;
 
+type IdentityEvidence = Pick<
+  IdentityCandidateObservation,
+  'candidateWorkerId' | 'similarityScore' | 'qualityScore'
+>;
+
+/** Summarize one event only; conflicting claims never select a Worker by input order. */
+export function summarizeIdentityEvidenceByTrack(
+  observations: readonly Observation[],
+): Map<number, IdentityEvidence> {
+  const groups = new Map<number, IdentityCandidateObservation[]>();
+  for (const observation of observations) {
+    if (observation.type !== 'IDENTITY_CANDIDATE') continue;
+    const group = groups.get(observation.trackId) ?? [];
+    group.push(observation);
+    groups.set(observation.trackId, group);
+  }
+  const summaries = new Map<number, IdentityEvidence>();
+  for (const [trackId, group] of groups) {
+    const first = group[0]!;
+    if (
+      !group.every(
+        (item) =>
+          item.status === first.status && item.candidateWorkerId === first.candidateWorkerId,
+      )
+    )
+      continue;
+    const candidate = first.status === 'CANDIDATE' && first.candidateWorkerId !== undefined;
+    summaries.set(trackId, {
+      candidateWorkerId: candidate ? first.candidateWorkerId : undefined,
+      similarityScore:
+        candidate && group.every((item) => item.similarityScore === first.similarityScore)
+          ? first.similarityScore
+          : undefined,
+      qualityScore: group.every((item) => item.qualityScore === first.qualityScore)
+        ? first.qualityScore
+        : undefined,
+    });
+  }
+  return summaries;
+}
+
 function getContext(
   lookup: ContextLookup,
   regionId: string,
@@ -132,31 +173,8 @@ export class AlertCandidateEvaluator {
     contextLookup: ContextLookup,
     authorizationLookup?: ZoneAuthorizationLookup,
   ): AlertCandidate[] {
-    // 1. Map non-authoritative identity evidence by trackId
-    const identityEvidenceByTrack = new Map<
-      number,
-      {
-        candidateWorkerId?: string;
-        similarityScore?: number;
-        qualityScore?: number;
-      }
-    >();
-
-    for (const obs of event.observations) {
-      if (obs.type === 'IDENTITY_CANDIDATE') {
-        if (obs.status === 'CANDIDATE' && obs.candidateWorkerId) {
-          identityEvidenceByTrack.set(obs.trackId, {
-            candidateWorkerId: obs.candidateWorkerId,
-            similarityScore: obs.similarityScore,
-            qualityScore: obs.qualityScore,
-          });
-        } else if (obs.qualityScore !== undefined && !identityEvidenceByTrack.has(obs.trackId)) {
-          identityEvidenceByTrack.set(obs.trackId, {
-            qualityScore: obs.qualityScore,
-          });
-        }
-      }
-    }
+    // 1. Preserve ambiguity; these per-event summaries are never trusted identity.
+    const identityEvidenceByTrack = summarizeIdentityEvidenceByTrack(event.observations);
 
     const uncollapsedCandidates: AlertCandidate[] = [];
 

@@ -32,6 +32,12 @@ import {
   parseNormalizedCapturedAt,
 } from '../src/integrations/ai/ai-ingestion.service.js';
 import { AiIngestionController } from '../src/integrations/ai/ai-ingestion.controller.js';
+import {
+  ZoneEntryAuthorizationService,
+  type ZoneEntryDecisionInput,
+} from '../src/modules/zones/zone-entry-authorization.service.js';
+import { ZoneEntryDecisionEntity } from '../src/database/entities/zone-entry-decision.entity.js';
+import type { ZoneAuthorizationResult } from '../src/modules/zones/zone-authorization.interface.js';
 
 interface MockStore {
   cameras: CameraEntity[];
@@ -222,6 +228,113 @@ function createSampleEvent(overrides: Record<string, unknown> = {}): Record<stri
     ...overrides,
   };
 }
+
+test('ingestion does not pass a conflicting candidate Worker into Zone decision or audit', async () => {
+  const cameraId = '33333333-3333-4333-8333-333333333333';
+  const siteId = '44444444-4444-4444-8444-444444444444';
+  const regionId = '55555555-5555-4555-8555-555555555555';
+  const zoneId = '66666666-6666-4666-8666-666666666666';
+  const identities = [
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 101,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'SYNTHETIC-A',
+      similarityScore: 0.81,
+      qualityScore: 0.91,
+    },
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 101,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'SYNTHETIC-B',
+      similarityScore: 0.82,
+      qualityScore: 0.92,
+    },
+  ];
+  for (const ordered of [identities, [...identities].reverse()]) {
+    const inputs: ZoneEntryDecisionInput[] = [];
+    class CheckedZoneAuthorization extends ZoneEntryAuthorizationService {
+      override async decide(manager: EntityManager, input: ZoneEntryDecisionInput) {
+        assert.equal(input.candidateWorkerId, undefined);
+        assert.equal(input.verifiedWorkerId, undefined);
+        inputs.push(input);
+        return super.decide(manager, input);
+      }
+      override async record(
+        _manager: EntityManager,
+        input: Omit<ZoneEntryDecisionInput, 'restrictionPolicy'>,
+        result: ZoneAuthorizationResult,
+      ) {
+        assert.equal(input.candidateWorkerId, undefined);
+        assert.equal(result.status, 'UNAVAILABLE');
+        return new ZoneEntryDecisionEntity();
+      }
+    }
+    const store: MockStore = {
+      cameras: [
+        {
+          id: cameraId,
+          siteId,
+          externalId: 'CAM-01',
+          code: 'CAM-01',
+          name: 'Synthetic camera',
+          status: CameraStatus.ACTIVE,
+          configurationVersion: 1,
+          createdAt: FIXED_NOW,
+        },
+      ],
+      regions: [
+        {
+          id: regionId,
+          cameraId,
+          zoneId,
+          coordinateSpace: 'NORMALIZED_0_1',
+          version: 1,
+          isActive: true,
+          polygon: { type: 'Polygon', coordinates: [] },
+          createdAt: FIXED_NOW,
+        },
+      ],
+      zones: [
+        {
+          id: zoneId,
+          siteId,
+          code: 'SYNTHETIC',
+          name: 'Synthetic zone',
+          type: ZoneType.RESTRICTED,
+          restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+          requiredPpe: [],
+          configurationLocked: false,
+          createdAt: FIXED_NOW,
+        },
+      ],
+      rawEvents: [],
+      alerts: [],
+      mappings: [],
+    };
+    const service = new AiIngestionService(
+      createMockDataSource(store),
+      new ObservationContextResolverService(),
+      new AlertCandidateEvaluator(),
+      new DurableGroupingService(createTestConfig()),
+      createTestConfig(),
+      () => FIXED_NOW,
+      new CheckedZoneAuthorization(),
+    );
+    const payload = createSampleEvent({
+      observations: [
+        ...ordered,
+        { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion: 1 },
+      ],
+    });
+    const result = await service.ingestEvent(payload);
+    assert.equal(result.status, EventProcessingStatus.PROCESSED);
+    assert.equal(inputs.length, 1);
+    assert.deepEqual(store.rawEvents[0]!.rawPayload, payload);
+    assert.equal(store.alerts[0]!.candidateWorkerId, null);
+  }
+});
 
 test('AiIngestionService: invalid schema throws a public validation error with structured issues', async () => {
   const store: MockStore = {

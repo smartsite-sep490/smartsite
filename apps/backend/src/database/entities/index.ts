@@ -12,6 +12,8 @@ import { WorkerEntity } from './worker.entity.js';
 import { ZoneAccessGrantEntity } from './zone-access-grant.entity.js';
 import { ZoneEntryDecisionEntity } from './zone-entry-decision.entity.js';
 import { SafetyAlertReviewEntity } from './safety-alert-review.entity.js';
+import { ObservationIdentityResolutionEntity } from './observation-identity-resolution.entity.js';
+import { ObservationIdentityDecisionEntity } from './observation-identity-decision.entity.js';
 import { ContractorEntity } from './contractor.entity.js';
 import { ContractorSiteParticipationEntity } from './contractor-site-participation.entity.js';
 import { ContractorRepresentativeGrantEntity } from './contractor-representative-grant.entity.js';
@@ -37,6 +39,8 @@ export * from './worker.entity.js';
 export * from './zone-access-grant.entity.js';
 export * from './zone-entry-decision.entity.js';
 export * from './safety-alert-review.entity.js';
+export * from './observation-identity-resolution.entity.js';
+export * from './observation-identity-decision.entity.js';
 export * from './contractor.entity.js';
 export * from './contractor-site-participation.entity.js';
 export * from './contractor-representative-grant.entity.js';
@@ -61,6 +65,8 @@ export const ENTITIES = [
   ZoneAccessGrantEntity,
   ZoneEntryDecisionEntity,
   SafetyAlertReviewEntity,
+  ObservationIdentityResolutionEntity,
+  ObservationIdentityDecisionEntity,
   ContractorEntity,
   ContractorSiteParticipationEntity,
   ContractorRepresentativeGrantEntity,

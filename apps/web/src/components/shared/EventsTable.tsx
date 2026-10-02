@@ -23,13 +23,13 @@ export function EventsTable<T>({
   keyExtractor,
 }: EventsTableProps<T>) {
   return (
-    <div className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-[2rem] shadow-sm">
-      <div className="bg-white rounded-[calc(2rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,1)] border border-slate-100 p-6 space-y-5">
+    <div className="w-full bg-white border border-[#EAEAEA] rounded-lg">
+      <div className="p-6 space-y-5">
         {/* Header Section */}
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold text-slate-900 tracking-tight">{title}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+            <h3 className="text-lg font-bold text-[#111111] tracking-tight">{title}</h3>
+            <p className="text-xs text-[#6B6B6B] mt-0.5">{subtitle}</p>
           </div>
         </div>
 
@@ -37,7 +37,7 @@ export function EventsTable<T>({
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse text-[13px]">
             <thead>
-              <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-[0.08em] text-[10px]">
+              <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-[0.08em] text-[10px]">
                 {columns.map((col) => (
                   <th
                     key={col.key}
@@ -48,12 +48,9 @@ export function EventsTable<T>({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100/80">
+            <tbody className="divide-y divide-[#EAEAEA]/60">
               {data.map((item) => (
-                <tr
-                  key={keyExtractor(item)}
-                  className="hover:bg-slate-50/50 transition-colors group"
-                >
+                <tr key={keyExtractor(item)} className="hover:bg-[#FBFBFA] transition-colors group">
                   {columns.map((col) => (
                     <td
                       key={col.key}
@@ -83,10 +80,10 @@ export function StatusBadge({
   type: 'error' | 'warning' | 'success' | 'info';
 }) {
   const styles = {
-    error: 'bg-red-50 text-red-600 border border-red-100',
-    warning: 'bg-amber-50 text-amber-600 border border-amber-100',
-    success: 'bg-emerald-50 text-emerald-600 border border-emerald-100',
-    info: 'bg-slate-50 text-slate-600 border border-slate-100',
+    error: 'bg-[#FDEBEC] text-[#9F2F2D] border border-[#EAEAEA]',
+    warning: 'bg-[#FBF3DB] text-[#956400] border border-[#EAEAEA]',
+    success: 'bg-[#EDF3EC] text-[#346538] border border-[#EAEAEA]',
+    info: 'bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]',
   };
 
   return (
