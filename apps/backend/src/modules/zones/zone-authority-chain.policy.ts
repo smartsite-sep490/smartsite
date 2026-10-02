@@ -125,6 +125,120 @@ function validGrants(
   );
 }
 
+function completeSnapshotForScope(
+  snapshot: unknown,
+  scope: ZoneAuthorityScope,
+): snapshot is CompleteZoneAuthoritySnapshot {
+  return (
+    validId(scope.siteId) &&
+    validId(scope.zoneId) &&
+    validId(scope.workerId) &&
+    record(snapshot) &&
+    snapshot.status === 'COMPLETE' &&
+    typeof snapshot.snapshotVersion === 'string' &&
+    Boolean(snapshot.snapshotVersion.trim()) &&
+    sameId(snapshot.siteId, scope.siteId) &&
+    sameId(snapshot.zoneId, scope.zoneId) &&
+    sameId(snapshot.workerId, scope.workerId) &&
+    validId(snapshot.contractorId) &&
+    validMembershipIntervals(snapshot.participationIntervals, snapshot, false) &&
+    validMembershipIntervals(snapshot.assignmentIntervals, snapshot, true) &&
+    validGrants(snapshot.contractorGrants, snapshot, false) &&
+    validGrants(snapshot.workerGrants, snapshot, true)
+  );
+}
+
+export interface WorkerZoneAllowProposal {
+  siteId: string;
+  zoneId: string;
+  workerId: string;
+  contractorId: string;
+  validFrom: Date;
+  validUntil: Date | null;
+}
+
+export type WorkerZoneAllowContainmentResult = {
+  status: 'CONTAINED' | 'NOT_CONTAINED' | 'UNAVAILABLE';
+  reasonCode:
+    | 'FULL_COVERAGE'
+    | 'INVALID_REQUEST'
+    | 'INCOMPLETE_AUTHORITY'
+    | 'CONTRACTOR_DENY'
+    | 'OUTSIDE_AUTHORITY';
+};
+
+function effectiveEnd(interval: ZoneAuthorityInterval): number {
+  return Math.min(
+    interval.validUntil?.getTime() ?? Infinity,
+    interval.revokedAt?.getTime() ?? Infinity,
+  );
+}
+
+function coversInterval(
+  intervals: readonly ZoneAuthorityInterval[],
+  start: number,
+  end: number,
+): boolean {
+  const ranges = intervals
+    .map((interval) => ({ start: interval.validFrom.getTime(), end: effectiveEnd(interval) }))
+    .filter((range) => range.start < range.end && range.end > start && range.start < end)
+    .sort((left, right) => left.start - right.start);
+  let coveredUntil = start;
+  for (const range of ranges) {
+    if (range.start > coveredUntil) return false;
+    coveredUntil = Math.max(coveredUntil, range.end);
+    if (coveredUntil >= end) return true;
+  }
+  return false;
+}
+
+/**
+ * Pure create/update precondition for a proposed Worker ALLOW, not an entry
+ * authorization or grant writer. Every instant of its half-open interval must
+ * fit the owner's complete scoped membership and effective Contractor rights.
+ * The actual writer must re-read/validate and serialize concurrent changes in
+ * its transaction; CONTAINED alone does not prove freshness or trusted identity.
+ */
+export function checkWorkerZoneAllowContainment(
+  snapshot: unknown,
+  proposed: unknown,
+): WorkerZoneAllowContainmentResult {
+  if (
+    !record(proposed) ||
+    !validId(proposed.siteId) ||
+    !validId(proposed.zoneId) ||
+    !validId(proposed.workerId) ||
+    !validId(proposed.contractorId) ||
+    !validInterval({ ...proposed, revokedAt: null })
+  )
+    return { status: 'UNAVAILABLE', reasonCode: 'INVALID_REQUEST' };
+
+  const request = proposed as unknown as WorkerZoneAllowProposal;
+  if (
+    !completeSnapshotForScope(snapshot, request) ||
+    !sameId(snapshot.contractorId, request.contractorId)
+  )
+    return { status: 'UNAVAILABLE', reasonCode: 'INCOMPLETE_AUTHORITY' };
+
+  const start = request.validFrom.getTime();
+  const end = request.validUntil?.getTime() ?? Infinity;
+  const denied = snapshot.contractorGrants.some((grant) => {
+    const from = grant.validFrom.getTime();
+    const until = effectiveEnd(grant);
+    return grant.effect === 'DENY' && from < until && from < end && until > start;
+  });
+  if (denied) return { status: 'NOT_CONTAINED', reasonCode: 'CONTRACTOR_DENY' };
+
+  const covered = [
+    snapshot.participationIntervals,
+    snapshot.assignmentIntervals,
+    snapshot.contractorGrants.filter((grant) => grant.effect === 'ALLOW'),
+  ].every((intervals) => coversInterval(intervals, start, end));
+  return covered
+    ? { status: 'CONTAINED', reasonCode: 'FULL_COVERAGE' }
+    : { status: 'NOT_CONTAINED', reasonCode: 'OUTSIDE_AUTHORITY' };
+}
+
 /**
  * Evaluate both tiers at one event timestamp. No DB, Face, cache or side effects.
  * Scope is supplied separately so a valid snapshot for another event cannot allow.
@@ -154,24 +268,7 @@ export function evaluateZoneAuthority(
         grants: [],
       },
     );
-  if (
-    !validDate(capturedAt) ||
-    !validId(scope.siteId) ||
-    !validId(scope.zoneId) ||
-    !record(snapshot) ||
-    snapshot.status !== 'COMPLETE' ||
-    typeof snapshot.snapshotVersion !== 'string' ||
-    !snapshot.snapshotVersion.trim() ||
-    !sameId(snapshot.siteId, scope.siteId) ||
-    !sameId(snapshot.zoneId, scope.zoneId) ||
-    !sameId(snapshot.workerId, workerId) ||
-    !validId(snapshot.contractorId) ||
-    !validMembershipIntervals(snapshot.participationIntervals, snapshot, false) ||
-    !validMembershipIntervals(snapshot.assignmentIntervals, snapshot, true) ||
-    !validGrants(snapshot.contractorGrants, snapshot, false) ||
-    !validGrants(snapshot.workerGrants, snapshot, true)
-  )
-    return unavailable();
+  if (!validDate(capturedAt) || !completeSnapshotForScope(snapshot, scope)) return unavailable();
 
   const at = capturedAt.getTime();
   const contractorGrants = snapshot.contractorGrants.filter((grant) => active(grant, at));
