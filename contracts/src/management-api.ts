@@ -6,7 +6,12 @@ export type UserRole =
   | 'SECURITY_OFFICER'
   | 'WORKER';
 export type ProvisionableUserRole =
-  'ADMIN' | 'SITE_MANAGER' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+  'ADMIN' |
+  'SITE_MANAGER' |
+  'CONTRACTOR_REPRESENTATIVE' |
+  'SAFETY_OFFICER' |
+  'SECURITY_OFFICER' |
+  'WORKER';
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export interface ProvisionableRoleAssignment {
@@ -202,6 +207,14 @@ export interface ContractorResponse {
   createdAt: string;
 }
 
+export interface ContractorRepresentativeAssignmentResponse {
+  id: string;
+  siteId: string;
+  contractorId: string;
+  userId: string;
+  createdAt: string;
+}
+
 export interface ShiftResponse {
   id: string;
   siteId: string;
@@ -209,6 +222,14 @@ export interface ShiftResponse {
   startsAt: string;
   endsAt: string;
   timezone: string;
+  createdAt: string;
+}
+
+export interface ContractorShiftAssignmentResponse {
+  id: string;
+  siteId: string;
+  shiftId: string;
+  contractorId: string;
   createdAt: string;
 }
 
@@ -290,6 +311,7 @@ export interface ShiftChangeRequestResponse {
   reason: string;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  reviewReason: string | null;
   appliedAt: string | null;
   createdAt: string;
 }
@@ -310,6 +332,7 @@ export interface ShiftSwapRequestResponse {
   coworkerConfirmedAt: string | null;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  reviewReason: string | null;
   appliedAt: string | null;
   createdAt: string;
 }
