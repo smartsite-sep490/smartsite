@@ -10,6 +10,7 @@ import { AuthSessionEntity } from './auth-session.entity.js';
 import { UserRoleAssignmentEntity } from './user-role-assignment.entity.js';
 import { ContractorEntity } from './contractor.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from './contractor-representative-assignment.entity.js';
+import { ContractorShiftAssignmentEntity } from './contractor-shift-assignment.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 import { ZoneAccessGrantEntity } from './zone-access-grant.entity.js';
 import { ZoneEntryDecisionEntity } from './zone-entry-decision.entity.js';
@@ -39,6 +40,7 @@ export * from './auth-session.entity.js';
 export * from './user-role-assignment.entity.js';
 export * from './contractor.entity.js';
 export * from './contractor-representative-assignment.entity.js';
+export * from './contractor-shift-assignment.entity.js';
 export * from './worker.entity.js';
 export * from './zone-access-grant.entity.js';
 export * from './zone-entry-decision.entity.js';
@@ -67,6 +69,7 @@ export const ENTITIES = [
   UserRoleAssignmentEntity,
   ContractorEntity,
   ContractorRepresentativeAssignmentEntity,
+  ContractorShiftAssignmentEntity,
   WorkerEntity,
   ZoneAccessGrantEntity,
   ZoneEntryDecisionEntity,

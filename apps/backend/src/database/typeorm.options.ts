@@ -12,6 +12,8 @@ import { Mf07WorkforceAccessScope1790812800000 } from './migrations/179081280000
 import { Mf07AbsenceScheduleVersion1790899200000 } from './migrations/1790899200000-Mf07AbsenceScheduleVersion.js';
 import { ScheduleVersionUnique1790985600000 } from './migrations/1790985600000-ScheduleVersionUnique.js';
 import { AllowMultipleWorkerShiftsPerDay1791072000000 } from './migrations/1791072000000-AllowMultipleWorkerShiftsPerDay.js';
+import { ContractorShiftAssignments1791158400000 } from './migrations/1791158400000-ContractorShiftAssignments.js';
+import { SchedulingRequestReviewReasons1791244800000 } from './migrations/1791244800000-SchedulingRequestReviewReasons.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -40,6 +42,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf07AbsenceScheduleVersion1790899200000,
       ScheduleVersionUnique1790985600000,
       AllowMultipleWorkerShiftsPerDay1791072000000,
+      ContractorShiftAssignments1791158400000,
+      SchedulingRequestReviewReasons1791244800000,
     ],
     logging: false,
     extra: {

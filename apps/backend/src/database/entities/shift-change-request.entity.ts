@@ -65,6 +65,9 @@ export class ShiftChangeRequestEntity {
   @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
   reviewedAt!: Date | null;
 
+  @Column({ name: 'review_reason', type: 'varchar', length: 1000, nullable: true })
+  reviewReason!: string | null;
+
   @Column({ name: 'applied_at', type: 'timestamptz', nullable: true })
   appliedAt!: Date | null;
 
