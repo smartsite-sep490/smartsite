@@ -37,3 +37,5 @@ export class CreateAbsenceRequestDto extends RequestReasonDto {
   @IsUUID()
   replacementWorkerId?: string;
 }
+
+export class RejectSchedulingRequestDto extends RequestReasonDto {}

@@ -18,6 +18,7 @@ import { UserRole } from '../../src/database/entities/user.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
 import { ContractorEntity } from '../../src/database/entities/contractor.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../src/database/entities/contractor-representative-assignment.entity.js';
+import { ContractorShiftAssignmentEntity } from '../../src/database/entities/contractor-shift-assignment.entity.js';
 import { WorkerEntity } from '../../src/database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../src/database/entities/worker-schedule.entity.js';
 import { ShiftEntity } from '../../src/database/entities/shift.entity.js';
@@ -92,6 +93,13 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     temporaryPassword: pass,
   });
 
+  await usersService.create({
+    username: `admin_${suffix}`,
+    displayName: 'Global Admin',
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+    temporaryPassword: pass,
+  });
+
   const repA = await usersService.create({
     username: `rep_a_${suffix}`,
     displayName: 'Rep A',
@@ -160,6 +168,10 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   await dataSource.getRepository(ShiftEntity).save({
     id: secondShiftId, siteId: siteA, name: 'S2', startsAt: '2026-01-01T16:00:00Z', endsAt: '2026-01-02T00:00:00Z', timezone: 'UTC'
   });
+  await dataSource.getRepository(ContractorShiftAssignmentEntity).save([
+    { id: randomUUID(), siteId: siteA, shiftId, contractorId: contractorA },
+    { id: randomUUID(), siteId: siteA, shiftId: secondShiftId, contractorId: contractorA },
+  ]);
   const versionId = randomUUID();
   await dataSource.getRepository(ScheduleVersionEntity).save({
     id: versionId, siteId: siteA, version: 1000 + Math.floor(Math.random() * 1000), effectiveFrom: new Date()
@@ -206,6 +218,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
 
   const mgrTokenA = await login(`mgr_a_${suffix}`);
   const mgrTokenB = await login(`mgr_b_${suffix}`);
+  const adminToken = await login(`admin_${suffix}`);
   const repTokenA = await login(`rep_a_${suffix}`);
   const workerTokenA = await login(`worker_a_${suffix}`);
   const unaffiliatedToken = await login(`unaff_${suffix}`);
@@ -278,6 +291,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   });
   assert.equal(managerShift.status, 201);
   const managerShiftId = (managerShift.json as { id: string }).id;
+  const managerShiftAssignment = await postJson(
+    `/sites/${siteA}/shifts/${managerShiftId}/contractors`,
+    mgrTokenA,
+    { contractorId: contractorA },
+  );
+  assert.equal(managerShiftAssignment.status, 201);
 
   const unusedShift = await postJson(`/sites/${siteA}/shifts`, mgrTokenA, {
     name: `Unused Shift ${suffix}`,
@@ -325,13 +344,25 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
       isActive: true,
     },
   );
-  assert.equal(managerSchedule.status, 201);
+  assert.equal(managerSchedule.status, 403);
 
-  // A worker may receive a second, different shift on the same day. The
-  // exact same shift remains unique across schedule versions at site scope.
+  const adminSchedule = await postJson(
+    `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
+    adminToken,
+    {
+      workerId: workerCEntityId,
+      shiftId: managerShiftId,
+      workDate: '2026-01-02',
+      isActive: true,
+    },
+  );
+  assert.equal(adminSchedule.status, 403);
+
+  // A Contractor Representative assigns worker schedules only for workers and
+  // shifts belonging to the representative's contractor.
   const secondShiftSameDay = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
-    mgrTokenA,
+    repTokenA,
     {
       workerId: workerAEntityId,
       shiftId: secondShiftId,
@@ -340,10 +371,11 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     },
   );
   assert.equal(secondShiftSameDay.status, 201);
+  const secondShiftSameDayId = (secondShiftSameDay.json as { id: string }).id;
 
   const duplicateShiftSameDay = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
-    mgrTokenA,
+    repTokenA,
     {
       workerId: workerAEntityId,
       shiftId,
@@ -355,6 +387,18 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
 
   const protectedShiftDelete = await deleteJson(`/sites/${siteA}/shifts/${managerShiftId}`, mgrTokenA);
   assert.equal(protectedShiftDelete.status, 409);
+
+  const repCannotAssignOtherContractor = await postJson(
+    `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
+    repTokenA,
+    {
+      workerId: workerCEntityId,
+      shiftId: managerShiftId,
+      workDate: '2026-01-02',
+      isActive: true,
+    },
+  );
+  assert.equal(repCannotAssignOtherContractor.status, 403);
 
   const crossSiteVersion = await postJson(`/sites/${siteA}/schedule-versions`, mgrTokenB, {
     effectiveFrom: '2026-01-01T00:00:00.000Z',
@@ -370,6 +414,13 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     [workerAEntityId, workerAEntityId, workerBEntityId].sort(),
   );
 
+  const representativeShifts = await fetchJson(`/sites/${siteA}/shifts`, repTokenA);
+  assert.equal(representativeShifts.status, 200);
+  assert.deepEqual(
+    representativeShifts.json.items.map((item: { id: string }) => item.id).sort(),
+    [shiftId, secondShiftId, managerShiftId].sort(),
+  );
+
   // 4. Worker sees only own schedule
   const res4 = await fetchJson(`/sites/${siteA}/worker-schedules`, workerTokenA);
   assert.equal(res4.status, 200);
@@ -378,6 +429,23 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     res4.json.items.map((item: { workerId: string }) => item.workerId),
     [workerAEntityId, workerAEntityId],
   );
+
+  const filteredSchedules = await fetchJson(
+    `/sites/${siteA}/worker-schedules?fromDate=2026-01-01&toDate=2026-01-01&workerId=${workerAEntityId}&status=ACTIVE&offset=0&limit=1`,
+    repTokenA,
+  );
+  assert.equal(filteredSchedules.status, 200);
+  assert.equal(filteredSchedules.json.total, 2);
+  assert.equal(filteredSchedules.json.items.length, 1);
+  assert.equal(filteredSchedules.json.items[0].workerId, workerAEntityId);
+
+  const workerCannotExpandScope = await fetchJson(
+    `/sites/${siteA}/worker-schedules?workerId=${workerBEntityId}`,
+    workerTokenA,
+  );
+  assert.equal(workerCannotExpandScope.status, 200);
+  assert.equal(workerCannotExpandScope.json.total, 0);
+  assert.equal(workerCannotExpandScope.json.items.length, 0);
 
   const eligibleShifts = await fetchJson(
     `/sites/${siteA}/worker-schedules/${workerASchedule.id}/eligible-shifts`,
@@ -450,6 +518,31 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   assert.equal(emptyCandidates.status, 200);
   assert.deepEqual(emptyCandidates.json, { items: [], total: 0 });
 
+  // Only the assigned Contractor Representative can review a direct shift
+  // change; Site Manager approval is no longer accepted for MF07 changes.
+  const reviewRequest = await postJson(`/sites/${siteA}/shift-change-requests`, workerTokenA, {
+    workerScheduleId: secondShiftSameDayId,
+    toShiftId: managerShiftId,
+    reason: 'Contractor review authorization check',
+  });
+  assert.equal(reviewRequest.status, 201);
+  const reviewRequestId = (reviewRequest.json as { id: string }).id;
+  const managerApproval = await fetch(`${baseUrl}/api/v1/sites/${siteA}/shift-change-requests/${reviewRequestId}/approve`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${mgrTokenA}` },
+  });
+  assert.equal(managerApproval.status, 403);
+  const adminApproval = await fetch(`${baseUrl}/api/v1/sites/${siteA}/shift-change-requests/${reviewRequestId}/approve`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(adminApproval.status, 403);
+  const representativeApproval = await fetch(`${baseUrl}/api/v1/sites/${siteA}/shift-change-requests/${reviewRequestId}/approve`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${repTokenA}` },
+  });
+  assert.equal(representativeApproval.status, 200);
+
   // 5. Worker can only view their own Worker record; coworkers use the scoped coworkers endpoint below.
   const res5 = await fetchJson(`/sites/${siteA}/workers`, workerTokenA);
   assert.equal(res5.status, 200);
@@ -467,17 +560,18 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   assert.equal(res7.status, 403);
 
   for (const path of ['shift-change-requests', 'shift-swap-requests', 'absence-requests']) {
+    const expectedRequestCount = path === 'shift-change-requests' ? 2 : 1;
     const managerRequests = await fetchJson(`/sites/${siteA}/${path}`, mgrTokenA);
     assert.equal(managerRequests.status, 200);
-    assert.equal(managerRequests.json.items.length, 1);
+    assert.equal(managerRequests.json.items.length, expectedRequestCount);
 
     const workerRequests = await fetchJson(`/sites/${siteA}/${path}`, workerTokenA);
     assert.equal(workerRequests.status, 200);
-    assert.equal(workerRequests.json.items.length, 1);
+    assert.equal(workerRequests.json.items.length, expectedRequestCount);
 
     const representativeRequests = await fetchJson(`/sites/${siteA}/${path}`, repTokenA);
     assert.equal(representativeRequests.status, 200);
-    assert.equal(representativeRequests.json.items.length, 1);
+    assert.equal(representativeRequests.json.items.length, expectedRequestCount);
 
     const deniedRequests = await fetchJson(`/sites/${siteA}/${path}`, unaffiliatedToken);
     assert.equal(deniedRequests.status, 403);

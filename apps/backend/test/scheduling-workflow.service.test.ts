@@ -245,16 +245,21 @@ test('SchedulingWorkflowService rejects a shift swap across contractors', async 
   );
 });
 
-test('SchedulingWorkflowService denies Site Manager approval outside the assigned Site', async () => {
+test('SchedulingWorkflowService allows only Contractor Representatives to review change and swap requests', async () => {
   const service = new SchedulingWorkflowService(undefined as unknown as DataSource);
-  await assert.rejects(
-    service.approveShiftChange(
-      actor(randomUUID(), [{ role: UserRole.SITE_MANAGER, siteId: randomUUID() }]),
-      randomUUID(),
-      randomUUID(),
-    ),
-    publicCode('FORBIDDEN'),
-  );
+  const siteId = randomUUID();
+  const requestId = randomUUID();
+  const reviewReason = { reason: 'Coverage is not available' } as never;
+
+  for (const reviewer of [
+    actor(randomUUID(), [{ role: UserRole.ADMIN, siteId: null }]),
+    actor(randomUUID(), [{ role: UserRole.SITE_MANAGER, siteId }]),
+  ]) {
+    await assert.rejects(service.approveShiftChange(reviewer, siteId, requestId), publicCode('FORBIDDEN'));
+    await assert.rejects(service.rejectShiftChange(reviewer, siteId, requestId, reviewReason), publicCode('FORBIDDEN'));
+    await assert.rejects(service.approveShiftSwap(reviewer, siteId, requestId), publicCode('FORBIDDEN'));
+    await assert.rejects(service.rejectShiftSwap(reviewer, siteId, requestId, reviewReason), publicCode('FORBIDDEN'));
+  }
 });
 
 test('SchedulingWorkflowService requires a changed password before any scheduling action', async () => {
@@ -266,5 +271,29 @@ test('SchedulingWorkflowService requires a changed password before any schedulin
       randomUUID(),
     ),
     publicCode('PASSWORD_CHANGE_REQUIRED'),
+  );
+});
+
+test('SchedulingWorkflowService requires a reason when a change or swap is rejected', async () => {
+  const service = new SchedulingWorkflowService(undefined as unknown as DataSource);
+  const actorValue = actor(randomUUID(), [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: randomUUID() }]);
+  const siteId = randomUUID();
+
+  await assert.rejects(
+    service.rejectShiftChange(actorValue, siteId, randomUUID(), { reason: 'abcd' } as never),
+    publicCode('VALIDATION_FAILED'),
+  );
+  await assert.rejects(
+    service.rejectShiftSwap(actorValue, siteId, randomUUID(), { reason: 'abcd' } as never),
+    publicCode('VALIDATION_FAILED'),
+  );
+  await assert.rejects(
+    service.declineShiftSwap(
+      actor(randomUUID(), [{ role: UserRole.WORKER, siteId }]),
+      siteId,
+      randomUUID(),
+      { reason: 'abcd' } as never,
+    ),
+    publicCode('VALIDATION_FAILED'),
   );
 });

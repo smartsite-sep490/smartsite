@@ -5,6 +5,7 @@ import { command, conflict, missing, page, uuid } from '../../common/configurati
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { AbsenceRequestEntity } from '../../database/entities/absence-request.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
+import { ContractorShiftAssignmentEntity } from '../../database/entities/contractor-shift-assignment.entity.js';
 import { AbsenceRequestStatus, ShiftRequestStatus } from '../../database/entities/enums.js';
 import { ShiftChangeRequestEntity } from '../../database/entities/shift-change-request.entity.js';
 import { ShiftEntity } from '../../database/entities/shift.entity.js';
@@ -17,6 +18,7 @@ import {
   CreateAbsenceRequestDto,
   CreateShiftChangeRequestDto,
   CreateShiftSwapRequestDto,
+  RejectSchedulingRequestDto,
 } from './dto/scheduling-request.dto.js';
 
 @Injectable()
@@ -144,9 +146,39 @@ export class SchedulingWorkflowService {
     if (!this.hasSiteRole(actor, UserRole.SITE_MANAGER, siteId)) this.forbidden();
   }
 
+  private async assertContractorRepresentativeAuthority(
+    manager: EntityManager,
+    actor: AuthenticatedUser,
+    siteId: string,
+    contractorId: string | null,
+  ): Promise<void> {
+    this.assertPasswordChanged(actor);
+    if (!contractorId || !this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, siteId))
+      this.forbidden();
+    const assignment = await manager
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .findOneBy({ siteId, contractorId, userId: actor.id });
+    if (!assignment) this.forbidden();
+  }
+
   private async assertTargetShift(manager: EntityManager, siteId: string, shiftId: string) {
     const shift = await manager.getRepository(ShiftEntity).findOneBy({ id: shiftId, siteId });
     return shift ?? missing();
+  }
+
+  private async assertContractorShiftAssignment(
+    manager: EntityManager,
+    siteId: string,
+    shiftId: string,
+    contractorId: string | null,
+  ): Promise<void> {
+    if (!contractorId) this.forbidden();
+    const assignment = await manager.getRepository(ContractorShiftAssignmentEntity).findOneBy({
+      siteId,
+      shiftId,
+      contractorId,
+    });
+    if (!assignment) conflict('Shift is not assigned to the worker contractor');
   }
 
   private async assertShiftAvailable(
@@ -194,6 +226,12 @@ export class SchedulingWorkflowService {
       await this.assertRequestAuthority(manager, actor, worker);
       await this.assertNoPendingRequests(manager, scopedSiteId, [schedule.id]);
       await this.assertTargetShift(manager, scopedSiteId, value.toShiftId);
+      await this.assertContractorShiftAssignment(
+        manager,
+        scopedSiteId,
+        value.toShiftId,
+        worker.contractorId,
+      );
       if (schedule.shiftId === value.toShiftId) conflict('Shift change must select a different shift');
       await this.assertShiftAvailable(manager, schedule, value.toShiftId);
       return manager.getRepository(ShiftChangeRequestEntity).save({
@@ -209,6 +247,7 @@ export class SchedulingWorkflowService {
         reason: value.reason,
         reviewedByUserId: null,
         reviewedAt: null,
+        reviewReason: null,
         appliedAt: null,
       });
     });
@@ -221,7 +260,9 @@ export class SchedulingWorkflowService {
   ): Promise<ShiftChangeRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedRequestId = uuid(requestId);
-    this.assertManagerAuthority(actor, scopedSiteId);
+    this.assertPasswordChanged(actor);
+    if (!this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId))
+      this.forbidden();
     return this.dataSource.transaction(async (manager) => {
       const request = await manager
         .getRepository(ShiftChangeRequestEntity)
@@ -230,17 +271,34 @@ export class SchedulingWorkflowService {
         .where('request.id = :id AND request.site_id = :siteId', {
           id: scopedRequestId,
           siteId: scopedSiteId,
-        })
+      })
         .getOne();
       if (!request) missing();
+      const worker = await manager.getRepository(WorkerEntity).findOneBy({
+        id: request.workerId,
+        siteId: scopedSiteId,
+        isActive: true,
+      });
+      await this.assertContractorRepresentativeAuthority(
+        manager,
+        actor,
+        scopedSiteId,
+        worker?.contractorId ?? null,
+      );
       if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending manager review');
+      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending contractor review');
       const schedule = await this.lockedSchedule(manager, request.workerScheduleId);
       if (!schedule || !this.scheduleStillMatches(schedule, request)) {
         request.status = ShiftRequestStatus.CONFLICTED;
         return manager.getRepository(ShiftChangeRequestEntity).save(request);
       }
       await this.assertTargetShift(manager, scopedSiteId, request.toShiftId);
+      await this.assertContractorShiftAssignment(
+        manager,
+        scopedSiteId,
+        request.toShiftId,
+        worker?.contractorId ?? null,
+      );
       await this.assertShiftAvailable(manager, schedule, request.toShiftId);
       schedule.shiftId = request.toShiftId;
       await manager.getRepository(WorkerScheduleEntity).save(schedule);
@@ -257,10 +315,14 @@ export class SchedulingWorkflowService {
     actor: AuthenticatedUser,
     siteId: string,
     requestId: string,
+    input: RejectSchedulingRequestDto,
   ): Promise<ShiftChangeRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedRequestId = uuid(requestId);
-    this.assertManagerAuthority(actor, scopedSiteId);
+    const value = command(RejectSchedulingRequestDto, input);
+    this.assertPasswordChanged(actor);
+    if (!this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId))
+      this.forbidden();
     return this.dataSource.transaction(async (manager) => {
       const request = await manager
         .getRepository(ShiftChangeRequestEntity)
@@ -269,14 +331,26 @@ export class SchedulingWorkflowService {
         .where('request.id = :id AND request.site_id = :siteId', {
           id: scopedRequestId,
           siteId: scopedSiteId,
-        })
+      })
         .getOne();
       if (!request) missing();
+      const worker = await manager.getRepository(WorkerEntity).findOneBy({
+        id: request.workerId,
+        siteId: scopedSiteId,
+        isActive: true,
+      });
+      await this.assertContractorRepresentativeAuthority(
+        manager,
+        actor,
+        scopedSiteId,
+        worker?.contractorId ?? null,
+      );
       if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending manager review');
+      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending contractor review');
       request.status = ShiftRequestStatus.REJECTED;
       request.reviewedByUserId = actor.id;
       request.reviewedAt = new Date();
+      request.reviewReason = value.reason;
       return manager.getRepository(ShiftChangeRequestEntity).save(request);
     });
   }
@@ -318,6 +392,20 @@ export class SchedulingWorkflowService {
         conflict('Worker schedules cannot be swapped');
       if (!requester.contractorId || requester.contractorId !== coworker.contractorId)
         conflict('Workers must belong to the same contractor to swap shifts');
+      await Promise.all([
+        this.assertContractorShiftAssignment(
+          manager,
+          scopedSiteId,
+          requesterSchedule.shiftId,
+          requester.contractorId,
+        ),
+        this.assertContractorShiftAssignment(
+          manager,
+          scopedSiteId,
+          coworkerSchedule.shiftId,
+          coworker.contractorId,
+        ),
+      ]);
       await this.assertNoPendingRequests(manager, scopedSiteId, [
         requesterSchedule.id,
         coworkerSchedule.id,
@@ -340,6 +428,7 @@ export class SchedulingWorkflowService {
         coworkerConfirmedAt: null,
         reviewedByUserId: null,
         reviewedAt: null,
+        reviewReason: null,
         appliedAt: null,
       });
     });
@@ -383,6 +472,48 @@ export class SchedulingWorkflowService {
     });
   }
 
+  async declineShiftSwap(
+    actor: AuthenticatedUser,
+    siteId: string,
+    requestId: string,
+    input: RejectSchedulingRequestDto,
+  ): Promise<ShiftSwapRequestEntity> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const scopedRequestId = uuid(requestId);
+    const value = command(RejectSchedulingRequestDto, input);
+    this.assertPasswordChanged(actor);
+    return this.dataSource.transaction(async (manager) => {
+      const request = await manager
+        .getRepository(ShiftSwapRequestEntity)
+        .createQueryBuilder('request')
+        .setLock('pessimistic_write')
+        .where('request.id = :id AND request.site_id = :siteId', {
+          id: scopedRequestId,
+          siteId: scopedSiteId,
+        })
+        .getOne();
+      if (!request) missing();
+      if (request.status !== ShiftRequestStatus.PENDING_COWORKER)
+        conflict('Request is not pending coworker confirmation');
+      const coworker = await manager.getRepository(WorkerEntity).findOneBy({
+        id: request.coworkerWorkerId,
+        siteId: scopedSiteId,
+        isActive: true,
+      });
+      if (
+        !coworker ||
+        coworker.userId !== actor.id ||
+        !this.hasSiteRole(actor, UserRole.WORKER, scopedSiteId)
+      )
+        this.forbidden();
+      request.status = ShiftRequestStatus.REJECTED;
+      request.reviewedByUserId = actor.id;
+      request.reviewedAt = new Date();
+      request.reviewReason = value.reason;
+      return manager.getRepository(ShiftSwapRequestEntity).save(request);
+    });
+  }
+
   private async lockedSwapSchedules(
     manager: EntityManager,
     request: ShiftSwapRequestEntity,
@@ -421,7 +552,9 @@ export class SchedulingWorkflowService {
   ): Promise<ShiftSwapRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedRequestId = uuid(requestId);
-    this.assertManagerAuthority(actor, scopedSiteId);
+    this.assertPasswordChanged(actor);
+    if (!this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId))
+      this.forbidden();
     return this.dataSource.transaction(async (manager) => {
       const request = await manager
         .getRepository(ShiftSwapRequestEntity)
@@ -430,11 +563,22 @@ export class SchedulingWorkflowService {
         .where('request.id = :id AND request.site_id = :siteId', {
           id: scopedRequestId,
           siteId: scopedSiteId,
-        })
+      })
         .getOne();
       if (!request) missing();
+      const requester = await manager.getRepository(WorkerEntity).findOneBy({
+        id: request.requesterWorkerId,
+        siteId: scopedSiteId,
+        isActive: true,
+      });
+      await this.assertContractorRepresentativeAuthority(
+        manager,
+        actor,
+        scopedSiteId,
+        requester?.contractorId ?? null,
+      );
       if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending manager review');
+      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending contractor review');
       const [requesterSchedule, coworkerSchedule] = await this.lockedSwapSchedules(manager, request);
       if (
         !requesterSchedule ||
@@ -444,6 +588,29 @@ export class SchedulingWorkflowService {
         request.status = ShiftRequestStatus.CONFLICTED;
         return manager.getRepository(ShiftSwapRequestEntity).save(request);
       }
+      const coworker = await manager.getRepository(WorkerEntity).findOneBy({
+        id: request.coworkerWorkerId,
+        siteId: scopedSiteId,
+        isActive: true,
+      });
+      if (!requester || !coworker || requester.contractorId !== coworker.contractorId) {
+        request.status = ShiftRequestStatus.CONFLICTED;
+        return manager.getRepository(ShiftSwapRequestEntity).save(request);
+      }
+      await Promise.all([
+        this.assertContractorShiftAssignment(
+          manager,
+          scopedSiteId,
+          request.coworkerShiftId,
+          requester.contractorId,
+        ),
+        this.assertContractorShiftAssignment(
+          manager,
+          scopedSiteId,
+          request.requesterShiftId,
+          coworker.contractorId,
+        ),
+      ]);
       await this.assertShiftAvailable(manager, requesterSchedule, request.coworkerShiftId);
       await this.assertShiftAvailable(manager, coworkerSchedule, request.requesterShiftId);
       requesterSchedule.shiftId = request.coworkerShiftId;
@@ -462,10 +629,14 @@ export class SchedulingWorkflowService {
     actor: AuthenticatedUser,
     siteId: string,
     requestId: string,
+    input: RejectSchedulingRequestDto,
   ): Promise<ShiftSwapRequestEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedRequestId = uuid(requestId);
-    this.assertManagerAuthority(actor, scopedSiteId);
+    const value = command(RejectSchedulingRequestDto, input);
+    this.assertPasswordChanged(actor);
+    if (!this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId))
+      this.forbidden();
     return this.dataSource.transaction(async (manager) => {
       const request = await manager
         .getRepository(ShiftSwapRequestEntity)
@@ -474,14 +645,26 @@ export class SchedulingWorkflowService {
         .where('request.id = :id AND request.site_id = :siteId', {
           id: scopedRequestId,
           siteId: scopedSiteId,
-        })
+      })
         .getOne();
       if (!request) missing();
+      const requester = await manager.getRepository(WorkerEntity).findOneBy({
+        id: request.requesterWorkerId,
+        siteId: scopedSiteId,
+        isActive: true,
+      });
+      await this.assertContractorRepresentativeAuthority(
+        manager,
+        actor,
+        scopedSiteId,
+        requester?.contractorId ?? null,
+      );
       if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending manager review');
+      if (request.status !== ShiftRequestStatus.PENDING_MANAGER) conflict('Request is not pending contractor review');
       request.status = ShiftRequestStatus.REJECTED;
       request.reviewedByUserId = actor.id;
       request.reviewedAt = new Date();
+      request.reviewReason = value.reason;
       return manager.getRepository(ShiftSwapRequestEntity).save(request);
     });
   }

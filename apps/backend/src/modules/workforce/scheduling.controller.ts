@@ -20,6 +20,7 @@ import {
   CreateAbsenceRequestDto,
   CreateShiftChangeRequestDto,
   CreateShiftSwapRequestDto,
+  RejectSchedulingRequestDto,
 } from './dto/scheduling-request.dto.js';
 import { SchedulingWorkflowService } from './scheduling-workflow.service.js';
 
@@ -80,8 +81,9 @@ export class SchedulingController {
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
+    @Body() input: RejectSchedulingRequestDto,
   ) {
-    const result = await this.scheduling.rejectShiftChange(request.user!, siteId, requestId);
+    const result = await this.scheduling.rejectShiftChange(request.user!, siteId, requestId, input);
     this.logger.log({
       actorId: request.user!.id,
       action: 'scheduling.shift-change.reject',
@@ -127,6 +129,25 @@ export class SchedulingController {
     return result;
   }
 
+  @Patch('shift-swap-requests/:requestId/decline')
+  @ApiOkResponse()
+  async declineShiftSwap(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('requestId') requestId: string,
+    @Body() input: RejectSchedulingRequestDto,
+  ) {
+    const result = await this.scheduling.declineShiftSwap(request.user!, siteId, requestId, input);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'scheduling.shift-swap.decline',
+      siteId,
+      resourceId: result.id,
+      status: result.status,
+    });
+    return result;
+  }
+
   @Patch('shift-swap-requests/:requestId/approve')
   @ApiOkResponse()
   async approveShiftSwap(
@@ -151,8 +172,9 @@ export class SchedulingController {
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
+    @Body() input: RejectSchedulingRequestDto,
   ) {
-    const result = await this.scheduling.rejectShiftSwap(request.user!, siteId, requestId);
+    const result = await this.scheduling.rejectShiftSwap(request.user!, siteId, requestId, input);
     this.logger.log({
       actorId: request.user!.id,
       action: 'scheduling.shift-swap.reject',
