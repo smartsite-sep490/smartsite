@@ -21,7 +21,9 @@ import type {
   ZoneEntryDecisionResponse,
   ZoneEntryDecisionStatus,
   ContractorResponse,
+  ContractorRepresentativeAssignmentResponse,
   ShiftResponse,
+  ContractorShiftAssignmentResponse,
   ScheduleVersionResponse,
   WorkerScheduleResponse,
   EligibleShiftListResponse,
@@ -35,7 +37,15 @@ export type { SchedulingRequestStatus };
 
 import { ApiError, parseBackendErrorEnvelope } from './index';
 
-type PageOptions = { offset?: number; limit?: number };
+export type PageOptions = { offset?: number; limit?: number };
+export type WorkerScheduleListOptions = PageOptions & {
+  fromDate?: string;
+  toDate?: string;
+  workerId?: string;
+  shiftId?: string;
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
+  searchName?: string;
+};
 export type SafetyAlertListOptions = PageOptions & {
   status?: SafetyAlertStatus;
   type?: SafetyAlertType;
@@ -135,10 +145,11 @@ export class SmartSiteManagementClient {
     return response.blob();
   }
 
-  private listPath(path: string, options: PageOptions = {}) {
+  private listPath(path: string, options: Record<string, string | number | undefined> = {}) {
     const query = new URLSearchParams();
-    if (options.offset !== undefined) query.set('offset', String(options.offset));
-    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    Object.entries(options).forEach(([key, value]) => {
+      if (value !== undefined) query.set(key, String(value));
+    });
     return `${path}${query.size ? `?${query}` : ''}`;
   }
 
@@ -511,6 +522,32 @@ export class SmartSiteManagementClient {
       token,
     );
   }
+  listContractorRepresentativeAssignments(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ContractorRepresentativeAssignmentResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/contractor-representative-assignments`, options),
+      token,
+    );
+  }
+  assignContractorRepresentative(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    input: { userId: string },
+  ) {
+    return this.request<{
+      id: string;
+      siteId: string;
+      contractorId: string;
+      userId: string;
+      createdAt: string;
+    }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/representatives`,
+      token,
+      input,
+    );
+  }
   listCoworkers(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<WorkerResponse>>(
       'GET',
@@ -524,6 +561,21 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/shifts`,
       token,
       input,
+    );
+  }
+  assignShiftToContractor(token: string, siteId: string, shiftId: string, input: { contractorId: string }) {
+    return this.request<ContractorShiftAssignmentResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}/contractors`,
+      token,
+      input,
+    );
+  }
+  listShiftContractorAssignments(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ContractorShiftAssignmentResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/shift-contractor-assignments`, options),
+      token,
     );
   }
   listShifts(token: string, siteId: string, options?: PageOptions) {
@@ -563,7 +615,7 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  listWorkerSchedules(token: string, siteId: string, options?: PageOptions) {
+  listWorkerSchedules(token: string, siteId: string, options?: WorkerScheduleListOptions) {
     return this.request<Page<WorkerScheduleResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/worker-schedules`, options),
@@ -628,11 +680,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectShiftChangeRequest(token: string, siteId: string, requestId: string) {
+  rejectShiftChangeRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
     return this.request<ShiftChangeRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-change-requests/${pathId(requestId)}/reject`,
       token,
+      input,
     );
   }
 
@@ -656,6 +709,14 @@ export class SmartSiteManagementClient {
       token,
     );
   }
+  declineShiftSwapRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+    return this.request<ShiftSwapRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/decline`,
+      token,
+      input,
+    );
+  }
   approveShiftSwapRequest(token: string, siteId: string, requestId: string) {
     return this.request<ShiftSwapRequestResponse>(
       'PATCH',
@@ -663,11 +724,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectShiftSwapRequest(token: string, siteId: string, requestId: string) {
+  rejectShiftSwapRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
     return this.request<ShiftSwapRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/reject`,
       token,
+      input,
     );
   }
 

@@ -2,6 +2,79 @@ import { describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 
 describe('management client', () => {
+  it('creates a contractor representative link with encoded scope IDs', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'assignment-1' }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.assignContractorRepresentative(
+        'admin-token',
+        'site/1',
+        'contractor/1',
+        { userId: 'user/1' },
+      );
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/contractors/contractor%2F1/representatives',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({ userId: 'user/1' }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('lists contractor representative assignments for the selected site', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listContractorRepresentativeAssignments('admin-token', 'site/1', {
+        offset: 0,
+        limit: 25,
+      });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/contractor-representative-assignments?offset=0&limit=25',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer admin-token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('assigns a shift to a contractor and lists scoped shift assignments', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.assignShiftToContractor('shift-token', 'site/1', 'shift/1', {
+        contractorId: 'contractor/1',
+      });
+      await client.listShiftContractorAssignments('shift-token', 'site/1', { offset: 0, limit: 25 });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/shifts/shift%2F1/contractors',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({ contractorId: 'contractor/1' }),
+      });
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/shift-contractor-assignments?offset=0&limit=25',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('deletes a site-scoped shift with bearer auth', async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -319,7 +392,7 @@ describe('management client', () => {
         reason: 'Personal reason',
       });
       await client.approveShiftChangeRequest('token', 'site-1', 'change-1');
-      await client.rejectShiftChangeRequest('token', 'site-1', 'change-1');
+      await client.rejectShiftChangeRequest('token', 'site-1', 'change-1', { reason: 'Not enough coverage' });
 
       expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests');
       expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
@@ -333,7 +406,10 @@ describe('management client', () => {
       expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests/change-1/approve');
       expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PATCH' });
       expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests/change-1/reject');
-      expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({ method: 'PATCH' });
+      expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+        method: 'PATCH',
+        body: JSON.stringify({ reason: 'Not enough coverage' }),
+      });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -347,12 +423,18 @@ describe('management client', () => {
     try {
       const client = new SmartSiteManagementClient('https://api.example.test');
       await client.confirmShiftSwapRequest('token', 'site-1', 'swap-1');
+      await client.declineShiftSwapRequest('token', 'site-1', 'swap-1', { reason: 'I need my assigned shift' });
       await client.approveShiftSwapRequest('token', 'site-1', 'swap-1');
-      await client.rejectShiftSwapRequest('token', 'site-1', 'swap-1');
+      await client.rejectShiftSwapRequest('token', 'site-1', 'swap-1', { reason: 'Coverage is not available' });
 
       expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/confirm');
-      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/approve');
-      expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/reject');
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/decline');
+      expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+        method: 'PATCH',
+        body: JSON.stringify({ reason: 'I need my assigned shift' }),
+      });
+      expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/approve');
+      expect(fetchMock.mock.calls[3]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/reject');
     } finally {
       vi.unstubAllGlobals();
     }
@@ -376,6 +458,31 @@ describe('management client', () => {
         method: 'GET',
         headers: { Authorization: 'Bearer token', Accept: 'application/json' },
       });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('serializes worker schedule filters and pagination', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listWorkerSchedules('token', 'site/1', {
+        offset: 25,
+        limit: 25,
+        fromDate: '2026-10-05',
+        toDate: '2026-10-11',
+        workerId: 'worker/1',
+        shiftId: 'shift/1',
+        status: 'ACTIVE',
+      });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/worker-schedules?offset=25&limit=25&fromDate=2026-10-05&toDate=2026-10-11&workerId=worker%2F1&shiftId=shift%2F1&status=ACTIVE',
+      );
     } finally {
       vi.unstubAllGlobals();
     }
