@@ -77,26 +77,29 @@ function AlertRow({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-lg border p-4 text-left transition-colors ${
+      aria-current={selected ? 'true' : undefined}
+      className={`w-full min-w-0 rounded-lg border p-3 sm:p-4 text-left transition-colors ${
         selected
           ? 'border-[#F66B17] bg-[#FBF3DB]/30'
           : 'border-[#EAEAEA] bg-white hover:border-[#2F3437]/15 hover:bg-[#F7F6F3]'
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
+        <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-widest text-[#6B6B6B]">
             {formatLabel(alert.alertType)}
           </p>
-          <p className="mt-1 font-semibold text-[#2F3437]">{formatLabel(alert.candidateSubtype)}</p>
+          <p className="mt-1 font-semibold text-[#2F3437] break-words">
+            {formatLabel(alert.candidateSubtype)}
+          </p>
         </div>
         <span
-          className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusTone(alert.status)}`}
+          className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusTone(alert.status)}`}
         >
           {formatLabel(alert.status)}
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#6B6B6B]">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B6B6B]">
         <span>{alert.detectionCount} detections</span>
         <span>Last seen {formatDate(alert.lastDetectedAt)}</span>
         <span>{alert.zoneId ? `Zone ${alert.zoneId.slice(0, 8)}` : 'No resolved Zone'}</span>
@@ -369,9 +372,9 @@ export function SafetyAlertsView({
   }
 
   return (
-    <div className="mx-auto max-w-[1202px] space-y-6 pb-10 text-[#2F3437]">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-6 pb-10 text-[#2F3437]">
+      <header className="flex flex-wrap items-start justify-between gap-4 min-w-0">
+        <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#111111]">Safety alerts</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6B6B6B]">
@@ -382,14 +385,14 @@ export function SafetyAlertsView({
         <button
           type="button"
           onClick={handleLogout}
-          className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3]"
+          className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] shrink-0 max-w-full truncate"
         >
           Sign out {session.user.displayName}
         </button>
       </header>
 
-      <section className="grid gap-4 rounded-lg border border-[#EAEAEA] bg-white p-4 md:grid-cols-3">
-        <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+      <section className="grid gap-3 sm:gap-4 rounded-lg border border-[#EAEAEA] bg-white p-3 sm:p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
+        <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
           Site
           <select
             value={selectedSiteId}
@@ -400,7 +403,7 @@ export function SafetyAlertsView({
               resetReviewDraft();
             }}
             disabled={sites.isPending || visibleSites.length === 0}
-            className="mt-1.5 w-full rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+            className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
           >
             {visibleSites.map((site) => (
               <option key={site.id} value={site.id}>
@@ -409,7 +412,7 @@ export function SafetyAlertsView({
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+        <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
           Status
           <select
             value={status}
@@ -419,7 +422,7 @@ export function SafetyAlertsView({
               setOffset(0);
               resetReviewDraft();
             }}
-            className="mt-1.5 w-full rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+            className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
           >
             <option value="ALL">All statuses</option>
             {statusOptions.map((value) => (
@@ -429,7 +432,7 @@ export function SafetyAlertsView({
             ))}
           </select>
         </label>
-        <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+        <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B] sm:col-span-2 lg:col-span-1">
           Alert type
           <select
             value={type}
@@ -439,7 +442,7 @@ export function SafetyAlertsView({
               setOffset(0);
               resetReviewDraft();
             }}
-            className="mt-1.5 w-full rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+            className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
           >
             <option value="ALL">All types</option>
             {alertTypeOptions.map((value) => (
@@ -464,8 +467,8 @@ export function SafetyAlertsView({
       )}
 
       {selectedSiteId && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
-          <section className="space-y-3">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)] min-w-0">
+          <section className="space-y-3 min-w-0">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-[#111111]">Alert queue</h2>
@@ -534,7 +537,7 @@ export function SafetyAlertsView({
             )}
           </section>
 
-          <aside className="min-h-80 rounded-lg border border-[#EAEAEA] bg-white p-5">
+          <aside className="min-h-80 rounded-lg border border-[#EAEAEA] bg-white p-4 sm:p-5 min-w-0">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold text-[#111111]">Alert detail</h2>
               {selectedAlertId && (
@@ -559,11 +562,11 @@ export function SafetyAlertsView({
               </p>
             )}
             {detail.data && (
-              <div className="mt-4 space-y-5">
-                <dl className="grid grid-cols-2 gap-4 text-sm">
+              <div className="mt-4 space-y-5 min-w-0">
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
                   <div>
                     <dt className="text-[#6B6B6B]">Candidate identity</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437]">
+                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       {detail.data.candidateWorkerId ?? 'Unknown'}
                     </dd>
                   </div>
@@ -575,19 +578,19 @@ export function SafetyAlertsView({
                   </div>
                   <div>
                     <dt className="text-[#6B6B6B]">Status</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437]">
+                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       {formatLabel(detail.data.status)} · revision {detail.data.revision}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-[#6B6B6B]">First seen</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437]">
+                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       {formatDate(detail.data.firstDetectedAt)}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-[#6B6B6B]">Last seen</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437]">
+                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       {formatDate(detail.data.lastDetectedAt)}
                     </dd>
                   </div>
@@ -600,7 +603,7 @@ export function SafetyAlertsView({
                     {detail.data.detections.map((detection) => (
                       <div
                         key={`${detail.data.id}:${detection.eventId}`}
-                        className="rounded-md bg-[#F7F6F3] p-3 text-xs"
+                        className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
                       >
                         <div className="flex justify-between gap-3">
                           <span className="font-mono font-semibold text-[#2F3437]">
@@ -635,20 +638,30 @@ export function SafetyAlertsView({
                 </div>
                 {(detail.data.status === 'PENDING_REVIEW' ||
                   detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
-                  <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-4">
+                  <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
                     <h3 className="text-sm font-bold text-[#111111]">Record review decision</h3>
                     <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
                       Explain the evidence behind the decision. The reason is required and cannot be
                       edited after submission.
                     </p>
+                    <label
+                      htmlFor="review-reason-textarea"
+                      className="mt-3 block text-xs font-semibold text-[#2F3437]"
+                    >
+                      Decision reason{' '}
+                      <span className="font-normal text-[#6B6B6B]">(minimum 5 characters)</span>
+                    </label>
                     <textarea
+                      id="review-reason-textarea"
+                      name="reviewReason"
+                      aria-label="Decision reason (minimum 5 characters)"
                       value={reviewReason}
                       onChange={(event) => setReviewReason(event.target.value)}
                       minLength={5}
                       maxLength={1000}
                       rows={3}
                       placeholder="Example: Worker is clearly visible without a hard hat across the linked observations."
-                      className="mt-3 w-full rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
+                      className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
                     />
                     {review.error && (
                       <p
@@ -696,7 +709,7 @@ export function SafetyAlertsView({
                     </div>
                   </section>
                 )}
-                <section>
+                <section className="min-w-0">
                   <h3 className="text-sm font-bold text-[#2F3437]">
                     Review history ({detail.data.reviewsTotal})
                   </h3>
@@ -704,16 +717,18 @@ export function SafetyAlertsView({
                     {detail.data.reviews.map((item) => (
                       <article
                         key={item.id}
-                        className="rounded-md border border-[#EAEAEA] p-3 text-xs"
+                        className="rounded-md border border-[#EAEAEA] p-3 text-xs min-w-0"
                       >
                         <div className="flex flex-wrap justify-between gap-2">
-                          <span className="font-bold text-[#2F3437]">
+                          <span className="font-bold text-[#2F3437] break-words">
                             {formatLabel(item.fromStatus)} → {formatLabel(item.toStatus)}
                           </span>
                           <time className="text-[#6B6B6B]">{formatDate(item.createdAt)}</time>
                         </div>
-                        <p className="mt-2 whitespace-pre-wrap text-[#2F3437]">{item.reason}</p>
-                        <p className="mt-2 font-mono text-[10px] text-[#6B6B6B]">
+                        <p className="mt-2 whitespace-pre-wrap break-words text-[#2F3437]">
+                          {item.reason}
+                        </p>
+                        <p className="mt-2 font-mono text-[10px] text-[#6B6B6B] break-all">
                           Actor {item.actorUserId} · revision {item.alertRevision}
                         </p>
                       </article>
