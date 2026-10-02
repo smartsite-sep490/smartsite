@@ -13,6 +13,7 @@ import {
 } from '../../modules/zones/observation-context-resolver.service.js';
 import {
   AlertCandidateEvaluator,
+  summarizeIdentityEvidenceByTrack,
   type AlertCandidate,
   type Observation,
 } from '../../modules/safety/alerts/alert-candidate-evaluator.js';
@@ -165,17 +166,8 @@ export class AiIngestionService {
             }
           }
 
-          const identityByTrack = new Map<number, string>();
-          for (const observation of event.observations) {
-            if (
-              observation['type'] === 'IDENTITY_CANDIDATE' &&
-              observation['status'] === 'CANDIDATE' &&
-              typeof observation['trackId'] === 'number' &&
-              typeof observation['candidateWorkerId'] === 'string'
-            ) {
-              identityByTrack.set(observation['trackId'], observation['candidateWorkerId']);
-            }
-          }
+          const observations = event.observations as unknown as Observation[];
+          const identityByTrack = summarizeIdentityEvidenceByTrack(observations);
 
           const decisionByObservation = new Map<string, ZoneAuthorizationResult>();
           for (const observation of event.observations) {
@@ -195,7 +187,7 @@ export class AiIngestionService {
               eventId: event.eventId,
               siteId: context.siteId,
               zoneId: context.zoneId,
-              candidateWorkerId: identityByTrack.get(observation['trackId']),
+              candidateWorkerId: identityByTrack.get(observation['trackId'])?.candidateWorkerId,
               trackId: observation['trackId'],
               evaluatedAt: capturedAt,
               restrictionPolicy: context.zone.restrictionPolicy,
@@ -212,7 +204,7 @@ export class AiIngestionService {
             {
               streamSessionId: event.streamSessionId,
               cameraExternalId: event.cameraExternalId,
-              observations: event.observations as unknown as Observation[],
+              observations,
             },
             contextMap,
             ({ trackId, regionId, geometryVersion }) =>

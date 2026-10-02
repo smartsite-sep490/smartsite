@@ -52,6 +52,141 @@ function createBaseEvent(observations: EvaluationEvent['observations']): Evaluat
   };
 }
 
+function identityConflictEvent(identities: EvaluationEvent['observations']): EvaluationEvent {
+  return createBaseEvent([
+    ...identities,
+    {
+      type: 'PPE',
+      trackId: 101,
+      ppeItem: 'HARD_HAT',
+      status: 'MISSING',
+      regionId,
+      geometryVersion,
+    },
+    { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion },
+  ]);
+}
+
+test('conflicting Worker candidates cannot select the last identity for PPE or Zone alerts', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({
+    requiredPpe: ['HARD_HAT'],
+    restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+  });
+  const identities: EvaluationEvent['observations'] = [
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 101,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'A',
+      similarityScore: 0.81,
+      qualityScore: 0.91,
+    },
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 101,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'B',
+      similarityScore: 0.82,
+      qualityScore: 0.92,
+    },
+  ];
+  const original = structuredClone(identities);
+  for (const ordered of [identities, [...identities].reverse()]) {
+    const candidates = evaluator.evaluate(identityConflictEvent(ordered), context);
+    assert.equal(candidates.length, 2);
+    assert.deepEqual(candidates.map((c) => c.candidateSubtype).sort(), [
+      'PPE_HARD_HAT_MISSING',
+      'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+    ]);
+    for (const candidate of candidates) {
+      assert.equal(candidate.candidateWorkerId, undefined);
+      assert.equal(candidate.identitySimilarityScore, undefined);
+      assert.equal(candidate.identityQualityScore, undefined);
+    }
+  }
+  assert.deepEqual(identities, original);
+});
+
+test('candidate and unavailable/unknown claims for one track remain ambiguous in either order', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({ requiredPpe: ['HARD_HAT'] });
+  for (const status of ['UNKNOWN', 'UNAVAILABLE'] as const) {
+    const identities: EvaluationEvent['observations'] = [
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 101,
+        status: 'CANDIDATE',
+        candidateWorkerId: 'A',
+        similarityScore: 0.9,
+        qualityScore: 0.8,
+      },
+      { type: 'IDENTITY_CANDIDATE', trackId: 101, status },
+    ];
+    for (const ordered of [identities, [...identities].reverse()]) {
+      const [candidate] = evaluator.evaluate(identityConflictEvent(ordered), context);
+      assert.equal(candidate!.candidateWorkerId, undefined);
+      assert.equal(candidate!.identitySimilarityScore, undefined);
+      assert.equal(candidate!.identityQualityScore, undefined);
+    }
+  }
+});
+
+test('agreeing Worker candidates retain only scores that agree, independent of order', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({ requiredPpe: ['HARD_HAT'] });
+  const identities: EvaluationEvent['observations'] = [
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 101,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'A',
+      similarityScore: 0.8,
+      qualityScore: 0.9,
+    },
+    {
+      type: 'IDENTITY_CANDIDATE',
+      trackId: 101,
+      status: 'CANDIDATE',
+      candidateWorkerId: 'A',
+      similarityScore: 0.95,
+      qualityScore: 0.9,
+    },
+  ];
+  for (const ordered of [identities, [...identities].reverse()]) {
+    const [candidate] = evaluator.evaluate(identityConflictEvent(ordered), context);
+    assert.equal(candidate!.candidateWorkerId, 'A');
+    assert.equal(candidate!.identitySimilarityScore, undefined);
+    assert.equal(candidate!.identityQualityScore, 0.9);
+  }
+});
+
+test('identical duplicate claims and unrelated tracks do not change candidate metadata', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({ requiredPpe: ['HARD_HAT'] });
+  const identity = {
+    type: 'IDENTITY_CANDIDATE',
+    trackId: 101,
+    status: 'CANDIDATE',
+    candidateWorkerId: 'A',
+    similarityScore: 0.8,
+    qualityScore: 0.9,
+  } as const;
+  const alone = evaluator.evaluate(identityConflictEvent([identity]), context);
+  const duplicated = evaluator.evaluate(
+    identityConflictEvent([
+      identity,
+      { ...identity },
+      { ...identity, trackId: 202, candidateWorkerId: 'B' },
+    ]),
+    context,
+  );
+  assert.deepEqual(duplicated, alone);
+  assert.equal(duplicated[0]!.candidateWorkerId, 'A');
+  assert.equal(duplicated[0]!.identitySimilarityScore, 0.8);
+  assert.equal(duplicated[0]!.identityQualityScore, 0.9);
+});
+
 test('Case 1: PERSON only returns empty candidates', () => {
   const evaluator = new AlertCandidateEvaluator();
   const context = createTestContext({ requiredPpe: ['HARD_HAT'] });
