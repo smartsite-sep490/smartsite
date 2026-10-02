@@ -91,10 +91,10 @@ export function SessionExpiredModal({
         {/* Title & Description */}
         <div className="space-y-2">
           <h2 className="text-xl font-extrabold text-[#071A2B] tracking-tight">
-            Phiên đăng nhập đã hết hạn
+            Your session has expired
           </h2>
           <p className="text-xs font-medium text-[#607A96] leading-relaxed max-w-xs mx-auto">
-            Phiên làm việc của bạn đã tự động kết thúc để đảm bảo an toàn bảo mật. Vui lòng đăng nhập lại để tiếp tục công việc trên SmartSite.
+            Your session ended automatically for security. Please sign in again to continue working on SmartSite.
           </p>
         </div>
 
@@ -104,7 +104,7 @@ export function SessionExpiredModal({
           onClick={onReLogin}
           className="w-full py-3 px-5 rounded-xl bg-[#071A2B] text-white text-xs font-bold shadow-[0_4px_16px_rgba(7,26,43,0.25)] hover:bg-[#F66B17] hover:shadow-[0_4px_16px_rgba(246,107,23,0.35)] transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 group"
         >
-          <span>Đăng nhập lại</span>
+          <span>Sign in again</span>
           <svg className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
           </svg>

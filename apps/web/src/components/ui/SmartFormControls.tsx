@@ -78,7 +78,12 @@ SmartInput.displayName = 'SmartInput';
 export interface SmartSelectOption {
   value: string;
   label: string;
+  icon?: React.ReactNode;
+  badge?: string;
+  description?: string;
+  disabled?: boolean;
 }
+
 export interface SmartSelectProps {
   label?: string;
   fieldRequired?: boolean;
@@ -91,71 +96,207 @@ export interface SmartSelectProps {
   id?: string;
   name?: string;
   required?: boolean;
+  disabled?: boolean;
+  size?: 'sm' | 'md';
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  icon?: React.ReactNode;
+  align?: 'start' | 'center' | 'end';
 }
 
-export function SmartSelect({ label, fieldRequired, error, placeholder, options, value, onChange, className = '', id: propId, name, required }: SmartSelectProps) {
+export function SmartSelect({
+  label,
+  fieldRequired,
+  error,
+  placeholder,
+  options,
+  value,
+  onChange,
+  className = '',
+  id: propId,
+  name,
+  required,
+  disabled = false,
+  size = 'md',
+  searchable = false,
+  searchPlaceholder = 'Search...',
+  icon,
+  align = 'start',
+}: SmartSelectProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const selectedOption = options.find((opt) => opt.value === value);
+
+  const filteredOptions = React.useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const q = searchQuery.toLowerCase();
+    return options.filter(
+      (opt) =>
+        opt.label.toLowerCase().includes(q) ||
+        (opt.description && opt.description.toLowerCase().includes(q)) ||
+        (opt.badge && opt.badge.toLowerCase().includes(q))
+    );
+  }, [options, searchQuery]);
+
+  const triggerClasses =
+    size === 'sm'
+      ? `w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 outline-none transition-all duration-200 ease-out hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 shadow-xs flex items-center justify-between cursor-pointer gap-2 ${
+          error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''
+        } ${!selectedOption && !placeholder ? 'text-[#94A3B8] font-normal' : ''} ${
+          disabled ? 'opacity-50 cursor-not-allowed' : ''
+        } ${className}`
+      : `${FIELD_BASE} flex items-center justify-between text-left cursor-pointer w-full gap-2 ${
+          error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''
+        } ${!selectedOption ? 'text-[#94A3B8] font-normal' : ''} ${
+          disabled ? 'opacity-50 cursor-not-allowed' : ''
+        } ${className}`;
 
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+        <label
+          htmlFor={id}
+          className={
+            size === 'sm'
+              ? 'block text-[10px] font-bold uppercase tracking-wider text-slate-500'
+              : 'block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]'
+          }
+        >
           {label}
           {fieldRequired && <span className="text-red-400 ml-1">*</span>}
         </label>
       )}
-      {name && (
-        <input type="hidden" name={name} value={value || ''} required={required} />
-      )}
-      <Popover.Root open={open} onOpenChange={setOpen}>
+      {name && <input type="hidden" name={name} value={value || ''} required={required} />}
+      <Popover.Root
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (disabled) return;
+          setOpen(nextOpen);
+          if (!nextOpen) setSearchQuery('');
+        }}
+      >
         <Popover.Trigger asChild>
-          <button
-            id={id}
-            type="button"
-            className={`${FIELD_BASE} flex items-center justify-between text-left cursor-pointer w-full ${
-              error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''
-            } ${!selectedOption ? 'text-[#94A3B8] font-normal' : ''} ${className}`}
-          >
-            <span className="truncate pr-4">
-              {selectedOption ? selectedOption.label : placeholder || 'Select an option'}
-            </span>
+          <button id={id} type="button" disabled={disabled} className={triggerClasses}>
+            <div className="flex items-center gap-2 truncate pr-1">
+              {icon && <span className="shrink-0 text-slate-500">{icon}</span>}
+              {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
+              <span className="truncate">
+                {selectedOption ? selectedOption.label : placeholder || 'Select an option'}
+              </span>
+            </div>
             <IconChevDown open={open} />
           </button>
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Content
             side="bottom"
-            sideOffset={8}
-            align="start"
+            sideOffset={6}
+            align={align}
             collisionPadding={12}
-            className="z-50 w-[var(--radix-popover-trigger-width)] max-h-[300px] overflow-y-auto"
+            className="z-50 min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-24px)] rounded-xl border border-[#DCE6EF] bg-white shadow-[0_16px_48px_rgba(7,26,43,0.14)] p-1 overflow-hidden"
             style={{ outline: 'none' }}
           >
-            <div className="bg-white rounded-xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)] overflow-hidden flex flex-col p-1">
-              {options.length === 0 ? (
-                <div className="p-3 text-xs text-[#94A3B8] text-center">No options available</div>
-              ) : (
-                options.map((opt) => (
+            {(searchable || options.length > 8) && (
+              <div className="p-1.5 border-b border-slate-100 flex items-center gap-1.5 mb-1 bg-slate-50/80 rounded-lg">
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <circle cx="7" cy="7" r="5" />
+                  <path d="M11 11l3.5 3.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 font-medium"
+                />
+                {searchQuery && (
                   <button
-                    key={opt.value}
                     type="button"
-                    onClick={() => {
-                      onChange?.(opt.value);
-                      setOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors cursor-pointer ${
-                      value === opt.value
-                        ? 'bg-[#071A2B] text-white font-bold'
-                        : 'text-[#071A2B] hover:bg-[#F5F8FB] font-medium'
-                    }`}
+                    onClick={() => setSearchQuery('')}
+                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
                   >
-                    {opt.label}
+                    <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                      <path d="M2 2l8 8M10 2L2 10" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
                   </button>
-                ))
+                )}
+              </div>
+            )}
+
+            <div className="max-h-[260px] overflow-y-auto space-y-0.5 custom-scrollbar p-0.5">
+              {filteredOptions.length === 0 ? (
+                <div className="p-3 text-xs text-[#94A3B8] text-center">
+                  {searchQuery ? 'No matching options' : 'No options available'}
+                </div>
+              ) : (
+                filteredOptions.map((opt) => {
+                  const isSelected = value === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      disabled={opt.disabled}
+                      onClick={() => {
+                        onChange?.(opt.value);
+                        setOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#071A2B] text-white font-bold shadow-xs'
+                          : 'text-slate-800 hover:bg-[#F5F8FB] hover:text-[#071A2B] font-medium'
+                      } ${opt.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {opt.icon && <span className="shrink-0">{opt.icon}</span>}
+                        <div className="truncate">
+                          <span className="truncate">{opt.label}</span>
+                          {opt.description && (
+                            <span
+                              className={`block text-[10px] ${
+                                isSelected ? 'text-slate-300' : 'text-slate-400'
+                              }`}
+                            >
+                              {opt.description}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {opt.badge && (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                              isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        )}
+                        {isSelected && (
+                          <svg
+                            className="w-3.5 h-3.5 text-[#F66B17] shrink-0"
+                            viewBox="0 0 16 16"
+                            fill="currentColor"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.739a.75.75 0 0 1 1.04-.208Z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </Popover.Content>
@@ -279,6 +420,7 @@ export interface SmartDatePickerProps {
   placeholder?: string;
   error?: string;
   id?: string;
+  disablePast?: boolean;
 }
 
 export function SmartDatePicker({
@@ -289,17 +431,20 @@ export function SmartDatePicker({
   placeholder = 'Pick a date',
   error,
   id: propId,
+  disablePast = true,
 }: SmartDatePickerProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const parsed = value ? parse(value, 'yyyy-MM-dd', new Date()) : undefined;
   const validDate = parsed && isValid(parsed) ? parsed : undefined;
   const displayValue = validDate ? format(validDate, 'dd MMM yyyy') : '';
 
   const handleSelect = (day: Date | undefined) => {
-    if (day) {
+    if (day && (!disablePast || day >= today)) {
       onChange(format(day, 'yyyy-MM-dd'));
       setOpen(false);
     }
@@ -343,6 +488,7 @@ export function SmartDatePicker({
                 mode="single"
                 selected={validDate}
                 onSelect={handleSelect}
+                disabled={disablePast ? { before: today } : undefined}
                 classNames={rdpClassNames as Parameters<typeof DayPicker>[0]['classNames']}
               />
             </div>
@@ -621,6 +767,7 @@ export interface SmartDateTimePickerProps {
   placeholder?: string;
   error?: string;
   id?: string;
+  disablePast?: boolean;
 }
 
 export function SmartDateTimePicker({
@@ -631,10 +778,13 @@ export function SmartDateTimePicker({
   placeholder = 'Pick date & time',
   error,
   id: propId,
+  disablePast = true,
 }: SmartDateTimePickerProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const parsed = value ? new Date(value) : undefined;
   const validParsed = parsed && isValid(parsed) ? parsed : undefined;
@@ -651,7 +801,7 @@ export function SmartDateTimePicker({
     : undefined;
 
   const handleSelectDay = (day: Date | undefined) => {
-    if (!day) return;
+    if (!day || (disablePast && day < today)) return;
     const parts = timeStr.split(':').map(Number);
     const hh = parts[0] ?? 0;
     const mm = parts[1] ?? 0;
@@ -710,6 +860,7 @@ export function SmartDateTimePicker({
                 mode="single"
                 selected={selectedDay}
                 onSelect={handleSelectDay}
+                disabled={disablePast ? { before: today } : undefined}
                 classNames={rdpClassNames as Parameters<typeof DayPicker>[0]['classNames']}
               />
               {/* Luxury Time row */}

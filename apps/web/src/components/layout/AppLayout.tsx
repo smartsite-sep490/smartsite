@@ -77,8 +77,12 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const userInitials = displayName.slice(0, 2).toUpperCase();
 
   const isAdmin = roles.includes('ADMIN');
-  const isManager = roles.includes('SITE_MANAGER') || isAdmin;
-  const isWorkerOnly = roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
+  const isManager = roles.includes('SITE_MANAGER');
+  const isContractorRep = roles.includes('CONTRACTOR_REPRESENTATIVE');
+  const isWorker = roles.includes('WORKER');
+  const isWorkerOnly = isWorker && !isAdmin && !isManager && !isContractorRep;
+  const canAccessWorkforce = (isWorker || isContractorRep) && !isAdmin;
+  const canAccessScheduleSetup = (isManager || isContractorRep) && !isAdmin;
 
   const navGroups = isWorkerOnly
     ? [
@@ -94,8 +98,18 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           label: 'Workspace',
           items: [
             { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
-            { id: 'workforce', label: 'Workforce', icon: IconUsers },
-            ...(isManager ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }] : []),
+            ...(canAccessWorkforce
+              ? [
+                  {
+                    id: 'workforce',
+                    label: isContractorRep ? 'Contractor Review' : 'Workforce',
+                    icon: IconUsers,
+                  },
+                ]
+              : []),
+            ...(canAccessScheduleSetup
+              ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }]
+              : []),
             ...(isAdmin ? [{ id: 'site-setup', label: 'Site Setup', icon: IconBuilding }] : []),
             { id: 'access', label: 'Site Access', icon: IconKey },
           ],
@@ -124,7 +138,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       <aside
         className={`${
           isCollapsed ? 'w-20' : 'w-64'
-        } bg-[#041D2E] text-white flex flex-col justify-between shrink-0 select-none border-r border-[#031724] transition-all duration-300 ease-in-out sticky top-0 h-screen z-30`}
+        } bg-gradient-to-b from-[#071320] via-[#04121D] to-[#020B13] text-white flex flex-col justify-between shrink-0 select-none border-r border-white/10 transition-all duration-300 ease-in-out sticky top-0 h-screen z-30 shadow-2xl`}
       >
         <div>
           {/* Brand & Collapse/Expand Toggle Header */}
@@ -135,17 +149,23 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           >
             {/* Brand Logo */}
             <div
-              className="flex items-center gap-3 cursor-pointer"
+              className="flex items-center gap-3 cursor-pointer group"
               onClick={() => navigate('/')}
               title="SmartSite Homepage"
             >
-              <div className="w-9 h-9 rounded-lg bg-[#F66B17] flex items-center justify-center text-white shadow-sm shrink-0">
-                <IconHardHat className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF7A1A] via-[#F66B17] to-[#D95200] p-[1px] shadow-[0_0_20px_rgba(246,107,23,0.35)] shrink-0 flex items-center justify-center transition-transform group-hover:scale-105">
+                <div className="w-full h-full rounded-[11px] bg-gradient-to-br from-[#FF8833] to-[#E05500] flex items-center justify-center text-white">
+                  <IconHardHat className="w-5 h-5 drop-shadow-sm" />
+                </div>
               </div>
               {!isCollapsed && (
-                <div className="text-xl font-bold tracking-tight whitespace-nowrap overflow-hidden transition-opacity duration-200">
-                  <span className="text-white">Smart</span>
-                  <span className="text-[#F66B17]">Site</span>
+                <div className="flex flex-col whitespace-nowrap overflow-hidden transition-opacity duration-200">
+                  <div className="text-lg font-black tracking-tight leading-none text-white">
+                    Smart<span className="text-[#FF7A1A] bg-gradient-to-r from-[#FF7A1A] to-[#FF9B42] bg-clip-text text-transparent">Site</span>
+                  </div>
+                  <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase mt-0.5 font-semibold">
+                    Operations
+                  </span>
                 </div>
               )}
             </div>
@@ -153,27 +173,30 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             {/* Toggle Button for Sidebar to/nhỏ */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
               title={isCollapsed ? 'Mở rộng sidebar' : 'Thu nhỏ sidebar'}
               aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {isCollapsed ? (
-                <IconChevronRight className="w-4 h-4" />
+                <IconChevronRight className="w-3.5 h-3.5" />
               ) : (
-                <IconChevronLeft className="w-4 h-4" />
+                <IconChevronLeft className="w-3.5 h-3.5" />
               )}
             </button>
           </div>
 
           {/* Navigation Section */}
-          <div className="px-3 py-3 flex-1 overflow-y-auto custom-scrollbar">
+          <div className="px-3 py-4 flex-1 overflow-y-auto custom-scrollbar">
             <nav className="space-y-6">
               {navGroups.map((group, groupIdx) => (
-                <div key={groupIdx} className="space-y-1">
+                <div key={groupIdx} className="space-y-1.5">
                   {!isCollapsed && (
-                    <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                      {group.label}
-                    </p>
+                    <div className="px-3 mb-2 flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-[#FF7A1A]/70" />
+                      <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400/80">
+                        {group.label}
+                      </p>
+                    </div>
                   )}
                   {group.items.map((item) => {
                     const isActive = activeTab === item.id;
@@ -187,16 +210,18 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                           isCollapsed
                             ? 'justify-center px-0 py-2.5'
                             : 'justify-between px-3.5 py-2.5'
-                        } rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
+                        } rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer relative group border ${
                           isActive
-                            ? 'bg-white/10 text-white font-semibold shadow-inner'
-                            : 'text-white/70 hover:bg-white/5 hover:text-white'
+                            ? 'bg-gradient-to-r from-[#FF7A1A]/20 via-[#FF7A1A]/10 to-transparent text-white font-semibold border-[#FF7A1A]/35 shadow-[0_0_20px_rgba(246,107,23,0.12)]'
+                            : 'text-slate-300/80 hover:text-white hover:bg-white/[0.06] border-transparent hover:border-white/5 hover:translate-x-0.5'
                         }`}
                       >
                         <div className={`flex items-center ${isCollapsed ? '' : 'gap-3'}`}>
                           <Icon
-                            className={`w-4 h-4 shrink-0 ${
-                              isActive ? 'text-[#F66B17]' : 'text-white/60'
+                            className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                              isActive
+                                ? 'text-[#FF7A1A] filter drop-shadow-[0_0_8px_rgba(246,107,23,0.6)]'
+                                : 'text-slate-400 group-hover:text-slate-200'
                             }`}
                           />
                           {!isCollapsed && (
@@ -204,10 +229,10 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                           )}
                         </div>
                         {isActive && !isCollapsed && (
-                          <span className="w-1.5 h-4 rounded-full bg-[#F66B17]" />
+                          <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
                         )}
                         {isActive && isCollapsed && (
-                          <span className="absolute left-1 w-1 h-5 rounded-full bg-[#F66B17]" />
+                          <span className="absolute left-1 w-1 h-5 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
                         )}
                       </button>
                     );
@@ -224,12 +249,12 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             onClick={() => navigate('/')}
             title={isCollapsed ? 'Public SmartSite Homepage' : undefined}
             className={`w-full flex items-center ${
-              isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2'
-            } rounded-lg text-xs font-medium text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer`}
+              isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
+            } rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-xs group`}
           >
-            <IconHome className="w-4 h-4 text-[#F66B17] shrink-0" />
+            <IconHome className="w-4 h-4 text-[#FF7A1A] shrink-0 group-hover:scale-110 transition-transform filter drop-shadow-[0_0_6px_rgba(246,107,23,0.4)]" />
             {!isCollapsed && (
-              <span className="whitespace-nowrap overflow-hidden">Public SmartSite Homepage</span>
+              <span className="whitespace-nowrap overflow-hidden font-medium">Public SmartSite Homepage</span>
             )}
           </button>
         </div>
