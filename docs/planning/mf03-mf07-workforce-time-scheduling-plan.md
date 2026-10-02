@@ -130,10 +130,10 @@ Khi công nhân cần đổi ca, swap ca với người khác hoặc nghỉ thì
 Đổi ca:
 
 ```text
-Worker hoặc Contractor Representative tạo ShiftChangeRequest
+Worker tạo ShiftChangeRequest
 -> request trỏ đúng worker_schedule của ngày cần đổi
--> request chờ manager review
--> Site Manager approve hoặc reject
+-> request chờ Contractor Representative review
+-> Contractor Representative approve hoặc reject
 -> backend kiểm tra lại schedule version
 -> lịch được cập nhật hoặc request chuyển sang conflicted
 ```
@@ -144,7 +144,7 @@ Swap ca:
 Worker A xin swap với Worker B
 -> request trỏ đúng worker_schedule của cả hai worker
 -> Worker B xác nhận
--> Site Manager approve hoặc reject
+-> Contractor Representative approve hoặc reject
 -> backend kiểm tra lại lịch của cả hai
 -> cập nhật cả hai lịch cùng lúc hoặc không cập nhật ai
 ```
@@ -178,9 +178,9 @@ ShiftRequestStatus =
 
 - Worker account phải được map rõ tới đúng `Worker` record trong Site. Không nhận `workerId` từ client như một bằng chứng quyền.
 - Contractor Representative phải có mapping tới Contractor; chỉ thao tác công nhân thuộc Contractor đó trong đúng Site.
-- Site Manager chỉ review request của Site mà tài khoản được phân quyền.
+- Contractor Representative chỉ review request của Contractor được gán trong Site mà tài khoản được phân quyền.
 - Người tạo request không được tự approve request của mình.
-- Swap ca bắt buộc coworker xác nhận trước khi manager duyệt.
+- Swap ca bắt buộc coworker xác nhận trước khi Contractor Representative duyệt.
 - Khi apply thay đổi lịch phải dùng `expectedScheduleVersion`.
 - Nếu lịch đã thay đổi trong lúc request đang chờ duyệt, request chuyển sang `CONFLICTED`.
 - Swap phải atomic: đổi lịch cả hai worker hoặc không đổi ai.

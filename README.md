@@ -251,7 +251,7 @@ Implemented:
 
 Not yet implemented in this foundation:
 
-- áp dụng role theo Site vào từng workflow nghiệp vụ (Auth/Users đã quản lý assignment; các API cấu hình hiện vẫn Admin-only) và scope Contractor/Zone;
+- áp dụng role theo Site vào từng workflow nghiệp vụ (Auth/Users đã quản lý assignment; Shift/Schedule configuration now supports Site Manager Site scope) và scope Contractor/Zone;
 - full workforce, attendance, and incident workflows;
 - production Neon integration;
 - production multi-camera operations and benchmark evidence;
