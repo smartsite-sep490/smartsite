@@ -56,6 +56,8 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
       }
       return null;
     });
+    vi.stubEnv('VITE_AI_BACKEND_SERVICE_TOKEN', 'mock-ai-backend-token');
+    vi.stubEnv('VITE_AI_WS_URL', 'ws://127.0.0.1:8000/ws/realtime');
   });
 
   afterEach(() => {
@@ -63,9 +65,10 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
     queryClient.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
-  it('1. Neutral Parent Badge: never claims Live AI Active even when stream is disconnected or erroring', () => {
+  it('1. Neutral Parent Badge: never claims Live AI Active even when stream is disconnected or erroring', async () => {
     // Simulate stream in disconnected/error state
     vi.spyOn(useRealtimePreviewModule, 'useRealtimePreview').mockReturnValue({
       url: null,
@@ -89,9 +92,9 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
 
     // Child runtime error indicator must remain visible and honest
     expect(
-      screen.getByText(/AI WebSocket: Connection refused: AI worker stream offline/i),
+      await screen.findByText(/AI WebSocket: Connection refused: AI worker stream offline/i),
     ).not.toBeNull();
-    expect(screen.getByText(/OFFLINE \(SOCKET ERROR\)/i)).not.toBeNull();
+    expect(await screen.findByText(/OFFLINE \(SOCKET ERROR\)/i)).not.toBeNull();
   });
 
   it('2. Sub-tab switching: preserves neutral parent header and switches to Restricted Zones view', async () => {
