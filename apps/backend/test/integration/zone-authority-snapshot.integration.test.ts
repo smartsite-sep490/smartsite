@@ -29,6 +29,7 @@ import {
   assignmentFact,
 } from '../../src/modules/workforce/workforce-authority-history.js';
 import { ZoneAuthoritySnapshotService } from '../../src/modules/zones/zone-authority-snapshot.service.js';
+import { decodeStoredAuthoritySnapshot } from '../../src/modules/zones/zone-authority-snapshot-codec.js';
 import { evaluateZoneAuthority } from '../../src/modules/zones/zone-authority-chain.policy.js';
 import { withZoneAuthorityTransaction } from '../../src/modules/zones/zone-authority-transaction.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
@@ -208,6 +209,62 @@ test('a validated audited synthetic two-tier history yields a bounded digest-bou
     assert.equal(result.snapshot.snapshotVersion, result.artifact.snapshotVersion);
     assert.equal(result.artifact.payload.purpose, f.purpose);
   }
+});
+
+test('reader artifact survives JSON roundtrip and later audited DENY or epoch OFF without consulting current sources', async () => {
+  const f = await fixture(),
+    first = await read(f);
+  assert.equal(first.status, 'COMPLETE');
+  if (first.status !== 'COMPLETE') return;
+  const saved: unknown = JSON.parse(JSON.stringify(first.artifact));
+  const expected = {
+    siteId: f.siteId,
+    zoneId: f.zoneId,
+    workerId: f.workerId,
+    capturedAt: f.capturedAt,
+    purpose: f.purpose,
+    snapshotVersion: first.artifact.snapshotVersion,
+  };
+  const original = decodeStoredAuthoritySnapshot(saved, expected);
+  assert.equal(original.status, 'VALID');
+  if (original.status !== 'VALID') return;
+  assert.deepEqual(original.snapshot, first.snapshot);
+  assert.equal(original.restrictionPolicy, first.restrictionPolicy);
+  assert.ok(original.snapshot.workerGrants[0]?.validFrom instanceof Date);
+  await db.transaction((manager) => insertSyntheticDeny(manager, f));
+  const fresh = await read(f);
+  assert.equal(fresh.status, 'COMPLETE');
+  if (fresh.status === 'COMPLETE') {
+    assert.notEqual(fresh.artifact.snapshotVersion, expected.snapshotVersion);
+    assert.equal(
+      evaluateZoneAuthority(fresh.snapshot, fresh.restrictionPolicy, capturedAt, f).reasonCode,
+      'EXPLICIT_DENY',
+    );
+  }
+  await db
+    .getRepository(ZoneAuthorityHistoryEpochEntity)
+    .update({ siteId: f.siteId }, { readiness: 'OFF' });
+  assert.equal((await read(f)).status, 'UNAVAILABLE');
+  const replay = decodeStoredAuthoritySnapshot(saved, expected);
+  assert.deepEqual(replay, original);
+  if (replay.status === 'VALID')
+    assert.equal(
+      evaluateZoneAuthority(replay.snapshot, replay.restrictionPolicy, replay.capturedAt, f).status,
+      'ALLOWED',
+    );
+  assert.deepEqual(
+    decodeStoredAuthoritySnapshot(saved, { ...expected, snapshotVersion: 'e'.repeat(64) }),
+    { status: 'UNAVAILABLE', reason: 'SNAPSHOT_DIGEST_MISMATCH' },
+  );
+  assert.deepEqual(
+    decodeStoredAuthoritySnapshot(saved, { ...expected, purpose: 'RETROSPECTIVE_REVIEW' }),
+    { status: 'UNAVAILABLE', reason: 'SNAPSHOT_BINDING_MISMATCH' },
+  );
+  assert.deepEqual(decodeStoredAuthoritySnapshot(saved, { ...expected, workerId: randomUUID() }), {
+    status: 'UNAVAILABLE',
+    reason: 'SNAPSHOT_BINDING_MISMATCH',
+  });
+  // This proves reader/artifact replay only, not persisted assessment rows or immutable raw-event integration.
 });
 
 test('OFF, wrong manifest, pre-cutover and default unconfigured reader cannot certify COMPLETE', async () => {

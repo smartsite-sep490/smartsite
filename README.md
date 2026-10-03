@@ -319,6 +319,16 @@ The verified local YOLO11s-to-alert demonstration is documented in the
 
 Per repository policy, generated task plans, execution specs, and working documentation are local-only artifacts and are not committed to Git.
 
+The internal MF06 authority snapshot codec validates a reader-produced JSON artifact against
+independent trusted stored-row scope, original assessment purpose, observation time, and digest.
+It rebuilds the policy projection from the saved historical evidence using the reader's shared
+pure projector; replay does not fetch current grants or require the current epoch to be READY.
+Malformed JSON, unknown fields, evidence gaps, legacy Contractor anchors, and mismatched
+projections fail closed. Limits are 2 MiB per payload, 2,048 facts and sources each, and 16 KiB
+per fact/source payload. A valid digest does not establish Worker identity or authorize input
+from Web/AI. Assessment/job persistence, approved history cutover, live identity resolution,
+and full MF06 acceptance remain separate gates; the codec is not registered as a runtime API.
+
 Contribution conventions are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Academic Context

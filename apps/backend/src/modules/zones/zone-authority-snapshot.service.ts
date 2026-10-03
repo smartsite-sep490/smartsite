@@ -18,11 +18,10 @@ import {
   ZoneAuthorityHistoryEpochEntity,
   ZoneAuthoritySourceKind,
   ZoneEntity,
-  WorkerSiteZoneAssignmentStatus,
 } from '../../database/entities/index.js';
 import { readWorkforceZoneAuthorityHistory } from '../workforce/workforce-zone-authority-history.query.js';
 import { selectAuthorityHistory } from './zone-authority-history-selection.js';
-import type { CompleteZoneAuthoritySnapshot } from './zone-authority-chain.policy.js';
+import { projectSelectedZoneAuthority } from './zone-authority-history-projection.js';
 
 const inputSchema = z.strictObject({
   siteId: z.uuid().transform((v) => v.toLowerCase()),
@@ -197,91 +196,9 @@ export class ZoneAuthoritySnapshotService implements ZoneAuthoritySnapshotReader
         scope.capturedAt,
       );
       if (selection.status !== 'SELECTED') return unavailable(selection.reason);
-      const selected = selection.selected;
-      const contractor = selected.find(
-        (fact) =>
-          fact.sourceKind === ZoneAuthoritySourceKind.CONTRACTOR_STATE &&
-          fact.sourceId === contractorId,
-      );
-      const zonePolicy = selected.find(
-        (fact) => fact.sourceKind === ZoneAuthoritySourceKind.ZONE_POLICY,
-      );
-      if (
-        !contractor ||
-        contractor.sourceKind !== ZoneAuthoritySourceKind.CONTRACTOR_STATE ||
-        !zonePolicy ||
-        zonePolicy.sourceKind !== ZoneAuthoritySourceKind.ZONE_POLICY
-      )
-        return unavailable('STATE_HISTORY_UNAVAILABLE');
-      const eligible = membership.payload.isActive && contractor.payload.isActive;
-      const interval = (value: {
-        validFrom: string;
-        validUntil: string | null;
-        revokedAt?: string | null;
-      }) => ({
-        validFrom: new Date(value.validFrom),
-        validUntil: value.validUntil === null ? null : new Date(value.validUntil),
-        revokedAt: value.revokedAt == null ? null : new Date(value.revokedAt),
-      });
-      const scoped = {
-        siteId: scope.siteId,
-        zoneId: scope.zoneId,
-        workerId: scope.workerId,
-        contractorId,
-      };
-      const projection: Omit<CompleteZoneAuthoritySnapshot, 'snapshotVersion'> = {
-        ...scoped,
-        status: 'COMPLETE',
-        participationIntervals: eligible
-          ? selected.flatMap((fact) =>
-              fact.sourceKind === ZoneAuthoritySourceKind.PARTICIPATION &&
-              fact.payload.siteId === scope.siteId &&
-              fact.payload.contractorId === contractorId &&
-              fact.payload.isActive
-                ? [{ ...scoped, ...interval(fact.payload) }]
-                : [],
-            )
-          : [],
-        assignmentIntervals: eligible
-          ? selected.flatMap((fact) =>
-              fact.sourceKind === ZoneAuthoritySourceKind.ASSIGNMENT &&
-              fact.payload.siteId === scope.siteId &&
-              fact.payload.workerId === scope.workerId &&
-              fact.payload.contractorId === contractorId &&
-              fact.payload.status === WorkerSiteZoneAssignmentStatus.APPROVED &&
-              fact.payload.zoneIds.includes(scope.zoneId)
-                ? [{ ...scoped, ...interval(fact.payload) }]
-                : [],
-            )
-          : [],
-        contractorGrants: selected.flatMap((fact) =>
-          fact.sourceKind === ZoneAuthoritySourceKind.CONTRACTOR_ZONE_GRANT &&
-          fact.payload.siteId === scope.siteId &&
-          fact.payload.zoneId === scope.zoneId &&
-          fact.payload.contractorId === contractorId
-            ? [{ ...scoped, effect: fact.payload.effect, ...interval(fact.payload) }]
-            : [],
-        ),
-        workerGrants: selected.flatMap((fact) =>
-          fact.sourceKind === ZoneAuthoritySourceKind.WORKER_ZONE_GRANT &&
-          fact.payload.siteId === scope.siteId &&
-          fact.payload.zoneId === scope.zoneId &&
-          fact.payload.workerId === scope.workerId &&
-          fact.payload.contractorId === contractorId
-            ? [{ ...scoped, effect: fact.payload.effect, ...interval(fact.payload) }]
-            : [],
-        ),
-      };
-      const relevantLegacy = selected.some(
-        (fact) =>
-          (fact.sourceKind === ZoneAuthoritySourceKind.WORKER_ZONE_GRANT &&
-            fact.payload.contractorId === null) ||
-          (fact.sourceKind === ZoneAuthoritySourceKind.ASSIGNMENT &&
-            fact.payload.siteId === scope.siteId &&
-            fact.payload.zoneIds.includes(scope.zoneId) &&
-            fact.payload.contractorId === null),
-      );
-      if (relevantLegacy) return unavailable('LEGACY_CONTRACTOR_ANCHOR');
+      const projected = projectSelectedZoneAuthority(selection.selected, scope);
+      if (projected.status !== 'PROJECTED') return unavailable(projected.reason);
+      const { projection, scope: scoped, restrictionPolicy, eligibility } = projected;
       // Dates converted to JSON only at the artifact boundary; policy receives typed Dates.
       const payload = JSON.parse(
         JSON.stringify({
@@ -299,11 +216,8 @@ export class ZoneAuthoritySnapshotService implements ZoneAuthoritySnapshotReader
           coverage: { method: 'SCOPED_SOURCE_CLOSURE', transactionIsolation: 'SERIALIZABLE' },
           evidence: selection.evidence,
           policyProjection: projection,
-          restrictionPolicy: zonePolicy.payload.restrictionPolicy,
-          eligibility: {
-            workerActive: membership.payload.isActive,
-            contractorActive: contractor.payload.isActive,
-          },
+          restrictionPolicy,
+          eligibility,
         }),
       ) as Record<string, unknown>;
       if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > AUTHORITY_SNAPSHOT_BYTE_LIMIT)
@@ -313,7 +227,7 @@ export class ZoneAuthoritySnapshotService implements ZoneAuthoritySnapshotReader
         status: 'COMPLETE',
         snapshot: { ...projection, snapshotVersion },
         artifact: { snapshotVersion, payload },
-        restrictionPolicy: zonePolicy.payload.restrictionPolicy,
+        restrictionPolicy,
       };
     } catch (error) {
       if (error instanceof AuthorityHistoryLimitError) return unavailable('RESOURCE_LIMIT');
