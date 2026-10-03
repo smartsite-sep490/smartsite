@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsEnum, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
-import { command, missing, page, uuid } from '../../common/configuration/commands.js';
+import { command, invalid, missing, page, uuid } from '../../common/configuration/commands.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import {
   ZoneAccessEffect,
@@ -147,16 +147,24 @@ export class ZoneAccessManagementService {
     grantId: string,
     revokedAt = new Date(),
   ): Promise<ZoneAccessGrantEntity> {
+    if (!(revokedAt instanceof Date) || !Number.isFinite(revokedAt.getTime())) {
+      invalid('Invalid revocation timestamp');
+    }
     const repository = this.dataSource.getRepository(ZoneAccessGrantEntity);
-    const grant = await repository.findOneBy({
+    const scope = {
       id: uuid(grantId),
       siteId: uuid(siteId),
       zoneId: uuid(zoneId),
-    });
+    };
+    const grant = await repository.findOneBy(scope);
     if (!grant) missing();
     if (grant.revokedAt === null) {
-      await repository.update({ id: grant.id }, { revokedAt });
-      grant.revokedAt = revokedAt;
+      // First successful revocation wins. A concurrent retry must not overwrite
+      // its timestamp or return the caller's unpersisted proposed value.
+      await repository.update({ ...scope, revokedAt: IsNull() }, { revokedAt });
+      const persisted = await repository.findOneBy(scope);
+      if (!persisted) missing();
+      return persisted;
     }
     return grant;
   }
