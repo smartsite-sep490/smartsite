@@ -216,6 +216,7 @@ export class ContractorOperationsService {
     contractorId: string,
     siteId: string,
     at: Date,
+    until?: Date | null,
   ): Promise<void> {
     const contractor = await manager
       .getRepository(ContractorEntity)
@@ -227,14 +228,40 @@ export class ContractorOperationsService {
       siteId,
       isActive: true,
     });
-    if (
-      !participation.some(
-        ({ validFrom, validUntil }) =>
-          validFrom.getTime() <= at.getTime() &&
-          (validUntil === null || validUntil.getTime() > at.getTime()),
+    if (until === undefined) {
+      if (
+        !participation.some(
+          ({ validFrom, validUntil }) =>
+            validFrom.getTime() <= at.getTime() &&
+            (validUntil === null || validUntil.getTime() > at.getTime()),
+        )
       )
-    )
-      this.forbidden();
+        this.forbidden();
+      return;
+    }
+
+    // An assignment needs continuous coverage for its entire [from, until)
+    // interval. Checking only its start lets it outlive contractor participation.
+    const intervals = participation.map(({ validFrom, validUntil }) => {
+      const from = validFrom instanceof Date ? validFrom.getTime() : Number.NaN;
+      const end =
+        validUntil === null
+          ? Number.POSITIVE_INFINITY
+          : validUntil instanceof Date
+            ? validUntil.getTime()
+            : Number.NaN;
+      if (!Number.isFinite(from) || Number.isNaN(end) || end <= from) this.forbidden();
+      return { from, end };
+    });
+    intervals.sort((left, right) => left.from - right.from);
+    const requestedEnd = until === null ? Number.POSITIVE_INFINITY : until.getTime();
+    let coveredUntil = at.getTime();
+    for (const interval of intervals) {
+      if (interval.from > coveredUntil) break;
+      coveredUntil = Math.max(coveredUntil, interval.end);
+      if (coveredUntil >= requestedEnd) return;
+    }
+    this.forbidden();
   }
 
   async requireWorkerEnrollmentAccess(
@@ -373,7 +400,13 @@ export class ContractorOperationsService {
       const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId });
       if (!worker?.contractorId || !worker.isActive) this.forbidden();
       await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
-      await this.requireActiveParticipation(manager, worker.contractorId, siteId, range.from);
+      await this.requireActiveParticipation(
+        manager,
+        worker.contractorId,
+        siteId,
+        range.from,
+        range.until,
+      );
       const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
       if (zones.length !== zoneIds.length) this.forbidden();
       return manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
