@@ -5,17 +5,14 @@ import type { CreateVisitCommand } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import {
   IconAlertTriangle,
-  IconArrowRight,
   IconBuilding2,
   IconCalendar,
   IconCheck,
-  IconClock,
   IconKey,
   IconLoader,
   IconRefresh,
   IconShield,
   IconUser,
-  IconUsers,
 } from '../icons';
 import { QrPassCard } from './QrPassCard';
 

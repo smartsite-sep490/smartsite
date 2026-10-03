@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { IconAlertTriangle, IconCheck, IconKey, IconLoader, IconShield, IconUser } from '../icons';
+import { IconAlertTriangle, IconKey, IconLoader, IconShield } from '../icons';
 import { QrPassCard } from './QrPassCard';
 
 export function WorkerMobileQrView({

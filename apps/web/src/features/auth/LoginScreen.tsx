@@ -5,6 +5,7 @@ import { useLogin } from './auth-session';
 import { IconArrowRight, IconAlertTriangle, IconUser, IconKey } from '../../components/icons';
 
 interface LoginScreenProps {
+  notice?: string;
   onLoginSuccess: () => void;
   onBack: () => void;
   onNavigateToRegister: () => void;
@@ -12,7 +13,7 @@ interface LoginScreenProps {
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: LoginScreenProps) {
+export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister, notice }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -279,6 +280,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
               </div>
             </div>
 
+            {notice && <p role="status" className="rounded-lg border border-emerald-500/40 bg-emerald-950/50 p-3 text-xs text-emerald-200">{notice}</p>}
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                 <IconAlertTriangle className="w-4 h-4 text-red-500 shrink-0" />

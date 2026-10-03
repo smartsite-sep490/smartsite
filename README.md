@@ -165,6 +165,15 @@ The opening operator scans/confirms at the same gate and direction. Backend chec
 worker, face profile, contractor participation and current gate permissions; QR does not bypass a
 denial. QR decisions persist as `method: QR`; manual clearance remains unimplemented.
 
+Before registering visitors, an Admin opens **Site Setup**, selects the site and uses **Assign Site
+Manager → Create New Site Manager**, or assigns an existing manager. Assigned accounts show whether
+they are disabled, require a password change, or are ready to approve. Only an active manager with
+a permanent password makes the site ready for visitor registration. Site Setup loads every page of
+sites, accounts, contractors and representative assignments, and reports unavailable data.
+New accounts sign in with their temporary password and must complete the password-change screen
+before any internal workflow opens. Saving revokes existing sessions and returns to sign-in; a Site
+Manager then opens **Site Access → Visitor Passes** for their assigned site.
+
 Visitor registration is available at `/visits/register`, without a login. One representative registers
 the site, group size, contact, host, requested area, gate and schedule. The request appears in
 **Visitor Passes** for the Site Manager assigned to that site; only that scoped role may approve or

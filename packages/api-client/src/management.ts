@@ -360,7 +360,7 @@ export class SmartSiteManagementClient {
     return this.request<void>('POST', '/auth/change-password', token, {
       currentPassword,
       newPassword,
-    });
+    }, 'include');
   }
   logout(clientType: AuthClientType = 'WEB', refreshToken?: string) {
     return this.request<void>(

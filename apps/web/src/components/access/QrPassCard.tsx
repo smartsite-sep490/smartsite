@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { QrPassResponse } from '@smartsite/contracts';
-import { IconCheck, IconClock, IconKey, IconRefresh, IconShield } from '../icons';
+import { IconCheck, IconClock, IconKey, IconRefresh } from '../icons';
 
 export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefresh: () => void }) {
   const [now, setNow] = useState(Date.now);

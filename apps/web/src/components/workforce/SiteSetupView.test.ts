@@ -6,6 +6,7 @@ import {
   getAssignableSiteManagers,
   getContractorRepresentativeUserIds,
   getSiteManagers,
+  getReadySiteManagers,
 } from './site-setup-helpers';
 
 const representative = (id: string, isActive = true) =>
@@ -67,6 +68,16 @@ describe('SiteSetupView representative assignment options', () => {
 });
 
 describe('SiteSetupView Site Manager assignment options', () => {
+  it('only marks active managers with permanent passwords as ready to approve visitors', () => {
+    const users = [
+      account('ready', [{ role: 'SITE_MANAGER', siteId: 'site-a' }]),
+      account('disabled', [{ role: 'SITE_MANAGER', siteId: 'site-a' }], false),
+      { ...account('temporary', [{ role: 'SITE_MANAGER', siteId: 'site-a' }]), mustChangePassword: true },
+      account('other-site', [{ role: 'SITE_MANAGER', siteId: 'site-b' }]),
+    ];
+    expect(getSiteManagers(users, 'site-a').map((user) => user.id)).toEqual(['ready', 'disabled', 'temporary']);
+    expect(getReadySiteManagers(users, 'site-a').map((user) => user.id)).toEqual(['ready']);
+  });
   it('shows managers assigned to the selected site and excludes inactive or already assigned accounts', () => {
     const users = [
       account('manager-a', [{ role: 'SITE_MANAGER', siteId: 'site-a' }]),

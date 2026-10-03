@@ -24,6 +24,7 @@ import {
 } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
+import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
 import { WorkforceView } from './components/workforce/WorkforceView';
 import { SiteSetupView } from './components/workforce/SiteSetupView';
 import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
@@ -41,13 +42,28 @@ interface ProtectedRoutesProps {
   defaultAuthTab: string;
   alertsContext?: AlertsNavigationContext;
   onNavigate: (tab: ActiveTab, context?: AlertsNavigationContext) => void;
+  onPasswordChanged: () => void;
 }
 
-function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
+function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate, onPasswordChanged }: ProtectedRoutesProps) {
   const { accessToken } = useAuth();
+  const currentUser = useCurrentUser(apiUrl);
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (currentUser.isPending) {
+    return <main className="min-h-screen flex items-center justify-center" role="status">Loading your account...</main>;
+  }
+  if (currentUser.isError) {
+    return <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <p role="alert">Could not load your account.</p>
+      <button type="button" onClick={() => currentUser.refetch()}>Try again</button>
+    </main>;
+  }
+  if (currentUser.data?.mustChangePassword) {
+    return <ChangePasswordScreen apiUrl={apiUrl} onComplete={onPasswordChanged} />;
   }
 
   return (
@@ -149,7 +165,8 @@ export function App() {
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const isWorkerOnly =
     roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
-  const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
+  const defaultAuthTab = isWorkerOnly ? 'workforce' : roles.includes('SITE_MANAGER') ? 'access' : 'dashboard';
+  const [passwordChanged, setPasswordChanged] = useState(false);
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check
@@ -196,7 +213,8 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
-                onLoginSuccess={() => navigate(`/${defaultAuthTab}`)}
+                notice={passwordChanged ? 'Password changed successfully. Sign in with your new password.' : undefined}
+                onLoginSuccess={() => { setPasswordChanged(false); navigate(`/${defaultAuthTab}`); }}
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />
@@ -227,6 +245,7 @@ export function App() {
               defaultAuthTab={defaultAuthTab}
               alertsContext={alertsContext}
               onNavigate={handleNavigate}
+              onPasswordChanged={() => { setPasswordChanged(true); navigate('/login', { replace: true }); }}
             />
           }
         />

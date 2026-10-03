@@ -6,16 +6,13 @@ import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import {
   IconAlertTriangle,
   IconArrowRight,
-  IconBuilding2,
   IconCamera,
   IconCheck,
   IconClock,
-  IconFilter,
   IconKey,
   IconLoader,
   IconRefresh,
   IconSearch,
-  IconShield,
   IconUsers,
   IconX,
 } from '../icons';
@@ -88,7 +85,7 @@ export function VisitorAccessView({
     verify.mutate(input);
   };
 
-  const rawItems = visits.data?.items ?? [];
+  const rawItems = useMemo(() => visits.data?.items ?? [], [visits.data]);
 
   // Metrics computation
   const metrics = useMemo(() => {

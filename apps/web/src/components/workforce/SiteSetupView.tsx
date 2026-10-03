@@ -28,7 +28,9 @@ import {
   getAssignableSiteManagers,
   getContractorRepresentativeUserIds,
   getSiteManagers,
+  getReadySiteManagers,
 } from './site-setup-helpers';
+import { loadAllPages } from './load-all-pages';
 
 interface SiteSetupViewProps {
   apiUrl: string;
@@ -40,8 +42,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
 
-  const roles = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isAdmin = roles.includes('ADMIN');
+  const isAdmin = currentUser?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null) ?? false;
 
   // Navigation & Selection state
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
@@ -91,12 +92,13 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
   // ── Queries ─────────────────────────────────────────────────────────────────
   const sitesQuery = useQuery({
-    queryKey: ['sites'],
-    queryFn: () => client.listSites(accessToken!),
+    queryKey: ['site-setup', apiUrl, currentUser?.id, 'sites'],
+    queryFn: ({ signal }) => loadAllPages((options) => client.listSites(accessToken!, options), signal),
     enabled: Boolean(accessToken && isAdmin),
   });
 
   const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data]);
+  const setupKey = ['site-setup', apiUrl, currentUser?.id];
 
   // Auto-select first site if none selected
   const selectedSite = useMemo(() => {
@@ -110,22 +112,22 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const activeSiteId = selectedSite?.id ?? null;
 
   const contractorsQuery = useQuery({
-    queryKey: ['contractors', activeSiteId],
-    queryFn: () => client.listContractors(accessToken!, activeSiteId!),
+    queryKey: [...setupKey, 'contractors', activeSiteId],
+    queryFn: ({ signal }) => loadAllPages((options) => client.listContractors(accessToken!, activeSiteId!, options), signal),
     enabled: Boolean(accessToken && activeSiteId),
   });
 
   const contractors = useMemo(() => contractorsQuery.data?.items ?? [], [contractorsQuery.data]);
 
   const usersQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => client.listUsers(accessToken!),
+    queryKey: [...setupKey, 'users'],
+    queryFn: ({ signal }) => loadAllPages((options) => client.listUsers(accessToken!, options), signal),
     enabled: Boolean(accessToken && isAdmin),
   });
 
   const representativeAssignmentsQuery = useQuery({
-    queryKey: ['contractor-representative-assignments', activeSiteId],
-    queryFn: () => client.listContractorRepresentativeAssignments(accessToken!, activeSiteId!),
+    queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
+    queryFn: ({ signal }) => loadAllPages((options) => client.listContractorRepresentativeAssignments(accessToken!, activeSiteId!, options), signal),
     enabled: Boolean(accessToken && isAdmin && activeSiteId),
   });
 
@@ -149,6 +151,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     () => (activeSiteId ? getSiteManagers(allUsers, activeSiteId) : []),
     [allUsers, activeSiteId],
   );
+
+  const readySiteManagers = activeSiteId ? getReadySiteManagers(allUsers, activeSiteId) : [];
+  const managersLoaded = usersQuery.isSuccess;
 
   const assignableSiteManagers = useMemo(
     () => (activeSiteId ? getAssignableSiteManagers(allUsers, activeSiteId) : []),
@@ -192,7 +197,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setSiteName('');
       setSiteCode('');
       setShowCreateSiteModal(false);
-      queryClient.invalidateQueries({ queryKey: ['sites'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'sites'] });
       setSelectedSiteId(newSite.id);
     },
     onError: (err: unknown) => {
@@ -213,7 +218,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setContractorCode('');
       setContractorName('');
       setShowCreateContractorModal(false);
-      queryClient.invalidateQueries({ queryKey: ['contractors', activeSiteId] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'contractors', activeSiteId] });
       setTimeout(() => setContractorSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -255,11 +260,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setRepPassword('');
       setRepContractorId('');
       setShowCreateRepModal(false);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       queryClient.invalidateQueries({
-        queryKey: ['contractor-representative-assignments', activeSiteId],
+        queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
       });
-      queryClient.invalidateQueries({ queryKey: ['contractors', activeSiteId] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'contractors', activeSiteId] });
       setTimeout(() => setRepSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -288,7 +293,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setAssignRepContractorId('');
       setShowAssignRepModal(false);
       queryClient.invalidateQueries({
-        queryKey: ['contractor-representative-assignments', activeSiteId],
+        queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
       });
       setTimeout(() => setRepSuccessMsg(null), 5000);
     },
@@ -317,7 +322,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setManagerSuccessMsg(`Site Manager account "${user.username}" assigned successfully.`);
       setSelectedManagerId('');
       setShowAssignManagerModal(false);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -348,13 +353,13 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onSuccess: (user) => {
       setCreateManagerError(null);
-      setManagerSuccessMsg(`Site Manager account "${user.username}" created and assigned successfully.`);
+      setManagerSuccessMsg(`Site Manager account "${user.username}" created for this site. They must sign in and change their temporary password before visitor registration and approval are available.`);
       setManagerUsername('');
       setManagerDisplayName('');
       setManagerPassword('');
       setShowCreateManagerModal(false);
       setShowAssignManagerModal(false);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -596,6 +601,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       </div>
 
       {/* Success Notification Banners */}
+      {(sitesQuery.isError || usersQuery.isError || contractorsQuery.isError || representativeAssignmentsQuery.isError) && (
+        <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+          Could not load complete site setup data. Use Refresh to try again. Manager readiness cannot be confirmed until accounts load successfully.
+        </div>
+      )}
       {contractorSuccessMsg && (
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
           <div className="flex items-center gap-2.5 font-medium">
@@ -827,23 +837,25 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
                     <div
                       className={`mt-3 inline-flex max-w-full items-center gap-2.5 rounded-xl border px-3 py-2 ${
-                        siteManagers.length > 0
+                        managersLoaded && readySiteManagers.length > 0
                           ? 'border-emerald-100 bg-emerald-50/70'
                           : 'border-amber-100 bg-amber-50/70'
                       }`}
                     >
                       <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          siteManagers.length > 0 ? 'bg-white text-emerald-600' : 'bg-white text-amber-600'
+                          managersLoaded && readySiteManagers.length > 0 ? 'bg-white text-emerald-600' : 'bg-white text-amber-600'
                         }`}
                       >
                         <IconShield className="w-3.5 h-3.5" />
                       </div>
                       <div className="min-w-0 leading-tight">
                         <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Site Manager</div>
-                        {siteManagers.length > 0 ? (
+                        {!managersLoaded ? (
+                          <div className="text-xs font-bold text-amber-700">{usersQuery.isError ? 'Account data unavailable' : 'Loading accounts...'}</div>
+                        ) : siteManagers.length > 0 ? (
                           <div className="text-xs font-bold text-slate-800 truncate">
-                            {siteManagers.map((manager) => manager.displayName || `@${manager.username}`).join(', ')}
+                            {siteManagers.map((manager) => `${manager.displayName || `@${manager.username}`} (${!manager.isActive ? 'Disabled' : manager.mustChangePassword ? 'Password change required' : 'Ready to approve'})`).join(', ')}
                           </div>
                         ) : (
                           <div className="text-xs font-bold text-amber-700">Not assigned yet</div>
@@ -851,7 +863,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       </div>
                       <span
                         className={`ml-1 w-2 h-2 rounded-full shrink-0 ${
-                          siteManagers.length > 0 ? 'bg-emerald-500' : 'bg-amber-500'
+                          managersLoaded && readySiteManagers.length > 0 ? 'bg-emerald-500' : 'bg-amber-500'
                         }`}
                         aria-hidden="true"
                       />
@@ -860,16 +872,15 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
                   {/* Actions Bar */}
                   <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2">
-                    {siteManagers.length === 0 && (
                       <button
                         type="button"
+                        disabled={!managersLoaded}
                         onClick={openAssignSiteManagerModal}
                         className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
                       >
                         <IconShield className="w-3.5 h-3.5" />
-                        <span>Assign Site Manager</span>
+                        <span>{siteManagers.length === 0 ? 'Assign Site Manager' : 'Manage Site Managers'}</span>
                       </button>
-                    )}
 
                     <button
                       type="button"
@@ -1202,13 +1213,14 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               )}
 
               {siteManagers.length > 0 ? (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs leading-relaxed">
-                  This site already has a Site Manager: {' '}
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+                  Assigned Site Managers: {' '}
                   <span className="font-bold">
-                    {siteManagers.map((manager) => manager.displayName || `@${manager.username}`).join(', ')}
+                    {siteManagers.map((manager) => `${manager.displayName || `@${manager.username}`} (${!manager.isActive ? 'Disabled' : manager.mustChangePassword ? 'Password change required' : 'Ready to approve'})`).join(', ')}
                   </span>
                 </div>
-              ) : assignableSiteManagers.length > 0 ? (
+              ) : null}
+              {assignableSiteManagers.length > 0 ? (
                 <SmartSelect
                   id="site-manager-select"
                   label="Site Manager Account"
@@ -1230,7 +1242,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
               )}
 
-              {siteManagers.length === 0 && (
                 <button
                   type="button"
                   onClick={openCreateSiteManagerModal}
@@ -1238,7 +1249,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 >
                   + Create New Site Manager
                 </button>
-              )}
 
               <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
                 Existing role assignments for this account will be preserved. The Site Manager role will be added only for this site.
@@ -1256,7 +1266,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 <button
                   type="submit"
                   disabled={
-                    siteManagers.length > 0 ||
                     assignSiteManagerMutation.isPending ||
                     assignableSiteManagers.length === 0 ||
                     !selectedManagerId
