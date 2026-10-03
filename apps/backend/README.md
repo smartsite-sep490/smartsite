@@ -125,14 +125,34 @@ và serialization conflict retry cả transaction. Existing legacy grant không 
 
 GRANT_CREATION prerequisites chỉ là dữ liệu cho command hiện tại, không phải COMPLETE
 snapshot, xác minh Face hay quyền live. Backdated validFrom không chứng minh lịch sử
-ownership/quyền được biết khi camera chụp; các quyết định gốc không được sửa. Reader
-historical và runtime quyền hai tầng còn cần tích hợp. Đồng thời create trước một DENY
+ownership/quyền được biết khi camera chụp; các quyết định gốc không được sửa. Đã có
+reader historical nội bộ; runtime quyền hai tầng còn cần tích hợp. Create trước một DENY
 mới có thể là thứ tự serial hợp lệ; runtime phải recheck cả hai tầng, không dựa vào việc
 Worker ALLOW đã từng được cấp. Không dùng async child cascade như cơ chế đúng duy nhất.
 Lịch sử chưa đủ để bật epoch READY hoặc xác minh Worker live; chỉ có bảng/digest không
 chứng minh completeness. Anchor legacy NULL giữ nguyên, không suy từ membership hiện tại.
 Worker assignment không tự cấp quyền Zone. Không áp dụng migration tự động lúc startup
 hoặc lên Neon chưa duyệt. Migration phải chạy trước source sử dụng các bảng audit.
+
+`ZoneAuthoritySnapshotService` đọc lịch sử qua cùng caller SERIALIZABLE manager;
+query được export từ Workforce giữ membership xuyên Site, global Contractor và cả
+participation/assignment inactive. Selector kiểm payload đóng, revision liên tục theo
+source, thời gian không đi ngược và đối soát latest fact với current source inventory.
+Current rows chỉ kiểm drift, không thay thế state tại `capturedAt`. Snapshot giữ cả
+negative facts và provenance; giới hạn2048 facts/sources và2MiB JSON, overflow trả
+UNAVAILABLE thay vì truncate. Assignment inventory hiện đọc toàn bộ Site theo Worker;
+quota2048 vì vậy tính cả phân công ở Site khác, chưa có compaction cho Worker lâu năm.
+SQL lỗi được truyền về transaction retry; chỉ40001/40P01 được retry tự động.
+
+Reader chưa được đăng ký runtime. Mặc định không có coverage attestation nên trả
+UNAVAILABLE; chỉ nhận một epoch READY có đúng writer-manifest đã được owner duyệt.
+Attestation là điều kiện bên ngoài, không phải thuật toán tự chứng minh baseline đầy đủ.
+READY/manifest trong integration test là synthetic, không phải cutover dữ liệu thật.
+Artifact có SHA-256/JCS để đối chiếu payload đã dùng; hash không chứng minh identity,
+authenticity hay coverage. B3 còn phải lưu assessment/snapshot cùng transaction,
+validate artifact khi replay, giữ quyết định gốc và append retrospective review riêng.
+Replay legacy chưa có stored snapshot trả UNAVAILABLE, không đọc current rows để dựng lại.
+Chưa bật live identity, public endpoint mới hay thay đổi quyền trên demo/Neon.
 
 Audit đã có dữ liệu chặn UPDATE/DELETE và TRUNCATE kể cả qua CASCADE; bảng audit rỗng
 cho phép cleanup. Downgrade từ chối nếu có grant Contractor, command/fact/epoch hoặc
