@@ -193,6 +193,169 @@ function assignmentServiceFor(participations: ReturnType<typeof participation>[]
 const assignmentStart = '2026-10-03T08:00:00.000Z';
 const assignmentEnd = '2026-10-03T17:00:00.000Z';
 
+function reviewServiceFor(options: {
+  status: WorkerSiteZoneAssignmentStatus;
+  workerActive?: boolean;
+  contractorActive?: boolean;
+  missingWorker?: boolean;
+  missingContractor?: boolean;
+  missingZone?: boolean;
+  rows?: ReturnType<typeof participation>[];
+}) {
+  const request = {
+    id: IDs.zone,
+    workerId: IDs.worker,
+    siteId: IDs.site,
+    zoneIds: [IDs.zone],
+    status: options.status,
+    validFrom: new Date(assignmentStart),
+    validUntil: new Date(assignmentEnd),
+    safetyReviewedByUserId: null,
+    siteManagerDecidedByUserId: null,
+  };
+  let saves = 0;
+  const manager = {
+    getRepository(target: unknown) {
+      if (target === WorkerSiteZoneAssignmentEntity) {
+        const builder = {
+          setLock: () => builder,
+          where: () => builder,
+          getOne: async () => request,
+        };
+        return {
+          createQueryBuilder: () => builder,
+          save: async (value: unknown) => {
+            saves++;
+            return value;
+          },
+        };
+      }
+      if (target === WorkerEntity)
+        return {
+          findOneBy: async () =>
+            options.missingWorker
+              ? null
+              : {
+                  id: IDs.worker,
+                  contractorId: IDs.contractor,
+                  isActive: options.workerActive ?? true,
+                },
+        };
+      if (target === ContractorEntity)
+        return {
+          findOneBy: async () =>
+            options.missingContractor
+              ? null
+              : {
+                  id: IDs.contractor,
+                  isActive: options.contractorActive ?? true,
+                },
+        };
+      if (target === ContractorSiteParticipationEntity)
+        return {
+          findBy: async (scope: unknown) => {
+            assert.deepEqual(scope, {
+              contractorId: IDs.contractor,
+              siteId: IDs.site,
+              isActive: true,
+            });
+            return options.rows ?? [participation(assignmentStart, assignmentEnd)];
+          },
+        };
+      if (target === ZoneEntity)
+        return {
+          findBy: async (scope: { siteId: string }) => {
+            assert.equal(scope.siteId, IDs.site);
+            return options.missingZone ? [] : [{ id: IDs.zone }];
+          },
+        };
+      throw new Error('Unexpected repository');
+    },
+  } as unknown as EntityManager;
+  return {
+    service: new ContractorOperationsService({
+      transaction: async (callback: (manager: EntityManager) => Promise<unknown>) =>
+        callback(manager),
+    } as never),
+    request,
+    saves: () => saves,
+  };
+}
+
+for (const stage of ['safetyReview', 'approval'] as const) {
+  const status =
+    stage === 'safetyReview'
+      ? WorkerSiteZoneAssignmentStatus.PENDING
+      : WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
+  const actor: WorkforceActor = {
+    id: IDs.actor,
+    mustChangePassword: false,
+    roleAssignments: [
+      {
+        role: stage === 'safetyReview' ? UserRole.SAFETY_OFFICER : UserRole.SITE_MANAGER,
+        siteId: IDs.site,
+      },
+    ],
+  };
+  const run = (service: ContractorOperationsService) =>
+    stage === 'safetyReview'
+      ? service.safetyReview(actor, IDs.zone)
+      : service.siteManagerDecision(actor, IDs.zone, { approve: true });
+  for (const scenario of [
+    { name: 'worker was disabled', workerActive: false },
+    { name: 'worker is missing', missingWorker: true },
+    { name: 'contractor was disabled', contractorActive: false },
+    { name: 'contractor is missing', missingContractor: true },
+    { name: 'participation was withdrawn', rows: [] },
+    {
+      name: 'participation was shortened',
+      rows: [participation(assignmentStart, '2026-10-03T10:00:00Z')],
+    },
+    { name: 'zone no longer belongs to the target Site', missingZone: true },
+  ]) {
+    test(`Assignment ${stage} revalidates when ${scenario.name}`, async () => {
+      const fixture = reviewServiceFor({ status, ...scenario });
+      await assert.rejects(
+        run(fixture.service),
+        (error: unknown) => error instanceof PublicHttpException,
+      );
+      assert.equal(fixture.saves(), 0);
+      assert.equal(fixture.request.status, status);
+      assert.equal(fixture.request.safetyReviewedByUserId, null);
+      assert.equal(fixture.request.siteManagerDecidedByUserId, null);
+    });
+  }
+  test(`Assignment ${stage} accepts a still-valid assignment without granting Zone permission`, async () => {
+    const fixture = reviewServiceFor({ status });
+    await run(fixture.service);
+    assert.equal(fixture.saves(), 1);
+    assert.equal(
+      fixture.request.status,
+      stage === 'safetyReview'
+        ? WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED
+        : WorkerSiteZoneAssignmentStatus.APPROVED,
+    );
+  });
+}
+
+test('Site Manager can reject an assignment even after participation was withdrawn', async () => {
+  const fixture = reviewServiceFor({
+    status: WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED,
+    rows: [],
+  });
+  await fixture.service.siteManagerDecision(
+    {
+      id: IDs.actor,
+      mustChangePassword: false,
+      roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: IDs.site }],
+    },
+    IDs.zone,
+    { approve: false },
+  );
+  assert.equal(fixture.saves(), 1);
+  assert.equal(fixture.request.status, WorkerSiteZoneAssignmentStatus.REJECTED);
+});
+
 for (const scenario of [
   {
     name: 'assignment outlives contractor participation',

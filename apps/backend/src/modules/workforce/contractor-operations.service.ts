@@ -424,6 +424,30 @@ export class ContractorOperationsService {
     });
   }
 
+  /** Recheck mutable eligibility before a positive review, not just at submission.
+   * This is not historical ownership or serialization of other domain writers.
+   * Assignment remains a work allocation; this check never creates Zone grants.
+   */
+  private async requireAssignmentEligibility(
+    manager: EntityManager,
+    request: WorkerSiteZoneAssignmentEntity,
+  ): Promise<void> {
+    const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: request.workerId });
+    if (!worker?.contractorId || !worker.isActive) this.forbidden();
+    await this.requireActiveParticipation(
+      manager,
+      worker.contractorId,
+      request.siteId,
+      request.validFrom,
+      request.validUntil,
+    );
+    const zones = await manager.getRepository(ZoneEntity).findBy({
+      id: In(request.zoneIds),
+      siteId: request.siteId,
+    });
+    if (zones.length !== request.zoneIds.length) this.forbidden();
+  }
+
   async safetyReview(actor: WorkforceActor, requestIdValue: string) {
     const requestId = uuid(requestIdValue);
     return this.dataSource.transaction(async (manager) => {
@@ -437,6 +461,7 @@ export class ContractorOperationsService {
       await this.requireSiteRole(actor, request.siteId, UserRole.SAFETY_OFFICER);
       if (request.status !== WorkerSiteZoneAssignmentStatus.PENDING)
         conflict('Assignment is not pending');
+      await this.requireAssignmentEligibility(manager, request);
       request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
       request.safetyReviewedByUserId = actor.id;
       return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
@@ -461,6 +486,7 @@ export class ContractorOperationsService {
       await this.requireSiteRole(actor, request.siteId, UserRole.SITE_MANAGER);
       if (request.status !== WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED)
         conflict('Assignment requires Safety review');
+      if (value.approve) await this.requireAssignmentEligibility(manager, request);
       request.status = value.approve
         ? WorkerSiteZoneAssignmentStatus.APPROVED
         : WorkerSiteZoneAssignmentStatus.REJECTED;
