@@ -16,6 +16,17 @@ function publicCode(code: string) {
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
 
+function siteManagerActor(siteId: string): AuthenticatedUser {
+  return {
+    id: randomUUID(),
+    username: 'test-site-manager',
+    displayName: 'Test Site Manager',
+    isActive: true,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
+  };
+}
+
 function adminActor(): AuthenticatedUser {
   return {
     id: randomUUID(),
@@ -40,8 +51,9 @@ function contractorRepresentativeActor(siteId: string): AuthenticatedUser {
 
 test('ScheduleConfigurationService validates shift input before database access', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const siteId = randomUUID();
   await assert.rejects(
-    service.createShift(adminActor(), randomUUID(), {
+    service.createShift(siteManagerActor(siteId), siteId, {
       name: 'Day shift',
       startsAt: 'not-a-date',
       endsAt: '2026-10-01T17:00:00.000Z',
@@ -53,8 +65,9 @@ test('ScheduleConfigurationService validates shift input before database access'
 
 test('ScheduleConfigurationService rejects a shift ending before it starts', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const siteId = randomUUID();
   await assert.rejects(
-    service.createShift(adminActor(), randomUUID(), {
+    service.createShift(siteManagerActor(siteId), siteId, {
       name: 'Invalid shift',
       startsAt: '2026-10-01T17:00:00.000Z',
       endsAt: '2026-10-01T08:00:00.000Z',

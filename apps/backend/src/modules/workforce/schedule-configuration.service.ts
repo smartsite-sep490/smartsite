@@ -12,8 +12,10 @@ import { UserRole } from '../../database/entities/user.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../database/entities/contractor-representative-assignment.entity.js';
 import { ContractorShiftAssignmentEntity } from '../../database/entities/contractor-shift-assignment.entity.js';
 import { ContractorEntity } from '../../database/entities/contractor.entity.js';
+import { ContractorSiteParticipationEntity } from '../../database/entities/contractor-site-participation.entity.js';
 import { AuthenticatedUser } from '../auth/auth.service.js';
 import { page } from '../../common/configuration/commands.js';
+import { hasActiveContractorParticipation } from './contractor-participation.js';
 import {
   CreateScheduleVersionDto,
   CreateShiftDto,
@@ -90,6 +92,8 @@ export class ScheduleConfigurationService {
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .findOneBy({ siteId: scopedSiteId, contractorId: worker.contractorId, userId: user.id });
       if (!representative) this.forbidden();
+      if (!(await hasActiveContractorParticipation(this.dataSource.manager, worker.contractorId, scopedSiteId)))
+        this.forbidden();
     } else if (!isManager && (worker.userId !== user.id || !worker.isActive)) {
       this.forbidden();
     }
@@ -116,7 +120,7 @@ export class ScheduleConfigurationService {
 
   private assertScheduleWriter(user: AuthenticatedUser, siteId: string): void {
     this.assertPasswordChanged(user);
-    if (!this.isGlobalAdmin(user) && !this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
+    if (!this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
       this.forbidden();
   }
 
@@ -132,7 +136,8 @@ export class ScheduleConfigurationService {
       const assignment = await this.dataSource
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .findOneBy({ siteId, userId: user.id });
-      if (assignment) return assignment.contractorId;
+      if (assignment && await hasActiveContractorParticipation(this.dataSource.manager, assignment.contractorId, siteId))
+        return assignment.contractorId;
     }
 
     if (this.hasSiteRole(user, UserRole.WORKER, siteId)) {
@@ -163,6 +168,7 @@ export class ScheduleConfigurationService {
       .getRepository(ContractorRepresentativeAssignmentEntity)
       .findOneBy({ siteId, contractorId: worker.contractorId, userId: user.id });
     if (!representative) this.forbidden();
+    if (!(await hasActiveContractorParticipation(manager, worker.contractorId, siteId))) this.forbidden();
 
     const shiftAssignment = await manager
       .getRepository(ContractorShiftAssignmentEntity)
@@ -351,15 +357,21 @@ export class ScheduleConfigurationService {
     const scopedContractorId = uuid(value.contractorId);
 
     return this.dataSource.transaction(async (manager) => {
-      const [shift, contractor] = await Promise.all([
+      const [shift, contractor, participations] = await Promise.all([
         manager.getRepository(ShiftEntity).findOneBy({ id: scopedShiftId, siteId: scopedSiteId }),
         manager.getRepository(ContractorEntity).findOneBy({
           id: scopedContractorId,
+          isActive: true,
+        }),
+        manager.getRepository(ContractorSiteParticipationEntity).findBy({
+          contractorId: scopedContractorId,
           siteId: scopedSiteId,
           isActive: true,
         }),
       ]);
-      if (!shift || !contractor) missing();
+      const now = Date.now();
+      if (!shift || !contractor || !participations.some(({ validFrom, validUntil }) =>
+        validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now))) missing();
       try {
         return await manager.getRepository(ContractorShiftAssignmentEntity).save({
           id: randomUUID(),
@@ -426,11 +438,17 @@ export class ScheduleConfigurationService {
     let workerIdScope: string | undefined;
     if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER
-      const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+      const rep = this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)
+        ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+        : null;
       if (rep) {
+        if (!(await hasActiveContractorParticipation(this.dataSource.manager, rep.contractorId, scopedSiteId)))
+          this.forbidden();
         contractorIdScope = rep.contractorId;
       } else {
-        const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id });
+        const worker = this.hasSiteRole(user, UserRole.WORKER, scopedSiteId)
+          ? await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+          : null;
         if (worker) {
           workerIdScope = worker.id;
         } else {

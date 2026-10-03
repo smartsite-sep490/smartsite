@@ -17,6 +17,8 @@ import { createLoggerParams } from '../../src/observability/logger.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
 import { ContractorEntity } from '../../src/database/entities/contractor.entity.js';
+import { ContractorSiteParticipationEntity } from '../../src/database/entities/contractor-site-participation.entity.js';
+import { ContractorRepresentativeGrantEntity } from '../../src/database/entities/contractor-representative-grant.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../src/database/entities/contractor-representative-assignment.entity.js';
 import { ContractorShiftAssignmentEntity } from '../../src/database/entities/contractor-shift-assignment.entity.js';
 import { WorkerEntity } from '../../src/database/entities/worker.entity.js';
@@ -69,8 +71,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   const contractorA = randomUUID();
   const contractorB = randomUUID();
   await dataSource.getRepository(ContractorEntity).save([
-    { id: contractorA, siteId: siteA, code: `CA_${suffix}`, name: 'Contractor A', isActive: true },
-    { id: contractorB, siteId: siteA, code: `CB_${suffix}`, name: 'Contractor B', isActive: true },
+    { id: contractorA, code: `CA_${suffix}`, name: 'Contractor A', isActive: true },
+    { id: contractorB, code: `CB_${suffix}`, name: 'Contractor B', isActive: true },
+  ]);
+  await dataSource.getRepository(ContractorSiteParticipationEntity).save([
+    { id: randomUUID(), contractorId: contractorA, siteId: siteA, validFrom: new Date(Date.now() - 60_000), validUntil: null, isActive: true },
+    { id: randomUUID(), contractorId: contractorB, siteId: siteA, validFrom: new Date(Date.now() - 60_000), validUntil: null, isActive: true },
   ]);
 
   const pass = 'Password123!';
@@ -111,6 +117,9 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     siteId: siteA,
     contractorId: contractorA,
     userId: repA.id,
+  });
+  await dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
+    id: randomUUID(), userId: repA.id, contractorId: contractorA,
   });
 
   const workerAUser = await usersService.create({

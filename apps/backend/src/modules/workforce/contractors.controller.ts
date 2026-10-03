@@ -25,10 +25,10 @@ import {
   WorkforceConfigurationService,
 } from './workforce-configuration.service.js';
 
-function contractorResponse(contractor: ContractorEntity) {
+function contractorResponse(contractor: ContractorEntity, siteId: string) {
   return {
     id: contractor.id,
-    siteId: contractor.siteId,
+    siteId,
     code: contractor.code,
     name: contractor.name,
     isActive: contractor.isActive,
@@ -76,7 +76,7 @@ export class ContractorsController {
       siteId,
       resourceId: contractor.id,
     });
-    return contractorResponse(contractor);
+    return contractorResponse(contractor, siteId);
   }
 
   @Post('contractors/:contractorId/representatives')
@@ -105,7 +105,7 @@ export class ContractorsController {
     @Param('siteId') siteId: string,
   ) {
     const result = await this.workforce.listContractors(request.user!, siteId);
-    return { items: result.items.map(contractorResponse), total: result.total };
+    return { items: result.items.map(contractor => contractorResponse(contractor, siteId)), total: result.total };
   }
 
   @Get('contractor-representative-assignments')

@@ -14,6 +14,7 @@ import { UserRole } from '../../database/entities/user.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../database/entities/worker-schedule.entity.js';
 import type { AuthenticatedUser } from '../auth/auth.service.js';
+import { hasActiveContractorParticipation } from './contractor-participation.js';
 import {
   CreateAbsenceRequestDto,
   CreateShiftChangeRequestDto,
@@ -138,6 +139,8 @@ export class SchedulingWorkflowService {
       .getRepository(ContractorRepresentativeAssignmentEntity)
       .findOneBy({ siteId: worker.siteId, contractorId: worker.contractorId, userId: actor.id });
     if (!representative) this.forbidden();
+    if (!(await hasActiveContractorParticipation(manager, worker.contractorId, worker.siteId)))
+      this.forbidden();
     return 'CONTRACTOR_REPRESENTATIVE';
   }
 
@@ -159,6 +162,7 @@ export class SchedulingWorkflowService {
       .getRepository(ContractorRepresentativeAssignmentEntity)
       .findOneBy({ siteId, contractorId, userId: actor.id });
     if (!assignment) this.forbidden();
+    if (!(await hasActiveContractorParticipation(manager, contractorId, siteId))) this.forbidden();
   }
 
   private async assertTargetShift(manager: EntityManager, siteId: string, shiftId: string) {
@@ -833,11 +837,16 @@ export class SchedulingWorkflowService {
     if (actor.roleAssignments.some(a => a.role === UserRole.ADMIN || (a.role === UserRole.SITE_MANAGER && a.siteId === siteId))) {
       return { type: 'ALL' };
     }
-    const rep = await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId, userId: actor.id });
-    if (rep) {
+    const rep = actor.roleAssignments.some(a =>
+      a.role === UserRole.CONTRACTOR_REPRESENTATIVE && a.siteId === siteId)
+      ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId, userId: actor.id })
+      : null;
+    if (rep && await hasActiveContractorParticipation(this.dataSource.manager, rep.contractorId, siteId)) {
       return { type: 'CONTRACTOR', contractorId: rep.contractorId };
     }
-    const worker = await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId, userId: actor.id, isActive: true });
+    const worker = this.hasSiteRole(actor, UserRole.WORKER, siteId)
+      ? await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId, userId: actor.id, isActive: true })
+      : null;
     if (worker) {
       return { type: 'WORKER', workerId: worker.id };
     }
