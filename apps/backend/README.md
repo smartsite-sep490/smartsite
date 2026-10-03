@@ -115,9 +115,20 @@ row lock giữ revocation đầu tiên. Chưa có public API/provider runtime ch
 không sinh Worker grant hoặc bật authority từ participation. Kiểm command-time không
 chứng minh participation bao phủ toàn khoảng đề xuất hoặc lịch sử đã COMPLETE.
 
-Worker ALLOW containment và reader quyền hai tầng còn cần tích hợp. Worker create/revoke
-hiện giữ semantics quản lý grant cũ; audit không chứng minh
-Worker ALLOW đã nằm trong ceiling Contractor hoặc luồng live đã bật.
+Worker ALLOW create kiểm toàn khoảng cấu hình trong cùng transaction: active Worker/
+Contractor hiện tại, participation active, assignment APPROVED có Contractor anchor
+đúng và Contractor ALLOW phải bao phủ toàn khoảng; Contractor DENY chồng thời gian
+chặn cấp. Adjacent intervals hợp lệ, gap1ms hoặc finite coverage cho end vô hạn bị
+từ chối409 CONFLICT, không để lại command/grant/history. DENY issuance và revoke legacy
+giữ behavior trước. Query Workforce dùng caller manager; current sources được read-lock
+và serialization conflict retry cả transaction. Existing legacy grant không bị rewrite.
+
+GRANT_CREATION prerequisites chỉ là dữ liệu cho command hiện tại, không phải COMPLETE
+snapshot, xác minh Face hay quyền live. Backdated validFrom không chứng minh lịch sử
+ownership/quyền được biết khi camera chụp; các quyết định gốc không được sửa. Reader
+historical và runtime quyền hai tầng còn cần tích hợp. Đồng thời create trước một DENY
+mới có thể là thứ tự serial hợp lệ; runtime phải recheck cả hai tầng, không dựa vào việc
+Worker ALLOW đã từng được cấp. Không dùng async child cascade như cơ chế đúng duy nhất.
 Lịch sử chưa đủ để bật epoch READY hoặc xác minh Worker live; chỉ có bảng/digest không
 chứng minh completeness. Anchor legacy NULL giữ nguyên, không suy từ membership hiện tại.
 Worker assignment không tự cấp quyền Zone. Không áp dụng migration tự động lúc startup

@@ -39,15 +39,8 @@ interface WorkerZoneAssignmentInterval extends ContractorParticipationInterval {
   zoneId: string;
 }
 
-/**
- * Internal policy facts, NOT a public wire contract or an implemented reader.
- * Only the owner-approved history reader may assert COMPLETE. Each interval's
- * scope is checked here; its historical eligibility is still the reader's duty.
- * A nonempty revision identifies the reader snapshot; it is not identity proof.
- */
-export interface CompleteZoneAuthoritySnapshot {
-  status: 'COMPLETE';
-  snapshotVersion: string;
+/** Common scoped interval inputs; this shape alone certifies neither identity nor history. */
+interface ZoneGrantCoverageFacts {
   siteId: string;
   zoneId: string;
   workerId: string;
@@ -55,7 +48,19 @@ export interface CompleteZoneAuthoritySnapshot {
   participationIntervals: readonly ContractorParticipationInterval[];
   assignmentIntervals: readonly WorkerZoneAssignmentInterval[];
   contractorGrants: readonly ContractorGrant[];
+}
+
+/** Only the owner-approved historical reader may assert COMPLETE and its revision. */
+export interface CompleteZoneAuthoritySnapshot extends ZoneGrantCoverageFacts {
+  status: 'COMPLETE';
+  snapshotVersion: string;
   workerGrants: readonly WorkerGrant[];
+}
+
+/** Current configured prerequisites read for one grant command, never event-time history. */
+export interface CurrentWorkerZoneGrantPrerequisites extends ZoneGrantCoverageFacts {
+  purpose: 'GRANT_CREATION';
+  checkedAt: Date;
 }
 
 type RecordValue = Record<string, unknown>;
@@ -125,25 +130,36 @@ function validGrants(
   );
 }
 
-function completeSnapshotForScope(
+function coverageFactsForScope(
   snapshot: unknown,
   scope: ZoneAuthorityScope,
-): snapshot is CompleteZoneAuthoritySnapshot {
+): snapshot is ZoneGrantCoverageFacts {
   return (
     validId(scope.siteId) &&
     validId(scope.zoneId) &&
     validId(scope.workerId) &&
     record(snapshot) &&
-    snapshot.status === 'COMPLETE' &&
-    typeof snapshot.snapshotVersion === 'string' &&
-    Boolean(snapshot.snapshotVersion.trim()) &&
     sameId(snapshot.siteId, scope.siteId) &&
     sameId(snapshot.zoneId, scope.zoneId) &&
     sameId(snapshot.workerId, scope.workerId) &&
     validId(snapshot.contractorId) &&
     validMembershipIntervals(snapshot.participationIntervals, snapshot, false) &&
     validMembershipIntervals(snapshot.assignmentIntervals, snapshot, true) &&
-    validGrants(snapshot.contractorGrants, snapshot, false) &&
+    validGrants(snapshot.contractorGrants, snapshot, false)
+  );
+}
+
+function completeSnapshotForScope(
+  snapshot: unknown,
+  scope: ZoneAuthorityScope,
+): snapshot is CompleteZoneAuthoritySnapshot {
+  return (
+    record(snapshot) &&
+    snapshot.status === 'COMPLETE' &&
+    snapshot.purpose !== 'GRANT_CREATION' &&
+    typeof snapshot.snapshotVersion === 'string' &&
+    Boolean(snapshot.snapshotVersion.trim()) &&
+    coverageFactsForScope(snapshot, scope) &&
     validGrants(snapshot.workerGrants, snapshot, true)
   );
 }
@@ -220,6 +236,40 @@ export function checkWorkerZoneAllowContainment(
   )
     return { status: 'UNAVAILABLE', reasonCode: 'INCOMPLETE_AUTHORITY' };
 
+  return containmentOfValidatedFacts(snapshot, request);
+}
+
+/** No COMPLETE claim: the caller must read/lock current sources in its command transaction. */
+export function checkCurrentWorkerZoneAllowPrerequisites(
+  prerequisites: unknown,
+  proposed: unknown,
+): WorkerZoneAllowContainmentResult {
+  if (
+    !record(proposed) ||
+    !validId(proposed.siteId) ||
+    !validId(proposed.zoneId) ||
+    !validId(proposed.workerId) ||
+    !validId(proposed.contractorId) ||
+    !validInterval({ ...proposed, revokedAt: null })
+  )
+    return { status: 'UNAVAILABLE', reasonCode: 'INVALID_REQUEST' };
+  const request = proposed as unknown as WorkerZoneAllowProposal;
+  if (
+    !record(prerequisites) ||
+    prerequisites.purpose !== 'GRANT_CREATION' ||
+    prerequisites.status !== undefined ||
+    !validDate(prerequisites.checkedAt) ||
+    !coverageFactsForScope(prerequisites, request) ||
+    !sameId(prerequisites.contractorId, request.contractorId)
+  )
+    return { status: 'UNAVAILABLE', reasonCode: 'INCOMPLETE_AUTHORITY' };
+  return containmentOfValidatedFacts(prerequisites, request);
+}
+
+function containmentOfValidatedFacts(
+  snapshot: ZoneGrantCoverageFacts,
+  request: WorkerZoneAllowProposal,
+): WorkerZoneAllowContainmentResult {
   const start = request.validFrom.getTime();
   const end = request.validUntil?.getTime() ?? Infinity;
   const denied = snapshot.contractorGrants.some((grant) => {

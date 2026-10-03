@@ -3,7 +3,14 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsEnum, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator';
 import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
-import { command, invalid, missing, page, uuid } from '../../common/configuration/commands.js';
+import {
+  command,
+  conflict,
+  invalid,
+  missing,
+  page,
+  uuid,
+} from '../../common/configuration/commands.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import {
   ZoneAccessEffect,
@@ -18,6 +25,9 @@ import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assi
 import { UserRole } from '../../database/entities/user.entity.js';
 import { ZoneAuthoritySourceKind } from '../../database/entities/zone-authority-fact-revision.entity.js';
 import { executeZoneAuthorityCommand, type ZoneAuthorityActor } from './zone-authority-history.js';
+import { ContractorZoneAccessGrantEntity } from '../../database/entities/contractor-zone-access-grant.entity.js';
+import { readZoneGrantWorkforcePrerequisites } from '../workforce/workforce-configuration.service.js';
+import { checkCurrentWorkerZoneAllowPrerequisites } from './zone-authority-chain.policy.js';
 
 export class CreateZoneAccessGrantCommand {
   @IsUUID()
@@ -171,7 +181,7 @@ export class ZoneAccessManagementService {
         validFrom: value.validFrom,
         validUntil: value.validUntil ?? null,
       },
-      async (manager) => {
+      async (manager, at) => {
         const zone = await manager
           .getRepository(ZoneEntity)
           .findOneBy({ id: scopedZoneId, siteId: scopedSiteId });
@@ -179,6 +189,47 @@ export class ZoneAccessManagementService {
           .getRepository(WorkerEntity)
           .findOneBy({ id: uuid(value.workerId), siteId: scopedSiteId, isActive: true });
         if (!zone || !worker) missing();
+        if (value.effect === ZoneAccessEffect.ALLOW) {
+          const workforce = await readZoneGrantWorkforcePrerequisites(
+            manager,
+            scopedSiteId,
+            scopedZoneId,
+            worker.id,
+          );
+          if (!workforce) conflict('Worker grant prerequisites are unavailable');
+          const contractorGrants = await manager
+            .getRepository(ContractorZoneAccessGrantEntity)
+            .find({
+              where: {
+                siteId: scopedSiteId,
+                zoneId: scopedZoneId,
+                contractorId: workforce.contractorId,
+              },
+              order: { id: 'ASC' },
+              lock: { mode: 'pessimistic_read' },
+            });
+          const containment = checkCurrentWorkerZoneAllowPrerequisites(
+            {
+              ...workforce,
+              zoneId: scopedZoneId,
+              purpose: 'GRANT_CREATION',
+              checkedAt: at,
+              contractorGrants,
+            },
+            {
+              siteId: scopedSiteId,
+              zoneId: scopedZoneId,
+              workerId: worker.id,
+              contractorId: worker.contractorId,
+              validFrom,
+              validUntil,
+            },
+          );
+          if (containment.status !== 'CONTAINED')
+            conflict(
+              'Worker ALLOW exceeds available Contractor, participation or assignment authority',
+            );
+        }
         return manager.getRepository(ZoneAccessGrantEntity).save({
           id: randomUUID(),
           siteId: scopedSiteId,

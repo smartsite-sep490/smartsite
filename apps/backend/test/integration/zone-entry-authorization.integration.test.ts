@@ -10,6 +10,7 @@ import {
   EventProcessingStatus,
   SiteEntity,
   ZoneAccessEffect,
+  ZoneAccessGrantEntity,
   ZoneEntity,
   ZoneEntryDecisionEntity,
   ZoneRestrictionPolicy,
@@ -34,7 +35,7 @@ async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promis
   }
 }
 
-test('MF06 resolves event-time allow, deny, expired and unknown identity and records decisions idempotently', async () => {
+test('legacy single-tier Zone decision compatibility retains allow, deny, expiry, unknown and idempotent records', async () => {
   await withDataSource(async (source) => {
     const siteId = randomUUID();
     const zoneId = randomUUID();
@@ -102,11 +103,18 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
     });
 
     const access = new ZoneAccessManagementService(source);
-    await access.createGrant(siteId, zoneId, {
+    // Existing legacy projection, not a new ALLOW command or proof of a
+    // historical COMPLETE two-tier authority snapshot.
+    await source.getRepository(ZoneAccessGrantEntity).insert({
+      id: randomUUID(),
+      siteId,
+      zoneId,
       workerId: actualWorkerId,
+      contractorId: null,
       effect: ZoneAccessEffect.ALLOW,
-      validFrom: '2026-09-28T07:00:00.000Z',
-      validUntil: '2026-09-28T09:00:00.000Z',
+      validFrom: new Date('2026-09-28T07:00:00.000Z'),
+      validUntil: new Date('2026-09-28T09:00:00.000Z'),
+      revokedAt: null,
     });
 
     const service = new ZoneEntryAuthorizationService();

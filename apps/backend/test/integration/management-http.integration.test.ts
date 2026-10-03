@@ -12,11 +12,20 @@ import { DataSource } from 'typeorm';
 import dataSource from '../support/test-data-source.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
+import type { ErrorResponseDto } from '../../src/common/http/error-response.dto.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
+import {
+  UserEntity,
+  WorkerEntity,
+  WorkerSiteZoneAssignmentEntity,
+  WorkerSiteZoneAssignmentStatus,
+  ZoneAccessEffect,
+} from '../../src/database/entities/index.js';
+import { ContractorZoneAccessManagementService } from '../../src/modules/zones/contractor-zone-access-management.service.js';
 
 after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
@@ -158,12 +167,61 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
       adminToken,
     );
     assert.equal(timezoneLessGrant.status, 400);
+    const grantValidFrom = new Date(Date.now() + 60_000).toISOString();
+    const unavailableGrant = await post(
+      `/sites/${site.id}/zones/${zone.id}/access-grants`,
+      { workerId: worker.id, effect: 'ALLOW', validFrom: grantValidFrom, validUntil: null },
+      adminToken,
+    );
+    assert.equal(unavailableGrant.status, 409);
+    const unavailableBody = (await unavailableGrant.json()) as ErrorResponseDto;
+    assert.equal(unavailableBody.code, 'CONFLICT');
+    assert.equal(unavailableBody.success, false);
+    assert.equal(unavailableBody.statusCode, 409);
+
+    // Synthetic command prerequisites. This exercises the HTTP grant guard,
+    // not Worker registration/assignment review or real camera identity.
+    const contractorResponse = await post(
+      `/sites/${site.id}/contractors`,
+      { code: `CTR-${suffix}`, name: 'Synthetic HTTP Contractor' },
+      adminToken,
+    );
+    assert.equal(contractorResponse.status, 201);
+    const contractor = (await contractorResponse.json()) as { id: string };
+    const adminRow = await dataSource
+      .getRepository(UserEntity)
+      .findOneByOrFail({ username: `http-admin-${suffix}` });
+    await dataSource
+      .getRepository(WorkerEntity)
+      .update({ id: worker.id }, { contractorId: contractor.id });
+    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).insert({
+      id: randomUUID(),
+      workerId: worker.id,
+      siteId: site.id,
+      contractorId: contractor.id,
+      zoneIds: [zone.id],
+      status: WorkerSiteZoneAssignmentStatus.APPROVED,
+      validFrom: new Date(grantValidFrom),
+      validUntil: null,
+      requestedByUserId: adminRow.id,
+    });
+    await new ContractorZoneAccessManagementService(dataSource).createGrant(
+      site.id,
+      zone.id,
+      {
+        contractorId: contractor.id,
+        effect: ZoneAccessEffect.ALLOW,
+        validFrom: grantValidFrom,
+        validUntil: null,
+      },
+      { kind: 'USER', userId: adminRow.id },
+    );
     const grantResponse = await post(
       `/sites/${site.id}/zones/${zone.id}/access-grants`,
       {
         workerId: worker.id,
         effect: 'ALLOW',
-        validFrom: '2026-09-28T00:00:00.000Z',
+        validFrom: grantValidFrom,
         validUntil: null,
       },
       adminToken,

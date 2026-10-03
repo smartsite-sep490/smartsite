@@ -46,11 +46,18 @@ async function createGrant() {
     isActive: true,
   });
   const service = new ZoneAccessManagementService(dataSource);
-  const grant = await service.createGrant(siteId, zoneId, {
+  // Explicit synthetic legacy grant: new ALLOW commands require a Contractor
+  // ceiling and approved anchored allocation. Revoking legacy rights stays valid.
+  const grant = await dataSource.getRepository(ZoneAccessGrantEntity).save({
+    id: randomUUID(),
+    siteId,
+    zoneId,
     workerId,
+    contractorId: null,
     effect: ZoneAccessEffect.ALLOW,
-    validFrom: '2026-10-03T07:00:00.000Z',
+    validFrom: new Date('2026-10-03T07:00:00.000Z'),
     validUntil: null,
+    revokedAt: null,
   });
   return { service, siteId, zoneId, grant };
 }
