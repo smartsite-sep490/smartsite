@@ -3,14 +3,31 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CreateVisitCommand } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import {
+  IconAlertTriangle,
+  IconArrowRight,
+  IconBuilding2,
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconKey,
+  IconLoader,
+  IconRefresh,
+  IconShield,
+  IconUser,
+  IconUsers,
+} from '../icons';
 import { QrPassCard } from './QrPassCard';
+
 function localTime(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
+
 function readReference() {
   const m = /^#visitor-pass=([a-f0-9-]{36})\.([a-f0-9]{64})$/.exec(window.location.hash);
   return m ? { visitId: m[1]!, accessKey: m[2]! } : null;
 }
+
 export function VisitorRegistrationView({
   apiUrl,
   onBack,
@@ -19,18 +36,20 @@ export function VisitorRegistrationView({
   onBack: () => void;
 }) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
-  const [reference, setReference] = useState(readReference),
-    [siteId, setSiteId] = useState(''),
-    [message, setMessage] = useState('');
+  const [reference, setReference] = useState(readReference);
+  const [siteId, setSiteId] = useState('');
+  const [message, setMessage] = useState('');
   const [schedule] = useState(() => ({
     from: localTime(new Date(Date.now() + 3600_000)),
     until: localTime(new Date(Date.now() + 7200_000)),
   }));
   const [attempt, setAttempt] = useState<CreateVisitCommand | null>(null);
+
   const sites = useQuery({
     queryKey: ['visitor-registration', apiUrl, 'sites'],
     queryFn: () => client.listVisitorSites(),
   });
+
   const pass = useQuery({
     queryKey: ['visitor-registration', apiUrl, reference?.visitId, reference?.accessKey],
     enabled: !!reference,
@@ -39,6 +58,7 @@ export function VisitorRegistrationView({
     refetchOnWindowFocus: false,
     refetchInterval: (q) => (q.state.data?.visit.status === 'PENDING' ? 15_000 : 240_000),
   });
+
   const register = useMutation({
     mutationFn: (input: CreateVisitCommand) =>
       client.registerVisit(siteId || sites.data!.items[0]!.id, input),
@@ -47,6 +67,7 @@ export function VisitorRegistrationView({
       window.history.replaceState(null, '', `#visitor-pass=${visit.id}.${input.accessKey}`);
     },
   });
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const f = new FormData(event.currentTarget);
@@ -71,206 +92,478 @@ export function VisitorRegistrationView({
     setAttempt(input);
     register.mutate(input);
   };
+
   const shareUrl = reference
     ? `${window.location.origin}${window.location.pathname}#visitor-pass=${reference.visitId}.${reference.accessKey}`
     : '';
+
   return (
-    <main className="mx-auto my-8 max-w-2xl space-y-5 rounded-2xl border bg-white p-6 shadow-sm">
-      <button type="button" onClick={onBack} className="underline">
-        Đăng nhập nhân viên / bảo vệ / Site Manager
-      </button>
-      <h1 className="text-2xl font-bold">Đăng ký tham quan công trường</h1>
-      <p className="text-sm text-slate-600">
-        Một người đại diện cho cá nhân hoặc cả đoàn. Yêu cầu được chuyển đến Site Manager của site
-        đã chọn.
-      </p>
-      {reference ? (
-        <div className="space-y-4">
-          <p>Lưu đường dẫn này để kiểm tra phê duyệt và mở QR trên điện thoại.</p>
-          <input
-            aria-label="Đường dẫn theo dõi lượt tham quan"
-            readOnly
-            value={shareUrl}
-            className="w-full rounded-lg border p-2 text-xs"
-          />
-          <button
-            type="button"
-            className="rounded-lg border p-2"
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(shareUrl)
-                .then(() => setMessage('Đã sao chép.'))
-                .catch(() => setMessage('Chọn và sao chép đường dẫn ở trên.'));
-            }}
-          >
-            Sao chép đường dẫn
-          </button>
-          {message && <p role="status">{message}</p>}
-          {pass.isPending && <p role="status">Đang kiểm tra…</p>}
-          {pass.error && (
-            <p role="alert" className="text-red-700">
-              {pass.error.message}
-            </p>
-          )}
-          {pass.data && (
-            <>
-              <h2 className="font-bold">
-                {pass.data.visit.visitorName} · {pass.data.visit.groupSize} người
-              </h2>
-              <p>
-                Trạng thái:{' '}
-                {pass.data.visit.status === 'PENDING'
-                  ? 'Chờ Site Manager duyệt'
-                  : pass.data.visit.status === 'APPROVED'
-                    ? 'Đã duyệt'
-                    : 'Bị từ chối'}
-              </p>
-              <p>
-                Site:{' '}
-                {sites.data?.items.find((s) => s.id === pass.data.visit.siteId)?.name ??
-                  pass.data.visit.siteId}
-              </p>
-              <p>
-                Khu vực: {pass.data.visit.targetArea} · Host: {pass.data.visit.hostName}
-              </p>
-              <p>
-                {new Date(pass.data.visit.validFrom).toLocaleString()} –{' '}
-                {new Date(pass.data.visit.validUntil).toLocaleString()}
-              </p>
-              <p>
-                Vào: {pass.data.visit.enteredCount} · Ra: {pass.data.visit.exitedCount} · Còn:{' '}
-                {pass.data.visit.enteredCount - pass.data.visit.exitedCount}
-              </p>
-              {pass.data.pass ? (
-                <QrPassCard pass={pass.data.pass} onRefresh={() => void pass.refetch()} />
-              ) : (
-                pass.data.visit.status === 'APPROVED' && (
-                  <p>Lượt tham quan đã hết hạn hoặc hoàn tất.</p>
-                )
-              )}
-            </>
-          )}
-          <button
-            type="button"
-            disabled={pass.isFetching}
-            className="rounded-lg border p-2"
-            onClick={() => void pass.refetch()}
-          >
-            Kiểm tra trạng thái / làm mới QR
-          </button>
-          <button
-            type="button"
-            className="ml-2 rounded-lg border p-2"
-            onClick={() => {
-              setReference(null);
-              setAttempt(null);
-              register.reset();
-              window.history.replaceState(null, '', window.location.pathname);
-            }}
-          >
-            Đăng ký lượt mới
-          </button>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50/50 to-slate-100 py-8 px-4 sm:px-6 lg:px-8">
+      {/* Top Header Bar */}
+      <div className="mx-auto max-w-3xl mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FF7A1A] text-white font-black text-sm">
+            S
+          </div>
+          <span className="font-bold text-slate-900 tracking-tight">
+            Smart<span className="text-[#FF7A1A]">Site</span>
+          </span>
+          <span className="text-slate-300">|</span>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Visitor Portal
+          </span>
         </div>
-      ) : (
-        <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-          <label className="sm:col-span-2">
-            Site đăng ký
-            <select
-              required
-              className="mt-1 w-full rounded-lg border p-2"
-              value={siteId || sites.data?.items[0]?.id || ''}
-              onChange={(e) => setSiteId(e.target.value)}
-            >
-              <option value="">Chọn site</option>
-              {sites.data?.items.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {sites.isPending && <p>Đang tải site…</p>}
-          {sites.error && (
-            <p role="alert">
-              {sites.error.message}
-              <button type="button" className="ml-2 underline" onClick={() => void sites.refetch()}>
-                Thử lại
+
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 underline transition-colors"
+        >
+          <span>Đăng nhập nhân viên / bảo vệ / Site Manager</span>
+        </button>
+      </div>
+
+      <main className="mx-auto max-w-3xl space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-10 shadow-sm">
+        {/* Header Hero */}
+        <div className="space-y-2 border-b border-slate-100 pb-6">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#FF7A1A] border border-orange-100">
+            <IconKey className="h-3.5 w-3.5" />
+            Giấy Phép Ra Vào Tạm Thời
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+            Đăng ký tham quan công trường
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            Một người đại diện cho cá nhân hoặc cả đoàn. Yêu cầu được chuyển đến Site Manager của
+            site đã chọn.
+          </p>
+        </div>
+
+        {reference ? (
+          /* ========================================================================= */
+          /* REGISTRATION RESULT & PASS TRACKING VIEW                                  */
+          /* ========================================================================= */
+          <div className="space-y-6">
+            {/* Shareable Link Card */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Lưu liên kết tra cứu
+                </span>
+                {message && (
+                  <span role="status" className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                    <IconCheck className="h-3.5 w-3.5" />
+                    {message}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                Lưu đường dẫn này để kiểm tra phê duyệt và mở QR trên điện thoại.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  aria-label="Đường dẫn theo dõi lượt tham quan"
+                  readOnly
+                  value={shareUrl}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-mono text-xs text-slate-800 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(shareUrl)
+                      .then(() => setMessage('Đã sao chép.'))
+                      .catch(() => setMessage('Chọn và sao chép đường dẫn ở trên.'));
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition-all shadow-xs"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <span>Sao chép đường dẫn</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Loading / Error States */}
+            {pass.isPending && (
+              <div role="status" className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+                <IconLoader className="h-4 w-4" />
+                <span>Đang kiểm tra…</span>
+              </div>
+            )}
+
+            {pass.error && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
+              >
+                <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                <span>{pass.error.message}</span>
+              </div>
+            )}
+
+            {/* Visit Details & Pass */}
+            {pass.data && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight text-slate-900">
+                        {pass.data.visit.visitorName} · {pass.data.visit.groupSize} người
+                      </h2>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Site:{' '}
+                        <span className="font-semibold text-slate-800">
+                          {sites.data?.items.find((s) => s.id === pass.data?.visit.siteId)?.name ??
+                            pass.data.visit.siteId}
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Status Pill */}
+                    <div>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                          pass.data.visit.status === 'PENDING'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : pass.data.visit.status === 'APPROVED'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            pass.data.visit.status === 'PENDING'
+                              ? 'bg-amber-500 animate-pulse'
+                              : pass.data.visit.status === 'APPROVED'
+                                ? 'bg-emerald-500'
+                                : 'bg-rose-500'
+                          }`}
+                        />
+                        <span>
+                          Trạng thái:{' '}
+                          {pass.data.visit.status === 'PENDING'
+                            ? 'Chờ Site Manager duyệt'
+                            : pass.data.visit.status === 'APPROVED'
+                              ? 'Đã duyệt'
+                              : 'Bị từ chối'}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+                    <div className="rounded-xl bg-slate-50 p-3 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Khu vực & Người tiếp đón
+                      </span>
+                      <p className="text-slate-800 font-semibold">
+                        Khu vực: {pass.data.visit.targetArea} · Host: {pass.data.visit.hostName}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-3 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Khung giờ hiệu lực
+                      </span>
+                      <p className="font-mono text-slate-800">
+                        {new Date(pass.data.visit.validFrom).toLocaleString()} –{' '}
+                        {new Date(pass.data.visit.validUntil).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Thống kê ra / vào
+                      </span>
+                      <p className="font-medium text-slate-800">
+                        Vào: {pass.data.visit.enteredCount} · Ra: {pass.data.visit.exitedCount} · Còn:{' '}
+                        <span className="font-bold text-[#FF7A1A]">
+                          {pass.data.visit.enteredCount - pass.data.visit.exitedCount}
+                        </span>{' '}
+                        người trong công trường
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* QR Card Presentation */}
+                  {pass.data.pass ? (
+                    <div className="pt-4 border-t border-slate-100">
+                      <QrPassCard pass={pass.data.pass} onRefresh={() => void pass.refetch()} />
+                    </div>
+                  ) : (
+                    pass.data.visit.status === 'APPROVED' && (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-500">
+                        Lượt tham quan đã hết hạn hoặc hoàn tất.
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={pass.isFetching}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-xs disabled:opacity-50"
+                onClick={() => void pass.refetch()}
+              >
+                <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
+                <span>Kiểm tra trạng thái / làm mới QR</span>
               </button>
-            </p>
-          )}
-          {[
-            ['visitorName', 'Tên người đại diện', true],
-            ['company', 'Đơn vị / công ty', false],
-            ['contact', 'Điện thoại / email liên hệ', true],
-            ['hostName', 'Người tiếp đón tại site', true],
-            ['purpose', 'Mục đích tham quan', true],
-            ['targetArea', 'Khu vực đề nghị tham quan', true],
-          ].map(([name, label, required]) => (
-            <label key={String(name)}>
-              {String(label)}
-              <input
-                name={String(name)}
-                required={Boolean(required)}
-                maxLength={name === 'purpose' ? 1000 : 255}
-                className="mt-1 w-full rounded-lg border p-2"
-              />
-            </label>
-          ))}
-          <label>
-            Số lượng người
-            <input
-              name="groupSize"
-              type="number"
-              min={1}
-              max={1000}
-              defaultValue={1}
-              required
-              className="mt-1 w-full rounded-lg border p-2"
-            />
-          </label>
-          <label>
-            Cổng đăng ký
-            <select name="gateId" className="mt-1 w-full rounded-lg border p-2">
-              {SITE_GATES.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Từ thời điểm
-            <input
-              name="validFrom"
-              type="datetime-local"
-              defaultValue={schedule.from}
-              required
-              className="mt-1 w-full rounded-lg border p-2"
-            />
-          </label>
-          <label>
-            Đến thời điểm
-            <input
-              name="validUntil"
-              type="datetime-local"
-              defaultValue={schedule.until}
-              required
-              className="mt-1 w-full rounded-lg border p-2"
-            />
-          </label>
-          {register.error && (
-            <p role="alert" className="text-red-700 sm:col-span-2">
-              {register.error.message}
-            </p>
-          )}
-          <button
-            disabled={register.isPending || !sites.data?.items.length}
-            className="rounded-xl bg-orange-600 p-3 font-bold text-white disabled:opacity-50 sm:col-span-2"
-          >
-            {register.isPending ? 'Đang gửi…' : 'Gửi Site Manager duyệt'}
-          </button>
-        </form>
-      )}
-    </main>
+
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+                onClick={() => {
+                  setReference(null);
+                  setAttempt(null);
+                  register.reset();
+                  window.history.replaceState(null, '', window.location.pathname);
+                }}
+              >
+                <span>Đăng ký lượt mới</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ========================================================================= */
+          /* REGISTRATION FORM                                                         */
+          /* ========================================================================= */
+          <form onSubmit={submit} className="space-y-6">
+            {/* Section 1: Site and Gate Selection */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
+                <IconBuilding2 className="h-3.5 w-3.5" />
+                1. Thông tin công trường & Cổng vào
+              </h3>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Site đăng ký
+                  <select
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                    value={siteId || sites.data?.items[0]?.id || ''}
+                    onChange={(e) => setSiteId(e.target.value)}
+                  >
+                    <option value="">Chọn site</option>
+                    {sites.data?.items.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {sites.isPending && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 sm:col-span-2">
+                    <IconLoader className="h-3.5 w-3.5" />
+                    <span>Đang tải site…</span>
+                  </div>
+                )}
+
+                {sites.error && (
+                  <div role="alert" className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 sm:col-span-2">
+                    <span>{sites.error.message}</span>
+                    <button
+                      type="button"
+                      className="underline font-bold"
+                      onClick={() => void sites.refetch()}
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                )}
+
+                <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Cổng đăng ký
+                  <select
+                    name="gateId"
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  >
+                    {SITE_GATES.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            {/* Section 2: Visitor Representative Info */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
+                <IconUser className="h-3.5 w-3.5" />
+                2. Thông tin người đại diện
+              </h3>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Tên người đại diện
+                  <input
+                    name="visitorName"
+                    required
+                    maxLength={255}
+                    placeholder="Họ và tên người đại diện"
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Đơn vị / công ty
+                  <input
+                    name="company"
+                    maxLength={255}
+                    placeholder="Tên công ty hoặc cơ quan (nếu có)"
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+
+                <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Điện thoại / email liên hệ
+                  <input
+                    name="contact"
+                    required
+                    maxLength={255}
+                    placeholder="Số điện thoại hoặc địa chỉ email"
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Section 3: Visit Purpose & Host Info */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
+                <IconShield className="h-3.5 w-3.5" />
+                3. Người tiếp đón & Khu vực tham quan
+              </h3>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Người tiếp đón tại site
+                  <input
+                    name="hostName"
+                    required
+                    maxLength={255}
+                    placeholder="Tên kỹ sư / quản lý tiếp đón"
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Khu vực đề nghị tham quan
+                  <input
+                    name="targetArea"
+                    required
+                    maxLength={255}
+                    placeholder="Ví dụ: Tòa nhà A, Nhà điều hành..."
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+
+                <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Mục đích tham quan
+                  <input
+                    name="purpose"
+                    required
+                    maxLength={1000}
+                    placeholder="Nêu rõ lý do ra vào hoặc công tác..."
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Section 4: Schedule and Group Size */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
+                <IconCalendar className="h-3.5 w-3.5" />
+                4. Thời gian & Số lượng người
+              </h3>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Số lượng người
+                  <input
+                    name="groupSize"
+                    type="number"
+                    min={1}
+                    max={1000}
+                    defaultValue={1}
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Từ thời điểm
+                  <input
+                    name="validFrom"
+                    type="datetime-local"
+                    defaultValue={schedule.from}
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Đến thời điểm
+                  <input
+                    name="validUntil"
+                    type="datetime-local"
+                    defaultValue={schedule.until}
+                    required
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {register.error && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
+              >
+                <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                <span>{register.error.message}</span>
+              </div>
+            )}
+
+            {/* Submit Action */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={register.isPending || !sites.data?.items.length}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF7A1A] py-3.5 px-6 font-bold text-sm text-white shadow-xs hover:bg-[#E56A10] transition-all disabled:opacity-50"
+              >
+                {register.isPending ? (
+                  <>
+                    <IconLoader className="h-4 w-4" />
+                    <span>Đang gửi…</span>
+                  </>
+                ) : (
+                  <>
+                    <IconCheck className="h-4 w-4" />
+                    <span>Gửi Site Manager duyệt</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+      </main>
+    </div>
   );
 }
