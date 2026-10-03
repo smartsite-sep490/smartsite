@@ -209,6 +209,15 @@ export function SafetyAlertEvidencePanel({
                   Close image
                 </button>
               </div>
+              {selectedItem.kind === 'FRAME' && (
+                <p className="px-0.5 text-[11px] leading-relaxed text-[#6B6B6B]">
+                  Frame view adds no subject highlight; it may show multiple people. Track IDs are
+                  not worker identities.{' '}
+                  {canReviewIdentity
+                    ? 'Select a person in identity review below to inspect subject bounds.'
+                    : 'Check the alert subject against source observations.'}
+                </p>
+              )}
             </div>
           )}
         </div>

@@ -498,4 +498,96 @@ describe('SafetyAlertEvidencePanel Integration (Plan §15 A4 Production Mount)',
       URL.revokeObjectURL = origRevokeObjectURL;
     }
   });
+
+  it('displays honest unannotated caption for FRAME evidence with role-aware instructions, and excludes it for non-FRAME cropped evidence', async () => {
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url-frame');
+    URL.revokeObjectURL = vi.fn();
+
+    try {
+      const user = userEvent.setup();
+      const detection = createMockDetection({
+        evidence: [
+          { index: 0, kind: 'FRAME', available: true },
+          { index: 1, kind: 'CROP', available: true, trackId: 3 },
+        ],
+      });
+
+      const mockBlob = new Blob(['mock-evidence-image'], { type: 'image/jpeg' });
+      const mockClient = {
+        getObservationIdentityContext: vi.fn().mockResolvedValue(createMockContext()),
+        listObservationIdentityWorkers: vi.fn().mockResolvedValue(mockWorkersList),
+        listObservationIdentityDecisions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+        getSafetyAlertEvidence: vi.fn().mockResolvedValue(mockBlob),
+        decideObservationIdentity: vi.fn(),
+      } as unknown as SmartSiteManagementClient;
+
+      // Case A: canReviewIdentity = false (Admin or Site without identity review permission)
+      const { unmount: unmountAdmin } = render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertEvidencePanel
+            {...baseProps}
+            client={mockClient}
+            detection={detection}
+            canReviewIdentity={false}
+          />
+        </QueryClientProvider>,
+      );
+
+      const viewFrameBtn = await screen.findByRole('button', { name: /View Frame/i });
+      await user.click(viewFrameBtn);
+
+      await screen.findByRole('img');
+      const adminCaption = await screen.findByText(/Frame view adds no subject highlight/i);
+      expect(adminCaption).toBeDefined();
+      expect(adminCaption.textContent).toContain('Track IDs are not worker identities');
+      expect(adminCaption.textContent).toContain(
+        'Check the alert subject against source observations',
+      );
+      expect(adminCaption.textContent).not.toContain('identity review below');
+
+      // Hide frame
+      const hideFrameBtn = await screen.findByRole('button', { name: /Hide Frame/i });
+      await user.click(hideFrameBtn);
+      expect(screen.queryByText(/Frame view adds no subject highlight/i)).toBeNull();
+
+      // Non-FRAME evidence (CROP) must NOT show unannotated frame caption
+      const viewCropBtn = await screen.findByRole('button', { name: /View Crop/i });
+      await user.click(viewCropBtn);
+      await screen.findByRole('img');
+      expect(screen.queryByText(/Frame view adds no subject highlight/i)).toBeNull();
+
+      unmountAdmin();
+
+      // Case B: canReviewIdentity = true (Safety Officer with identity review permission)
+      const { unmount: unmountSo } = render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertEvidencePanel
+            {...baseProps}
+            client={mockClient}
+            detection={detection}
+            canReviewIdentity={true}
+          />
+        </QueryClientProvider>,
+      );
+
+      const soViewFrameBtn = await screen.findByRole('button', { name: /View Frame/i });
+      await user.click(soViewFrameBtn);
+
+      await screen.findByRole('img');
+      const soCaption = await screen.findByText(/Frame view adds no subject highlight/i);
+      expect(soCaption).toBeDefined();
+      expect(soCaption.textContent).toContain('Track IDs are not worker identities');
+      expect(soCaption.textContent).toContain('Select a person in identity review below');
+      expect(soCaption.textContent).not.toContain(
+        'Check the alert subject against source observations',
+      );
+
+      unmountSo();
+    } finally {
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+    }
+  });
 });
