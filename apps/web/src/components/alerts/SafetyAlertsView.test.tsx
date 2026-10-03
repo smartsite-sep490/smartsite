@@ -511,6 +511,60 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     expect(errorAlert.textContent).toContain('Could not connect to the backend');
   });
 
+  it('renders generic sign-in failed message on login HTTP 401 without disclosing account/password specifics or claiming session expired', async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockRejectedValue(
+      new (await import('@smartsite/api-client')).ApiError('http', 'Unauthorized', 401),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" />
+      </QueryClientProvider>,
+    );
+
+    await user.type(screen.getByLabelText(/Username/i), 'wronguser');
+    await user.type(screen.getByLabelText(/Password/i), 'wrongpass');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    const errorAlert = await screen.findByRole('alert');
+    expect(errorAlert.textContent).toBe('Sign-in failed. Check your credentials and try again.');
+    expect(errorAlert.textContent).not.toContain('session');
+    expect(errorAlert.textContent).not.toContain('password');
+    expect(errorAlert.textContent).not.toContain('user');
+    // Login form remains mounted
+    expect(screen.getByRole('heading', { name: 'Safety alert queue' })).toBeDefined();
+  });
+
+  it('preserves session-expired message when an authenticated query returns HTTP 401', async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
+      mockAdminLoginResponse,
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockRejectedValue(
+      new (await import('@smartsite/api-client')).ApiError('http', 'Unauthorized', 401),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" />
+      </QueryClientProvider>,
+    );
+
+    await user.type(screen.getByLabelText(/Username/i), 'admin');
+    await user.type(screen.getByLabelText(/Password/i), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    // Reaches authenticated dashboard
+    await screen.findByRole('heading', { name: 'Safety alerts' });
+
+    const errorAlert = await screen.findByRole('alert');
+    expect(errorAlert.textContent).toBe('Your session is no longer valid. Sign in again.');
+    expect(errorAlert.textContent).not.toContain('Sign-in failed');
+  });
+
   it('updates filter from initialType to ALL when prop is cleared without unmounting or losing session', async () => {
     const user = userEvent.setup();
 

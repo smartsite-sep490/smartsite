@@ -44,6 +44,15 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function loginErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return 'Sign-in failed. Check your credentials and try again.';
+    if (error.code === 'network') return 'Could not connect to the backend.';
+    return error.message;
+  }
+  return error instanceof Error ? error.message : 'The request could not be completed.';
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Your session is no longer valid. Sign in again.';
@@ -356,7 +365,7 @@ export function SafetyAlertsView({
           </label>
           {login.error && (
             <p role="alert" className="rounded-md bg-[#FDEBEC] px-3 py-2 text-sm text-[#9F2F2D]">
-              {errorMessage(login.error)}
+              {loginErrorMessage(login.error)}
             </p>
           )}
           <button
