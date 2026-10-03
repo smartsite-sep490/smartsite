@@ -9,22 +9,23 @@ import { UserEntity } from './user.entity.js';
   unique: true,
   where: 'user_id IS NOT NULL',
 })
-@Index('idx_worker_contractor', ['contractorId'])
+@Index('idx_worker_contractor', ['contractorId'], { where: 'contractor_id IS NOT NULL' })
 export class WorkerEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_worker_id' })
   id!: string;
+
+  @Column({ name: 'user_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => UserEntity, { name: 'fk_worker_user', onDelete: 'RESTRICT' })
+  userId!: string | null;
 
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'fk_worker_site', onDelete: 'RESTRICT' })
   siteId!: string;
 
+  /** Nullable only for legacy MF06 workers; gate authorization rejects it. */
   @Column({ name: 'contractor_id', type: 'uuid', nullable: true })
   @ForeignKey(() => ContractorEntity, { name: 'fk_worker_contractor', onDelete: 'RESTRICT' })
   contractorId!: string | null;
-
-  @Column({ name: 'user_id', type: 'uuid', nullable: true })
-  @ForeignKey(() => UserEntity, { name: 'fk_worker_user', onDelete: 'RESTRICT' })
-  userId!: string | null;
 
   @Column({ name: 'external_id', type: 'varchar', length: 128 })
   externalId!: string;

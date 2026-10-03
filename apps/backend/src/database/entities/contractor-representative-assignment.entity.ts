@@ -4,7 +4,7 @@ import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 
 @Entity({ name: 'contractor_representative_assignment' })
-@Unique('uq_contractor_representative_assignment', ['contractorId', 'userId'])
+@Unique('uq_contractor_representative_assignment', ['siteId', 'contractorId', 'userId'])
 @Index('idx_contractor_representative_user_site', ['userId', 'siteId'])
 export class ContractorRepresentativeAssignmentEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_contractor_representative_assignment_id' })

@@ -25,6 +25,55 @@ async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promis
   }
 }
 
+test('identity audit migration keeps independent column defaults, exact pointer FK, and append-only trigger', async () => {
+  await withDataSource(async (source) => {
+    const columns = await source.query<
+      {
+        table_name: string;
+        column_name: string;
+        udt_name: string;
+        is_nullable: string;
+        column_default: string | null;
+      }[]
+    >(
+      `SELECT table_name,column_name,udt_name,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' AND (table_name='observation_identity_resolution' AND column_name IN ('person_observation_index','revision','current_decision_id','subject_ref','payload_hash')) OR (table_schema='public' AND table_name='observation_identity_decision' AND column_name IN ('expected_revision','revision','worker_id','evidence_index','scope','verification_method')) ORDER BY table_name,column_name`,
+    );
+    assert.deepEqual(
+      columns.map((c) =>
+        [c.table_name, c.column_name, c.udt_name, c.is_nullable, c.column_default ?? ''].join('|'),
+      ),
+      [
+        'observation_identity_decision|evidence_index|int2|YES|',
+        'observation_identity_decision|expected_revision|int4|NO|',
+        'observation_identity_decision|revision|int4|NO|',
+        "observation_identity_decision|scope|varchar|NO|'EXACT_OBSERVATION'::character varying",
+        "observation_identity_decision|verification_method|varchar|NO|'MANUAL'::character varying",
+        'observation_identity_decision|worker_id|uuid|YES|',
+        'observation_identity_resolution|current_decision_id|uuid|YES|',
+        'observation_identity_resolution|payload_hash|bpchar|NO|',
+        'observation_identity_resolution|person_observation_index|int2|NO|',
+        'observation_identity_resolution|revision|int4|NO|0',
+        'observation_identity_resolution|subject_ref|jsonb|NO|',
+      ],
+    );
+    const pointer = await source.query<{ definition: string; condeferrable: boolean }[]>(
+      `SELECT pg_get_constraintdef(oid) AS definition,condeferrable FROM pg_constraint WHERE conrelid='observation_identity_resolution'::regclass AND conname='fk_identity_resolution_current'`,
+    );
+    assert.equal(
+      pointer[0]?.definition,
+      'FOREIGN KEY (id, current_decision_id, revision) REFERENCES observation_identity_decision(resolution_id, id, revision) ON DELETE RESTRICT',
+    );
+    assert.equal(pointer[0]?.condeferrable, false);
+    const trigger = await source.query<{ definition: string }[]>(
+      `SELECT pg_get_triggerdef(oid) AS definition FROM pg_trigger WHERE tgrelid='observation_identity_decision'::regclass AND tgname='trg_identity_decision_append_only'`,
+    );
+    assert.match(
+      trigger[0]?.definition ?? '',
+      /BEFORE DELETE OR UPDATE.*FOR EACH ROW EXECUTE FUNCTION reject_observation_identity_audit_mutation/,
+    );
+  });
+});
+
 test('foundation migration creates 7 tables with required columns, nullability, and types', async () => {
   await withDataSource(async (source) => {
     const expectedTables = [

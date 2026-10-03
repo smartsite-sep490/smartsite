@@ -8,7 +8,9 @@
     "schemas"
   ],
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./management": "./dist/management-api.js",
+    "./gate-permissions": "./dist/gate-permissions-api.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

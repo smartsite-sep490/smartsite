@@ -133,10 +133,10 @@ test('MF07 workforce access scope binds workers and contractor representatives e
   );
   const migration = fs.readFileSync(migrationPath, 'utf8');
 
-  assert.match(migration, /CREATE TABLE contractor/);
+  assert.doesNotMatch(migration, /CREATE TABLE contractor\s*\(/);
   assert.match(migration, /CREATE TABLE contractor_representative_assignment/);
-  assert.match(migration, /uq_contractor_representative_assignment UNIQUE \(contractor_id, user_id\)/);
-  assert.match(migration, /ALTER TABLE worker ADD COLUMN contractor_id uuid/);
+  assert.match(migration, /uq_contractor_representative_assignment UNIQUE \(site_id, contractor_id, user_id\)/);
+  assert.doesNotMatch(migration, /ALTER TABLE worker ADD COLUMN contractor_id uuid/);
   assert.match(migration, /ALTER TABLE worker ADD COLUMN user_id uuid/);
   assert.match(migration, /uq_worker_site_user/);
   assert.match(migration, /FOREIGN KEY \(user_id\) REFERENCES app_user\(id\)/);

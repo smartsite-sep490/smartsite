@@ -1,3 +1,5 @@
+import type { WorkerSiteZoneAssignmentStatus } from './identity-access-api.js';
+
 export type UserRole =
   | 'ADMIN'
   | 'SITE_MANAGER'
@@ -13,6 +15,8 @@ export type ProvisionableUserRole =
   'SECURITY_OFFICER' |
   'WORKER';
 export type AuthClientType = 'WEB' | 'MOBILE';
+
+export * from './observation-identity-management.js';
 
 export interface ProvisionableRoleAssignment {
   role: ProvisionableUserRole;
@@ -166,6 +170,69 @@ export interface WorkerResponse {
   displayName: string;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface ContractorParticipationResponse {
+  id: string;
+  contractorId: string;
+  siteId: string;
+  validFrom: string;
+  validUntil: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ContractorRepresentativeGrantResponse {
+  id: string;
+  userId: string;
+  contractorId: string;
+  createdAt: string;
+}
+
+export interface WorkerSiteZoneAssignmentResponse {
+  id: string;
+  workerId: string;
+  siteId: string;
+  zoneIds: string[];
+  status: WorkerSiteZoneAssignmentStatus;
+  validFrom: string;
+  validUntil: string | null;
+  requestedByUserId: string;
+  safetyReviewedByUserId: string | null;
+  siteManagerDecidedByUserId: string | null;
+  createdAt: string;
+}
+
+export type FaceEnrollmentSessionStatus =
+  'PENDING' | 'COLLECTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface FaceEnrollmentSessionResponse {
+  id: string;
+  workerId: string;
+  consentVersion: string;
+  status: FaceEnrollmentSessionStatus;
+  acceptedSampleCount: number;
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export type EnrollmentCaptureTarget = 'front' | 'left' | 'right';
+export interface FaceEnrollmentQualityResponse {
+  status: 'ACCEPTED' | 'QUALITY_FAILED';
+  reasonCode: string;
+}
+
+export interface FaceProfileResponse {
+  id: string;
+  workerId: string;
+  userId?: string | null;
+  modelVersion: string;
+  status: 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+  consentVersion: string;
+  consentedAt: string;
+  createdAt: string;
+  revokedAt: string | null;
 }
 
 export type ZoneAccessEffect = 'ALLOW' | 'DENY';

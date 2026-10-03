@@ -1,5 +1,7 @@
 export const CONTRACTS_VERSION = '1.0.0';
 
+export * from './observation-identity-management.js';
+
 export { canonicalizeJson, computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 
 export { validateGeometries } from './validation/geometry-validator.js';
@@ -11,6 +13,12 @@ export { validateObservationEvent } from './validation/schema-validator.js';
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
 export type { ValidationResult } from './validation/schema-validator.js';
+export { SITE_GATES } from './gate-permissions-api.js';
+export type {
+  WorkerGatePermissionResponse,
+  WorkerGatePermissionsResponse,
+  SetWorkerGatePermissionsCommand,
+} from './gate-permissions-api.js';
 
 export {
   MAX_CAMERA_REGION_PAYLOAD_BYTES,
@@ -24,6 +32,18 @@ export type {
   CameraRegionConfiguration,
   NormalizedCoordinate,
 } from './camera-region-configuration.js';
+
+export type {
+  GateFacePresenceResponse,
+  FaceGateDecisionResponse,
+  FaceGateVerificationResponse,
+  GateAccessLogResponse,
+  FaceGateReasonCode,
+  FaceProfileStatus,
+  FaceVerificationTechnicalOutcome,
+  GateAuthorizationOutcome,
+  WorkerSiteZoneAssignmentStatus,
+} from './identity-access-api.js';
 
 export type {
   AccountResponse,
@@ -49,11 +69,19 @@ export type {
   SafetyAlertReviewResponse,
   SafetyAlertReviewMutationResponse,
   WorkerResponse,
+  ContractorResponse,
+  ContractorParticipationResponse,
+  ContractorRepresentativeGrantResponse,
+  WorkerSiteZoneAssignmentResponse,
+  FaceEnrollmentSessionResponse,
+  FaceEnrollmentSessionStatus,
+  FaceEnrollmentQualityResponse,
+  EnrollmentCaptureTarget,
+  FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionStatus,
   ZoneEntryDecisionResponse,
-  ContractorResponse,
   ContractorRepresentativeAssignmentResponse,
   ShiftResponse,
   ContractorShiftAssignmentResponse,

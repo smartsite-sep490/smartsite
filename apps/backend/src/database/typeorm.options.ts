@@ -14,6 +14,14 @@ import { ScheduleVersionUnique1790985600000 } from './migrations/1790985600000-S
 import { AllowMultipleWorkerShiftsPerDay1791072000000 } from './migrations/1791072000000-AllowMultipleWorkerShiftsPerDay.js';
 import { ContractorShiftAssignments1791158400000 } from './migrations/1791158400000-ContractorShiftAssignments.js';
 import { SchedulingRequestReviewReasons1791244800000 } from './migrations/1791244800000-SchedulingRequestReviewReasons.js';
+import { ZoneEntryTrackIdRange1790812800001 } from './migrations/1790812800001-ZoneEntryTrackIdRange.js';
+import { ObservationIdentityReview1790899200000 } from './migrations/1790899200000-ObservationIdentityReview.js';
+import { IdentityAccessScope1790726400000 } from './migrations/1790726400000-IdentityAccessScope.js';
+import { FaceEnrollmentMetadata1790812800000 } from './migrations/1790812800000-FaceEnrollmentMetadata.js';
+import { AccountFaceTemplates1790899200000 } from './migrations/1790899200000-AccountFaceTemplates.js';
+import { GateAccessLogs1790985600000 } from './migrations/1790985600000-GateAccessLogs.js';
+import { WorkerGatePermissions1790992800000 } from './migrations/1790992800000-WorkerGatePermissions.js';
+import { Mf07SharedContractorCompatibility1791331200000 } from './migrations/1791331200000-Mf07SharedContractorCompatibility.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -44,6 +52,14 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       AllowMultipleWorkerShiftsPerDay1791072000000,
       ContractorShiftAssignments1791158400000,
       SchedulingRequestReviewReasons1791244800000,
+      IdentityAccessScope1790726400000,
+      FaceEnrollmentMetadata1790812800000,
+      ZoneEntryTrackIdRange1790812800001,
+      AccountFaceTemplates1790899200000,
+      ObservationIdentityReview1790899200000,
+      GateAccessLogs1790985600000,
+      WorkerGatePermissions1790992800000,
+      Mf07SharedContractorCompatibility1791331200000,
     ],
     logging: false,
     extra: {

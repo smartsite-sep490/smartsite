@@ -159,6 +159,22 @@ export const backendEnvironmentSchema = z
         'must not contain whitespace',
       )
       .optional(),
+    SMARTSITE_AI_IDENTITY_URL: z
+      .string({ error: 'must be an absolute HTTP(S) URL without credentials' })
+      .url('must be an absolute HTTP(S) URL without credentials')
+      .refine((value) => {
+        try {
+          const parsed = new URL(value);
+          return (
+            ['http:', 'https:'].includes(parsed.protocol) &&
+            !parsed.username &&
+            !parsed.password
+          );
+        } catch {
+          return false;
+        }
+      }, 'must be an absolute HTTP(S) URL without credentials')
+      .optional(),
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),

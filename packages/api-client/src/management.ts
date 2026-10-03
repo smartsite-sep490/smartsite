@@ -1,3 +1,13 @@
+import {
+  parseObservationIdentityContextResponse,
+  parseObservationIdentityDecisionPage,
+  parseObservationIdentityMutationResponse,
+  parseObservationIdentityWorkerPage,
+  type ObservationIdentityContextResponse,
+  type ObservationIdentityDecisionCommand,
+  type ObservationIdentityMutationResponse,
+  type ObservationIdentityWorkerResponse,
+} from '@smartsite/contracts/management';
 import type {
   AccountResponse,
   AuthClientType,
@@ -16,11 +26,17 @@ import type {
   SiteResponse,
   ZoneResponse,
   WorkerResponse,
+  ContractorResponse,
+  ContractorParticipationResponse,
+  ContractorRepresentativeGrantResponse,
+  WorkerSiteZoneAssignmentResponse,
+  FaceEnrollmentSessionResponse,
+  FaceEnrollmentQualityResponse,
+  FaceProfileResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
   ZoneEntryDecisionStatus,
-  ContractorResponse,
   ContractorRepresentativeAssignmentResponse,
   ShiftResponse,
   ContractorShiftAssignmentResponse,
@@ -32,10 +48,16 @@ import type {
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
   SchedulingRequestStatus,
+  FaceGateVerificationResponse,
+  GateFacePresenceResponse,
+  GateAccessLogResponse,
+  EnrollmentCaptureTarget,
+  WorkerGatePermissionsResponse,
+  SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
 export type { SchedulingRequestStatus };
 
-import { ApiError, parseBackendErrorEnvelope } from './index';
+import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './index';
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
@@ -56,9 +78,70 @@ export type ZoneEntryDecisionListOptions = PageOptions & {
 };
 type CameraMutation = { expectedConfigurationVersion: number };
 const pathId = (id: string) => encodeURIComponent(id);
+const MAX_TIMEOUT_MS = 2_147_483_647;
+// Node clamps NaN, Infinity, negatives, and delays above 2^31-1 to 1ms.
+const validTimeout = (timeoutMs: number) =>
+  Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
 
 export class SmartSiteManagementClient {
   constructor(private readonly baseUrl: string) {}
+
+  private async runRequest<T>(
+    options: RequestOptions | undefined,
+    operation: (signal: AbortSignal | undefined) => Promise<T>,
+  ): Promise<T> {
+    if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
+      throw new RangeError(
+        'timeoutMs must be a finite positive integer no greater than 2147483647.',
+      );
+    }
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    options?.signal?.addEventListener('abort', onAbort);
+    if (options?.signal?.aborted) controller.abort();
+    let timedOut = false;
+    const timeout =
+      options?.timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+          }, options.timeoutMs);
+    const signal =
+      options?.signal || options?.timeoutMs !== undefined ? controller.signal : undefined;
+    try {
+      if (options?.signal?.aborted) throw new ApiError('cancelled', 'Request cancelled.');
+      return await operation(signal);
+    } catch (error) {
+      if (options?.signal?.aborted) throw new ApiError('cancelled', 'Request cancelled.');
+      if (timedOut) throw new ApiError('timeout', 'Backend request timed out.');
+      if (error instanceof ApiError) throw error;
+      throw new ApiError('network', 'Could not connect to the backend.');
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      options?.signal?.removeEventListener('abort', onAbort);
+    }
+  }
+
+  private async readBody<T>(read: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return read();
+    if (signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
+    let onAbort: (() => void) | undefined;
+    const remove = () => {
+      if (!onAbort) return;
+      signal.removeEventListener('abort', onAbort);
+      onAbort = undefined;
+    };
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        onAbort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+        signal.addEventListener('abort', onAbort);
+        read().then(resolve, reject);
+      });
+    } finally {
+      remove();
+    }
+  }
 
   private async request<T>(
     method: string,
@@ -66,10 +149,10 @@ export class SmartSiteManagementClient {
     token?: string,
     body?: unknown,
     credentials?: RequestCredentials,
+    options?: RequestOptions,
   ): Promise<T> {
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+    return this.runRequest(options, async (signal) => {
+      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
         method,
         headers: {
           Accept: 'application/json',
@@ -78,6 +161,36 @@ export class SmartSiteManagementClient {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         ...(credentials ? { credentials } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      if (response.status === 204) return undefined as T;
+      let payload: unknown;
+      try {
+        payload = await this.readBody(() => response.json(), signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+      }
+      if (!response.ok) {
+        const error = parseBackendErrorEnvelope(payload, response.status);
+        throw new ApiError(
+          'http',
+          error?.message ?? `Backend returned HTTP ${response.status}.`,
+          response.status,
+          error,
+        );
+      }
+      return payload as T;
+    });
+  }
+
+  private async requestFormData<T>(method: string, path: string, token: string, body: FormData) {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+        method,
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+        body,
       });
     } catch {
       throw new ApiError('network', 'Could not connect to the backend.');
@@ -104,45 +217,41 @@ export class SmartSiteManagementClient {
     return payload as T;
   }
 
-  private async requestBlob(path: string, token: string): Promise<Blob> {
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+  private async requestBlob(path: string, token: string, options?: RequestOptions): Promise<Blob> {
+    return this.runRequest(options, async (signal) => {
+      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
         headers: {
           Accept: 'image/jpeg',
           Authorization: `Bearer ${token}`,
         },
+        ...(signal ? { signal } : {}),
       });
-    } catch {
-      throw new ApiError('network', 'Could not connect to the backend.');
-    }
-    if (!response.ok) {
-      if (response.status === 401 && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+      if (!response.ok) {
+        let payload: unknown;
+        try {
+          payload = await this.readBody(() => response.json(), signal);
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+        }
+        const error = parseBackendErrorEnvelope(payload, response.status);
+        throw new ApiError(
+          'http',
+          error?.message ?? `Backend returned HTTP ${response.status}.`,
+          response.status,
+          error,
+        );
       }
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch {
-        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+      const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
+      if (contentType !== 'image/jpeg') {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid evidence type.',
+          response.status,
+        );
       }
-      const error = parseBackendErrorEnvelope(payload, response.status);
-      throw new ApiError(
-        'http',
-        error?.message ?? `Backend returned HTTP ${response.status}.`,
-        response.status,
-        error,
-      );
-    }
-    const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
-    if (contentType !== 'image/jpeg') {
-      throw new ApiError(
-        'invalid-response',
-        'Backend returned an invalid evidence type.',
-        response.status,
-      );
-    }
-    return response.blob();
+      return this.readBody(() => response.blob(), signal);
+    });
   }
 
   private listPath(path: string, options: Record<string, string | number | undefined> = {}) {
@@ -265,10 +374,12 @@ export class SmartSiteManagementClient {
     alertId: string,
     eventId: string,
     evidenceIndex: number,
+    options?: RequestOptions,
   ) {
     return this.requestBlob(
       `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/evidence/${pathId(String(evidenceIndex))}`,
       token,
+      options,
     );
   }
   reviewSafetyAlert(
@@ -296,10 +407,213 @@ export class SmartSiteManagementClient {
   createWorker(token: string, siteId: string, input: { externalId: string; displayName: string }) {
     return this.request<WorkerResponse>('POST', `/sites/${pathId(siteId)}/workers`, token, input);
   }
+
+  linkWorkerAccount(token: string, siteId: string, workerId: string, userId: string) {
+    return this.request<WorkerResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/account`,
+      token,
+      { userId },
+    );
+  }
+  prepareFaceAccount(token: string, siteId: string, userId: string) {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/for-account`,
+      token,
+      { userId },
+    );
+  }
   listWorkers(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<WorkerResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/workers`, options),
+      token,
+    );
+  }
+
+  createContractor(token: string, input: { code: string; name: string }): Promise<ContractorResponse>;
+  createContractor(
+    token: string,
+    siteId: string,
+    input: { code: string; name: string },
+  ): Promise<ContractorResponse>;
+  createContractor(
+    token: string,
+    siteIdOrInput: string | { code: string; name: string },
+    siteInput?: { code: string; name: string },
+  ) {
+    const siteScoped = typeof siteIdOrInput === 'string';
+    const input = siteScoped ? siteInput! : siteIdOrInput;
+    const path = siteScoped ? `/sites/${pathId(siteIdOrInput)}/contractors` : '/contractors';
+    return this.request<ContractorResponse>('POST', path, token, input);
+  }
+  createContractorParticipation(
+    token: string,
+    contractorId: string,
+    input: { siteId: string; validFrom: string; validUntil: string | null },
+  ) {
+    return this.request<ContractorParticipationResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/participations`,
+      token,
+      input,
+    );
+  }
+  grantContractorRepresentative(token: string, contractorId: string, userId: string) {
+    return this.request<ContractorRepresentativeGrantResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/representative-grants`,
+      token,
+      { userId },
+    );
+  }
+  createContractorWorker(
+    token: string,
+    contractorId: string,
+    input: { siteId: string; externalId: string; displayName: string },
+  ) {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/workers`,
+      token,
+      input,
+    );
+  }
+  createWorkerSiteZoneAssignment(
+    token: string,
+    workerId: string,
+    input: { siteId: string; zoneIds: string[]; validFrom: string; validUntil: string | null },
+  ) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/site-zone-assignment-requests`,
+      token,
+      input,
+    );
+  }
+  safetyReviewWorkerSiteZoneAssignment(token: string, requestId: string) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(requestId)}/safety-review`,
+      token,
+    );
+  }
+  decideWorkerSiteZoneAssignment(token: string, requestId: string, approve: boolean) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(requestId)}/site-manager-decision`,
+      token,
+      { approve },
+    );
+  }
+  startFaceEnrollment(token: string, workerId: string, consentVersion: string) {
+    return this.request<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-enrollments`,
+      token,
+      { consentVersion },
+    );
+  }
+  verifyFaceGate(
+    token: string,
+    siteId: string,
+    gateId: string,
+    frame: Blob,
+    direction: 'IN' | 'OUT',
+  ) {
+    const form = new FormData();
+    form.append('frame', frame, 'scan-frame.jpg');
+    form.append('direction', direction);
+    return this.requestFormData<FaceGateVerificationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-verifications`,
+      token,
+      form,
+    );
+  }
+  listGateAccessLogs(token: string, siteId: string, gateId: string) {
+    return this.request<{ items: GateAccessLogResponse[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/access-logs`,
+      token,
+    );
+  }
+  observeGateFace(token: string, siteId: string, gateId: string, sessionId: string, frame: Blob) {
+    const form = new FormData();
+    form.append('frame', frame, 'presence.jpg');
+    form.append('sessionId', sessionId);
+    return this.requestFormData<GateFacePresenceResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-presence`,
+      token,
+      form,
+    );
+  }
+  getWorkerGatePermissions(token: string, siteId: string, workerId: string) {
+    return this.request<WorkerGatePermissionsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
+      token,
+    );
+  }
+  setWorkerGatePermissions(
+    token: string,
+    siteId: string,
+    workerId: string,
+    input: SetWorkerGatePermissionsCommand,
+  ) {
+    return this.request<WorkerGatePermissionsResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
+      token,
+      input,
+    );
+  }
+  uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob) {
+    const form = new FormData();
+    form.append('sample', sample, 'face-sample.jpg');
+    return this.requestFormData<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/samples`,
+      token,
+      form,
+    );
+  }
+  checkFaceEnrollmentQuality(
+    token: string,
+    workerId: string,
+    sample: Blob,
+    target: EnrollmentCaptureTarget,
+  ) {
+    const form = new FormData();
+    form.append('sample', sample, 'face-quality-check.jpg');
+    form.append('target', target);
+    return this.requestFormData<FaceEnrollmentQualityResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-enrollment-quality`,
+      token,
+      form,
+    );
+  }
+  completeFaceEnrollment(token: string, sessionId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/complete`,
+      token,
+    );
+  }
+  getFaceProfile(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'GET',
+      `/workers/${pathId(workerId)}/face-profile`,
+      token,
+    );
+  }
+  revokeFaceProfile(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-profile/revoke`,
       token,
     );
   }
@@ -507,14 +821,6 @@ export class SmartSiteManagementClient {
   }
 
   // Workforce / MF07 Endpoints
-  createContractor(token: string, siteId: string, input: { code: string; name: string }) {
-    return this.request<ContractorResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/contractors`,
-      token,
-      input,
-    );
-  }
   listContractors(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<ContractorResponse>>(
       'GET',
@@ -759,5 +1065,162 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/absence-requests/${pathId(requestId)}/reject`,
       token,
     );
+  }
+
+  private identitySubjectsPath(siteId: string, alertId: string, eventId: string) {
+    return `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/identity-subjects`;
+  }
+
+  private sameScopeId(actual: string, expected: string) {
+    return actual.toLowerCase() === expected.toLowerCase();
+  }
+
+  private matchesIdentityCommand(
+    decision: ObservationIdentityMutationResponse['recordedDecision'],
+    eventId: string,
+    personObservationIndex: number,
+    input: ObservationIdentityDecisionCommand,
+  ) {
+    const evidenceMatches =
+      input.action === 'CLEAR'
+        ? decision.action === 'CLEAR' &&
+          decision.workerId === null &&
+          decision.evidenceIndex === null &&
+          decision.evidenceSha256 === null
+        : decision.action === 'RESOLVE' &&
+          decision.workerId !== null &&
+          this.sameScopeId(decision.workerId, input.workerId) &&
+          decision.evidenceIndex === input.evidenceIndex &&
+          decision.evidenceSha256 === input.expectedEvidenceSha256;
+    return (
+      this.sameScopeId(decision.id, input.commandId) &&
+      decision.revision === input.expectedRevision + 1 &&
+      decision.reason === input.reason.trim() &&
+      decision.subjectRef.payloadHash === input.expectedEventHash &&
+      this.sameScopeId(decision.subjectRef.eventId, eventId) &&
+      decision.subjectRef.personObservationIndex === personObservationIndex &&
+      evidenceMatches
+    );
+  }
+
+  private parsedIdentity<T>(value: T | undefined): T {
+    if (value === undefined) {
+      throw new ApiError('invalid-response', 'Backend returned an invalid identity response.');
+    }
+    return value;
+  }
+
+  getObservationIdentityContext(
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    options?: RequestOptions,
+  ): Promise<ObservationIdentityContextResponse> {
+    return this.request<unknown>(
+      'GET',
+      this.identitySubjectsPath(siteId, alertId, eventId),
+      token,
+      undefined,
+      undefined,
+      options,
+    ).then((payload) => {
+      const context = parseObservationIdentityContextResponse(payload);
+      if (!context || !this.sameScopeId(context.eventId, eventId)) {
+        throw new ApiError('invalid-response', 'Backend returned an invalid identity response.');
+      }
+      return context;
+    });
+  }
+
+  listObservationIdentityWorkers(
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    offset: number,
+    limit: number,
+    options?: RequestOptions,
+  ): Promise<{ items: ObservationIdentityWorkerResponse[]; total: number }> {
+    return this.request<unknown>(
+      'GET',
+      this.listPath(`${this.identitySubjectsPath(siteId, alertId, eventId)}/workers`, {
+        offset,
+        limit,
+      }),
+      token,
+      undefined,
+      undefined,
+      options,
+    ).then((payload) => this.parsedIdentity(parseObservationIdentityWorkerPage(payload, siteId)));
+  }
+
+  listObservationIdentityDecisions(
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    personObservationIndex: number,
+    offset: number,
+    limit: number,
+    options?: RequestOptions,
+  ): Promise<{ items: ObservationIdentityMutationResponse['recordedDecision'][]; total: number }> {
+    return this.request<unknown>(
+      'GET',
+      this.listPath(
+        `${this.identitySubjectsPath(siteId, alertId, eventId)}/${pathId(String(personObservationIndex))}/decisions`,
+        { offset, limit },
+      ),
+      token,
+      undefined,
+      undefined,
+      options,
+    ).then((payload) => {
+      const page = parseObservationIdentityDecisionPage(payload);
+      if (
+        !page ||
+        page.items.some(
+          (item) =>
+            !this.sameScopeId(item.subjectRef.eventId, eventId) ||
+            item.subjectRef.personObservationIndex !== personObservationIndex,
+        )
+      ) {
+        throw new ApiError('invalid-response', 'Backend returned an invalid identity response.');
+      }
+      return page;
+    });
+  }
+
+  decideObservationIdentity(
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    personObservationIndex: number,
+    input: ObservationIdentityDecisionCommand,
+    options?: RequestOptions,
+  ): Promise<ObservationIdentityMutationResponse> {
+    return this.request<unknown>(
+      'POST',
+      `${this.identitySubjectsPath(siteId, alertId, eventId)}/${pathId(String(personObservationIndex))}/decisions`,
+      token,
+      input,
+      undefined,
+      options,
+    ).then((payload) => {
+      const mutation = parseObservationIdentityMutationResponse(payload);
+      if (
+        !mutation ||
+        !this.matchesIdentityCommand(
+          mutation.recordedDecision,
+          eventId,
+          personObservationIndex,
+          input,
+        )
+      ) {
+        throw new ApiError('invalid-response', 'Backend returned an invalid identity response.');
+      }
+      return mutation;
+    });
   }
 }

@@ -236,5 +236,97 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
       'ALLOWED',
       'UNAVAILABLE',
     ]);
+
+    // Immutable v1 accepts zero and Track IDs beyond PostgreSQL INTEGER.
+    for (const trackId of [0, 2147483648, Number.MAX_SAFE_INTEGER]) {
+      const input = { eventId, siteId, zoneId, trackId, evaluatedAt: capturedAt };
+      await source.transaction(async (manager) => {
+        await service.record(manager, input, unknown);
+        await service.record(manager, input, unknown);
+      });
+      const rows = await source.getRepository(ZoneEntryDecisionEntity).findBy({ eventId, trackId });
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.trackId, trackId);
+      assert.equal(typeof rows[0]!.trackId, 'number');
+    }
+    const largeDecisions = await access.listDecisions(siteId, { zoneId, offset: 0, limit: 20 });
+    assert.equal(largeDecisions.total, 5);
+    for (const { trackId } of largeDecisions.items) {
+      assert.equal(typeof JSON.parse(JSON.stringify({ trackId })).trackId, 'number');
+    }
+
+    // Identity review reads the original decision; it never uses a face candidate as authority.
+    const exact = await access.listObservationDecisions(siteId, eventId, Number.MAX_SAFE_INTEGER);
+    assert.equal(exact.total, 1);
+    assert.equal(exact.items[0]?.status, 'UNAVAILABLE');
+    assert.deepEqual(Object.keys(exact.items[0]!).sort(), [
+      'evaluatedAt',
+      'id',
+      'reasonCode',
+      'status',
+      'zoneId',
+    ]);
+    assert.deepEqual(
+      await access.listObservationDecisions(randomUUID(), eventId, Number.MAX_SAFE_INTEGER),
+      { items: [], total: 0 },
+    );
+    assert.deepEqual(
+      await access.listObservationDecisions(siteId, randomUUID(), Number.MAX_SAFE_INTEGER),
+      { items: [], total: 0 },
+    );
+    assert.deepEqual(await access.listObservationDecisions(siteId, eventId, 999), {
+      items: [],
+      total: 0,
+    });
+    const otherZoneId = randomUUID();
+    await source.getRepository(ZoneEntity).insert({
+      id: otherZoneId,
+      siteId,
+      code: `Z-${otherZoneId}`,
+      name: 'Overlapping zone',
+      type: ZoneType.RESTRICTED,
+      restrictionPolicy: ZoneRestrictionPolicy.PROHIBITED_FOR_ALL,
+      requiredPpe: [],
+      configurationLocked: false,
+    });
+    await source.transaction(async (manager) => {
+      const input = {
+        eventId,
+        siteId,
+        zoneId: otherZoneId,
+        trackId: Number.MAX_SAFE_INTEGER,
+        evaluatedAt: capturedAt,
+        restrictionPolicy: ZoneRestrictionPolicy.PROHIBITED_FOR_ALL,
+      };
+      await service.record(manager, input, await service.decide(manager, input));
+    });
+    const overlapping = await access.listObservationDecisions(
+      siteId,
+      eventId,
+      Number.MAX_SAFE_INTEGER,
+    );
+    assert.equal(overlapping.total, 2);
+    assert.deepEqual(
+      new Set(overlapping.items.map((item) => item.status)),
+      new Set(['DENIED', 'UNAVAILABLE']),
+    );
+    const first = await access.listObservationDecisions(
+      siteId,
+      eventId,
+      Number.MAX_SAFE_INTEGER,
+      0,
+      1,
+    );
+    const second = await access.listObservationDecisions(
+      siteId,
+      eventId,
+      Number.MAX_SAFE_INTEGER,
+      1,
+      1,
+    );
+    assert.equal(first.total, 2);
+    assert.equal(second.total, 2);
+    assert.notEqual(first.items[0]?.id, second.items[0]?.id);
+    assert.deepEqual([...first.items, ...second.items], overlapping.items);
   });
 });

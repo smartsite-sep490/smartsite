@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import type { DataSource } from 'typeorm';
@@ -11,6 +12,7 @@ import { PublicHttpException } from '../src/common/http/public-http-exception.js
 import { AiObservationEventEntity } from '../src/database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../src/database/entities/alert-detection-mapping.entity.js';
 import { SafetyAlertEntity } from '../src/database/entities/safety-alert.entity.js';
+import { CameraEntity } from '../src/database/entities/camera.entity.js';
 import { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
 
 const jpeg = Buffer.from([0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9]);
@@ -28,6 +30,9 @@ function dataSourceFor(input: {
   rawPayload: unknown;
   includeAlert?: boolean;
   includeMapping?: boolean;
+  camera?: { id: string; siteId: string; externalId: string };
+  eventMetadata?: Record<string, unknown>;
+  conflictingSiteMapping?: boolean;
 }) {
   return {
     getRepository(entity: unknown) {
@@ -42,7 +47,30 @@ function dataSourceFor(input: {
         };
       }
       if (entity === AlertDetectionMappingEntity) {
+        const query = {
+          innerJoin(joined: unknown, alias: string, condition: string) {
+            assert.equal(joined, SafetyAlertEntity);
+            assert.equal(alias, 'mappedAlert');
+            assert.equal(condition, 'mappedAlert.id = mapping.alertId');
+            return query;
+          },
+          where(condition: string, params: unknown) {
+            assert.equal(condition, 'mapping.eventId = :eventId');
+            assert.deepEqual(params, { eventId: input.eventId });
+            return query;
+          },
+          andWhere(condition: string, params: unknown) {
+            assert.equal(condition, 'mappedAlert.siteId <> :siteId');
+            assert.deepEqual(params, { siteId: input.siteId });
+            return query;
+          },
+          getExists: async () => input.conflictingSiteMapping === true,
+        };
         return {
+          createQueryBuilder: (alias: string) => {
+            assert.equal(alias, 'mapping');
+            return query;
+          },
           findOneBy: async (where: { alertId: string; eventId: string }) =>
             input.includeMapping !== false &&
             where.alertId === input.alertId &&
@@ -55,7 +83,15 @@ function dataSourceFor(input: {
         return {
           findOneBy: async (where: { eventId: string }) =>
             where.eventId === input.eventId
-              ? { eventId: input.eventId, rawPayload: input.rawPayload }
+              ? { eventId: input.eventId, rawPayload: input.rawPayload, ...input.eventMetadata }
+              : null,
+        };
+      }
+      if (entity === CameraEntity) {
+        return {
+          findOneBy: async (where: { id: string; siteId: string }) =>
+            input.camera?.id === where.id && input.camera.siteId === where.siteId
+              ? input.camera
               : null,
         };
       }
@@ -68,6 +104,227 @@ function isPublicError(code: string) {
   return (error: unknown) =>
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
+
+function identityFrameFixture(
+  root: string,
+  overrides?: {
+    kind?: string;
+    uriSessionId?: string;
+    storedSessionId?: string;
+    storedHash?: string;
+    cameraSiteId?: string;
+    storedCameraExternalId?: string;
+    conflictingSiteMapping?: boolean;
+  },
+) {
+  const siteId = randomUUID();
+  const alertId = randomUUID();
+  const eventId = randomUUID();
+  const sessionId = randomUUID();
+  const cameraId = randomUUID();
+  const uriSessionId = overrides?.uriSessionId ?? sessionId;
+  const rawPayload = {
+    eventId,
+    schemaVersion: '1.0.0',
+    cameraExternalId: 'CAM-01',
+    streamSessionId: sessionId,
+    capturedAt: '2026-10-01T00:00:00.000Z',
+    frameDimensions: { width: 1280, height: 720 },
+    observations: [
+      {
+        type: 'PERSON',
+        trackId: 7,
+        boundingBox: {
+          x1: 0.1,
+          y1: 0.2,
+          x2: 0.4,
+          y2: 0.9,
+          coordinateSpace: 'NORMALIZED_0_1',
+        },
+      },
+    ],
+    evidence: [
+      {
+        kind: overrides?.kind ?? 'FRAME',
+        uri: `local://evidence/${uriSessionId}/9/${eventId}.jpg`,
+      },
+    ],
+  };
+  const payloadHash = computeCanonicalPayloadHash(rawPayload);
+  const service = new SafetyAlertEvidenceService(
+    dataSourceFor({
+      siteId,
+      alertId,
+      eventId,
+      rawPayload,
+      camera: { id: cameraId, siteId: overrides?.cameraSiteId ?? siteId, externalId: 'CAM-01' },
+      conflictingSiteMapping: overrides?.conflictingSiteMapping,
+      eventMetadata: {
+        payloadHash: overrides?.storedHash ?? payloadHash,
+        streamSessionId: overrides?.storedSessionId ?? sessionId,
+        cameraExternalId: overrides?.storedCameraExternalId ?? 'CAM-01',
+        resolvedCameraId: cameraId,
+      },
+    }),
+    config(root),
+  );
+  return {
+    service,
+    siteId,
+    alertId,
+    eventId,
+    payloadHash,
+    fileName: `${uriSessionId}_9_${eventId}.jpg`,
+  };
+}
+
+test('identity review FRAME digest describes exactly the protected bytes served', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const value = identityFrameFixture(root);
+  await writeFile(join(root, value.fileName), jpeg);
+  const content = await value.service.readFrameForIdentityReview(
+    value.siteId,
+    value.alertId,
+    value.eventId,
+    '0',
+    value.payloadHash,
+  );
+  assert.deepEqual(content.bytes, jpeg);
+  assert.equal(content.sha256, createHash('sha256').update(jpeg).digest('hex'));
+  const changed = Buffer.from([0xff, 0xd8, 0x03, 0x04, 0xff, 0xd9]);
+  await writeFile(join(root, value.fileName), changed);
+  const reread = await value.service.readFrameForIdentityReview(
+    value.siteId,
+    value.alertId,
+    value.eventId,
+    '0',
+    value.payloadHash,
+  );
+  assert.notEqual(reread.sha256, content.sha256);
+});
+
+test('identity review refuses crops, snapshots and FRAME from a different session', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const overrides of [
+    { kind: 'CROP' },
+    { kind: 'SNAPSHOT' },
+    { uriSessionId: randomUUID() },
+  ]) {
+    const value = identityFrameFixture(root, overrides);
+    await writeFile(join(root, value.fileName), jpeg);
+    await assert.rejects(
+      value.service.readFrameForIdentityReview(
+        value.siteId,
+        value.alertId,
+        value.eventId,
+        '0',
+        value.payloadHash,
+      ),
+      isPublicError('NOT_FOUND'),
+    );
+  }
+});
+
+test('identity review refuses raw hash and stored camera/session contradictions', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const overrides of [
+    { storedHash: 'a'.repeat(64) },
+    { storedSessionId: randomUUID() },
+    { conflictingSiteMapping: true },
+    { storedCameraExternalId: 'OTHER-CAMERA' },
+  ]) {
+    const value = identityFrameFixture(root, overrides);
+    await writeFile(join(root, value.fileName), jpeg);
+    await assert.rejects(
+      value.service.readFrameForIdentityReview(
+        value.siteId,
+        value.alertId,
+        value.eventId,
+        '0',
+        value.payloadHash,
+      ),
+      isPublicError('CONFLICT'),
+    );
+  }
+  const value = identityFrameFixture(root);
+  await assert.rejects(
+    value.service.readFrameForIdentityReview(
+      value.siteId,
+      value.alertId,
+      value.eventId,
+      '0',
+      'b'.repeat(64),
+    ),
+    isPublicError('CONFLICT'),
+  );
+});
+
+test('camera reassignment cannot replace historical alert/event Site ownership', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const value = identityFrameFixture(root, { cameraSiteId: randomUUID() });
+  await writeFile(join(root, value.fileName), jpeg);
+  const result = await value.service.readFrameForIdentityReview(
+    value.siteId,
+    value.alertId,
+    value.eventId,
+    '0',
+    value.payloadHash,
+  );
+  assert.deepEqual(result.bytes, jpeg);
+  await assert.rejects(
+    value.service.readFrameForIdentityReview(
+      randomUUID(),
+      value.alertId,
+      value.eventId,
+      '0',
+      value.payloadHash,
+    ),
+    isPublicError('NOT_FOUND'),
+  );
+});
+
+test('identity review missing, oversized or invalid local media remains unavailable', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const value = identityFrameFixture(root);
+  for (const bytes of [undefined, Buffer.alloc(1_048_577), Buffer.from('not jpeg')]) {
+    if (bytes) await writeFile(join(root, value.fileName), bytes);
+    await assert.rejects(
+      value.service.readFrameForIdentityReview(
+        value.siteId,
+        value.alertId,
+        value.eventId,
+        '0',
+        value.payloadHash,
+      ),
+      isPublicError('NOT_FOUND'),
+    );
+  }
+  await assert.rejects(
+    value.service.readFrameForIdentityReview(
+      randomUUID(),
+      value.alertId,
+      value.eventId,
+      '0',
+      value.payloadHash,
+    ),
+    isPublicError('NOT_FOUND'),
+  );
+  await assert.rejects(
+    value.service.readFrameForIdentityReview(
+      value.siteId,
+      value.alertId,
+      randomUUID(),
+      '0',
+      value.payloadHash,
+    ),
+    isPublicError('NOT_FOUND'),
+  );
+});
 
 test('evidence summaries expose curated metadata and never expose storage URIs', () => {
   const eventId = randomUUID();

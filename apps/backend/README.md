@@ -51,6 +51,26 @@ AppModule
 
 Controller chỉ xử lý HTTP. Module gọi provider được export của module khác, không đọc persistence nội bộ. Chỉ thêm module khi có hành vi thật; không thêm repository tổng quát, base service hay folder chờ tính năng. Quy tắc chi tiết ở [AGENTS.md](AGENTS.md).
 
+## Review danh tính trong một quan sát
+
+`SafetyModule` đăng ký API review thủ công tại
+`GET /api/v1/sites/:siteId/safety-alerts/:alertId/detections/:eventId/identity-subjects`,
+picker `/workers`, và history/command `/:personObservationIndex/decisions`.
+Mọi route yêu cầu tài khoản active đã đổi mật khẩu tạm và vai trò Safety Officer đúng Site;
+Admin đơn thuần không có quyền review danh tính.
+
+Reader dùng `WorkforceConfigurationService` được export hiện có, đọc Worker theo UUID + Site.
+RESOLVE khóa Worker trong chính transaction lưu quyết định; picker phân trang chỉ trả
+`id`, `siteId`, `externalId`, `displayName`, `isActive`. Không tạo danh bạ thứ hai hoặc gọi face model.
+Review chỉ thuộc một PERSON trong một event; correction/CLEAR giữ audit và không cấp quyền
+Zone, sửa quyết định vào vùng gốc, hay truyền danh tính sang Track/event/camera khác.
+
+Trước khi triển khai source này, chạy migration theo quy trình triển khai đã duyệt và xác nhận
+hai bảng observation identity tồn tại; ứng dụng không tự migrate lúc startup.
+Không revert migration chứa audit nếu chưa có backup và kế hoạch khôi phục được duyệt.
+Triển khai với dữ liệu thật còn cần chốt retention/access policy; kiểm chứng local sử dụng
+dữ liệu synthetic và database riêng, không tự apply migration lên Neon.
+
 ## Cấu hình môi trường
 
 Zod kiểm tra cấu hình trước khi khởi động; `BackendEnvironment` được suy ra từ schema. Service dùng `ConfigService<BackendEnvironment, true>`, không tự đọc `process.env` hay đặt fallback chưa kiểm tra. Khi thêm biến, cập nhật schema, `.env.example`, tài liệu và regression test cùng nhau.
@@ -125,6 +145,10 @@ Safety Alert detail chỉ trả metadata evidence đã tuyển chọn. Admin glo
 
 TypeORM Data Mapper (`@nestjs/typeorm`, `typeorm`, `pg`) quản lý Site, Camera, Zone, observation region, raw AI event, Safety Alert và detection mapping. `synchronize: false` và `migrationsRun: false` ở mọi môi trường; không chạy migration trong lúc server boot. Thay đổi schema cần migration được review và integration test với PostgreSQL thật.
 
+Contractor là thực thể toàn cục, có thể tham gia nhiều Site qua `contractor_site_participation` theo khoảng thời gian hiệu lực. API MF07 dưới `/sites/:siteId/contractors` tạo Contractor mới hoặc liên kết Contractor cùng `code` và `name` vào Site trong một transaction; mã đã tồn tại với tên khác hoặc Contractor inactive bị từ chối. Representative cần role đúng Site và `contractor_representative_assignment` của Site đó để thao tác lịch; thao tác gán này đồng thời tạo `contractor_representative_grant` cho các luồng workforce/face-gate trên main. Participation hết hiệu lực không cấp quyền MF07 mới. Worker Schedule chỉ do Representative được gán phân công; Site Manager tạo/giao ca cho Contractor, Admin không phân ca Worker.
+
+Khi nâng cấp database đã chạy migration MF07 cũ trước `IdentityAccessScope`, migration chuyển `contractor.site_id` sang participation và backfill grant mà không đổi ID Contractor/Worker. Các `code` Contractor trùng giữa nhiều Site sẽ chặn migration vì `code` giờ duy nhất toàn cục; cần đối chiếu và xử lý dữ liệu sau khi sao lưu, không tự đổi mã. Chạy migration trên bản sao trước khi áp dụng cho database thật; không rollback migration này khi MF07 cũ vẫn sở hữu dữ liệu.
+
 API quản trị Site/Camera/Zone/Region hiện vẫn yêu cầu tài khoản Admin global active đã đổi mật khẩu tạm. Camera có `configurationVersion`; mỗi thao tác sửa Region hoặc trạng thái Camera phải gửi revision hiện tại và được thực hiện trong transaction. Sau khi Zone đã gắn Region, `type`, `restrictionPolicy` và `requiredPpe` bị khóa vĩnh viễn; tên vẫn sửa được. Snapshot chỉ gồm các Region active và được kiểm tra bằng contract Backend–AI trước khi trả. `siteId` trong service chỉ giới hạn dữ liệu, không tự chứng minh quyền người dùng.
 
 ### Tài khoản và API cấu hình
@@ -174,6 +198,31 @@ pnpm --filter @smartsite/backend typeorm migration:run -d dist/database/typeorm.
 ```
 
 Docker Compose chạy service `migrate` trước Backend. Staging/production phải chạy migration có kiểm soát trước khi deploy phiên bản cần schema mới. Kiểm tra đường rollback và tương thích dữ liệu; `revert` chỉ hoàn tác migration gần nhất, không thay backup.
+
+Migration `ZoneEntryTrackIdRange1790812800001` mở rộng `zone_entry_decision.track_id` từ
+PostgreSQL `integer` sang `bigint`, với CHECK `0..9007199254740991` đúng contract observation
+v1. Chạy migration này trước khi deploy Backend dùng transformer mới. API vẫn trả `trackId`
+kiểu số JSON; thay đổi lưu trữ không xác nhận Worker hay thay chính sách quyền Zone.
+Downgrade về `integer` sẽ bị PostgreSQL từ chối nếu còn Track ID lớn hơn `2147483647`;
+lệnh thất bại nguyên tử, không xóa hoặc cắt giá trị để ép rollback. Khi đã có các ID đó,
+ưu tiên forward fix hoặc quy trình restore đã được duyệt, không coi `revert` luôn khả dụng.
+
+Migration `ObservationIdentityReview1790899200000` chỉ cho revert khi cả head và audit
+đều rỗng. Nếu đã có quyết định review, `down` từ chối trước mọi thay đổi schema trong
+cùng một statement; dùng forward fix hoặc backup/restore được duyệt. Không truncate
+audit để ép rollback. Trigger chặn `UPDATE`/`DELETE` quyết định; tài khoản database
+runtime phải không có quyền `TRUNCATE` hoặc DDL. Trigger không bảo vệ trước database
+owner/superuser. Chỉ fixture giả trong database test riêng được dọn bằng `TRUNCATE`.
+
+API review danh tính theo từng PERSON observation hiện chưa được đăng ký trong
+`SafetyModule`: phải thống nhất reader/export từ registry Worker trước khi bật.
+Các test HTTP dùng module và reader riêng cho fixture; đây không phải bằng chứng
+endpoint đã hoạt động trên môi trường ứng dụng. Review thủ công chỉ có phạm vi
+`EXACT_OBSERVATION`, không xác minh track trực tiếp, cấp quyền Zone, tính lại quyết
+định vào vùng đã lưu hoặc mở lại alert. Nếu ảnh hết hạn hay Camera đã bị xóa,
+lịch sử/replay/CLEAR vẫn dùng snapshot hợp lệ đã lưu; RESOLVE mới bị chặn khi
+không còn bằng chứng phù hợp. Management response validators dùng browser-safe
+entry `@smartsite/contracts/management` trong Web/API client.
 
 ### Neon local
 
