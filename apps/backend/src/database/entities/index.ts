@@ -34,6 +34,10 @@ import { FaceProfileEntity } from './face-profile.entity.js';
 import { FaceEnrollmentSessionEntity } from './face-enrollment-session.entity.js';
 import { GateAccessLogEntity } from './gate-access-log.entity.js';
 import { WorkerGatePermissionEntity } from './worker-gate-permission.entity.js';
+import { ContractorZoneAccessGrantEntity } from './contractor-zone-access-grant.entity.js';
+import { ZoneAuthorityCommandEntity } from './zone-authority-command.entity.js';
+import { ZoneAuthorityFactRevisionEntity } from './zone-authority-fact-revision.entity.js';
+import { ZoneAuthorityHistoryEpochEntity } from './zone-authority-history-epoch.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -74,6 +78,10 @@ export * from './face-profile.entity.js';
 export * from './face-enrollment-session.entity.js';
 export * from './gate-access-log.entity.js';
 export * from './worker-gate-permission.entity.js';
+export * from './contractor-zone-access-grant.entity.js';
+export * from './zone-authority-command.entity.js';
+export * from './zone-authority-fact-revision.entity.js';
+export * from './zone-authority-history-epoch.entity.js';
 
 export const ENTITIES = [
   SiteEntity,
@@ -113,4 +121,8 @@ export const ENTITIES = [
   FaceEnrollmentSessionEntity,
   GateAccessLogEntity,
   WorkerGatePermissionEntity,
+  ContractorZoneAccessGrantEntity,
+  ZoneAuthorityCommandEntity,
+  ZoneAuthorityFactRevisionEntity,
+  ZoneAuthorityHistoryEpochEntity,
 ] as const;

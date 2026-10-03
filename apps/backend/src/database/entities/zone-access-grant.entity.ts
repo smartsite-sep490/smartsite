@@ -1,5 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
+import { ContractorEntity } from './contractor.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 
@@ -27,6 +28,14 @@ export class ZoneAccessGrantEntity {
   @Column({ name: 'worker_id', type: 'uuid' })
   @ForeignKey(() => WorkerEntity, { name: 'fk_zone_access_grant_worker', onDelete: 'RESTRICT' })
   workerId!: string;
+
+  /** Immutable grant ownership; NULL preserves unproven legacy authority. */
+  @Column({ name: 'contractor_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorEntity, {
+    name: 'fk_worker_grant_contractor_anchor',
+    onDelete: 'RESTRICT',
+  })
+  contractorId!: string | null;
 
   @Column({ type: 'varchar', length: 8 })
   effect!: ZoneAccessEffect;

@@ -71,6 +71,22 @@ Không revert migration chứa audit nếu chưa có backup và kế hoạch kh�
 Triển khai với dữ liệu thật còn cần chốt retention/access policy; kiểm chứng local sử dụng
 dữ liệu synthetic và database riêng, không tự apply migration lên Neon.
 
+## Lưu trữ lịch sử quyền Zone
+
+Migration `1791417600000-ZoneAuthorityHistory` bổ sung grant Contractor → Zone,
+command/fact audit và epoch theo Site. Assignment và Worker grant có anchor
+Contractor bất biến; bản ghi cũ giữ `NULL`, không backfill từ Worker hiện tại.
+Migration không tạo grant, baseline history hay epoch `READY`.
+
+Đây là storage foundation, chưa nối writer/reader quyền hai tầng hoặc bật xác minh
+Worker live. Payload theo từng loại fact còn phải được validator của writer kiểm tra;
+chỉ có bảng hoặc digest không chứng minh lịch sử đầy đủ. Worker assignment không tự
+cấp quyền Zone. Không áp dụng migration tự động lúc startup hoặc lên Neon chưa duyệt.
+
+Audit đã có dữ liệu chặn UPDATE/DELETE và TRUNCATE kể cả qua CASCADE; bảng audit rỗng
+cho phép cleanup. Downgrade từ chối nếu có grant Contractor, command/fact/epoch hoặc
+anchor mới để giữ dữ liệu; dùng forward migration khi cần sửa schema đã có audit.
+
 ## Cấu hình môi trường
 
 Zod kiểm tra cấu hình trước khi khởi động; `BackendEnvironment` được suy ra từ schema. Service dùng `ConfigService<BackendEnvironment, true>`, không tự đọc `process.env` hay đặt fallback chưa kiểm tra. Khi thêm biến, cập nhật schema, `.env.example`, tài liệu và regression test cùng nhau.

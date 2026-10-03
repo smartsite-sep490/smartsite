@@ -1,5 +1,6 @@
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
+import { ContractorEntity } from './contractor.entity.js';
 import { UserEntity } from './user.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 
@@ -33,6 +34,14 @@ export class WorkerSiteZoneAssignmentEntity {
     onDelete: 'RESTRICT',
   })
   workerId!: string;
+
+  /** Immutable submission ownership. NULL legacy rows must not infer past Contractor. */
+  @Column({ name: 'contractor_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorEntity, {
+    name: 'fk_assignment_contractor_anchor',
+    onDelete: 'RESTRICT',
+  })
+  contractorId!: string | null;
 
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, {

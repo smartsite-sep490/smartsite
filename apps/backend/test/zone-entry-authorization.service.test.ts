@@ -40,6 +40,7 @@ function allowGrant(overrides: Partial<ZoneAccessGrantEntity> = {}): ZoneAccessG
     zoneId,
     workerId,
     effect: ZoneAccessEffect.ALLOW,
+    contractorId: null,
     validFrom: new Date('2026-09-28T07:00:00.000Z'),
     validUntil: new Date('2026-09-28T09:00:00.000Z'),
     revokedAt: null,
