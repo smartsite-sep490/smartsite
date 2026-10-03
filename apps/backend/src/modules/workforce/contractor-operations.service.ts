@@ -35,6 +35,14 @@ import {
 } from '../../database/entities/worker-site-zone-assignment.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
+import type { ZoneAuthorityFact } from '../zones/zone-authority-history.js';
+import {
+  assignmentFact,
+  contractorFact,
+  participationFact,
+  workerMembershipFact,
+  writeWorkforceAuthority,
+} from './workforce-authority-history.js';
 
 export interface WorkforceActor {
   id: string;
@@ -134,6 +142,36 @@ function timeRange(
 @Injectable()
 export class ContractorOperationsService {
   constructor(private readonly dataSource: DataSource) {}
+
+  /** One transaction boundary for these six authority-changing use cases. */
+  protected authorityMutation<T>(
+    actor: WorkforceActor,
+    operation: string,
+    request: Record<string, unknown>,
+    mutate: (
+      manager: EntityManager,
+      actor: WorkforceActor,
+      effectiveFrom: Date,
+    ) => Promise<{ result: T; facts: readonly ZoneAuthorityFact[] }>,
+  ): Promise<T> {
+    return writeWorkforceAuthority(
+      this.dataSource,
+      { kind: 'USER', userId: actor.id },
+      operation,
+      request,
+      async (manager, at) => {
+        const roles = await manager
+          .getRepository(UserRoleAssignmentEntity)
+          .findBy({ userId: actor.id });
+        // Authentication's earlier role snapshot cannot authorize a write after revocation.
+        const currentActor = {
+          ...actor,
+          roleAssignments: roles.map(({ role, siteId }) => ({ role, siteId })),
+        };
+        return mutate(manager, currentActor, at);
+      },
+    );
+  }
 
   private forbidden(): never {
     throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -285,12 +323,21 @@ export class ContractorOperationsService {
     this.assertAdmin(actor);
     const value = command(CreateContractorCommand, input);
     try {
-      return await this.dataSource.getRepository(ContractorEntity).save({
-        id: randomUUID(),
-        code: value.code,
-        name: value.name,
-        isActive: true,
-      });
+      return await this.authorityMutation(
+        actor,
+        'CONTRACTOR_CREATE',
+        { ...value },
+        async (manager, currentActor, at) => {
+          this.assertAdmin(currentActor);
+          const result = await manager.getRepository(ContractorEntity).save({
+            id: randomUUID(),
+            code: value.code,
+            name: value.name,
+            isActive: true,
+          });
+          return { result, facts: [contractorFact(result, at)] };
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
     }
@@ -305,23 +352,30 @@ export class ContractorOperationsService {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorParticipationCommand, input);
     const range = timeRange(value.validFrom, value.validUntil);
-    return this.dataSource.transaction(async (manager) => {
-      const contractor = await manager
-        .getRepository(ContractorEntity)
-        .findOneBy({ id: contractorId });
-      if (!contractor) missing();
-      const siteId = uuid(value.siteId);
-      const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
-      if (!site) missing();
-      return manager.getRepository(ContractorSiteParticipationEntity).save({
-        id: randomUUID(),
-        contractorId,
-        siteId,
-        validFrom: range.from,
-        validUntil: range.until,
-        isActive: true,
-      });
-    });
+    return this.authorityMutation(
+      actor,
+      'CONTRACTOR_PARTICIPATION_CREATE',
+      { contractorId, ...value },
+      async (manager, currentActor, at) => {
+        this.assertAdmin(currentActor);
+        const contractor = await manager
+          .getRepository(ContractorEntity)
+          .findOneBy({ id: contractorId });
+        if (!contractor) missing();
+        const siteId = uuid(value.siteId);
+        const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
+        if (!site) missing();
+        const result = await manager.getRepository(ContractorSiteParticipationEntity).save({
+          id: randomUUID(),
+          contractorId,
+          siteId,
+          validFrom: range.from,
+          validUntil: range.until,
+          isActive: true,
+        });
+        return { result, facts: [participationFact(result, at)] };
+      },
+    );
   }
 
   async grantRepresentative(
@@ -367,22 +421,28 @@ export class ContractorOperationsService {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
-    return this.dataSource.transaction(async (manager) => {
-      await this.requireContractorRepresentative(manager, actor, contractorId, siteId);
-      await this.requireActiveParticipation(manager, contractorId, siteId, new Date());
-      try {
-        return await manager.getRepository(WorkerEntity).save({
-          id: randomUUID(),
-          contractorId,
-          siteId,
-          externalId: value.externalId,
-          displayName: value.displayName,
-          isActive: true,
-        });
-      } catch (error) {
-        knownUnique(error, ['uq_worker_site_external_id']);
-      }
-    });
+    return this.authorityMutation(
+      actor,
+      'CONTRACTOR_WORKER_CREATE',
+      { contractorId, ...value },
+      async (manager, currentActor, at) => {
+        await this.requireContractorRepresentative(manager, currentActor, contractorId, siteId);
+        await this.requireActiveParticipation(manager, contractorId, siteId, at);
+        try {
+          const result = await manager.getRepository(WorkerEntity).save({
+            id: randomUUID(),
+            contractorId,
+            siteId,
+            externalId: value.externalId,
+            displayName: value.displayName,
+            isActive: true,
+          });
+          return { result, facts: [workerMembershipFact(result, at)] };
+        } catch (error) {
+          knownUnique(error, ['uq_worker_site_external_id']);
+        }
+      },
+    );
   }
 
   async requestAssignment(
@@ -396,36 +456,50 @@ export class ContractorOperationsService {
     const zoneIds = [...new Set(value.zoneIds.map(uuid))];
     if (zoneIds.length !== value.zoneIds.length) conflict('Zone IDs must be unique');
     const range = timeRange(value.validFrom, value.validUntil);
-    return this.dataSource.transaction(async (manager) => {
-      const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
-      if (!worker?.contractorId || !worker.isActive) this.forbidden();
-      await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
-      await this.requireActiveParticipation(
-        manager,
-        worker.contractorId,
-        siteId,
-        range.from,
-        range.until,
-      );
-      const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
-      if (zones.length !== zoneIds.length) this.forbidden();
-      return manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
-        id: randomUUID(),
-        workerId,
-        siteId,
-        zoneIds,
-        status: WorkerSiteZoneAssignmentStatus.PENDING,
-        validFrom: range.from,
-        validUntil: range.until,
-        requestedByUserId: actor.id,
-        safetyReviewedByUserId: null,
-        siteManagerDecidedByUserId: null,
-      });
-    });
+    return this.authorityMutation(
+      actor,
+      'WORKER_ASSIGNMENT_REQUEST',
+      { workerId, ...value },
+      async (manager, currentActor, at) => {
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOneBy({ id: workerId, siteId });
+        if (!worker?.contractorId || !worker.isActive) this.forbidden();
+        await this.requireContractorRepresentative(
+          manager,
+          currentActor,
+          worker.contractorId,
+          siteId,
+        );
+        await this.requireActiveParticipation(
+          manager,
+          worker.contractorId,
+          siteId,
+          range.from,
+          range.until,
+        );
+        const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
+        if (zones.length !== zoneIds.length) this.forbidden();
+        const result = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
+          id: randomUUID(),
+          workerId,
+          contractorId: worker.contractorId,
+          siteId,
+          zoneIds,
+          status: WorkerSiteZoneAssignmentStatus.PENDING,
+          validFrom: range.from,
+          validUntil: range.until,
+          requestedByUserId: actor.id,
+          safetyReviewedByUserId: null,
+          siteManagerDecidedByUserId: null,
+        });
+        return { result, facts: [assignmentFact(result, at)] };
+      },
+    );
   }
 
-  /** Recheck mutable eligibility before a positive review, not just at submission.
-   * This is not historical ownership or serialization of other domain writers.
+  /** Recheck current eligibility inside the command, not just at submission.
+   * This is not complete historical ownership; legacy NULL anchors stay NULL.
    * Assignment remains a work allocation; this check never creates Zone grants.
    */
   private async requireAssignmentEligibility(
@@ -437,6 +511,12 @@ export class ContractorOperationsService {
       siteId: request.siteId,
     });
     if (!worker?.contractorId || !worker.isActive) this.forbidden();
+    if (
+      request.contractorId !== null &&
+      request.contractorId !== undefined &&
+      request.contractorId !== worker.contractorId
+    )
+      this.forbidden();
     await this.requireActiveParticipation(
       manager,
       worker.contractorId,
@@ -453,22 +533,28 @@ export class ContractorOperationsService {
 
   async safetyReview(actor: WorkforceActor, requestIdValue: string) {
     const requestId = uuid(requestIdValue);
-    return this.dataSource.transaction(async (manager) => {
-      const request = await manager
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .createQueryBuilder('assignment')
-        .setLock('pessimistic_write')
-        .where('assignment.id = :requestId', { requestId })
-        .getOne();
-      if (!request) missing();
-      await this.requireSiteRole(actor, request.siteId, UserRole.SAFETY_OFFICER);
-      if (request.status !== WorkerSiteZoneAssignmentStatus.PENDING)
-        conflict('Assignment is not pending');
-      await this.requireAssignmentEligibility(manager, request);
-      request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
-      request.safetyReviewedByUserId = actor.id;
-      return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
-    });
+    return this.authorityMutation(
+      actor,
+      'WORKER_ASSIGNMENT_SAFETY_REVIEW',
+      { requestId },
+      async (manager, currentActor, at) => {
+        const request = await manager
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .createQueryBuilder('assignment')
+          .setLock('pessimistic_write')
+          .where('assignment.id = :requestId', { requestId })
+          .getOne();
+        if (!request) missing();
+        await this.requireSiteRole(currentActor, request.siteId, UserRole.SAFETY_OFFICER);
+        if (request.status !== WorkerSiteZoneAssignmentStatus.PENDING)
+          conflict('Assignment is not pending');
+        await this.requireAssignmentEligibility(manager, request);
+        request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
+        request.safetyReviewedByUserId = actor.id;
+        const result = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
+        return { result, facts: [assignmentFact(result, at)] };
+      },
+    );
   }
 
   async siteManagerDecision(
@@ -478,23 +564,29 @@ export class ContractorOperationsService {
   ) {
     const requestId = uuid(requestIdValue);
     const value = command(SiteManagerDecisionCommand, input);
-    return this.dataSource.transaction(async (manager) => {
-      const request = await manager
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .createQueryBuilder('assignment')
-        .setLock('pessimistic_write')
-        .where('assignment.id = :requestId', { requestId })
-        .getOne();
-      if (!request) missing();
-      await this.requireSiteRole(actor, request.siteId, UserRole.SITE_MANAGER);
-      if (request.status !== WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED)
-        conflict('Assignment requires Safety review');
-      if (value.approve) await this.requireAssignmentEligibility(manager, request);
-      request.status = value.approve
-        ? WorkerSiteZoneAssignmentStatus.APPROVED
-        : WorkerSiteZoneAssignmentStatus.REJECTED;
-      request.siteManagerDecidedByUserId = actor.id;
-      return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
-    });
+    return this.authorityMutation(
+      actor,
+      'WORKER_ASSIGNMENT_MANAGER_DECISION',
+      { requestId, ...value },
+      async (manager, currentActor, at) => {
+        const request = await manager
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .createQueryBuilder('assignment')
+          .setLock('pessimistic_write')
+          .where('assignment.id = :requestId', { requestId })
+          .getOne();
+        if (!request) missing();
+        await this.requireSiteRole(currentActor, request.siteId, UserRole.SITE_MANAGER);
+        if (request.status !== WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED)
+          conflict('Assignment requires Safety review');
+        if (value.approve) await this.requireAssignmentEligibility(manager, request);
+        request.status = value.approve
+          ? WorkerSiteZoneAssignmentStatus.APPROVED
+          : WorkerSiteZoneAssignmentStatus.REJECTED;
+        request.siteManagerDecidedByUserId = actor.id;
+        const result = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
+        return { result, facts: [assignmentFact(result, at)] };
+      },
+    );
   }
 }

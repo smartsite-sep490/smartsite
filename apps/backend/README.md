@@ -87,7 +87,21 @@ khác bị từ chối. Zone HTTP chưa nhận idempotency key từ client: mỗ
 mới. USER lấy từ authentication context; lời gọi nội bộ ghi SERVICE, không giả danh USER.
 Mỗi command giới hạn64KiB request và64 facts; vượt giới hạn bị từ chối, không cắt dữ liệu.
 
-Workforce/Worker/Contractor grant writers và reader quyền hai tầng còn cần tích hợp.
+Mười thao tác Workforce hiện có cũng ghi projection và history cùng transaction:
+tạo Contractor/participation/Worker, gửi phân công, Safety review, Manager quyết định;
+và tạo Worker/chuẩn bị tài khoản/liên kết tài khoản/tạo Contractor theo Site. Actor USER
+active được đọc lại trong transaction; role quản trị/review của các thao tác tương ứng
+không dựa riêng vào snapshot đăng nhập. Participation/Worker/Zone eligibility được kiểm
+tra trên cùng manager. Phân công mới lưu Contractor anchor; positive review từ chối
+nếu Worker đã chuyển Contractor. Bản ghi legacy NULL vẫn giữ hành vi phân công cũ,
+không biến thành lịch sử ownership đầy đủ hoặc quyền Zone.
+
+HTTP Workforce truyền USER từ context; SERVICE chỉ dành cho lời gọi nội bộ. Chuẩn bị/
+liên kết tài khoản giữ scope endpoint hiện có; account link không chứng minh Worker
+đang có mặt trước camera. Mỗi lời gọi mới tạo command mới; record idempotency không
+đồng nghĩa HTTP retry chỉ ghi một audit. Fact membership không chứa account/Face profile.
+
+Worker/Contractor grant writers và reader quyền hai tầng còn cần tích hợp.
 Lịch sử chưa đủ để bật epoch READY hoặc xác minh Worker live; chỉ có bảng/digest không
 chứng minh completeness. Anchor legacy NULL giữ nguyên, không suy từ membership hiện tại.
 Worker assignment không tự cấp quyền Zone. Không áp dụng migration tự động lúc startup
@@ -96,7 +110,8 @@ hoặc lên Neon chưa duyệt. Migration phải chạy trước source sử d�
 Audit đã có dữ liệu chặn UPDATE/DELETE và TRUNCATE kể cả qua CASCADE; bảng audit rỗng
 cho phép cleanup. Downgrade từ chối nếu có grant Contractor, command/fact/epoch hoặc
 anchor mới để giữ dữ liệu; dùng forward migration khi cần sửa schema đã có audit.
-Các suite authentication/JWT/migration/configuration dùng schema test riêng trên database
+Các suite authentication/JWT/migration/configuration, assignment review và account-face
+templates dùng schema test riêng trên database
 local đã kiểm tra; cleanup chỉ xóa schema do suite đó tạo, không truncate audit của suite khác.
 
 ## Cấu hình môi trường

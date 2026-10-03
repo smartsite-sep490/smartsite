@@ -17,13 +17,8 @@ import type { ContractorRepresentativeAssignmentEntity } from '../../database/en
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
 import { pagination } from '../../common/http/pagination.js';
-import {
-  AssignContractorRepresentativeDto,
-  CreateContractorDto,
-} from './dto/workforce.dto.js';
-import {
-  WorkforceConfigurationService,
-} from './workforce-configuration.service.js';
+import { AssignContractorRepresentativeDto, CreateContractorDto } from './dto/workforce.dto.js';
+import { WorkforceConfigurationService } from './workforce-configuration.service.js';
 
 function contractorResponse(contractor: ContractorEntity, siteId: string) {
   return {
@@ -69,7 +64,10 @@ export class ContractorsController {
     @Param('siteId') siteId: string,
     @Body() input: CreateContractorDto,
   ) {
-    const contractor = await this.workforce.createContractor(siteId, input);
+    const contractor = await this.workforce.createContractor(siteId, input, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.create',
@@ -100,12 +98,12 @@ export class ContractorsController {
 
   @Get('contractors')
   @ApiOkResponse()
-  async list(
-    @Req() request: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-  ) {
+  async list(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string) {
     const result = await this.workforce.listContractors(request.user!, siteId);
-    return { items: result.items.map(contractor => contractorResponse(contractor, siteId)), total: result.total };
+    return {
+      items: result.items.map((contractor) => contractorResponse(contractor, siteId)),
+      total: result.total,
+    };
   }
 
   @Get('contractor-representative-assignments')

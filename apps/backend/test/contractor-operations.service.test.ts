@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { EntityManager } from 'typeorm';
+import type { DataSource, EntityManager } from 'typeorm';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
 import { ContractorEntity } from '../src/database/entities/contractor.entity.js';
 import { ContractorRepresentativeGrantEntity } from '../src/database/entities/contractor-representative-grant.entity.js';
@@ -16,6 +16,29 @@ import {
   ContractorOperationsService,
   type WorkforceActor,
 } from '../src/modules/workforce/contractor-operations.service.js';
+import type { ZoneAuthorityFact } from '../src/modules/zones/zone-authority-history.js';
+
+// These unit cases exercise domain eligibility only. The real transaction, fresh
+// actor roles, projection/history rollback and concurrency run in PostgreSQL in
+// workforce-authority-writers.integration.test.ts.
+class DomainOnlyContractorOperations extends ContractorOperationsService {
+  constructor(private readonly testManager: EntityManager) {
+    super({} as DataSource);
+  }
+
+  protected override async authorityMutation<T>(
+    actor: WorkforceActor,
+    _operation: string,
+    _request: Record<string, unknown>,
+    mutate: (
+      manager: EntityManager,
+      actor: WorkforceActor,
+      at: Date,
+    ) => Promise<{ result: T; facts: readonly ZoneAuthorityFact[] }>,
+  ): Promise<T> {
+    return (await mutate(this.testManager, actor, new Date('2026-10-04T00:00:00Z'))).result;
+  }
+}
 
 const IDs = {
   actor: '00000000-0000-4000-8000-000000000001',
@@ -62,10 +85,7 @@ function serviceFor({ hasGrant }: { hasGrant: boolean }) {
       throw new Error('Unexpected repository');
     },
   } as unknown as EntityManager;
-  const service = new ContractorOperationsService({
-    transaction: async (callback: (transactionManager: EntityManager) => Promise<unknown>) =>
-      callback(manager),
-  } as never);
+  const service = new DomainOnlyContractorOperations(manager);
   return { service, savedWorkers };
 }
 
@@ -184,10 +204,7 @@ function assignmentServiceFor(participations: ReturnType<typeof participation>[]
       throw new Error('Unexpected repository');
     },
   } as unknown as EntityManager;
-  const service = new ContractorOperationsService({
-    transaction: async (callback: (transactionManager: EntityManager) => Promise<unknown>) =>
-      callback(manager),
-  } as never);
+  const service = new DomainOnlyContractorOperations(manager);
   return { service, savedAssignments };
 }
 
@@ -279,10 +296,7 @@ function reviewServiceFor(options: {
     },
   } as unknown as EntityManager;
   return {
-    service: new ContractorOperationsService({
-      transaction: async (callback: (manager: EntityManager) => Promise<unknown>) =>
-        callback(manager),
-    } as never),
+    service: new DomainOnlyContractorOperations(manager),
     request,
     saves: () => saves,
   };

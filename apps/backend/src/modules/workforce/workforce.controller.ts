@@ -74,7 +74,10 @@ export class WorkforceController {
     @Param('siteId') siteId: string,
     @Body() input: LinkWorkerAccountCommand,
   ) {
-    const worker = await this.workforce.forAccount(siteId, input);
+    const worker = await this.workforce.forAccount(siteId, input, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.account.prepare',
@@ -92,7 +95,10 @@ export class WorkforceController {
     @Param('workerId') workerId: string,
     @Body() input: LinkWorkerAccountCommand,
   ) {
-    const worker = await this.workforce.linkAccount(siteId, workerId, input);
+    const worker = await this.workforce.linkAccount(siteId, workerId, input, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.account.link',
@@ -110,7 +116,10 @@ export class WorkforceController {
     @Param('siteId') siteId: string,
     @Body() input: CreateWorkerDto,
   ) {
-    const worker = await this.workforce.create(siteId, input);
+    const worker = await this.workforce.create(siteId, input, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.create',
@@ -142,7 +151,12 @@ export class WorkforceController {
     @Query('limit') limit?: string,
   ) {
     const value = pagination(offset, limit);
-    const result = await this.workforce.listCoworkers(request.user!, siteId, value.offset, value.limit);
+    const result = await this.workforce.listCoworkers(
+      request.user!,
+      siteId,
+      value.offset,
+      value.limit,
+    );
     return { items: result.items, total: result.total };
   }
 }
