@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsEnum, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { command, invalid, missing, page, uuid } from '../../common/configuration/commands.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
@@ -14,6 +14,10 @@ import {
   type ZoneEntryDecisionStatus,
 } from '../../database/entities/zone-entry-decision.entity.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
+import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
+import { UserRole } from '../../database/entities/user.entity.js';
+import { ZoneAuthoritySourceKind } from '../../database/entities/zone-authority-fact-revision.entity.js';
+import { executeZoneAuthorityCommand, type ZoneAuthorityActor } from './zone-authority-history.js';
 
 export class CreateZoneAccessGrantCommand {
   @IsUUID()
@@ -47,6 +51,57 @@ export type OriginalZoneDecisionSummary = Pick<
 @Injectable()
 export class ZoneAccessManagementService {
   constructor(private readonly dataSource: DataSource) {}
+
+  /** These existing MF06 commands commit their grant and history together. */
+  private async writeGrant(
+    operation: string,
+    actor: ZoneAuthorityActor,
+    request: Record<string, unknown>,
+    mutate: (manager: EntityManager, at: Date) => Promise<ZoneAccessGrantEntity>,
+  ): Promise<ZoneAccessGrantEntity> {
+    let result: ZoneAccessGrantEntity | undefined;
+    await executeZoneAuthorityCommand(
+      this.dataSource,
+      { commandId: randomUUID(), operation, actor, request },
+      async (manager) => {
+        if (
+          actor.kind === 'USER' &&
+          !(await manager
+            .getRepository(UserRoleAssignmentEntity)
+            .existsBy({ userId: actor.userId, role: UserRole.ADMIN, siteId: IsNull() }))
+        ) {
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
+        }
+        const clock: { now: Date }[] = await manager.query('SELECT statement_timestamp() AS now');
+        result = await mutate(manager, clock[0]!.now);
+        return [
+          {
+            sourceKind: ZoneAuthoritySourceKind.WORKER_ZONE_GRANT,
+            sourceId: result.id,
+            siteId: result.siteId,
+            effectiveFrom: clock[0]!.now,
+            effectiveTo: null,
+            payload: {
+              grantId: result.id,
+              siteId: result.siteId,
+              zoneId: result.zoneId,
+              workerId: result.workerId,
+              contractorId: result.contractorId,
+              effect: result.effect,
+              validFrom: result.validFrom.toISOString(),
+              validUntil: result.validUntil?.toISOString() ?? null,
+              revokedAt: result.revokedAt?.toISOString() ?? null,
+            },
+          },
+        ];
+      },
+    );
+    if (!result) throw new Error('Zone grant command did not produce a projection');
+    return result;
+  }
 
   /** Historical policy outcomes only; manual identity review must not recalculate authorization. */
   async listObservationDecisions(
@@ -89,6 +144,7 @@ export class ZoneAccessManagementService {
     siteId: string,
     zoneId: string,
     input: CreateZoneAccessGrantCommand,
+    actor: ZoneAuthorityActor = { kind: 'SERVICE', subject: 'ZONE_ACCESS_MANAGEMENT' },
   ): Promise<ZoneAccessGrantEntity> {
     const scopedSiteId = uuid(siteId);
     const scopedZoneId = uuid(zoneId);
@@ -104,25 +160,38 @@ export class ZoneAccessManagementService {
         message: 'validUntil must be later than validFrom',
       });
     }
-    const [zone, worker] = await Promise.all([
-      this.dataSource
-        .getRepository(ZoneEntity)
-        .findOneBy({ id: scopedZoneId, siteId: scopedSiteId }),
-      this.dataSource
-        .getRepository(WorkerEntity)
-        .findOneBy({ id: uuid(value.workerId), siteId: scopedSiteId, isActive: true }),
-    ]);
-    if (!zone || !worker) missing();
-    return await this.dataSource.getRepository(ZoneAccessGrantEntity).save({
-      id: randomUUID(),
-      siteId: scopedSiteId,
-      zoneId: scopedZoneId,
-      workerId: worker.id,
-      effect: value.effect,
-      validFrom,
-      validUntil,
-      revokedAt: null,
-    });
+    return this.writeGrant(
+      'WORKER_ZONE_GRANT_CREATE',
+      actor,
+      {
+        siteId: scopedSiteId,
+        zoneId: scopedZoneId,
+        workerId: value.workerId,
+        effect: value.effect,
+        validFrom: value.validFrom,
+        validUntil: value.validUntil ?? null,
+      },
+      async (manager) => {
+        const zone = await manager
+          .getRepository(ZoneEntity)
+          .findOneBy({ id: scopedZoneId, siteId: scopedSiteId });
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOneBy({ id: uuid(value.workerId), siteId: scopedSiteId, isActive: true });
+        if (!zone || !worker) missing();
+        return manager.getRepository(ZoneAccessGrantEntity).save({
+          id: randomUUID(),
+          siteId: scopedSiteId,
+          zoneId: scopedZoneId,
+          workerId: worker.id,
+          contractorId: worker.contractorId,
+          effect: value.effect,
+          validFrom,
+          validUntil,
+          revokedAt: null,
+        });
+      },
+    );
   }
 
   async listGrants(
@@ -145,28 +214,40 @@ export class ZoneAccessManagementService {
     siteId: string,
     zoneId: string,
     grantId: string,
-    revokedAt = new Date(),
+    revokedAt?: Date,
+    actor: ZoneAuthorityActor = { kind: 'SERVICE', subject: 'ZONE_ACCESS_MANAGEMENT' },
   ): Promise<ZoneAccessGrantEntity> {
-    if (!(revokedAt instanceof Date) || !Number.isFinite(revokedAt.getTime())) {
+    if (
+      revokedAt !== undefined &&
+      (!(revokedAt instanceof Date) || !Number.isFinite(revokedAt.getTime()))
+    ) {
       invalid('Invalid revocation timestamp');
     }
-    const repository = this.dataSource.getRepository(ZoneAccessGrantEntity);
     const scope = {
       id: uuid(grantId),
       siteId: uuid(siteId),
       zoneId: uuid(zoneId),
     };
-    const grant = await repository.findOneBy(scope);
-    if (!grant) missing();
-    if (grant.revokedAt === null) {
-      // First successful revocation wins. A concurrent retry must not overwrite
-      // its timestamp or return the caller's unpersisted proposed value.
-      await repository.update({ ...scope, revokedAt: IsNull() }, { revokedAt });
-      const persisted = await repository.findOneBy(scope);
-      if (!persisted) missing();
-      return persisted;
-    }
-    return grant;
+    return this.writeGrant(
+      'WORKER_ZONE_GRANT_REVOKE',
+      actor,
+      { ...scope, revokedAt: revokedAt?.toISOString() ?? null },
+      async (manager, at) => {
+        const repository = manager.getRepository(ZoneAccessGrantEntity);
+        const grant = await repository.findOne({
+          where: scope,
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!grant) missing();
+        // First successful revocation wins. New commands confirm the persisted
+        // value; they never rewrite it with a later caller's proposed timestamp.
+        if (grant.revokedAt === null) {
+          grant.revokedAt = revokedAt ?? at;
+          return repository.save(grant);
+        }
+        return grant;
+      },
+    );
   }
 
   async listDecisions(

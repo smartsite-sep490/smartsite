@@ -100,7 +100,10 @@ export class ZoneAccessController {
     @Param('zoneId') zoneId: string,
     @Body() input: CreateZoneAccessGrantCommand,
   ) {
-    const grant = await this.access.createGrant(siteId, zoneId, input);
+    const grant = await this.access.createGrant(siteId, zoneId, input, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone-access.create',
@@ -131,7 +134,10 @@ export class ZoneAccessController {
     @Param('zoneId') zoneId: string,
     @Param('grantId') grantId: string,
   ) {
-    const grant = await this.access.revokeGrant(siteId, zoneId, grantId);
+    const grant = await this.access.revokeGrant(siteId, zoneId, grantId, undefined, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone-access.revoke',

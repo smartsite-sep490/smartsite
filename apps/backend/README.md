@@ -101,7 +101,15 @@ liên kết tài khoản giữ scope endpoint hiện có; account link không ch
 đang có mặt trước camera. Mỗi lời gọi mới tạo command mới; record idempotency không
 đồng nghĩa HTTP retry chỉ ghi một audit. Fact membership không chứa account/Face profile.
 
-Worker/Contractor grant writers và reader quyền hai tầng còn cần tích hợp.
+Worker Zone grant create/revoke cũng ghi grant, command và history cùng transaction.
+Grant mới lưu Contractor anchor từ Worker lúc cấp; revoke legacy giữ NULL. Thu hồi
+khóa grant row và giữ timestamp đã lưu đầu tiên; API dùng giờ DB mặc định, caller retry
+không ghi đè timestamp. USER được kiểm lại global Admin trong transaction. Mỗi lần gọi
+mới vẫn là một command mới; noop revoke ghi confirmation fact của giá trị đã lưu.
+
+Worker ALLOW containment, Contractor grant commands và reader quyền hai tầng còn cần
+tích hợp. Create/revoke hiện giữ semantics quản lý grant cũ; audit không chứng minh
+Worker ALLOW đã nằm trong ceiling Contractor hoặc luồng live đã bật.
 Lịch sử chưa đủ để bật epoch READY hoặc xác minh Worker live; chỉ có bảng/digest không
 chứng minh completeness. Anchor legacy NULL giữ nguyên, không suy từ membership hiện tại.
 Worker assignment không tự cấp quyền Zone. Không áp dụng migration tự động lúc startup

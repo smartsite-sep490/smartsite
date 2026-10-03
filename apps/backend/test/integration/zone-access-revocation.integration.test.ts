@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
   SiteEntity,
@@ -12,14 +12,14 @@ import {
   ZoneType,
 } from '../../src/database/entities/index.js';
 import { ZoneAccessManagementService } from '../../src/modules/zones/zone-access-management.service.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const database = createIsolatedTestDatabase();
+const { dataSource } = database;
+before(() => database.initialize());
+after(() => database.dispose());
 
 async function createGrant() {
-  if (!dataSource.isInitialized) await dataSource.initialize();
   const siteId = randomUUID();
   const zoneId = randomUUID();
   const workerId = randomUUID();
@@ -58,35 +58,42 @@ async function createGrant() {
 test('concurrent Zone revocations keep the first persisted timestamp and both return stored state', async () => {
   const { service, siteId, zoneId, grant } = await createGrant();
   const repository = dataSource.getRepository(ZoneAccessGrantEntity);
-  const originalFind = repository.findOneBy.bind(repository);
-  const restoreFind = repository.findOneBy;
-  let initialReads = 0;
-  let releaseReads!: () => void;
-  const bothHaveRead = new Promise<void>((resolve) => {
-    releaseReads = resolve;
-  });
-  // Force both requests to see the initial NULL before either writes. Reads and
-  // writes still use the actual PostgreSQL repository, never a fake SQL store.
-  repository.findOneBy = async (where) => {
-    const row = await originalFind(where);
-    if (++initialReads <= 2) {
-      if (initialReads === 2) releaseReads();
-      await bothHaveRead;
-    }
-    return row;
-  };
   const firstTime = new Date('2026-10-03T08:00:00.000Z');
   const otherTime = new Date('2026-10-03T08:00:01.000Z');
+  const blocker = dataSource.createQueryRunner();
+  await blocker.connect();
+  await blocker.startTransaction();
+  await blocker.query('SELECT id FROM zone_access_grant WHERE id=$1 FOR UPDATE', [grant.id]);
+  const pending = Promise.allSettled([
+    service.revokeGrant(siteId, zoneId, grant.id, firstTime),
+    service.revokeGrant(siteId, zoneId, grant.id, otherTime),
+  ]);
   try {
-    const results = await Promise.all([
-      service.revokeGrant(siteId, zoneId, grant.id, firstTime),
-      service.revokeGrant(siteId, zoneId, grant.id, otherTime),
-    ]);
-    const stored = await originalFind({ id: grant.id });
+    // Hold the real row until both requests are waiting in PostgreSQL. The old
+    // repository monkeypatch no longer intercepts transaction-owned repositories.
+    const scope: { schema: string }[] = await dataSource.query('SELECT current_schema() AS schema');
+    const deadline = Date.now() + 5000;
+    let waiting = 0;
+    do {
+      const rows: { n: number }[] = await dataSource.query(
+        `SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE datname=current_database() AND wait_event_type='Lock'
+        AND query LIKE $1 AND query LIKE '%zone_access_grant%'`,
+        [`%${scope[0]!.schema}%`],
+      );
+      waiting = rows[0]!.n;
+      if (waiting < 2) await new Promise((resolve) => setTimeout(resolve, 20));
+    } while (waiting < 2 && Date.now() < deadline);
+    assert.equal(waiting, 2, 'Both revocations must reach the actual locked grant row');
+    await blocker.commitTransaction();
+    const results = await pending;
+    const stored = await repository.findOneBy({ id: grant.id });
     assert(stored?.revokedAt);
     assert([firstTime.getTime(), otherTime.getTime()].includes(stored.revokedAt.getTime()));
     for (const result of results) {
-      assert.equal(result.revokedAt?.getTime(), stored.revokedAt.getTime());
+      assert.equal(result.status, 'fulfilled');
+      if (result.status === 'fulfilled')
+        assert.equal(result.value.revokedAt?.getTime(), stored.revokedAt.getTime());
     }
     const repeated = await service.revokeGrant(
       siteId,
@@ -96,11 +103,13 @@ test('concurrent Zone revocations keep the first persisted timestamp and both re
     );
     assert.equal(repeated.revokedAt?.getTime(), stored.revokedAt.getTime());
     assert.equal(
-      (await originalFind({ id: grant.id }))?.revokedAt?.getTime(),
+      (await repository.findOneBy({ id: grant.id }))?.revokedAt?.getTime(),
       stored.revokedAt.getTime(),
     );
   } finally {
-    repository.findOneBy = restoreFind;
+    if (blocker.isTransactionActive) await blocker.rollbackTransaction();
+    await blocker.release();
+    await pending;
   }
 });
 
