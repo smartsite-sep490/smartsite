@@ -137,6 +137,56 @@ sources and secret-safe process handling, see
 
 The AI API is then available at http://localhost:8000.
 
+For the face-enrollment transport demo, Compose wires the Backend's
+`SMARTSITE_AI_IDENTITY_URL` to `http://ai:8000` and supplies a matching
+service token. It accepts three authenticated JPEG uploads. Completion remains
+honestly `AI_UNAVAILABLE` until a reviewed face model and private template store
+exist; it never creates a simulated biometric profile or grants access.
+
+### Account-linked face enrollment
+
+The Access Control **Quyền vào cửa** tab replaces the Restricted Zones tab. Admin selects a site worker and the fixed Gate Desk catalog (Gate 1/2/3), then saves or revokes explicit gate permissions in PostgreSQL. Empty selection revokes all gates; saves are immediate with no expiry and require the last snapshot to prevent stale concurrent writes. Existing approved assignments with explicit gate IDs migrate with their original validity intervals. Site-wide/Zone assignments do not implicitly allow every gate. Gate checks still require an active linked account, active face profile and valid contractor participation. Restricted-zone APIs remain separate and unchanged.
+
+Face Enrollment is account-first: search/select an existing active account for the current site,
+then enroll its face. `POST /api/v1/sites/:siteId/workers/for-account` idempotently prepares the
+internal worker linkage; it never creates a login account or grants entry permissions.
+Gate-specific assignments use optional `gate_id` (null retains legacy site-wide behavior).
+Only face scans resolved to a worker/account persist a decision in `gate_access_log` before acknowledging it.
+Gate Desk first checks camera brightness locally, then polls an authenticated, non-persisting face-presence endpoint. Two stable observations trigger verification once; transient face continuity suppresses repeat scans until a different face appears or an observed empty frame persists for two seconds. Continuity is technical evidence, not identity or permission. The opt-in demo uses bounded AI RAM only (128 sessions, 30-second idle expiry); no presence JPEGs/embeddings are stored in DB/files. Camera selection/restart is available; covered/underlit cameras must be physically corrected. Clear explicitly starts a fresh test session. Real-camera continuity accuracy is not yet validated.
+Unknown, low-confidence, poor-quality and unavailable scans without an identified account are not retained.
+Authorized site gate operators can read the latest 50 records through
+`GET /api/v1/sites/:siteId/gates/:gateId/access-logs`; Gate Desk shows these DB records,
+including denied scans of identified people. These are software access decisions, not proof of physical passage.
+QR/manual clearance is not implemented and never fabricates successful access logs.
+
+Face templates now live as encrypted ciphertext in PostgreSQL `face_profile.encrypted_template`.
+`worker.user_id` links an explicitly selected account to the worker; `face_profile.user_id` records
+the account at enrollment. Raw photos are transient. The Fernet key stays in the AI runtime as
+`SMARTSITE_AI_IDENTITY_TEMPLATE_ENCRYPTION_KEY`, never in the database or browser.
+
+An Admin selects an active site-assigned account (or global Admin) in Face Enrollment.
+The Backend reuses its linked worker or prepares an internal worker automatically.
+The lower-level `PUT /api/v1/sites/:siteId/workers/:workerId/account` endpoint remains available
+for explicitly linking an existing worker with `{ "userId": "<account UUID>" }`.
+Each account may link to one worker per site. Changing an existing link to another account is rejected.
+Then capture three samples with consent. The Backend atomically saves the encrypted template,
+account, profile metadata, and completed session. A matching face resolves the worker and account;
+gate permissions still depend on the Backend's contractor and assignment policy.
+
+Each guided capture has an explicit 3-second countdown, a frozen photo preview and a server quality result.
+Enrollment and Gate Desk support camera selection/restart, release stale or disconnected streams, and reject dark/blank feeds before upload. Camera readiness is only a usability guard; server-side face and target-angle checks remain authoritative.
+The capture target is required: missing or invalid `target` is rejected rather than silently checked as front-facing. Older browser clients must refresh before enrollment. Completion failures preserve allowlisted quality reasons, including the failed pose and inconsistent samples; the UI does not claim a measured 15-degree yaw.
+Only an accepted photo enables the next angle; failed checks explain lighting, sharpness, framing or
+relative pose. The AI rechecks front/left/right and sample consistency before producing a template.
+Quality/landmark thresholds are demo heuristics, not calibrated yaw measurements or liveness protection.
+
+Deploy the Backend migration `AccountFaceTemplates1790899200000` and both updated services together.
+Legacy file-backed active profiles become `NEEDS_REENROLL`; select their account and enroll again.
+Old local template files are preserved and are no longer read. Disabled accounts, removed site roles,
+inactive workers and revoked profiles are excluded from matching. Revocation clears DB ciphertext.
+AI restarts retain enrollment because the templates come from PostgreSQL, but all AI instances must
+use the same encryption key and compatible model. Losing/changing the key requires reenrollment.
+
 ### Mobile Development
 
 See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instructions.

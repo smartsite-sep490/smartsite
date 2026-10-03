@@ -178,6 +178,7 @@ ShiftRequestStatus =
 
 - Worker account phải được map rõ tới đúng `Worker` record trong Site. Không nhận `workerId` từ client như một bằng chứng quyền.
 - Contractor Representative phải có mapping tới Contractor; chỉ thao tác công nhân thuộc Contractor đó trong đúng Site.
+- Một Contractor có thể tham gia nhiều Site. Mapping Site nằm ở `contractor_site_participation`; assignment Representative cho MF07 là theo từng Site và Contractor, không tự mở quyền ở Site khác.
 - Contractor Representative chỉ review request của Contractor được gán trong Site mà tài khoản được phân quyền.
 - Người tạo request không được tự approve request của mình.
 - Swap ca bắt buộc coworker xác nhận trước khi Contractor Representative duyệt.

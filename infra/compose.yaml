@@ -42,7 +42,6 @@ services:
       # Local only. Production disables interactive Swagger and uses real secrets.
       NODE_ENV: development
       PORT: '3000'
-      DATABASE_URL: postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite
       DATABASE_TIMEOUT_MS: '2000'
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       # The runtime image contains production dependencies only (no pino-pretty).
@@ -52,6 +51,9 @@ services:
       HTTP_RATE_LIMIT_LIMIT: '120'
       AI_RATE_LIMIT_TTL_MS: '60000'
       AI_RATE_LIMIT_LIMIT: '600'
+      # Optional enrollment transport. The AI service remains fail-closed
+      # until a reviewed model and private template store are configured.
+      SMARTSITE_AI_IDENTITY_URL: http://ai:8000
       SMARTSITE_AI_SERVICE_TOKEN: ${SMARTSITE_AI_SERVICE_TOKEN:-smartsite_local_dev_service_token_only}
       # Keep empty by default (deny all). Set this to the comma-separated Camera UUIDs
       # returned by `pnpm demo:setup` before recreating the Backend container.
@@ -110,12 +112,23 @@ services:
       SMARTSITE_AI_HOST: 0.0.0.0
       SMARTSITE_AI_PORT: '8000'
       SMARTSITE_AI_BACKEND_INGESTION_URL: http://backend:3000
-      SMARTSITE_AI_BACKEND_SERVICE_TOKEN: smartsite_local_dev_service_token_only
+      SMARTSITE_AI_BACKEND_SERVICE_TOKEN: ${SMARTSITE_AI_SERVICE_TOKEN:-smartsite_local_dev_service_token_only}
+      SMARTSITE_AI_IDENTITY_SERVICE_TOKEN: ${SMARTSITE_AI_SERVICE_TOKEN:-smartsite_local_dev_service_token_only}
+      # Explicit local academic-demo opt in. The public buffalo_l weights and
+      # models live in ai-face-data; encrypted face templates live in PostgreSQL.
+      SMARTSITE_AI_IDENTITY_DEMO_MODE: ${SMARTSITE_AI_IDENTITY_DEMO_MODE:-false}
+      SMARTSITE_AI_IDENTITY_MODEL_ROOT: /var/lib/smartsite-ai/model-root
+      SMARTSITE_AI_IDENTITY_TEMPLATE_ENCRYPTION_KEY: ${SMARTSITE_AI_IDENTITY_TEMPLATE_ENCRYPTION_KEY:-}
+      SMARTSITE_AI_IDENTITY_MATCH_THRESHOLD: '0.45'
     ports:
       - '127.0.0.1:8000:8000'
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      - ai-face-data:/var/lib/smartsite-ai
 
 volumes:
   postgres-data:
+  ai-face-data:
+      DATABASE_URL: postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite

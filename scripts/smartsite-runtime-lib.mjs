@@ -137,6 +137,10 @@ export function selectChildEnvironment(environment) {
 export function splitAiEnvironments(combined, sourceProfile, sourceManifest) {
   const worker = { ...combined };
   const api = { ...combined };
+  // Only the durable worker owns event delivery and retained evidence.
+  // An empty override prevents an AI .env file from restoring the ingestion URL.
+  // Keep the service token for preview authentication.
+  api.SMARTSITE_AI_BACKEND_INGESTION_URL = '';
   if (sourceProfile !== 'mp4') {
     delete api.SMARTSITE_AI_REALTIME_SOURCE;
     const reference = sourceManifest.cameras?.[0]?.source;
