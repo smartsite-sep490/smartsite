@@ -4,10 +4,14 @@ export class AccountFaceTemplates1790899200000 implements MigrationInterface {
   name = 'AccountFaceTemplates1790899200000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
+    if (!(await queryRunner.hasColumn('worker', 'user_id'))) {
+      await queryRunner.query(`
+        ALTER TABLE worker ADD COLUMN user_id UUID,
+          ADD CONSTRAINT fk_worker_user FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT;
+        CREATE UNIQUE INDEX uq_worker_site_user ON worker (site_id, user_id) WHERE user_id IS NOT NULL;
+      `);
+    }
     await queryRunner.query(`
-      ALTER TABLE worker ADD COLUMN user_id UUID,
-        ADD CONSTRAINT fk_worker_user FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT;
-      CREATE UNIQUE INDEX uq_worker_site_user ON worker (site_id, user_id) WHERE user_id IS NOT NULL;
       ALTER TABLE face_profile ADD COLUMN user_id UUID,
         ADD COLUMN encrypted_template TEXT,
         ADD CONSTRAINT fk_face_profile_user FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT;
@@ -23,8 +27,6 @@ export class AccountFaceTemplates1790899200000 implements MigrationInterface {
     await queryRunner.query(`
       ALTER TABLE face_profile DROP CONSTRAINT chk_face_profile_database_template,
         DROP CONSTRAINT fk_face_profile_user, DROP COLUMN encrypted_template, DROP COLUMN user_id;
-      DROP INDEX uq_worker_site_user;
-      ALTER TABLE worker DROP CONSTRAINT fk_worker_user, DROP COLUMN user_id;
     `);
   }
 }

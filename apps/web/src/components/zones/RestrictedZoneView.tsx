@@ -64,6 +64,8 @@ interface ZoneReviewItem {
   time: string;
 }
 
+import type { SharedSession } from '../../types/shared-session';
+
 export interface RestrictedZoneViewProps {
   apiUrl?: string;
   onNavigate?: (
@@ -74,11 +76,13 @@ export interface RestrictedZoneViewProps {
       alertId?: string;
     },
   ) => void;
+  sharedSession?: SharedSession | null;
 }
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
   onNavigate,
+  sharedSession,
 }: RestrictedZoneViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
@@ -255,21 +259,52 @@ export function RestrictedZoneView({
     );
   };
 
+  const isControlled = sharedSession !== undefined;
+  const isShared = isControlled && sharedSession !== null;
+  const apiToken = isControlled ? (sharedSession?.accessToken ?? '') : (session?.accessToken ?? '');
+  const sessionScope = isControlled
+    ? (sharedSession?.sessionScope ?? '')
+    : (session?.user.id ?? '');
+  const effectiveUser = isControlled ? (sharedSession?.user ?? null) : (session?.user ?? null);
+
+  const isGlobalAdmin = useMemo(() => {
+    if (!effectiveUser) return false;
+    return effectiveUser.roleAssignments.some(
+      ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+    );
+  }, [effectiveUser]);
+
   const removeSessionQueries = useCallback(
-    (userId: string) => {
-      queryClient.removeQueries({ queryKey: ['zone-admin', apiUrl, userId] });
+    (scope: string) => {
+      void queryClient.cancelQueries({ queryKey: ['zone-admin', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['zone-admin', apiUrl, scope] });
     },
     [apiUrl, queryClient],
   );
+
+  const prevScopeRef = useRef(sessionScope);
+  useEffect(() => {
+    if (prevScopeRef.current && prevScopeRef.current !== sessionScope) {
+      removeSessionQueries(prevScopeRef.current);
+      setRequestedSiteId('');
+      setRequestedCameraId('');
+      setRequestedRegionId('');
+      setIsDraftMode(false);
+      setStaleDraftInfo(null);
+      clearTransientFeedback();
+      setZonePolygon(DEFAULT_ZONE_POLYGON);
+    }
+    prevScopeRef.current = sessionScope;
+  }, [sessionScope, removeSessionQueries, clearTransientFeedback]);
 
   const login = useMutation({
     mutationFn: async () => {
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
-      const isGlobalAdmin = result.user.roleAssignments.some(
+      const allowed = result.user.roleAssignments.some(
         ({ role, siteId }) => role === 'ADMIN' && siteId === null,
       );
-      if (!isGlobalAdmin) {
+      if (!allowed) {
         await client.logout('WEB').catch(() => undefined);
         throw new Error('A global Admin role is required.');
       }
@@ -291,19 +326,36 @@ export function RestrictedZoneView({
     },
   });
 
+  const sessionScopeRef = useRef(sessionScope);
+  useEffect(() => {
+    sessionScopeRef.current = sessionScope;
+  }, [sessionScope]);
+
   useEffect(() => {
     lifecycleGeneration.current += 1;
     return () => {
       lifecycleGeneration.current += 1;
       const current = activeSession.current;
       activeSession.current = null;
-      if (!current) return;
-      removeSessionQueries(current.userId);
-      void client.logout('WEB').catch(() => undefined);
+      if (isControlled) {
+        if (sessionScopeRef.current) {
+          removeSessionQueries(sessionScopeRef.current);
+        }
+      } else {
+        if (current) {
+          removeSessionQueries(current.userId);
+          void client.logout('WEB').catch(() => undefined);
+        }
+      }
     };
-  }, [client, removeSessionQueries]);
+  }, [client, isControlled, removeSessionQueries]);
 
   const handleLogout = () => {
+    if (isShared) {
+      if (sessionScope) removeSessionQueries(sessionScope);
+      sharedSession?.onSignOut?.();
+      return;
+    }
     const current = activeSession.current;
     activeSession.current = null;
     activeScopeRef.current = { userId: null, siteId: '', cameraId: '', regionId: '' };
@@ -319,13 +371,10 @@ export function RestrictedZoneView({
     if (current) void client.logout('WEB').catch(() => undefined);
   };
 
-  const apiToken = session?.accessToken ?? '';
-  const sessionScope = session?.user.id ?? '';
-
   const sites = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, 'sites'],
     queryFn: () => client.listSites(apiToken, { limit: 100 }),
-    enabled: apiToken.length > 0,
+    enabled: isGlobalAdmin && apiToken.length > 0 && sessionScope.length > 0,
   });
 
   const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
@@ -335,7 +384,8 @@ export function RestrictedZoneView({
   const cameras = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
     queryFn: () => client.listCameras(apiToken, selectedSiteId, { limit: 100 }),
-    enabled: apiToken.length > 0 && selectedSiteId.length > 0,
+    enabled:
+      isGlobalAdmin && apiToken.length > 0 && sessionScope.length > 0 && selectedSiteId.length > 0,
   });
 
   const selectedCameraId = cameras.data?.items.some((cam) => cam.id === requestedCameraId)
@@ -350,7 +400,12 @@ export function RestrictedZoneView({
   const regions = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
     queryFn: () => client.listRegions(apiToken, selectedSiteId, selectedCameraId, { limit: 100 }),
-    enabled: apiToken.length > 0 && selectedSiteId.length > 0 && selectedCameraId.length > 0,
+    enabled:
+      isGlobalAdmin &&
+      apiToken.length > 0 &&
+      sessionScope.length > 0 &&
+      selectedSiteId.length > 0 &&
+      selectedCameraId.length > 0,
   });
 
   const activeRegions = useMemo(
@@ -374,18 +429,19 @@ export function RestrictedZoneView({
 
   useEffect(() => {
     activeScopeRef.current = {
-      userId: session?.user.id ?? null,
+      userId: effectiveUser?.id ?? null,
+      sessionScope,
       siteId: selectedSiteId,
       cameraId: selectedCameraId,
       regionId: selectedRegionId,
     };
-  }, [session?.user.id, selectedSiteId, selectedCameraId, selectedRegionId]);
+  }, [effectiveUser?.id, sessionScope, selectedSiteId, selectedCameraId, selectedRegionId]);
 
-  const currentScopeKey = session
-    ? `${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
+  const currentScopeKey = effectiveUser
+    ? `${sessionScope}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
     : 'fallback-camera-04';
-  const currentIdentityScopeKey = session
-    ? `${session.user.id}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}`
+  const currentIdentityScopeKey = effectiveUser
+    ? `${effectiveUser.id}:${sessionScope}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}`
     : 'fallback-camera-04';
 
   const [prevScopeKey, setPrevScopeKey] = useState(currentScopeKey);
@@ -420,8 +476,12 @@ export function RestrictedZoneView({
     SavePolygonMutationVariables
   >({
     mutationFn: async (vars: SavePolygonMutationVariables) => {
-      const token = vars.token || activeSession.current?.token;
-      if (!token || !activeSession.current || activeSession.current.userId !== vars.userId) {
+      const token =
+        vars.token || (isShared ? sharedSession?.accessToken : activeSession.current?.token);
+      if (!token) {
+        throw new Error('Sign in as Admin before saving to backend.');
+      }
+      if (!isShared && (!activeSession.current || activeSession.current.userId !== vars.userId)) {
         throw new Error('Sign in as Admin before saving to backend.');
       }
       const payload = preparePolygonSave(
@@ -433,18 +493,18 @@ export function RestrictedZoneView({
     onSuccess: async (mutationResult, vars) => {
       const plan = planMutationCompletion(apiUrl, vars);
 
-      // Always clear the draft and invalidate queries for the saved scope
-      clearLocalDraft(
-        plan.draftScopeToClear.siteId,
-        plan.draftScopeToClear.cameraId,
-        plan.draftScopeToClear.regionId,
-      );
+      // Invalidation targets the mutation's scope key (old query cache if scope rotated)
       await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
       await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
 
       // Invalidation is asynchronous. Re-evaluate the live scope after every
-      // await so a completion from camera A cannot modify camera B's UI.
+      // await so a completion from camera A or old token cannot modify active UI or clear new drafts.
       if (isMutationScopeActive(activeScopeRef.current, vars)) {
+        clearLocalDraft(
+          plan.draftScopeToClear.siteId,
+          plan.draftScopeToClear.cameraId,
+          plan.draftScopeToClear.regionId,
+        );
         setConflictMessage(null);
         setStaleDraftInfo(null);
         setIsDraftMode(false);
@@ -474,10 +534,11 @@ export function RestrictedZoneView({
   });
 
   const handleSaveToBackend = () => {
-    if (!session || !apiToken) return;
+    if (!effectiveUser || !apiToken) return;
     if (!selectedSiteId || !selectedCamera || !selectedRegion) return;
     const vars: SavePolygonMutationVariables = {
-      userId: session.user.id,
+      userId: effectiveUser.id,
+      sessionScope,
       token: apiToken,
       siteId: selectedSiteId,
       cameraId: selectedCamera.id,
@@ -490,7 +551,7 @@ export function RestrictedZoneView({
   };
 
   const saveDraft = () => {
-    if (session) {
+    if (effectiveUser) {
       if (!selectedSiteId || !selectedCameraId || !selectedCamera || !selectedRegion) {
         showStatusMessage('Wait for a Site, Camera, and Region before saving a local draft.');
         return;
@@ -517,7 +578,7 @@ export function RestrictedZoneView({
   };
 
   const resetToAuthoritative = () => {
-    if (session && selectedSiteId && selectedCameraId && selectedRegion) {
+    if (effectiveUser && selectedSiteId && selectedCameraId && selectedRegion) {
       clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion.id);
       const authoritative = backendPolygonToPoints(selectedRegion.polygon, DEFAULT_ZONE_POLYGON);
       setZonePolygon(authoritative);
@@ -667,66 +728,99 @@ export function RestrictedZoneView({
     });
   };
 
+  if (isShared && !isGlobalAdmin) {
+    return (
+      <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
+        <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF05</p>
+          <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">
+            Zone Configuration is restricted
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
+            A global Admin role is required to configure restricted zones and save authoritative
+            polygons.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Admin Session & Backend Camera/Region Configuration Bar */}
-      {!session ? (
-        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
-                  <IconKey className="h-4 w-4" />
-                </span>
-                <h2 className="text-sm font-bold text-[#2F3437]">Backend Camera Configuration</h2>
-              </div>
-              <p className="mt-1 text-xs text-[#6B6B6B] max-w-xl">
-                Sign in as a global Admin to load camera regions and save authoritative polygons to
-                the Backend API. Fallback test video and realtime AI feed remain available below.
-              </p>
+      {!effectiveUser ? (
+        isControlled ? (
+          <div className="rounded-xl border border-[#EAEAEA] bg-white p-4">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
+                <IconAlertTriangle className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-bold text-[#2F3437]">Session pending or expired</h2>
             </div>
-            <form
-              onSubmit={(e: FormEvent) => {
-                e.preventDefault();
-                login.mutate();
-              }}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input
-                required
-                type="text"
-                autoComplete="username"
-                placeholder="Admin username"
-                aria-label="Admin username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
-              />
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                placeholder="Password"
-                aria-label="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
-              />
-              <button
-                type="submit"
-                disabled={login.isPending}
-                className="rounded-lg bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#333333] disabled:opacity-60 cursor-pointer transition-colors"
-              >
-                {login.isPending ? 'Signing in…' : 'Sign in as Admin'}
-              </button>
-            </form>
-          </div>
-          {loginError && (
-            <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
-              {loginError}
+            <p className="mt-1 text-xs text-[#6B6B6B]">
+              Zone session is pending or expired. Please sign in to the application to configure
+              camera regions.
             </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
+                    <IconKey className="h-4 w-4" />
+                  </span>
+                  <h2 className="text-sm font-bold text-[#2F3437]">Backend Camera Configuration</h2>
+                </div>
+                <p className="mt-1 text-xs text-[#6B6B6B] max-w-xl">
+                  Sign in as a global Admin to load camera regions and save authoritative polygons
+                  to the Backend API. Fallback test video and realtime AI feed remain available
+                  below.
+                </p>
+              </div>
+              <form
+                onSubmit={(e: FormEvent) => {
+                  e.preventDefault();
+                  login.mutate();
+                }}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <input
+                  required
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Admin username"
+                  aria-label="Admin username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                />
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Password"
+                  aria-label="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={login.isPending}
+                  className="rounded-lg bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#333333] disabled:opacity-60 cursor-pointer transition-colors"
+                >
+                  {login.isPending ? 'Signing in…' : 'Sign in as Admin'}
+                </button>
+              </form>
+            </div>
+            {loginError && (
+              <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
+                {loginError}
+              </p>
+            )}
+          </div>
+        )
       ) : (
         <div className="rounded-xl border border-[#EAEAEA] bg-white p-4  space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#EAEAEA]">
@@ -740,7 +834,7 @@ export function RestrictedZoneView({
                     Admin Session Active
                   </span>
                   <span className="text-xs font-semibold text-[#2F3437]">
-                    · {session.user.displayName} ({session.user.username})
+                    · {effectiveUser.displayName} ({effectiveUser.username || effectiveUser.id})
                   </span>
                 </div>
                 <p className="text-[11px] text-[#6B6B6B]">
@@ -769,7 +863,7 @@ export function RestrictedZoneView({
                 onChange={(e) => {
                   const siteId = e.target.value;
                   activeScopeRef.current = {
-                    userId: session.user.id,
+                    userId: effectiveUser.id,
                     siteId,
                     cameraId: '',
                     regionId: '',
@@ -799,7 +893,7 @@ export function RestrictedZoneView({
                 onChange={(e) => {
                   const cameraId = e.target.value;
                   activeScopeRef.current = {
-                    userId: session.user.id,
+                    userId: effectiveUser.id,
                     siteId: selectedSiteId,
                     cameraId,
                     regionId: '',
@@ -828,7 +922,7 @@ export function RestrictedZoneView({
                 onChange={(e) => {
                   const regionId = e.target.value;
                   activeScopeRef.current = {
-                    userId: session.user.id,
+                    userId: effectiveUser.id,
                     siteId: selectedSiteId,
                     cameraId: selectedCameraId,
                     regionId,
@@ -1068,7 +1162,7 @@ export function RestrictedZoneView({
                   </div>
                 ) : (
                   <>
-                    {session && selectedCamera && selectedRegion ? (
+                    {effectiveUser && selectedCamera && selectedRegion ? (
                       <button
                         onClick={handleSaveToBackend}
                         disabled={savePolygonMutation.isPending}
@@ -1087,7 +1181,7 @@ export function RestrictedZoneView({
                       onClick={resetToAuthoritative}
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
-                      {session && selectedRegion ? 'RESET TO SERVER' : 'RESET'}
+                      {effectiveUser && selectedRegion ? 'RESET TO SERVER' : 'RESET'}
                     </button>
                     <button
                       onClick={exportZone}

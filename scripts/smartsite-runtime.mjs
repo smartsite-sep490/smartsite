@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 
 import {
   buildAiEnvironment,
+  buildComposeEnvironment,
   buildHiddenLaunchOptions,
   buildTapoRtspUrl,
   buildWindowsProcessInspectionScript,
@@ -347,12 +348,13 @@ async function start(config, source, build) {
   const backendUrl = config.backendUrl ?? 'http://127.0.0.1:3000';
   const webUrl = config.webUrl ?? 'http://127.0.0.1:5173';
   const aiUrl = config.aiUrl ?? 'http://127.0.0.1:8000';
-  const composeEnvironment = {
-    ...process.env,
-    EVIDENCE_LOCAL_HOST_ROOT: config.evidenceRoot,
-    AI_CONFIGURATION_CAMERA_IDS: demoConfiguration.cameraId,
-    SMARTSITE_AI_SERVICE_TOKEN: serviceToken,
-  };
+  const composeEnvironment = buildComposeEnvironment({
+    baseEnv: process.env,
+    backendUrl,
+    evidenceRoot: config.evidenceRoot,
+    cameraId: demoConfiguration.cameraId,
+    serviceToken,
+  });
 
   const reuseApi = decision.action === 'restart-source';
   const processes = reuseApi ? { aiApi: existingState.processes.aiApi } : {};

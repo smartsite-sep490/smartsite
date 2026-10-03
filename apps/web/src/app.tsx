@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   getBackendHealth,
   type SafetyAlertStatus,
   type SafetyAlertType,
 } from '@smartsite/api-client';
-import { AppLayout, ActiveTab } from './components/layout/AppLayout';
+import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
@@ -13,7 +14,20 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
-import { IconRadio, IconUsers, IconTrendingUp } from './components/icons';
+import { IconRadio, IconTrendingUp } from './components/icons';
+import {
+  useAuth,
+  useRestoreSession,
+  useCurrentUser,
+  useLogout,
+  SessionExpiredModal,
+} from './features/auth/auth-session';
+import type { SharedSession } from './types/shared-session';
+import { LoginScreen } from './features/auth/LoginScreen';
+import { RegisterScreen } from './features/auth/RegisterScreen';
+import { WorkforceView } from './components/workforce/WorkforceView';
+import { SiteSetupView } from './components/workforce/SiteSetupView';
+import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -24,8 +38,192 @@ interface AlertsNavigationContext {
   status?: SafetyAlertStatus;
 }
 
+interface ProtectedRoutesProps {
+  defaultAuthTab: string;
+  alertsContext?: AlertsNavigationContext;
+  onNavigate: (tab: ActiveTab, context?: AlertsNavigationContext) => void;
+}
+
+function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
+  const { accessToken, sessionScope: providerScope } = useAuth();
+  const {
+    data: currentUser,
+    isPending: isUserPending,
+    isError: isUserError,
+    error: userError,
+    refetch: refetchUser,
+  } = useCurrentUser(apiUrl);
+  const logoutMutation = useLogout(apiUrl);
+
+  const handleSignOut = React.useCallback(() => {
+    logoutMutation.mutate();
+  }, [logoutMutation]);
+
+  const sharedSession = React.useMemo<SharedSession | null>(() => {
+    if (!accessToken || !currentUser || !providerScope) return null;
+    return {
+      accessToken,
+      user: {
+        id: currentUser.id,
+        displayName: currentUser.displayName,
+        roleAssignments: currentUser.roleAssignments,
+        username: currentUser.username,
+      },
+      sessionScope: providerScope,
+      onSignOut: handleSignOut,
+    };
+  }, [accessToken, currentUser, providerScope, handleSignOut]);
+
+  if (!accessToken) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (isUserError && !currentUser) {
+    return (
+      <AppLayout onSelectTab={onNavigate}>
+        <div className="mx-auto max-w-lg rounded-xl border border-[#EAEAEA] bg-white p-7 text-center">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#9F2F2D]">
+            Authentication Error
+          </p>
+          <h2 className="mt-2 text-xl font-bold text-[#2F3437]">Could not load user profile</h2>
+          <p className="mt-2 text-sm text-[#6B6B6B]">
+            {userError instanceof Error
+              ? userError.message
+              : 'Failed to retrieve current user account.'}
+          </p>
+          <div className="mt-6 flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => void refetchUser()}
+              className="rounded-md bg-[#111111] px-4 py-2 text-sm font-semibold text-white hover:bg-[#333333] cursor-pointer"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="rounded-md border border-[#EAEAEA] px-4 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (isUserPending || !currentUser) {
+    return (
+      <AppLayout onSelectTab={onNavigate}>
+        <div className="flex h-96 items-center justify-center">
+          <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout onSelectTab={onNavigate}>
+      <Routes>
+        <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
+        <Route
+          path="/dashboard"
+          element={<DashboardView onNavigate={(tab) => onNavigate(tab)} />}
+        />
+        <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+        <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
+        <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
+        <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
+        <Route
+          path="/live-monitoring"
+          element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
+        />
+        <Route
+          path="/ppe"
+          element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
+        />
+        <Route
+          path="/zones"
+          element={
+            <RestrictedZoneView
+              apiUrl={apiUrl}
+              sharedSession={sharedSession}
+              onNavigate={(tab, context) => onNavigate(tab, context)}
+            />
+          }
+        />
+        <Route
+          path="/incidents"
+          element={
+            <SafetyAlertsView
+              key={JSON.stringify(alertsContext ?? {})}
+              apiUrl={apiUrl}
+              sharedSession={sharedSession}
+              initialSiteId={alertsContext?.siteId}
+              initialAlertId={alertsContext?.alertId}
+              initialStatus={alertsContext?.status}
+              initialType={alertsContext?.alertType}
+            />
+          }
+        />
+        <Route
+          path="/iot"
+          element={
+            <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
+                <IconRadio className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold text-[#041D2E]">IoT Environmental Sensors</h2>
+              <p className="text-sm text-[#62748E] max-w-md mx-auto">
+                Environmental air quality, noise thresholds, crane wind speed and perimeter beams.
+              </p>
+            </div>
+          }
+        />
+        <Route
+          path="/progress"
+          element={
+            <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
+                <IconTrendingUp className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold text-[#041D2E]">Construction Progress Monitoring</h2>
+              <p className="text-sm text-[#62748E] max-w-md mx-auto">
+                4D BIM overlay, photogrammetry site scans and milestone progress tracking.
+              </p>
+            </div>
+          }
+        />
+        <Route path="*" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
+      </Routes>
+    </AppLayout>
+  );
+}
+
+function PublicOnlyRoute({
+  children,
+  defaultAuthTab,
+}: {
+  children: React.ReactNode;
+  defaultAuthTab: string;
+}) {
+  const { accessToken } = useAuth();
+  if (accessToken) {
+    return <Navigate to={`/${defaultAuthTab}`} replace />;
+  }
+  return <>{children}</>;
+}
+
 export function App() {
-  const [currentTab, setCurrentTab] = useState<ActiveTab>('landing');
+  const navigate = useNavigate();
+  const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
+  const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
+  const { data: currentUser } = useCurrentUser(apiUrl);
+
+  const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
+  const isWorkerOnly =
+    roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
+  const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check
@@ -34,88 +232,84 @@ export function App() {
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
   });
 
-  const handleSelectTab = (tab: ActiveTab, context?: AlertsNavigationContext) => {
+  const handleNavigate = (tab: ActiveTab, context?: AlertsNavigationContext) => {
     if (tab === 'incidents') {
       setAlertsContext(context);
     }
-    setCurrentTab(tab);
+    navigate(`/${tab}`);
   };
 
-  // If viewing public landing page
-  if (currentTab === 'landing') {
-    return <LandingPage onEnterApp={(targetTab = 'dashboard') => handleSelectTab(targetTab)} />;
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen bg-[#041D2E] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
+      </div>
+    );
   }
 
   return (
-    <AppLayout currentTab={currentTab} onSelectTab={handleSelectTab}>
-      {/* Tab: Live Monitoring */}
-      {currentTab === 'live-monitoring' && (
-        <LiveMonitoringView onNavigate={(tab) => handleSelectTab(tab)} />
-      )}
-
-      {/* Tab: Restricted Zones (MF05) */}
-      {currentTab === 'zones' && (
-        <RestrictedZoneView apiUrl={apiUrl} onNavigate={(tab, ctx) => handleSelectTab(tab, ctx)} />
-      )}
-
-      {/* Tab: PPE Monitoring (MF04) */}
-      {currentTab === 'ppe' && (
-        <PpeMonitoringView onNavigate={(tab, ctx) => handleSelectTab(tab, ctx)} />
-      )}
-
-      {/* Tab: Operational Dashboard */}
-      {currentTab === 'dashboard' && <DashboardView onNavigate={(tab) => handleSelectTab(tab)} />}
-
-      {/* Placeholder tabs for remaining modules */}
-      {currentTab === 'workforce' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#F66B17] mx-auto flex items-center justify-center">
-            <IconUsers className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">Workforce Management</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Worker roster, site assignments, trade qualifications and active safety certifications.
-          </p>
-        </div>
-      )}
-
-      {currentTab === 'access' && <AccessControlView apiUrl={apiUrl} />}
-
-      {currentTab === 'incidents' && (
-        <SafetyAlertsView
-          key={JSON.stringify(alertsContext ?? {})}
-          apiUrl={apiUrl}
-          initialSiteId={alertsContext?.siteId}
-          initialAlertId={alertsContext?.alertId}
-          initialStatus={alertsContext?.status}
-          initialType={alertsContext?.alertType}
+    <>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingPage
+              onEnterApp={(tab) => {
+                if (accessToken) {
+                  navigate(tab ? `/${tab}` : `/${defaultAuthTab}`);
+                } else {
+                  navigate('/login');
+                }
+              }}
+            />
+          }
         />
-      )}
 
-      {currentTab === 'iot' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
-            <IconRadio className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">IoT Environmental Sensors</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            Environmental air quality, noise thresholds, crane wind speed and perimeter beams.
-          </p>
-        </div>
-      )}
+        <Route
+          path="/login"
+          element={
+            <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
+              <LoginScreen
+                onLoginSuccess={() => navigate(`/${defaultAuthTab}`)}
+                onBack={() => navigate('/')}
+                onNavigateToRegister={() => navigate('/register')}
+              />
+            </PublicOnlyRoute>
+          }
+        />
 
-      {currentTab === 'progress' && (
-        <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
-            <IconTrendingUp className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-[#041D2E]">Construction Progress Monitoring</h2>
-          <p className="text-sm text-[#62748E] max-w-md mx-auto">
-            4D BIM overlay, photogrammetry site scans and milestone progress tracking.
-          </p>
-        </div>
-      )}
-    </AppLayout>
+        <Route
+          path="/register"
+          element={
+            <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
+              <RegisterScreen
+                onRegisterSuccess={() => navigate('/login')}
+                onBackToLogin={() => navigate('/login')}
+                onBackToSite={() => navigate('/')}
+              />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoutes
+              defaultAuthTab={defaultAuthTab}
+              alertsContext={alertsContext}
+              onNavigate={handleNavigate}
+            />
+          }
+        />
+      </Routes>
+
+      <SessionExpiredModal
+        open={isSessionExpired}
+        onReLogin={() => {
+          dismissSessionExpired();
+          navigate('/login');
+        }}
+      />
+    </>
   );
 }
 

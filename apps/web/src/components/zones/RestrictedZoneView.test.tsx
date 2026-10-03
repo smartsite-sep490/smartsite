@@ -669,4 +669,229 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
 
     expect(screen.getByText(/Saved to browser local storage/i)).not.toBeNull();
   });
+
+  describe('RestrictedZoneView Shared Session Integration', () => {
+    it('shared-session mounts directly without Admin login panel and does not call client.login', async () => {
+      const loginSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'login');
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView
+            sharedSession={{
+              accessToken: 'shared-admin-token',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin User',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-admin-zone',
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText(/Admin Session Active/i)).toBeDefined();
+      expect(screen.queryByText(/SIGN IN AS ADMIN/i)).toBeNull();
+      expect(loginSpy).not.toHaveBeenCalled();
+    });
+
+    it('unmount in shared session mode cancels and evicts owned queries without calling client.logout', async () => {
+      const logoutSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'logout');
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView
+            sharedSession={{
+              accessToken: 'shared-admin-token',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin User',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-admin-zone',
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByText(/Admin Session Active/i);
+      expect(
+        queryClient.getQueryData([
+          'zone-admin',
+          'http://localhost:3000',
+          'scope-admin-zone',
+          'sites',
+        ]),
+      ).toBeDefined();
+
+      unmount();
+      expect(logoutSpy).not.toHaveBeenCalled();
+      expect(
+        queryClient.getQueryData([
+          'zone-admin',
+          'http://localhost:3000',
+          'scope-admin-zone',
+          'sites',
+        ]),
+      ).toBeUndefined();
+    });
+
+    it('sharedSession === null renders session pending or expired without standalone login form', async () => {
+      const listSitesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listSites');
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView sharedSession={null} />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText(/Session pending or expired/i)).toBeDefined();
+      expect(screen.queryByText(/Sign in as Admin/i)).toBeNull();
+      expect(screen.queryByPlaceholderText(/Admin username/i)).toBeNull();
+      expect(listSitesSpy).not.toHaveBeenCalled();
+    });
+
+    it('delayed polygon result after same-user token rotation preserves new draft without clearing it', async () => {
+      let resolveUpdate: (
+        value: Awaited<ReturnType<SmartSiteManagementClient['updatePolygon']>>,
+      ) => void;
+      const updatePromise = new Promise<
+        Awaited<ReturnType<SmartSiteManagementClient['updatePolygon']>>
+      >((resolve) => {
+        resolveUpdate = resolve;
+      });
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue(
+        mockCamerasPage,
+      );
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue(
+        mockRegionsCam1Page,
+      );
+      vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon').mockImplementation(
+        () => updatePromise,
+      );
+
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView
+            sharedSession={{
+              accessToken: 'token-1',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin User',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-1',
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByText(/Admin Session Active/i);
+      await user.click(await screen.findByRole('button', { name: /EDIT ZONE/i }));
+      const saveBtn = await screen.findByRole('button', { name: /SAVE TO BACKEND/i });
+      await user.click(saveBtn);
+
+      // Now create a local draft under scope-2
+      saveLocalDraft('site-alpha', 'cam-1', 'reg-1', 3, [
+        [0.2, 0.2],
+        [0.3, 0.3],
+        [0.4, 0.4],
+      ]);
+
+      // Rotate token / sessionScope to scope-2 for same user
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView
+            sharedSession={{
+              accessToken: 'token-2',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin User',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-2',
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      // Complete delayed mutation from scope-1
+      const baseRegion = mockRegionsCam1Page.items[0]!;
+      await act(async () => {
+        resolveUpdate!({
+          configurationVersion: 4,
+          region: {
+            ...baseRegion,
+            version: 2,
+          },
+        });
+      });
+
+      // Draft must NOT be cleared by the old mutation!
+      const draftAfter = loadLocalDraft('site-alpha', 'cam-1', 'reg-1', 3);
+      expect(draftAfter.status).toBe('valid');
+    });
+
+    it('restricted user (Worker) is denied without firing protected queries or signing out of app', async () => {
+      const listSitesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listSites');
+      const onSignOut = vi.fn();
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView
+            sharedSession={{
+              accessToken: 'worker-token',
+              user: {
+                id: 'worker-1',
+                displayName: 'John Worker',
+                roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
+              },
+              sessionScope: 'scope-worker-zone',
+              onSignOut,
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText(/Zone Configuration is restricted/i)).toBeDefined();
+      expect(
+        screen.getByText(/A global Admin role is required to configure restricted zones/i),
+      ).toBeDefined();
+      expect(listSitesSpy).not.toHaveBeenCalled();
+      expect(onSignOut).not.toHaveBeenCalled();
+    });
+
+    it('explicit sign-out delegates to sharedSession.onSignOut and does not call client.logout', async () => {
+      const user = userEvent.setup();
+      const onSignOut = vi.fn();
+      const logoutSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'logout');
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView
+            sharedSession={{
+              accessToken: 'shared-admin-token',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin User',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-admin-zone',
+              onSignOut,
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByText(/Admin Session Active/i);
+      const signOutBtn = screen.getByRole('button', { name: /SIGN OUT/i });
+      await user.click(signOutBtn);
+
+      expect(onSignOut).toHaveBeenCalledTimes(1);
+      expect(logoutSpy).not.toHaveBeenCalled();
+    });
+  });
 });

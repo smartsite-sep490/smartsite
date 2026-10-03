@@ -163,7 +163,7 @@ type Equal<Left, Right> =
     ? true
     : false;
 
-test('account responses represent every persisted role without widening role mutation inputs', () => {
+test('account responses and role mutation inputs represent every provisionable role', () => {
   const account: AccountResponse = {
     id: '00000000-0000-4000-8000-000000000001',
     username: 'role-catalog',
@@ -184,7 +184,12 @@ test('account responses represent every persisted role without widening role mut
   };
   const provisionableRolesStayRestricted: Equal<
     ProvisionableRoleAssignment['role'],
-    'ADMIN' | 'SITE_MANAGER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER'
+    'ADMIN' |
+      'SITE_MANAGER' |
+      'CONTRACTOR_REPRESENTATIVE' |
+      'SAFETY_OFFICER' |
+      'SECURITY_OFFICER' |
+      'WORKER'
   > = true;
 
   assert.deepEqual(

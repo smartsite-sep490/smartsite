@@ -23,6 +23,7 @@ const IDs = {
   site: '00000000-0000-4000-8000-000000000003',
   worker: '00000000-0000-4000-8000-000000000004',
   zone: '00000000-0000-4000-8000-000000000005',
+  otherSite: '00000000-0000-4000-8000-000000000006',
 };
 
 function representative(): WorkforceActor {
@@ -200,6 +201,7 @@ function reviewServiceFor(options: {
   missingWorker?: boolean;
   missingContractor?: boolean;
   missingZone?: boolean;
+  workerSiteId?: string;
   rows?: ReturnType<typeof participation>[];
 }) {
   const request = {
@@ -232,14 +234,18 @@ function reviewServiceFor(options: {
       }
       if (target === WorkerEntity)
         return {
-          findOneBy: async () =>
-            options.missingWorker
-              ? null
-              : {
-                  id: IDs.worker,
-                  contractorId: IDs.contractor,
-                  isActive: options.workerActive ?? true,
-                },
+          findOneBy: async (scope: { id: string; siteId?: string }) => {
+            assert.equal(scope.id, IDs.worker);
+            const siteId = options.workerSiteId ?? IDs.site;
+            if (options.missingWorker || (scope.siteId !== undefined && scope.siteId !== siteId))
+              return null;
+            return {
+              id: IDs.worker,
+              siteId,
+              contractorId: IDs.contractor,
+              isActive: options.workerActive ?? true,
+            };
+          },
         };
       if (target === ContractorEntity)
         return {
@@ -312,6 +318,7 @@ for (const stage of ['safetyReview', 'approval'] as const) {
       rows: [participation(assignmentStart, '2026-10-03T10:00:00Z')],
     },
     { name: 'zone no longer belongs to the target Site', missingZone: true },
+    { name: 'worker now belongs to another Site', workerSiteId: IDs.otherSite },
   ]) {
     test(`Assignment ${stage} revalidates when ${scenario.name}`, async () => {
       const fixture = reviewServiceFor({ status, ...scenario });

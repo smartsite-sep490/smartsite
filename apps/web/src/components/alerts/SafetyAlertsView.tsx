@@ -11,6 +11,7 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
+import type { SharedSession } from '../../types/shared-session';
 
 export interface SafetyAlertsViewProps {
   apiUrl: string;
@@ -18,6 +19,7 @@ export interface SafetyAlertsViewProps {
   initialAlertId?: string;
   initialStatus?: 'ALL' | SafetyAlertStatus;
   initialType?: 'ALL' | SafetyAlertType;
+  sharedSession?: SharedSession | null;
 }
 
 const statusOptions: readonly SafetyAlertStatus[] = [
@@ -123,6 +125,7 @@ export function SafetyAlertsView({
   initialAlertId,
   initialStatus,
   initialType,
+  sharedSession,
 }: SafetyAlertsViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
@@ -140,6 +143,22 @@ export function SafetyAlertsView({
     null,
   );
   const lifecycleGeneration = useRef(0);
+
+  const isControlled = sharedSession !== undefined;
+  const isShared = isControlled && sharedSession !== null;
+  const effectiveToken = isControlled
+    ? (sharedSession?.accessToken ?? '')
+    : (session?.accessToken ?? '');
+  const effectiveScope = isControlled ? (sharedSession?.sessionScope ?? '') : sessionScope;
+  const effectiveUser = isControlled ? (sharedSession?.user ?? null) : (session?.user ?? null);
+
+  const canReviewSafetyAlerts = useMemo(() => {
+    if (!effectiveUser) return false;
+    return effectiveUser.roleAssignments.some(
+      ({ role, siteId }) =>
+        (role === 'ADMIN' && siteId === null) || (role === 'SAFETY_OFFICER' && siteId !== null),
+    );
+  }, [effectiveUser]);
 
   // Minimal appropriate mount semantics: adjust filters when navigation initial* props change without useEffect
   const [prevInitialType, setPrevInitialType] = useState(initialType);
@@ -188,15 +207,20 @@ export function SafetyAlertsView({
     [apiUrl, queryClient],
   );
 
+  const effectiveScopeRef = useRef(effectiveScope);
+  useEffect(() => {
+    effectiveScopeRef.current = effectiveScope;
+  }, [effectiveScope]);
+
   const login = useMutation({
     mutationFn: async () => {
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
-      const canReviewSafetyAlerts = result.user.roleAssignments.some(
+      const allowed = result.user.roleAssignments.some(
         ({ role, siteId }) =>
           (role === 'ADMIN' && siteId === null) || (role === 'SAFETY_OFFICER' && siteId !== null),
       );
-      if (!canReviewSafetyAlerts) {
+      if (!allowed) {
         await client.logout().catch(() => undefined);
         throw new Error('A global Admin or Site-scoped Safety Officer role is required.');
       }
@@ -227,30 +251,37 @@ export function SafetyAlertsView({
       lifecycleGeneration.current += 1;
       const current = activeSession.current;
       activeSession.current = null;
-      if (!current) return;
-      removeSessionQueries(current.sessionScope);
-      void client.logout().catch(() => undefined);
+      if (isControlled) {
+        if (effectiveScopeRef.current) {
+          removeSessionQueries(effectiveScopeRef.current);
+        }
+      } else {
+        if (current) {
+          removeSessionQueries(current.sessionScope);
+          void client.logout().catch(() => undefined);
+        }
+      }
     };
-  }, [client, removeSessionQueries]);
+  }, [client, isControlled, removeSessionQueries]);
 
-  const token = session?.accessToken ?? '';
   const sites = useQuery({
-    queryKey: ['sites', apiUrl, sessionScope],
-    queryFn: () => client.listSites(token, { limit: 100 }),
-    enabled: token.length > 0,
+    queryKey: ['sites', apiUrl, effectiveScope],
+    queryFn: () => client.listSites(effectiveToken, { limit: 100 }),
+    enabled: canReviewSafetyAlerts && effectiveToken.length > 0 && effectiveScope.length > 0,
   });
 
   const isGlobalAdmin =
-    session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null) ??
-    false;
+    effectiveUser?.roleAssignments.some(
+      ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+    ) ?? false;
   const safetyOfficerSiteIds = useMemo(
     () =>
       new Set(
-        session?.user.roleAssignments.flatMap(({ role, siteId }) =>
+        effectiveUser?.roleAssignments.flatMap(({ role, siteId }) =>
           role === 'SAFETY_OFFICER' && siteId !== null ? [siteId] : [],
         ) ?? [],
       ),
-    [session],
+    [effectiveUser],
   );
   const visibleSites = useMemo(
     () =>
@@ -263,15 +294,19 @@ export function SafetyAlertsView({
     : (visibleSites[0]?.id ?? '');
 
   const alerts = useQuery({
-    queryKey: ['safety-alerts', apiUrl, sessionScope, selectedSiteId, status, type, offset],
+    queryKey: ['safety-alerts', apiUrl, effectiveScope, selectedSiteId, status, type, offset],
     queryFn: () =>
-      client.listSafetyAlerts(token, selectedSiteId, {
+      client.listSafetyAlerts(effectiveToken, selectedSiteId, {
         offset,
         limit: alertPageSize,
         ...(status === 'ALL' ? {} : { status }),
         ...(type === 'ALL' ? {} : { type }),
       }),
-    enabled: token.length > 0 && selectedSiteId.length > 0,
+    enabled:
+      canReviewSafetyAlerts &&
+      effectiveToken.length > 0 &&
+      effectiveScope.length > 0 &&
+      selectedSiteId.length > 0,
   });
 
   const selectedAlertId = alerts.data?.items.some((alert) => alert.id === requestedAlertId)
@@ -279,29 +314,50 @@ export function SafetyAlertsView({
     : (alerts.data?.items[0]?.id ?? '');
 
   const detail = useQuery({
-    queryKey: ['safety-alert', apiUrl, sessionScope, selectedSiteId, selectedAlertId],
-    queryFn: () => client.getSafetyAlert(token, selectedSiteId, selectedAlertId),
-    enabled: token.length > 0 && selectedSiteId.length > 0 && selectedAlertId.length > 0,
+    queryKey: ['safety-alert', apiUrl, effectiveScope, selectedSiteId, selectedAlertId],
+    queryFn: () => client.getSafetyAlert(effectiveToken, selectedSiteId, selectedAlertId),
+    enabled:
+      canReviewSafetyAlerts &&
+      effectiveToken.length > 0 &&
+      effectiveScope.length > 0 &&
+      selectedSiteId.length > 0 &&
+      selectedAlertId.length > 0,
   });
 
   const review = useMutation({
-    mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
-      if (!detail.data) throw new Error('Load an alert before submitting a review.');
-      return client.reviewSafetyAlert(token, selectedSiteId, detail.data.id, {
+    mutationFn: async ({
+      targetStatus,
+      targetAlertId,
+      expectedRevision,
+      targetReason,
+    }: {
+      targetStatus: SafetyAlertReviewTargetStatus;
+      targetScope: string;
+      targetAlertId: string;
+      expectedRevision: number;
+      targetReason: string;
+    }) => {
+      return client.reviewSafetyAlert(effectiveToken, selectedSiteId, targetAlertId, {
         commandId: crypto.randomUUID(),
-        expectedRevision: detail.data.revision,
+        expectedRevision,
         targetStatus,
-        reason: reviewReason,
+        reason: targetReason,
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
+      if (variables.targetScope !== effectiveScopeRef.current) return;
       setReviewReason('');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['safety-alerts', apiUrl, sessionScope] }),
-        queryClient.invalidateQueries({ queryKey: ['safety-alert', apiUrl, sessionScope] }),
+        queryClient.invalidateQueries({
+          queryKey: ['safety-alerts', apiUrl, variables.targetScope],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['safety-alert', apiUrl, variables.targetScope],
+        }),
       ]);
     },
-    onError: async (error) => {
+    onError: async (error, variables) => {
+      if (variables.targetScope !== effectiveScopeRef.current) return;
       if (error instanceof ApiError && error.status === 409) {
         await Promise.all([alerts.refetch(), detail.refetch()]);
       }
@@ -313,12 +369,30 @@ export function SafetyAlertsView({
     setReviewReason('');
   };
 
+  const prevScopeRef = useRef(effectiveScope);
+  useEffect(() => {
+    if (prevScopeRef.current && prevScopeRef.current !== effectiveScope) {
+      removeSessionQueries(prevScopeRef.current);
+      setRequestedSiteId(initialSiteId ?? '');
+      setRequestedAlertId(initialAlertId ?? '');
+      setOffset(0);
+      setReviewReason('');
+      review.reset();
+    }
+    prevScopeRef.current = effectiveScope;
+  }, [effectiveScope, removeSessionQueries, initialSiteId, initialAlertId, review]);
+
   const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     login.mutate();
   };
 
   const handleLogout = () => {
+    if (isShared) {
+      if (effectiveScope) removeSessionQueries(effectiveScope);
+      sharedSession?.onSignOut?.();
+      return;
+    }
     const current = activeSession.current;
     activeSession.current = null;
     if (current) removeSessionQueries(current.sessionScope);
@@ -332,7 +406,32 @@ export function SafetyAlertsView({
     if (current) void client.logout().catch(() => undefined);
   };
 
-  if (!session) {
+  if (isShared && !canReviewSafetyAlerts) {
+    return (
+      <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
+        <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">Access restricted</h1>
+        <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
+          A global Admin or Site-scoped Safety Officer role is required to review safety alerts.
+        </p>
+      </div>
+    );
+  }
+
+  if (isControlled && sharedSession === null) {
+    return (
+      <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
+        <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">Session pending or expired</h1>
+        <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
+          Your application session is pending or no longer valid. Please sign in to the application
+          to continue.
+        </p>
+      </div>
+    );
+  }
+
+  if (!isControlled && !session) {
     return (
       <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
@@ -396,7 +495,7 @@ export function SafetyAlertsView({
           onClick={handleLogout}
           className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] shrink-0 max-w-full truncate"
         >
-          Sign out {session.user.displayName}
+          Sign out {effectiveUser?.displayName}
         </button>
       </header>
 
@@ -629,8 +728,8 @@ export function SafetyAlertsView({
                         <SafetyAlertEvidencePanel
                           client={client}
                           apiUrl={apiUrl}
-                          sessionScope={sessionScope}
-                          token={token}
+                          sessionScope={effectiveScope}
+                          token={effectiveToken}
                           siteId={selectedSiteId}
                           alertId={detail.data.id}
                           detection={detection}
@@ -672,50 +771,89 @@ export function SafetyAlertsView({
                       placeholder="Example: Worker is clearly visible without a hard hat across the linked observations."
                       className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
                     />
-                    {review.error && (
-                      <p
-                        role="alert"
-                        className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
-                      >
-                        {errorMessage(review.error)}
-                      </p>
-                    )}
-                    {review.isSuccess && (
-                      <p
-                        role="status"
-                        className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
-                      >
-                        Review decision recorded.
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('CONFIRMED')}
-                        className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Confirm violation
-                      </button>
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('DISMISSED')}
-                        className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Dismiss alert
-                      </button>
-                      {detail.data.status === 'PENDING_REVIEW' && (
-                        <button
-                          type="button"
-                          disabled={reviewReason.trim().length < 5 || review.isPending}
-                          onClick={() => review.mutate('NEEDS_MORE_EVIDENCE')}
-                          className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Request more evidence
-                        </button>
-                      )}
-                    </div>
+                    {(() => {
+                      const isCurrentReviewMutation =
+                        review.variables?.targetScope === effectiveScope;
+                      const reviewPending = isCurrentReviewMutation && review.isPending;
+                      const reviewSuccess = isCurrentReviewMutation && review.isSuccess;
+                      const reviewError = isCurrentReviewMutation ? review.error : null;
+
+                      return (
+                        <>
+                          {reviewError && (
+                            <p
+                              role="alert"
+                              className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
+                            >
+                              {errorMessage(reviewError)}
+                            </p>
+                          )}
+                          {reviewSuccess && (
+                            <p
+                              role="status"
+                              className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
+                            >
+                              Review decision recorded.
+                            </p>
+                          )}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={reviewReason.trim().length < 5 || reviewPending}
+                              onClick={() => {
+                                if (!detail.data) return;
+                                review.mutate({
+                                  targetStatus: 'CONFIRMED',
+                                  targetScope: effectiveScope,
+                                  targetAlertId: detail.data.id,
+                                  expectedRevision: detail.data.revision,
+                                  targetReason: reviewReason,
+                                });
+                              }}
+                              className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Confirm violation
+                            </button>
+                            <button
+                              type="button"
+                              disabled={reviewReason.trim().length < 5 || reviewPending}
+                              onClick={() => {
+                                if (!detail.data) return;
+                                review.mutate({
+                                  targetStatus: 'DISMISSED',
+                                  targetScope: effectiveScope,
+                                  targetAlertId: detail.data.id,
+                                  expectedRevision: detail.data.revision,
+                                  targetReason: reviewReason,
+                                });
+                              }}
+                              className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Dismiss alert
+                            </button>
+                            {detail.data.status === 'PENDING_REVIEW' && (
+                              <button
+                                type="button"
+                                disabled={reviewReason.trim().length < 5 || reviewPending}
+                                onClick={() => {
+                                  if (!detail.data) return;
+                                  review.mutate({
+                                    targetStatus: 'NEEDS_MORE_EVIDENCE',
+                                    targetScope: effectiveScope,
+                                    targetAlertId: detail.data.id,
+                                    expectedRevision: detail.data.revision,
+                                    targetReason: reviewReason,
+                                  });
+                                }}
+                                className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Request more evidence
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </section>
                 )}
                 <section className="min-w-0">

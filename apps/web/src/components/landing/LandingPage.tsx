@@ -12,6 +12,7 @@ import {
   IconAlertTriangle,
   IconX,
 } from '../icons';
+import { SmartSiteScrollWorld } from './SmartSiteScrollWorld';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -446,6 +447,9 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </div>
         </div>
       </section>
+
+      {/* 5. Connected SmartSite site journey */}
+      <SmartSiteScrollWorld />
 
       {/* 5. Built Around Operations */}
       <section

@@ -3,7 +3,9 @@ import type { NormalizedPoint } from '../cameras/monitoringUtils';
 
 export type CameraResponse = Awaited<ReturnType<SmartSiteManagementClient['getCamera']>>;
 export type RegionResponse = Awaited<ReturnType<SmartSiteManagementClient['getRegion']>>;
-export type RegionMutationResponse = Awaited<ReturnType<SmartSiteManagementClient['updatePolygon']>>;
+export type RegionMutationResponse = Awaited<
+  ReturnType<SmartSiteManagementClient['updatePolygon']>
+>;
 
 export const DEFAULT_ZONE_POLYGON: NormalizedPoint[] = [
   [0.63, 0.2],
@@ -52,6 +54,7 @@ export interface ResolveActivePolygonOptions {
 
 export interface SavePolygonMutationVariables {
   userId: string;
+  sessionScope?: string;
   token?: string;
   siteId: string;
   cameraId: string;
@@ -63,6 +66,7 @@ export interface SavePolygonMutationVariables {
 
 export interface ActiveScope {
   userId: string | null;
+  sessionScope?: string;
   siteId: string;
   cameraId: string;
   regionId: string;
@@ -347,6 +351,11 @@ export function isMutationScopeActive(
   variables: SavePolygonMutationVariables,
 ): boolean {
   if (!activeScope || !activeScope.userId) return false;
+  if (variables.sessionScope) {
+    if (!activeScope.sessionScope || activeScope.sessionScope !== variables.sessionScope) {
+      return false;
+    }
+  }
   return (
     activeScope.userId === variables.userId &&
     activeScope.siteId === variables.siteId &&
@@ -359,12 +368,13 @@ export function planMutationCompletion(
   apiUrl: string,
   variables: SavePolygonMutationVariables,
 ): MutationCallbackPlan {
+  const scopeKey = variables.sessionScope || variables.userId;
   return {
-    invalidateSiteCamerasKey: ['zone-admin', apiUrl, variables.userId, variables.siteId, 'cameras'],
+    invalidateSiteCamerasKey: ['zone-admin', apiUrl, scopeKey, variables.siteId, 'cameras'],
     invalidateCameraRegionsKey: [
       'zone-admin',
       apiUrl,
-      variables.userId,
+      scopeKey,
       variables.siteId,
       variables.cameraId,
       'regions',

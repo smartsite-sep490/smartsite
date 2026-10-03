@@ -93,7 +93,7 @@ services:
       context: ..
       dockerfile: infra/docker/web.Dockerfile
       args:
-        VITE_API_URL: http://localhost:3000
+        VITE_API_URL: ${SMARTSITE_WEB_API_URL:-http://localhost:3000}
         VITE_AI_WS_URL: ws://127.0.0.1:8000/ws/realtime
         # Local demo only: Vite embeds this value in the browser bundle.
         VITE_AI_BACKEND_SERVICE_TOKEN: ${SMARTSITE_AI_SERVICE_TOKEN:-smartsite_local_dev_service_token_only}

@@ -27,6 +27,7 @@ after(async () => {
 test('assignment reviews reread participation and roll back rejected transitions in PostgreSQL', async () => {
   await dataSource.initialize();
   const siteId = randomUUID();
+  const otherSiteId = randomUUID();
   const userId = randomUUID();
   const contractorId = randomUUID();
   const workerId = randomUUID();
@@ -41,6 +42,9 @@ test('assignment reviews reread participation and roll back rejected transitions
     await dataSource
       .getRepository(SiteEntity)
       .save({ id: siteId, code: siteId, name: 'Synthetic assignment site' });
+    await dataSource
+      .getRepository(SiteEntity)
+      .save({ id: otherSiteId, code: otherSiteId, name: 'Synthetic relocation site' });
     await dataSource.getRepository(UserEntity).save({
       id: userId,
       username: userId,
@@ -122,6 +126,17 @@ test('assignment reviews reread participation and roll back rejected transitions
       assert.equal(unchanged.siteManagerDecidedByUserId, null);
 
       await participation.update(participationId, { isActive: true });
+      await dataSource.getRepository(WorkerEntity).update(workerId, { siteId: otherSiteId });
+      await assert.rejects(
+        advance(),
+        (error: unknown) =>
+          error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+      );
+      const movedWorkerRequest = await assignments.findOneByOrFail({ id: requestId });
+      assert.equal(movedWorkerRequest.status, status);
+      assert.equal(movedWorkerRequest.safetyReviewedByUserId, null);
+      assert.equal(movedWorkerRequest.siteManagerDecidedByUserId, null);
+      await dataSource.getRepository(WorkerEntity).update(workerId, { siteId });
       await advance();
       const accepted = await assignments.findOneByOrFail({ id: requestId });
       assert.equal(
@@ -140,5 +155,6 @@ test('assignment reviews reread participation and roll back rejected transitions
     await dataSource.getRepository(ContractorEntity).delete({ id: contractorId });
     await dataSource.getRepository(UserEntity).delete({ id: userId });
     await dataSource.getRepository(SiteEntity).delete({ id: siteId });
+    await dataSource.getRepository(SiteEntity).delete({ id: otherSiteId });
   }
 });

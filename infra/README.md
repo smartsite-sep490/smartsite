@@ -13,4 +13,6 @@ Postgres18 volume lưu tại /var/lib/postgresql. Service `migrate` chạy TypeO
 
 Web/API/AI có image riêng và chạy non-root. Web API URL là build argument, truy cập từ browser. Backend health live không thay DB readiness; gọi /api/v1/health/ready để kiểm tra database thật. AI health xác nhận API service, không xác nhận model sẵn sàng. Profile AI truyền URL ingestion nội bộ và cùng local service token với Backend; production phải lấy cả hai giá trị từ cấu hình/secret manager.
 
+`SMARTSITE_WEB_API_URL` đặt API URL khi build Web; mặc định `http://localhost:3000`. Controller demo truyền `backendUrl` vào biến này. Khi mở Web bằng `127.0.0.1`, dùng API cùng hostname để phiên refresh cookie hoạt động đúng; cần rebuild Web sau khi đổi URL, không chỉ restart container.
+
 Đây là Compose development với credentials mẫu, không phải production deployment. Deploy Web/API riêng, Neon TLS và secrets ở server; AI có thể chạy GPU tại công trường. Chưa triển khai cloud, GPU container hoặc mobile distribution.

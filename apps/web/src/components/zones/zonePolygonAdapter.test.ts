@@ -440,6 +440,50 @@ describe('zonePolygonAdapter', () => {
       expect(isMutationScopeActive(activeScope, mutationVars)).toBe(false);
     });
 
+    it('isMutationScopeActive returns false when operator sessionScope rotated during save in flight', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        sessionScope: 'scope-new-token',
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      };
+      const varsWithOldScope = {
+        ...mutationVars,
+        sessionScope: 'scope-old-token',
+      };
+      expect(isMutationScopeActive(activeScope, varsWithOldScope)).toBe(false);
+    });
+
+    it('isMutationScopeActive returns false when variables has sessionScope but activeScope lacks it', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      };
+      const varsWithScope = {
+        ...mutationVars,
+        sessionScope: 'scope-token-1',
+      };
+      expect(isMutationScopeActive(activeScope, varsWithScope)).toBe(false);
+    });
+
+    it('isMutationScopeActive returns true when sessionScope matches', () => {
+      const activeScope = {
+        userId: 'user-admin-1',
+        sessionScope: 'scope-token-1',
+        siteId: 'site-A',
+        cameraId: 'cam-1',
+        regionId: 'reg-1',
+      };
+      const varsWithSameScope = {
+        ...mutationVars,
+        sessionScope: 'scope-token-1',
+      };
+      expect(isMutationScopeActive(activeScope, varsWithSameScope)).toBe(true);
+    });
+
     it('isMutationScopeActive returns false when operator logged out during save in flight', () => {
       expect(isMutationScopeActive(null, mutationVars)).toBe(false);
       expect(
@@ -454,6 +498,30 @@ describe('zonePolygonAdapter', () => {
           mutationVars,
         ),
       ).toBe(false);
+    });
+
+    it('planMutationCompletion prioritizes sessionScope over userId for query invalidation when present', () => {
+      const varsWithSessionScope = {
+        ...mutationVars,
+        sessionScope: 'session-scope-token-xyz',
+      };
+      const plan = planMutationCompletion('http://localhost:3000', varsWithSessionScope);
+
+      expect(plan.invalidateSiteCamerasKey).toEqual([
+        'zone-admin',
+        'http://localhost:3000',
+        'session-scope-token-xyz',
+        'site-A',
+        'cameras',
+      ]);
+      expect(plan.invalidateCameraRegionsKey).toEqual([
+        'zone-admin',
+        'http://localhost:3000',
+        'session-scope-token-xyz',
+        'site-A',
+        'cam-1',
+        'regions',
+      ]);
     });
 
     it('planMutationCompletion always targets the saved scope for cache invalidation and draft clearing', () => {

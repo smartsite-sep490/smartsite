@@ -216,6 +216,22 @@ function requiredString(value, label) {
   return value;
 }
 
+export function buildComposeEnvironment({
+  baseEnv,
+  backendUrl,
+  evidenceRoot,
+  cameraId,
+  serviceToken,
+}) {
+  return {
+    ...baseEnv,
+    SMARTSITE_WEB_API_URL: requiredString(backendUrl, 'Backend URL'),
+    EVIDENCE_LOCAL_HOST_ROOT: requiredString(evidenceRoot, 'evidence root'),
+    AI_CONFIGURATION_CAMERA_IDS: requiredString(cameraId, 'camera ID'),
+    SMARTSITE_AI_SERVICE_TOKEN: requiredString(serviceToken, 'Backend service token'),
+  };
+}
+
 export function buildAiEnvironment({
   baseEnv,
   serviceToken,

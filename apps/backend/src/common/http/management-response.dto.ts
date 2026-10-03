@@ -256,3 +256,40 @@ export class ZoneEntryDecisionPageResponseDto {
   items!: ZoneEntryDecisionResponseDto[];
   @ApiProperty() total!: number;
 }
+
+export class EligibleShiftResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() name!: string;
+  @ApiProperty({ format: 'date-time' }) startsAt!: string;
+  @ApiProperty({ format: 'date-time' }) endsAt!: string;
+  @ApiProperty() timezone!: string;
+}
+
+export class EligibleShiftPageResponseDto {
+  @ApiProperty({ type: [EligibleShiftResponseDto] })
+  items!: EligibleShiftResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class SwapCandidateShiftResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() name!: string;
+  @ApiProperty({ format: 'date-time' }) startsAt!: string;
+  @ApiProperty({ format: 'date-time' }) endsAt!: string;
+  @ApiProperty() timezone!: string;
+}
+
+export class SwapCandidateResponseDto {
+  @ApiProperty({ format: 'uuid' }) candidateWorkerId!: string;
+  @ApiProperty() candidateWorkerDisplayName!: string;
+  @ApiProperty({ format: 'uuid' }) candidateWorkerScheduleId!: string;
+  @ApiProperty({ format: 'date' }) workDate!: string;
+  @ApiProperty({ type: SwapCandidateShiftResponseDto })
+  currentShift!: SwapCandidateShiftResponseDto;
+}
+
+export class SwapCandidatePageResponseDto {
+  @ApiProperty({ type: [SwapCandidateResponseDto] })
+  items!: SwapCandidateResponseDto[];
+  @ApiProperty() total!: number;
+}
