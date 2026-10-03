@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getBackendHealth } from '@smartsite/api-client';
-import { AppLayout } from './components/layout/AppLayout';
+import {
+  getBackendHealth,
+  type SafetyAlertStatus,
+  type SafetyAlertType,
+} from '@smartsite/api-client';
+import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
@@ -20,27 +24,54 @@ import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-function ProtectedRoutes({ defaultAuthTab }: { defaultAuthTab: string }) {
+interface AlertsNavigationContext {
+  alertType?: SafetyAlertType;
+  siteId?: string;
+  alertId?: string;
+  status?: SafetyAlertStatus;
+}
+
+interface ProtectedRoutesProps {
+  defaultAuthTab: string;
+  alertsContext?: AlertsNavigationContext;
+  onNavigate: (tab: ActiveTab, context?: AlertsNavigationContext) => void;
+}
+
+function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
   const { accessToken } = useAuth();
-  const navigate = useNavigate();
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
   }
 
   return (
-    <AppLayout>
+    <AppLayout onSelectTab={onNavigate}>
       <Routes>
         <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
-        <Route path="/dashboard" element={<DashboardView onNavigate={(tab) => navigate(`/${tab}`)} />} />
+        <Route path="/dashboard" element={<DashboardView onNavigate={tab => onNavigate(tab)} />} />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
-        <Route path="/live-monitoring" element={<LiveMonitoringView onNavigate={(tab) => navigate(`/${tab}`)} />} />
-        <Route path="/ppe" element={<PpeMonitoringView />} />
-        <Route path="/zones" element={<RestrictedZoneView apiUrl={apiUrl} />} />
-        <Route path="/incidents" element={<SafetyAlertsView apiUrl={apiUrl} />} />
+        <Route path="/live-monitoring" element={<LiveMonitoringView onNavigate={tab => onNavigate(tab)} />} />
+        <Route path="/ppe" element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />} />
+        <Route
+          path="/zones"
+          element={<RestrictedZoneView apiUrl={apiUrl} onNavigate={(tab, context) => onNavigate(tab, context)} />}
+        />
+        <Route
+          path="/incidents"
+          element={
+            <SafetyAlertsView
+              key={JSON.stringify(alertsContext ?? {})}
+              apiUrl={apiUrl}
+              initialSiteId={alertsContext?.siteId}
+              initialAlertId={alertsContext?.alertId}
+              initialStatus={alertsContext?.status}
+              initialType={alertsContext?.alertType}
+            />
+          }
+        />
         <Route
           path="/iot"
           element={
@@ -92,12 +123,20 @@ export function App() {
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const isWorkerOnly = roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
   const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
+  const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check
   useQuery({
     queryKey: ['backend', apiUrl, 'health'],
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
   });
+
+  const handleNavigate = (tab: ActiveTab, context?: AlertsNavigationContext) => {
+    if (tab === 'incidents') {
+      setAlertsContext(context);
+    }
+    navigate(`/${tab}`);
+  };
 
   if (isRestoringSession) {
     return (
@@ -150,8 +189,16 @@ export function App() {
             </PublicOnlyRoute>
           }
         />
-
-        <Route path="/*" element={<ProtectedRoutes defaultAuthTab={defaultAuthTab} />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoutes
+              defaultAuthTab={defaultAuthTab}
+              alertsContext={alertsContext}
+              onNavigate={handleNavigate}
+            />
+          }
+        />
       </Routes>
 
       <SessionExpiredModal

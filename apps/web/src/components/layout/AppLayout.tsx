@@ -133,8 +133,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       ];
 
   return (
-    <div className="min-h-screen bg-[#F9FAFC] text-[#182232] font-sans flex">
-      {/* Left Sidebar: Collapsible directly on the sidebar */}
+    <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
+      {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
           isCollapsed ? 'w-20' : 'w-64'
@@ -143,8 +143,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         <div>
           {/* Brand & Collapse/Expand Toggle Header */}
           <div
-            className={`p-4 border-b border-white/10 flex items-center ${
-              isCollapsed ? 'flex-col gap-3 justify-center' : 'justify-between'
+            className={`p-3 lg:p-4 border-b border-white/10 flex items-center ${
+              isCollapsed ? 'flex-col gap-3 justify-center' : 'justify-center lg:justify-between'
             }`}
           >
             {/* Brand Logo */}
@@ -152,6 +152,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               className="flex items-center gap-3 cursor-pointer group"
               onClick={() => navigate('/')}
               title="SmartSite Homepage"
+              aria-label="SmartSite Homepage"
             >
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF7A1A] via-[#F66B17] to-[#D95200] p-[1px] shadow-[0_0_20px_rgba(246,107,23,0.35)] shrink-0 flex items-center justify-center transition-transform group-hover:scale-105">
                 <div className="w-full h-full rounded-[11px] bg-gradient-to-br from-[#FF8833] to-[#E05500] flex items-center justify-center text-white">
@@ -187,7 +188,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
 
           {/* Navigation Section */}
           <div className="px-3 py-4 flex-1 overflow-y-auto custom-scrollbar">
-            <nav className="space-y-6">
+            <nav className="space-y-6" aria-label="Main navigation">
               {navGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1.5">
                   {!isCollapsed && (
@@ -206,6 +207,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                         key={item.id}
                         onClick={() => handleNav(item.id)}
                         title={isCollapsed ? item.label : undefined}
+                        aria-label={item.label}
+                        aria-current={isActive ? 'page' : undefined}
                         className={`w-full flex items-center ${
                           isCollapsed
                             ? 'justify-center px-0 py-2.5'
@@ -216,7 +219,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                             : 'text-slate-300/80 hover:text-white hover:bg-white/[0.06] border-transparent hover:border-white/5 hover:translate-x-0.5'
                         }`}
                       >
-                        <div className={`flex items-center ${isCollapsed ? '' : 'gap-3'}`}>
+                        <div
+                          className={`flex items-center ${
+                            isCollapsed
+                              ? 'justify-center'
+                              : 'justify-center lg:justify-start gap-0 lg:gap-3'
+                          }`}
+                        >
                           <Icon
                             className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
                               isActive
@@ -224,9 +233,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                                 : 'text-slate-400 group-hover:text-slate-200'
                             }`}
                           />
-                          {!isCollapsed && (
-                            <span className="whitespace-nowrap overflow-hidden">{item.label}</span>
-                          )}
+                          <span
+                            className={`whitespace-nowrap overflow-hidden ${
+                              isCollapsed ? 'hidden' : 'hidden lg:inline'
+                            }`}
+                          >
+                            {item.label}
+                          </span>
                         </div>
                         {isActive && !isCollapsed && (
                           <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
@@ -244,10 +257,11 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         </div>
 
         {/* Bottom Homepage Link */}
-        <div className="p-3 border-t border-white/10">
+        <div className="p-2 lg:p-3 border-t border-white/10">
           <button
             onClick={() => navigate('/')}
             title={isCollapsed ? 'Public SmartSite Homepage' : undefined}
+            aria-label="Public SmartSite Homepage"
             className={`w-full flex items-center ${
               isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
             } rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-xs group`}
@@ -261,7 +275,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#F9FAFC]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-canvas)]">
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-xs">
           {/* Left: Brand/Context info */}
@@ -271,29 +285,26 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             </span>
           </div>
 
-          {/* Right: Search, Notification, Status, Profile */}
-          <div className="flex items-center gap-4">
+          {/* Right: Search, Notification, Profile */}
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {/* Search Input */}
-            <div className="relative w-56 hidden md:block">
-              <IconSearch className="w-4 h-4 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
+            <div className="relative w-56 hidden lg:block">
+              <IconSearch className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search SmartSite"
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-[#F1F5F9] text-xs text-[#182232] focus:outline-none focus:border-[#F66B17] focus:bg-white transition-all placeholder:text-[#94A3B8]"
+                aria-label="Search SmartSite"
+                className="w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-secondary)]"
               />
             </div>
 
-            {/* Notification Bell */}
-            <button className="p-2 rounded-lg hover:bg-slate-100 text-[#62748E] transition-colors relative cursor-pointer">
+            {/* Notification Bell — no fake unread count */}
+            <button
+              className="p-2 rounded-md hover:bg-[var(--surface-bone)] text-[var(--text-secondary)] transition-colors cursor-pointer shrink-0"
+              aria-label="Notifications"
+            >
               <IconBell className="w-4 h-4" />
-              <span className="w-2 h-2 rounded-full bg-[#F66B17] absolute top-1.5 right-1.5" />
             </button>
-
-            {/* Status Pill */}
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#DCF7E1] text-xs font-semibold text-[#008C47]">
-              <span className="w-2 h-2 rounded-full bg-[#008C47] animate-ping" />
-              <span>All Systems Online</span>
-            </div>
 
             {/* User Profile */}
             <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">
@@ -319,7 +330,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         </header>
 
         {/* Viewport Content */}
-        <main className="flex-1 p-6 md:p-8">{children}</main>
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

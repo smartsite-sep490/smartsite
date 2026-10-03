@@ -1,9 +1,8 @@
+import { useRealtimePreview } from '../cameras/useRealtimePreview';
+import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  SmartSiteManagementClient,
-  type LoginResponse,
-} from '@smartsite/api-client';
+import { SmartSiteManagementClient, type LoginResponse } from '@smartsite/api-client';
 import {
   IconX,
   IconAlertTriangle,
@@ -20,7 +19,6 @@ import {
   getZoneVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
-  type VideoTestDetection,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 import {
@@ -68,10 +66,19 @@ interface ZoneReviewItem {
 
 export interface RestrictedZoneViewProps {
   apiUrl?: string;
+  onNavigate?: (
+    tab: 'incidents',
+    context?: {
+      alertType?: 'RESTRICTED_ZONE_INTRUSION';
+      siteId?: string;
+      alertId?: string;
+    },
+  ) => void;
 }
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  onNavigate,
 }: RestrictedZoneViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
@@ -107,9 +114,6 @@ export function RestrictedZoneView({
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
-  const [liveZoneDetections, setLiveZoneDetections] = useState<VideoTestDetection[] | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [socketRuntimeError, setSocketRuntimeError] = useState<string | null>(null);
   const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(() => {
     const resolved = resolveActivePolygon({
       siteId: 'demo-site',
@@ -154,7 +158,7 @@ export function RestrictedZoneView({
   const activeZonePoint = useRef<number | null>(null);
 
   const [containerSize, setContainerSize] = useState<Size2D>({ width: 829, height: 466 });
-  const [videoNaturalSize, setVideoNaturalSize] = useState<Size2D>({ width: 1920, height: 1080 });
+  const [fixtureNaturalSize, setVideoNaturalSize] = useState<Size2D>({ width: 1920, height: 1080 });
 
   const rawUrl = import.meta.env.VITE_AI_WS_URL;
   const aiWsToken =
@@ -167,6 +171,17 @@ export function RestrictedZoneView({
     return buildAiWebSocketUrl(rawUrl, aiWsToken);
   }, [rawUrl, aiWsToken]);
 
+  const {
+    preview,
+    connected: socketConnected,
+    error: socketRuntimeError,
+  } = useRealtimePreview(wsConfig.url);
+  const liveZoneDetections = preview?.frame.zoneDetections ?? null;
+  const videoNaturalSize = useMemo(
+    () =>
+      preview ? { width: preview.frame.width, height: preview.frame.height } : fixtureNaturalSize,
+    [preview, fixtureNaturalSize],
+  );
   const socketError = wsConfig.error ?? socketRuntimeError;
 
   // Update clock every second
@@ -194,109 +209,6 @@ export function RestrictedZoneView({
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
-
-  // AI Realtime WebSocket connection with auth token
-  useEffect(() => {
-    if (!wsConfig.url) {
-      return;
-    }
-
-    let unmounted = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let currentSocket: WebSocket | null = null;
-
-    const connect = () => {
-      if (unmounted) return;
-      try {
-        const socket = new WebSocket(wsConfig.url!);
-        currentSocket = socket;
-
-        socket.onopen = () => {
-          if (unmounted) return;
-          setSocketConnected(true);
-          setSocketRuntimeError(null);
-        };
-
-        socket.onmessage = (message) => {
-          if (unmounted) return;
-          try {
-            const payload = JSON.parse(message.data) as {
-              type?: string;
-              message?: string;
-              cameraExternalId?: string;
-              zoneDetections?: Array<{
-                trackId: number;
-                confidence: number;
-                boundingBox: VideoTestDetection['boundingBox'];
-                active: boolean;
-                label: string;
-                regionId?: string;
-              }>;
-            };
-
-            if (payload.type === 'error') {
-              setSocketRuntimeError(payload.message ?? 'Realtime AI socket error');
-              return;
-            }
-
-            if (payload.type !== 'frame' || !payload.zoneDetections) return;
-
-            setSocketRuntimeError(null);
-            setLiveZoneDetections(
-              payload.zoneDetections.map((detection) => ({
-                active: detection.active,
-                boundingBox: detection.boundingBox,
-                cameraExternalId: payload.cameraExternalId,
-                confidence: detection.confidence,
-                eventId: `REALTIME-ZONE-TRACK-${detection.trackId}`,
-                label: `MF05 ${detection.label}`,
-                ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
-                regionId: detection.regionId,
-                timecode: 'LIVE',
-                trackId: detection.trackId,
-              })),
-            );
-          } catch {
-            // Keep last frame on malformed message
-          }
-        };
-
-        socket.onerror = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setSocketRuntimeError('WebSocket connection error');
-          setLiveZoneDetections(null);
-        };
-
-        socket.onclose = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setLiveZoneDetections(null);
-          // Auto-reconnect when still mounted
-          reconnectTimeout = setTimeout(connect, 3000);
-        };
-      } catch (err) {
-        if (unmounted) return;
-        setSocketConnected(false);
-        setSocketRuntimeError(err instanceof Error ? err.message : 'Failed to connect WebSocket');
-        setLiveZoneDetections(null);
-      }
-    };
-
-    connect();
-
-    return () => {
-      unmounted = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (currentSocket) {
-        currentSocket.onopen = null;
-        currentSocket.onmessage = null;
-        currentSocket.onerror = null;
-        currentSocket.onclose = null;
-        currentSocket.close();
-      }
-    };
-  }, [wsConfig.url]);
 
   const fallbackDetections = useMemo(
     () => getZoneVideoTestDetections(videoTimeline, aiTimeline),
@@ -416,10 +328,9 @@ export function RestrictedZoneView({
     enabled: apiToken.length > 0,
   });
 
-  const selectedSiteId =
-    sites.data?.items.some((site) => site.id === requestedSiteId)
-      ? requestedSiteId
-      : (sites.data?.items[0]?.id ?? '');
+  const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
+    ? requestedSiteId
+    : (sites.data?.items[0]?.id ?? '');
 
   const cameras = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
@@ -427,10 +338,9 @@ export function RestrictedZoneView({
     enabled: apiToken.length > 0 && selectedSiteId.length > 0,
   });
 
-  const selectedCameraId =
-    cameras.data?.items.some((cam) => cam.id === requestedCameraId)
-      ? requestedCameraId
-      : (cameras.data?.items[0]?.id ?? '');
+  const selectedCameraId = cameras.data?.items.some((cam) => cam.id === requestedCameraId)
+    ? requestedCameraId
+    : (cameras.data?.items[0]?.id ?? '');
 
   const selectedCamera = useMemo(
     () => cameras.data?.items.find((c) => c.id === selectedCameraId),
@@ -453,10 +363,9 @@ export function RestrictedZoneView({
     [activeRegions, regions.data?.items],
   );
 
-  const selectedRegionId =
-    selectableRegions.some((r) => r.id === requestedRegionId)
-      ? requestedRegionId
-      : (selectableRegions[0]?.id ?? '');
+  const selectedRegionId = selectableRegions.some((r) => r.id === requestedRegionId)
+    ? requestedRegionId
+    : (selectableRegions[0]?.id ?? '');
 
   const selectedRegion = useMemo(
     () => selectableRegions.find((r) => r.id === selectedRegionId),
@@ -626,6 +535,13 @@ export function RestrictedZoneView({
   };
 
   const activeCameraContext = useMemo(() => {
+    if (preview) {
+      return resolveCameraAndWorkArea(
+        preview.frame.cameraExternalId,
+        testDetection?.regionId,
+        'Chưa có mã camera',
+      );
+    }
     if (selectedCamera) {
       const regionLabel = selectedRegion
         ? `Region ${selectedRegion.id.slice(0, 8)}`
@@ -637,7 +553,7 @@ export function RestrictedZoneView({
     }
     const rawCamera = testDetection?.cameraExternalId || aiTimeline?.cameraExternalId;
     return resolveCameraAndWorkArea(rawCamera, testDetection?.regionId, 'CAM-04');
-  }, [selectedCamera, selectedRegion, testDetection, aiTimeline]);
+  }, [preview, selectedCamera, selectedRegion, testDetection, aiTimeline]);
 
   const exportZone = () => {
     const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
@@ -755,17 +671,18 @@ export function RestrictedZoneView({
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Admin Session & Backend Camera/Region Configuration Bar */}
       {!session ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
                   <IconKey className="h-4 w-4" />
                 </span>
-                <h2 className="text-sm font-bold text-slate-900">Backend Camera Configuration</h2>
+                <h2 className="text-sm font-bold text-[#2F3437]">Backend Camera Configuration</h2>
               </div>
-              <p className="mt-1 text-xs text-slate-500 max-w-xl">
-                Sign in as a global Admin to load camera regions and save authoritative polygons to the Backend API. Fallback test video and realtime AI feed remain available below.
+              <p className="mt-1 text-xs text-[#6B6B6B] max-w-xl">
+                Sign in as a global Admin to load camera regions and save authoritative polygons to
+                the Backend API. Fallback test video and realtime AI feed remain available below.
               </p>
             </div>
             <form
@@ -780,23 +697,25 @@ export function RestrictedZoneView({
                 type="text"
                 autoComplete="username"
                 placeholder="Admin username"
+                aria-label="Admin username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
               />
               <input
                 required
                 type="password"
                 autoComplete="current-password"
                 placeholder="Password"
+                aria-label="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
               />
               <button
                 type="submit"
                 disabled={login.isPending}
-                className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60 cursor-pointer shadow-xs transition-colors"
+                className="rounded-lg bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#333333] disabled:opacity-60 cursor-pointer transition-colors"
               >
                 {login.isPending ? 'Signing in…' : 'Sign in as Admin'}
               </button>
@@ -809,8 +728,8 @@ export function RestrictedZoneView({
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4  space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#EAEAEA]">
             <div className="flex items-center gap-3">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                 <IconCheck className="h-4 w-4" />
@@ -820,19 +739,20 @@ export function RestrictedZoneView({
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
                     Admin Session Active
                   </span>
-                  <span className="text-xs font-semibold text-slate-900">
+                  <span className="text-xs font-semibold text-[#2F3437]">
                     · {session.user.displayName} ({session.user.username})
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  Global Admin role verified. Polygons saved here synchronize directly with Backend camera configuration.
+                <p className="text-[11px] text-[#6B6B6B]">
+                  Global Admin role verified. Polygons saved here synchronize directly with Backend
+                  camera configuration.
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1 text-xs font-semibold text-[#2F3437] hover:bg-[#FBFBFA] transition-colors cursor-pointer"
             >
               Sign out
             </button>
@@ -841,7 +761,7 @@ export function RestrictedZoneView({
           {/* Selectors Grid: Site, Camera, Region, Version */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 Site
               </label>
               <select
@@ -860,7 +780,7 @@ export function RestrictedZoneView({
                   setRequestedRegionId('');
                 }}
                 disabled={sites.isPending || !sites.data?.items.length}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {sites.data?.items.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -871,7 +791,7 @@ export function RestrictedZoneView({
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 Camera
               </label>
               <select
@@ -889,7 +809,7 @@ export function RestrictedZoneView({
                   setRequestedRegionId('');
                 }}
                 disabled={cameras.isPending || !cameras.data?.items.length}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {cameras.data?.items.map((camera) => (
                   <option key={camera.id} value={camera.id}>
@@ -900,7 +820,7 @@ export function RestrictedZoneView({
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 Region / Zone
               </label>
               <select
@@ -917,11 +837,12 @@ export function RestrictedZoneView({
                   setRequestedRegionId(regionId);
                 }}
                 disabled={regions.isPending || selectableRegions.length === 0}
-                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none focus:border-[#F66B17]"
+                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {selectableRegions.map((region) => (
                   <option key={region.id} value={region.id}>
-                    Region {region.id.slice(0, 8)} (v{region.version}) {region.isActive ? '· Active' : ''}
+                    Region {region.id.slice(0, 8)} (v{region.version}){' '}
+                    {region.isActive ? '· Active' : ''}
                   </option>
                 ))}
               </select>
@@ -946,7 +867,7 @@ export function RestrictedZoneView({
       {staleDraftInfo && (
         <div
           role="alert"
-          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
         >
           <div className="flex items-start gap-3">
             <IconAlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -955,7 +876,10 @@ export function RestrictedZoneView({
                 Outdated Local Draft Detected
               </h4>
               <p className="mt-0.5 text-xs text-amber-700">
-                An unsaved local draft created against camera configuration version v{staleDraftInfo.version} was detected, but the camera is now at version v{selectedCamera?.configurationVersion ?? 0}. Authoritative server geometry was loaded to protect against overwriting updates.
+                An unsaved local draft created against camera configuration version v
+                {staleDraftInfo.version} was detected, but the camera is now at version v
+                {selectedCamera?.configurationVersion ?? 0}. Authoritative server geometry was
+                loaded to protect against overwriting updates.
               </p>
             </div>
           </div>
@@ -967,7 +891,7 @@ export function RestrictedZoneView({
               }
               setStaleDraftInfo(null);
             }}
-            className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-800 whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+            className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-800 whitespace-nowrap cursor-pointer transition-colors "
           >
             Discard Stale Draft
           </button>
@@ -978,7 +902,7 @@ export function RestrictedZoneView({
       {conflictMessage && (
         <div
           role="alert"
-          className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+          className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
         >
           <div className="flex items-start gap-3">
             <IconAlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -992,7 +916,7 @@ export function RestrictedZoneView({
           <button
             type="button"
             onClick={resetToAuthoritative}
-            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 whitespace-nowrap cursor-pointer transition-colors shadow-xs"
+            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 whitespace-nowrap cursor-pointer transition-colors "
           >
             Load Server Version
           </button>
@@ -1027,8 +951,10 @@ export function RestrictedZoneView({
               }}
               onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
               aria-label="Restricted-zone test video"
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
             />
+
+            {preview && <RealtimePreviewCanvas preview={preview} mode="zone" />}
 
             {/* AI Status Badge */}
             <div
@@ -1055,11 +981,23 @@ export function RestrictedZoneView({
               className="absolute inset-0 w-full h-full"
               viewBox="0 0 1 1"
               preserveAspectRatio="none"
-              onPointerMove={isEditingZone ? updateZonePoint : undefined}
+              onPointerMove={
+                isEditingZone &&
+                (!preview || selectedCamera?.externalId === preview.frame.cameraExternalId)
+                  ? updateZonePoint
+                  : undefined
+              }
               onPointerUp={() => {
                 activeZonePoint.current = null;
               }}
               aria-label="Restricted zone editor"
+              style={{
+                visibility:
+                  isLive &&
+                  (!isEditingZone || selectedCamera?.externalId !== preview?.frame.cameraExternalId)
+                    ? 'hidden'
+                    : 'visible',
+              }}
             >
               <polygon
                 points={displayPolygon.map(([x, y]) => `${x},${y}`).join(' ')}
@@ -1110,12 +1048,20 @@ export function RestrictedZoneView({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsEditingZone(true)}
+                      disabled={
+                        isLive && selectedCamera?.externalId !== preview?.frame.cameraExternalId
+                      }
+                      title={
+                        isLive
+                          ? 'Select the matching Backend camera before editing this preview'
+                          : 'Edit zone draft'
+                      }
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
                       EDIT ZONE
                     </button>
                     {isDraftMode && (
-                      <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm shadow-xs">
+                      <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm ">
                         UNSAVED DRAFT
                       </span>
                     )}
@@ -1160,24 +1106,25 @@ export function RestrictedZoneView({
             </div>
 
             {/* Render one bounding box per active zone-entry track */}
-            {activeZoneDetections.map((detection) =>
-              detection.boundingBox ? (
-                <div
-                  key={`${detection.eventId}-${detection.trackId}`}
-                  className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
-                  style={{
-                    left: `${detection.boundingBox.x1 * 100}%`,
-                    top: `${detection.boundingBox.y1 * 100}%`,
-                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
-                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
-                  }}
-                >
-                  <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                    {detection.label} · TRACK #{detection.trackId}
+            {!isLive &&
+              activeZoneDetections.map((detection) =>
+                detection.boundingBox ? (
+                  <div
+                    key={`${detection.eventId}-${detection.trackId}`}
+                    className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
+                    style={{
+                      left: `${detection.boundingBox.x1 * 100}%`,
+                      top: `${detection.boundingBox.y1 * 100}%`,
+                      width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                      height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                    }}
+                  >
+                    <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
+                      {detection.label} · TRACK #{detection.trackId}
+                    </div>
                   </div>
-                </div>
-              ) : null,
-            )}
+                ) : null,
+              )}
 
             {/* Empty live frame indicator */}
             {isLive && zoneDetections.length === 0 && (
@@ -1228,19 +1175,31 @@ export function RestrictedZoneView({
           )}
 
           {/* Bottom Camera Controls Bar Overlay */}
-          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
+          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={togglePlayback}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title={isPlaying ? 'Pause' : 'Play'}
+                disabled={isLive}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
+                title={
+                  isLive
+                    ? 'Playback controls apply to timeline replay only'
+                    : isPlaying
+                      ? 'Pause'
+                      : 'Play'
+                }
               >
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
+                type="button"
                 onClick={toggleMuted}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Sound"
+                disabled={isLive}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
+                title={isLive ? 'Realtime preview has no audio' : 'Sound'}
               >
                 <IconVolume className="w-4 h-4" />
               </button>
@@ -1248,15 +1207,20 @@ export function RestrictedZoneView({
 
             <div className="flex items-center gap-3">
               <button
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Grid"
+                type="button"
+                disabled
+                className="p-1.5 rounded text-white/40 cursor-not-allowed"
+                title="Multi-camera grid view is currently unavailable"
+                aria-label="Grid view unavailable"
               >
                 <IconGrid className="w-4 h-4" />
               </button>
               <button
+                type="button"
                 onClick={() => void videoRef.current?.requestFullscreen()}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
                 title="Fullscreen"
+                aria-label="Enter fullscreen"
               >
                 <IconMaximize className="w-4 h-4" />
               </button>
@@ -1265,14 +1229,14 @@ export function RestrictedZoneView({
         </div>
 
         {/* Right: Sidebar Verification Card (355px) */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
           <div className="p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between pb-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
                 DETECTION DETAILS
               </span>
-              <span className="font-mono text-[11px] font-semibold text-slate-500">
+              <span className="font-mono text-[11px] font-semibold text-[#6B6B6B]">
                 {testDetection?.eventId ?? 'NO-DETECTION'}
               </span>
             </div>
@@ -1280,56 +1244,55 @@ export function RestrictedZoneView({
             {/* 2-Column Metadata Grid */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Identity
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? `Worker (Track #${testDetection.trackId})`
-                    : 'Unassigned'}
+                    ? 'Unknown — not identified'
+                    : 'No person detected'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker ID
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  Track ID
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
-                  {activeZoneDetections.length === 0
-                    ? '—'
-                    : activeZoneDetections
-                        .map((detection) => `Track #${detection.trackId}`)
-                        .join(', ')}
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+                  {zoneDetections
+                    .filter((detection) => detection.trackId !== null)
+                    .map((detection) => `Track #${detection.trackId}`)
+                    .join(', ') || '—'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Camera
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {activeCameraContext.camera}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Zone
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1 truncate">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1 truncate">
                   {activeCameraContext.workArea}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Detected
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Recognition Confidence
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  Detection Confidence
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
                     ? '—'
                     : `${Math.round(testDetection.confidence * 100)}%`}
@@ -1337,45 +1300,45 @@ export function RestrictedZoneView({
               </div>
             </div>
 
-            <div className="h-px bg-slate-100 w-full" />
+            <div className="h-px bg-[#F7F6F3] w-full" />
 
             {/* Verification Heading */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
                 VERIFICATION
               </p>
 
               {/* Verification items */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
                   <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Identity</p>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="font-semibold text-[#2F3437] text-xs">Identity</p>
+                    <p className="text-[11px] text-[#6B6B6B]">
                       {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                        ? `Track #${testDetection.trackId}`
-                        : 'Unknown'}
+                        ? 'Unknown — not identified'
+                        : 'No person detected'}
                     </p>
                   </div>
-                  <IconClock className="w-5 h-5 text-slate-400" />
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
                   <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Site Assignment</p>
-                    <p className="text-[11px] text-slate-500">Not evaluated</p>
+                    <p className="font-semibold text-[#2F3437] text-xs">Site Assignment</p>
+                    <p className="text-[11px] text-[#6B6B6B]">Not evaluated</p>
                   </div>
-                  <IconClock className="w-5 h-5 text-slate-400" />
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
                   <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-slate-900 text-xs">Zone Permission</p>
-                    <p className="text-[11px] text-slate-500">Backend evaluation required</p>
+                    <p className="font-semibold text-[#2F3437] text-xs">Zone Permission</p>
+                    <p className="text-[11px] text-[#6B6B6B]">Backend evaluation required</p>
                   </div>
-                  <IconClock className="w-5 h-5 text-slate-400" />
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-slate-500">
+                <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-[#6B6B6B]">
                   <span>Permission validity</span>
                   <span className="font-bold text-slate-300">—</span>
                 </div>
@@ -1386,15 +1349,15 @@ export function RestrictedZoneView({
             <div className="pt-1">
               <div
                 className={`border-l-[3px] pl-3 ${
-                  testDetection?.active ? 'border-red-500' : 'border-slate-300'
+                  testDetection?.active ? 'border-red-500' : 'border-[#EAEAEA]'
                 }`}
               >
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">
                   RESULT
                 </p>
                 <div
                   className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
-                    testDetection?.active ? 'text-red-500' : 'text-slate-500'
+                    testDetection?.active ? 'text-red-500' : 'text-[#6B6B6B]'
                   }`}
                 >
                   {testDetection?.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
@@ -1406,7 +1369,7 @@ export function RestrictedZoneView({
                         : 'SCANNING VIDEO'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-[#6B6B6B]">
                   {testDetection?.active
                     ? 'Technical zone-entry observation; Backend decides authorization and violation.'
                     : isLive
@@ -1425,7 +1388,7 @@ export function RestrictedZoneView({
               className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-sm transition-colors cursor-pointer ${
                 testDetection?.active
                   ? 'bg-[#F66B17] hover:bg-[#E05A0B] text-white'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-[#F7F6F3] text-[#A3A09C] cursor-not-allowed'
               }`}
             >
               Review Incident
@@ -1438,7 +1401,7 @@ export function RestrictedZoneView({
                   );
                 }
               }}
-              className="w-full py-2.5 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-lg bg-white border border-[#EAEAEA] text-[#2F3437] font-semibold text-sm hover:bg-[#FBFBFA] transition-colors cursor-pointer"
             >
               {activeFilterWorker !== null
                 ? `Clear Worker Filter (#${activeFilterWorker})`
@@ -1450,105 +1413,146 @@ export function RestrictedZoneView({
         </div>
       </div>
 
-      {/* Bottom Table Section: Recent Zone Events */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Recent Zone Events</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Latest camera detections and verification outcomes.
-              {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setZoneFilter('ALL')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                zoneFilter === 'ALL'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              All Events ({events.length})
-            </button>
-            <button
-              onClick={() => setZoneFilter('ACTIVE_ONLY')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                zoneFilter === 'ACTIVE_ONLY'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              Zone Entries (
-              {
-                events.filter(
-                  (e) =>
-                    e.result.toLowerCase().includes('entry') ||
-                    e.result.toLowerCase().includes('violation'),
-                ).length
-              }
-              )
-            </button>
+      {/* Live AI Observations status or Replay Observations Table */}
+      {isLive ? (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
+                <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
+                  Live Zone Observations Active
+                </h3>
+              </div>
+              <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
+                Technical zone-entry detections are rendered directly on the live camera feed above.
+                Sample replay timeline rows are hidden during live monitoring. Durable safety alerts
+                require Backend worker ingestion; review persisted records in Safety Alerts.
+              </p>
+            </div>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })}
+                className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                View in Safety Alerts →
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-3">Time</th>
-                <th className="py-3 px-3">Person / Worker</th>
-                <th className="py-3 px-3">Zone</th>
-                <th className="py-3 px-3">Camera</th>
-                <th className="py-3 px-3">Identity</th>
-                <th className="py-3 px-3">Authorization</th>
-                <th className="py-3 px-3">Result</th>
-                <th className="py-3 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {displayedEvents.map((evt) => (
-                <tr key={evt.rowKey} className="hover:bg-slate-50 transition-colors group">
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.time}</td>
-                  <td className="py-3 px-3 font-semibold text-slate-900">{evt.person}</td>
-                  <td className="py-3 px-3 text-slate-600">{evt.zone}</td>
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.camera}</td>
-                  <td className="py-3 px-3 text-slate-600">{evt.identity}</td>
-                  <td className="py-3 px-3 text-slate-600">{evt.authorization}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                        evt.result === 'Violation'
-                          ? 'bg-red-50 text-red-600'
-                          : evt.result === 'Access Valid'
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {evt.result}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => setSelectedIncident(evt)}
-                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    >
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {displayedEvents.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-slate-400 text-xs">
-                    No zone events match the selected criteria.
-                  </td>
-                </tr>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#2F3437]">Zone Replay Observations</h3>
+              <p className="text-xs text-[#6B6B6B] mt-1">
+                Observations from the sample video timeline. Live safety alerts are available in
+                Safety Alerts.
+                {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })
+                  }
+                  className="px-2.5 py-1.5 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  View in Safety Alerts →
+                </button>
               )}
-            </tbody>
-          </table>
+              <button
+                onClick={() => setZoneFilter('ALL')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  zoneFilter === 'ALL'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                All Events ({events.length})
+              </button>
+              <button
+                onClick={() => setZoneFilter('ACTIVE_ONLY')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  zoneFilter === 'ACTIVE_ONLY'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                Zone Entries (
+                {
+                  events.filter(
+                    (e) =>
+                      e.result.toLowerCase().includes('entry') ||
+                      e.result.toLowerCase().includes('violation'),
+                  ).length
+                }
+                )
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">Time</th>
+                  <th className="py-3 px-3">Person / Worker</th>
+                  <th className="py-3 px-3">Zone</th>
+                  <th className="py-3 px-3">Camera</th>
+                  <th className="py-3 px-3">Identity</th>
+                  <th className="py-3 px-3">Authorization</th>
+                  <th className="py-3 px-3">Result</th>
+                  <th className="py-3 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EAEAEA]">
+                {displayedEvents.map((evt) => (
+                  <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.authorization}</td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                          evt.result === 'Violation'
+                            ? 'bg-red-50 text-red-600'
+                            : evt.result === 'Access Valid'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-amber-50 text-amber-600'
+                        }`}
+                      >
+                        {evt.result}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => setSelectedIncident(evt)}
+                        className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200"
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {displayedEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
+                      No zone events match the selected criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Incident Review Modal with Bound Data */}
       {selectedIncident && (
@@ -1559,48 +1563,65 @@ export function RestrictedZoneView({
                 <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-mono uppercase tracking-wider">
                   {selectedIncident.id}
                 </span>
-                <h3 className="font-bold text-slate-900">Review & Action</h3>
+                <h3 className="font-bold text-[#2F3437]">Review & Action</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedIncident(null)}
-                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close review dialog"
+                className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
               >
                 <IconX className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4 text-sm text-slate-600">
+            <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
                 You are reviewing a restricted zone intrusion at{' '}
-                <strong className="text-slate-900">
+                <strong className="text-[#2F3437]">
                   {selectedIncident.zone} ({selectedIncident.camera})
                 </strong>
                 . AI detected worker{' '}
-                <strong className="text-slate-900">{selectedIncident.person}</strong> with status:{' '}
-                <strong className="text-slate-900">{selectedIncident.authorization}</strong>.
+                <strong className="text-[#2F3437]">{selectedIncident.person}</strong> with status:{' '}
+                <strong className="text-[#2F3437]">{selectedIncident.authorization}</strong>.
               </p>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                <p className="font-bold text-slate-700 text-xs uppercase tracking-wider">
-                  Review Status: Local Preview
+              <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
+                <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
+                  Technical Evidence Preview
                 </p>
-                <p className="text-slate-600 text-xs">
-                  Backend guard dispatch and authorization override APIs are pending integration.
+                <p className="text-[#6B6B6B] text-xs leading-relaxed">
+                  AI zone detections are preliminary observations. To inspect session-scoped
+                  evidence frames or record an auditable safety decision, navigate to Safety Alerts.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
+              {onNavigate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedIncident(null);
+                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' });
+                  }}
+                  className="py-2 px-4 rounded-lg bg-[#DF2225] hover:bg-[#B8191C] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
+                >
+                  Review in Safety Alerts
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title="Safety alerts navigation not configured"
+                  className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
+                >
+                  Review in Alerts
+                </button>
+              )}
               <button
-                disabled
-                title="Guard alert dispatch API pending integration"
-                className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors"
-              >
-                Alert Guard (API Pending)
-              </button>
-              <button
+                type="button"
                 onClick={() => setSelectedIncident(null)}
-                className="py-2 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors"
+                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
               >
                 Dismiss Preview
               </button>

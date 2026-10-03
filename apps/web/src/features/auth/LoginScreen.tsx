@@ -239,7 +239,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Enter your username"
-                    className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
+                    className="bg-transparent text-white w-full !outline-none focus:outline-none focus-visible:!outline-none text-sm placeholder:text-white/20"
                   />
                 </div>
               </div>
@@ -255,7 +255,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="bg-transparent text-white w-full pr-8 focus:outline-none text-sm placeholder:text-white/20"
+                    className="bg-transparent text-white w-full pr-8 !outline-none focus:outline-none focus-visible:!outline-none text-sm placeholder:text-white/20"
                   />
                   <button
                     type="button"

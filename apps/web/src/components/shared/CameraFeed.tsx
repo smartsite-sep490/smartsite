@@ -20,8 +20,8 @@ export function CameraFeed({
   const [isMuted, setIsMuted] = useState(true);
 
   return (
-    <div className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-[2rem] shadow-sm">
-      <div className="relative bg-[#041D2E] rounded-[calc(2rem-0.375rem)] overflow-hidden shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)] w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
+    <div className="w-full bg-white border border-[#EAEAEA] rounded-lg p-1">
+      <div className="relative bg-[#041D2E] rounded-md overflow-hidden w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
         {/* Camera Output */}
         <div className="absolute inset-0">
           <img
@@ -44,8 +44,8 @@ export function CameraFeed({
               {zoneName}
             </span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DF2225] animate-pulse" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black/40 border border-white/10">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#9F2F2D]" />
             <span className="font-mono text-[10px] font-bold text-white tracking-wider">
               {timestamp}
             </span>
@@ -53,12 +53,14 @@ export function CameraFeed({
         </div>
 
         {/* Bottom Camera Controls */}
-        <div className="relative z-10 px-6 py-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
+        <div className="relative z-10 px-6 py-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
           <div className="flex items-center gap-4">
             <button
+              type="button"
               onClick={() => setIsPlaying(!isPlaying)}
-              className="group p-2 rounded-full hover:bg-white/10 transition-colors"
+              className="group p-2 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
               title={isPlaying ? 'Pause' : 'Play'}
+              aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
             >
               {isPlaying ? (
                 <IconPause className="w-4 h-4 group-active:scale-90 transition-transform" />
@@ -67,9 +69,11 @@ export function CameraFeed({
               )}
             </button>
             <button
+              type="button"
               onClick={() => setIsMuted(!isMuted)}
-              className="group p-2 rounded-full hover:bg-white/10 transition-colors"
+              className="group p-2 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
               title="Sound"
+              aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
             >
               <IconVolume className="w-4 h-4 group-active:scale-90 transition-transform" />
             </button>
@@ -77,16 +81,22 @@ export function CameraFeed({
 
           <div className="flex items-center gap-4">
             <button
-              className="group p-2 rounded-full hover:bg-white/10 transition-colors"
-              title="Grid"
+              type="button"
+              disabled
+              className="p-2 rounded-md text-white/40 cursor-not-allowed"
+              title="Multi-camera grid view is currently unavailable"
+              aria-label="Grid view unavailable"
             >
-              <IconGrid className="w-4 h-4 group-active:scale-90 transition-transform" />
+              <IconGrid className="w-4 h-4" />
             </button>
             <button
-              className="group p-2 rounded-full hover:bg-white/10 transition-colors"
-              title="Fullscreen"
+              type="button"
+              disabled
+              className="p-2 rounded-md text-white/40 cursor-not-allowed"
+              title="Fullscreen view is currently unavailable"
+              aria-label="Fullscreen view unavailable"
             >
-              <IconMaximize className="w-4 h-4 group-active:scale-90 transition-transform" />
+              <IconMaximize className="w-4 h-4" />
             </button>
           </div>
         </div>

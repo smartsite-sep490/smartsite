@@ -1,3 +1,5 @@
+import { useRealtimePreview } from '../cameras/useRealtimePreview';
+import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconCheck,
@@ -13,7 +15,6 @@ import {
   getPpeVideoTestDetections,
   loadAiVideoTimeline,
   type AiVideoTimeline,
-  type VideoTestDetection,
   type VideoTestTimeline,
 } from '../cameras/videoTestFixture';
 import {
@@ -42,7 +43,18 @@ interface PpeReviewItem {
   time: string;
 }
 
-export function PpeMonitoringView() {
+export interface PpeMonitoringViewProps {
+  onNavigate?: (
+    tab: 'incidents',
+    context?: {
+      alertType?: 'PPE_VIOLATION';
+      siteId?: string;
+      alertId?: string;
+    },
+  ) => void;
+}
+
+export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pausedViolationRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -53,9 +65,6 @@ export function PpeMonitoringView() {
     duration: 0,
   });
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
-  const [liveDetections, setLiveDetections] = useState<VideoTestDetection[] | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [socketRuntimeError, setSocketRuntimeError] = useState<string | null>(null);
   const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
   const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
   const [ppeFilter, setPpeFilter] = useState<'ALL' | 'HARD_HAT' | 'SAFETY_VEST'>('ALL');
@@ -76,6 +85,12 @@ export function PpeMonitoringView() {
     return buildAiWebSocketUrl(rawUrl, token);
   }, [rawUrl, token]);
 
+  const {
+    preview,
+    connected: socketConnected,
+    error: socketRuntimeError,
+  } = useRealtimePreview(wsConfig.url);
+  const liveDetections = preview?.frame.detections ?? null;
   const socketError = wsConfig.error ?? socketRuntimeError;
 
   // Update real-time clock every second
@@ -101,114 +116,6 @@ export function PpeMonitoringView() {
     };
   }, []);
 
-  // AI Realtime WebSocket connection with auth token
-  useEffect(() => {
-    if (!wsConfig.url) {
-      return;
-    }
-
-    let unmounted = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let currentSocket: WebSocket | null = null;
-
-    const connect = () => {
-      if (unmounted) return;
-      try {
-        const socket = new WebSocket(wsConfig.url!);
-        currentSocket = socket;
-
-        socket.onopen = () => {
-          if (unmounted) return;
-          setSocketConnected(true);
-          setSocketRuntimeError(null);
-        };
-
-        socket.onmessage = (message) => {
-          if (unmounted) return;
-          try {
-            const payload = JSON.parse(message.data) as {
-              type?: string;
-              message?: string;
-              cameraExternalId?: string;
-              detections?: Array<{
-                trackId: number;
-                confidence: number;
-                boundingBox: VideoTestDetection['boundingBox'];
-                ppeStatus: VideoTestDetection['ppeStatus'];
-                alertState?: VideoTestDetection['alertState'];
-                confirmedMissingItems?: VideoTestDetection['confirmedMissingItems'];
-                active: boolean;
-                label: string;
-                regionId?: string;
-              }>;
-            };
-
-            if (payload.type === 'error') {
-              setSocketRuntimeError(payload.message ?? 'Realtime AI socket error');
-              return;
-            }
-
-            if (payload.type !== 'frame' || !payload.detections) return;
-
-            setSocketRuntimeError(null);
-            setLiveDetections(
-              payload.detections.map((detection) => ({
-                active: detection.active,
-                alertState: detection.alertState,
-                boundingBox: detection.boundingBox,
-                cameraExternalId: payload.cameraExternalId,
-                confidence: detection.confidence,
-                confirmedMissingItems: detection.confirmedMissingItems,
-                eventId: `REALTIME-TRACK-${detection.trackId}`,
-                label: `MF04 ${detection.label}`,
-                ppeStatus: detection.ppeStatus,
-                regionId: detection.regionId,
-                timecode: 'LIVE',
-                trackId: detection.trackId,
-              })),
-            );
-          } catch {
-            // Keep last frame on malformed message
-          }
-        };
-
-        socket.onerror = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setSocketRuntimeError('WebSocket connection error');
-          setLiveDetections(null);
-        };
-
-        socket.onclose = () => {
-          if (unmounted) return;
-          setSocketConnected(false);
-          setLiveDetections(null);
-          // Auto-reconnect when still mounted
-          reconnectTimeout = setTimeout(connect, 3000);
-        };
-      } catch (err) {
-        if (unmounted) return;
-        setSocketConnected(false);
-        setSocketRuntimeError(err instanceof Error ? err.message : 'Failed to connect WebSocket');
-        setLiveDetections(null);
-      }
-    };
-
-    connect();
-
-    return () => {
-      unmounted = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (currentSocket) {
-        currentSocket.onopen = null;
-        currentSocket.onmessage = null;
-        currentSocket.onerror = null;
-        currentSocket.onclose = null;
-        currentSocket.close();
-      }
-    };
-  }, [wsConfig.url]);
-
   const fallbackDetections = useMemo(
     () => getPpeVideoTestDetections(videoTimeline, aiTimeline),
     [videoTimeline, aiTimeline],
@@ -232,11 +139,18 @@ export function PpeMonitoringView() {
   // Derive cameraExternalId and human-readable work area directly from active detection or timeline
   const activeCameraContext = useMemo(() => {
     return resolveCameraAndWorkArea(
-      testDetection?.cameraExternalId || aiTimeline?.cameraExternalId,
+      preview?.frame.cameraExternalId ||
+        testDetection?.cameraExternalId ||
+        aiTimeline?.cameraExternalId,
       testDetection?.regionId,
       'Chưa có mã camera',
     );
-  }, [testDetection?.cameraExternalId, testDetection?.regionId, aiTimeline?.cameraExternalId]);
+  }, [
+    preview?.frame.cameraExternalId,
+    testDetection?.cameraExternalId,
+    testDetection?.regionId,
+    aiTimeline?.cameraExternalId,
+  ]);
 
   // Snapshot PPE: only auto-pause when playing timeline fixture; do not pause local video on websocket frames
   useEffect(() => {
@@ -395,8 +309,10 @@ export function PpeMonitoringView() {
               onLoadedMetadata={(event) => updateVideoTimeline(event.currentTarget)}
               onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
               aria-label="PPE test video"
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
             />
+
+            {preview && <RealtimePreviewCanvas preview={preview} mode="ppe" />}
 
             {/* AI Status Badge */}
             <div
@@ -430,31 +346,32 @@ export function PpeMonitoringView() {
             <div className="absolute top-[40%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
 
             {/* Render every tracked worker in the current frame */}
-            {ppeDetections.map((detection) =>
-              detection.boundingBox ? (
-                <div
-                  key={`${detection.eventId}-${detection.trackId}`}
-                  className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
-                    isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
-                  }`}
-                  data-testid="mf04-test-detection"
-                  style={{
-                    top: `${detection.boundingBox.y1 * 100}%`,
-                    width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
-                    height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
-                    left: `${detection.boundingBox.x1 * 100}%`,
-                  }}
-                >
+            {!isLive &&
+              ppeDetections.map((detection) =>
+                detection.boundingBox ? (
                   <div
-                    className={`absolute -top-[18px] left-[-1.6px] whitespace-nowrap px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-sm ${
-                      isConfirmedPpeDetection(detection) ? 'bg-[#F66B17]' : 'bg-emerald-600'
+                    key={`${detection.eventId}-${detection.trackId}`}
+                    className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
+                      isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
                     }`}
+                    data-testid="mf04-test-detection"
+                    style={{
+                      top: `${detection.boundingBox.y1 * 100}%`,
+                      width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                      height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                      left: `${detection.boundingBox.x1 * 100}%`,
+                    }}
                   >
-                    {detection.label} · TRACK #{detection.trackId}
+                    <div
+                      className={`absolute -top-[18px] left-[-1.6px] whitespace-nowrap px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-sm ${
+                        isConfirmedPpeDetection(detection) ? 'bg-[#F66B17]' : 'bg-emerald-600'
+                      }`}
+                    >
+                      {detection.label} · TRACK #{detection.trackId}
+                    </div>
                   </div>
-                </div>
-              ) : null,
-            )}
+                ) : null,
+              )}
 
             {/* Empty live frame indicator */}
             {isLive && ppeDetections.length === 0 && (
@@ -505,19 +422,31 @@ export function PpeMonitoringView() {
           )}
 
           {/* Bottom Camera Controls */}
-          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 transition-opacity">
+          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={togglePlayback}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title={isPlaying ? 'Pause' : 'Play'}
+                disabled={isLive}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
+                title={
+                  isLive
+                    ? 'Playback controls apply to timeline replay only'
+                    : isPlaying
+                      ? 'Pause'
+                      : 'Play'
+                }
               >
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
               </button>
               <button
+                type="button"
                 onClick={toggleMuted}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Sound"
+                disabled={isLive}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
+                title={isLive ? 'Realtime preview has no audio' : 'Sound'}
               >
                 <IconVolume className="w-4 h-4" />
               </button>
@@ -525,15 +454,20 @@ export function PpeMonitoringView() {
 
             <div className="flex items-center gap-3">
               <button
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
-                title="Grid"
+                type="button"
+                disabled
+                className="p-1.5 rounded text-white/40 cursor-not-allowed"
+                title="Multi-camera grid view is currently unavailable"
+                aria-label="Grid view unavailable"
               >
                 <IconGrid className="w-4 h-4" />
               </button>
               <button
+                type="button"
                 onClick={() => void videoRef.current?.requestFullscreen()}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
                 title="Fullscreen"
+                aria-label="Enter fullscreen"
               >
                 <IconMaximize className="w-4 h-4" />
               </button>
@@ -542,14 +476,14 @@ export function PpeMonitoringView() {
         </div>
 
         {/* Right: AI Detection & PPE Check Card (355px) */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
+        <div className="bg-white rounded-lg border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
           <div className="p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between pb-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
                 AI DETECTION
               </span>
-              <span className="font-mono text-[11px] font-semibold text-slate-500">
+              <span className="font-mono text-[11px] font-semibold text-[#6B6B6B]">
                 {testDetection?.eventId ?? 'NO-DETECTION'}
               </span>
             </div>
@@ -557,53 +491,53 @@ export function PpeMonitoringView() {
             {/* 2-Column Details Grid */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  Identity
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? `Worker (Track #${testDetection.trackId})`
-                    : 'Unassigned'}
+                    ? 'Unknown — not identified'
+                    : 'No person detected'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Worker ID
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  Track ID
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {ppeDetections.map((detection) => `Track #${detection.trackId}`).join(', ') ||
                     '—'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Camera
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {activeCameraContext.camera}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Work Area
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {activeCameraContext.workArea}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
                   Detected
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Recognition Confidence
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  Detection Confidence
                 </p>
-                <p className="font-semibold text-slate-900 text-[13px] mt-1">
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
                     ? '—'
                     : `${Math.round(testDetection.confidence * 100)}%`}
@@ -611,16 +545,16 @@ export function PpeMonitoringView() {
               </div>
             </div>
 
-            <div className="h-px bg-slate-100 w-full" />
+            <div className="h-px bg-[#F7F6F3] w-full" />
 
             {/* PPE Check List */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+              <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
                 PPE CHECK
               </p>
               <div className="space-y-2">
                 {ppeDetections.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">
+                  <p className="text-xs text-[#6B6B6B] italic">
                     No tracked individuals in current frame
                   </p>
                 ) : (
@@ -630,9 +564,9 @@ export function PpeMonitoringView() {
                     return (
                       <div
                         key={`ppe-check-${detection.trackId}`}
-                        className="rounded-lg bg-slate-50 p-3"
+                        className="rounded-lg bg-[#FBFBFA] p-3"
                       >
-                        <p className="mb-2 text-[11px] font-bold text-slate-700">
+                        <p className="mb-2 text-[11px] font-bold text-[#2F3437]">
                           Track #{detection.trackId}
                         </p>
                         <div className="flex items-center justify-between text-xs">
@@ -653,7 +587,7 @@ export function PpeMonitoringView() {
                           ) : helmet === 'PRESENT' ? (
                             <IconCheck className="w-4 h-4 text-emerald-500" />
                           ) : (
-                            <span className="text-[10px] text-slate-400">—</span>
+                            <span className="text-[10px] text-[#A3A09C]">—</span>
                           )}
                         </div>
                         <div className="mt-1 flex items-center justify-between text-xs">
@@ -674,7 +608,7 @@ export function PpeMonitoringView() {
                           ) : vest === 'PRESENT' ? (
                             <IconCheck className="w-4 h-4 text-emerald-500" />
                           ) : (
-                            <span className="text-[10px] text-slate-400">—</span>
+                            <span className="text-[10px] text-[#A3A09C]">—</span>
                           )}
                         </div>
                       </div>
@@ -694,10 +628,10 @@ export function PpeMonitoringView() {
                       ? 'border-amber-500'
                       : ppeResultState === 'COMPLIANT'
                         ? 'border-emerald-500'
-                        : 'border-slate-300'
+                        : 'border-[#EAEAEA]'
                 }`}
               >
-                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">
                   RESULT
                 </p>
                 <div
@@ -708,7 +642,7 @@ export function PpeMonitoringView() {
                         ? 'text-amber-600'
                         : ppeResultState === 'COMPLIANT'
                           ? 'text-emerald-600'
-                          : 'text-slate-500'
+                          : 'text-[#6B6B6B]'
                   }`}
                 >
                   {(ppeResultState === 'CONFIRMED_MISSING' ||
@@ -728,7 +662,7 @@ export function PpeMonitoringView() {
                               : 'PPE STATUS UNKNOWN'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-[#6B6B6B]">
                   {ppeResultState === 'CONFIRMED_MISSING'
                     ? 'Technical observation from the YOLO + MF04 pipeline.'
                     : ppeResultState === 'PENDING_CONFIRMATION'
@@ -742,7 +676,7 @@ export function PpeMonitoringView() {
               </div>
             </div>
 
-            {violationSnapshot && (
+            {!isLive && violationSnapshot && (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 p-3"
                 data-testid="mf04-evidence-capture"
@@ -767,7 +701,7 @@ export function PpeMonitoringView() {
               className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-sm transition-colors cursor-pointer ${
                 testDetection && isConfirmedPpeDetection(testDetection)
                   ? 'bg-[#F66B17] hover:bg-[#E05A0B] text-white'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-[#F7F6F3] text-[#A3A09C] cursor-not-allowed'
               }`}
             >
               Review Alert
@@ -780,7 +714,7 @@ export function PpeMonitoringView() {
                   );
                 }
               }}
-              className="w-full py-2.5 px-4 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-lg bg-white border border-[#EAEAEA] text-[#2F3437] font-semibold text-sm hover:bg-[#FBFBFA] transition-colors cursor-pointer"
             >
               {activeFilterWorker !== null
                 ? `Clear Worker Filter (#${activeFilterWorker})`
@@ -792,110 +726,149 @@ export function PpeMonitoringView() {
         </div>
       </div>
 
-      {/* Recent PPE Events Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Recent PPE Events</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Latest camera detections and verification outcomes.
-              {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
-            </p>
-          </div>
-          {/* Functional event filter controls (no misleading "Last 24 hours" label) */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => setPpeFilter('ALL')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                ppeFilter === 'ALL'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              All Events ({ppeEvents.length})
-            </button>
-            <button
-              onClick={() => setPpeFilter('HARD_HAT')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                ppeFilter === 'HARD_HAT'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              Missing Helmet ({ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length})
-            </button>
-            <button
-              onClick={() => setPpeFilter('SAFETY_VEST')}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                ppeFilter === 'SAFETY_VEST'
-                  ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
-            </button>
+      {/* Live AI Observations status or Replay Observations Table */}
+      {isLive ? (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
+                <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
+                  Live AI Observations Active
+                </h3>
+              </div>
+              <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
+                Technical PPE detections are rendered directly on the live camera feed above. Sample
+                replay timeline rows are hidden during live monitoring. Durable safety alerts
+                require Backend worker ingestion; review persisted records in Safety Alerts.
+              </p>
+            </div>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('incidents', { alertType: 'PPE_VIOLATION' })}
+                className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-[#F66B17]/40 bg-orange-50 text-[#F66B17] hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                View in Safety Alerts →
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-3">Time</th>
-                <th className="py-3 px-3">Worker</th>
-                <th className="py-3 px-3">Camera</th>
-                <th className="py-3 px-3">Work Area</th>
-                <th className="py-3 px-3">Issue</th>
-                <th className="py-3 px-3">Confidence</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {displayedEvents.map((evt) => (
-                <tr key={evt.rowKey} className="hover:bg-slate-50 transition-colors group">
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.time}</td>
-                  <td className="py-3 px-3 font-semibold text-slate-900">{evt.worker}</td>
-                  <td className="py-3 px-3 font-mono text-slate-500 text-xs font-semibold">
-                    {evt.camera}
-                  </td>
-                  <td className="py-3 px-3 text-slate-600">{evt.workArea}</td>
-                  <td className="py-3 px-3 font-medium text-slate-900">{evt.issue}</td>
-                  <td className="py-3 px-3 font-semibold text-slate-900">{evt.confidence}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                        evt.status === 'Open'
-                          ? 'bg-red-50 text-red-600'
-                          : evt.status === 'Logged'
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {evt.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => setSelectedReview(evt)}
-                      className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
-                    >
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {displayedEvents.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-slate-400 text-xs">
-                    No PPE events match the selected criteria.
-                  </td>
-                </tr>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#2F3437]">PPE Replay Observations</h3>
+              <p className="text-xs text-[#6B6B6B] mt-1">
+                Observations from the sample video timeline. Live safety alerts are available in
+                Safety Alerts.
+                {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
+              </p>
+            </div>
+            {/* Functional event filter controls and Safety Alerts navigation */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('incidents', { alertType: 'PPE_VIOLATION' })}
+                  className="px-2.5 py-1.5 rounded-lg border border-[#F66B17]/40 bg-orange-50 text-[#F66B17] hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  View in Safety Alerts →
+                </button>
               )}
-            </tbody>
-          </table>
+              <button
+                onClick={() => setPpeFilter('ALL')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  ppeFilter === 'ALL'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                All Events ({ppeEvents.length})
+              </button>
+              <button
+                onClick={() => setPpeFilter('HARD_HAT')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  ppeFilter === 'HARD_HAT'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                Missing Helmet ({ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length})
+              </button>
+              <button
+                onClick={() => setPpeFilter('SAFETY_VEST')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  ppeFilter === 'SAFETY_VEST'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">Time</th>
+                  <th className="py-3 px-3">Worker</th>
+                  <th className="py-3 px-3">Camera</th>
+                  <th className="py-3 px-3">Work Area</th>
+                  <th className="py-3 px-3">Issue</th>
+                  <th className="py-3 px-3">Confidence</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EAEAEA]">
+                {displayedEvents.map((evt) => (
+                  <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.worker}</td>
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs font-semibold">
+                      {evt.camera}
+                    </td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.workArea}</td>
+                    <td className="py-3 px-3 font-medium text-[#2F3437]">{evt.issue}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.confidence}</td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                          evt.status === 'Open'
+                            ? 'bg-red-50 text-red-600'
+                            : evt.status === 'Logged'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-amber-50 text-amber-600'
+                        }`}
+                      >
+                        {evt.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => setSelectedReview(evt)}
+                        className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-[#EAEAEA] cursor-pointer"
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {displayedEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
+                      No PPE events match the selected criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Review Modal with Bound Data from Selected Row or Detection */}
       {selectedReview && (
@@ -906,47 +879,64 @@ export function PpeMonitoringView() {
                 <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold font-mono uppercase tracking-wider">
                   {selectedReview.id}
                 </span>
-                <h3 className="font-bold text-slate-900">Violation Review</h3>
+                <h3 className="font-bold text-[#2F3437]">Violation Review</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedReview(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close review dialog"
+                className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
               >
                 <IconX className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4 text-sm text-slate-600">
+            <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
                 AI detected an observation for{' '}
-                <strong className="text-slate-900">{selectedReview.worker}</strong> in{' '}
-                <strong className="text-slate-900">{selectedReview.workArea}</strong> (
+                <strong className="text-[#2F3437]">{selectedReview.worker}</strong> in{' '}
+                <strong className="text-[#2F3437]">{selectedReview.workArea}</strong> (
                 {selectedReview.camera}). Observation:{' '}
-                <strong className="text-slate-900">{selectedReview.issue}</strong> (Confidence:{' '}
+                <strong className="text-[#2F3437]">{selectedReview.issue}</strong> (Confidence:{' '}
                 {selectedReview.confidence}).
               </p>
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                <p className="font-bold text-slate-700 text-xs uppercase tracking-wider">
-                  Review Status: Local Preview
+              <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
+                <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
+                  Technical Evidence Preview
                 </p>
-                <p className="text-slate-600 text-xs">
-                  Backend review and dispatch API endpoints are not yet integrated. Actions below
-                  are recorded in preview state only.
+                <p className="text-[#6B6B6B] text-xs leading-relaxed">
+                  AI detections are preliminary observations. To review durable records, inspect
+                  session-scoped evidence images, or record an auditable safety decision (Confirm,
+                  Dismiss, or Request Evidence), open the Safety Alerts queue.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
+              {onNavigate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReview(null);
+                    onNavigate('incidents', { alertType: 'PPE_VIOLATION' });
+                  }}
+                  className="py-2 px-4 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
+                >
+                  Review in Safety Alerts
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title="Safety alerts navigation not configured"
+                  className="py-2 px-4 rounded-lg bg-[#F66B17]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
+                >
+                  Review in Alerts
+                </button>
+              )}
               <button
-                disabled
-                title="Review dispatch API endpoint pending integration"
-                className="py-2 px-4 rounded-lg bg-[#F66B17]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors"
-              >
-                Dispatch (API Pending)
-              </button>
-              <button
+                type="button"
                 onClick={() => setSelectedReview(null)}
-                className="py-2 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-[#EAEAEA] text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
               >
                 Dismiss Preview
               </button>
