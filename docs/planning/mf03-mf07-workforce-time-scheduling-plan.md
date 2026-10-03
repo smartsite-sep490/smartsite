@@ -1,7 +1,7 @@
 # Kế hoạch MF03/MF07 Workforce Time & Scheduling
 
-Trạng thái: kế hoạch triển khai đang dùng để làm việc  
-Domain: Workforce Time & Scheduling  
+Trạng thái: kế hoạch triển khai đang dùng để làm việc\
+Domain: Workforce Time & Scheduling\
 Main flows: MF03 Attendance Reconciliation & Approval, MF07 Worker Shift Change & Swap Management
 
 ## 1. Mục tiêu

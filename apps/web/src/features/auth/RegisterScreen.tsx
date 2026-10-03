@@ -26,7 +26,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
       gsap.set(panelRef.current, { width: 240, height: 240, opacity: 1, scale: 1 });
       gsap.set('.register-form-content', { opacity: 0, scale: 0.95 });
       gsap.set('.register-loading-content', { display: 'none' });
-      
+
       const tl = gsap.timeline({ delay: 0.01 });
       tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' })
         .to('.register-form-content', {
@@ -116,15 +116,15 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
 
       {/* Cyber-Chamfered Panel */}
       <div ref={panelRef} className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4 mt-8 mb-8" style={{ minHeight: 600 }}>
-        
+
         {/* Outer Thin Border Layer */}
-        <div 
+        <div
           className="absolute inset-0 bg-white/20 transition-all"
           style={{ clipPath: 'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)' }}
         />
-        
+
         {/* Inner Dark Glass Layer */}
-        <div 
+        <div
           className="absolute inset-[1px] bg-[#0A1118]/80 backdrop-blur-2xl transition-all"
           style={{ clipPath: 'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)' }}
         >
@@ -132,12 +132,12 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
         </div>
 
         {/* Top Left Glass Accent */}
-        <div 
+        <div
           className="absolute top-[1px] left-[1px] w-[39px] h-[39px] bg-white/5 border-b border-r border-white/10 backdrop-blur-3xl hidden sm:block"
           style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
         />
         {/* Bottom Right Glass Accent */}
-        <div 
+        <div
           className="absolute bottom-[1px] right-[1px] w-[39px] h-[39px] bg-white/5 border-t border-l border-white/10 backdrop-blur-3xl hidden sm:block"
           style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
         />
@@ -154,7 +154,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 flex-1 flex flex-col justify-center">
-            
+
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">Full Name</label>
@@ -237,15 +237,15 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
 
             <div className="text-center mt-2">
               <span className="text-white/40 text-xs font-medium">Already have an account? </span>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={handleNavigateLogin}
                 className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
               >
                 Sign In
               </button>
             </div>
-            
+
           </form>
         </div>
 

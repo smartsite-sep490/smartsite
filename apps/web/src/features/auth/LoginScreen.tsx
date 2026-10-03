@@ -119,7 +119,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
           setErrorMessage(msg);
 
           // Shake effect on error
-          gsap.fromTo(panelRef.current, 
+          gsap.fromTo(panelRef.current,
             { x: -10 },
             { x: 0, duration: 0.4, ease: "elastic.out(2, 0.2)" }
           );
@@ -172,7 +172,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-[#F66B17] opacity-[0.03] blur-[150px] rounded-full pointer-events-none" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-[#041D2E] opacity-50 blur-[120px] rounded-full pointer-events-none" />
       </div>
-      
+
       <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] opacity-[0.02] pointer-events-none mix-blend-overlay" />
 
       {/* Top Nav */}
@@ -188,15 +188,15 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
 
       {/* Cyber-Chamfered Panel */}
       <div ref={panelRef} className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4">
-        
+
         {/* Outer Thin Border Layer */}
-        <div 
+        <div
           className="absolute inset-0 bg-white/20 transition-all"
           style={{ clipPath: 'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)' }}
         />
-        
+
         {/* Inner Dark Glass Layer */}
-        <div 
+        <div
           className="absolute inset-[1px] bg-[#0A1118]/80 backdrop-blur-2xl transition-all"
           style={{ clipPath: 'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)' }}
         >
@@ -204,12 +204,12 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
         </div>
 
         {/* Top Left Glass Accent */}
-        <div 
+        <div
           className="absolute top-[1px] left-[1px] w-[39px] h-[39px] bg-white/5 border-b border-r border-white/10 backdrop-blur-3xl hidden sm:block"
           style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
         />
         {/* Bottom Right Glass Accent */}
-        <div 
+        <div
           className="absolute bottom-[1px] right-[1px] w-[39px] h-[39px] bg-white/5 border-t border-l border-white/10 backdrop-blur-3xl hidden sm:block"
           style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
         />
@@ -226,7 +226,7 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5 flex-1 flex flex-col justify-center">
-            
+
             <div className="space-y-4">
               {/* Username Input */}
               <div>
@@ -298,15 +298,15 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
 
             <div className="text-center mt-2">
               <span className="text-white/40 text-xs font-medium">Don't have an account? </span>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={handleNavigateRegister}
                 className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
               >
                 Sign Up
               </button>
             </div>
-            
+
           </form>
         </div>
 
@@ -315,11 +315,11 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
           <div className="relative w-full h-full flex items-center justify-center">
             {/* The wireframe square inside the orb container */}
             <div className="absolute w-20 h-20 border border-white/10 rounded-2xl" />
-            
+
             {/* Outer animated rings */}
             <div className="absolute w-24 h-24 border border-[#F66B17]/20 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
             <div className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" style={{ animationDelay: '1s' }} />
-            
+
             {/* The glowing orb */}
             <div className="orb-core relative w-8 h-8 bg-[#F66B17] rounded-full shadow-[0_0_40px_20px_rgba(246,107,23,0.4)] animate-pulse" />
           </div>

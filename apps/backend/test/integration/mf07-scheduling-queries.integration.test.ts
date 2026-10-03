@@ -91,7 +91,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: siteA }],
     temporaryPassword: pass,
   });
-  
+
   await usersService.create({
     username: `mgr_b_${suffix}`,
     displayName: 'Mgr B',
@@ -139,7 +139,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     displayName: 'Worker A',
     isActive: true,
   });
-  
+
   const workerBEntityId = randomUUID();
   await dataSource.getRepository(WorkerEntity).save({
     id: workerBEntityId,

@@ -118,7 +118,7 @@ export function SessionExpiredModal({
 
 export function useRestoreSession(apiUrl: string) {
   const { setAccessToken } = useAuth();
-  
+
   return useQuery({
     queryKey: ['auth', 'session'],
     queryFn: async () => {
