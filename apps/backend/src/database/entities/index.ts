@@ -1,4 +1,11 @@
 import { SiteEntity } from './site.entity.js';
+import {
+  VisitorVisitEntity,
+  QrFallbackSessionEntity,
+  QrCredentialEntity,
+  VisitorGateEventEntity,
+} from './qr-access.entity.js';
+export * from './qr-access.entity.js';
 import { CameraEntity } from './camera.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { CameraObservationRegionEntity } from './camera-observation-region.entity.js';
@@ -76,6 +83,10 @@ export * from './gate-access-log.entity.js';
 export * from './worker-gate-permission.entity.js';
 
 export const ENTITIES = [
+  VisitorVisitEntity,
+  QrFallbackSessionEntity,
+  QrCredentialEntity,
+  VisitorGateEventEntity,
   SiteEntity,
   CameraEntity,
   ZoneEntity,

@@ -379,7 +379,49 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
       </QueryClientProvider>,
     );
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/active Global Admin account/i);
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /active gate operator, Site Manager, Worker or Admin account/i,
+    );
     expect(screen.queryByLabelText(/username/i)).toBeNull();
+  });
+  it('8. Site Manager opens its site visitor approval queue without Admin-only tabs', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+    };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [mockSitesList.items[0]!],
+      total: 1,
+    });
+    const visits = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listVisits')
+      .mockResolvedValue({ items: [] });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AccessControlView apiUrl="https://api.example.test" />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Chưa có yêu cầu tại site này.');
+    expect(visits).toHaveBeenCalledWith('mock-admin-token', 'site-alpha');
+    expect(screen.queryByRole('button', { name: /MF01 Worker Biometrics/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /MF06 Zone Permissions/i })).toBeNull();
+  });
+  it('9. Worker can request its own QR without seeing gate operator or Admin actions', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
+    };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [mockSitesList.items[0]!],
+      total: 1,
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AccessControlView apiUrl="https://api.example.test" />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('button', { name: 'Lấy QR của tôi' });
+    expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
   });
 });

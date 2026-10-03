@@ -350,6 +350,9 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await gate.verify(actor, siteId, 'gate1', frame);
     assert.equal(verification?.templates?.length, 0);
   } finally {
+    await dataSource.query('DELETE FROM qr_fallback_session WHERE site_id = ANY($1)', [
+      [siteId, otherSiteId],
+    ]);
     await dataSource.query('DELETE FROM worker_gate_permission WHERE site_id = ANY($1)', [
       [siteId, otherSiteId],
     ]);

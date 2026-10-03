@@ -9,6 +9,15 @@ import {
   type ObservationIdentityWorkerResponse,
 } from '@smartsite/contracts/management';
 import type {
+  CreateVisitCommand,
+  VisitResponse,
+  QrPassResponse,
+  VisitorPassResponse,
+  QrFallbackResponse,
+  VerifyQrCommand,
+  VisitorGateCommand,
+  WorkerQrVerificationResponse,
+  VisitorGateEventResponse,
   AccountResponse,
   AuthClientType,
   CameraResponse,
@@ -85,6 +94,70 @@ const validTimeout = (timeoutMs: number) =>
 
 export class SmartSiteManagementClient {
   constructor(private readonly baseUrl: string) {}
+  listVisitorSites() {
+    return this.request<{ items: Array<{ id: string; name: string; code: string }> }>(
+      'GET',
+      '/visitor-registration/sites',
+    );
+  }
+  registerVisit(siteId: string, input: CreateVisitCommand) {
+    return this.request<VisitResponse>(
+      'POST',
+      `/visitor-registration/sites/${pathId(siteId)}/visits`,
+      undefined,
+      input,
+    );
+  }
+  getVisitorPass(visitId: string, accessKey: string) {
+    return this.request<VisitorPassResponse>('POST', '/visitor-registration/pass', undefined, {
+      visitId,
+      accessKey,
+    });
+  }
+  listVisits(token: string, siteId: string) {
+    return this.request<{ items: VisitResponse[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/visits`,
+      token,
+    );
+  }
+  decideVisit(token: string, siteId: string, visitId: string, status: 'APPROVED' | 'REJECTED') {
+    return this.request<VisitResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/visits/${pathId(visitId)}/decision`,
+      token,
+      { status },
+    );
+  }
+  issueWorkerQr(token: string, siteId: string, fallbackSessionId: string) {
+    return this.request<QrPassResponse>('POST', `/sites/${pathId(siteId)}/worker-qr`, token, {
+      fallbackSessionId,
+    });
+  }
+  openCameraQrFallback(token: string, siteId: string, gateId: string, direction: 'IN' | 'OUT') {
+    return this.request<QrFallbackResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-fallback`,
+      token,
+      { direction, reason: 'CAMERA_UNAVAILABLE' },
+    );
+  }
+  verifyWorkerQr(token: string, siteId: string, gateId: string, input: VerifyQrCommand) {
+    return this.request<WorkerQrVerificationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-verifications`,
+      token,
+      input,
+    );
+  }
+  verifyVisitorQr(token: string, siteId: string, gateId: string, input: VisitorGateCommand) {
+    return this.request<VisitorGateEventResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/visitor-gate-events`,
+      token,
+      input,
+    );
+  }
 
   private async runRequest<T>(
     options: RequestOptions | undefined,
@@ -432,7 +505,10 @@ export class SmartSiteManagementClient {
     );
   }
 
-  createContractor(token: string, input: { code: string; name: string }): Promise<ContractorResponse>;
+  createContractor(
+    token: string,
+    input: { code: string; name: string },
+  ): Promise<ContractorResponse>;
   createContractor(
     token: string,
     siteId: string,
@@ -861,15 +937,19 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  createShift(token: string, siteId: string, input: { name: string; startsAt: string; endsAt: string; timezone: string }) {
-    return this.request<ShiftResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/shifts`,
-      token,
-      input,
-    );
+  createShift(
+    token: string,
+    siteId: string,
+    input: { name: string; startsAt: string; endsAt: string; timezone: string },
+  ) {
+    return this.request<ShiftResponse>('POST', `/sites/${pathId(siteId)}/shifts`, token, input);
   }
-  assignShiftToContractor(token: string, siteId: string, shiftId: string, input: { contractorId: string }) {
+  assignShiftToContractor(
+    token: string,
+    siteId: string,
+    shiftId: string,
+    input: { contractorId: string },
+  ) {
     return this.request<ContractorShiftAssignmentResponse>(
       'POST',
       `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}/contractors`,
@@ -898,7 +978,11 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  createScheduleVersion(token: string, siteId: string, input: { effectiveFrom: string; effectiveUntil?: string }) {
+  createScheduleVersion(
+    token: string,
+    siteId: string,
+    input: { effectiveFrom: string; effectiveUntil?: string },
+  ) {
     return this.request<ScheduleVersionResponse>(
       'POST',
       `/sites/${pathId(siteId)}/schedule-versions`,
@@ -913,7 +997,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  createWorkerSchedule(token: string, siteId: string, scheduleVersionId: string, input: { workerId: string; shiftId: string; workDate: string; isActive?: boolean }) {
+  createWorkerSchedule(
+    token: string,
+    siteId: string,
+    scheduleVersionId: string,
+    input: { workerId: string; shiftId: string; workDate: string; isActive?: boolean },
+  ) {
     return this.request<WorkerScheduleResponse>(
       'POST',
       `/sites/${pathId(siteId)}/schedule-versions/${pathId(scheduleVersionId)}/worker-schedules`,
@@ -967,11 +1056,15 @@ export class SmartSiteManagementClient {
   }
 
   // --- Shift Change Request Mutations ---
-  createShiftChangeRequest(token: string, siteId: string, input: {
-    workerScheduleId: string;
-    toShiftId: string;
-    reason: string;
-  }) {
+  createShiftChangeRequest(
+    token: string,
+    siteId: string,
+    input: {
+      workerScheduleId: string;
+      toShiftId: string;
+      reason: string;
+    },
+  ) {
     return this.request<ShiftChangeRequestResponse>(
       'POST',
       `/sites/${pathId(siteId)}/shift-change-requests`,
@@ -986,7 +1079,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectShiftChangeRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+  rejectShiftChangeRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<ShiftChangeRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-change-requests/${pathId(requestId)}/reject`,
@@ -996,11 +1094,15 @@ export class SmartSiteManagementClient {
   }
 
   // --- Shift Swap Request Mutations ---
-  createShiftSwapRequest(token: string, siteId: string, input: {
-    requesterWorkerScheduleId: string;
-    coworkerWorkerScheduleId: string;
-    reason: string;
-  }) {
+  createShiftSwapRequest(
+    token: string,
+    siteId: string,
+    input: {
+      requesterWorkerScheduleId: string;
+      coworkerWorkerScheduleId: string;
+      reason: string;
+    },
+  ) {
     return this.request<ShiftSwapRequestResponse>(
       'POST',
       `/sites/${pathId(siteId)}/shift-swap-requests`,
@@ -1015,7 +1117,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  declineShiftSwapRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+  declineShiftSwapRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<ShiftSwapRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/decline`,
@@ -1030,7 +1137,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectShiftSwapRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+  rejectShiftSwapRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<ShiftSwapRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/reject`,
@@ -1040,11 +1152,15 @@ export class SmartSiteManagementClient {
   }
 
   // --- Absence Request Mutations ---
-  createAbsenceRequest(token: string, siteId: string, input: {
-    workerScheduleId: string;
-    reason: string;
-    replacementWorkerId?: string;
-  }) {
+  createAbsenceRequest(
+    token: string,
+    siteId: string,
+    input: {
+      workerScheduleId: string;
+      reason: string;
+      replacementWorkerId?: string;
+    },
+  ) {
     return this.request<AbsenceRequestResponse>(
       'POST',
       `/sites/${pathId(siteId)}/absence-requests`,

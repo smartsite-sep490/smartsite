@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { QrAccessService } from './qr-access.service.js';
+import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DatabaseModule } from '../../database/database.module.js';
@@ -28,6 +30,8 @@ import {
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [
+    QrAccessController,
+    VisitorRegistrationController,
     WorkforceController,
     ContractorsController,
     ScheduleConfigurationController,
@@ -39,6 +43,7 @@ import {
     WorkerGatePermissionsController,
   ],
   providers: [
+    QrAccessService,
     WorkforceConfigurationService,
     ScheduleConfigurationService,
     SchedulingWorkflowService,

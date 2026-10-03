@@ -41,6 +41,7 @@ export interface FaceGateDecisionResponse {
 }
 
 export interface FaceGateVerificationResponse {
+  fallback?: import('./qr-access-api.js').QrFallbackResponse;
   decision: FaceGateDecisionResponse;
   log?: GateAccessLogResponse;
   worker?: {
@@ -55,6 +56,7 @@ export interface FaceGateVerificationResponse {
 }
 
 export interface GateAccessLogResponse {
+  method?: 'FACE' | 'QR';
   id: string;
   createdAt: string;
   gateId: string;
@@ -65,7 +67,7 @@ export interface GateAccessLogResponse {
   workerExternalId: string | null;
   contractorName: string | null;
   username: string | null;
-  decision: FaceGateDecisionResponse;
+  decision: { authorization: GateAuthorizationOutcome; reasonCode: string };
 }
 export interface GateFacePresenceResponse {
   state: 'NEW_FACE' | 'SAME_FACE' | 'WAITING' | 'QUALITY_FAILED' | 'AI_UNAVAILABLE';

@@ -1,4 +1,15 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export type {
+  CreateVisitCommand,
+  VisitResponse,
+  QrPassResponse,
+  VisitorPassResponse,
+  QrFallbackResponse,
+  VerifyQrCommand,
+  VisitorGateCommand,
+  WorkerQrVerificationResponse,
+  VisitorGateEventResponse,
+} from './qr-access-api.js';
 
 export * from './observation-identity-management.js';
 

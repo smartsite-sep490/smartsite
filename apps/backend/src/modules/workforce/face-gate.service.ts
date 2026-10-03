@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { QrAccessService } from './qr-access.service.js';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { DataSource, IsNull } from 'typeorm';
 import type {
@@ -38,6 +39,7 @@ export class FaceGateService {
     private readonly dataSource: DataSource,
     @Inject(FACE_ENROLLMENT_ADAPTER)
     private readonly adapter: FaceVerificationAdapter = new UnavailableFaceEnrollmentAdapter(),
+    private readonly qrAccess: QrAccessService = new QrAccessService(dataSource),
   ) {}
 
   async verify(
@@ -55,7 +57,19 @@ export class FaceGateService {
       });
     const result = await this.evaluate(siteId, gateId, frame);
     // Unidentified scans carry no business identity and are not retained.
-    if (!result.worker) return result;
+    if (!result.worker)
+      return result.decision.qrFallbackAllowed
+        ? {
+            ...result,
+            fallback: await this.qrAccess.openFallback(
+              actor,
+              siteId,
+              gateId,
+              direction,
+              result.decision.technicalOutcome,
+            ),
+          }
+        : result;
     // A decision is acknowledged only after its audit record is durably stored.
     const log = await this.dataSource.getRepository(GateAccessLogEntity).save({
       id: randomUUID(),
@@ -136,6 +150,7 @@ export class FaceGateService {
   private logResponse(log: GateAccessLogEntity): GateAccessLogResponse {
     return {
       id: log.id,
+      method: log.method,
       createdAt: log.createdAt.toISOString(),
       gateId: log.gateId,
       direction: log.direction,

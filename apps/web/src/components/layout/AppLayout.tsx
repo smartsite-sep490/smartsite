@@ -68,12 +68,12 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const userRole = roles.includes('ADMIN')
     ? 'System Admin'
     : roles.includes('SITE_MANAGER')
-    ? 'Site Manager'
-    : roles.includes('CONTRACTOR_REPRESENTATIVE')
-    ? 'Contractor Rep'
-    : roles.includes('WORKER')
-    ? 'Worker'
-    : 'Authenticated User';
+      ? 'Site Manager'
+      : roles.includes('CONTRACTOR_REPRESENTATIVE')
+        ? 'Contractor Rep'
+        : roles.includes('WORKER')
+          ? 'Worker'
+          : 'Authenticated User';
   const userInitials = displayName.slice(0, 2).toUpperCase();
 
   const isAdmin = roles.includes('ADMIN');
@@ -90,6 +90,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           label: 'Workspace',
           items: [
             { id: 'workforce', label: 'My Schedule & Requests', icon: IconUsers },
+            { id: 'access', label: 'QR của tôi', icon: IconKey },
           ],
         },
       ]
@@ -162,7 +163,10 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               {!isCollapsed && (
                 <div className="flex flex-col whitespace-nowrap overflow-hidden transition-opacity duration-200">
                   <div className="text-lg font-black tracking-tight leading-none text-white">
-                    Smart<span className="text-[#FF7A1A] bg-gradient-to-r from-[#FF7A1A] to-[#FF9B42] bg-clip-text text-transparent">Site</span>
+                    Smart
+                    <span className="text-[#FF7A1A] bg-gradient-to-r from-[#FF7A1A] to-[#FF9B42] bg-clip-text text-transparent">
+                      Site
+                    </span>
                   </div>
                   <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase mt-0.5 font-semibold">
                     Operations
@@ -268,7 +272,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           >
             <IconHome className="w-4 h-4 text-[#FF7A1A] shrink-0 group-hover:scale-110 transition-transform filter drop-shadow-[0_0_6px_rgba(246,107,23,0.4)]" />
             {!isCollapsed && (
-              <span className="whitespace-nowrap overflow-hidden font-medium">Public SmartSite Homepage</span>
+              <span className="whitespace-nowrap overflow-hidden font-medium">
+                Public SmartSite Homepage
+              </span>
             )}
           </button>
         </div>

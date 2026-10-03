@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import type { QrFallbackResponse, VerifyQrCommand } from '@smartsite/contracts';
+import { QrScannerView } from './QrScannerView';
 import { inspectGateCamera } from './gateCameraReadiness';
 import { GateCameraSession } from './gateCameraSession';
 import {
@@ -114,8 +116,34 @@ export function SecurityGateDeskView({
   // QR Fallback modal state
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrCodeInput, setQrCodeInput] = useState('');
-  const [qrOfficerNotes, setQrOfficerNotes] = useState('');
-  const qrProcessing = false;
+  const [fallback, setFallback] = useState<QrFallbackResponse | null>(null);
+  const [qrResultMessage, setQrResultMessage] = useState('');
+  const qrCommand = useRef<VerifyQrCommand | null>(null);
+  const fallbackMutation = useMutation({
+    mutationFn: () =>
+      client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction),
+    onSuccess: (r) => {
+      setFallback(r);
+      setQrModalOpen(true);
+    },
+  });
+  const qrVerification = useMutation({
+    mutationFn: (input: VerifyQrCommand) =>
+      client.verifyWorkerQr(token!, selectedSiteId, selectedGateId, input),
+    onSuccess: (r) => {
+      setQrResultMessage(
+        `${r.authorization}: ${r.worker.displayName} · ${getSafeReasonMessage(r.reasonCode)}`,
+      );
+      setCandidateWorker(r.worker);
+      setQrCodeInput('');
+      setFallback(null);
+      qrCommand.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
+      });
+    },
+  });
+  const qrProcessing = qrVerification.isPending;
 
   // Recent Gate Events log
   const logQueryKey = ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId];
@@ -131,7 +159,7 @@ export function SecurityGateDeskView({
     workerExternalId: log.workerExternalId ?? '—',
     contractorName: log.contractorName ?? '—',
     direction: log.direction,
-    method: 'FACE',
+    method: log.method ?? 'FACE',
     outcome: log.decision.authorization,
     reasonCode: log.decision.reasonCode,
     gateName: gates.find((gate) => gate.id === log.gateId)?.name ?? log.gateId,
@@ -231,14 +259,11 @@ export function SecurityGateDeskView({
         frameBlob,
       );
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
-      if (presence.state !== 'NEW_FACE') {
+      if (presence.state !== 'NEW_FACE' && presence.state !== 'AI_UNAVAILABLE') {
         if (presence.state === 'SAME_FACE')
           setScanMessage('Worker already scanned. Awaiting next worker or step out of frame.');
         else if (presence.state === 'WAITING') {
           setScanMessage('Face detected. Hold still to verify…');
-        } else if (presence.state === 'AI_UNAVAILABLE') {
-          setNetworkError(true);
-          setScanMessage('AI unavailable. Check connection and retry.');
         } else {
           setScanMessage(getGateFaceMessage(presence.reasonCode));
         }
@@ -258,6 +283,7 @@ export function SecurityGateDeskView({
         );
         if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         setLastDecision(data.decision);
+        setFallback(data.fallback ?? null);
         // Historical display only: unknown scans never inherit this worker's identity or access.
         setCandidateWorker((previous) => retainGateWorker(previous, data.worker));
         await queryClient.invalidateQueries({
@@ -289,7 +315,8 @@ export function SecurityGateDeskView({
   ]);
 
   useEffect(() => {
-    if (!cameraActive || networkError || !selectedSiteId || !token) return;
+    if (!cameraActive || networkError || !selectedSiteId || !token || qrModalOpen || fallback)
+      return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
@@ -303,7 +330,7 @@ export function SecurityGateDeskView({
       clearTimeout(timer);
       scanGeneration.current += 1;
     };
-  }, [cameraActive, handleScanFace, networkError, selectedSiteId, token]);
+  }, [cameraActive, handleScanFace, networkError, selectedSiteId, token, qrModalOpen, fallback]);
 
   // Reset scan to prepare for next worker
   const handleResetScan = () => {
@@ -315,6 +342,9 @@ export function SecurityGateDeskView({
     setLastDecision(null);
     setCandidateWorker(null);
     setNetworkError(false);
+    setFallback(null);
+    setQrCodeInput('');
+    qrCommand.current = null;
   };
 
   // Face decisions are already saved by the Backend. Never fabricate clearance logs.
@@ -323,7 +353,19 @@ export function SecurityGateDeskView({
   };
 
   const handleConfirmQrFallback = () => {
-    setQrOfficerNotes('QR clearance is not implemented. No access or log was granted.');
+    if (!fallback || !token) return;
+    const old = qrCommand.current;
+    const input =
+      old && old.token === qrCodeInput.trim() && old.direction === fallback.direction
+        ? old
+        : {
+            token: qrCodeInput.trim(),
+            direction: fallback.direction,
+            requestId: crypto.randomUUID(),
+          };
+    qrCommand.current = input;
+    setQrResultMessage('');
+    qrVerification.mutate(input);
   };
 
   const uiState = resolveGateUiState({
@@ -509,7 +551,33 @@ export function SecurityGateDeskView({
               <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-slate-400">
                 <IconCamera className="mb-3 h-12 w-12 text-slate-600" />
                 <p className="text-sm font-semibold text-slate-300">Webcam Not Active</p>
-                {cameraError && <p className="mt-2 max-w-sm text-xs text-red-400">{cameraError}</p>}
+                {cameraError && (
+                  <div className="mt-2 max-w-sm space-y-2">
+                    <p className="text-xs text-red-400">{cameraError}</p>
+                    {lastDecision?.authorization !== 'DENIED' && (
+                      <button
+                        type="button"
+                        disabled={!token || fallbackMutation.isPending}
+                        className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-950"
+                        onClick={() => {
+                          stopCamera();
+                          qrVerification.reset();
+                          setQrResultMessage('');
+                          fallbackMutation.mutate();
+                        }}
+                      >
+                        {fallbackMutation.isPending
+                          ? 'Đang mở phiên…'
+                          : 'Camera lỗi · Dùng QR dự phòng'}
+                      </button>
+                    )}
+                    {fallbackMutation.error && (
+                      <p role="alert" className="text-red-400">
+                        {fallbackMutation.error.message}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -683,7 +751,12 @@ export function SecurityGateDeskView({
               {uiState.canUseQrFallback && (
                 <button
                   type="button"
-                  onClick={() => setQrModalOpen(true)}
+                  onClick={() => {
+                    stopCamera();
+                    qrVerification.reset();
+                    setQrResultMessage('');
+                    setQrModalOpen(true);
+                  }}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-100/90 py-3 text-xs font-bold text-amber-950 hover:bg-amber-200 transition-all"
                 >
                   <span>⚡ Launch Dynamic QR Fallback</span>
@@ -730,8 +803,8 @@ export function SecurityGateDeskView({
                 supervisor authorization.
               </li>
               <li>
-                For inconclusive face matches, request the worker present their dynamic QR pass via
-                the SmartSite mobile app.
+                For inconclusive face matches, give the worker a fallback session ID and request
+                their dynamic pass from “QR của tôi”.
               </li>
             </ul>
           </div>
@@ -749,6 +822,7 @@ export function SecurityGateDeskView({
               </div>
               <button
                 type="button"
+                aria-label="Đóng quét QR dự phòng"
                 onClick={() => setQrModalOpen(false)}
                 className="rounded-lg p-1 text-slate-400 hover:text-slate-600"
               >
@@ -757,6 +831,23 @@ export function SecurityGateDeskView({
             </div>
 
             <div className="mt-4 space-y-4">
+              {fallback && (
+                <div className="rounded-lg bg-blue-50 p-3 text-sm">
+                  <p>Đưa mã phiên cho worker nhập vào mục “QR của tôi”:</p>
+                  <p className="break-all select-all font-mono">{fallback.id}</p>
+                  <p>
+                    {fallback.direction} · Hết hạn{' '}
+                    {new Date(fallback.expiresAt).toLocaleTimeString()}
+                  </p>
+                </div>
+              )}
+              <QrScannerView disabled={qrProcessing || !fallback} onScan={setQrCodeInput} />
+              {qrVerification.error && (
+                <p role="alert" className="text-red-700">
+                  {qrVerification.error.message}
+                </p>
+              )}
+              {qrResultMessage && <p role="status">{qrResultMessage}</p>}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
                 ⚠️ Dynamic QR is a fallback method when facial recognition is inconclusive. Security
                 officers must physically verify worker credentials and contractor badge before
@@ -773,27 +864,11 @@ export function SecurityGateDeskView({
                 <input
                   id="qr-code-input"
                   type="text"
-                  placeholder="e.g. WKR-FALLBACK-9281-EXP..."
+                  placeholder="SSQ-..."
+                  disabled={qrProcessing}
                   value={qrCodeInput}
                   onChange={(e) => setQrCodeInput(e.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-mono focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="qr-notes-input"
-                  className="block text-xs font-bold uppercase tracking-wider text-slate-700"
-                >
-                  Officer Notes (Optional)
-                </label>
-                <input
-                  id="qr-notes-input"
-                  type="text"
-                  placeholder="e.g. Physically verified badge and contractor credentials"
-                  value={qrOfficerNotes}
-                  onChange={(e) => setQrOfficerNotes(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
                 />
               </div>
 
@@ -807,7 +882,7 @@ export function SecurityGateDeskView({
                 </button>
                 <button
                   type="button"
-                  disabled={!qrCodeInput.trim() || qrProcessing}
+                  disabled={!fallback || !qrCodeInput.trim() || qrProcessing}
                   onClick={handleConfirmQrFallback}
                   className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-xs"
                 >

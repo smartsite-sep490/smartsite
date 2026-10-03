@@ -14,8 +14,14 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
+import { VisitorRegistrationView } from './components/access/VisitorRegistrationView';
 import { IconRadio, IconTrendingUp } from './components/icons';
-import { useAuth, useRestoreSession, useCurrentUser, SessionExpiredModal } from './features/auth/auth-session';
+import {
+  useAuth,
+  useRestoreSession,
+  useCurrentUser,
+  SessionExpiredModal,
+} from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
 import { WorkforceView } from './components/workforce/WorkforceView';
@@ -48,16 +54,30 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     <AppLayout onSelectTab={onNavigate}>
       <Routes>
         <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
-        <Route path="/dashboard" element={<DashboardView onNavigate={tab => onNavigate(tab)} />} />
+        <Route
+          path="/dashboard"
+          element={<DashboardView onNavigate={(tab) => onNavigate(tab)} />}
+        />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
-        <Route path="/live-monitoring" element={<LiveMonitoringView onNavigate={tab => onNavigate(tab)} />} />
-        <Route path="/ppe" element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />} />
+        <Route
+          path="/live-monitoring"
+          element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
+        />
+        <Route
+          path="/ppe"
+          element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
+        />
         <Route
           path="/zones"
-          element={<RestrictedZoneView apiUrl={apiUrl} onNavigate={(tab, context) => onNavigate(tab, context)} />}
+          element={
+            <RestrictedZoneView
+              apiUrl={apiUrl}
+              onNavigate={(tab, context) => onNavigate(tab, context)}
+            />
+          }
         />
         <Route
           path="/incidents"
@@ -106,7 +126,13 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
   );
 }
 
-function PublicOnlyRoute({ children, defaultAuthTab }: { children: React.ReactNode; defaultAuthTab: string }) {
+function PublicOnlyRoute({
+  children,
+  defaultAuthTab,
+}: {
+  children: React.ReactNode;
+  defaultAuthTab: string;
+}) {
   const { accessToken } = useAuth();
   if (accessToken) {
     return <Navigate to={`/${defaultAuthTab}`} replace />;
@@ -121,7 +147,8 @@ export function App() {
   const { data: currentUser } = useCurrentUser(apiUrl);
 
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isWorkerOnly = roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
+  const isWorkerOnly =
+    roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
   const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
@@ -175,6 +202,10 @@ export function App() {
               />
             </PublicOnlyRoute>
           }
+        />
+        <Route
+          path="/visits/register"
+          element={<VisitorRegistrationView apiUrl={apiUrl} onBack={() => navigate('/login')} />}
         />
 
         <Route
