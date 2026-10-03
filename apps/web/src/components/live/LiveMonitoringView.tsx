@@ -1,177 +1,105 @@
 import React from 'react';
-import { CameraFeed } from '../shared/CameraFeed';
-import { EventsTable, TableColumn, StatusBadge } from '../shared/EventsTable';
-import { ActiveTab } from '../layout/AppLayout';
+import type { ActiveTab } from '../layout/AppLayout';
+import { IconHardHat, IconShield, IconAlertTriangle } from '../icons';
 
-interface LiveMonitoringViewProps {
+export interface LiveMonitoringViewProps {
   onNavigate: (tab: ActiveTab) => void;
 }
 
-interface CombinedEvent {
-  id: string;
-  time: string;
-  person: string;
-  camera: string;
-  type: 'PPE' | 'Restricted Zone';
-  issue: string;
-  status: 'Violation' | 'Warning' | 'Compliant';
-  targetTab: ActiveTab;
-}
-
 export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
-  const events: CombinedEvent[] = [
-    {
-      id: 'EVT-2049',
-      time: '10:42',
-      person: 'Nguyen Van A',
-      camera: 'CAM-04',
-      type: 'Restricted Zone',
-      issue: 'Not Authorized',
-      status: 'Violation',
-      targetTab: 'zones',
-    },
-    {
-      id: 'EVT-2048',
-      time: '10:42',
-      person: 'Nguyen Van A',
-      camera: 'CAM-04',
-      type: 'PPE',
-      issue: 'Missing Gloves',
-      status: 'Violation',
-      targetTab: 'ppe',
-    },
-    {
-      id: 'EVT-2047',
-      time: '10:35',
-      person: 'Tran Van B',
-      camera: 'CAM-08',
-      type: 'PPE',
-      issue: 'Missing Helmet',
-      status: 'Warning',
-      targetTab: 'ppe',
-    },
-    {
-      id: 'EVT-2046',
-      time: '10:30',
-      person: 'Le Van C',
-      camera: 'CAM-04',
-      type: 'Restricted Zone',
-      issue: 'Authorized',
-      status: 'Compliant',
-      targetTab: 'zones',
-    },
-  ];
-
-  const columns: TableColumn<CombinedEvent>[] = [
-    {
-      header: 'Time',
-      key: 'time',
-      render: (item) => <span className="font-mono text-[#6B6B6B] text-xs">{item.time}</span>,
-    },
-    {
-      header: 'Type',
-      key: 'type',
-      render: (item) => (
-        <span className="font-bold text-[11px] text-[#6B6B6B] uppercase tracking-widest">
-          {item.type}
-        </span>
-      ),
-    },
-    {
-      header: 'Person',
-      key: 'person',
-      render: (item) => <span className="font-semibold text-[#2F3437]">{item.person}</span>,
-    },
-    {
-      header: 'Camera',
-      key: 'camera',
-      render: (item) => <span className="font-mono text-[#6B6B6B] text-xs">{item.camera}</span>,
-    },
-    {
-      header: 'Detection',
-      key: 'issue',
-      render: (item) => <span className="font-medium text-[#2F3437]">{item.issue}</span>,
-    },
-    {
-      header: 'Result',
-      key: 'status',
-      render: (item) => {
-        let type: 'error' | 'warning' | 'success' | 'info' = 'info';
-        if (item.status === 'Violation') type = 'error';
-        if (item.status === 'Warning') type = 'warning';
-        if (item.status === 'Compliant') type = 'success';
-        return <StatusBadge status={item.status} type={type} />;
-      },
-    },
-    {
-      header: 'Action',
-      key: 'action',
-      align: 'right',
-      render: (item) => (
-        <button
-          onClick={() => onNavigate(item.targetTab)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200 transition-all active:scale-[0.98]"
-        >
-          View Details
-        </button>
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-[#2F3437] tracking-tight">Live Monitoring</h1>
-        <p className="text-sm text-[#6B6B6B] mt-2 max-w-2xl leading-relaxed">
-          Operational workspace displaying real-time safety detections across all cameras. Multiple
-          AI models run concurrently to detect PPE compliance and Restricted Zone access.
+      {/* Header & Concise Scope Notice */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#2F3437] tracking-tight">
+          Giám sát An toàn (Live Monitoring)
+        </h1>
+        <p className="text-sm text-[#6B6B6B] mt-2 max-w-3xl leading-relaxed">
+          Chưa tích hợp luồng trực tiếp đa camera đồng thời (No combined live multi-camera feed).
+          Khung hình xem trước chỉ hỗ trợ phạm vi mô hình{' '}
+          <strong>Mũ bảo hộ &amp; Áo phản quang</strong> (Hard Hat &amp; Safety Vest) và quan sát
+          vùng hạn chế; không suy đoán danh tính công nhân hoặc thẩm quyền ra vào từ video xem
+          trước.
         </p>
       </div>
 
-      {/* Main Camera Feed showing multiple violations on one worker */}
-      <div className="w-full">
-        <CameraFeed
-          cameraId="CAM-04"
-          zoneName="CRANE OPERATION AREA"
-          imageUrl="/assets/crane-camera-view.png"
-        >
-          {/* Zone Polygon */}
-          <div
-            className="absolute border-[1.6px] border-[#DF2225] bg-[#DF2225]/10 pointer-events-none transition-all duration-300"
-            style={{ left: '21.0%', top: '40.0%', width: '57.0%', height: '46.0%' }}
-          >
-            <div className="absolute top-4 left-4 px-2 py-0.5 bg-[#DF2225]/90 backdrop-blur-md text-white text-[10px] font-extrabold uppercase tracking-widest shadow-sm">
-              RESTRICTED ZONE
+      {/* Three Direct Subsystem Navigation Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        {/* Card 1: PPE Monitoring */}
+        <div className="flex flex-col justify-between rounded-lg border border-[#EAEAEA] bg-white p-5 shadow-xs hover:border-[#2F3437]/20 transition-colors">
+          <div className="space-y-3">
+            <div className="rounded-md bg-amber-50 p-2.5 text-[#D97706] w-fit">
+              <IconHardHat className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-[#111111]">
+                Giám sát Trang bị Bảo hộ (PPE Monitoring)
+              </h2>
+              <p className="mt-1.5 text-xs leading-5 text-[#6B6B6B]">
+                Xem trước phát hiện Mũ bảo hộ và Áo phản quang qua luồng WebSocket camera thời gian
+                thực hoặc video chẩn đoán theo từng đối tượng.
+              </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('ppe')}
+            className="mt-5 w-full rounded-md border border-[#EAEAEA] bg-[#F7F6F3] px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#EAEAEA] hover:text-[#111111] transition-colors cursor-pointer"
+          >
+            Vào Giám sát Trang bị Bảo hộ
+          </button>
+        </div>
 
-          {/* Worker Bounding Box */}
-          <div
-            className="absolute border-[2px] border-[#F66B17] pointer-events-none transition-all duration-300"
-            style={{ left: '42.0%', top: '55.0%', width: '10.0%', height: '25.0%' }}
-          >
-            {/* Multi-alert Badge */}
-            <div className="absolute -top-[38px] left-[-2px] flex flex-col gap-0.5 pointer-events-auto">
-              <div className="px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-widest shadow-sm whitespace-nowrap">
-                W-1024 ZONE VIOLATION
-              </div>
-              <div className="px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-widest shadow-sm whitespace-nowrap">
-                W-1024 MISSING GLOVES
-              </div>
+        {/* Card 2: Restricted Zones */}
+        <div className="flex flex-col justify-between rounded-lg border border-[#EAEAEA] bg-white p-5 shadow-xs hover:border-[#2F3437]/20 transition-colors">
+          <div className="space-y-3">
+            <div className="rounded-md bg-red-50 p-2.5 text-[#DF2225] w-fit">
+              <IconShield className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-[#111111]">
+                Giám sát Khu vực Hạn chế (Restricted Zones)
+              </h2>
+              <p className="mt-1.5 text-xs leading-5 text-[#6B6B6B]">
+                Cấu hình đa giác vùng nguy hiểm trực tiếp trên video và quan sát các sự kiện người
+                đi vào khu vực cấm vận hành máy móc theo từng phân vùng.
+              </p>
             </div>
           </div>
-        </CameraFeed>
+          <button
+            type="button"
+            onClick={() => onNavigate('zones')}
+            className="mt-5 w-full rounded-md border border-[#EAEAEA] bg-[#F7F6F3] px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#EAEAEA] hover:text-[#111111] transition-colors cursor-pointer"
+          >
+            Vào Giám sát Khu vực Hạn chế
+          </button>
+        </div>
+
+        {/* Card 3: Safety Alerts */}
+        <div className="flex flex-col justify-between rounded-lg border border-[#EAEAEA] bg-white p-5 shadow-xs hover:border-[#2F3437]/20 transition-colors">
+          <div className="space-y-3">
+            <div className="rounded-md bg-stone-100 p-2.5 text-[#111111] w-fit">
+              <IconAlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-[#111111]">
+                Cảnh báo An toàn (Safety Alerts)
+              </h2>
+              <p className="mt-1.5 text-xs leading-5 text-[#6B6B6B]">
+                Tra cứu danh sách cảnh báo đã lưu trữ từ Backend API, kiểm tra ảnh bằng chứng và
+                thực hiện quy trình duyệt danh tính có kiểm toán.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('incidents')}
+            className="mt-5 w-full rounded-md border border-[#EAEAEA] bg-[#F7F6F3] px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#EAEAEA] hover:text-[#111111] transition-colors cursor-pointer"
+          >
+            Vào Cảnh báo An toàn
+          </button>
+        </div>
       </div>
-
-      {/* Combined Active Events Table */}
-      <EventsTable
-        title="Active Safety Detections"
-        subtitle="Combined feed of PPE and Zone events across the site."
-        data={events}
-        columns={columns}
-        keyExtractor={(item) => item.id}
-      />
     </div>
   );
 }
