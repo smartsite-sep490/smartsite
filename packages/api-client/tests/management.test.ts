@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 
+type FetchMock = (url: string, init: RequestInit) => Promise<Response>;
+
+function createFetchMock(responseFactory: () => Response | Promise<Response>) {
+  return vi.fn<FetchMock>(async () => responseFactory());
+}
+
 describe('management client', () => {
   it('creates a contractor representative link with encoded scope IDs', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'assignment-1' }), { status: 201 }));
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'assignment-1' }), { status: 201 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     try {
       const client = new SmartSiteManagementClient('https://api.example.test');
@@ -27,7 +35,9 @@ describe('management client', () => {
   });
 
   it('lists contractor representative assignments for the selected site', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }));
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     try {
       const client = new SmartSiteManagementClient('https://api.example.test');
@@ -49,8 +59,8 @@ describe('management client', () => {
   });
 
   it('assigns a shift to a contractor and lists scoped shift assignments', async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -76,7 +86,7 @@ describe('management client', () => {
   });
 
   it('deletes a site-scoped shift with bearer auth', async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
     try {
       const client = new SmartSiteManagementClient('https://api.example.test');
@@ -152,7 +162,7 @@ describe('management client', () => {
   });
 
   it('uses cookies only for Web refresh/logout and JSON refresh tokens only for Mobile', async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
     try {
       const client = new SmartSiteManagementClient('https://api.example.test');
@@ -230,8 +240,8 @@ describe('management client', () => {
 
   it('fetches alert evidence as an authenticated JPEG blob', async () => {
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = createFetchMock(
+      () =>
         new Response(jpeg, {
           status: 200,
           headers: { 'Content-Type': 'image/jpeg' },
@@ -261,8 +271,8 @@ describe('management client', () => {
   });
 
   it('submits a Site-scoped alert review command with optimistic revision', async () => {
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = createFetchMock(
+      () =>
         new Response(JSON.stringify({ replayed: false, alert: {}, review: {} }), { status: 201 }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -293,8 +303,8 @@ describe('management client', () => {
   });
 
   it('constructs worker and zone access endpoints with encoded scope IDs', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -318,8 +328,8 @@ describe('management client', () => {
   });
 
   it('sends grant creation and revocation mutations with bearer auth', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ id: 'grant-1', effect: 'ALLOW' }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'grant-1', effect: 'ALLOW' }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -352,8 +362,8 @@ describe('management client', () => {
   });
 
   it('constructs shift swap request payload with correct MF07 field names', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_COWORKER' }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_COWORKER' }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -380,8 +390,8 @@ describe('management client', () => {
   });
 
   it('constructs shift change request payload and handles approve/reject mutations', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ id: 'change-1', status: 'PENDING_MANAGER' }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'change-1', status: 'PENDING_MANAGER' }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -416,8 +426,8 @@ describe('management client', () => {
   });
 
   it('handles shift swap confirm, approve, and reject mutations', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_MANAGER' }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_MANAGER' }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -441,8 +451,8 @@ describe('management client', () => {
   });
 
   it('constructs MF07 worker schedule discovery endpoints with encoded IDs', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -464,8 +474,8 @@ describe('management client', () => {
   });
 
   it('serializes worker schedule filters and pagination', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
