@@ -22,7 +22,9 @@ import {
 } from '../../common/configuration/commands.js';
 import { ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
+import { ZoneAuthoritySourceKind } from '../../database/entities/zone-authority-fact-revision.entity.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
+import { executeZoneAuthorityCommand, type ZoneAuthorityActor } from './zone-authority-history.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -76,17 +78,38 @@ export class ZoneConfigurationService {
     private readonly sites: SiteConfigurationService,
   ) {}
 
-  async create(siteId: string, input: CreateZoneCommand): Promise<ZoneEntity> {
+  async create(
+    siteId: string,
+    input: CreateZoneCommand,
+    actor: ZoneAuthorityActor = { kind: 'SERVICE', subject: 'ZONE_CONFIGURATION' },
+  ): Promise<ZoneEntity> {
     const value = command(CreateZoneCommand, input);
     await this.sites.get(siteId);
+    const zoneId = randomUUID();
+    let result: ZoneEntity | undefined;
     try {
-      return await this.dataSource.getRepository(ZoneEntity).save({
-        id: randomUUID(),
-        siteId,
-        ...value,
-        requiredPpe: [...value.requiredPpe].sort(),
-        configurationLocked: false,
-      });
+      await executeZoneAuthorityCommand(
+        this.dataSource,
+        {
+          commandId: randomUUID(),
+          operation: 'ZONE_CREATE',
+          actor,
+          request: { siteId, ...value },
+        },
+        async (manager) => {
+          const zone = await manager.getRepository(ZoneEntity).save({
+            id: zoneId,
+            siteId,
+            ...value,
+            requiredPpe: [...value.requiredPpe].sort(),
+            configurationLocked: false,
+          });
+          result = zone;
+          return [zonePolicyFact(zone, zone.createdAt)];
+        },
+      );
+      if (!result) throw new Error('Zone command did not produce a projection');
+      return result;
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
     }
@@ -130,33 +153,50 @@ export class ZoneConfigurationService {
     siteId: string,
     zoneId: string,
     input: UpdateZonePolicyCommand,
+    actor: ZoneAuthorityActor = { kind: 'SERVICE', subject: 'ZONE_CONFIGURATION' },
   ): Promise<ZoneEntity> {
     const value = command(UpdateZonePolicyCommand, input);
     uuid(siteId);
     uuid(zoneId);
-    return await this.dataSource.transaction(async (manager) => {
-      const zone = await this.lockForRegion(manager, siteId, zoneId);
-      const requiredPpe = [...value.requiredPpe].sort();
-      if (
-        zone.type === value.type &&
-        zone.restrictionPolicy === value.restrictionPolicy &&
-        JSON.stringify([...zone.requiredPpe].sort()) === JSON.stringify(requiredPpe)
-      )
-        return zone;
-      if (zone.configurationLocked) conflict('Zone policy is locked after a region is linked');
-      await manager.getRepository(ZoneEntity).update(
-        { id: zone.id },
-        {
-          type: value.type,
-          restrictionPolicy: value.restrictionPolicy,
-          requiredPpe,
-        },
-      );
-      zone.type = value.type;
-      zone.restrictionPolicy = value.restrictionPolicy;
-      zone.requiredPpe = requiredPpe;
-      return zone;
-    });
+    let result: ZoneEntity | undefined;
+    await executeZoneAuthorityCommand(
+      this.dataSource,
+      {
+        commandId: randomUUID(),
+        operation: 'ZONE_POLICY_UPDATE',
+        actor,
+        request: { siteId, zoneId, ...value },
+      },
+      async (manager) => {
+        const zone = await this.lockForRegion(manager, siteId, zoneId);
+        const requiredPpe = [...value.requiredPpe].sort();
+        if (
+          zone.type === value.type &&
+          zone.restrictionPolicy === value.restrictionPolicy &&
+          JSON.stringify([...zone.requiredPpe].sort()) === JSON.stringify(requiredPpe)
+        ) {
+          result = zone;
+        } else {
+          if (zone.configurationLocked) conflict('Zone policy is locked after a region is linked');
+          await manager.getRepository(ZoneEntity).update(
+            { id: zone.id },
+            {
+              type: value.type,
+              restrictionPolicy: value.restrictionPolicy,
+              requiredPpe,
+            },
+          );
+          zone.type = value.type;
+          zone.restrictionPolicy = value.restrictionPolicy;
+          zone.requiredPpe = requiredPpe;
+          result = zone;
+        }
+        const clock: { now: Date }[] = await manager.query('SELECT statement_timestamp() AS now');
+        return [zonePolicyFact(zone, clock[0]!.now)];
+      },
+    );
+    if (!result) throw new Error('Zone command did not produce a projection');
+    return result;
   }
 
   async lockForRegion(manager: EntityManager, siteId: string, zoneId: string): Promise<ZoneEntity> {
@@ -177,4 +217,15 @@ export class ZoneConfigurationService {
     await manager.getRepository(ZoneEntity).update({ id: zone.id }, { configurationLocked: true });
     zone.configurationLocked = true;
   }
+}
+
+function zonePolicyFact(zone: ZoneEntity, effectiveFrom: Date) {
+  return {
+    sourceKind: ZoneAuthoritySourceKind.ZONE_POLICY,
+    sourceId: zone.id,
+    siteId: zone.siteId,
+    effectiveFrom,
+    effectiveTo: null,
+    payload: { zoneId: zone.id, siteId: zone.siteId, restrictionPolicy: zone.restrictionPolicy },
+  };
 }

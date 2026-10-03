@@ -78,14 +78,26 @@ command/fact audit và epoch theo Site. Assignment và Worker grant có anchor
 Contractor bất biến; bản ghi cũ giữ `NULL`, không backfill từ Worker hiện tại.
 Migration không tạo grant, baseline history hay epoch `READY`.
 
-Đây là storage foundation, chưa nối writer/reader quyền hai tầng hoặc bật xác minh
-Worker live. Payload theo từng loại fact còn phải được validator của writer kiểm tra;
-chỉ có bảng hoặc digest không chứng minh lịch sử đầy đủ. Worker assignment không tự
-cấp quyền Zone. Không áp dụng migration tự động lúc startup hoặc lên Neon chưa duyệt.
+Writer tạo Zone và sửa policy đã ghi projection, command attribution và fact trong cùng
+transaction SERIALIZABLE. Validator kiểm tra payload đóng cho 7 loại fact, scope và trạng
+thái thật của source; revision được tính dưới row lock bằng bigint. Retry toàn transaction
+chỉ áp dụng cho SQLSTATE40001/40P01, tối đa3 lần; hết lượt trả SERVICE_UNAVAILABLE.
+Command cùng ID/actor/request canonical trả lại facts đã lưu; dùng lại ID với request
+khác bị từ chối. Zone HTTP chưa nhận idempotency key từ client: mỗi lần gọi tạo command ID
+mới. USER lấy từ authentication context; lời gọi nội bộ ghi SERVICE, không giả danh USER.
+Mỗi command giới hạn64KiB request và64 facts; vượt giới hạn bị từ chối, không cắt dữ liệu.
+
+Workforce/Worker/Contractor grant writers và reader quyền hai tầng còn cần tích hợp.
+Lịch sử chưa đủ để bật epoch READY hoặc xác minh Worker live; chỉ có bảng/digest không
+chứng minh completeness. Anchor legacy NULL giữ nguyên, không suy từ membership hiện tại.
+Worker assignment không tự cấp quyền Zone. Không áp dụng migration tự động lúc startup
+hoặc lên Neon chưa duyệt. Migration phải chạy trước source sử dụng các bảng audit.
 
 Audit đã có dữ liệu chặn UPDATE/DELETE và TRUNCATE kể cả qua CASCADE; bảng audit rỗng
 cho phép cleanup. Downgrade từ chối nếu có grant Contractor, command/fact/epoch hoặc
 anchor mới để giữ dữ liệu; dùng forward migration khi cần sửa schema đã có audit.
+Các suite authentication/JWT/migration/configuration dùng schema test riêng trên database
+local đã kiểm tra; cleanup chỉ xóa schema do suite đó tạo, không truncate audit của suite khác.
 
 ## Cấu hình môi trường
 

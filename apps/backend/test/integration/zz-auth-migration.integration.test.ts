@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
-import dataSource from '../support/test-data-source.js';
+import { after, before, test } from 'node:test';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ScopedJwtAuthentication1790553600000 } from '../../src/database/migrations/1790553600000-ScopedJwtAuthentication.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const isolatedDatabase = createIsolatedTestDatabase();
+const dataSource = isolatedDatabase.dataSource;
+before(() => isolatedDatabase.initialize());
+
+after(() => isolatedDatabase.dispose());
 
 test('scoped auth migration backfills Admin, deactivates Worker, and invalidates old sessions', async () => {
-  await dataSource.initialize();
+  assert.ok(dataSource.isInitialized);
   await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
   const runner = dataSource.createQueryRunner();
   await runner.connect();
@@ -53,7 +55,7 @@ test('scoped auth migration backfills Admin, deactivates Worker, and invalidates
         (
           await runner.query(`
             SELECT COUNT(*) AS count FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'app_user' AND column_name = 'role'
+            WHERE table_schema = current_schema() AND table_name = 'app_user' AND column_name = 'role'
           `)
         )[0].count,
       ),

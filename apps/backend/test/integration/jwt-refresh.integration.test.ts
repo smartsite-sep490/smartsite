@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
@@ -11,12 +11,14 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { AuthSessionEntity } from '../../src/database/entities/auth-session.entity.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const isolatedDatabase = createIsolatedTestDatabase();
+const dataSource = isolatedDatabase.dataSource;
+before(() => isolatedDatabase.initialize());
+
+after(() => isolatedDatabase.dispose());
 
 test('mobile refresh rotates once and replay revokes the database-backed JWT session', async () => {
-  await dataSource.initialize();
+  assert.ok(dataSource.isInitialized);
   await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
   const users = new UsersService(dataSource, new SiteConfigurationService(dataSource));
   const tokens = new AuthTokenService(new JwtService(), createTestConfig());

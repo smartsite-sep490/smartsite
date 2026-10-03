@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import type { EntitySubscriberInterface } from 'typeorm';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
 import { CameraConfigurationService } from '../../src/modules/cameras/camera-configuration.service.js';
@@ -23,9 +23,11 @@ import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-
 import { CameraObservationRegionEntity } from '../../src/database/entities/camera-observation-region.entity.js';
 import { CameraEntity } from '../../src/database/entities/camera.entity.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const isolatedDatabase = createIsolatedTestDatabase();
+const dataSource = isolatedDatabase.dataSource;
+before(() => isolatedDatabase.initialize());
+
+after(() => isolatedDatabase.dispose());
 
 const triangle = {
   coordinates: [

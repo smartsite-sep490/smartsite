@@ -72,7 +72,7 @@ export class ZonesController {
     @Param('siteId') siteId: string,
     @Body() input: CreateZoneCommand,
   ) {
-    const zone = await this.zones.create(siteId, input);
+    const zone = await this.zones.create(siteId, input, { kind: 'USER', userId: request.user!.id });
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.create',
@@ -126,7 +126,10 @@ export class ZonesController {
     @Param('zoneId') zoneId: string,
     @Body() input: UpdateZonePolicyCommand,
   ) {
-    const zone = await this.zones.updatePolicy(siteId, zoneId, input);
+    const zone = await this.zones.updatePolicy(siteId, zoneId, input, {
+      kind: 'USER',
+      userId: request.user!.id,
+    });
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.policy',

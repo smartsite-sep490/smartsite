@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
@@ -14,17 +14,19 @@ import {
 import { createTestConfig } from '../support/config.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const isolatedDatabase = createIsolatedTestDatabase();
+const dataSource = isolatedDatabase.dataSource;
+before(() => isolatedDatabase.initialize());
+
+after(() => isolatedDatabase.dispose());
 
 test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule', async () => {
-  await dataSource.initialize();
+  assert.ok(dataSource.isInitialized);
   // Bootstrap requires an empty account table; this is the dedicated disposable test database.
   await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
   const columns = (await dataSource.query(`
     SELECT table_name, column_name FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name IN ('app_user', 'auth_session', 'user_role_assignment')
+    WHERE table_schema = current_schema() AND table_name IN ('app_user', 'auth_session', 'user_role_assignment')
   `)) as { table_name: string; column_name: string }[];
   assert.ok(
     columns.some((row) => row.table_name === 'app_user' && row.column_name === 'password_hash'),
@@ -72,22 +74,14 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   assert.equal((await auth.authenticate(firstLogin.accessToken)).user.id, admin.id);
   await auth.changePassword(admin.id, adminPassword, 'NewAdmin123!');
   await assert.rejects(auth.authenticate(firstLogin.accessToken));
-  const secondLogin = await auth.login(
-    admin.username,
-    'NewAdmin123!',
-    AuthClientType.MOBILE,
-  );
+  const secondLogin = await auth.login(admin.username, 'NewAdmin123!', AuthClientType.MOBILE);
   assert.equal(secondLogin.user.mustChangePassword, false);
   const secondSession = await auth.authenticate(secondLogin.accessToken);
   await dataSource
     .getRepository(AuthSessionEntity)
     .update({ id: secondSession.sessionId }, { expiresAt: new Date(Date.now() - 1000) });
   await assert.rejects(auth.authenticate(secondLogin.accessToken));
-  const activeLogin = await auth.login(
-    admin.username,
-    'NewAdmin123!',
-    AuthClientType.MOBILE,
-  );
+  const activeLogin = await auth.login(admin.username, 'NewAdmin123!', AuthClientType.MOBILE);
   const site = await sites.create({ code: `AUTH-${suffix}`, name: 'Auth Site' });
   const secondSite = await sites.create({ code: `AUTH2-${suffix}`, name: 'Second Auth Site' });
   const worker = await users.create({
@@ -99,11 +93,7 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     ],
     temporaryPassword: 'WorkerTemp123!',
   });
-  const workerLogin = await auth.login(
-    worker.username,
-    'WorkerTemp123!',
-    AuthClientType.MOBILE,
-  );
+  const workerLogin = await auth.login(worker.username, 'WorkerTemp123!', AuthClientType.MOBILE);
   assert.deepEqual(worker.roleAssignments, [
     { role: UserRole.SAFETY_OFFICER, siteId: secondSite.id },
     { role: UserRole.SITE_MANAGER, siteId: site.id },
@@ -154,11 +144,7 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   await assert.rejects(auth.authenticate(workerLogin.accessToken));
   await users.resetPassword(worker.id, { temporaryPassword: 'WorkerReset123!' });
   await assert.rejects(auth.login(worker.username, 'WorkerTemp123!'));
-  const resetLogin = await auth.login(
-    worker.username,
-    'WorkerReset123!',
-    AuthClientType.MOBILE,
-  );
+  const resetLogin = await auth.login(worker.username, 'WorkerReset123!', AuthClientType.MOBILE);
   assert.equal(resetLogin.user.mustChangePassword, true);
   await assert.rejects(users.setStatus(admin.id, admin.id, { isActive: false }));
   await assert.rejects(
