@@ -401,7 +401,7 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
         <AccessControlView apiUrl="https://api.example.test" />
       </QueryClientProvider>,
     );
-    await screen.findByText('Chưa có yêu cầu tại site này.');
+    await screen.findByText('No visitor pass requests at this site.');
     expect(visits).toHaveBeenCalledWith('mock-admin-token', 'site-alpha');
     expect(screen.queryByRole('button', { name: /MF01 Worker Biometrics/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /MF06 Zone Permissions/i })).toBeNull();
@@ -420,7 +420,7 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
         <AccessControlView apiUrl="https://api.example.test" />
       </QueryClientProvider>,
     );
-    await screen.findByRole('button', { name: 'Lấy QR của tôi' });
+    await screen.findByRole('button', { name: 'Get My QR' });
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
   });

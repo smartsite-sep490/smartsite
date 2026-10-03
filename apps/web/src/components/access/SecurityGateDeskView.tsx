@@ -569,8 +569,8 @@ export function SecurityGateDeskView({
                         <IconKey className="h-3.5 w-3.5" />
                         <span>
                           {fallbackMutation.isPending
-                            ? 'Đang mở phiên…'
-                            : 'Camera lỗi · Dùng QR dự phòng'}
+                            ? 'Opening Session…'
+                            : 'Camera Error · Use Fallback QR'}
                         </span>
                       </button>
                     )}
@@ -807,7 +807,7 @@ export function SecurityGateDeskView({
               </li>
               <li>
                 For inconclusive face matches, give the worker a fallback session ID and request
-                their dynamic pass from “QR của tôi”.
+                their dynamic pass from “My QR Pass”.
               </li>
             </ul>
           </div>
@@ -825,7 +825,7 @@ export function SecurityGateDeskView({
               </div>
               <button
                 type="button"
-                aria-label="Đóng quét QR dự phòng"
+                aria-label="Close QR fallback modal"
                 onClick={() => setQrModalOpen(false)}
                 className="rounded-lg p-1 text-slate-400 hover:text-slate-600"
               >
@@ -839,20 +839,20 @@ export function SecurityGateDeskView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
                       <IconKey className="h-3.5 w-3.5 text-blue-600" />
-                      Mã phiên dự phòng cho Worker
+                      Worker Fallback Session
                     </span>
                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800">
-                      Hướng: {fallback.direction}
+                      Direction: {fallback.direction}
                     </span>
                   </div>
                   <p className="text-xs text-blue-800">
-                    Đưa mã phiên cho worker nhập vào mục “QR của tôi”:
+                    Provide this session code to the worker to enter in “My QR Pass”:
                   </p>
                   <div className="rounded-xl border border-blue-200 bg-white p-2.5 font-mono text-xs text-blue-950 font-bold break-all select-all shadow-inner">
                     {fallback.id}
                   </div>
                   <p className="text-[11px] text-blue-700">
-                    Hết hạn: <span className="font-semibold">{new Date(fallback.expiresAt).toLocaleTimeString()}</span>
+                    Expires: <span className="font-semibold">{new Date(fallback.expiresAt).toLocaleTimeString()}</span>
                   </p>
                 </div>
               )}

@@ -47,10 +47,10 @@ export function WorkerMobileQrView({
             </div>
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight text-white">
-                QR dự phòng · {workerName}
+                Fallback QR · {workerName}
               </h2>
               <p className="mt-0.5 text-xs text-slate-300">
-                Xác thực cổng dự phòng khi camera lỗi hoặc nhận diện không kết luận được
+                Emergency gate access fallback when webcam fails or face verification is inconclusive
               </p>
             </div>
           </div>
@@ -63,19 +63,19 @@ export function WorkerMobileQrView({
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF7A1A]/15 font-bold text-[#FF7A1A]">
                 1
               </span>
-              <p className="text-slate-600">Nhận mã phiên từ bảo vệ tại cổng</p>
+              <p className="text-slate-600">Receive session code from security officer at gate</p>
             </div>
             <div className="flex items-start gap-2.5">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF7A1A]/15 font-bold text-[#FF7A1A]">
                 2
               </span>
-              <p className="text-slate-600">Nhập mã vào ô bên dưới</p>
+              <p className="text-slate-600">Enter the session code below</p>
             </div>
             <div className="flex items-start gap-2.5">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF7A1A]/15 font-bold text-[#FF7A1A]">
                 3
               </span>
-              <p className="text-slate-600">Xuất trình mã QR tại đầu đọc</p>
+              <p className="text-slate-600">Present dynamic QR code at scanner</p>
             </div>
           </div>
         </div>
@@ -85,7 +85,7 @@ export function WorkerMobileQrView({
           <form onSubmit={submit} className="space-y-4">
             <div>
               <label htmlFor="fallback-session-id" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Mã phiên từ bảo vệ
+                Officer Session Code
               </label>
               <div className="relative mt-1.5">
                 <input
@@ -97,7 +97,7 @@ export function WorkerMobileQrView({
                     pass.reset();
                   }}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-3 font-mono text-sm tracking-wide text-slate-900 placeholder:font-sans placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
-                  placeholder="Mã phiên UUID (ví dụ: b81a5d44-...)"
+                  placeholder="Session UUID (e.g. b81a5d44-...)"
                 />
               </div>
             </div>
@@ -110,12 +110,12 @@ export function WorkerMobileQrView({
               {pass.isPending ? (
                 <>
                   <IconLoader className="h-4 w-4" />
-                  <span>Đang lấy QR…</span>
+                  <span>Generating QR…</span>
                 </>
               ) : (
                 <>
                   <IconKey className="h-4 w-4" />
-                  <span>Lấy QR của tôi</span>
+                  <span>Get My QR</span>
                 </>
               )}
             </button>
@@ -142,7 +142,7 @@ export function WorkerMobileQrView({
           <div className="flex items-start gap-2.5 text-xs text-amber-900">
             <IconShield className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
             <p className="leading-relaxed">
-              Backend vẫn kiểm tra quyền cổng, trạng thái worker và nhà thầu trước khi cho phép IN/OUT.
+              Backend enforces gate clearance rules, worker status, and contractor credentials before authorizing IN/OUT.
             </p>
           </div>
         </div>

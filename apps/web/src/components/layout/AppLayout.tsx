@@ -90,7 +90,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           label: 'Workspace',
           items: [
             { id: 'workforce', label: 'My Schedule & Requests', icon: IconUsers },
-            { id: 'access', label: 'QR của tôi', icon: IconKey },
+            { id: 'access', label: 'My QR Pass', icon: IconKey },
           ],
         },
       ]

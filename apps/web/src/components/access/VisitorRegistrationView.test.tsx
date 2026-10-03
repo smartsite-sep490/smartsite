@@ -12,6 +12,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   window.history.replaceState(null, '', '/');
 });
+
 it('routes a representative group registration to the selected site and shows QR only after approval', async () => {
   const user = userEvent.setup();
   const queryClient = new QueryClient({
@@ -54,22 +55,22 @@ it('routes a representative group registration to the selected site and shows QR
     </QueryClientProvider>,
   );
   await screen.findByRole('option', { name: 'Beta' });
-  await user.selectOptions(screen.getByLabelText('Site đăng ký'), 'site-beta');
-  await user.type(screen.getByLabelText('Tên người đại diện'), visit.visitorName);
-  await user.type(screen.getByLabelText('Điện thoại / email liên hệ'), visit.contact);
-  await user.type(screen.getByLabelText('Người tiếp đón tại site'), visit.hostName);
-  await user.type(screen.getByLabelText('Mục đích tham quan'), visit.purpose);
-  await user.type(screen.getByLabelText('Khu vực đề nghị tham quan'), visit.targetArea);
-  await user.clear(screen.getByLabelText('Số lượng người'));
-  await user.type(screen.getByLabelText('Số lượng người'), '20');
-  await user.click(screen.getByRole('button', { name: 'Gửi Site Manager duyệt' }));
-  await screen.findByText('Trạng thái: Chờ Site Manager duyệt');
+  await user.selectOptions(screen.getByLabelText('Registration Site'), 'site-beta');
+  await user.type(screen.getByLabelText('Representative Full Name'), visit.visitorName);
+  await user.type(screen.getByLabelText('Contact Phone / Email'), visit.contact);
+  await user.type(screen.getByLabelText('Host Contact at Site'), visit.hostName);
+  await user.type(screen.getByLabelText('Visit Purpose'), visit.purpose);
+  await user.type(screen.getByLabelText('Target Visit Area'), visit.targetArea);
+  await user.clear(screen.getByLabelText('Total Visitors (Headcount)'));
+  await user.type(screen.getByLabelText('Total Visitors (Headcount)'), '20');
+  await user.click(screen.getByRole('button', { name: 'Submit for Site Manager Approval' }));
+  await screen.findByText('Status: Pending Site Manager Approval');
   expect(register).toHaveBeenCalledWith(
     'site-beta',
     expect.objectContaining({ groupSize: 20, visitorName: visit.visitorName }),
   );
   expect(screen.queryByTitle('SmartSite access QR')).toBeNull();
-  const reference = screen.getByLabelText('Đường dẫn theo dõi lượt tham quan') as HTMLInputElement;
+  const reference = screen.getByLabelText('Visitor Pass Tracking Link') as HTMLInputElement;
   expect(reference.value).toContain(`#visitor-pass=${visit.id}.`);
   lookup.mockResolvedValue({
     visit: { ...visit, status: 'APPROVED' },
@@ -78,7 +79,7 @@ it('routes a representative group registration to the selected site and shows QR
       expiresAt: new Date(Date.now() + 300_000).toISOString(),
     },
   });
-  await user.click(screen.getByRole('button', { name: 'Kiểm tra trạng thái / làm mới QR' }));
+  await user.click(screen.getByRole('button', { name: 'Check Status / Refresh QR' }));
   await waitFor(() => expect(screen.getByTitle('SmartSite access QR')).toBeTruthy());
   const svg = screen.getByRole('img', { name: 'SmartSite access QR' });
   const exportedSvg = new DOMParser().parseFromString(svg.outerHTML, 'image/svg+xml');

@@ -119,7 +119,7 @@ export function VisitorRegistrationView({
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 underline transition-colors"
         >
-          <span>Đăng nhập nhân viên / bảo vệ / Site Manager</span>
+          <span>Staff / Security / Site Manager Login</span>
         </button>
       </div>
 
@@ -128,14 +128,14 @@ export function VisitorRegistrationView({
         <div className="space-y-2 border-b border-slate-100 pb-6">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#FF7A1A] border border-orange-100">
             <IconKey className="h-3.5 w-3.5" />
-            Giấy Phép Ra Vào Tạm Thời
+            Temporary Access Pass
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
-            Đăng ký tham quan công trường
+            Visitor Site Registration
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Một người đại diện cho cá nhân hoặc cả đoàn. Yêu cầu được chuyển đến Site Manager của
-            site đã chọn.
+            One representative for an individual or entire party. Requests are routed to the Site
+            Manager of the selected site for clearance.
           </p>
         </div>
 
@@ -148,7 +148,7 @@ export function VisitorRegistrationView({
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Lưu liên kết tra cứu
+                  Save Tracking Link
                 </span>
                 {message && (
                   <span role="status" className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
@@ -158,11 +158,11 @@ export function VisitorRegistrationView({
                 )}
               </div>
               <p className="text-xs text-slate-500">
-                Lưu đường dẫn này để kiểm tra phê duyệt và mở QR trên điện thoại.
+                Save this link to check approval status and access your QR pass on mobile.
               </p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
-                  aria-label="Đường dẫn theo dõi lượt tham quan"
+                  aria-label="Visitor Pass Tracking Link"
                   readOnly
                   value={shareUrl}
                   className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-mono text-xs text-slate-800 focus:outline-none"
@@ -172,8 +172,8 @@ export function VisitorRegistrationView({
                   onClick={() => {
                     void navigator.clipboard
                       .writeText(shareUrl)
-                      .then(() => setMessage('Đã sao chép.'))
-                      .catch(() => setMessage('Chọn và sao chép đường dẫn ở trên.'));
+                      .then(() => setMessage('Copied to clipboard.'))
+                      .catch(() => setMessage('Select and copy the URL above.'));
                   }}
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition-all shadow-xs"
                 >
@@ -185,7 +185,7 @@ export function VisitorRegistrationView({
                       d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                     />
                   </svg>
-                  <span>Sao chép đường dẫn</span>
+                  <span>Copy Tracking Link</span>
                 </button>
               </div>
             </div>
@@ -194,7 +194,7 @@ export function VisitorRegistrationView({
             {pass.isPending && (
               <div role="status" className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
                 <IconLoader className="h-4 w-4" />
-                <span>Đang kiểm tra…</span>
+                <span>Checking approval status…</span>
               </div>
             )}
 
@@ -215,7 +215,7 @@ export function VisitorRegistrationView({
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
                     <div>
                       <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                        {pass.data.visit.visitorName} · {pass.data.visit.groupSize} người
+                        {pass.data.visit.visitorName} · {pass.data.visit.groupSize} visitors
                       </h2>
                       <p className="mt-1 text-xs text-slate-500">
                         Site:{' '}
@@ -247,12 +247,12 @@ export function VisitorRegistrationView({
                           }`}
                         />
                         <span>
-                          Trạng thái:{' '}
+                          Status:{' '}
                           {pass.data.visit.status === 'PENDING'
-                            ? 'Chờ Site Manager duyệt'
+                            ? 'Pending Site Manager Approval'
                             : pass.data.visit.status === 'APPROVED'
-                              ? 'Đã duyệt'
-                              : 'Bị từ chối'}
+                              ? 'Approved'
+                              : 'Rejected'}
                         </span>
                       </span>
                     </div>
@@ -261,16 +261,16 @@ export function VisitorRegistrationView({
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
                     <div className="rounded-xl bg-slate-50 p-3 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Khu vực & Người tiếp đón
+                        Target Area & Host Contact
                       </span>
                       <p className="text-slate-800 font-semibold">
-                        Khu vực: {pass.data.visit.targetArea} · Host: {pass.data.visit.hostName}
+                        Area: {pass.data.visit.targetArea} · Host: {pass.data.visit.hostName}
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-3 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Khung giờ hiệu lực
+                        Authorized Schedule
                       </span>
                       <p className="font-mono text-slate-800">
                         {new Date(pass.data.visit.validFrom).toLocaleString()} –{' '}
@@ -280,14 +280,14 @@ export function VisitorRegistrationView({
 
                     <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Thống kê ra / vào
+                        Entry / Exit Headcount
                       </span>
                       <p className="font-medium text-slate-800">
-                        Vào: {pass.data.visit.enteredCount} · Ra: {pass.data.visit.exitedCount} · Còn:{' '}
+                        In: {pass.data.visit.enteredCount} · Out: {pass.data.visit.exitedCount} · On-site:{' '}
                         <span className="font-bold text-[#FF7A1A]">
                           {pass.data.visit.enteredCount - pass.data.visit.exitedCount}
                         </span>{' '}
-                        người trong công trường
+                        visitors in site
                       </p>
                     </div>
                   </div>
@@ -300,7 +300,7 @@ export function VisitorRegistrationView({
                   ) : (
                     pass.data.visit.status === 'APPROVED' && (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-500">
-                        Lượt tham quan đã hết hạn hoặc hoàn tất.
+                        Visit pass has concluded or expired.
                       </div>
                     )
                   )}
@@ -317,7 +317,7 @@ export function VisitorRegistrationView({
                 onClick={() => void pass.refetch()}
               >
                 <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
-                <span>Kiểm tra trạng thái / làm mới QR</span>
+                <span>Check Status / Refresh QR</span>
               </button>
 
               <button
@@ -330,7 +330,7 @@ export function VisitorRegistrationView({
                   window.history.replaceState(null, '', window.location.pathname);
                 }}
               >
-                <span>Đăng ký lượt mới</span>
+                <span>Register New Visit</span>
               </button>
             </div>
           </div>
@@ -343,19 +343,19 @@ export function VisitorRegistrationView({
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconBuilding2 className="h-3.5 w-3.5" />
-                1. Thông tin công trường & Cổng vào
+                1. Site & Designated Gate
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Site đăng ký
+                  Registration Site
                   <select
                     required
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                     value={siteId || sites.data?.items[0]?.id || ''}
                     onChange={(e) => setSiteId(e.target.value)}
                   >
-                    <option value="">Chọn site</option>
+                    <option value="">Select site</option>
                     {sites.data?.items.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -367,7 +367,7 @@ export function VisitorRegistrationView({
                 {sites.isPending && (
                   <div className="flex items-center gap-2 text-xs text-slate-500 sm:col-span-2">
                     <IconLoader className="h-3.5 w-3.5" />
-                    <span>Đang tải site…</span>
+                    <span>Loading sites…</span>
                   </div>
                 )}
 
@@ -379,13 +379,13 @@ export function VisitorRegistrationView({
                       className="underline font-bold"
                       onClick={() => void sites.refetch()}
                     >
-                      Thử lại
+                      Retry
                     </button>
                   </div>
                 )}
 
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Cổng đăng ký
+                  Designated Gate
                   <select
                     name="gateId"
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
@@ -404,38 +404,38 @@ export function VisitorRegistrationView({
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconUser className="h-3.5 w-3.5" />
-                2. Thông tin người đại diện
+                2. Representative Information
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Tên người đại diện
+                  Representative Full Name
                   <input
                     name="visitorName"
                     required
                     maxLength={255}
-                    placeholder="Họ và tên người đại diện"
+                    placeholder="Full name of party representative"
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Đơn vị / công ty
+                  Company / Organization
                   <input
                     name="company"
                     maxLength={255}
-                    placeholder="Tên công ty hoặc cơ quan (nếu có)"
+                    placeholder="Company or agency name (optional)"
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Điện thoại / email liên hệ
+                  Contact Phone / Email
                   <input
                     name="contact"
                     required
                     maxLength={255}
-                    placeholder="Số điện thoại hoặc địa chỉ email"
+                    placeholder="Phone number or email address"
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
@@ -446,39 +446,39 @@ export function VisitorRegistrationView({
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconShield className="h-3.5 w-3.5" />
-                3. Người tiếp đón & Khu vực tham quan
+                3. Host & Visit Purpose
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Người tiếp đón tại site
+                  Host Contact at Site
                   <input
                     name="hostName"
                     required
                     maxLength={255}
-                    placeholder="Tên kỹ sư / quản lý tiếp đón"
+                    placeholder="Name of site host / supervising engineer"
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Khu vực đề nghị tham quan
+                  Target Visit Area
                   <input
                     name="targetArea"
                     required
                     maxLength={255}
-                    placeholder="Ví dụ: Tòa nhà A, Nhà điều hành..."
+                    placeholder="e.g. Building A, Admin Block, Foundation..."
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Mục đích tham quan
+                  Visit Purpose
                   <input
                     name="purpose"
                     required
                     maxLength={1000}
-                    placeholder="Nêu rõ lý do ra vào hoặc công tác..."
+                    placeholder="Reason for site entry or official inspection..."
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
@@ -489,12 +489,12 @@ export function VisitorRegistrationView({
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconCalendar className="h-3.5 w-3.5" />
-                4. Thời gian & Số lượng người
+                4. Schedule & Headcount
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Số lượng người
+                  Total Visitors (Headcount)
                   <input
                     name="groupSize"
                     type="number"
@@ -507,7 +507,7 @@ export function VisitorRegistrationView({
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Từ thời điểm
+                  Valid From
                   <input
                     name="validFrom"
                     type="datetime-local"
@@ -518,7 +518,7 @@ export function VisitorRegistrationView({
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Đến thời điểm
+                  Valid Until
                   <input
                     name="validUntil"
                     type="datetime-local"
@@ -551,12 +551,12 @@ export function VisitorRegistrationView({
                 {register.isPending ? (
                   <>
                     <IconLoader className="h-4 w-4" />
-                    <span>Đang gửi…</span>
+                    <span>Submitting…</span>
                   </>
                 ) : (
                   <>
                     <IconCheck className="h-4 w-4" />
-                    <span>Gửi Site Manager duyệt</span>
+                    <span>Submit for Site Manager Approval</span>
                   </>
                 )}
               </button>

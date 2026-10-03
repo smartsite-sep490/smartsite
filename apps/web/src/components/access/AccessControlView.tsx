@@ -39,9 +39,9 @@ const ACCESS_TABS: readonly TabDefinition[] = [
   {
     id: 'worker-qr',
     code: 'MF02 QR',
-    label: 'QR của tôi',
-    subLabel: 'Worker QR fallback',
-    description: 'QR for an authorized gate fallback session',
+    label: 'My QR Pass',
+    subLabel: 'Worker QR Fallback',
+    description: 'Dynamic QR pass for an authorized gate fallback session',
     icon: IconKey,
   },
   {

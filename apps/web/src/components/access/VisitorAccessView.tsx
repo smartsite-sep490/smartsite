@@ -65,7 +65,7 @@ export function VisitorAccessView({
     mutationFn: (input: VisitorGateCommand) => client.verifyVisitorQr(token, siteId, gateId, input),
     onSuccess: (r) => {
       setMessage(
-        `Đã ghi ${r.direction}: ${r.count} người · ${r.visit.visitorName}. Còn ${r.visit.enteredCount - r.visit.exitedCount} người trong site.`,
+        `Recorded ${r.direction}: ${r.count} people · ${r.visit.visitorName}. Remaining on site: ${r.visit.enteredCount - r.visit.exitedCount} visitors.`,
       );
       setQrToken('');
       pending.current = null;
@@ -132,16 +132,16 @@ export function VisitorAccessView({
                 MF04 QR
               </span>
               <span className="text-xs font-semibold text-slate-500">
-                {canApprove ? 'Quyền phê duyệt Site Manager' : 'Chỉ xem / Quét cổng'}
+                {canApprove ? 'Site Manager Approval Authority' : 'View-Only / Gate Scanner'}
               </span>
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-              Lượt tham quan · {siteName}
+              Visitor Access Passes · {siteName}
             </h2>
             <p className="text-xs text-slate-500 leading-relaxed">
               {canApprove
-                ? 'Danh sách yêu cầu gửi Site Manager của site này duyệt.'
-                : 'Site Manager tại site đăng ký duyệt trước khi visitor nhận QR.'}
+                ? 'Pass requests routed to the Site Manager of this site for approval.'
+                : 'Site Manager clearance is required before visitors receive dynamic QR passes.'}
             </p>
           </div>
 
@@ -152,7 +152,7 @@ export function VisitorAccessView({
               rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-xl bg-[#FF7A1A] px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#E56A10] transition-all"
             >
-              <span>Mở trang đăng ký dành cho visitor</span>
+              <span>Open Visitor Registration Portal</span>
               <IconArrowRight className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -162,11 +162,11 @@ export function VisitorAccessView({
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Tổng lượt đăng ký
+              Total Registrations
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-black text-slate-900">{metrics.total}</span>
-              <span className="text-xs text-slate-400">lượt</span>
+              <span className="text-xs text-slate-400">passes</span>
             </div>
           </div>
 
@@ -178,7 +178,7 @@ export function VisitorAccessView({
             }`}
           >
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Chờ phê duyệt
+              Pending Approval
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span
@@ -188,7 +188,7 @@ export function VisitorAccessView({
               >
                 {metrics.pendingCount}
               </span>
-              <span className="text-xs text-slate-400">yêu cầu</span>
+              <span className="text-xs text-slate-400">requests</span>
             </div>
           </div>
 
@@ -200,7 +200,7 @@ export function VisitorAccessView({
             }`}
           >
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Đang trong công trường
+              Currently On-Site
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span
@@ -210,17 +210,17 @@ export function VisitorAccessView({
               >
                 {metrics.currentlyInside}
               </span>
-              <span className="text-xs text-slate-400">người</span>
+              <span className="text-xs text-slate-400">visitors</span>
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Đã được duyệt
+              Approved Passes
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-black text-slate-900">{metrics.approved}</span>
-              <span className="text-xs text-slate-400">lượt</span>
+              <span className="text-xs text-slate-400">cleared</span>
             </div>
           </div>
         </div>
@@ -233,11 +233,11 @@ export function VisitorAccessView({
           <div className="flex flex-wrap items-center gap-1.5">
             {(
               [
-                { id: 'ALL' as const, label: 'Tất cả' },
-                { id: 'PENDING' as const, label: 'Chờ duyệt', count: metrics.pendingCount },
-                { id: 'APPROVED' as const, label: 'Đã duyệt' },
-                { id: 'INSIDE' as const, label: 'Đang trong site' },
-                { id: 'REJECTED' as const, label: 'Từ chối' },
+                { id: 'ALL' as const, label: 'All' },
+                { id: 'PENDING' as const, label: 'Pending', count: metrics.pendingCount },
+                { id: 'APPROVED' as const, label: 'Approved' },
+                { id: 'INSIDE' as const, label: 'On-Site' },
+                { id: 'REJECTED' as const, label: 'Rejected' },
               ] as {
                 id: 'ALL' | 'PENDING' | 'APPROVED' | 'INSIDE' | 'REJECTED';
                 label: string;
@@ -268,7 +268,7 @@ export function VisitorAccessView({
             <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Tìm theo tên khách, công ty, host..."
+              placeholder="Search by visitor, company, host..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
@@ -280,7 +280,7 @@ export function VisitorAccessView({
         {visits.isPending && (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
             <IconLoader className="h-4 w-4" />
-            <p>Đang tải lượt tham quan…</p>
+            <p>Loading visitor passes…</p>
           </div>
         )}
 
@@ -295,7 +295,7 @@ export function VisitorAccessView({
               className="inline-flex items-center gap-1 underline hover:text-rose-900"
             >
               <IconRefresh className="h-3 w-3" />
-              <span>Thử lại</span>
+              <span>Retry</span>
             </button>
           </div>
         )}
@@ -305,7 +305,7 @@ export function VisitorAccessView({
             role="alert"
             className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
           >
-            <IconAlertTriangle className="h-4 w-4 shrink-0" />
+            <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
             <span>{decide.error.message}</span>
           </div>
         )}
@@ -314,16 +314,16 @@ export function VisitorAccessView({
         {rawItems.length === 0 && !visits.isPending && !visits.error && (
           <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
             <IconUsers className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-            <p className="text-sm font-semibold text-slate-600">Chưa có yêu cầu tại site này.</p>
+            <p className="text-sm font-semibold text-slate-600">No visitor pass requests at this site.</p>
             <p className="mt-1 text-xs text-slate-400">
-              Chia sẻ trang đăng ký cho khách tham quan hoặc đối tác để nhận yêu cầu.
+              Share the registration portal with visitors or contractors to receive requests.
             </p>
           </div>
         )}
 
         {rawItems.length > 0 && filteredVisits.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-xs text-slate-500">
-            Không tìm thấy lượt tham quan nào phù hợp với bộ lọc hiện tại.
+            No visitor requests match the active filter criteria.
           </div>
         )}
 
@@ -333,7 +333,7 @@ export function VisitorAccessView({
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-200 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  {['Đại diện / liên hệ', 'Lịch / cổng / khu vực', 'Số lượng', 'Trạng thái / duyệt'].map(
+                  {['Representative / Contact', 'Schedule / Gate / Target Area', 'Headcount', 'Status / Clearance'].map(
                     (header) => (
                       <th key={header} className="px-4 py-3.5 font-semibold">
                         {header}
@@ -398,11 +398,11 @@ export function VisitorAccessView({
                       <td className="px-4 py-3.5 space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold text-slate-900">
-                            Đăng ký: {v.groupSize}
+                            Registered: {v.groupSize}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 font-mono">
-                          Vào: {v.enteredCount} · Ra: {v.exitedCount}
+                          In: {v.enteredCount} · Out: {v.exitedCount}
                         </p>
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
@@ -416,7 +416,7 @@ export function VisitorAccessView({
                               inside > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
                             }`}
                           />
-                          Còn: {inside} người
+                          On-site: {inside} visitors
                         </span>
                       </td>
 
@@ -451,7 +451,7 @@ export function VisitorAccessView({
                               onClick={() => decide.mutate({ id: v.id, status: 'APPROVED' })}
                             >
                               <IconCheck className="h-3.5 w-3.5" />
-                              <span>Duyệt</span>
+                              <span>Approve</span>
                             </button>
                             <button
                               disabled={decide.isPending}
@@ -459,7 +459,7 @@ export function VisitorAccessView({
                               onClick={() => decide.mutate({ id: v.id, status: 'REJECTED' })}
                             >
                               <IconX className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Từ chối</span>
+                              <span>Reject</span>
                             </button>
                           </div>
                         )}
@@ -481,10 +481,10 @@ export function VisitorAccessView({
           </div>
           <div>
             <h2 className="text-lg font-bold tracking-tight text-slate-900">
-              Quét QR visitor tại cổng
+              Scan Visitor QR at Gate
             </h2>
             <p className="text-xs text-slate-500">
-              Đọc mã QR động của khách tham quan và xác nhận số lượng vào / ra thực tế
+              Verify dynamic visitor QR code and record actual group entry / exit headcount
             </p>
           </div>
         </div>
@@ -494,7 +494,7 @@ export function VisitorAccessView({
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Cổng kiểm soát
+                Designated Gate
                 <select
                   disabled={verify.isPending}
                   value={gateId}
@@ -512,7 +512,7 @@ export function VisitorAccessView({
 
             <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
               <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Camera / Tải ảnh QR
+                Camera / Upload QR
               </span>
               <QrScannerView
                 disabled={verify.isPending}
@@ -528,12 +528,12 @@ export function VisitorAccessView({
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                QR token
+                QR Token
                 <input
                   disabled={verify.isPending}
                   value={qrToken}
                   onChange={(e) => setQrToken(e.target.value)}
-                  placeholder="Nhập hoặc quét mã token (SSQ-...)"
+                  placeholder="Enter or scan token (SSQ-...)"
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 font-mono text-xs text-slate-900 placeholder:font-sans placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                 />
               </label>
@@ -541,7 +541,7 @@ export function VisitorAccessView({
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Số người thực tế
+                Actual Headcount
               </label>
               <div className="mt-1.5 flex items-center gap-2">
                 <button
@@ -569,7 +569,7 @@ export function VisitorAccessView({
                 >
                   +
                 </button>
-                <span className="text-xs text-slate-500 ml-2">người theo đoàn qua cổng</span>
+                <span className="text-xs text-slate-500 ml-2">visitors passing through gate</span>
               </div>
             </div>
 
@@ -613,7 +613,7 @@ export function VisitorAccessView({
                       />
                     </svg>
                   )}
-                  <span>Xác nhận {d}</span>
+                  <span>Confirm Check-{d === 'IN' ? 'in (IN)' : 'out (OUT)'}</span>
                 </button>
               ))}
             </div>

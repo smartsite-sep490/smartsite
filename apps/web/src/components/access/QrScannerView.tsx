@@ -34,7 +34,7 @@ export function QrScannerView({
     );
     void scanner.start().catch(() => {
       if (!cancelled) {
-        setError('Không mở được camera. Thử đọc ảnh QR hoặc dùng máy quét/nhập token.');
+        setError('Unable to access camera. Try uploading a QR image or entering the token manually.');
         setActive(false);
       }
     });
@@ -64,12 +64,12 @@ export function QrScannerView({
           {active ? (
             <>
               <IconX className="h-4 w-4" />
-              <span>Dừng quét</span>
+              <span>Stop Scanner</span>
             </>
           ) : (
             <>
               <IconCamera className="h-4 w-4" />
-              <span>Quét QR bằng camera</span>
+              <span>Scan with Camera</span>
             </>
           )}
         </button>
@@ -87,9 +87,9 @@ export function QrScannerView({
               d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
             />
           </svg>
-          <span>Đọc ảnh QR</span>
+          <span>Upload QR Image</span>
           <input
-            aria-label="Tải ảnh QR để quét"
+            aria-label="Upload QR image to scan"
             type="file"
             accept="image/*"
             disabled={disabled}
@@ -101,7 +101,7 @@ export function QrScannerView({
               setError('');
               void QrScanner.scanImage(file, { returnDetailedScanResult: true })
                 .then((r) => callback.current(r.data))
-                .catch(() => setError('Không đọc được QR trong ảnh.'));
+                .catch(() => setError('No valid QR code found in the image.'));
             }}
           />
         </label>
@@ -130,7 +130,7 @@ export function QrScannerView({
               <div className="absolute inset-x-2 top-1/2 h-0.5 bg-gradient-to-r from-transparent via-[#FF7A1A] to-transparent animate-pulse shadow-[0_0_8px_#FF7A1A]" />
             </div>
             <p className="mt-3 text-[11px] font-medium tracking-wide text-white/90 drop-shadow">
-              Căn chỉnh mã QR vào trong khung vuông
+              Align QR code inside the viewfinder
             </p>
           </div>
         </div>
