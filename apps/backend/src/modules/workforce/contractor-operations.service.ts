@@ -370,7 +370,7 @@ export class ContractorOperationsService {
     if (zoneIds.length !== value.zoneIds.length) conflict('Zone IDs must be unique');
     const range = timeRange(value.validFrom, value.validUntil);
     return this.dataSource.transaction(async (manager) => {
-      const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId });
+      const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
       if (!worker?.contractorId || !worker.isActive) this.forbidden();
       await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
       await this.requireActiveParticipation(manager, worker.contractorId, siteId, range.from);

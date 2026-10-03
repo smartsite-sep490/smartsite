@@ -16,6 +16,32 @@ import type {
 } from '@smartsite/api-client';
 import { AccessControlView } from './AccessControlView';
 
+const authSessionMock = vi.hoisted(() => ({
+  accessToken: 'mock-admin-token',
+  user: null as unknown,
+  logout: vi.fn(),
+}));
+
+vi.mock('../../features/auth/auth-session', () => ({
+  useAuth: () => ({
+    accessToken: authSessionMock.accessToken,
+    setAccessToken: vi.fn(),
+    isSessionExpired: false,
+    triggerSessionExpired: vi.fn(),
+    dismissSessionExpired: vi.fn(),
+  }),
+  useCurrentUser: () => ({
+    data: authSessionMock.user,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+  useLogout: () => ({
+    mutate: authSessionMock.logout,
+    isPending: false,
+  }),
+}));
+
 const mockAdminLoginResponse: LoginResponse = {
   accessToken: 'mock-admin-token',
   tokenType: 'Bearer',
@@ -72,6 +98,7 @@ const mockWorkersList: Page<WorkerResponse> = {
       id: 'worker-1',
       siteId: 'site-alpha',
       contractorId: null,
+      userId: null,
       externalId: 'WKR-001',
       displayName: 'Nguyen Van A',
       isActive: true,
@@ -128,7 +155,8 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
       },
     });
 
-    vi.spyOn(SmartSiteManagementClient.prototype, 'logout').mockResolvedValue(undefined as never);
+    authSessionMock.user = mockAdminLoginResponse.user;
+    authSessionMock.logout.mockReset();
   });
 
   afterEach(() => {
@@ -137,10 +165,10 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
     vi.restoreAllMocks();
   });
 
-  async function loginAsAdmin(user: ReturnType<typeof userEvent.setup>) {
-    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
-      mockAdminLoginResponse,
-    );
+  async function loginAsAdmin() {
+    const loginSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'login')
+      .mockResolvedValue(mockAdminLoginResponse);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listZones').mockResolvedValue(mockZonesList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers').mockResolvedValue(mockWorkersList);
@@ -157,23 +185,23 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
       </QueryClientProvider>,
     );
 
-    await user.type(screen.getByLabelText(/username/i), 'admin');
-    await user.type(screen.getByLabelText(/password/i), 'admin-password');
-    await user.click(screen.getByRole('button', { name: /open access control/i }));
-
-    // Wait for the main authenticated portal and active site to resolve
+    // The app session already authenticated the user. Site Access must reuse it
+    // without displaying or submitting a second login form.
     await waitFor(() => {
       expect(screen.getByText(/Quản trị viên Hệ thống/i)).not.toBeNull();
       expect(screen.queryByText(/Loading construction sites…/i)).toBeNull();
     });
+    expect(screen.queryByLabelText(/username/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /open access control/i })).toBeNull();
+    expect(loginSpy).not.toHaveBeenCalled();
   }
 
-  it('1. Admin login & Site Isolation: loads sites and queries workers/zones scoped to active siteId', async () => {
+  it('1. Reuses the authenticated Admin session & isolates sites by active siteId', async () => {
     const user = userEvent.setup();
     const listZonesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listZones');
     const listWorkersSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers');
 
-    await loginAsAdmin(user);
+    await loginAsAdmin();
 
     expect(screen.getByText(/Site Access & Biometric Identity Control/i)).not.toBeNull();
     // Default site is the first site in the list: site-alpha
@@ -203,8 +231,7 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
   });
 
   it('2. List Workers & Zone selection: displays worker roster and active zone options', async () => {
-    const user = userEvent.setup();
-    await loginAsAdmin(user);
+    await loginAsAdmin();
 
     // Verify worker in roster scoped to Worker roster section
     const rosterHeading = await screen.findByRole('heading', { name: /worker roster/i });
@@ -256,7 +283,7 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
         createdAt: '2026-09-28T08:00:00.000Z',
       });
 
-    await loginAsAdmin(user);
+    await loginAsAdmin();
 
     // Test Revocation of existing grant
     const revokeButton = await screen.findByRole('button', { name: /revoke permission/i });
@@ -290,8 +317,7 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
   });
 
   it('4. Candidate UNAVAILABLE in Entry Decisions: renders fail-closed label and candidateWorkerId', async () => {
-    const user = userEvent.setup();
-    await loginAsAdmin(user);
+    await loginAsAdmin();
 
     // Locate the table row containing candidate CANDIDATE-WKR-99
     const candidateCell = await screen.findByText('Candidate: CANDIDATE-WKR-99');
@@ -309,7 +335,7 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
 
   it('5. Navigation across 5 tabs: preserves default MF06 flow and switches to other tabs on click', async () => {
     const user = userEvent.setup();
-    await loginAsAdmin(user);
+    await loginAsAdmin();
 
     // Verify all 5 tab buttons exist in the navigation bar
     expect(screen.getByRole('button', { name: /MF06 Zone Permissions/i })).not.toBeNull();
@@ -332,64 +358,28 @@ describe('AccessControlView MF06 Zone Clearance & Multi-Tab Integration Tests', 
     });
   });
 
-  it('6. Logout scoped cache invalidation: clears access-control and gate-access-logs queries for active user, preserving unrelated caches', async () => {
+  it('6. Sign out uses the shared authenticated session instead of a local access session', async () => {
     const user = userEvent.setup();
-    const apiUrl = 'https://api.example.test';
-    const activeUserId = mockAdminLoginResponse.user.id;
-    const otherUserId = 'other-user-456';
 
-    // Configure finite/Infinity gcTime for this test to prevent instant garbage collection of unobserved queries during login await
-    queryClient.setDefaultOptions({
-      queries: { retry: false, gcTime: Infinity },
-      mutations: { retry: false, gcTime: Infinity },
-    });
-
-    // Pre-populate query cache with active session queries and unrelated queries
-    queryClient.setQueryData(['access-control', apiUrl, activeUserId, 'sites'], { items: [] });
-    queryClient.setQueryData(['gate-access-logs', apiUrl, activeUserId, 'site-alpha', 'gate-1'], {
-      items: [],
-    });
-    queryClient.setQueryData(['access-control', apiUrl, otherUserId, 'sites'], { items: [] });
-    queryClient.setQueryData(['gate-access-logs', apiUrl, otherUserId, 'site-alpha', 'gate-1'], {
-      items: [],
-    });
-    queryClient.setQueryData(['unrelated-module', 'config'], { ready: true });
-
-    await loginAsAdmin(user);
-
-    // Assert seeded control caches exist immediately BEFORE logout
-    expect(queryClient.getQueryData(['access-control', apiUrl, otherUserId, 'sites'])).toEqual({
-      items: [],
-    });
-    expect(
-      queryClient.getQueryData(['gate-access-logs', apiUrl, otherUserId, 'site-alpha', 'gate-1']),
-    ).toEqual({ items: [] });
-    expect(queryClient.getQueryData(['unrelated-module', 'config'])).toEqual({ ready: true });
-
-    // Click Sign out button
+    await loginAsAdmin();
     const signOutButton = screen.getByRole('button', { name: /sign out/i });
     await user.click(signOutButton);
+    expect(authSessionMock.logout).toHaveBeenCalledTimes(1);
+  });
 
-    // Verify returning to login screen
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /open access control/i })).not.toBeNull();
-    });
+  it('7. Does not bypass access authorization for a non-global-admin session', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-alpha' }],
+    };
 
-    // Active user queries must be purged from cache
-    expect(
-      queryClient.getQueryData(['access-control', apiUrl, activeUserId, 'sites']),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(['gate-access-logs', apiUrl, activeUserId, 'site-alpha', 'gate-1']),
-    ).toBeUndefined();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AccessControlView apiUrl="https://api.example.test" />
+      </QueryClientProvider>,
+    );
 
-    // Unrelated caches must be preserved
-    expect(queryClient.getQueryData(['access-control', apiUrl, otherUserId, 'sites'])).toEqual({
-      items: [],
-    });
-    expect(
-      queryClient.getQueryData(['gate-access-logs', apiUrl, otherUserId, 'site-alpha', 'gate-1']),
-    ).toEqual({ items: [] });
-    expect(queryClient.getQueryData(['unrelated-module', 'config'])).toEqual({ ready: true });
+    expect((await screen.findByRole('alert')).textContent).toMatch(/active Global Admin account/i);
+    expect(screen.queryByLabelText(/username/i)).toBeNull();
   });
 });

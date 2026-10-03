@@ -8,7 +8,12 @@ export type UserRole =
   | 'SECURITY_OFFICER'
   | 'WORKER';
 export type ProvisionableUserRole =
-  'ADMIN' | 'SITE_MANAGER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+  'ADMIN' |
+  'SITE_MANAGER' |
+  'CONTRACTOR_REPRESENTATIVE' |
+  'SAFETY_OFFICER' |
+  'SECURITY_OFFICER' |
+  'WORKER';
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export * from './observation-identity-management.js';
@@ -160,17 +165,9 @@ export interface WorkerResponse {
   id: string;
   siteId: string;
   contractorId: string | null;
-  userId?: string | null;
+  userId: string | null;
   externalId: string;
   displayName: string;
-  isActive: boolean;
-  createdAt: string;
-}
-
-export interface ContractorResponse {
-  id: string;
-  code: string;
-  name: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -265,5 +262,161 @@ export interface ZoneEntryDecisionResponse {
   status: ZoneEntryDecisionStatus;
   reasonCode: string;
   evaluatedAt: string;
+  createdAt: string;
+}
+
+export interface ContractorResponse {
+  id: string;
+  siteId: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ContractorRepresentativeAssignmentResponse {
+  id: string;
+  siteId: string;
+  contractorId: string;
+  userId: string;
+  createdAt: string;
+}
+
+export interface ShiftResponse {
+  id: string;
+  siteId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  createdAt: string;
+}
+
+export interface ContractorShiftAssignmentResponse {
+  id: string;
+  siteId: string;
+  shiftId: string;
+  contractorId: string;
+  createdAt: string;
+}
+
+export interface ScheduleVersionResponse {
+  id: string;
+  siteId: string;
+  version: number;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+  createdAt: string;
+}
+
+export interface WorkerScheduleResponse {
+  id: string;
+  siteId: string;
+  scheduleVersionId: string;
+  workerId: string;
+  shiftId: string;
+  workDate: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface EligibleShiftResponse {
+  id: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+}
+
+export interface EligibleShiftListResponse {
+  items: EligibleShiftResponse[];
+  total: number;
+}
+
+export interface SwapCandidateShiftResponse {
+  id: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+}
+
+export interface SwapCandidateResponse {
+  candidateWorkerId: string;
+  candidateWorkerDisplayName: string;
+  candidateWorkerScheduleId: string;
+  workDate: string;
+  currentShift: SwapCandidateShiftResponse;
+}
+
+export interface SwapCandidateListResponse {
+  items: SwapCandidateResponse[];
+  total: number;
+}
+
+export type SchedulingRequestStatus =
+  | 'DRAFT'
+  | 'PENDING_COWORKER'
+  | 'PENDING_MANAGER'
+  | 'APPROVED'
+  | 'APPLIED'
+  | 'REJECTED'
+  | 'CONFLICTED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+
+export interface ShiftChangeRequestResponse {
+  id: string;
+  siteId: string;
+  workerId: string;
+  workerScheduleId: string;
+  fromShiftId: string;
+  toShiftId: string;
+  expectedScheduleVersionId: string;
+  status: SchedulingRequestStatus;
+  requestedByUserId: string;
+  reason: string;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewReason: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+}
+
+export interface ShiftSwapRequestResponse {
+  id: string;
+  siteId: string;
+  requesterWorkerId: string;
+  requesterWorkerScheduleId: string;
+  coworkerWorkerId: string;
+  coworkerWorkerScheduleId: string;
+  requesterShiftId: string;
+  coworkerShiftId: string;
+  expectedScheduleVersionId: string;
+  status: SchedulingRequestStatus;
+  requestedByUserId: string;
+  reason: string;
+  coworkerConfirmedAt: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewReason: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+}
+
+export interface AbsenceRequestResponse {
+  id: string;
+  siteId: string;
+  workerId: string;
+  workerScheduleId: string;
+  shiftId: string;
+  expectedScheduleVersionId: string;
+  replacementWorkerId: string | null;
+  requestedByUserId: string;
+  reason: string;
+  status: SchedulingRequestStatus;
+  isUnderstaffed: boolean;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
   createdAt: string;
 }

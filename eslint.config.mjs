@@ -16,6 +16,7 @@ export default tseslint.config(
       '**/coverage/**',
       '**/generated/**',
       '**/*.d.ts',
+      '**/.agents/**',
     ],
   },
   js.configs.recommended,
@@ -31,5 +32,16 @@ export default tseslint.config(
     files: ['apps/web/src/**/*.{ts,tsx}'],
     plugins: { 'react-refresh': reactRefresh },
     rules: { 'react-refresh/only-export-components': ['error', { allowConstantExport: true }] },
+  },
+  {
+    // auth-session.tsx is a hooks + context module that also exports AuthProvider (a component).
+    // The react-refresh rule would fire because it mixes hook exports with a component export.
+    // WorkforceView.tsx exports getWorkforceTabs (a pure function used by tests) alongside WorkforceView.
+    // These files are intentionally structured this way; Fast Refresh still works for their components.
+    files: [
+      'apps/web/src/features/auth/auth-session.tsx',
+      'apps/web/src/components/workforce/WorkforceView.tsx',
+    ],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
 );

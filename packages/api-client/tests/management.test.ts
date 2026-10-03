@@ -3,7 +3,39 @@ import { getEventListeners } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, SmartSiteManagementClient } from '../src/index';
 
+type FetchMock = (url: string, init: RequestInit) => Promise<Response>;
+
+function createFetchMock(responseFactory: () => Response | Promise<Response>) {
+  return vi.fn<FetchMock>(async () => responseFactory());
+}
+
 describe('management client', () => {
+  it('creates a contractor representative link with encoded scope IDs', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'assignment-1' }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.assignContractorRepresentative(
+        'admin-token',
+        'site/1',
+        'contractor/1',
+        { userId: 'user/1' },
+      );
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/contractors/contractor%2F1/representatives',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({ userId: 'user/1' }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reads and atomically replaces worker gate permissions with an expected snapshot', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       void _url;
@@ -30,6 +62,76 @@ describe('management client', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('lists contractor representative assignments for the selected site', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listContractorRepresentativeAssignments('admin-token', 'site/1', {
+        offset: 0,
+        limit: 25,
+      });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/contractor-representative-assignments?offset=0&limit=25',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer admin-token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('assigns a shift to a contractor and lists scoped shift assignments', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.assignShiftToContractor('shift-token', 'site/1', 'shift/1', {
+        contractorId: 'contractor/1',
+      });
+      await client.listShiftContractorAssignments('shift-token', 'site/1', { offset: 0, limit: 25 });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/shifts/shift%2F1/contractors',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({ contractorId: 'contractor/1' }),
+      });
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/shift-contractor-assignments?offset=0&limit=25',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('deletes a site-scoped shift with bearer auth', async () => {
+    const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.deleteShift('shift-token', 'site/1', 'shift/1');
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/shifts/shift%2F1',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer shift-token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('prepares an existing account and sends gate direction/photo to Backend, then reads DB logs', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       void _url;
@@ -78,6 +180,7 @@ describe('management client', () => {
       vi.unstubAllGlobals();
     }
   });
+
   it('sends a token only to the requested endpoint and sends revision in mutation body', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
       void _url;
@@ -137,7 +240,7 @@ describe('management client', () => {
   });
 
   it('uses cookies only for Web refresh/logout and JSON refresh tokens only for Mobile', async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
     try {
       const client = new SmartSiteManagementClient('https://api.example.test');
@@ -215,8 +318,8 @@ describe('management client', () => {
 
   it('fetches alert evidence as an authenticated JPEG blob', async () => {
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = createFetchMock(
+      () =>
         new Response(jpeg, {
           status: 200,
           headers: { 'Content-Type': 'image/jpeg' },
@@ -246,8 +349,8 @@ describe('management client', () => {
   });
 
   it('submits a Site-scoped alert review command with optimistic revision', async () => {
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = createFetchMock(
+      () =>
         new Response(JSON.stringify({ replayed: false, alert: {}, review: {} }), { status: 201 }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -278,8 +381,8 @@ describe('management client', () => {
   });
 
   it('constructs worker and zone access endpoints with encoded scope IDs', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -303,8 +406,8 @@ describe('management client', () => {
   });
 
   it('sends grant creation and revocation mutations with bearer auth', async () => {
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ id: 'grant-1', effect: 'ALLOW' }), { status: 200 }),
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'grant-1', effect: 'ALLOW' }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     try {
@@ -331,6 +434,143 @@ describe('management client', () => {
         method: 'PATCH',
         headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
       });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('constructs shift swap request payload with correct MF07 field names', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_COWORKER' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.createShiftSwapRequest('token', 'site-1', {
+        requesterWorkerScheduleId: 'ws-1',
+        coworkerWorkerScheduleId: 'ws-2',
+        reason: 'Family emergency'
+      });
+
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+        body: JSON.stringify({
+          requesterWorkerScheduleId: 'ws-1',
+          coworkerWorkerScheduleId: 'ws-2',
+          reason: 'Family emergency'
+        }),
+      });
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('constructs shift change request payload and handles approve/reject mutations', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'change-1', status: 'PENDING_MANAGER' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.createShiftChangeRequest('token', 'site-1', {
+        workerScheduleId: 'ws-1',
+        toShiftId: 'shift-2',
+        reason: 'Personal reason',
+      });
+      await client.approveShiftChangeRequest('token', 'site-1', 'change-1');
+      await client.rejectShiftChangeRequest('token', 'site-1', 'change-1', { reason: 'Not enough coverage' });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests');
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify({
+          workerScheduleId: 'ws-1',
+          toShiftId: 'shift-2',
+          reason: 'Personal reason',
+        }),
+      });
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests/change-1/approve');
+      expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PATCH' });
+      expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-change-requests/change-1/reject');
+      expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+        method: 'PATCH',
+        body: JSON.stringify({ reason: 'Not enough coverage' }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('handles shift swap confirm, approve, and reject mutations', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'swap-1', status: 'PENDING_MANAGER' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.confirmShiftSwapRequest('token', 'site-1', 'swap-1');
+      await client.declineShiftSwapRequest('token', 'site-1', 'swap-1', { reason: 'I need my assigned shift' });
+      await client.approveShiftSwapRequest('token', 'site-1', 'swap-1');
+      await client.rejectShiftSwapRequest('token', 'site-1', 'swap-1', { reason: 'Coverage is not available' });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/confirm');
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/decline');
+      expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+        method: 'PATCH',
+        body: JSON.stringify({ reason: 'I need my assigned shift' }),
+      });
+      expect(fetchMock.mock.calls[2]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/approve');
+      expect(fetchMock.mock.calls[3]?.[0]).toBe('https://api.example.test/api/v1/sites/site-1/shift-swap-requests/swap-1/reject');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('constructs MF07 worker schedule discovery endpoints with encoded IDs', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listEligibleShifts('token', 'site/1', 'schedule/1');
+      await client.listSwapCandidates('token', 'site/1', 'schedule/1');
+
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        'https://api.example.test/api/v1/sites/site%2F1/worker-schedules/schedule%2F1/eligible-shifts',
+        'https://api.example.test/api/v1/sites/site%2F1/worker-schedules/schedule%2F1/swap-candidates',
+      ]);
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'GET',
+        headers: { Authorization: 'Bearer token', Accept: 'application/json' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('serializes worker schedule filters and pagination', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new SmartSiteManagementClient('https://api.example.test');
+      await client.listWorkerSchedules('token', 'site/1', {
+        offset: 25,
+        limit: 25,
+        fromDate: '2026-10-05',
+        toDate: '2026-10-11',
+        workerId: 'worker/1',
+        shiftId: 'shift/1',
+        status: 'ACTIVE',
+      });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/worker-schedules?offset=25&limit=25&fromDate=2026-10-05&toDate=2026-10-11&workerId=worker%2F1&shiftId=shift%2F1&status=ACTIVE',
+      );
     } finally {
       vi.unstubAllGlobals();
     }
