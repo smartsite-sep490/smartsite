@@ -79,13 +79,13 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     () => currentUser?.roleAssignments ?? [],
     [currentUser?.roleAssignments],
   );
-  const roles = useMemo(() => roleAssignments.map((r) => r.role), [roleAssignments]);
-  const isAdmin = roles.includes('ADMIN');
-  const isManager = roles.includes('SITE_MANAGER');
-  const isContractorRep = roles.includes('CONTRACTOR_REPRESENTATIVE');
-  const canAccess = isAdmin || isManager || isContractorRep;
-  const canManageShiftsAndVersions = isAdmin || isManager;
-  const canAssignWorker = isContractorRep;
+  const isAdmin = roleAssignments.some(
+    (assignment) => assignment.role === 'ADMIN' && assignment.siteId === null,
+  );
+  const canDiscoverSites = isAdmin || roleAssignments.some(
+    (assignment) =>
+      assignment.role === 'SITE_MANAGER' || assignment.role === 'CONTRACTOR_REPRESENTATIVE',
+  );
 
   // Site Scope Determination
   const scopedSiteIds = useMemo(
@@ -134,7 +134,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       const sites = await Promise.all(sitePromises);
       return sites.filter((s): s is NonNullable<typeof s> => s !== null);
     },
-    enabled: Boolean(accessToken && canAccess),
+    enabled: Boolean(accessToken && canDiscoverSites),
   });
 
   const availableSites = useMemo(() => sitesQuery.data ?? [], [sitesQuery.data]);
@@ -143,6 +143,18 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     () => availableSites.find((s) => s.id === activeSiteId) ?? null,
     [availableSites, activeSiteId],
   );
+  const isManager = roleAssignments.some(
+    (assignment) => assignment.role === 'SITE_MANAGER' && assignment.siteId === activeSiteId,
+  );
+  const isContractorRep = roleAssignments.some(
+    (assignment) =>
+      assignment.role === 'CONTRACTOR_REPRESENTATIVE' && assignment.siteId === activeSiteId,
+  );
+  const canAccess = isAdmin || isManager || isContractorRep;
+  // MF07: only a Site Manager for the selected Site may create/delete shifts,
+  // manage versions, and assign shifts to contractors. Admin may still view setup.
+  const canManageShiftsAndVersions = isManager;
+  const canAssignWorker = isContractorRep;
 
   useEffect(() => {
     if (!selectedSiteId && availableSites.length > 0) {
