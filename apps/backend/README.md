@@ -107,8 +107,16 @@ khóa grant row và giữ timestamp đã lưu đầu tiên; API dùng giờ DB m
 không ghi đè timestamp. USER được kiểm lại global Admin trong transaction. Mỗi lần gọi
 mới vẫn là một command mới; noop revoke ghi confirmation fact của giá trị đã lưu.
 
-Worker ALLOW containment, Contractor grant commands và reader quyền hai tầng còn cần
-tích hợp. Create/revoke hiện giữ semantics quản lý grant cũ; audit không chứng minh
+Contractor Zone grant có internal create/revoke command với actor bắt buộc; USER phải
+còn global Admin. Create kiểm active participation của Contractor đúng Site tại giờ
+DB trong transaction qua query của Workforce; revoke vẫn được sau khi participation
+hoặc Contractor đã disable. Ceiling, command và history commit/rollback cùng nhau;
+row lock giữ revocation đầu tiên. Chưa có public API/provider runtime cho command này;
+không sinh Worker grant hoặc bật authority từ participation. Kiểm command-time không
+chứng minh participation bao phủ toàn khoảng đề xuất hoặc lịch sử đã COMPLETE.
+
+Worker ALLOW containment và reader quyền hai tầng còn cần tích hợp. Worker create/revoke
+hiện giữ semantics quản lý grant cũ; audit không chứng minh
 Worker ALLOW đã nằm trong ceiling Contractor hoặc luồng live đã bật.
 Lịch sử chưa đủ để bật epoch READY hoặc xác minh Worker live; chỉ có bảng/digest không
 chứng minh completeness. Anchor legacy NULL giữ nguyên, không suy từ membership hiện tại.
