@@ -13,7 +13,7 @@ export function getWorkforceTabs(roles: string[]) {
   const isWorker = roles.includes('WORKER');
   const isContractorRep = roles.includes('CONTRACTOR_REPRESENTATIVE');
 
-  const showSchedule = isWorker || isContractorRep;
+  const showSchedule = isWorker;
   const showReview = isContractorRep;
 
   return {
@@ -22,6 +22,7 @@ export function getWorkforceTabs(roles: string[]) {
     defaultTab: (showReview ? 'review' : 'schedule') as 'schedule' | 'review',
   };
 }
+
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 function LoadingState() {

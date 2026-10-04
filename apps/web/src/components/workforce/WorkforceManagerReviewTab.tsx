@@ -26,6 +26,9 @@ import {
   EmptyState,
   Tabs,
   Card,
+  Alert,
+  AlertTitle,
+  AlertDescription,
 } from '../ui';
 
 export function WorkforceManagerReviewTab({
@@ -46,6 +49,11 @@ export function WorkforceManagerReviewTab({
     null,
   );
   const [rejectReason, setRejectReason] = useState('');
+  const [actionFeedback, setActionFeedback] = useState<{
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  } | null>(null);
 
   // Queries
   const {
@@ -131,6 +139,12 @@ export function WorkforceManagerReviewTab({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
+      setActionFeedback({
+        type: 'success',
+        title: 'Shift Change Approved',
+        message: 'Shift change request has been approved. The worker schedule is now updated.',
+      });
+      setTimeout(() => setActionFeedback(null), 5000);
     },
   });
 
@@ -141,6 +155,12 @@ export function WorkforceManagerReviewTab({
       queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
       setRejectTarget(null);
       setRejectReason('');
+      setActionFeedback({
+        type: 'success',
+        title: 'Shift Change Rejected',
+        message: 'The shift change request has been declined.',
+      });
+      setTimeout(() => setActionFeedback(null), 5000);
     },
   });
 
@@ -149,6 +169,12 @@ export function WorkforceManagerReviewTab({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
+      setActionFeedback({
+        type: 'success',
+        title: 'Shift Swap Approved',
+        message: 'Shift swap request approved. Schedules for both workers have been updated.',
+      });
+      setTimeout(() => setActionFeedback(null), 5000);
     },
   });
 
@@ -159,6 +185,12 @@ export function WorkforceManagerReviewTab({
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       setRejectTarget(null);
       setRejectReason('');
+      setActionFeedback({
+        type: 'success',
+        title: 'Shift Swap Rejected',
+        message: 'The shift swap request has been declined.',
+      });
+      setTimeout(() => setActionFeedback(null), 5000);
     },
   });
 
@@ -380,6 +412,67 @@ export function WorkforceManagerReviewTab({
           </div>
         </div>
       </div>
+
+      {/* ── HIGH-END FLOATING TOAST FEEDBACK ─────────────────────────────── */}
+      {actionFeedback && (
+        <div className="fixed top-5 right-5 z-50 pointer-events-auto max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)] animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white">
+            <div className="flex items-start gap-3.5">
+              <div
+                className={`w-9 h-9 rounded-xl text-white flex items-center justify-center shrink-0 ${
+                  actionFeedback.type === 'success'
+                    ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_16px_rgba(16,185,129,0.45)]'
+                    : 'bg-gradient-to-br from-rose-400 to-rose-600 shadow-[0_0_16px_rgba(244,63,94,0.45)]'
+                }`}
+              >
+                {actionFeedback.type === 'success' ? (
+                  <IconCheck className="w-5 h-5 text-white" />
+                ) : (
+                  <IconAlertCircle className="w-5 h-5 text-white" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">
+                    {actionFeedback.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActionFeedback(null)}
+                    className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+                    aria-label="Dismiss notification"
+                  >
+                    <IconX className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs font-semibold text-slate-100 leading-snug">
+                  {actionFeedback.message}
+                </p>
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 overflow-hidden">
+              <div className="h-full bg-emerald-400 animate-[pulse_2s_ease-in-out_infinite]" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Reviews Notice Banner */}
+      {totalPending > 0 && subTab === 'pending' && (
+        <Alert variant="warning" className="animate-in slide-in-from-top-2 fade-in duration-200">
+          <IconAlertCircle className="w-5 h-5" />
+          <div className="space-y-1">
+            <AlertTitle className="text-amber-950 font-bold flex items-center gap-2 text-xs">
+              <span>Pending Contractor Review</span>
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            </AlertTitle>
+            <AlertDescription className="text-amber-900/90 font-medium text-xs">
+              You have <span className="font-semibold text-slate-950">{totalPending} shift request(s)</span> awaiting your review and approval.
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
 
       {/* 3. Controls & Tabs */}
       <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
