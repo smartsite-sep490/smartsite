@@ -7,7 +7,6 @@ import {
   IconClock,
   IconUsers,
   IconPlus,
-  IconCheckCircle2,
   IconAlertCircle,
   IconLoader,
   IconShield,
@@ -27,6 +26,9 @@ import {
   Tabs,
   Card,
   CardHeader,
+  Alert,
+  AlertTitle,
+  AlertDescription,
   SmartInput,
   SmartSelect,
   SmartDatePicker,
@@ -281,13 +283,20 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [versionError, setVersionError] = useState<string | null>(null);
   const [versionSuccess, setVersionSuccess] = useState<string | null>(null);
 
+  interface AssignSuccessInfo {
+    workerName: string;
+    shiftName: string;
+    shiftHours?: string;
+    workDate: string;
+  }
+
   // Worker Schedule Assignment Form
   const [assignVersionId, setAssignVersionId] = useState('');
   const [assignWorkerId, setAssignWorkerId] = useState('');
   const [assignShiftId, setAssignShiftId] = useState('');
   const [assignWorkDate, setAssignWorkDate] = useState(currentDateIso());
   const [assignError, setAssignError] = useState<string | null>(null);
-  const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
+  const [assignSuccess, setAssignSuccess] = useState<AssignSuccessInfo | null>(null);
 
   // Default selected version for worker assignment
   const selectedVersionId = assignVersionId || versions[0]?.id || '';
@@ -385,11 +394,21 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         shiftId: input.shiftId,
         workDate: input.workDate,
       }),
-    onSuccess: () => {
-      setAssignSuccess('Worker assigned to schedule successfully.');
+    onSuccess: (_, variables) => {
+      const worker = workers.find((w) => w.id === variables.workerId);
+      const shift = shifts.find((s) => s.id === variables.shiftId);
+      const workerName = worker?.displayName || 'Worker';
+      const shiftName = shift?.name || 'Shift';
+      const shiftHours = shift ? `${formatShiftTime(shift.startsAt)} - ${formatShiftTime(shift.endsAt)}` : undefined;
+      setAssignSuccess({
+        workerName,
+        shiftName,
+        shiftHours,
+        workDate: variables.workDate,
+      });
       setAssignError(null);
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', activeSiteId] });
-      setTimeout(() => setAssignSuccess(null), 5000);
+      setTimeout(() => setAssignSuccess(null), 6000);
     },
     onError: (err: unknown) => {
       setAssignSuccess(null);
@@ -637,54 +656,134 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         </div>
       </div>
 
-      {/* Success / Notification Toasts */}
-      {shiftSuccess && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 font-medium">
-            <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{shiftSuccess}</span>
-          </div>
-          <button type="button" onClick={() => setShiftSuccess(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
-            <IconX className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      {/* ── HIGH-END FLOATING TOAST NOTIFICATIONS ───────────────────────── */}
+      <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)]">
+        {assignSuccess && (
+          <div
+            role="status"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center shadow-[0_0_16px_rgba(16,185,129,0.45)] shrink-0">
+                <IconCheck className="w-5 h-5 text-white" />
+              </div>
 
-      {assignContractorSuccess && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 font-medium">
-            <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{assignContractorSuccess}</span>
-          </div>
-          <button type="button" onClick={() => setAssignContractorSuccess(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
-            <IconX className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">
+                      Schedule Assigned
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAssignSuccess(null)}
+                    className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+                    aria-label="Dismiss notification"
+                  >
+                    <IconX className="w-3.5 h-3.5" />
+                  </button>
+                </div>
 
-      {versionSuccess && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 font-medium">
-            <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{versionSuccess}</span>
-          </div>
-          <button type="button" onClick={() => setVersionSuccess(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
-            <IconX className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+                <p className="text-xs font-semibold text-slate-100 leading-snug">
+                  Successfully assigned <span className="text-[#F66B17] font-bold">{assignSuccess.shiftName}</span> to <span className="text-emerald-300 font-bold">{assignSuccess.workerName}</span>
+                </p>
 
-      {assignSuccess && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 font-medium">
-            <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{assignSuccess}</span>
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-medium text-slate-300 border border-white/5">
+                    <IconCalendar className="w-3 h-3 text-[#F66B17]" />
+                    {assignSuccess.workDate}
+                  </span>
+                  {assignSuccess.shiftHours && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-medium text-slate-300 border border-white/5">
+                      <IconClock className="w-3 h-3 text-blue-400" />
+                      {assignSuccess.shiftHours}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Micro progress line */}
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 overflow-hidden">
+              <div className="h-full bg-emerald-400 animate-[pulse_2s_ease-in-out_infinite]" />
+            </div>
           </div>
-          <button type="button" onClick={() => setAssignSuccess(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
-            <IconX className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+        )}
+
+        {shiftSuccess && (
+          <div
+            role="status"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.4)] shrink-0">
+                  <IconCheck className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-xs font-semibold text-slate-100">{shiftSuccess}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShiftSuccess(null)}
+                className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+              >
+                <IconX className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {assignContractorSuccess && (
+          <div
+            role="status"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.4)] shrink-0">
+                  <IconCheck className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-xs font-semibold text-slate-100">{assignContractorSuccess}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignContractorSuccess(null)}
+                className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+              >
+                <IconX className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {versionSuccess && (
+          <div
+            role="status"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(59,130,246,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.4)] shrink-0">
+                  <IconCheck className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-xs font-semibold text-slate-100">{versionSuccess}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVersionSuccess(null)}
+                className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+              >
+                <IconX className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 2. Top Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
@@ -955,12 +1054,54 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             />
 
             <form onSubmit={handleAssignWorkerSchedule} className="space-y-3.5">
-              {assignError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
-                  <IconAlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{assignError}</span>
-                </div>
+              {assignSuccess && (
+                <Alert variant="success" className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <IconCheck className="w-5 h-5" />
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <AlertTitle className="text-emerald-950 font-bold flex items-center gap-1.5 text-xs">
+                        <span>Assignment Confirmed</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      </AlertTitle>
+                      <button
+                        type="button"
+                        onClick={() => setAssignSuccess(null)}
+                        className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
+                        aria-label="Dismiss banner"
+                      >
+                        <IconX className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <AlertDescription className="text-emerald-900/90 font-medium text-xs">
+                      Assigned <span className="font-semibold text-slate-950">{assignSuccess.shiftName}</span> to{' '}
+                      <span className="font-semibold text-slate-950">{assignSuccess.workerName}</span>
+                    </AlertDescription>
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-mono text-slate-600">
+                      <span className="inline-flex items-center gap-1 bg-white/90 border border-emerald-200/80 px-1.5 py-0.5 rounded shadow-2xs">
+                        <IconCalendar className="w-2.5 h-2.5 text-[#F66B17]" />
+                        {assignSuccess.workDate}
+                      </span>
+                      {assignSuccess.shiftHours && (
+                        <span className="inline-flex items-center gap-1 bg-white/90 border border-emerald-200/80 px-1.5 py-0.5 rounded shadow-2xs">
+                          <IconClock className="w-2.5 h-2.5 text-blue-600" />
+                          {assignSuccess.shiftHours}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Alert>
               )}
+
+              {assignError && (
+                <Alert variant="destructive" className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <IconAlertCircle className="w-5 h-5" />
+                  <div>
+                    <AlertTitle className="text-rose-950 font-bold text-xs">Assignment Failed</AlertTitle>
+                    <AlertDescription className="text-rose-900/90 text-xs">{assignError}</AlertDescription>
+                  </div>
+                </Alert>
+              )}
+
 
               {/* Version selector */}
               <div className="space-y-1">
