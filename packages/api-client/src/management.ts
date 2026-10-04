@@ -48,6 +48,8 @@ import type {
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
   SchedulingRequestStatus,
+  UserNotificationListResponse,
+  NotificationReadResponse,
   FaceGateVerificationResponse,
   GateFacePresenceResponse,
   GateAccessLogResponse,
@@ -85,6 +87,34 @@ const validTimeout = (timeoutMs: number) =>
 
 export class SmartSiteManagementClient {
   constructor(private readonly baseUrl: string) {}
+
+  listNotifications(
+    token: string,
+    options: PageOptions & { readStatus?: 'ALL' | 'UNREAD' } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<UserNotificationListResponse> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.readStatus) query.set('readStatus', options.readStatus);
+    return this.request('GET', `/me/notifications?${query}`, token, undefined, undefined, requestOptions);
+  }
+
+  readNotification(token: string, id: string): Promise<NotificationReadResponse> {
+    return this.request('PATCH', `/me/notifications/${pathId(id)}/read`, token);
+  }
+
+  readAllNotifications(token: string): Promise<{ updated: number }> {
+    return this.request('PATCH', '/me/notifications/read-all', token);
+  }
+
+  getShiftChangeRequest(token: string, siteId: string, id: string): Promise<ShiftChangeRequestResponse> {
+    return this.request('GET', `/sites/${pathId(siteId)}/shift-change-requests/${pathId(id)}`, token);
+  }
+
+  getShiftSwapRequest(token: string, siteId: string, id: string): Promise<ShiftSwapRequestResponse> {
+    return this.request('GET', `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(id)}`, token);
+  }
 
   private async runRequest<T>(
     options: RequestOptions | undefined,

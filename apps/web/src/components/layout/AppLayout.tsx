@@ -12,7 +12,6 @@ import {
   IconBuilding,
   IconCalendar,
   IconSearch,
-  IconBell,
   IconChevronLeft,
   IconChevronRight,
   IconCamera,
@@ -21,6 +20,7 @@ import {
 } from '../icons';
 
 import { useLogout, useCurrentUser } from '../../features/auth/auth-session';
+import { NotificationBell } from '../../features/notifications/NotificationBell';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -298,13 +298,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               />
             </div>
 
-            {/* Notification Bell — no fake unread count */}
-            <button
-              className="p-2 rounded-md hover:bg-[var(--surface-bone)] text-[var(--text-secondary)] transition-colors cursor-pointer shrink-0"
-              aria-label="Notifications"
-            >
-              <IconBell className="w-4 h-4" />
-            </button>
+            <NotificationBell key={currentUser?.id ?? 'signed-out'} apiUrl={apiUrl}
+              userId={currentUser?.id ?? ''} enabled={!!currentUser && !currentUser.mustChangePassword} />
 
             {/* User Profile */}
             <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">

@@ -14,6 +14,7 @@ import { UserRole } from '../../database/entities/user.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../database/entities/worker-schedule.entity.js';
 import type { AuthenticatedUser } from '../auth/auth.service.js';
+import { SchedulingNotificationService } from './scheduling-notification.service.js';
 import { hasActiveContractorParticipation } from './contractor-participation.js';
 import {
   CreateAbsenceRequestDto,
@@ -24,7 +25,28 @@ import {
 
 @Injectable()
 export class SchedulingWorkflowService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly notifications: SchedulingNotificationService = new SchedulingNotificationService(dataSource),
+  ) {}
+
+  private async notifyChange(manager: EntityManager, actor: AuthenticatedUser, request: ShiftChangeRequestEntity) {
+    const event = request.status === ShiftRequestStatus.PENDING_MANAGER ? 'CHANGE_REQUESTED'
+      : request.status === ShiftRequestStatus.APPLIED ? 'REQUEST_APPLIED'
+      : request.status === ShiftRequestStatus.CONFLICTED ? 'REQUEST_CONFLICTED' : 'REQUEST_REJECTED';
+    await this.notifications.record(manager, 'CHANGE', request, event, actor.id);
+    return request;
+  }
+
+  private async notifySwap(manager: EntityManager, actor: AuthenticatedUser, request: ShiftSwapRequestEntity, declined = false) {
+    const event = declined ? 'SWAP_DECLINED'
+      : request.status === ShiftRequestStatus.PENDING_COWORKER ? 'SWAP_REQUESTED'
+      : request.status === ShiftRequestStatus.PENDING_MANAGER ? 'SWAP_CONFIRMED'
+      : request.status === ShiftRequestStatus.APPLIED ? 'REQUEST_APPLIED'
+      : request.status === ShiftRequestStatus.CONFLICTED ? 'REQUEST_CONFLICTED' : 'REQUEST_REJECTED';
+    await this.notifications.record(manager, 'SWAP', request, event, actor.id);
+    return request;
+  }
 
   private forbidden(): never {
     throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -238,7 +260,7 @@ export class SchedulingWorkflowService {
       );
       if (schedule.shiftId === value.toShiftId) conflict('Shift change must select a different shift');
       await this.assertShiftAvailable(manager, schedule, value.toShiftId);
-      return manager.getRepository(ShiftChangeRequestEntity).save({
+      return this.notifyChange(manager, actor, await manager.getRepository(ShiftChangeRequestEntity).save({
         id: randomUUID(),
         siteId: scopedSiteId,
         workerId: worker.id,
@@ -253,7 +275,7 @@ export class SchedulingWorkflowService {
         reviewedAt: null,
         reviewReason: null,
         appliedAt: null,
-      });
+      }));
     });
   }
 
@@ -294,7 +316,7 @@ export class SchedulingWorkflowService {
       const schedule = await this.lockedSchedule(manager, request.workerScheduleId);
       if (!schedule || !this.scheduleStillMatches(schedule, request)) {
         request.status = ShiftRequestStatus.CONFLICTED;
-        return manager.getRepository(ShiftChangeRequestEntity).save(request);
+        return this.notifyChange(manager, actor, await manager.getRepository(ShiftChangeRequestEntity).save(request));
       }
       await this.assertTargetShift(manager, scopedSiteId, request.toShiftId);
       await this.assertContractorShiftAssignment(
@@ -311,7 +333,7 @@ export class SchedulingWorkflowService {
       request.reviewedByUserId = actor.id;
       request.reviewedAt = now;
       request.appliedAt = now;
-      return manager.getRepository(ShiftChangeRequestEntity).save(request);
+      return this.notifyChange(manager, actor, await manager.getRepository(ShiftChangeRequestEntity).save(request));
     });
   }
 
@@ -355,7 +377,7 @@ export class SchedulingWorkflowService {
       request.reviewedByUserId = actor.id;
       request.reviewedAt = new Date();
       request.reviewReason = value.reason;
-      return manager.getRepository(ShiftChangeRequestEntity).save(request);
+      return this.notifyChange(manager, actor, await manager.getRepository(ShiftChangeRequestEntity).save(request));
     });
   }
 
@@ -416,7 +438,7 @@ export class SchedulingWorkflowService {
       ]);
       await this.assertShiftAvailable(manager, requesterSchedule, coworkerSchedule.shiftId);
       await this.assertShiftAvailable(manager, coworkerSchedule, requesterSchedule.shiftId);
-      return manager.getRepository(ShiftSwapRequestEntity).save({
+      return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save({
         id: randomUUID(),
         siteId: scopedSiteId,
         requesterWorkerId: requester.id,
@@ -434,7 +456,7 @@ export class SchedulingWorkflowService {
         reviewedAt: null,
         reviewReason: null,
         appliedAt: null,
-      });
+      }));
     });
   }
 
@@ -472,7 +494,7 @@ export class SchedulingWorkflowService {
         this.forbidden();
       request.status = ShiftRequestStatus.PENDING_MANAGER;
       request.coworkerConfirmedAt = new Date();
-      return manager.getRepository(ShiftSwapRequestEntity).save(request);
+      return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save(request));
     });
   }
 
@@ -514,7 +536,7 @@ export class SchedulingWorkflowService {
       request.reviewedByUserId = actor.id;
       request.reviewedAt = new Date();
       request.reviewReason = value.reason;
-      return manager.getRepository(ShiftSwapRequestEntity).save(request);
+      return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save(request), true);
     });
   }
 
@@ -590,7 +612,7 @@ export class SchedulingWorkflowService {
         !this.swapSchedulesStillMatch(requesterSchedule, coworkerSchedule, request)
       ) {
         request.status = ShiftRequestStatus.CONFLICTED;
-        return manager.getRepository(ShiftSwapRequestEntity).save(request);
+        return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save(request));
       }
       const coworker = await manager.getRepository(WorkerEntity).findOneBy({
         id: request.coworkerWorkerId,
@@ -599,7 +621,7 @@ export class SchedulingWorkflowService {
       });
       if (!requester || !coworker || requester.contractorId !== coworker.contractorId) {
         request.status = ShiftRequestStatus.CONFLICTED;
-        return manager.getRepository(ShiftSwapRequestEntity).save(request);
+        return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save(request));
       }
       await Promise.all([
         this.assertContractorShiftAssignment(
@@ -625,7 +647,7 @@ export class SchedulingWorkflowService {
       request.reviewedByUserId = actor.id;
       request.reviewedAt = now;
       request.appliedAt = now;
-      return manager.getRepository(ShiftSwapRequestEntity).save(request);
+      return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save(request));
     });
   }
 
@@ -669,7 +691,7 @@ export class SchedulingWorkflowService {
       request.reviewedByUserId = actor.id;
       request.reviewedAt = new Date();
       request.reviewReason = value.reason;
-      return manager.getRepository(ShiftSwapRequestEntity).save(request);
+      return this.notifySwap(manager, actor, await manager.getRepository(ShiftSwapRequestEntity).save(request));
     });
   }
 
@@ -849,6 +871,31 @@ export class SchedulingWorkflowService {
       : null;
     if (worker) {
       return { type: 'WORKER', workerId: worker.id };
+    }
+    this.forbidden();
+  }
+
+  async getShiftRequest(actor: AuthenticatedUser, siteId: string, requestId: string, type: 'CHANGE' | 'SWAP') {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    const scopedRequestId = uuid(requestId);
+    this.assertPasswordChanged(actor);
+    const manager = this.dataSource.manager;
+    const request = type === 'CHANGE'
+      ? await manager.getRepository(ShiftChangeRequestEntity).findOneBy({ id: scopedRequestId, siteId: scopedSiteId })
+      : await manager.getRepository(ShiftSwapRequestEntity).findOneBy({ id: scopedRequestId, siteId: scopedSiteId });
+    if (!request) missing();
+    const workerIds = type === 'CHANGE' ? [(request as ShiftChangeRequestEntity).workerId]
+      : [(request as ShiftSwapRequestEntity).requesterWorkerId, (request as ShiftSwapRequestEntity).coworkerWorkerId];
+    for (const workerId of workerIds) {
+      const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId: scopedSiteId, isActive: true });
+      if (!worker?.contractorId || !(await hasActiveContractorParticipation(manager, worker.contractorId, scopedSiteId))) continue;
+      if (this.hasSiteRole(actor, UserRole.WORKER, scopedSiteId) && worker.userId === actor.id) return request;
+      if (this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)) {
+        const rep = await manager.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({
+          siteId: scopedSiteId, contractorId: worker.contractorId, userId: actor.id,
+        });
+        if (rep) return request;
+      }
     }
     this.forbidden();
   }

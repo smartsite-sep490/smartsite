@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { NotificationsController } from './notifications.controller.js';
+import { SchedulingNotificationService } from './scheduling-notification.service.js';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DatabaseModule } from '../../database/database.module.js';
@@ -28,6 +30,7 @@ import {
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [
+    NotificationsController,
     WorkforceController,
     ContractorsController,
     ScheduleConfigurationController,
@@ -39,6 +42,7 @@ import {
     WorkerGatePermissionsController,
   ],
   providers: [
+    SchedulingNotificationService,
     WorkforceConfigurationService,
     ScheduleConfigurationService,
     SchedulingWorkflowService,

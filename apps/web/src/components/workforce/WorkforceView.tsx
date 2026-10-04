@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
@@ -64,6 +65,7 @@ function ErrorState({
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const resolvedApiUrl = apiUrlProp || apiUrl;
   const { accessToken } = useAuth();
 
@@ -96,11 +98,12 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
   });
 
   // 3. Resolve selectedSiteId
-  const [overrideSiteId] = useState<string | null>(null);
+  const requestedSiteId = searchParams.get('siteId');
   const autoSiteId = isGlobalAdmin
     ? sitesQuery.data?.items?.[0]?.id ?? null
     : scopedSiteIds[0] ?? null;
-  const selectedSiteId = overrideSiteId ?? autoSiteId;
+  const targetSiteAllowed = !requestedSiteId || scopedSiteIds.includes(requestedSiteId) || isGlobalAdmin;
+  const selectedSiteId = requestedSiteId ?? autoSiteId;
 
   // 4. Role-based tab visibility
   const effectiveRoles = roleAssignments
@@ -119,6 +122,8 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
   >(null);
 
   const activeTab =
+    searchParams.get('tab') === 'review' && showReview ? 'review' :
+    searchParams.get('tab') === 'schedule' && showSchedule ? 'schedule' :
     (userSelectedTab === 'review' && showReview) ||
     (userSelectedTab === 'schedule' && showSchedule)
       ? userSelectedTab
@@ -190,7 +195,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
     );
   }
 
-  if (!showSchedule && !showReview) {
+  if (!targetSiteAllowed || (!showSchedule && !showReview)) {
     return (
       <div className="max-w-md mx-auto mt-20 p-8 rounded-2xl border border-slate-200 bg-white text-center space-y-4 shadow-sm">
         <div className="w-12 h-12 rounded-xl bg-slate-50 text-slate-500 mx-auto flex items-center justify-center">
@@ -224,7 +229,12 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
               },
             ]}
             activeTab={activeTab as 'review' | 'schedule'}
-            onChange={(tab) => setUserSelectedTab(tab)}
+            onChange={(tab) => {
+              setUserSelectedTab(tab);
+              const next = new URLSearchParams(searchParams);
+              for (const key of ['tab', 'view', 'requestType', 'requestId']) next.delete(key);
+              setSearchParams(next);
+            }}
           />
         </div>
       )}
@@ -233,6 +243,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
       <div>
         {activeTab === 'schedule' && (
           <WorkforceScheduleTab
+            key={`${selectedSiteId}-${searchParams.get('requestId') ?? ''}`}
             apiUrl={resolvedApiUrl}
             siteId={selectedSiteId}
             token={accessToken}
@@ -241,6 +252,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
         )}
         {activeTab === 'review' && (
           <WorkforceManagerReviewTab
+            key={`${selectedSiteId}-${searchParams.get('requestId') ?? ''}`}
             apiUrl={resolvedApiUrl}
             siteId={selectedSiteId}
             token={accessToken}

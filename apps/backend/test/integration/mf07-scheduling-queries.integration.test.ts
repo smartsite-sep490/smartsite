@@ -552,6 +552,40 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   });
   assert.equal(representativeApproval.status, 200);
 
+  // Durable notification HTTP contract uses real sessions, PostgreSQL, and current scope.
+  const personalNotifications = await fetchJson('/me/notifications?readStatus=UNREAD&limit=20', workerTokenA);
+  assert.equal(personalNotifications.status, 200);
+  const notificationPage = personalNotifications.json as {
+    items: Array<{ id: string; event: string; readAt: string | null; target: { requestId: string } }>;
+    unreadCount: number;
+  };
+  const approvedNotice = notificationPage.items.find(item => item.target.requestId === reviewRequestId)!;
+  assert.equal(approvedNotice.event, 'REQUEST_APPLIED');
+  assert.equal(approvedNotice.readAt, null);
+  const detail = await fetchJson(`/sites/${siteA}/shift-change-requests/${reviewRequestId}`, workerTokenA);
+  assert.equal(detail.status, 200);
+  assert.equal((await fetchJson(`/sites/${siteA}/shift-change-requests/${reviewRequestId}`, unaffiliatedToken)).status, 403);
+  const readResponse = await fetch(`${baseUrl}/api/v1/me/notifications/${approvedNotice.id}/read`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${workerTokenA}` },
+  });
+  assert.equal(readResponse.status, 200);
+  const readBody = await readResponse.json() as { id: string; readAt: string };
+  assert.equal(readBody.id, approvedNotice.id);
+  assert.ok(Number.isFinite(Date.parse(readBody.readAt)));
+  const wrongRecipientRead = await fetch(`${baseUrl}/api/v1/me/notifications/${approvedNotice.id}/read`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${repTokenA}` },
+  });
+  assert.equal(wrongRecipientRead.status, 404);
+  const readAll = await fetch(`${baseUrl}/api/v1/me/notifications/read-all`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${workerTokenA}` },
+  });
+  assert.equal(readAll.status, 200);
+  assert.equal((await fetchJson('/me/notifications?readStatus=UNREAD', workerTokenA)).json.unreadCount, 0);
+  assert.equal((await fetch(`${baseUrl}/api/v1/me/notifications`)).status, 401);
+  for (const query of ['readStatus=READ', 'recipientUserId=another-account', 'limit=101', 'limit=20&limit=30']) {
+    assert.equal((await fetchJson(`/me/notifications?${query}`, workerTokenA)).status, 400);
+  }
+
   // 5. Worker can only view their own Worker record; coworkers use the scoped coworkers endpoint below.
   const res5 = await fetchJson(`/sites/${siteA}/workers`, workerTokenA);
   assert.equal(res5.status, 200);

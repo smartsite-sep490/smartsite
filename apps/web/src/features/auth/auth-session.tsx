@@ -148,6 +148,7 @@ export function useLogin(apiUrl: string) {
       return client.login(username, password, 'WEB');
     },
     onSuccess: (data) => {
+      queryClient.clear();
       dismissSessionExpired();
       setAccessToken(data.accessToken);
       // Invalidate the session query so it updates if needed, though we just set the token manually
