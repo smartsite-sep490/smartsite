@@ -1,9 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNotificationRequest } from './useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  SmartSiteManagementClient,
-} from '@smartsite/api-client';
+import { SmartSiteManagementClient, type ShiftRequestResponse } from '@smartsite/api-client';
 import {
   IconUsers,
   IconCalendar,
@@ -21,7 +19,9 @@ import {
   IconChevronRight,
 } from '../icons';
 import { formatShiftTime, formatDateTime, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
-import { filterContractorReviewRequests } from './WorkforceManagerReviewUtils';
+import { useShiftRequests } from './useShiftRequests';
+import { RequestPagination } from './RequestPagination';
+import { schedulingError } from './scheduling-error';
 import {
   Button,
   Badge,
@@ -47,7 +47,8 @@ export function WorkforceManagerReviewTab({
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const target = useNotificationRequest(apiUrl, siteId, token);
   const [userSubTab, setSubTab] = useState<'pending' | 'history' | null>(null);
-  const subTab = userSubTab ?? (target.data && target.data.status !== 'PENDING_MANAGER' ? 'history' : 'pending');
+  const subTab =
+    userSubTab ?? (target.data && target.data.status !== 'PENDING_MANAGER' ? 'history' : 'pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'CHANGE' | 'SWAP'>('ALL');
   const [rejectTarget, setRejectTarget] = useState<{ type: 'CHANGE' | 'SWAP'; id: string } | null>(
@@ -60,45 +61,23 @@ export function WorkforceManagerReviewTab({
     message: string;
   } | null>(null);
 
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
+  const requestQuery = useShiftRequests(apiUrl, siteId, token, {
+    view: subTab === 'pending' ? 'REVIEW' : 'HISTORY',
+    requestType: filterType,
+    search: searchQuery,
+    offset: historyPage * historyPageSize,
+    limit: historyPageSize,
+  });
+
   // Queries
-  const {
-    data: changePage,
-    isLoading: changesLoading,
-    isError: changesError,
-    error: changesErrorObj,
-    refetch: refetchChanges,
-  } = useQuery({
-    queryKey: ['shift-change-requests', siteId],
-    queryFn: () => client.listShiftChangeRequests(token, siteId, { limit: 25 }),
-    refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-  });
-
-  const {
-    data: swapPage,
-    isLoading: swapsLoading,
-    isError: swapsError,
-    error: swapsErrorObj,
-    refetch: refetchSwaps,
-  } = useQuery({
-    queryKey: ['swap-requests', siteId],
-    queryFn: () => client.listShiftSwapRequests(token, siteId, { limit: 25 }),
-    refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-  });
-
-  const changes = useMemo(() => {
-    if (target.data?.requestType !== 'CHANGE') return changePage;
-    return { items: [target.data, ...(changePage?.items ?? []).filter(r => r.id !== target.data!.id)], total: changePage?.total ?? 1 };
-  }, [changePage, target.data]);
-  const swaps = useMemo(() => {
-    if (target.data?.requestType !== 'SWAP') return swapPage;
-    return { items: [target.data, ...(swapPage?.items ?? []).filter(r => r.id !== target.data!.id)], total: swapPage?.total ?? 1 };
-  }, [swapPage, target.data]);
+  const changesError = requestQuery.isError;
+  const swapsError = false;
+  const changesErrorObj = requestQuery.error;
+  const swapsErrorObj: { status?: number } = {};
+  const refetchChanges = requestQuery.refetch;
+  const refetchSwaps = requestQuery.refetch;
   const { data: workers } = useQuery({
     queryKey: ['workers', siteId],
     queryFn: () => client.listWorkers(token, siteId, { limit: 25 }),
@@ -146,21 +125,33 @@ export function WorkforceManagerReviewTab({
       : `Shift (${id.slice(0, 6)})`;
   };
 
+  const actionError = (error: unknown) =>
+    setActionFeedback({ type: 'error', title: 'Action Failed', message: schedulingError(error) });
+
   // Mutations
   const approveChange = useMutation({
     mutationFn: (id: string) => client.approveShiftChangeRequest(token, siteId, id),
+    onError: actionError,
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
-      queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
-      setActionFeedback(result.status === 'APPLIED' ? {
-        type: 'success', title: 'Shift Change Approved',
-        message: 'Shift change request has been approved. The worker schedule is now updated.',
-      } : {
-        type: 'error', title: 'Shift Change Could Not Be Applied',
-        message: 'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
-      });
+      setActionFeedback(
+        result.status === 'APPLIED'
+          ? {
+              type: 'success',
+              title: 'Shift Change Approved',
+              message:
+                'Shift change request has been approved. The worker schedule is now updated.',
+            }
+          : {
+              type: 'error',
+              title: 'Shift Change Could Not Be Applied',
+              message:
+                'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
+            },
+      );
       setTimeout(() => setActionFeedback(null), 5000);
     },
   });
@@ -168,10 +159,11 @@ export function WorkforceManagerReviewTab({
   const rejectChange = useMutation({
     mutationFn: (input: { id: string; reason: string }) =>
       client.rejectShiftChangeRequest(token, siteId, input.id, { reason: input.reason }),
+    onError: actionError,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
-      queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       setRejectTarget(null);
       setRejectReason('');
       setActionFeedback({
@@ -185,18 +177,26 @@ export function WorkforceManagerReviewTab({
 
   const approveSwap = useMutation({
     mutationFn: (id: string) => client.approveShiftSwapRequest(token, siteId, id),
+    onError: actionError,
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
-      queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
-      setActionFeedback(result.status === 'APPLIED' ? {
-        type: 'success', title: 'Shift Swap Approved',
-        message: 'Shift swap request approved. Schedules for both workers have been updated.',
-      } : {
-        type: 'error', title: 'Shift Swap Could Not Be Applied',
-        message: 'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
-      });
+      setActionFeedback(
+        result.status === 'APPLIED'
+          ? {
+              type: 'success',
+              title: 'Shift Swap Approved',
+              message: 'Shift swap request approved. Schedules for both workers have been updated.',
+            }
+          : {
+              type: 'error',
+              title: 'Shift Swap Could Not Be Applied',
+              message:
+                'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
+            },
+      );
       setTimeout(() => setActionFeedback(null), 5000);
     },
   });
@@ -204,10 +204,11 @@ export function WorkforceManagerReviewTab({
   const rejectSwap = useMutation({
     mutationFn: (input: { id: string; reason: string }) =>
       client.rejectShiftSwapRequest(token, siteId, input.id, { reason: input.reason }),
+    onError: actionError,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
-      queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       setRejectTarget(null);
       setRejectReason('');
       setActionFeedback({
@@ -231,103 +232,34 @@ export function WorkforceManagerReviewTab({
     rejectSwap.reset();
   };
 
-  const isLoading = changesLoading || swapsLoading;
-
-  // Filter pending items
-  const filteredPending = useMemo(() => {
-    const { pendingChanges, pendingSwaps } = filterContractorReviewRequests(
-      changes?.items || [],
-      swaps?.items || [],
-    );
-
-    let filteredC = pendingChanges;
-    let filteredS = pendingSwaps;
-
-    if (filterType === 'CHANGE') filteredS = [];
-    if (filterType === 'SWAP') filteredC = [];
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filteredC = filteredC.filter(
-        (r) =>
-          getWorkerName(r.workerId).toLowerCase().includes(q) ||
-          r.reason.toLowerCase().includes(q),
-      );
-      filteredS = filteredS.filter(
-        (r) =>
-          getWorkerName(r.requesterWorkerId).toLowerCase().includes(q) ||
-          getWorkerName(r.coworkerWorkerId).toLowerCase().includes(q) ||
-          r.reason.toLowerCase().includes(q),
-      );
-    }
-
-    return {
-      changes: filteredC,
-      swaps: filteredS,
-      total: filteredC.length + filteredS.length,
-    };
-  }, [changes, swaps, filterType, searchQuery, getWorkerName]);
-
-  const totalPending =
-    (changes?.items?.filter((r) => r.status === 'PENDING_MANAGER').length || 0) +
-    (swaps?.items?.filter((r) => r.status === 'PENDING_MANAGER').length || 0);
-
-  // History list
-  const historyChanges = useMemo(() => {
-    let list =
-      changes?.items.filter((r) => r.status !== 'PENDING_MANAGER' && r.status !== 'DRAFT') || [];
-    if (filterType === 'SWAP') return [];
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (r) =>
-          getWorkerName(r.workerId).toLowerCase().includes(q) ||
-          r.reason.toLowerCase().includes(q),
-      );
-    }
-    return list;
-  }, [changes, filterType, searchQuery, getWorkerName]);
-
-  const historySwaps = useMemo(() => {
-    let list =
-      swaps?.items.filter(
-        (r) =>
-          r.status !== 'PENDING_MANAGER' &&
-          r.status !== 'DRAFT' &&
-          r.status !== 'PENDING_COWORKER',
-      ) || [];
-    if (filterType === 'CHANGE') return [];
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (r) =>
-          getWorkerName(r.requesterWorkerId).toLowerCase().includes(q) ||
-          getWorkerName(r.coworkerWorkerId).toLowerCase().includes(q) ||
-          r.reason.toLowerCase().includes(q),
-      );
-    }
-    return list;
-  }, [swaps, filterType, searchQuery, getWorkerName]);
-
-  const [historyPage, setHistoryPage] = useState(0);
-  const [historyPageSize, setHistoryPageSize] = useState(10);
-
-  const allHistory = useMemo(() => {
-    const combined = [
-      ...historyChanges.map((c) => ({ ...c, requestType: 'CHANGE' as const })),
-      ...historySwaps.map((s) => ({ ...s, requestType: 'SWAP' as const })),
-    ];
-    return combined.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  }, [historyChanges, historySwaps]);
-
-  const historyTotal = allHistory.length;
+  const isLoading = requestQuery.isLoading;
+  const pageItems = requestQuery.data?.items ?? [];
+  const selected =
+    target.data &&
+    !pageItems.some((r) => r.id === target.data!.id) &&
+    (filterType === 'ALL' || target.data.requestType === filterType) &&
+    (subTab === 'pending'
+      ? target.data.status === 'PENDING_MANAGER'
+      : !['DRAFT', 'PENDING_MANAGER', 'PENDING_COWORKER'].includes(target.data.status))
+      ? target.data
+      : null;
+  const visibleItems = selected ? [selected, ...pageItems] : pageItems;
+  const filteredPending = {
+    changes: visibleItems.filter(
+      (r): r is Extract<ShiftRequestResponse, { requestType: 'CHANGE' }> =>
+        r.requestType === 'CHANGE' && r.status === 'PENDING_MANAGER',
+    ),
+    swaps: visibleItems.filter(
+      (r): r is Extract<ShiftRequestResponse, { requestType: 'SWAP' }> =>
+        r.requestType === 'SWAP' && r.status === 'PENDING_MANAGER',
+    ),
+    total: visibleItems.length,
+  };
+  const totalPending = requestQuery.data?.pendingCount ?? 0;
+  const allHistory = visibleItems;
+  const historyTotal = requestQuery.data?.total ?? 0;
   const historyPageCount = Math.max(1, Math.ceil(historyTotal / historyPageSize));
-  const paginatedHistory = useMemo(() => {
-    const start = historyPage * historyPageSize;
-    return allHistory.slice(start, start + historyPageSize);
-  }, [allHistory, historyPage, historyPageSize]);
+  const paginatedHistory = allHistory;
 
   const activeWorkerCount = workers?.items.length || 0;
   const totalAssignedShifts = schedules?.total || 0;
@@ -345,7 +277,8 @@ export function WorkforceManagerReviewTab({
         </div>
         <h2 className="text-lg font-bold text-slate-900">Access Denied</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Contractor Review is reserved for Contractor Representatives assigned to this Site and Contractor.
+          Contractor Review is reserved for Contractor Representatives assigned to this Site and
+          Contractor.
         </p>
       </div>
     );
@@ -379,14 +312,27 @@ export function WorkforceManagerReviewTab({
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       {target.isLoading && <p role="status">Loading selected request…</p>}
-      {target.isError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-        This request is unavailable or you no longer have access. <button type="button" onClick={() => void target.refetch()} className="underline">Retry</button>
-      </div>}
-      {target.data && <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
-        Selected {target.data.requestType === 'CHANGE' ? 'shift change' : 'shift swap'} · {target.data.status}
-        <p className="mt-1 text-xs text-slate-600">{target.data.reason}</p>
-        {target.data.reviewReason && <p className="mt-1 text-xs">Review message: {target.data.reviewReason}</p>}
-      </div>}
+      {target.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          This request is unavailable or you no longer have access.{' '}
+          <button type="button" onClick={() => void target.refetch()} className="underline">
+            Retry
+          </button>
+        </div>
+      )}
+      {target.data && (
+        <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
+          Selected {target.data.requestType === 'CHANGE' ? 'shift change' : 'shift swap'} ·{' '}
+          {target.data.status}
+          <p className="mt-1 text-xs text-slate-600">{target.data.reason}</p>
+          {target.data.reviewReason && (
+            <p className="mt-1 text-xs">Review message: {target.data.reviewReason}</p>
+          )}
+        </div>
+      )}
 
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
@@ -404,9 +350,7 @@ export function WorkforceManagerReviewTab({
                 Shift Approvals
               </span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              Contractor Review
-            </h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">Contractor Review</h1>
           </div>
         </div>
 
@@ -428,7 +372,9 @@ export function WorkforceManagerReviewTab({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Workers</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Workers
+            </span>
             <p className="text-xl font-black text-[#071A2B]">{activeWorkerCount}</p>
           </div>
           <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -438,7 +384,9 @@ export function WorkforceManagerReviewTab({
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Shifts</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Assigned Shifts
+            </span>
             <p className="text-xl font-black text-[#071A2B]">{totalAssignedShifts}</p>
           </div>
           <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -448,7 +396,9 @@ export function WorkforceManagerReviewTab({
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Pending Action</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              Pending Action
+            </span>
             <p className="text-xl font-black text-amber-600">{totalPending}</p>
           </div>
           <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
@@ -458,7 +408,9 @@ export function WorkforceManagerReviewTab({
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Coverage Risk</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              Coverage Risk
+            </span>
             <p className="text-xl font-black text-emerald-600">0 Shifts</p>
           </div>
           <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
@@ -521,12 +473,13 @@ export function WorkforceManagerReviewTab({
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
             </AlertTitle>
             <AlertDescription className="text-amber-900/90 font-medium text-xs">
-              You have <span className="font-semibold text-slate-950">{totalPending} shift request(s)</span> awaiting your review and approval.
+              You have{' '}
+              <span className="font-semibold text-slate-950">{totalPending} shift request(s)</span>{' '}
+              awaiting your review and approval.
             </AlertDescription>
           </div>
         </Alert>
       )}
-
 
       {/* 3. Controls & Tabs */}
       <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -545,7 +498,10 @@ export function WorkforceManagerReviewTab({
             },
           ]}
           activeTab={subTab}
-          onChange={(tab) => setSubTab(tab)}
+          onChange={(tab) => {
+            setSubTab(tab);
+            setHistoryPage(0);
+          }}
         />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -553,27 +509,42 @@ export function WorkforceManagerReviewTab({
           <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50/80 p-0.5">
             <button
               type="button"
-              onClick={() => setFilterType('ALL')}
+              onClick={() => {
+                setFilterType('ALL');
+                setHistoryPage(0);
+              }}
               className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
-                filterType === 'ALL' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                filterType === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               All
             </button>
             <button
               type="button"
-              onClick={() => setFilterType('CHANGE')}
+              onClick={() => {
+                setFilterType('CHANGE');
+                setHistoryPage(0);
+              }}
               className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
-                filterType === 'CHANGE' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                filterType === 'CHANGE'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               Changes
             </button>
             <button
               type="button"
-              onClick={() => setFilterType('SWAP')}
+              onClick={() => {
+                setFilterType('SWAP');
+                setHistoryPage(0);
+              }}
               className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
-                filterType === 'SWAP' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                filterType === 'SWAP'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               Swaps
@@ -586,7 +557,10 @@ export function WorkforceManagerReviewTab({
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setHistoryPage(0);
+              }}
               placeholder="Search worker / reason..."
               className="bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:bg-white transition-colors w-44"
             />
@@ -697,7 +671,8 @@ export function WorkforceManagerReviewTab({
                         </div>
                         <div>
                           <div className="font-bold text-slate-900 text-xs">
-                            {getWorkerName(swap.requesterWorkerId)} ↔ {getWorkerName(swap.coworkerWorkerId)}
+                            {getWorkerName(swap.requesterWorkerId)} ↔{' '}
+                            {getWorkerName(swap.coworkerWorkerId)}
                           </div>
                           <span className="text-[10px] text-slate-400 font-mono">
                             {formatDateTime(swap.createdAt)}
@@ -712,10 +687,16 @@ export function WorkforceManagerReviewTab({
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                       <div className="text-xs text-slate-700 space-y-1">
                         <div>
-                          <span className="font-semibold">{getWorkerName(swap.requesterWorkerId)}:</span> Shift ({getShiftName(swap.requesterShiftId)})
+                          <span className="font-semibold">
+                            {getWorkerName(swap.requesterWorkerId)}:
+                          </span>{' '}
+                          Shift ({getShiftName(swap.requesterShiftId)})
                         </div>
                         <div>
-                          <span className="font-semibold">{getWorkerName(swap.coworkerWorkerId)}:</span> Shift ({getShiftName(swap.coworkerShiftId)})
+                          <span className="font-semibold">
+                            {getWorkerName(swap.coworkerWorkerId)}:
+                          </span>{' '}
+                          Shift ({getShiftName(swap.coworkerShiftId)})
                         </div>
                       </div>
                       {swap.reason && (
@@ -755,10 +736,31 @@ export function WorkforceManagerReviewTab({
         </div>
       )}
 
+      {subTab === 'pending' && (
+        <RequestPagination
+          page={historyPage}
+          size={historyPageSize}
+          total={historyTotal}
+          onChange={setHistoryPage}
+        />
+      )}
+      {subTab === 'history' && allHistory.length === 0 && historyTotal > 0 && (
+        <RequestPagination
+          page={historyPage}
+          size={historyPageSize}
+          total={historyTotal}
+          onChange={setHistoryPage}
+        />
+      )}
+
       {/* 5. Content Area: Request History Table */}
       {subTab === 'history' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          {allHistory.length === 0 ? (
+          {isLoading ? (
+            <p role="status" className="p-4">
+              Loading request history...
+            </p>
+          ) : allHistory.length === 0 ? (
             <EmptyState
               icon={<IconClock className="w-6 h-6 text-slate-400" />}
               title="No History Records"
@@ -779,7 +781,10 @@ export function WorkforceManagerReviewTab({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {paginatedHistory.map((item) => (
-                      <tr key={`${item.requestType}-${item.id}`} className="hover:bg-slate-50/70 transition-colors">
+                      <tr
+                        key={`${item.requestType}-${item.id}`}
+                        className="hover:bg-slate-50/70 transition-colors"
+                      >
                         <td className="py-3.5 px-4 font-bold text-slate-800">
                           {item.requestType === 'CHANGE' ? 'Change' : 'Swap'}
                         </td>
@@ -792,14 +797,27 @@ export function WorkforceManagerReviewTab({
                           {item.requestType === 'CHANGE' ? (
                             <>
                               <div>To: {getShiftName(item.toShiftId)}</div>
-                              {item.reason && <div className="text-[11px] text-slate-400 italic">&quot;{item.reason}&quot;</div>}
+                              {item.reason && (
+                                <div className="text-[11px] text-slate-400 italic">
+                                  &quot;{item.reason}&quot;
+                                </div>
+                              )}
                             </>
+                          ) : item.reason ? (
+                            `"${item.reason}"`
                           ) : (
-                            item.reason ? `"${item.reason}"` : 'Swap agreed by coworker'
+                            'Swap agreed by coworker'
                           )}
                         </td>
                         <td className="py-3.5 px-4">
-                          <Badge variant={item.status === 'APPROVED' || item.status === 'APPLIED' ? 'success' : 'danger'} dot>
+                          <Badge
+                            variant={
+                              item.status === 'APPROVED' || item.status === 'APPLIED'
+                                ? 'success'
+                                : 'danger'
+                            }
+                            dot
+                          >
                             {item.status}
                           </Badge>
                         </td>
@@ -816,9 +834,15 @@ export function WorkforceManagerReviewTab({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500 font-medium">
                 <div className="flex items-center gap-2">
                   <span>
-                    Showing <span className="font-bold text-slate-900">{historyTotal === 0 ? 0 : historyPage * historyPageSize + 1}</span> to{' '}
-                    <span className="font-bold text-slate-900">{Math.min((historyPage + 1) * historyPageSize, historyTotal)}</span> of{' '}
-                    <span className="font-bold text-slate-900">{historyTotal}</span> records
+                    Showing{' '}
+                    <span className="font-bold text-slate-900">
+                      {historyTotal === 0 ? 0 : historyPage * historyPageSize + 1}
+                    </span>{' '}
+                    to{' '}
+                    <span className="font-bold text-slate-900">
+                      {Math.min((historyPage + 1) * historyPageSize, historyTotal)}
+                    </span>{' '}
+                    of <span className="font-bold text-slate-900">{historyTotal}</span> records
                   </span>
                   <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
                     <span className="text-[11px] text-slate-400">Per page:</span>
@@ -931,7 +955,6 @@ export function WorkforceManagerReviewTab({
           </div>
         </div>
       </Dialog>
-
     </div>
   );
 }

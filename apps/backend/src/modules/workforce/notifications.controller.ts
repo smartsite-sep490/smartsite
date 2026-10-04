@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Logger, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
+  Param,
+  Patch,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsOptional } from 'class-validator';
 import { command, invalid } from '../../common/configuration/commands.js';
@@ -54,6 +65,23 @@ export class NotificationsController {
     return result;
   }
 
+  @Delete('read')
+  async deleteRead(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: unknown,
+    @Query() query: Record<string, unknown>,
+  ) {
+    emptyBody(body);
+    if (Object.keys(query).length) invalid();
+    const result = await this.notifications.deleteRead(request.user!);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'notification.delete-read',
+      deleted: result.deleted,
+    });
+    return result;
+  }
+
   @Patch(':id/read')
   async read(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: unknown) {
     emptyBody(body);
@@ -61,6 +89,22 @@ export class NotificationsController {
     this.logger.log({
       actorId: request.user!.id,
       action: 'notification.read',
+      resourceId: result.id,
+    });
+    return result;
+  }
+
+  @Delete(':id')
+  async delete(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    emptyBody(body);
+    const result = await this.notifications.delete(request.user!, id);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'notification.delete',
       resourceId: result.id,
     });
     return result;

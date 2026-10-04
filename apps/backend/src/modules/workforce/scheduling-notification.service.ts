@@ -5,6 +5,7 @@ import type {
   SchedulingNotificationEvent,
   UserNotificationListResponse,
   UserNotificationResponse,
+  NotificationDeleteReadResponse,
 } from '@smartsite/contracts';
 import { invalid, missing, page, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -245,6 +246,7 @@ export class SchedulingNotificationService {
         .getRepository(UserNotificationEntity)
         .createQueryBuilder('n')
         .where('n.recipient_user_id = :userId', { userId: actor.id })
+        .andWhere('n.deleted_at IS NULL')
         .andWhere(scope);
       const unreadCount = await query.clone().andWhere('n.read_at IS NULL').getCount();
       if (readStatus === 'UNREAD') query.andWhere('n.read_at IS NULL');
@@ -264,7 +266,7 @@ export class SchedulingNotificationService {
     const [rows]: [Array<{ id: string; read_at: Date }>, number] = await this.dataSource.query(
       `
       UPDATE user_notification n SET read_at = COALESCE(n.read_at, CURRENT_TIMESTAMP)
-      WHERE n.id = $1 AND n.recipient_user_id = $2 AND ${scope} RETURNING n.id, n.read_at`,
+      WHERE n.id = $1 AND n.recipient_user_id = $2 AND n.deleted_at IS NULL AND ${scope} RETURNING n.id, n.read_at`,
       [notificationId, actor.id],
     );
     if (!rows[0]) missing();
@@ -276,10 +278,35 @@ export class SchedulingNotificationService {
     const result: [unknown[], number] = await this.dataSource.query(
       `
       UPDATE user_notification n SET read_at = CURRENT_TIMESTAMP
-      WHERE n.recipient_user_id = $1 AND n.read_at IS NULL AND ${scope} RETURNING n.id`,
+      WHERE n.recipient_user_id = $1 AND n.read_at IS NULL AND n.deleted_at IS NULL AND ${scope} RETURNING n.id`,
       [actor.id],
     );
     return { updated: result[1] };
+  }
+
+  async deleteRead(actor: AuthenticatedUser): Promise<NotificationDeleteReadResponse> {
+    this.assertActor(actor);
+    const result: [unknown[], number] = await this.dataSource.query(
+      `
+      UPDATE user_notification n SET deleted_at = CURRENT_TIMESTAMP
+      WHERE n.recipient_user_id = $1 AND n.read_at IS NOT NULL AND n.deleted_at IS NULL
+        AND ${scope} RETURNING n.id`,
+      [actor.id],
+    );
+    return { deleted: result[1] };
+  }
+
+  async delete(actor: AuthenticatedUser, id: string): Promise<{ id: string }> {
+    const notificationId = uuid(id);
+    this.assertActor(actor);
+    const [rows]: [Array<{ id: string }>, number] = await this.dataSource.query(
+      `
+      UPDATE user_notification n SET deleted_at = CURRENT_TIMESTAMP, read_at = COALESCE(n.read_at, CURRENT_TIMESTAMP)
+      WHERE n.id = $1 AND n.recipient_user_id = $2 AND n.deleted_at IS NULL AND ${scope} RETURNING n.id`,
+      [notificationId, actor.id],
+    );
+    if (!rows[0]) missing();
+    return { id: rows[0].id };
   }
 
   async backfillPending(): Promise<number> {

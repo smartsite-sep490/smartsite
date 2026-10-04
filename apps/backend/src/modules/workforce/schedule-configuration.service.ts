@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
-import { command, conflict, knownUnique, missing, uuid } from '../../common/configuration/commands.js';
+import {
+  command,
+  conflict,
+  knownUnique,
+  missing,
+  uuid,
+} from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ScheduleVersionEntity } from '../../database/entities/schedule-version.entity.js';
 import { ShiftEntity } from '../../database/entities/shift.entity.js';
@@ -70,9 +76,14 @@ export class ScheduleConfigurationService {
     this.assertPasswordChanged(user);
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedWorkerScheduleId = uuid(workerScheduleId);
-    const isManager = this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, scopedSiteId);
+    const isManager =
+      this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, scopedSiteId);
     const isWorker = this.hasSiteRole(user, UserRole.WORKER, scopedSiteId);
-    const isRepresentative = this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId);
+    const isRepresentative = this.hasSiteRole(
+      user,
+      UserRole.CONTRACTOR_REPRESENTATIVE,
+      scopedSiteId,
+    );
     if (!isManager && !isWorker && !isRepresentative) this.forbidden();
 
     const schedule = await this.dataSource.getRepository(WorkerScheduleEntity).findOneBy({
@@ -92,11 +103,27 @@ export class ScheduleConfigurationService {
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .findOneBy({ siteId: scopedSiteId, contractorId: worker.contractorId, userId: user.id });
       if (!representative) this.forbidden();
-      if (!(await hasActiveContractorParticipation(this.dataSource.manager, worker.contractorId, scopedSiteId)))
+      if (
+        !(await hasActiveContractorParticipation(
+          this.dataSource.manager,
+          worker.contractorId,
+          scopedSiteId,
+        ))
+      )
         this.forbidden();
     } else if (!isManager && (worker.userId !== user.id || !worker.isActive)) {
       this.forbidden();
     }
+    if (
+      !isManager &&
+      (!worker.contractorId ||
+        !(await hasActiveContractorParticipation(
+          this.dataSource.manager,
+          worker.contractorId,
+          scopedSiteId,
+        )))
+    )
+      this.forbidden();
     if (!schedule.isActive) conflict('Worker schedule is inactive');
     if (!worker.isActive) conflict('Worker is inactive');
     return { schedule, worker };
@@ -113,15 +140,17 @@ export class ScheduleConfigurationService {
   }
 
   private assertSiteAccess(user: AuthenticatedUser, siteId: string) {
-    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || r.siteId === siteId)) {
-      throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+    if (!user.roleAssignments.some((r) => r.role === UserRole.ADMIN || r.siteId === siteId)) {
+      throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+        code: 'FORBIDDEN',
+        message: 'Forbidden',
+      });
     }
   }
 
   private assertScheduleWriter(user: AuthenticatedUser, siteId: string): void {
     this.assertPasswordChanged(user);
-    if (!this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
-      this.forbidden();
+    if (!this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId)) this.forbidden();
   }
 
   private async contractorScopeForReader(
@@ -136,7 +165,14 @@ export class ScheduleConfigurationService {
       const assignment = await this.dataSource
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .findOneBy({ siteId, userId: user.id });
-      if (assignment && await hasActiveContractorParticipation(this.dataSource.manager, assignment.contractorId, siteId))
+      if (
+        assignment &&
+        (await hasActiveContractorParticipation(
+          this.dataSource.manager,
+          assignment.contractorId,
+          siteId,
+        ))
+      )
         return assignment.contractorId;
     }
 
@@ -146,7 +182,15 @@ export class ScheduleConfigurationService {
         userId: user.id,
         isActive: true,
       });
-      if (worker?.contractorId) return worker.contractorId;
+      if (
+        worker?.contractorId &&
+        (await hasActiveContractorParticipation(
+          this.dataSource.manager,
+          worker.contractorId,
+          siteId,
+        ))
+      )
+        return worker.contractorId;
     }
 
     this.forbidden();
@@ -160,15 +204,15 @@ export class ScheduleConfigurationService {
     shiftId: string,
   ): Promise<void> {
     this.assertPasswordChanged(user);
-    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId))
-      this.forbidden();
+    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId)) this.forbidden();
     if (!worker.contractorId) this.forbidden();
 
     const representative = await manager
       .getRepository(ContractorRepresentativeAssignmentEntity)
       .findOneBy({ siteId, contractorId: worker.contractorId, userId: user.id });
     if (!representative) this.forbidden();
-    if (!(await hasActiveContractorParticipation(manager, worker.contractorId, siteId))) this.forbidden();
+    if (!(await hasActiveContractorParticipation(manager, worker.contractorId, siteId)))
+      this.forbidden();
 
     const shiftAssignment = await manager
       .getRepository(ContractorShiftAssignmentEntity)
@@ -199,11 +243,7 @@ export class ScheduleConfigurationService {
     });
   }
 
-  async deleteShift(
-    user: AuthenticatedUser,
-    siteId: string,
-    shiftId: string,
-  ): Promise<void> {
+  async deleteShift(user: AuthenticatedUser, siteId: string, shiftId: string): Promise<void> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     this.assertScheduleWriter(user, scopedSiteId);
     const scopedShiftId = uuid(shiftId);
@@ -276,8 +316,7 @@ export class ScheduleConfigurationService {
   ): Promise<WorkerScheduleEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     this.assertPasswordChanged(user);
-    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId))
-      this.forbidden();
+    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)) this.forbidden();
     const scopedScheduleVersionId = uuid(scheduleVersionId);
     const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {
@@ -370,8 +409,15 @@ export class ScheduleConfigurationService {
         }),
       ]);
       const now = Date.now();
-      if (!shift || !contractor || !participations.some(({ validFrom, validUntil }) =>
-        validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now))) missing();
+      if (
+        !shift ||
+        !contractor ||
+        !participations.some(
+          ({ validFrom, validUntil }) =>
+            validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now),
+        )
+      )
+        missing();
       try {
         return await manager.getRepository(ContractorShiftAssignmentEntity).save({
           id: randomUUID(),
@@ -398,8 +444,7 @@ export class ScheduleConfigurationService {
       .getRepository(ContractorShiftAssignmentEntity)
       .createQueryBuilder('assignment')
       .where('assignment.site_id = :siteId', { siteId: scopedSiteId });
-    if (contractorId)
-      query.andWhere('assignment.contractor_id = :contractorId', { contractorId });
+    if (contractorId) query.andWhere('assignment.contractor_id = :contractorId', { contractorId });
     const [items, total] = await query
       .orderBy('assignment.createdAt', 'DESC')
       .addOrderBy('assignment.id', 'ASC')
@@ -436,51 +481,84 @@ export class ScheduleConfigurationService {
     // Authorization check
     let contractorIdScope: string | undefined;
     let workerIdScope: string | undefined;
-    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
+    if (
+      !user.roleAssignments.some(
+        (r) =>
+          r.role === UserRole.ADMIN ||
+          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+      )
+    ) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER
       const rep = this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)
-        ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+        ? await this.dataSource
+            .getRepository(ContractorRepresentativeAssignmentEntity)
+            .findOneBy({ siteId: scopedSiteId, userId: user.id })
         : null;
       if (rep) {
-        if (!(await hasActiveContractorParticipation(this.dataSource.manager, rep.contractorId, scopedSiteId)))
+        if (
+          !(await hasActiveContractorParticipation(
+            this.dataSource.manager,
+            rep.contractorId,
+            scopedSiteId,
+          ))
+        )
           this.forbidden();
         contractorIdScope = rep.contractorId;
       } else {
         const worker = this.hasSiteRole(user, UserRole.WORKER, scopedSiteId)
-          ? await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+          ? await this.dataSource
+              .getRepository(WorkerEntity)
+              .findOneBy({ siteId: scopedSiteId, userId: user.id })
           : null;
-        if (worker) {
+        if (
+          worker?.isActive &&
+          worker.contractorId &&
+          (await hasActiveContractorParticipation(
+            this.dataSource.manager,
+            worker.contractorId,
+            scopedSiteId,
+          ))
+        ) {
           workerIdScope = worker.id;
         } else {
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         }
       }
     }
 
-    const query = this.dataSource.getRepository(WorkerScheduleEntity).createQueryBuilder('schedule')
+    const query = this.dataSource
+      .getRepository(WorkerScheduleEntity)
+      .createQueryBuilder('schedule')
       .where('schedule.site_id = :siteId', { siteId: scopedSiteId });
 
     if (contractorIdScope) {
-      query.innerJoin('worker', 'w', 'schedule.worker_id = w.id')
-           .andWhere('w.contractor_id = :contractorId', { contractorId: contractorIdScope });
+      query
+        .innerJoin('worker', 'w', 'schedule.worker_id = w.id')
+        .andWhere('w.contractor_id = :contractorId', { contractorId: contractorIdScope });
     }
     if (workerIdScope)
       query.andWhere('schedule.worker_id = :workerId', { workerId: workerIdScope });
     if (input.workerId)
-      query.andWhere('schedule.worker_id = :requestedWorkerId', { requestedWorkerId: uuid(input.workerId) });
+      query.andWhere('schedule.worker_id = :requestedWorkerId', {
+        requestedWorkerId: uuid(input.workerId),
+      });
     if (input.shiftId)
       query.andWhere('schedule.shift_id = :shiftId', { shiftId: uuid(input.shiftId) });
     if (input.fromDate)
       query.andWhere('schedule.work_date >= :fromDate', { fromDate: input.fromDate });
-    if (input.toDate)
-      query.andWhere('schedule.work_date <= :toDate', { toDate: input.toDate });
+    if (input.toDate) query.andWhere('schedule.work_date <= :toDate', { toDate: input.toDate });
     if (input.status === 'ACTIVE') query.andWhere('schedule.is_active = true');
     if (input.status === 'INACTIVE') query.andWhere('schedule.is_active = false');
     if (input.searchName) {
       if (!contractorIdScope) {
         query.innerJoin('worker', 'w', 'schedule.worker_id = w.id');
       }
-      query.andWhere('(w.display_name ILIKE :searchName OR w.external_id ILIKE :searchName)', { searchName: `%${input.searchName}%` });
+      query.andWhere('(w.display_name ILIKE :searchName OR w.external_id ILIKE :searchName)', {
+        searchName: `%${input.searchName}%`,
+      });
     }
 
     const [items, total] = await query
@@ -493,13 +571,13 @@ export class ScheduleConfigurationService {
     return { items, total };
   }
 
-  async listEligibleShifts(
-    user: AuthenticatedUser,
-    siteId: string,
-    workerScheduleId: string,
-  ) {
+  async listEligibleShifts(user: AuthenticatedUser, siteId: string, workerScheduleId: string) {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const { schedule, worker } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    const { schedule, worker } = await this.activeScheduleForReader(
+      user,
+      scopedSiteId,
+      workerScheduleId,
+    );
     if (!worker.contractorId) return { items: [], total: 0 };
     const shifts = await this.dataSource
       .getRepository(ShiftEntity)
@@ -521,13 +599,13 @@ export class ScheduleConfigurationService {
     return { items, total: items.length };
   }
 
-  async listSwapCandidates(
-    user: AuthenticatedUser,
-    siteId: string,
-    workerScheduleId: string,
-  ) {
+  async listSwapCandidates(user: AuthenticatedUser, siteId: string, workerScheduleId: string) {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const { schedule, worker } = await this.activeScheduleForReader(user, scopedSiteId, workerScheduleId);
+    const { schedule, worker } = await this.activeScheduleForReader(
+      user,
+      scopedSiteId,
+      workerScheduleId,
+    );
     // A worker without a contractor has no valid coworker scope. Fail closed.
     if (!worker.contractorId) return { items: [], total: 0 };
     type SwapCandidateRow = {
@@ -573,7 +651,9 @@ export class ScheduleConfigurationService {
       .andWhere('candidateSchedule.shift_id <> :shiftId', { shiftId: schedule.shiftId })
       .andWhere('candidateSchedule.is_active = true')
       .andWhere('candidateWorker.is_active = true')
-      .andWhere('candidateWorker.contractor_id = :contractorId', { contractorId: worker.contractorId })
+      .andWhere('candidateWorker.contractor_id = :contractorId', {
+        contractorId: worker.contractorId,
+      })
       .orderBy('candidateWorker.display_name', 'ASC')
       .addOrderBy('candidateSchedule.id', 'ASC')
       .getRawMany<SwapCandidateRow>();

@@ -23,6 +23,7 @@ import { GateAccessLogs1790985600000 } from './migrations/1790985600000-GateAcce
 import { WorkerGatePermissions1790992800000 } from './migrations/1790992800000-WorkerGatePermissions.js';
 import { Mf07SharedContractorCompatibility1791331200000 } from './migrations/1791331200000-Mf07SharedContractorCompatibility.js';
 import { Mf07Notifications1791417600000 } from './migrations/1791417600000-Mf07Notifications.js';
+import { Mf07NotificationDeletion1791504000000 } from './migrations/1791504000000-Mf07NotificationDeletion.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -62,6 +63,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       WorkerGatePermissions1790992800000,
       Mf07SharedContractorCompatibility1791331200000,
       Mf07Notifications1791417600000,
+      Mf07NotificationDeletion1791504000000,
     ],
     logging: false,
     extra: {

@@ -48,8 +48,12 @@ import type {
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
   SchedulingRequestStatus,
+  ShiftRequestListOptions,
+  ShiftRequestListResponse,
   UserNotificationListResponse,
   NotificationReadResponse,
+  NotificationDeleteReadResponse,
+  NotificationDeleteResponse,
   FaceGateVerificationResponse,
   GateFacePresenceResponse,
   GateAccessLogResponse,
@@ -88,6 +92,19 @@ const validTimeout = (timeoutMs: number) =>
 export class SmartSiteManagementClient {
   constructor(private readonly baseUrl: string) {}
 
+  listShiftRequests(token: string, siteId: string, options: ShiftRequestListOptions) {
+    const query = new URLSearchParams({ view: options.view });
+    if (options.requestType) query.set('requestType', options.requestType);
+    if (options.search) query.set('search', options.search);
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    return this.request<ShiftRequestListResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/shift-requests?${query}`,
+      token,
+    );
+  }
+
   listNotifications(
     token: string,
     options: PageOptions & { readStatus?: 'ALL' | 'UNREAD' } = {},
@@ -97,7 +114,14 @@ export class SmartSiteManagementClient {
     if (options.offset !== undefined) query.set('offset', String(options.offset));
     if (options.limit !== undefined) query.set('limit', String(options.limit));
     if (options.readStatus) query.set('readStatus', options.readStatus);
-    return this.request('GET', `/me/notifications?${query}`, token, undefined, undefined, requestOptions);
+    return this.request(
+      'GET',
+      `/me/notifications?${query}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
   }
 
   readNotification(token: string, id: string): Promise<NotificationReadResponse> {
@@ -108,11 +132,31 @@ export class SmartSiteManagementClient {
     return this.request('PATCH', '/me/notifications/read-all', token);
   }
 
-  getShiftChangeRequest(token: string, siteId: string, id: string): Promise<ShiftChangeRequestResponse> {
-    return this.request('GET', `/sites/${pathId(siteId)}/shift-change-requests/${pathId(id)}`, token);
+  deleteReadNotifications(token: string): Promise<NotificationDeleteReadResponse> {
+    return this.request('DELETE', '/me/notifications/read', token);
   }
 
-  getShiftSwapRequest(token: string, siteId: string, id: string): Promise<ShiftSwapRequestResponse> {
+  deleteNotification(token: string, id: string): Promise<NotificationDeleteResponse> {
+    return this.request('DELETE', `/me/notifications/${pathId(id)}`, token);
+  }
+
+  getShiftChangeRequest(
+    token: string,
+    siteId: string,
+    id: string,
+  ): Promise<ShiftChangeRequestResponse> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/shift-change-requests/${pathId(id)}`,
+      token,
+    );
+  }
+
+  getShiftSwapRequest(
+    token: string,
+    siteId: string,
+    id: string,
+  ): Promise<ShiftSwapRequestResponse> {
     return this.request('GET', `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(id)}`, token);
   }
 
@@ -462,7 +506,10 @@ export class SmartSiteManagementClient {
     );
   }
 
-  createContractor(token: string, input: { code: string; name: string }): Promise<ContractorResponse>;
+  createContractor(
+    token: string,
+    input: { code: string; name: string },
+  ): Promise<ContractorResponse>;
   createContractor(
     token: string,
     siteId: string,
@@ -891,15 +938,19 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  createShift(token: string, siteId: string, input: { name: string; startsAt: string; endsAt: string; timezone: string }) {
-    return this.request<ShiftResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/shifts`,
-      token,
-      input,
-    );
+  createShift(
+    token: string,
+    siteId: string,
+    input: { name: string; startsAt: string; endsAt: string; timezone: string },
+  ) {
+    return this.request<ShiftResponse>('POST', `/sites/${pathId(siteId)}/shifts`, token, input);
   }
-  assignShiftToContractor(token: string, siteId: string, shiftId: string, input: { contractorId: string }) {
+  assignShiftToContractor(
+    token: string,
+    siteId: string,
+    shiftId: string,
+    input: { contractorId: string },
+  ) {
     return this.request<ContractorShiftAssignmentResponse>(
       'POST',
       `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}/contractors`,
@@ -928,7 +979,11 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  createScheduleVersion(token: string, siteId: string, input: { effectiveFrom: string; effectiveUntil?: string }) {
+  createScheduleVersion(
+    token: string,
+    siteId: string,
+    input: { effectiveFrom: string; effectiveUntil?: string },
+  ) {
     return this.request<ScheduleVersionResponse>(
       'POST',
       `/sites/${pathId(siteId)}/schedule-versions`,
@@ -943,7 +998,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  createWorkerSchedule(token: string, siteId: string, scheduleVersionId: string, input: { workerId: string; shiftId: string; workDate: string; isActive?: boolean }) {
+  createWorkerSchedule(
+    token: string,
+    siteId: string,
+    scheduleVersionId: string,
+    input: { workerId: string; shiftId: string; workDate: string; isActive?: boolean },
+  ) {
     return this.request<WorkerScheduleResponse>(
       'POST',
       `/sites/${pathId(siteId)}/schedule-versions/${pathId(scheduleVersionId)}/worker-schedules`,
@@ -997,11 +1057,15 @@ export class SmartSiteManagementClient {
   }
 
   // --- Shift Change Request Mutations ---
-  createShiftChangeRequest(token: string, siteId: string, input: {
-    workerScheduleId: string;
-    toShiftId: string;
-    reason: string;
-  }) {
+  createShiftChangeRequest(
+    token: string,
+    siteId: string,
+    input: {
+      workerScheduleId: string;
+      toShiftId: string;
+      reason: string;
+    },
+  ) {
     return this.request<ShiftChangeRequestResponse>(
       'POST',
       `/sites/${pathId(siteId)}/shift-change-requests`,
@@ -1016,7 +1080,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectShiftChangeRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+  rejectShiftChangeRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<ShiftChangeRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-change-requests/${pathId(requestId)}/reject`,
@@ -1026,11 +1095,15 @@ export class SmartSiteManagementClient {
   }
 
   // --- Shift Swap Request Mutations ---
-  createShiftSwapRequest(token: string, siteId: string, input: {
-    requesterWorkerScheduleId: string;
-    coworkerWorkerScheduleId: string;
-    reason: string;
-  }) {
+  createShiftSwapRequest(
+    token: string,
+    siteId: string,
+    input: {
+      requesterWorkerScheduleId: string;
+      coworkerWorkerScheduleId: string;
+      reason: string;
+    },
+  ) {
     return this.request<ShiftSwapRequestResponse>(
       'POST',
       `/sites/${pathId(siteId)}/shift-swap-requests`,
@@ -1045,7 +1118,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  declineShiftSwapRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+  declineShiftSwapRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<ShiftSwapRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/decline`,
@@ -1060,7 +1138,12 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectShiftSwapRequest(token: string, siteId: string, requestId: string, input: { reason: string }) {
+  rejectShiftSwapRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<ShiftSwapRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/reject`,
@@ -1070,11 +1153,15 @@ export class SmartSiteManagementClient {
   }
 
   // --- Absence Request Mutations ---
-  createAbsenceRequest(token: string, siteId: string, input: {
-    workerScheduleId: string;
-    reason: string;
-    replacementWorkerId?: string;
-  }) {
+  createAbsenceRequest(
+    token: string,
+    siteId: string,
+    input: {
+      workerScheduleId: string;
+      reason: string;
+      replacementWorkerId?: string;
+    },
+  ) {
     return this.request<AbsenceRequestResponse>(
       'POST',
       `/sites/${pathId(siteId)}/absence-requests`,

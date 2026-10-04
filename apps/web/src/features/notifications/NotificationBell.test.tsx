@@ -83,6 +83,12 @@ beforeEach(() => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'readAllNotifications').mockResolvedValue({
     updated: 1,
   });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'deleteReadNotifications').mockResolvedValue({
+    deleted: 1,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'deleteNotification').mockResolvedValue({
+    id: notification.id,
+  });
   if (!globalThis.ResizeObserver)
     globalThis.ResizeObserver = class {
       observe() {}
@@ -99,6 +105,141 @@ afterEach(() => {
 });
 
 describe('durable Web notification bell', () => {
+  it('confirms deletion, preserves unread items and reloads the inbox', async () => {
+    const read = {
+      ...notification,
+      id: 'read-notice',
+      title: 'Already read notice',
+      readAt: '2030-01-01T01:00:00Z',
+    };
+    const list = vi
+      .mocked(SmartSiteManagementClient.prototype.listNotifications)
+      .mockResolvedValue({ items: [notification, read], total: 2, unreadCount: 1 });
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete read notifications' }));
+    expect(screen.getByText(/Unread notifications will be kept/)).toBeTruthy();
+    expect(SmartSiteManagementClient.prototype.deleteReadNotifications).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: 'Confirm deletion' })).toBeNull();
+    expect(SmartSiteManagementClient.prototype.deleteReadNotifications).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete read notifications' }));
+    list.mockResolvedValue(page);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    expect(await screen.findByText('1 read notification deleted.')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText(read.title)).toBeNull());
+    expect(screen.getByText(notification.title)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Notifications, 1 unread' })).toBeTruthy();
+    expect(SmartSiteManagementClient.prototype.deleteReadNotifications).toHaveBeenCalledWith(
+      'synthetic-token',
+    );
+    expect(screen.getByTestId('location').textContent).toBe('/');
+  });
+
+  it('deletes an individual notification with confirmation prompt without navigating', async () => {
+    const list = vi.mocked(SmartSiteManagementClient.prototype.listNotifications);
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    expect(await screen.findByText(notification.title)).toBeTruthy();
+    list.mockResolvedValue({ items: [], total: 0, unreadCount: 0 });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete notification' }));
+    expect(screen.getByRole('alertdialog', { name: 'Delete notification?' })).toBeTruthy();
+    expect(
+      screen.getByText(`Delete notification “${notification.title}”? This cannot be undone from the app.`),
+    ).toBeTruthy();
+    expect(SmartSiteManagementClient.prototype.deleteNotification).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog', { name: 'Delete notification?' })).toBeNull();
+    expect(SmartSiteManagementClient.prototype.deleteNotification).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete notification' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    await waitFor(() =>
+      expect(SmartSiteManagementClient.prototype.deleteNotification).toHaveBeenCalledWith(
+        'synthetic-token',
+        notification.id,
+      ),
+    );
+    expect(await screen.findByText('Notification deleted.')).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe('/');
+  });
+
+  it('shows error banner when individual notification deletion fails and recovers on retry', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.deleteNotification).mockRejectedValueOnce(
+      new ApiError('network', 'Synthetic delete error'),
+    );
+    const list = vi.mocked(SmartSiteManagementClient.prototype.listNotifications);
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    expect(await screen.findByText(notification.title)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete notification' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    expect(
+      await screen.findByText('Could not delete notification. Please try again.'),
+    ).toBeTruthy();
+    expect(screen.getByText(notification.title)).toBeTruthy();
+
+    list.mockResolvedValue({ items: [], total: 0, unreadCount: 0 });
+    vi.mocked(SmartSiteManagementClient.prototype.deleteNotification).mockResolvedValueOnce({
+      id: notification.id,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    expect(await screen.findByText('Notification deleted.')).toBeTruthy();
+  });
+
+  it('retains read records and offers retry when deletion fails', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      items: [{ ...notification, readAt: '2030-01-01T01:00:00Z' }],
+      total: 1,
+      unreadCount: 0,
+    });
+    const deletion = vi
+      .mocked(SmartSiteManagementClient.prototype.deleteReadNotifications)
+      .mockRejectedValue(new ApiError('network', 'Synthetic private detail'));
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 0 unread' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete read notifications' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    expect(
+      await screen.findByText('Could not delete read notifications. Please try again.'),
+    ).toBeTruthy();
+    expect(screen.getByText(notification.title)).toBeTruthy();
+    expect(screen.queryByText('Synthetic private detail')).toBeNull();
+    deletion.mockResolvedValue({ deleted: 1 });
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      items: [],
+      total: 0,
+      unreadCount: 0,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+    expect(await screen.findByText('No notifications yet.')).toBeTruthy();
+  });
+
+  it('disables deletion when there are no read notifications, but includes read records beyond the loaded page', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    expect(
+      (
+        (await screen.findByRole('button', {
+          name: 'Delete read notifications',
+        })) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      ...page,
+      total: 21,
+    });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Delete read notifications' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+  });
   it('shows unread count, opening does not read, and clicking marks read before navigating to the exact site/request', async () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));

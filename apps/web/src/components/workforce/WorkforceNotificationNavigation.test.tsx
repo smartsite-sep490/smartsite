@@ -68,6 +68,13 @@ function mount(tab: 'schedule' | 'review', view: string, targetRequest = request
   vi.spyOn(SmartSiteManagementClient.prototype, 'getShiftSwapRequest').mockResolvedValue(
     targetRequest,
   );
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listShiftRequests').mockResolvedValue({
+    items: [],
+    total: 0,
+    pendingCount: 0,
+    incomingCount: 0,
+    pendingScheduleIds: [],
+  });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -99,7 +106,7 @@ describe('notification request navigation', () => {
       status: 'CONFLICTED',
     });
     mount('review', 'pending', { ...request, status: 'PENDING_MANAGER' });
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve Swap' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve Swap' }, { timeout: 5000 }));
     expect(await screen.findByText('Shift Swap Could Not Be Applied')).toBeTruthy();
     expect(screen.queryByText('Shift Swap Approved')).toBeNull();
   });
@@ -133,7 +140,7 @@ describe('notification request navigation', () => {
     mount('review', 'pending');
     expect(await screen.findByText(/Selected shift swap · APPLIED/)).toBeTruthy();
     expect(screen.queryByText('Approve Swap')).toBeNull();
-    expect(screen.getByText('APPLIED')).toBeTruthy();
+    expect(await screen.findByText('APPLIED')).toBeTruthy();
   });
 
   it('denies a notification link to an unassigned Site before requesting its details', async () => {

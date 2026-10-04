@@ -24,6 +24,9 @@ import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
 import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling-workflow.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
+import { ShiftRequestReaderService } from '../../src/modules/workforce/shift-request-reader.service.js';
+import { ShiftSwapRequestEntity } from '../../src/database/entities/shift-swap-request.entity.js';
+import { ScheduleConfigurationService } from '../../src/modules/workforce/schedule-configuration.service.js';
 
 test('MF07 durable notifications: delivery, scope, transactions, history and reads', async (t) => {
   await dataSource.initialize();
@@ -479,6 +482,382 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       0,
     );
   });
+
+  await t.test(
+    'mixed requests are filtered before paging, including old pending work beyond 60 outcomes per type',
+    async () => {
+      const [a, b] = await schedules();
+      const pendingChange = await workflow.createShiftChange(workerA, siteId, {
+        workerScheduleId: a!.id,
+        toShiftId: evening,
+        reason: 'Old pending needle change',
+      });
+      await workflow.rejectShiftChange(repA, siteId, pendingChange.id, {
+        reason: 'Synthetic rejection for fixture',
+      });
+      const [c, d] = await schedules();
+      const pendingSwap = await workflow.createShiftSwap(workerA, siteId, {
+        requesterWorkerScheduleId: c!.id,
+        coworkerWorkerScheduleId: d!.id,
+        reason: 'Old pending needle swap',
+      });
+      await workflow.confirmShiftSwap(workerB, siteId, pendingSwap.id);
+      const changes = Array.from({ length: 61 }, (_, index) => ({
+        id: randomUUID(),
+        siteId,
+        workerId: aId,
+        workerScheduleId: a!.id,
+        fromShiftId: morning,
+        toShiftId: evening,
+        expectedScheduleVersionId: version,
+        status: ShiftRequestStatus.REJECTED,
+        requestedByUserId: workerA.id,
+        reason: 'Pagination fixture needle',
+        createdAt: new Date(`2031-01-01T00:00:${String(index % 60).padStart(2, '0')}Z`),
+      }));
+      const swaps = changes.map((change) => ({
+        id: randomUUID(),
+        siteId,
+        requesterWorkerId: aId,
+        requesterWorkerScheduleId: a!.id,
+        coworkerWorkerId: bId,
+        coworkerWorkerScheduleId: b!.id,
+        requesterShiftId: morning,
+        coworkerShiftId: evening,
+        expectedScheduleVersionId: version,
+        status: ShiftRequestStatus.REJECTED,
+        requestedByUserId: workerA.id,
+        reason: change.reason,
+        createdAt: change.createdAt,
+      }));
+      await dataSource.getRepository(ShiftChangeRequestEntity).save(changes);
+      await dataSource.getRepository(ShiftSwapRequestEntity).save(swaps);
+      const reader = new ShiftRequestReaderService(dataSource);
+      const seen = new Set<string>();
+      for (let offset = 0; offset < 122; offset += 10) {
+        const result = await reader.list(repA, siteId, {
+          view: 'HISTORY',
+          search: 'Pagination fixture needle',
+          offset: String(offset),
+          limit: '10',
+        });
+        assert.equal(result.total, 122);
+        for (const item of result.items) {
+          assert.ok(!seen.has(item.id));
+          seen.add(item.id);
+          assert.equal(item.siteId, siteId);
+        }
+      }
+      assert.equal(seen.size, 122);
+      const queue = await reader.list(repA, siteId, {
+        view: 'REVIEW',
+        search: 'Old pending needle swap',
+        limit: '1',
+      });
+      assert.equal(queue.total, 1);
+      assert.equal(queue.items[0]!.id, pendingSwap.id);
+      const workerPage = await reader.list(workerB, siteId, {
+        view: 'WORKER',
+        search: 'Pagination fixture needle',
+        offset: '60',
+        limit: '10',
+      });
+      assert.equal(workerPage.total, 61);
+      assert.equal(workerPage.items.length, 1);
+      await assert.rejects(reader.list(wrongRep, siteId, { view: 'WORKER' }), code('FORBIDDEN'));
+      await assert.rejects(
+        reader.list(unassignedRep, siteId, { view: 'REVIEW' }),
+        code('FORBIDDEN'),
+      );
+      await assert.rejects(reader.list(workerA, otherSite, { view: 'WORKER' }), code('FORBIDDEN'));
+      await assert.rejects(
+        reader.list(repA, siteId, { view: 'REVIEW', limit: '101' }),
+        code('VALIDATION_FAILED'),
+      );
+    },
+  );
+
+  await t.test(
+    'past dates cannot create, confirm or apply, while today remains editable after start time',
+    async (dateTest) => {
+      dateTest.mock.timers.enable({ apis: ['Date'], now: new Date('2090-01-01T23:30:00Z') });
+      const [a, b] = await schedules();
+      await dataSource
+        .getRepository(WorkerScheduleEntity)
+        .update([a!.id, b!.id], { workDate: '2029-12-31' });
+      await assert.rejects(
+        workflow.createShiftChange(workerA, siteId, {
+          workerScheduleId: a!.id,
+          toShiftId: evening,
+          reason: 'Past date synthetic request',
+        }),
+        code('SHIFT_WORK_DATE_PASSED'),
+      );
+      await assert.rejects(
+        workflow.createShiftSwap(workerA, siteId, {
+          requesterWorkerScheduleId: a!.id,
+          coworkerWorkerScheduleId: b!.id,
+          reason: 'Past swap synthetic request',
+        }),
+        code('SHIFT_WORK_DATE_PASSED'),
+      );
+      await dataSource
+        .getRepository(WorkerScheduleEntity)
+        .update([a!.id, b!.id], { workDate: '2090-01-01' });
+      const swap = await workflow.createShiftSwap(workerA, siteId, {
+        requesterWorkerScheduleId: a!.id,
+        coworkerWorkerScheduleId: b!.id,
+        reason: 'Today even after start time',
+      });
+      dateTest.mock.timers.setTime(new Date('2090-01-02T00:00:00Z').getTime());
+      await assert.rejects(
+        workflow.confirmShiftSwap(workerB, siteId, swap.id),
+        code('SHIFT_WORK_DATE_PASSED'),
+      );
+      assert.equal(
+        (await dataSource.getRepository(ShiftSwapRequestEntity).findOneByOrFail({ id: swap.id }))
+          .status,
+        ShiftRequestStatus.PENDING_COWORKER,
+      );
+      dateTest.mock.timers.setTime(new Date('2090-01-01T23:30:00Z').getTime());
+      await workflow.confirmShiftSwap(workerB, siteId, swap.id);
+      dateTest.mock.timers.setTime(new Date('2090-01-02T00:00:00Z').getTime());
+      await assert.rejects(
+        workflow.approveShiftSwap(repA, siteId, swap.id),
+        code('SHIFT_WORK_DATE_PASSED'),
+      );
+      assert.equal(
+        (await dataSource.getRepository(WorkerScheduleEntity).findOneByOrFail({ id: a!.id }))
+          .shiftId,
+        morning,
+      );
+      assert.equal(
+        await dataSource
+          .getRepository(UserNotificationEntity)
+          .countBy({ requestId: swap.id, event: 'REQUEST_APPLIED' }),
+        0,
+      );
+      const [c] = await schedules();
+      await dataSource
+        .getRepository(WorkerScheduleEntity)
+        .update(c!.id, { workDate: '2090-01-03' });
+      dateTest.mock.timers.setTime(new Date('2090-01-03T23:30:00Z').getTime());
+      const change = await workflow.createShiftChange(workerA, siteId, {
+        workerScheduleId: c!.id,
+        toShiftId: evening,
+        reason: 'Today direct synthetic change',
+      });
+      dateTest.mock.timers.setTime(new Date('2090-01-04T00:00:00Z').getTime());
+      await assert.rejects(
+        workflow.approveShiftChange(repA, siteId, change.id),
+        code('SHIFT_WORK_DATE_PASSED'),
+      );
+      dateTest.mock.timers.setTime(new Date('2090-01-03T23:30:00Z').getTime());
+      assert.equal(
+        (await workflow.approveShiftChange(repA, siteId, change.id)).status,
+        ShiftRequestStatus.APPLIED,
+      );
+    },
+  );
+
+  await t.test(
+    'revoked participation blocks commands, legacy lists, detail, discovery and mixed paging',
+    async () => {
+      const [a, b] = await schedules();
+      const swap = await workflow.createShiftSwap(workerA, siteId, {
+        requesterWorkerScheduleId: a!.id,
+        coworkerWorkerScheduleId: b!.id,
+        reason: 'Synthetic revoked scope swap',
+      });
+      const [c] = await schedules();
+      const change = await workflow.createShiftChange(workerA, siteId, {
+        workerScheduleId: c!.id,
+        toShiftId: evening,
+        reason: 'Synthetic revoked scope change',
+      });
+      await dataSource
+        .getRepository(ContractorSiteParticipationEntity)
+        .update({ contractorId, siteId }, { isActive: false });
+      const noticeCount = await dataSource.getRepository(UserNotificationEntity).count();
+      await assert.rejects(
+        workflow.createShiftChange(workerA, siteId, {
+          workerScheduleId: c!.id,
+          toShiftId: evening,
+          reason: 'Synthetic invalid participation',
+        }),
+        code('FORBIDDEN'),
+      );
+      await assert.rejects(
+        workflow.createShiftSwap(workerA, siteId, {
+          requesterWorkerScheduleId: a!.id,
+          coworkerWorkerScheduleId: b!.id,
+          reason: 'Synthetic invalid participation',
+        }),
+        code('FORBIDDEN'),
+      );
+      await assert.rejects(workflow.confirmShiftSwap(workerB, siteId, swap.id), code('FORBIDDEN'));
+      await assert.rejects(
+        workflow.declineShiftSwap(workerB, siteId, swap.id, { reason: 'Synthetic refusal reason' }),
+        code('FORBIDDEN'),
+      );
+      await assert.rejects(workflow.approveShiftChange(repA, siteId, change.id), code('FORBIDDEN'));
+      await assert.rejects(workflow.listShiftChangeRequests(workerA, siteId), code('FORBIDDEN'));
+      await assert.rejects(workflow.listShiftSwapRequests(workerB, siteId), code('FORBIDDEN'));
+      await assert.rejects(
+        workflow.getShiftRequest(workerA, siteId, change.id, 'CHANGE'),
+        code('FORBIDDEN'),
+      );
+      const reader = new ShiftRequestReaderService(dataSource);
+      await assert.rejects(reader.list(workerA, siteId, { view: 'WORKER' }), code('FORBIDDEN'));
+      await assert.rejects(reader.list(repA, siteId, { view: 'REVIEW' }), code('FORBIDDEN'));
+      const configuration = new ScheduleConfigurationService(dataSource);
+      await assert.rejects(configuration.listWorkerSchedules(workerA, siteId), code('FORBIDDEN'));
+      await assert.rejects(
+        configuration.listEligibleShifts(workerA, siteId, c!.id),
+        code('FORBIDDEN'),
+      );
+      await assert.rejects(
+        configuration.listSwapCandidates(workerA, siteId, c!.id),
+        code('FORBIDDEN'),
+      );
+      assert.equal(await dataSource.getRepository(UserNotificationEntity).count(), noticeCount);
+      await dataSource
+        .getRepository(ContractorSiteParticipationEntity)
+        .update({ contractorId, siteId }, { isActive: true });
+      await dataSource
+        .getRepository(ContractorSiteParticipationEntity)
+        .update({ contractorId, siteId }, { validUntil: new Date('2025-01-01') });
+      await assert.rejects(reader.list(workerA, siteId, { view: 'WORKER' }), code('FORBIDDEN'));
+      await assert.rejects(workflow.confirmShiftSwap(workerB, siteId, swap.id), code('FORBIDDEN'));
+      await assert.rejects(workflow.approveShiftChange(repA, siteId, change.id), code('FORBIDDEN'));
+      await dataSource
+        .getRepository(ContractorSiteParticipationEntity)
+        .update({ contractorId, siteId }, { validUntil: null });
+    },
+  );
+
+  await t.test(
+    'delete read inbox entries is scoped, idempotent and cannot be undone by delivery replay',
+    async () => {
+      const [a] = await schedules();
+      const request = await workflow.createShiftChange(workerA, siteId, {
+        workerScheduleId: a!.id,
+        toShiftId: evening,
+        reason: 'Synthetic dismissible request',
+      });
+      const notice = (await notifications.list(repA, 'ALL', 0, 100)).items.find(
+        (n) => n.target.requestId === request.id,
+      )!;
+      await notifications.read(repA, notice.id);
+      const repository = dataSource.getRepository(UserNotificationEntity);
+      const content = {
+        siteName: 'Synthetic site',
+        title: 'Synthetic deletion fixture',
+        message: 'Synthetic read record',
+        workDate: '2030-01-01',
+        fromShiftName: 'Morning',
+        toShiftName: 'Evening',
+      };
+      const row = (recipientUserId: string, overrides = {}) => ({
+        id: randomUUID(),
+        recipientUserId,
+        siteId,
+        contractorId,
+        workerId: null,
+        recipientRole: 'CONTRACTOR_REPRESENTATIVE' as const,
+        requestType: 'CHANGE' as const,
+        requestId: randomUUID(),
+        event: 'REQUEST_REJECTED' as const,
+        content,
+        readAt: new Date(),
+        ...overrides,
+      });
+      const readRows = await repository.save(Array.from({ length: 25 }, () => row(repA.id)));
+      const [unread, otherAccount, otherScope] = await repository.save([
+        row(repA.id, { readAt: null }),
+        row(repB.id),
+        row(repA.id, { siteId: otherSite }),
+      ]);
+      const before = await notifications.list(repA, 'ALL', 0, 100);
+      const readCount = before.total - before.unreadCount;
+      assert.ok(readCount >= 26);
+      assert.deepEqual(await notifications.deleteRead(repA), { deleted: readCount });
+      const after = await notifications.list(repA, 'ALL', 0, 100);
+      assert.equal(after.total, before.unreadCount);
+      assert.equal(after.unreadCount, before.unreadCount);
+      assert.ok(after.items.every((n) => n.readAt === null));
+      assert.deepEqual(await notifications.deleteRead(repA), { deleted: 0 });
+      for (const r of [...readRows, notice])
+        assert.ok((await repository.findOneByOrFail({ id: r.id })).deletedAt);
+      for (const r of [unread!, otherAccount!, otherScope!])
+        assert.equal((await repository.findOneByOrFail({ id: r.id })).deletedAt, null);
+      const singleNotice = await repository.save(row(repA.id, { readAt: null }));
+      assert.deepEqual(await notifications.delete(repA, singleNotice.id), { id: singleNotice.id });
+      assert.ok((await repository.findOneByOrFail({ id: singleNotice.id })).deletedAt);
+      await assert.rejects(notifications.delete(repA, singleNotice.id), code('NOT_FOUND'));
+      await assert.rejects(notifications.delete(repA, otherAccount!.id), code('NOT_FOUND'));
+      await assert.rejects(notifications.read(repA, notice.id), code('NOT_FOUND'));
+      await dataSource.transaction(async (manager) =>
+        notifications.record(
+          manager,
+          'CHANGE',
+          request as ShiftChangeRequestEntity,
+          'CHANGE_REQUESTED',
+          workerA.id,
+        ),
+      );
+      await notifications.backfillPending();
+      assert.equal(
+        (await notifications.list(repA, 'ALL', 0, 100)).items.some((n) => n.id === notice.id),
+        false,
+      );
+      assert.equal(
+        await repository.countBy({
+          recipientUserId: repA.id,
+          requestId: request.id,
+          event: 'CHANGE_REQUESTED',
+        }),
+        1,
+      );
+      assert.equal(
+        (await dataSource.getRepository(WorkerScheduleEntity).findOneByOrFail({ id: a!.id }))
+          .shiftId,
+        morning,
+      );
+      assert.equal(
+        (
+          await dataSource
+            .getRepository(ShiftChangeRequestEntity)
+            .findOneByOrFail({ id: request.id })
+        ).status,
+        ShiftRequestStatus.PENDING_MANAGER,
+      );
+      await assert.rejects(
+        notifications.deleteRead({ ...repA, isActive: false }),
+        code('FORBIDDEN'),
+      );
+      await assert.rejects(
+        notifications.deleteRead({ ...repA, mustChangePassword: true }),
+        code('FORBIDDEN'),
+      );
+      await notifications.read(repA, unread!.id);
+      await dataSource
+        .getRepository(ContractorSiteParticipationEntity)
+        .update({ siteId, contractorId }, { isActive: false });
+      try {
+        assert.deepEqual(await notifications.deleteRead(repA), { deleted: 0 });
+        assert.equal((await repository.findOneByOrFail({ id: unread!.id })).deletedAt, null);
+      } finally {
+        await dataSource
+          .getRepository(ContractorSiteParticipationEntity)
+          .update({ siteId, contractorId }, { isActive: true });
+      }
+      await assert.rejects(
+        repository.update({ id: otherAccount!.id }, { readAt: null, deletedAt: new Date() }),
+        /chk_notification_deleted_read/,
+      );
+    },
+  );
 
   await t.test(
     'revoked role, representative assignment, worker linkage and participation hide list/count/read',
