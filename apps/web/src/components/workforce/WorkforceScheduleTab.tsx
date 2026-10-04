@@ -26,6 +26,7 @@ import {
   IconUsers,
   IconChevronLeft,
   IconChevronRight,
+  IconX,
 } from '../icons';
 import {
   Button,
@@ -364,6 +365,40 @@ export function WorkforceScheduleTab({
     return allMyRequests.slice(start, start + requestsPageSize);
   }, [allMyRequests, requestsPage, requestsPageSize]);
 
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('smartsite_dismissed_schedule_notifs');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const dismissNotification = (id: string) => {
+    setDismissedNotificationIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem('smartsite_dismissed_schedule_notifs', JSON.stringify(Array.from(next)));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  };
+
+  const latestDecidedRequest = useMemo(() => {
+    return (
+      allMyRequests.find(
+        (req) =>
+          (req.status === 'APPROVED' ||
+            req.status === 'APPLIED' ||
+            req.status === 'REJECTED' ||
+            req.status === 'CONFLICTED') &&
+          !dismissedNotificationIds.has(req.id),
+      ) ?? null
+    );
+  }, [allMyRequests, dismissedNotificationIds]);
   const pendingScheduleIds = useMemo(() => {
     const ids = new Set<string>();
     for (const request of myChanges) {
@@ -531,7 +566,7 @@ export function WorkforceScheduleTab({
       </div>
 
       {/* ── WORKFORCE ACTIVITY NOTIFICATIONS ─────────────────────────────── */}
-      {coworkerPendingSwaps.length > 0 && (
+      {(coworkerPendingSwaps.length > 0 || latestDecidedRequest !== null) && (
         <div className="space-y-3">
           {/* 1. Pending Incoming Coworker Swap Requests */}
           {coworkerPendingSwaps.length > 0 && (
@@ -574,9 +609,99 @@ export function WorkforceScheduleTab({
           )}
 
           {/* 2. Latest Decided Shift Change / Swap Request (Approved or Rejected by Contractor) */}
+          {latestDecidedRequest && (() => {
+            const req = latestDecidedRequest;
+            const isApproved = req.status === 'APPROVED' || req.status === 'APPLIED';
+            const isChange = req.requestType === 'CHANGE';
+            const shiftName = isChange ? getShiftName((req as { toShiftId: string }).toShiftId) : undefined;
+            const swapReq = !isChange ? (req as { coworkerWorkerId: string; requesterWorkerId: string }) : null;
+            const coworkerName = swapReq
+              ? getWorkerName(swapReq.coworkerWorkerId === currentWorkerId ? swapReq.requesterWorkerId : swapReq.coworkerWorkerId)
+              : undefined;
+            const reviewReason = (req as { reviewReason?: string | null }).reviewReason;
+
+            return (
+              <Alert
+                key={req.id}
+                variant={isApproved ? 'success' : 'destructive'}
+                className="animate-in slide-in-from-top-2 fade-in duration-200"
+              >
+                {isApproved ? (
+                  <IconCheck className="w-5 h-5" />
+                ) : (
+                  <IconAlertCircle className="w-5 h-5" />
+                )}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <AlertTitle
+                      className={`font-bold flex items-center gap-2 text-xs ${
+                        isApproved ? 'text-emerald-950' : 'text-rose-950'
+                      }`}
+                    >
+                      <span>
+                        {isApproved
+                          ? isChange
+                            ? 'Shift Change Approved'
+                            : 'Shift Swap Approved'
+                          : isChange
+                          ? 'Shift Change Rejected'
+                          : 'Shift Swap Declined'}
+                      </span>
+                      <span className={`w-2 h-2 rounded-full ${isApproved ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    </AlertTitle>
+                    <AlertDescription className="text-xs text-slate-700 font-medium">
+                      {isApproved ? (
+                        isChange ? (
+                          <>
+                            Your shift change request to <span className="font-bold text-[#071A2B]">{shiftName}</span> has been <span className="font-bold text-emerald-700">approved</span> by the contractor!
+                          </>
+                        ) : (
+                          <>
+                            Your shift swap request with <span className="font-bold text-[#071A2B]">{coworkerName}</span> has been <span className="font-bold text-emerald-700">approved</span> by the contractor!
+                          </>
+                        )
+                      ) : (
+                        <>
+                          Your shift request was not approved.{' '}
+                          {reviewReason && (
+                            <span className="italic text-slate-600 font-normal">
+                              (Reason: &quot;{reviewReason}&quot;)
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </AlertDescription>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => {
+                        if (isApproved) setActiveView('schedule');
+                        else setActiveView('requests');
+                      }}
+                      rightIcon={<IconArrowRight className="w-3.5 h-3.5 text-[#F66B17]" />}
+                      className="bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs text-xs font-semibold"
+                    >
+                      {isApproved ? 'View Timetable' : 'View Requests'}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => dismissNotification(req.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                      aria-label="Dismiss notification"
+                      title="Dismiss notification"
+                    >
+                      <IconX className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </Alert>
+            );
+          })()}
         </div>
       )}
-
       {/* 3. Sub-Tabs */}
       <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex items-center justify-between">
         <Tabs
