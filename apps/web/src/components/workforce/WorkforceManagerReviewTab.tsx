@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNotificationRequest } from './useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
@@ -16,6 +17,8 @@ import {
   IconClock,
   IconRefreshCw,
   IconArrowRight,
+  IconChevronLeft,
+  IconChevronRight,
 } from '../icons';
 import { formatShiftTime, formatDateTime, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
 import { filterContractorReviewRequests } from './WorkforceManagerReviewUtils';
@@ -42,7 +45,9 @@ export function WorkforceManagerReviewTab({
 }) {
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
-  const [subTab, setSubTab] = useState<'pending' | 'history'>('pending');
+  const target = useNotificationRequest(apiUrl, siteId, token);
+  const [userSubTab, setSubTab] = useState<'pending' | 'history' | null>(null);
+  const subTab = userSubTab ?? (target.data && target.data.status !== 'PENDING_MANAGER' ? 'history' : 'pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'CHANGE' | 'SWAP'>('ALL');
   const [rejectTarget, setRejectTarget] = useState<{ type: 'CHANGE' | 'SWAP'; id: string } | null>(
@@ -57,7 +62,7 @@ export function WorkforceManagerReviewTab({
 
   // Queries
   const {
-    data: changes,
+    data: changePage,
     isLoading: changesLoading,
     isError: changesError,
     error: changesErrorObj,
@@ -72,7 +77,7 @@ export function WorkforceManagerReviewTab({
   });
 
   const {
-    data: swaps,
+    data: swapPage,
     isLoading: swapsLoading,
     isError: swapsError,
     error: swapsErrorObj,
@@ -86,6 +91,14 @@ export function WorkforceManagerReviewTab({
     refetchOnReconnect: true,
   });
 
+  const changes = useMemo(() => {
+    if (target.data?.requestType !== 'CHANGE') return changePage;
+    return { items: [target.data, ...(changePage?.items ?? []).filter(r => r.id !== target.data!.id)], total: changePage?.total ?? 1 };
+  }, [changePage, target.data]);
+  const swaps = useMemo(() => {
+    if (target.data?.requestType !== 'SWAP') return swapPage;
+    return { items: [target.data, ...(swapPage?.items ?? []).filter(r => r.id !== target.data!.id)], total: swapPage?.total ?? 1 };
+  }, [swapPage, target.data]);
   const { data: workers } = useQuery({
     queryKey: ['workers', siteId],
     queryFn: () => client.listWorkers(token, siteId, { limit: 25 }),
@@ -136,13 +149,17 @@ export function WorkforceManagerReviewTab({
   // Mutations
   const approveChange = useMutation({
     mutationFn: (id: string) => client.approveShiftChangeRequest(token, siteId, id),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
-      setActionFeedback({
-        type: 'success',
-        title: 'Shift Change Approved',
+      setActionFeedback(result.status === 'APPLIED' ? {
+        type: 'success', title: 'Shift Change Approved',
         message: 'Shift change request has been approved. The worker schedule is now updated.',
+      } : {
+        type: 'error', title: 'Shift Change Could Not Be Applied',
+        message: 'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
       });
       setTimeout(() => setActionFeedback(null), 5000);
     },
@@ -152,6 +169,8 @@ export function WorkforceManagerReviewTab({
     mutationFn: (input: { id: string; reason: string }) =>
       client.rejectShiftChangeRequest(token, siteId, input.id, { reason: input.reason }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
       setRejectTarget(null);
       setRejectReason('');
@@ -166,13 +185,17 @@ export function WorkforceManagerReviewTab({
 
   const approveSwap = useMutation({
     mutationFn: (id: string) => client.approveShiftSwapRequest(token, siteId, id),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
-      setActionFeedback({
-        type: 'success',
-        title: 'Shift Swap Approved',
+      setActionFeedback(result.status === 'APPLIED' ? {
+        type: 'success', title: 'Shift Swap Approved',
         message: 'Shift swap request approved. Schedules for both workers have been updated.',
+      } : {
+        type: 'error', title: 'Shift Swap Could Not Be Applied',
+        message: 'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
       });
       setTimeout(() => setActionFeedback(null), 5000);
     },
@@ -182,6 +205,8 @@ export function WorkforceManagerReviewTab({
     mutationFn: (input: { id: string; reason: string }) =>
       client.rejectShiftSwapRequest(token, siteId, input.id, { reason: input.reason }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       setRejectTarget(null);
       setRejectReason('');
@@ -284,6 +309,26 @@ export function WorkforceManagerReviewTab({
     return list;
   }, [swaps, filterType, searchQuery, getWorkerName]);
 
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
+
+  const allHistory = useMemo(() => {
+    const combined = [
+      ...historyChanges.map((c) => ({ ...c, requestType: 'CHANGE' as const })),
+      ...historySwaps.map((s) => ({ ...s, requestType: 'SWAP' as const })),
+    ];
+    return combined.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [historyChanges, historySwaps]);
+
+  const historyTotal = allHistory.length;
+  const historyPageCount = Math.max(1, Math.ceil(historyTotal / historyPageSize));
+  const paginatedHistory = useMemo(() => {
+    const start = historyPage * historyPageSize;
+    return allHistory.slice(start, start + historyPageSize);
+  }, [allHistory, historyPage, historyPageSize]);
+
   const activeWorkerCount = workers?.items.length || 0;
   const totalAssignedShifts = schedules?.total || 0;
 
@@ -333,6 +378,15 @@ export function WorkforceManagerReviewTab({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
+      {target.isLoading && <p role="status">Loading selected request…</p>}
+      {target.isError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        This request is unavailable or you no longer have access. <button type="button" onClick={() => void target.refetch()} className="underline">Retry</button>
+      </div>}
+      {target.data && <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
+        Selected {target.data.requestType === 'CHANGE' ? 'shift change' : 'shift swap'} · {target.data.status}
+        <p className="mt-1 text-xs text-slate-600">{target.data.reason}</p>
+        {target.data.reviewReason && <p className="mt-1 text-xs">Review message: {target.data.reviewReason}</p>}
+      </div>}
 
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
@@ -704,67 +758,128 @@ export function WorkforceManagerReviewTab({
       {/* 5. Content Area: Request History Table */}
       {subTab === 'history' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          {historyChanges.length === 0 && historySwaps.length === 0 ? (
+          {allHistory.length === 0 ? (
             <EmptyState
               icon={<IconClock className="w-6 h-6 text-slate-400" />}
               title="No History Records"
               description="Past approved and rejected workforce change requests will appear here."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Worker(s)</th>
-                    <th className="py-3 px-4">Details / Reason</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {historyChanges.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-800">Change</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {getWorkerName(item.workerId)}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        <div>To: {getShiftName(item.toShiftId)}</div>
-                        {item.reason && <div className="text-[11px] text-slate-400 italic">&quot;{item.reason}&quot;</div>}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <Badge variant={item.status === 'APPROVED' || item.status === 'APPLIED' ? 'success' : 'danger'} dot>
-                          {item.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-400 text-[11px]">
-                        {formatDateTime(item.createdAt)}
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Worker(s)</th>
+                      <th className="py-3 px-4">Details / Reason</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Date</th>
                     </tr>
-                  ))}
-                  {historySwaps.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-800">Swap</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {getWorkerName(item.requesterWorkerId)} ↔ {getWorkerName(item.coworkerWorkerId)}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        {item.reason ? `"${item.reason}"` : 'Swap agreed by coworker'}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <Badge variant={item.status === 'APPROVED' || item.status === 'APPLIED' ? 'success' : 'danger'} dot>
-                          {item.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-400 text-[11px]">
-                        {formatDateTime(item.createdAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedHistory.map((item) => (
+                      <tr key={`${item.requestType}-${item.id}`} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-slate-800">
+                          {item.requestType === 'CHANGE' ? 'Change' : 'Swap'}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
+                          {item.requestType === 'CHANGE'
+                            ? getWorkerName(item.workerId)
+                            : `${getWorkerName(item.requesterWorkerId)} ↔ ${getWorkerName(item.coworkerWorkerId)}`}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600">
+                          {item.requestType === 'CHANGE' ? (
+                            <>
+                              <div>To: {getShiftName(item.toShiftId)}</div>
+                              {item.reason && <div className="text-[11px] text-slate-400 italic">&quot;{item.reason}&quot;</div>}
+                            </>
+                          ) : (
+                            item.reason ? `"${item.reason}"` : 'Swap agreed by coworker'
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Badge variant={item.status === 'APPROVED' || item.status === 'APPLIED' ? 'success' : 'danger'} dot>
+                            {item.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">
+                          {formatDateTime(item.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500 font-medium">
+                <div className="flex items-center gap-2">
+                  <span>
+                    Showing <span className="font-bold text-slate-900">{historyTotal === 0 ? 0 : historyPage * historyPageSize + 1}</span> to{' '}
+                    <span className="font-bold text-slate-900">{Math.min((historyPage + 1) * historyPageSize, historyTotal)}</span> of{' '}
+                    <span className="font-bold text-slate-900">{historyTotal}</span> records
+                  </span>
+                  <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
+                    <span className="text-[11px] text-slate-400">Per page:</span>
+                    <select
+                      value={historyPageSize}
+                      onChange={(e) => {
+                        setHistoryPageSize(Number(e.target.value));
+                        setHistoryPage(0);
+                      }}
+                      className="bg-white border border-slate-200 rounded-md px-1.5 py-0.5 text-xs text-slate-700 outline-none focus:border-[#F66B17] cursor-pointer"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                </div>
+
+                {historyPageCount > 1 && (
+                  <div className="flex items-center gap-1 self-end sm:self-center">
+                    <button
+                      type="button"
+                      disabled={historyPage === 0}
+                      onClick={() => setHistoryPage((p) => Math.max(0, p - 1))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
+                    >
+                      <IconChevronLeft className="w-3.5 h-3.5" />
+                      <span>Prev</span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: historyPageCount }).map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setHistoryPage(idx)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            historyPage === idx
+                              ? 'bg-[#071A2B] text-white shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={historyPage + 1 >= historyPageCount}
+                      onClick={() => setHistoryPage((p) => Math.min(historyPageCount - 1, p + 1))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
+                    >
+                      <span>Next</span>
+                      <IconChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
