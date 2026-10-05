@@ -28,6 +28,7 @@ export interface NotificationContent {
 @Index('idx_notification_recipient_created', ['recipientUserId', 'createdAt', 'id'])
 @Index('idx_notification_unread', ['recipientUserId', 'createdAt'], { where: 'read_at IS NULL' })
 @Check('chk_notification_request_type', "request_type IN ('CHANGE', 'SWAP')")
+@Check('chk_notification_deleted_read', 'deleted_at IS NULL OR read_at IS NOT NULL')
 @Check(
   'chk_notification_role',
   "(recipient_role = 'WORKER' AND worker_id IS NOT NULL) OR (recipient_role = 'CONTRACTOR_REPRESENTATIVE' AND worker_id IS NULL)",
@@ -76,4 +77,7 @@ export class UserNotificationEntity {
 
   @Column({ name: 'read_at', type: 'timestamptz', nullable: true })
   readAt!: Date | null;
+
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
 }

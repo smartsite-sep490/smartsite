@@ -7,12 +7,12 @@ import {
   ShiftSwapRequestResponse,
   WorkerScheduleResponse,
 } from '@smartsite/api-client';
-import {
-  formatShiftTime,
-  formatDateTime,
-  WORKFORCE_POLL_INTERVAL_MS,
-} from './WorkforceSharedUI';
-import { splitWorkerSwapRequests } from './WorkforceScheduleUtils';
+import { formatShiftTime, formatDateTime, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+import { useEffect } from 'react';
+import { isPastWorkDate } from '@smartsite/contracts/management';
+import { useShiftRequests } from './useShiftRequests';
+import { RequestPagination } from './RequestPagination';
+import { schedulingError } from './scheduling-error';
 import {
   IconCalendar,
   IconArrowRight,
@@ -26,7 +26,6 @@ import {
   IconUsers,
   IconChevronLeft,
   IconChevronRight,
-  IconX,
 } from '../icons';
 import {
   Button,
@@ -59,7 +58,6 @@ function getWeekRangeFromOffset(offsetWeeks: number = 0) {
   sunday.setDate(sunday.getDate() + 6);
   return { fromDate: localDateIso(monday), toDate: localDateIso(sunday) };
 }
-
 
 function currentMonthRange() {
   const today = new Date();
@@ -123,8 +121,15 @@ export function WorkforceScheduleTab({
   const [selectedSchedule, setSelectedSchedule] = useState<WorkerScheduleResponse | null>(null);
   const [modalType, setModalType] = useState<'swap' | 'change' | null>(null);
   const [userView, setActiveView] = useState<'schedule' | 'requests' | 'coworker' | null>(null);
-  const activeView = userView ?? (target.data && target.data.status !== 'PENDING_COWORKER' ? 'requests'
-    : params.get('view') === 'coworker' ? 'coworker' : params.get('requestId') ? 'requests' : 'schedule');
+  const activeView =
+    userView ??
+    (target.data && target.data.status !== 'PENDING_COWORKER'
+      ? 'requests'
+      : params.get('view') === 'coworker'
+        ? 'coworker'
+        : params.get('view') === 'requests' || params.get('requestId')
+          ? 'requests'
+          : 'schedule');
   const [scheduleViewMode, setScheduleViewMode] = useState<'timetable' | 'list'>('timetable');
   const [changeTargetShiftId, setChangeTargetShiftId] = useState('');
   const [changeReason, setChangeReason] = useState('');
@@ -132,7 +137,12 @@ export function WorkforceScheduleTab({
   const [swapReason, setSwapReason] = useState('');
   const [declineTarget, setDeclineTarget] = useState<ShiftSwapRequestResponse | null>(null);
   const [declineReason, setDeclineReason] = useState('');
-  const todayIso = useMemo(() => localDateIso(new Date()), []);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const todayIso = localDateIso(now);
   const [weekOffset, setWeekOffset] = useState(0);
   const [scheduleRange, setScheduleRange] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('WEEK');
   const [scheduleFromDate, setScheduleFromDate] = useState(todayIso);
@@ -140,10 +150,14 @@ export function WorkforceScheduleTab({
   const [schedulePage, setSchedulePage] = useState(0);
   const [requestsPage, setRequestsPage] = useState(0);
   const [requestsPageSize, setRequestsPageSize] = useState(10);
+  const [incomingPage, setIncomingPage] = useState(0);
   const [collapsedScheduleDates, setCollapsedScheduleDates] = useState<Set<string>>(new Set());
 
   const activeWeekRange = useMemo(() => getWeekRangeFromOffset(weekOffset), [weekOffset]);
-  const activeWeekDays = useMemo(() => getWeekDays(activeWeekRange.fromDate), [activeWeekRange.fromDate]);
+  const activeWeekDays = useMemo(
+    () => getWeekDays(activeWeekRange.fromDate),
+    [activeWeekRange.fromDate],
+  );
 
   const scheduleDateRange = useMemo(() => {
     if (scheduleRange === 'TODAY') {
@@ -205,44 +219,31 @@ export function WorkforceScheduleTab({
     queryFn: () => client.listCoworkers(token, siteId, { limit: 25 }),
   });
 
-  const { data: swapPage } = useQuery({
-    queryKey: ['swap-requests', siteId],
-    queryFn: () => client.listShiftSwapRequests(token, siteId, { limit: 25 }),
-    refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+  const requestsQuery = useShiftRequests(apiUrl, siteId, token, {
+    view: 'WORKER',
+    offset: requestsPage * requestsPageSize,
+    limit: requestsPageSize,
   });
-
-  const { data: changePage } = useQuery({
-    queryKey: ['shift-change-requests', siteId],
-    queryFn: () => client.listShiftChangeRequests(token, siteId, { limit: 25 }),
-    refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+  const incomingQuery = useShiftRequests(apiUrl, siteId, token, {
+    view: 'INCOMING',
+    offset: incomingPage * 10,
+    limit: 10,
   });
-
-  const swapRequests = useMemo(() => {
-    if (target.data?.requestType !== 'SWAP') return swapPage;
-    return { items: [target.data, ...(swapPage?.items ?? []).filter(r => r.id !== target.data!.id)], total: swapPage?.total ?? 1 };
-  }, [swapPage, target.data]);
-  const changeRequests = useMemo(() => {
-    if (target.data?.requestType !== 'CHANGE') return changePage;
-    return { items: [target.data, ...(changePage?.items ?? []).filter(r => r.id !== target.data!.id)], total: changePage?.total ?? 1 };
-  }, [changePage, target.data]);
   // 2. Discovery queries when schedule is selected for Change/Swap
-  const { data: eligibleShifts } = useQuery({
+  const eligibleQuery = useQuery({
     queryKey: ['eligible-shifts', siteId, selectedSchedule?.id],
     queryFn: () => client.listEligibleShifts(token, siteId, selectedSchedule!.id),
     enabled: !!selectedSchedule?.id && modalType === 'change',
   });
 
-  const { data: swapCandidates } = useQuery({
+  const candidateQuery = useQuery({
     queryKey: ['swap-candidates', siteId, selectedSchedule?.id],
     queryFn: () => client.listSwapCandidates(token, siteId, selectedSchedule!.id),
     enabled: !!selectedSchedule?.id && modalType === 'swap',
   });
+
+  const eligibleShifts = eligibleQuery.data;
+  const swapCandidates = candidateQuery.data;
 
   // 3. Mutations
   const createSwap = useMutation({
@@ -252,10 +253,11 @@ export function WorkforceScheduleTab({
       reason: string;
     }) => client.createShiftSwapRequest(token, siteId, data),
     onSuccess: () => {
+      setRequestsPage(0);
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
-      queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       setModalType(null);
       setSelectedSchedule(null);
       setSwapReason('');
@@ -267,10 +269,11 @@ export function WorkforceScheduleTab({
     mutationFn: (data: { workerScheduleId: string; toShiftId: string; reason: string }) =>
       client.createShiftChangeRequest(token, siteId, data),
     onSuccess: () => {
+      setRequestsPage(0);
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
-      queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       setModalType(null);
       setSelectedSchedule(null);
       setChangeReason('');
@@ -281,9 +284,10 @@ export function WorkforceScheduleTab({
   const confirmCoworkerSwap = useMutation({
     mutationFn: (id: string) => client.confirmShiftSwapRequest(token, siteId, id),
     onSuccess: () => {
+      setIncomingPage(0);
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
-      queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
     },
   });
@@ -292,9 +296,10 @@ export function WorkforceScheduleTab({
     mutationFn: (input: { requestId: string; reason: string }) =>
       client.declineShiftSwapRequest(token, siteId, input.requestId, { reason: input.reason }),
     onSuccess: () => {
+      setIncomingPage(0);
       void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
       void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
-      queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['shift-requests', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
       setDeclineTarget(null);
       setDeclineReason('');
@@ -335,86 +340,35 @@ export function WorkforceScheduleTab({
     () => workers?.items.find((worker) => worker.userId === currentUserId)?.id ?? null,
     [workers?.items, currentUserId],
   );
-  const myChanges = useMemo(
-    () =>
-      currentWorkerId
-        ? (changeRequests?.items ?? []).filter((request) => request.workerId === currentWorkerId)
-        : [],
-    [changeRequests, currentWorkerId],
-  );
-  const { myRequests: mySwaps, incomingRequests: coworkerPendingSwaps, relatedPendingRequests } =
-    useMemo(
-      () => splitWorkerSwapRequests(swapRequests?.items ?? [], currentWorkerId),
-      [swapRequests, currentWorkerId],
-    );
-
-  const allMyRequests = useMemo(() => {
-    const changes = myChanges.map((c) => ({ ...c, requestType: 'CHANGE' as const }));
-    const swaps = (swapRequests?.items ?? [])
-      .filter(s => s.requesterWorkerId === currentWorkerId || s.coworkerWorkerId === currentWorkerId)
-      .map((s) => ({ ...s, requestType: 'SWAP' as const }));
-    return [...changes, ...swaps].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [myChanges, swapRequests, currentWorkerId]);
-
-  const requestsTotal = allMyRequests.length;
+  const allMyRequests = requestsQuery.data?.items ?? [];
+  const selectedRequest =
+    target.data && !allMyRequests.some((r) => r.id === target.data!.id) ? target.data : null;
+  const paginatedRequests = selectedRequest ? [selectedRequest, ...allMyRequests] : allMyRequests;
+  const requestsTotal = requestsQuery.data?.total ?? 0;
   const requestsPageCount = Math.max(1, Math.ceil(requestsTotal / requestsPageSize));
-  const paginatedRequests = useMemo(() => {
-    const start = requestsPage * requestsPageSize;
-    return allMyRequests.slice(start, start + requestsPageSize);
-  }, [allMyRequests, requestsPage, requestsPageSize]);
-
-  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<string>>(() => {
+  const incomingItems = incomingQuery.data?.items ?? [];
+  const coworkerPendingSwaps = [
+    ...(target.data?.requestType === 'SWAP' &&
+    target.data.status === 'PENDING_COWORKER' &&
+    target.data.coworkerWorkerId === currentWorkerId &&
+    !incomingItems.some((r) => r.id === target.data!.id)
+      ? [target.data]
+      : []),
+    ...incomingItems.filter((r) => r.requestType === 'SWAP'),
+  ];
+  const pendingScheduleIds = new Set(requestsQuery.data?.pendingScheduleIds ?? []);
+  const isPastSchedule = (schedule: WorkerScheduleResponse) => {
+    const shift = getShiftObj(schedule.shiftId);
+    if (!shift) return true;
     try {
-      const saved = localStorage.getItem('smartsite_dismissed_schedule_notifs');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
+      return isPastWorkDate(schedule.workDate, shift.timezone, now);
     } catch {
-      return new Set();
+      return true;
     }
-  });
-
-  const dismissNotification = (id: string) => {
-    setDismissedNotificationIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      try {
-        localStorage.setItem('smartsite_dismissed_schedule_notifs', JSON.stringify(Array.from(next)));
-      } catch {
-        // Ignore storage errors
-      }
-      return next;
-    });
   };
 
-  const latestDecidedRequest = useMemo(() => {
-    return (
-      allMyRequests.find(
-        (req) =>
-          (req.status === 'APPROVED' ||
-            req.status === 'APPLIED' ||
-            req.status === 'REJECTED' ||
-            req.status === 'CONFLICTED') &&
-          !dismissedNotificationIds.has(req.id),
-      ) ?? null
-    );
-  }, [allMyRequests, dismissedNotificationIds]);
-  const pendingScheduleIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const request of myChanges) {
-      if (request.status === 'PENDING_MANAGER') ids.add(request.workerScheduleId);
-    }
-    for (const request of relatedPendingRequests) {
-      if (request.status === 'PENDING_COWORKER' || request.status === 'PENDING_MANAGER') {
-        ids.add(request.requesterWorkerScheduleId);
-        ids.add(request.coworkerWorkerScheduleId);
-      }
-    }
-    return ids;
-  }, [myChanges, relatedPendingRequests]);
-
   const openChangeModal = (sched: WorkerScheduleResponse) => {
-    if (sched.workDate < todayIso) return;
+    if (isPastSchedule(sched)) return;
     setSelectedSchedule(sched);
     setChangeReason('');
     setChangeTargetShiftId('');
@@ -422,7 +376,7 @@ export function WorkforceScheduleTab({
   };
 
   const openSwapModal = (sched: WorkerScheduleResponse) => {
-    if (sched.workDate < todayIso) return;
+    if (isPastSchedule(sched)) return;
     setSelectedSchedule(sched);
     setSwapReason('');
     setSwapTargetScheduleId('');
@@ -454,6 +408,30 @@ export function WorkforceScheduleTab({
     );
   }
 
+  const requestError = requestsQuery.error ?? incomingQuery.error;
+  if (requestError)
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+      >
+        <p>{schedulingError(requestError)}</p>
+        <Button
+          onClick={() => {
+            void requestsQuery.refetch();
+            void incomingQuery.refetch();
+          }}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  if (
+    (activeView === 'requests' && requestsQuery.isLoading) ||
+    (activeView === 'coworker' && incomingQuery.isLoading)
+  )
+    return <p role="status">Loading shift requests...</p>;
+
   // ── Error state ────────────────────────────────────────────────────────────
   if (schedError) {
     return (
@@ -475,14 +453,27 @@ export function WorkforceScheduleTab({
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       {target.isLoading && <p role="status">Loading selected request…</p>}
-      {target.isError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-        This request is unavailable or you no longer have access. <button type="button" onClick={() => void target.refetch()} className="underline">Retry</button>
-      </div>}
-      {target.data && <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
-        Selected {target.data.requestType === 'CHANGE' ? 'shift change' : 'shift swap'} · {target.data.status}
-        <p className="mt-1 text-xs text-slate-600">{target.data.reason}</p>
-        {target.data.reviewReason && <p className="mt-1 text-xs">Review message: {target.data.reviewReason}</p>}
-      </div>}
+      {target.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          This request is unavailable or you no longer have access.{' '}
+          <button type="button" onClick={() => void target.refetch()} className="underline">
+            Retry
+          </button>
+        </div>
+      )}
+
+
+      {confirmCoworkerSwap.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          {schedulingError(confirmCoworkerSwap.error)}
+        </div>
+      )}
 
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
@@ -520,8 +511,12 @@ export function WorkforceScheduleTab({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Shifts</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">{scheduleList.length}</p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Assigned Shifts
+            </span>
+            <p className="text-2xl font-black tracking-tight text-[#071A2B]">
+              {scheduleList.length}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
             <IconClock className="w-5 h-5 text-[#F66B17]" />
@@ -530,10 +525,10 @@ export function WorkforceScheduleTab({
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">My Requests</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">
-              {myChanges.length + mySwaps.length}
-            </p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              My Requests
+            </span>
+            <p className="text-2xl font-black tracking-tight text-[#071A2B]">{requestsTotal}</p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
             <IconArrowRight className="w-5 h-5 text-blue-600" />
@@ -550,7 +545,9 @@ export function WorkforceScheduleTab({
         >
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Coworker Swap Requests</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                Coworker Swap Requests
+              </span>
               {coworkerPendingSwaps.length > 0 && (
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
               )}
@@ -566,11 +563,14 @@ export function WorkforceScheduleTab({
       </div>
 
       {/* ── WORKFORCE ACTIVITY NOTIFICATIONS ─────────────────────────────── */}
-      {(coworkerPendingSwaps.length > 0 || latestDecidedRequest !== null) && (
+      {coworkerPendingSwaps.length > 0 && (
         <div className="space-y-3">
           {/* 1. Pending Incoming Coworker Swap Requests */}
           {coworkerPendingSwaps.length > 0 && (
-            <Alert variant="warning" className="animate-in slide-in-from-top-2 fade-in duration-200">
+            <Alert
+              variant="warning"
+              className="animate-in slide-in-from-top-2 fade-in duration-200"
+            >
               <IconUser className="w-5 h-5" />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1">
@@ -584,11 +584,16 @@ export function WorkforceScheduleTab({
                         <span className="font-semibold text-slate-950">
                           {getWorkerName(coworkerPendingSwaps[0]!.requesterWorkerId)}
                         </span>{' '}
-                        wants to swap with your shift ({getShiftName(coworkerPendingSwaps[0]!.coworkerShiftId)}).
+                        wants to swap with your shift (
+                        {getShiftName(coworkerPendingSwaps[0]!.coworkerShiftId)}).
                       </>
                     ) : (
                       <>
-                        You have <span className="font-semibold text-slate-950">{coworkerPendingSwaps.length} shift swap requests</span> from coworkers waiting for your confirmation.
+                        You have{' '}
+                        <span className="font-semibold text-slate-950">
+                          {coworkerPendingSwaps.length} shift swap requests
+                        </span>{' '}
+                        from coworkers waiting for your confirmation.
                       </>
                     )}
                   </AlertDescription>
@@ -607,99 +612,6 @@ export function WorkforceScheduleTab({
               </div>
             </Alert>
           )}
-
-          {/* 2. Latest Decided Shift Change / Swap Request (Approved or Rejected by Contractor) */}
-          {latestDecidedRequest && (() => {
-            const req = latestDecidedRequest;
-            const isApproved = req.status === 'APPROVED' || req.status === 'APPLIED';
-            const isChange = req.requestType === 'CHANGE';
-            const shiftName = isChange ? getShiftName((req as { toShiftId: string }).toShiftId) : undefined;
-            const swapReq = !isChange ? (req as { coworkerWorkerId: string; requesterWorkerId: string }) : null;
-            const coworkerName = swapReq
-              ? getWorkerName(swapReq.coworkerWorkerId === currentWorkerId ? swapReq.requesterWorkerId : swapReq.coworkerWorkerId)
-              : undefined;
-            const reviewReason = (req as { reviewReason?: string | null }).reviewReason;
-
-            return (
-              <Alert
-                key={req.id}
-                variant={isApproved ? 'success' : 'destructive'}
-                className="animate-in slide-in-from-top-2 fade-in duration-200"
-              >
-                {isApproved ? (
-                  <IconCheck className="w-5 h-5" />
-                ) : (
-                  <IconAlertCircle className="w-5 h-5" />
-                )}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <AlertTitle
-                      className={`font-bold flex items-center gap-2 text-xs ${
-                        isApproved ? 'text-emerald-950' : 'text-rose-950'
-                      }`}
-                    >
-                      <span>
-                        {isApproved
-                          ? isChange
-                            ? 'Shift Change Approved'
-                            : 'Shift Swap Approved'
-                          : isChange
-                          ? 'Shift Change Rejected'
-                          : 'Shift Swap Declined'}
-                      </span>
-                      <span className={`w-2 h-2 rounded-full ${isApproved ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                    </AlertTitle>
-                    <AlertDescription className="text-xs text-slate-700 font-medium">
-                      {isApproved ? (
-                        isChange ? (
-                          <>
-                            Your shift change request to <span className="font-bold text-[#071A2B]">{shiftName}</span> has been <span className="font-bold text-emerald-700">approved</span> by the contractor!
-                          </>
-                        ) : (
-                          <>
-                            Your shift swap request with <span className="font-bold text-[#071A2B]">{coworkerName}</span> has been <span className="font-bold text-emerald-700">approved</span> by the contractor!
-                          </>
-                        )
-                      ) : (
-                        <>
-                          Your shift request was not approved.{' '}
-                          {reviewReason && (
-                            <span className="italic text-slate-600 font-normal">
-                              (Reason: &quot;{reviewReason}&quot;)
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </AlertDescription>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => {
-                        if (isApproved) setActiveView('schedule');
-                        else setActiveView('requests');
-                      }}
-                      rightIcon={<IconArrowRight className="w-3.5 h-3.5 text-[#F66B17]" />}
-                      className="bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs text-xs font-semibold"
-                    >
-                      {isApproved ? 'View Timetable' : 'View Requests'}
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => dismissNotification(req.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                      aria-label="Dismiss notification"
-                      title="Dismiss notification"
-                    >
-                      <IconX className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </Alert>
-            );
-          })()}
         </div>
       )}
       {/* 3. Sub-Tabs */}
@@ -715,7 +627,7 @@ export function WorkforceScheduleTab({
             {
               id: 'requests' as const,
               label: 'My Change/Swap Requests',
-              count: myChanges.length + mySwaps.length,
+              count: requestsTotal,
               icon: <IconArrowRight className="w-3.5 h-3.5 text-blue-600" />,
             },
             {
@@ -737,12 +649,14 @@ export function WorkforceScheduleTab({
           <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs space-y-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div className="flex flex-wrap items-center gap-2">
-                {([
-                  ['WEEK', 'This week'],
-                  ['TODAY', 'Today'],
-                  ['MONTH', 'This month'],
-                  ['CUSTOM', 'Custom range'],
-                ] as const).map(([value, label]) => (
+                {(
+                  [
+                    ['WEEK', 'This week'],
+                    ['TODAY', 'Today'],
+                    ['MONTH', 'This month'],
+                    ['CUSTOM', 'Custom range'],
+                  ] as const
+                ).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
@@ -796,17 +710,18 @@ export function WorkforceScheduleTab({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-800">
-                    Week: {activeWeekDays[0]?.fullFormattedDate} - {activeWeekDays[6]?.fullFormattedDate}
+                    Week: {activeWeekDays[0]?.fullFormattedDate} -{' '}
+                    {activeWeekDays[6]?.fullFormattedDate}
                   </span>
                   {weekOffset === 0 && (
-                    <Badge variant="default" dot>CURRENT WEEK</Badge>
+                    <Badge variant="default" dot>
+                      CURRENT WEEK
+                    </Badge>
                   )}
                   {weekOffset < 0 && (
                     <Badge variant="neutral">PAST ({Math.abs(weekOffset)} wks ago)</Badge>
                   )}
-                  {weekOffset > 0 && (
-                    <Badge variant="success">FUTURE (+{weekOffset} wks)</Badge>
-                  )}
+                  {weekOffset > 0 && <Badge variant="success">FUTURE (+{weekOffset} wks)</Badge>}
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -819,11 +734,7 @@ export function WorkforceScheduleTab({
                     Previous week
                   </Button>
                   {weekOffset !== 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setWeekOffset(0)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setWeekOffset(0)}>
                       Current week
                     </Button>
                   )}
@@ -884,8 +795,8 @@ export function WorkforceScheduleTab({
                       isToday
                         ? 'border-[#071A2B] ring-2 ring-[#071A2B]/10 shadow-md bg-white'
                         : isPast
-                        ? 'border-slate-200/70 bg-slate-50/40 opacity-90'
-                        : 'border-slate-200/90 bg-white shadow-xs'
+                          ? 'border-slate-200/70 bg-slate-50/40 opacity-90'
+                          : 'border-slate-200/90 bg-white shadow-xs'
                     }`}
                   >
                     {/* Day Column Header */}
@@ -894,17 +805,21 @@ export function WorkforceScheduleTab({
                         isToday
                           ? 'bg-[#071A2B] text-white border-[#071A2B]'
                           : isPast
-                          ? 'bg-slate-100/90 text-slate-600 border-slate-200/70'
-                          : 'bg-slate-50/90 text-slate-800 border-slate-100'
+                            ? 'bg-slate-100/90 text-slate-600 border-slate-200/70'
+                            : 'bg-slate-50/90 text-slate-800 border-slate-100'
                       }`}
                     >
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-xs font-bold ${isToday ? 'text-white' : 'text-slate-900'}`}>
+                          <span
+                            className={`text-xs font-bold ${isToday ? 'text-white' : 'text-slate-900'}`}
+                          >
                             {day.viName}
                           </span>
                         </div>
-                        <span className={`text-[11px] font-mono ${isToday ? 'text-slate-300' : 'text-slate-500'}`}>
+                        <span
+                          className={`text-[11px] font-mono ${isToday ? 'text-slate-300' : 'text-slate-500'}`}
+                        >
                           {day.dayMonth}
                         </span>
                       </div>
@@ -915,9 +830,7 @@ export function WorkforceScheduleTab({
                         </span>
                       )}
                       {isPast && !isToday && (
-                        <span className="text-[10px] font-medium text-slate-400">
-                          Past
-                        </span>
+                        <span className="text-[10px] font-medium text-slate-400">Past</span>
                       )}
                     </div>
 
@@ -932,6 +845,7 @@ export function WorkforceScheduleTab({
                         <div className="space-y-2 flex-1 flex flex-col">
                           {daySchedules.map((sched) => {
                             const shiftObj = getShiftObj(sched.shiftId);
+                            const isPast = isPastSchedule(sched);
                             const hasPendingRequest = pendingScheduleIds.has(sched.id);
 
                             return (
@@ -947,8 +861,13 @@ export function WorkforceScheduleTab({
                                   {/* Shift Header & Status Badge */}
                                   <div className="flex items-center justify-between gap-1">
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                      <span className={`w-2 h-2 rounded-full shrink-0 ${isPast ? 'bg-slate-400' : 'bg-[#F66B17]'}`} />
-                                      <h4 className="text-xs font-bold text-slate-900 truncate" title={shiftObj?.name}>
+                                      <span
+                                        className={`w-2 h-2 rounded-full shrink-0 ${isPast ? 'bg-slate-400' : 'bg-[#F66B17]'}`}
+                                      />
+                                      <h4
+                                        className="text-xs font-bold text-slate-900 truncate"
+                                        title={shiftObj?.name}
+                                      >
                                         {shiftObj?.name || 'Shift'}
                                       </h4>
                                     </div>
@@ -957,17 +876,17 @@ export function WorkforceScheduleTab({
                                         isPast
                                           ? 'bg-slate-100 text-slate-500 border border-slate-200/60'
                                           : hasPendingRequest
-                                          ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                                          : isToday
-                                          ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                            ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                            : isToday
+                                              ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
                                       }`}
                                     >
                                       {isPast
                                         ? 'PAST'
                                         : hasPendingRequest
-                                        ? 'PENDING'
-                                        : 'SCHEDULED'}
+                                          ? 'PENDING'
+                                          : 'SCHEDULED'}
                                     </span>
                                   </div>
 
@@ -976,7 +895,8 @@ export function WorkforceScheduleTab({
                                     <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 font-mono text-[10px] text-slate-700 flex items-center gap-1">
                                       <IconClock className="w-3 h-3 text-slate-400 shrink-0" />
                                       <span className="truncate">
-                                        {formatShiftTime(shiftObj.startsAt)} - {formatShiftTime(shiftObj.endsAt)}
+                                        {formatShiftTime(shiftObj.startsAt)} -{' '}
+                                        {formatShiftTime(shiftObj.endsAt)}
                                       </span>
                                     </div>
                                   )}
@@ -995,7 +915,11 @@ export function WorkforceScheduleTab({
                                         disabled={hasPendingRequest}
                                         onClick={() => openChangeModal(sched)}
                                         className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 h-7 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer"
-                                        title={hasPendingRequest ? 'Request pending approval.' : 'Change shift'}
+                                        title={
+                                          hasPendingRequest
+                                            ? 'Request pending approval.'
+                                            : 'Change shift'
+                                        }
                                       >
                                         <IconClock className="w-3 h-3 text-blue-600 shrink-0" />
                                         <span>Change</span>
@@ -1005,7 +929,11 @@ export function WorkforceScheduleTab({
                                         disabled={hasPendingRequest}
                                         onClick={() => openSwapModal(sched)}
                                         className="flex-1 flex items-center justify-center gap-1 px-1 py-1.5 h-7 rounded-lg bg-[#071A2B] text-white text-[11px] font-semibold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
-                                        title={hasPendingRequest ? 'Request pending approval.' : 'Swap with coworker'}
+                                        title={
+                                          hasPendingRequest
+                                            ? 'Request pending approval.'
+                                            : 'Swap with coworker'
+                                        }
                                       >
                                         <IconUsers className="w-3 h-3 text-[#F66B17] shrink-0" />
                                         <span>Swap</span>
@@ -1058,13 +986,14 @@ export function WorkforceScheduleTab({
                             isDateToday
                               ? 'border-[#071A2B] bg-[#071A2B] text-white'
                               : isDatePast
-                              ? 'border-slate-200 bg-slate-50/80 text-slate-700'
-                              : 'border-slate-200 bg-white text-slate-800'
+                                ? 'border-slate-200 bg-slate-50/80 text-slate-700'
+                                : 'border-slate-200 bg-white text-slate-800'
                           }`}
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold">
-                              {date} · {dateSchedules.length} shift{dateSchedules.length === 1 ? '' : 's'}
+                              {date} · {dateSchedules.length} shift
+                              {dateSchedules.length === 1 ? '' : 's'}
                             </span>
                             {isDateToday && <Badge variant="default">Today</Badge>}
                             {isDatePast && <Badge variant="neutral">Past</Badge>}
@@ -1076,14 +1005,16 @@ export function WorkforceScheduleTab({
                             {dateSchedules.map((sched) => {
                               const shiftObj = getShiftObj(sched.shiftId);
                               const hasPendingRequest = pendingScheduleIds.has(sched.id);
-                              const isPast = sched.workDate < todayIso;
+                              const isPast = isPastSchedule(sched);
 
                               return (
                                 <Card key={sched.id} doubleBezel className="space-y-3.5">
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="space-y-1">
                                       <div className="flex items-center gap-2">
-                                        <span className={`w-2 h-2 rounded-full ${isPast ? 'bg-slate-400' : 'bg-[#F66B17]'}`} />
+                                        <span
+                                          className={`w-2 h-2 rounded-full ${isPast ? 'bg-slate-400' : 'bg-[#F66B17]'}`}
+                                        />
                                         <h3 className="text-sm font-bold text-slate-900">
                                           {shiftObj?.name || 'Shift'}
                                         </h3>
@@ -1095,11 +1026,15 @@ export function WorkforceScheduleTab({
                                         isPast
                                           ? 'neutral'
                                           : hasPendingRequest
-                                          ? 'warning'
-                                          : 'success'
+                                            ? 'warning'
+                                            : 'success'
                                       }
                                     >
-                                      {isPast ? 'PAST' : hasPendingRequest ? 'PENDING REVIEW' : 'SCHEDULED'}
+                                      {isPast
+                                        ? 'PAST'
+                                        : hasPendingRequest
+                                          ? 'PENDING REVIEW'
+                                          : 'SCHEDULED'}
                                     </Badge>
                                   </div>
 
@@ -1107,7 +1042,8 @@ export function WorkforceScheduleTab({
                                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 font-mono text-xs text-slate-700 flex items-center gap-1.5">
                                       <IconClock className="w-3.5 h-3.5 text-slate-400" />
                                       <span>
-                                        {formatShiftTime(shiftObj.startsAt)} - {formatShiftTime(shiftObj.endsAt)}
+                                        {formatShiftTime(shiftObj.startsAt)} -{' '}
+                                        {formatShiftTime(shiftObj.endsAt)}
                                       </span>
                                     </div>
                                   )}
@@ -1124,9 +1060,15 @@ export function WorkforceScheduleTab({
                                           size="sm"
                                           disabled={hasPendingRequest}
                                           onClick={() => openChangeModal(sched)}
-                                          leftIcon={<IconClock className="w-3.5 h-3.5 text-blue-600" />}
+                                          leftIcon={
+                                            <IconClock className="w-3.5 h-3.5 text-blue-600" />
+                                          }
                                           className="border-slate-300 text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                                          title={hasPendingRequest ? 'A request for this shift is already pending review.' : undefined}
+                                          title={
+                                            hasPendingRequest
+                                              ? 'A request for this shift is already pending review.'
+                                              : undefined
+                                          }
                                         >
                                           Change Shift
                                         </Button>
@@ -1135,9 +1077,15 @@ export function WorkforceScheduleTab({
                                           size="sm"
                                           disabled={hasPendingRequest}
                                           onClick={() => openSwapModal(sched)}
-                                          leftIcon={<IconUsers className="w-3.5 h-3.5 text-[#F66B17]" />}
+                                          leftIcon={
+                                            <IconUsers className="w-3.5 h-3.5 text-[#F66B17]" />
+                                          }
                                           className="bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs"
-                                          title={hasPendingRequest ? 'A request for this shift is already pending review.' : undefined}
+                                          title={
+                                            hasPendingRequest
+                                              ? 'A request for this shift is already pending review.'
+                                              : undefined
+                                          }
                                         >
                                           Swap Shift
                                         </Button>
@@ -1154,7 +1102,9 @@ export function WorkforceScheduleTab({
                   })}
 
                   <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] text-slate-500">
-                    <span>Page {schedulePage + 1} of {schedulePageCount}</span>
+                    <span>
+                      Page {schedulePage + 1} of {schedulePageCount}
+                    </span>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -1167,7 +1117,9 @@ export function WorkforceScheduleTab({
                       <button
                         type="button"
                         disabled={schedulePage + 1 >= schedulePageCount}
-                        onClick={() => setSchedulePage((page) => Math.min(schedulePageCount - 1, page + 1))}
+                        onClick={() =>
+                          setSchedulePage((page) => Math.min(schedulePageCount - 1, page + 1))
+                        }
                         className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                       >
                         Next
@@ -1184,7 +1136,7 @@ export function WorkforceScheduleTab({
       {/* ── TAB 2: MY REQUESTS ─────────────────────────────────────────────── */}
       {activeView === 'requests' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          {allMyRequests.length === 0 ? (
+          {paginatedRequests.length === 0 ? (
             <EmptyState
               icon={<IconArrowRight className="w-6 h-6 text-slate-400" />}
               title="No Requests Filed"
@@ -1205,13 +1157,18 @@ export function WorkforceScheduleTab({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {paginatedRequests.map((req) => (
-                      <tr key={`${req.requestType}-${req.id}`} className="hover:bg-slate-50/70 transition-colors">
+                      <tr
+                        key={`${req.requestType}-${req.id}`}
+                        className="hover:bg-slate-50/70 transition-colors"
+                      >
                         <td className="py-3.5 px-4 font-bold text-slate-800">
                           {req.requestType === 'CHANGE' ? 'Shift Change' : 'Shift Swap'}
                         </td>
                         <td className="py-3.5 px-4 font-semibold text-slate-900">
                           {req.requestType === 'CHANGE' ? (
-                            <span className="font-normal text-slate-700">To: {getShiftName(req.toShiftId)}</span>
+                            <span className="font-normal text-slate-700">
+                              To: {getShiftName(req.toShiftId)}
+                            </span>
                           ) : (
                             `Swap with ${getWorkerName(req.coworkerWorkerId === currentWorkerId ? req.requesterWorkerId : req.coworkerWorkerId)}`
                           )}
@@ -1230,8 +1187,8 @@ export function WorkforceScheduleTab({
                               req.status === 'APPROVED' || req.status === 'APPLIED'
                                 ? 'success'
                                 : req.status === 'REJECTED'
-                                ? 'danger'
-                                : 'warning'
+                                  ? 'danger'
+                                  : 'warning'
                             }
                             dot
                           >
@@ -1251,9 +1208,15 @@ export function WorkforceScheduleTab({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500 font-medium">
                 <div className="flex items-center gap-2">
                   <span>
-                    Showing <span className="font-bold text-slate-900">{requestsTotal === 0 ? 0 : requestsPage * requestsPageSize + 1}</span> to{' '}
-                    <span className="font-bold text-slate-900">{Math.min((requestsPage + 1) * requestsPageSize, requestsTotal)}</span> of{' '}
-                    <span className="font-bold text-slate-900">{requestsTotal}</span> requests
+                    Showing{' '}
+                    <span className="font-bold text-slate-900">
+                      {requestsTotal === 0 ? 0 : requestsPage * requestsPageSize + 1}
+                    </span>{' '}
+                    to{' '}
+                    <span className="font-bold text-slate-900">
+                      {Math.min((requestsPage + 1) * requestsPageSize, requestsTotal)}
+                    </span>{' '}
+                    of <span className="font-bold text-slate-900">{requestsTotal}</span> requests
                   </span>
                   <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
                     <span className="text-[11px] text-slate-400">Per page:</span>
@@ -1319,8 +1282,15 @@ export function WorkforceScheduleTab({
         </div>
       )}
 
-
       {/* ── TAB 3: COWORKER SWAPS ──────────────────────────────────────────── */}
+      {activeView === 'requests' && paginatedRequests.length === 0 && requestsTotal > 0 && (
+        <RequestPagination
+          page={requestsPage}
+          size={requestsPageSize}
+          total={requestsTotal}
+          onChange={setRequestsPage}
+        />
+      )}
       {activeView === 'coworker' && (
         <div className="space-y-4">
           {coworkerPendingSwaps.length === 0 ? (
@@ -1350,15 +1320,21 @@ export function WorkforceScheduleTab({
                       </div>
                     </div>
 
-                    <Badge variant="warning" dot>PENDING COWORKER</Badge>
+                    <Badge variant="warning" dot>
+                      PENDING COWORKER
+                    </Badge>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700 space-y-1">
                     <div>
-                      <span className="font-semibold">{getWorkerName(swap.requesterWorkerId)}&apos;s shift:</span> {getShiftName(swap.requesterShiftId)}
+                      <span className="font-semibold">
+                        {getWorkerName(swap.requesterWorkerId)}&apos;s shift:
+                      </span>{' '}
+                      {getShiftName(swap.requesterShiftId)}
                     </div>
                     <div>
-                      <span className="font-semibold">Your shift:</span> {getShiftName(swap.coworkerShiftId)}
+                      <span className="font-semibold">Your shift:</span>{' '}
+                      {getShiftName(swap.coworkerShiftId)}
                     </div>
                     {swap.reason && (
                       <p className="text-[11px] text-slate-500 italic pt-1 border-t border-slate-200/60">
@@ -1422,16 +1398,23 @@ export function WorkforceScheduleTab({
           {declineCoworkerSwap.isError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>Failed to decline this swap. Please refresh and try again.</span>
+              <span>{schedulingError(declineCoworkerSwap.error)}</span>
             </div>
           )}
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs text-slate-700">
-            You are declining the swap request from <span className="font-bold">{declineTarget ? getWorkerName(declineTarget.requesterWorkerId) : 'the requester'}</span>.
+            You are declining the swap request from{' '}
+            <span className="font-bold">
+              {declineTarget ? getWorkerName(declineTarget.requesterWorkerId) : 'the requester'}
+            </span>
+            .
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="coworker-decline-reason" className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+            <label
+              htmlFor="coworker-decline-reason"
+              className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+            >
               Reason for declining <span className="text-rose-500">*</span>
             </label>
             <textarea
@@ -1456,7 +1439,7 @@ export function WorkforceScheduleTab({
               type="submit"
               variant="destructive"
               size="md"
-              disabled={declineReason.trim().length < 5}
+              disabled={declineReason.trim().length < 5 || declineCoworkerSwap.isPending}
               isLoading={declineCoworkerSwap.isPending}
             >
               Decline Swap
@@ -1475,7 +1458,14 @@ export function WorkforceScheduleTab({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!selectedSchedule || !changeTargetShiftId) return;
+            if (
+              !selectedSchedule ||
+              !changeTargetShiftId ||
+              createChange.isPending ||
+              !eligibleQuery.isSuccess ||
+              changeReason.trim().length < 5
+            )
+              return;
             createChange.mutate({
               workerScheduleId: selectedSchedule.id,
               toShiftId: changeTargetShiftId,
@@ -1484,10 +1474,22 @@ export function WorkforceScheduleTab({
           }}
           className="space-y-4"
         >
+          {eligibleQuery.isLoading && <p role="status">Loading eligible shifts...</p>}
+          {eligibleQuery.isError && (
+            <div role="alert">
+              {schedulingError(eligibleQuery.error)}{' '}
+              <Button type="button" onClick={() => void eligibleQuery.refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {eligibleQuery.isSuccess && !eligibleShifts?.items.length && (
+            <p>No eligible shifts are available.</p>
+          )}
           {createChange.isError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>Failed to submit shift change request.</span>
+              <span>{schedulingError(createChange.error)}</span>
             </div>
           )}
 
@@ -1496,27 +1498,50 @@ export function WorkforceScheduleTab({
               label="Target Shift"
               fieldRequired
               value={changeTargetShiftId}
-              onChange={setChangeTargetShiftId}
+              onChange={(value) => {
+                setChangeTargetShiftId(value);
+                if (createChange.isError) createChange.reset();
+              }}
               placeholder="-- Select Target Shift --"
-              options={(eligibleShifts?.items || shifts?.items || []).map((s) => ({
+              options={(eligibleShifts?.items ?? []).map((s) => ({
                 value: s.id,
-                label: `${s.name} (${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)})`
+                label: `${s.name} (${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)})`,
               }))}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+            <label
+              htmlFor="shift-change-reason"
+              className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+            >
               Reason <span className="text-rose-500">*</span>
             </label>
             <textarea
               rows={3}
               required
               placeholder="Why do you need to change your shift?"
+              id="shift-change-reason"
+              minLength={5}
+              maxLength={1000}
+              aria-invalid={changeReason.trim().length < 5}
+              aria-describedby="shift-change-reason-help"
               value={changeReason}
-              onChange={(e) => setChangeReason(e.target.value)}
+              onChange={(e) => {
+                setChangeReason(e.target.value);
+                if (createChange.isError) createChange.reset();
+              }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCE6EF] bg-[#F9FAFC] text-sm font-semibold text-[#071A2B] placeholder-[#94A3B8] outline-none transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-[#B0C4D8] focus:border-[#071A2B] focus:bg-white focus:ring-2 focus:ring-[#071A2B]/8 shadow-[inset_0_1px_2px_rgba(7,26,43,0.04)] resize-none"
             />
+            <p
+              id="shift-change-reason-help"
+              aria-live="polite"
+              className={`text-[11px] ${changeReason.trim().length < 5 ? 'text-rose-700' : 'text-slate-500'}`}
+            >
+              {changeReason.trim().length < 5
+                ? 'Reason must be at least 5 characters.'
+                : 'Reason must be 5 to 1000 characters.'}
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1527,7 +1552,12 @@ export function WorkforceScheduleTab({
               type="submit"
               variant="default"
               size="md"
-              disabled={!changeTargetShiftId || !changeReason.trim()}
+              disabled={
+                !changeTargetShiftId ||
+                changeReason.trim().length < 5 ||
+                createChange.isPending ||
+                !eligibleQuery.isSuccess
+              }
               isLoading={createChange.isPending}
             >
               Submit Change Request
@@ -1535,6 +1565,15 @@ export function WorkforceScheduleTab({
           </div>
         </form>
       </Dialog>
+
+      {activeView === 'coworker' && (
+        <RequestPagination
+          page={incomingPage}
+          size={10}
+          total={incomingQuery.data?.total ?? 0}
+          onChange={setIncomingPage}
+        />
+      )}
 
       {/* ── MODAL: Request Shift Swap Dialog ────────────────────────────────── */}
       <Dialog
@@ -1547,7 +1586,14 @@ export function WorkforceScheduleTab({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!selectedSchedule || !swapTargetScheduleId) return;
+            if (
+              !selectedSchedule ||
+              !swapTargetScheduleId ||
+              createSwap.isPending ||
+              !candidateQuery.isSuccess ||
+              swapReason.trim().length < 5
+            )
+              return;
             createSwap.mutate({
               requesterWorkerScheduleId: selectedSchedule.id,
               coworkerWorkerScheduleId: swapTargetScheduleId,
@@ -1556,10 +1602,22 @@ export function WorkforceScheduleTab({
           }}
           className="space-y-4"
         >
+          {candidateQuery.isLoading && <p role="status">Loading coworker shifts...</p>}
+          {candidateQuery.isError && (
+            <div role="alert">
+              {schedulingError(candidateQuery.error)}{' '}
+              <Button type="button" onClick={() => void candidateQuery.refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {candidateQuery.isSuccess && !swapCandidates?.items.length && (
+            <p>No eligible coworker shifts are available.</p>
+          )}
           {createSwap.isError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>Failed to submit swap request.</span>
+              <span>{schedulingError(createSwap.error)}</span>
             </div>
           )}
 
@@ -1568,27 +1626,50 @@ export function WorkforceScheduleTab({
               label="Select Coworker Shift"
               fieldRequired
               value={swapTargetScheduleId}
-              onChange={setSwapTargetScheduleId}
+              onChange={(value) => {
+                setSwapTargetScheduleId(value);
+                if (createSwap.isError) createSwap.reset();
+              }}
               placeholder="-- Select Candidate --"
               options={(swapCandidates?.items || []).map((cand) => ({
                 value: cand.candidateWorkerScheduleId,
-                label: `${cand.candidateWorkerDisplayName} - ${cand.workDate} (${cand.currentShift.name})`
+                label: `${cand.candidateWorkerDisplayName} - ${cand.workDate} (${cand.currentShift.name})`,
               }))}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+            <label
+              htmlFor="shift-swap-reason"
+              className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+            >
               Reason <span className="text-rose-500">*</span>
             </label>
             <textarea
               rows={3}
               required
               placeholder="Why do you wish to swap this shift?"
+              id="shift-swap-reason"
+              minLength={5}
+              maxLength={1000}
+              aria-invalid={swapReason.trim().length < 5}
+              aria-describedby="shift-swap-reason-help"
               value={swapReason}
-              onChange={(e) => setSwapReason(e.target.value)}
+              onChange={(e) => {
+                setSwapReason(e.target.value);
+                if (createSwap.isError) createSwap.reset();
+              }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCE6EF] bg-[#F9FAFC] text-sm font-semibold text-[#071A2B] placeholder-[#94A3B8] outline-none transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-[#B0C4D8] focus:border-[#071A2B] focus:bg-white focus:ring-2 focus:ring-[#071A2B]/8 shadow-[inset_0_1px_2px_rgba(7,26,43,0.04)] resize-none"
             />
+            <p
+              id="shift-swap-reason-help"
+              aria-live="polite"
+              className={`text-[11px] ${swapReason.trim().length < 5 ? 'text-rose-700' : 'text-slate-500'}`}
+            >
+              {swapReason.trim().length < 5
+                ? 'Reason must be at least 5 characters.'
+                : 'Reason must be 5 to 1000 characters.'}
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1599,7 +1680,12 @@ export function WorkforceScheduleTab({
               type="submit"
               variant="default"
               size="md"
-              disabled={!swapTargetScheduleId || !swapReason.trim()}
+              disabled={
+                !swapTargetScheduleId ||
+                swapReason.trim().length < 5 ||
+                createSwap.isPending ||
+                !candidateQuery.isSuccess
+              }
               isLoading={createSwap.isPending}
             >
               Submit Swap Request
@@ -1607,7 +1693,6 @@ export function WorkforceScheduleTab({
           </div>
         </form>
       </Dialog>
-
     </div>
   );
 }

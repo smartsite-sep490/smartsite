@@ -66,8 +66,12 @@ import type {
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
   SchedulingRequestStatus,
+  ShiftRequestListOptions,
+  ShiftRequestListResponse,
   UserNotificationListResponse,
   NotificationReadResponse,
+  NotificationDeleteReadResponse,
+  NotificationDeleteResponse,
   FaceGateVerificationResponse,
   GateFacePresenceResponse,
   GateAccessLogResponse,
@@ -106,6 +110,19 @@ const validTimeout = (timeoutMs: number) =>
 export class SmartSiteManagementClient {
   constructor(private readonly baseUrl: string) {}
 
+  listShiftRequests(token: string, siteId: string, options: ShiftRequestListOptions) {
+    const query = new URLSearchParams({ view: options.view });
+    if (options.requestType) query.set('requestType', options.requestType);
+    if (options.search) query.set('search', options.search);
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    return this.request<ShiftRequestListResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/shift-requests?${query}`,
+      token,
+    );
+  }
+
   listNotifications(
     token: string,
     options: PageOptions & { readStatus?: 'ALL' | 'UNREAD' } = {},
@@ -131,6 +148,14 @@ export class SmartSiteManagementClient {
 
   readAllNotifications(token: string): Promise<{ updated: number }> {
     return this.request('PATCH', '/me/notifications/read-all', token);
+  }
+
+  deleteReadNotifications(token: string): Promise<NotificationDeleteReadResponse> {
+    return this.request('DELETE', '/me/notifications/read', token);
+  }
+
+  deleteNotification(token: string, id: string): Promise<NotificationDeleteResponse> {
+    return this.request('DELETE', `/me/notifications/${pathId(id)}`, token);
   }
 
   getShiftChangeRequest(

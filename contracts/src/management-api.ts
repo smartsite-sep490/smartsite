@@ -8,15 +8,16 @@ export type UserRole =
   | 'SECURITY_OFFICER'
   | 'WORKER';
 export type ProvisionableUserRole =
-  'ADMIN' |
-  'SITE_MANAGER' |
-  'CONTRACTOR_REPRESENTATIVE' |
-  'SAFETY_OFFICER' |
-  'SECURITY_OFFICER' |
-  'WORKER';
+  | 'ADMIN'
+  | 'SITE_MANAGER'
+  | 'CONTRACTOR_REPRESENTATIVE'
+  | 'SAFETY_OFFICER'
+  | 'SECURITY_OFFICER'
+  | 'WORKER';
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export * from './observation-identity-management.js';
+export { isPastWorkDate } from './scheduling-date.js';
 
 export interface ProvisionableRoleAssignment {
   role: ProvisionableUserRole;
@@ -409,6 +410,14 @@ export interface NotificationReadResponse {
   readAt: string;
 }
 
+export interface NotificationDeleteReadResponse {
+  deleted: number;
+}
+
+export interface NotificationDeleteResponse {
+  id: string;
+}
+
 export interface ShiftChangeRequestResponse {
   id: string;
   siteId: string;
@@ -463,4 +472,22 @@ export interface AbsenceRequestResponse {
   reviewedByUserId: string | null;
   reviewedAt: string | null;
   createdAt: string;
+}
+
+export type ShiftRequestResponse =
+  | (ShiftChangeRequestResponse & { requestType: 'CHANGE' })
+  | (ShiftSwapRequestResponse & { requestType: 'SWAP' });
+
+export interface ShiftRequestListOptions {
+  view: 'WORKER' | 'INCOMING' | 'REVIEW' | 'HISTORY';
+  requestType?: 'ALL' | 'CHANGE' | 'SWAP';
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface ShiftRequestListResponse extends Page<ShiftRequestResponse> {
+  pendingCount: number;
+  incomingCount: number;
+  pendingScheduleIds: string[];
 }

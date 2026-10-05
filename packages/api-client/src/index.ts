@@ -51,8 +51,13 @@ export type {
   UserNotificationResponse,
   UserNotificationListResponse,
   NotificationReadResponse,
+  NotificationDeleteReadResponse,
+  NotificationDeleteResponse,
   ShiftChangeRequestResponse,
   ShiftSwapRequestResponse,
+  ShiftRequestListOptions,
+  ShiftRequestListResponse,
+  ShiftRequestResponse,
   AbsenceRequestResponse,
 } from '@smartsite/contracts';
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
@@ -74,6 +79,8 @@ export const BACKEND_ERROR_CODES = [
   'AI_EVENT_ID_CONFLICT',
   'AI_INGESTION_UNAVAILABLE',
   'DATABASE_UNAVAILABLE',
+  'SHIFT_WORK_DATE_PASSED',
+  'SHIFT_DATE_UNAVAILABLE',
 ] as const;
 export type BackendErrorCode = (typeof BACKEND_ERROR_CODES)[number];
 export type BackendValidationIssue = { code: string; path: string; message: string };
