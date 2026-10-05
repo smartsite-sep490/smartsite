@@ -1,3 +1,4 @@
+import type { PpeItem } from '@smartsite/contracts/ppe-items';
 import type { VideoTestDetection } from './videoTestFixture';
 
 export interface Size2D {
@@ -66,17 +67,21 @@ export function getEffectiveDetections(
 export type PpeResultState =
   'NO_TARGETS' | 'CONFIRMED_MISSING' | 'PENDING_CONFIRMATION' | 'COMPLIANT' | 'UNKNOWN';
 
-export type PpeItemDisplayState = 'CONFIRMED_MISSING' | 'PENDING_MISSING' | 'PRESENT' | 'UNKNOWN';
+export type PpeItemDisplayState =
+  'CONFIRMED_MISSING' | 'PENDING_MISSING' | 'PRESENT' | 'UNKNOWN' | 'NOT_REPORTED';
 
 function resolvePpeAlertState(
   detection: VideoTestDetection,
 ): Exclude<VideoTestDetection['alertState'], undefined> {
   if (detection.alertState) return detection.alertState;
   if (detection.active) return 'CONFIRMED';
-  if (Object.values(detection.ppeStatus).some((status) => status === 'MISSING')) {
+  const statuses = Object.values(detection.ppeStatus).filter(
+    (status): status is 'PRESENT' | 'MISSING' | 'UNKNOWN' => status !== undefined,
+  );
+  if (statuses.some((status) => status === 'MISSING')) {
     return 'PENDING_CONFIRMATION';
   }
-  if (Object.values(detection.ppeStatus).every((status) => status === 'PRESENT')) {
+  if (statuses.length > 0 && statuses.every((status) => status === 'PRESENT')) {
     return 'COMPLIANT';
   }
   return 'UNKNOWN';
@@ -102,16 +107,19 @@ export function getPpeResultState(detections: VideoTestDetection[]): PpeResultSt
 /** Separates the current-frame item evidence from the temporally latched alert. */
 export function getPpeItemDisplayState(
   detection: VideoTestDetection,
-  item: 'HARD_HAT' | 'SAFETY_VEST',
+  item: PpeItem,
 ): PpeItemDisplayState {
+  const currentStatus = detection.ppeStatus[item];
+  if (currentStatus === undefined) return 'NOT_REPORTED';
+  if (currentStatus === 'PRESENT') return 'PRESENT';
+  if (currentStatus === 'UNKNOWN') return 'UNKNOWN';
+
   const confirmedItems = detection.confirmedMissingItems;
-  const confirmed = confirmedItems
+  const isConfirmed = confirmedItems
     ? confirmedItems.includes(item)
-    : isConfirmedPpeDetection(detection) && detection.ppeStatus[item] === 'MISSING';
-  if (confirmed) return 'CONFIRMED_MISSING';
-  if (detection.ppeStatus[item] === 'MISSING') return 'PENDING_MISSING';
-  if (detection.ppeStatus[item] === 'PRESENT') return 'PRESENT';
-  return 'UNKNOWN';
+    : isConfirmedPpeDetection(detection);
+
+  return isConfirmed ? 'CONFIRMED_MISSING' : 'PENDING_MISSING';
 }
 
 /**
@@ -281,30 +289,36 @@ export function resolveCameraAndWorkArea(
 
 export interface PpeFilterOptions {
   workerTrackId?: number | null;
-  itemType?: 'ALL' | 'HARD_HAT' | 'SAFETY_VEST';
+  itemType?: 'ALL' | PpeItem;
 }
 
 /**
  * Truly filters the loaded PPE events list so that the table changes according to user selection.
  */
-export function filterPpeEvents<
-  T extends { trackId: number; ppeItem?: 'HARD_HAT' | 'SAFETY_VEST'; issue: string },
->(events: T[], options: PpeFilterOptions): T[] {
+export function filterPpeEvents<T extends { trackId: number; ppeItem?: PpeItem; issue: string }>(
+  events: T[],
+  options: PpeFilterOptions,
+): T[] {
   let result = events;
   if (options.workerTrackId !== null && options.workerTrackId !== undefined) {
     result = result.filter((e) => e.trackId === options.workerTrackId);
   }
-  if (options.itemType === 'HARD_HAT') {
-    result = result.filter(
-      (e) =>
-        e.ppeItem === 'HARD_HAT' ||
-        e.issue.toLowerCase().includes('hard hat') ||
-        e.issue.toLowerCase().includes('helmet'),
-    );
-  } else if (options.itemType === 'SAFETY_VEST') {
-    result = result.filter(
-      (e) => e.ppeItem === 'SAFETY_VEST' || e.issue.toLowerCase().includes('vest'),
-    );
+  if (options.itemType && options.itemType !== 'ALL') {
+    const target = options.itemType;
+    result = result.filter((e) => {
+      // Typed ppeItem is authoritative when present
+      if (e.ppeItem !== undefined && e.ppeItem !== null) {
+        return e.ppeItem === target;
+      }
+      // Free-text issue fallback ONLY when ppeItem is absent
+      const issue = e.issue.toLowerCase();
+      if (target === 'HARD_HAT') return issue.includes('hard hat') || issue.includes('helmet');
+      if (target === 'SAFETY_VEST') return issue.includes('vest');
+      if (target === 'GLOVES') return issue.includes('glove');
+      if (target === 'BOOTS') return issue.includes('boot');
+      if (target === 'GOGGLES') return issue.includes('goggle');
+      return false;
+    });
   }
   return result;
 }
@@ -336,4 +350,21 @@ export function filterZoneEvents<T extends { trackId: number; zone: string; resu
     );
   }
   return result;
+}
+
+export function formatPpeItemLabel(item?: PpeItem): string {
+  switch (item) {
+    case 'HARD_HAT':
+      return 'Hard Hat';
+    case 'SAFETY_VEST':
+      return 'Safety Vest';
+    case 'GLOVES':
+      return 'Gloves';
+    case 'BOOTS':
+      return 'Boots';
+    case 'GOGGLES':
+      return 'Goggles';
+    default:
+      return 'PPE';
+  }
 }

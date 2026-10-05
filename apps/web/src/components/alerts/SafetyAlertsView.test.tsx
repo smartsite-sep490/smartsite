@@ -15,6 +15,7 @@ import type {
   ObservationIdentityWorkerResponse,
 } from '@smartsite/api-client';
 import { SafetyAlertsView } from './SafetyAlertsView';
+import { formatCandidateSubtype } from './safetyAlertEvidenceUtils';
 
 // Polyfill URL.createObjectURL and ResizeObserver for jsdom
 if (typeof URL.createObjectURL !== 'function') {
@@ -1315,6 +1316,22 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
 
       // Assert that alert-2 remains selected, no stale review success feedback for alert-1 is shown
       expect(screen.queryByText(/Review decision recorded\./i)).toBeNull();
+    });
+  });
+
+  describe('formatCandidateSubtype', () => {
+    it('formats candidate subtypes cleanly for expanded PPE and zone entries', () => {
+      expect(formatCandidateSubtype('PPE_HARD_HAT_MISSING')).toBe('Missing Hard Hat');
+      expect(formatCandidateSubtype('PPE_SAFETY_VEST_MISSING')).toBe('Missing Safety Vest');
+      expect(formatCandidateSubtype('PPE_GLOVES_MISSING')).toBe('Missing Gloves');
+      expect(formatCandidateSubtype('PPE_BOOTS_MISSING')).toBe('Missing Boots');
+      expect(formatCandidateSubtype('PPE_GOGGLES_MISSING')).toBe('Missing Goggles');
+      expect(formatCandidateSubtype('RESTRICTED_ZONE_INTRUSION')).toBe('Restricted Zone Intrusion');
+      expect(formatCandidateSubtype('ZONE_ENTRY_VIOLATION')).toBe('Zone Entry Violation');
+      expect(formatCandidateSubtype('ZONE_ENTRY_UNAUTHORIZED')).toBe('Unauthorized Zone Entry');
+      expect(formatCandidateSubtype('ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE')).toBe(
+        'Authorization Unavailable',
+      );
     });
   });
 });

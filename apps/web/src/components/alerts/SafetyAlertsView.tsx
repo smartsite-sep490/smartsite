@@ -11,6 +11,7 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
+import { formatCandidateSubtype } from './safetyAlertEvidenceUtils';
 import type { SharedSession } from '../../types/shared-session';
 
 export interface SafetyAlertsViewProps {
@@ -101,7 +102,7 @@ function AlertRow({
             {formatLabel(alert.alertType)}
           </p>
           <p className="mt-1 font-semibold text-[#2F3437] break-words">
-            {formatLabel(alert.candidateSubtype)}
+            {formatCandidateSubtype(alert.candidateSubtype)}
           </p>
           {alert.candidateSubtype === 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE' && (
             <p className="mt-1 text-[11px] text-[#1F6C9F] italic leading-tight">

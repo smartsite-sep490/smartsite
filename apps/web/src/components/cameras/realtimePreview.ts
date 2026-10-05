@@ -1,3 +1,4 @@
+import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
 import type { VideoTestDetection } from './videoTestFixture';
 
 export interface RealtimePreview {
@@ -44,17 +45,28 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
     ) {
       throw new Error('Invalid preview box');
     }
-    const status = {
+    const status: VideoTestDetection['ppeStatus'] = {
       HARD_HAT: 'UNKNOWN',
       SAFETY_VEST: 'UNKNOWN',
-    } as VideoTestDetection['ppeStatus'];
+    };
     if (mode === 'ppe') {
       if (!record(item.ppeStatus)) throw new Error('Invalid preview PPE status');
+      for (const k of Object.keys(item.ppeStatus)) {
+        if (!PPE_ITEMS.includes(k as PpeItem)) throw new Error('Invalid preview PPE status');
+      }
       for (const key of ['HARD_HAT', 'SAFETY_VEST'] as const) {
         const state = item.ppeStatus[key];
         if (state !== 'UNKNOWN' && state !== 'MISSING' && state !== 'PRESENT')
           throw new Error('Invalid preview PPE status');
         status[key] = state;
+      }
+      for (const key of ['GLOVES', 'BOOTS', 'GOGGLES'] as const) {
+        const state = item.ppeStatus[key];
+        if (state !== undefined) {
+          if (state !== 'UNKNOWN' && state !== 'MISSING' && state !== 'PRESENT')
+            throw new Error('Invalid preview PPE status');
+          status[key] = state;
+        }
       }
     }
     const alertState = item.alertState;
@@ -70,8 +82,9 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
     if (
       missing !== undefined &&
       (!Array.isArray(missing) ||
-        missing.length > 2 ||
-        !missing.every((v) => v === 'HARD_HAT' || v === 'SAFETY_VEST'))
+        missing.length > PPE_ITEMS.length ||
+        new Set(missing).size !== missing.length ||
+        !missing.every((v): v is PpeItem => PPE_ITEMS.includes(v as PpeItem)))
     )
       throw new Error('Invalid preview PPE items');
     if (

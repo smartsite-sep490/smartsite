@@ -56,3 +56,32 @@ export function evidenceErrorMessage(error: unknown): string {
   }
   return error instanceof Error ? error.message : 'Failed to load evidence image.';
 }
+
+export function formatCandidateSubtype(value: string): string {
+  switch (value) {
+    case 'PPE_HARD_HAT_MISSING':
+      return 'Missing Hard Hat';
+    case 'PPE_SAFETY_VEST_MISSING':
+      return 'Missing Safety Vest';
+    case 'PPE_GLOVES_MISSING':
+      return 'Missing Gloves';
+    case 'PPE_BOOTS_MISSING':
+      return 'Missing Boots';
+    case 'PPE_GOGGLES_MISSING':
+      return 'Missing Goggles';
+    case 'ZONE_ENTRY_VIOLATION':
+      return 'Zone Entry Violation';
+    case 'ZONE_ENTRY_UNAUTHORIZED':
+      return 'Unauthorized Zone Entry';
+    case 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE':
+      return 'Authorization Unavailable';
+    case 'RESTRICTED_ZONE_INTRUSION':
+      return 'Restricted Zone Intrusion';
+    default:
+      return value
+        .toLowerCase()
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+  }
+}

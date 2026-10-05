@@ -1,3 +1,4 @@
+import type { PpeItem } from '@smartsite/contracts/ppe-items';
 import { useRealtimePreview } from '../cameras/useRealtimePreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -27,13 +28,14 @@ import {
   formatClockTime,
   resolveCameraAndWorkArea,
   filterPpeEvents,
+  formatPpeItemLabel,
 } from '../cameras/monitoringUtils';
 
-interface PpeReviewItem {
+export interface PpeReviewItem {
   id: string;
   rowKey: string;
   trackId: number;
-  ppeItem?: 'HARD_HAT' | 'SAFETY_VEST';
+  ppeItem?: PpeItem;
   worker: string;
   camera: string;
   workArea: string;
@@ -54,6 +56,9 @@ export interface PpeMonitoringViewProps {
   ) => void;
 }
 
+const CORE_PPE_ITEMS: PpeItem[] = ['HARD_HAT', 'SAFETY_VEST'];
+const EXPANDED_PPE_ITEMS: PpeItem[] = ['GLOVES', 'BOOTS', 'GOGGLES'];
+
 export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pausedViolationRef = useRef<string | null>(null);
@@ -67,7 +72,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
   const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
   const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
   const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
-  const [ppeFilter, setPpeFilter] = useState<'ALL' | 'HARD_HAT' | 'SAFETY_VEST'>('ALL');
+  const [ppeFilter, setPpeFilter] = useState<'ALL' | PpeItem>('ALL');
   const [violationSnapshot, setViolationSnapshot] = useState<{
     eventId: string;
     imageUrl: string;
@@ -135,6 +140,13 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
     );
   }, [ppeDetections]);
   const ppeResultState = useMemo(() => getPpeResultState(ppeDetections), [ppeDetections]);
+  const hasExpandedReported = useMemo(() => {
+    return ppeDetections.some(
+      (detection) =>
+        detection.ppeStatus &&
+        EXPANDED_PPE_ITEMS.some((item) => detection.ppeStatus[item] !== undefined),
+    );
+  }, [ppeDetections]);
 
   // Derive cameraExternalId and human-readable work area directly from active detection or timeline
   const activeCameraContext = useMemo(() => {
@@ -248,7 +260,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               worker: `Track #${observation.trackId}`,
               camera: context.camera,
               workArea: context.workArea,
-              issue: `Missing ${observation.ppeItem === 'HARD_HAT' ? 'Hard Hat' : 'Safety Vest'}`,
+              issue: `Missing ${formatPpeItemLabel(observation.ppeItem)}`,
               confidence: person?.confidence ? `${Math.round(person.confidence * 100)}%` : '—',
               status: 'Technical observation',
             };
@@ -553,8 +565,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 PPE CHECK
               </p>
               <p className="text-[10px] text-[#8C8C8C] mb-3">
-                Core baseline: Helmet & Safety Vest. Expanded items (gloves, boots, goggles,
-                harness) are not assessed.
+                Core observations: Helmet & Safety Vest. Expanded items are evaluated when reported.
               </p>
               <div className="space-y-2">
                 {ppeDetections.length === 0 ? (
@@ -563,8 +574,11 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                   </p>
                 ) : (
                   ppeDetections.map((detection) => {
-                    const helmet = getPpeItemDisplayState(detection, 'HARD_HAT');
-                    const vest = getPpeItemDisplayState(detection, 'SAFETY_VEST');
+                    const reportedExtended = EXPANDED_PPE_ITEMS.filter(
+                      (item) => detection.ppeStatus && detection.ppeStatus[item] !== undefined,
+                    );
+                    const itemsToDisplay = [...CORE_PPE_ITEMS, ...reportedExtended];
+
                     return (
                       <div
                         key={`ppe-check-${detection.trackId}`}
@@ -573,47 +587,44 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                         <p className="mb-2 text-[11px] font-bold text-[#2F3437]">
                           Track #{detection.trackId}
                         </p>
-                        <div className="flex items-center justify-between text-xs">
-                          <span>
-                            Helmet ·{' '}
-                            {helmet === 'CONFIRMED_MISSING'
-                              ? 'Missing · confirmed'
-                              : helmet === 'PENDING_MISSING'
-                                ? 'Missing · checking'
-                                : helmet === 'PRESENT'
-                                  ? 'Detected'
-                                  : 'Not assessed'}
-                          </span>
-                          {helmet === 'CONFIRMED_MISSING' ? (
-                            <IconX className="w-4 h-4 text-red-500" />
-                          ) : helmet === 'PENDING_MISSING' ? (
-                            <IconX className="w-4 h-4 text-amber-500" />
-                          ) : helmet === 'PRESENT' ? (
-                            <IconCheck className="w-4 h-4 text-emerald-500" />
-                          ) : (
-                            <span className="text-[10px] text-[#A3A09C]">—</span>
-                          )}
-                        </div>
-                        <div className="mt-1 flex items-center justify-between text-xs">
-                          <span>
-                            Safety Vest ·{' '}
-                            {vest === 'CONFIRMED_MISSING'
-                              ? 'Missing · confirmed'
-                              : vest === 'PENDING_MISSING'
-                                ? 'Missing · checking'
-                                : vest === 'PRESENT'
-                                  ? 'Detected'
-                                  : 'Not assessed'}
-                          </span>
-                          {vest === 'CONFIRMED_MISSING' ? (
-                            <IconX className="w-4 h-4 text-red-500" />
-                          ) : vest === 'PENDING_MISSING' ? (
-                            <IconX className="w-4 h-4 text-amber-500" />
-                          ) : vest === 'PRESENT' ? (
-                            <IconCheck className="w-4 h-4 text-emerald-500" />
-                          ) : (
-                            <span className="text-[10px] text-[#A3A09C]">—</span>
-                          )}
+                        <div className="space-y-1">
+                          {itemsToDisplay.map((item) => {
+                            const state = getPpeItemDisplayState(detection, item);
+                            const itemName =
+                              item === 'HARD_HAT' ? 'Helmet' : formatPpeItemLabel(item);
+                            const statusLabel =
+                              state === 'CONFIRMED_MISSING'
+                                ? 'Missing · confirmed'
+                                : state === 'PENDING_MISSING'
+                                  ? 'Missing · checking'
+                                  : state === 'PRESENT'
+                                    ? 'Detected'
+                                    : state === 'UNKNOWN'
+                                      ? 'Unknown'
+                                      : 'Not reported';
+
+                            return (
+                              <div
+                                key={`ppe-item-${detection.trackId}-${item}`}
+                                className="flex items-center justify-between text-xs"
+                              >
+                                <span>
+                                  {itemName} · {statusLabel}
+                                </span>
+                                {state === 'CONFIRMED_MISSING' ? (
+                                  <IconX className="w-4 h-4 text-red-500" />
+                                ) : state === 'PENDING_MISSING' ? (
+                                  <IconX className="w-4 h-4 text-amber-500" />
+                                ) : state === 'PRESENT' ? (
+                                  <IconCheck className="w-4 h-4 text-emerald-500" />
+                                ) : state === 'UNKNOWN' ? (
+                                  <IconAlertTriangle className="w-4 h-4 text-amber-500" />
+                                ) : (
+                                  <span className="text-[10px] text-[#A3A09C]">—</span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -658,7 +669,9 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                       : ppeResultState === 'PENDING_CONFIRMATION'
                         ? 'PPE CHECK PENDING'
                         : ppeResultState === 'COMPLIANT'
-                          ? 'HELMET AND VEST DETECTED'
+                          ? hasExpandedReported
+                            ? 'CORE AND REPORTED PPE DETECTED'
+                            : 'HELMET AND VEST DETECTED'
                           : ppeResultState === 'UNKNOWN'
                             ? 'PPE STATUS UNKNOWN'
                             : ppeDetections.length === 0
@@ -672,8 +685,10 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     : ppeResultState === 'PENDING_CONFIRMATION'
                       ? 'Missing evidence is waiting for multi-frame confirmation.'
                       : ppeResultState === 'COMPLIANT'
-                        ? 'Helmet and safety vest detected. Expanded items (gloves, boots, goggles, ' +
-                          'harness) are not assessed by the current baseline.'
+                        ? hasExpandedReported
+                          ? 'Helmet, safety vest, and reported expanded PPE items detected.'
+                          : 'Helmet and safety vest detected. Expanded items (gloves, boots, goggles) ' +
+                            'are not assessed by the current baseline.'
                         : ppeResultState === 'UNKNOWN'
                           ? 'The current frame does not contain enough evidence to decide PPE compliance.'
                           : isLive
@@ -813,6 +828,23 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               >
                 Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
               </button>
+              {(['GLOVES', 'BOOTS', 'GOGGLES'] as const).map((item) => {
+                const count = ppeEvents.filter((e) => e.ppeItem === item).length;
+                if (count === 0 && ppeFilter !== item) return null;
+                return (
+                  <button
+                    key={item}
+                    onClick={() => setPpeFilter(item)}
+                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                      ppeFilter === item
+                        ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                        : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                    }`}
+                  >
+                    Missing {formatPpeItemLabel(item)} ({count})
+                  </button>
+                );
+              })}
             </div>
           </div>
 

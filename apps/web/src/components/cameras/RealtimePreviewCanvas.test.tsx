@@ -182,7 +182,7 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
 
     // 4. Accessible list and visible details include technical evidence summary
     expect(
-      screen.getAllByText(/Bằng chứng kỹ thuật ghi nhận có Mũ bảo hộ và Áo phản quang/i).length,
+      screen.getAllByText(/Bằng chứng kỹ thuật ghi nhận có Mũ và Áo/i).length,
     ).toBeGreaterThanOrEqual(1);
 
     // 5. Visible compact details dropdown exists and is default collapsed
@@ -365,5 +365,47 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
     expect(items.length).toBe(2);
     expect(items[0]!.textContent).toContain('Khu vực: zone-north');
     expect(items[1]!.textContent).toContain('Khu vực: zone-south');
+  });
+
+  it('7. Renders accessible summary and canvas label for expanded 5 items when all reported present', () => {
+    const preview = createMockDecodedPreview({
+      detections: [
+        {
+          active: false,
+          alertState: 'COMPLIANT',
+          boundingBox: { x1: 0.2, y1: 0.2, x2: 0.4, y2: 0.7 },
+          cameraExternalId: 'CAM-01',
+          confidence: 0.95,
+          confirmedMissingItems: [],
+          eventId: 'EVENT-5ITEMS',
+          label: 'MF04 PPE COMPLIANT',
+          ppeStatus: {
+            HARD_HAT: 'PRESENT',
+            SAFETY_VEST: 'PRESENT',
+            GLOVES: 'PRESENT',
+            BOOTS: 'PRESENT',
+            GOGGLES: 'PRESENT',
+          },
+          timecode: 'LIVE',
+          trackId: 12,
+        },
+      ],
+    });
+
+    render(<RealtimePreviewCanvas preview={preview} mode="ppe" />);
+
+    // 1. Canvas text includes all 5 items
+    expect(mockContext.fillText).toHaveBeenCalledWith(
+      expect.stringContaining('Track #12 · Mũ & Áo & Găng & Ủng & Kính: Có'),
+      expect.any(Number),
+      expect.any(Number),
+    );
+
+    // 2. Accessible list and visible details include positive technical evidence summary for all 5 items
+    expect(
+      screen.getAllByText(
+        /Bằng chứng kỹ thuật ghi nhận có Mũ và Áo và Găng và Ủng và Kính trong khung hình này/i,
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 });

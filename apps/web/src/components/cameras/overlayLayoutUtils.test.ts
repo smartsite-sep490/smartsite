@@ -179,6 +179,106 @@ describe('overlayLayoutUtils - Label formatting and neutral semantics', () => {
     const styleMissing = resolveDetectionVisualStyle(confirmedMissing, 'ppe');
     expect(styleMissing.boxStroke).toBe('#EA580C');
   });
+
+  it('formats compact neutral label with expanded PPE items when supplied', () => {
+    // When GLOVES is supplied and PRESENT along with Mũ and Áo
+    const withGloves = createMockDetection({
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'PRESENT',
+      },
+    });
+    const label = formatPpeCompactLabel(withGloves);
+    expect(label.full).toBe('Track #1 · Mũ & Áo & Găng: Có');
+
+    // When BOOTS is supplied and MISSING (confirmed)
+    const bootsMissing = createMockDetection({
+      trackId: 5,
+      confirmedMissingItems: ['BOOTS'],
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        BOOTS: 'MISSING',
+      },
+    });
+    const bootsLabel = formatPpeCompactLabel(bootsMissing);
+    expect(bootsLabel.full).toBe('Track #5 · Thiếu Ủng');
+
+    // When GLOVES is MISSING (pending) and BOOTS is MISSING (confirmed)
+    const mixedExpanded = createMockDetection({
+      trackId: 6,
+      confirmedMissingItems: ['BOOTS'],
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'MISSING',
+        BOOTS: 'MISSING',
+      },
+    });
+    const mixedLabel = formatPpeCompactLabel(mixedExpanded);
+    expect(mixedLabel.full).toBe('Track #6 · Thiếu Ủng · Chờ Găng');
+
+    // When an optional item is absent, it must NOT appear in the label
+    const absentOptional = createMockDetection({
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+      },
+    });
+    const absentLabel = formatPpeCompactLabel(absentOptional);
+    expect(absentLabel.full).toBe('Track #1 · Mũ & Áo: Có');
+    expect(absentLabel.full).not.toMatch(/Găng|Ủng|Kính/);
+  });
+
+  it('applies neutral style to UNKNOWN expanded PPE without latching warning colors', () => {
+    const unknownExpanded = createMockDetection({
+      trackId: 7,
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'UNKNOWN',
+        BOOTS: 'UNKNOWN',
+      },
+    });
+    const style = resolveDetectionVisualStyle(unknownExpanded, 'ppe');
+    expect(style.boxStroke).toBe('#78716C');
+    expect(style.badgeBg).toBe('#1C1917');
+  });
+
+  it('applies amber warning to pending expanded PPE missing items', () => {
+    const pendingExpanded = createMockDetection({
+      trackId: 8,
+      confirmedMissingItems: [],
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'MISSING',
+      },
+    });
+    const style = resolveDetectionVisualStyle(pendingExpanded, 'ppe');
+    expect(style.boxStroke).toBe('#D97706'); // Muted Amber
+  });
+
+  it('separates historical confirmed missing extended items from current UNKNOWN status (never fresh Thiếu)', () => {
+    // Gloves has confirmed missing history, but current frame evidence is UNKNOWN
+    const historicalGloves = createMockDetection({
+      trackId: 19,
+      confirmedMissingItems: ['GLOVES'],
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'UNKNOWN',
+      },
+    });
+    const label = formatPpeCompactLabel(historicalGloves);
+    // MUST NOT label as fresh "Thiếu Găng"
+    expect(label.full).not.toMatch(/Thiếu Găng/i);
+    expect(label.full).toContain('Mũ & Áo: Có');
+    expect(label.full).toContain('Có cảnh báo kỹ thuật đã xác nhận');
+    expect(label.accessibleSummary).not.toMatch(/vi phạm/i);
+    expect(label.accessibleSummary).toMatch(/cảnh báo kỹ thuật/i);
+  });
 });
 
 describe('overlayLayoutUtils - Deterministic Placement & Collision Avoidance', () => {

@@ -1,3 +1,4 @@
+import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
 import type { VideoTestDetection } from './videoTestFixture';
 
 export interface BoundingBoxPixels {
@@ -55,8 +56,19 @@ export interface LabelPlacementOptions {
   margin?: number;
 }
 
-function formatItemName(item: 'HARD_HAT' | 'SAFETY_VEST'): string {
-  return item === 'HARD_HAT' ? 'Mũ' : 'Áo';
+function formatItemName(item: PpeItem): string {
+  switch (item) {
+    case 'HARD_HAT':
+      return 'Mũ';
+    case 'SAFETY_VEST':
+      return 'Áo';
+    case 'GLOVES':
+      return 'Găng';
+    case 'BOOTS':
+      return 'Ủng';
+    case 'GOGGLES':
+      return 'Kính';
+  }
 }
 
 /**
@@ -86,14 +98,19 @@ export function formatPpeCompactLabel(detection: VideoTestDetection): {
   const shortText =
     detection.trackId !== null && detection.trackId !== undefined ? `#${detection.trackId}` : '#?';
 
-  const helmetStatus = detection.ppeStatus?.HARD_HAT;
-  const vestStatus = detection.ppeStatus?.SAFETY_VEST;
   const confirmedList = detection.confirmedMissingItems ?? [];
 
-  // Determine current frame missing items strictly from ppeStatus
-  const currentMissingItems: Array<'HARD_HAT' | 'SAFETY_VEST'> = [];
-  if (helmetStatus === 'MISSING') currentMissingItems.push('HARD_HAT');
-  if (vestStatus === 'MISSING') currentMissingItems.push('SAFETY_VEST');
+  // Determine current frame missing, present, and unknown items strictly from defined entries in ppeStatus
+  const currentMissingItems: PpeItem[] = [];
+  const currentPresentItems: PpeItem[] = [];
+  const currentUnknownItems: PpeItem[] = [];
+
+  for (const item of PPE_ITEMS) {
+    const status = detection.ppeStatus?.[item];
+    if (status === 'MISSING') currentMissingItems.push(item);
+    else if (status === 'PRESENT') currentPresentItems.push(item);
+    else if (status === 'UNKNOWN') currentUnknownItems.push(item);
+  }
 
   const confirmedCurrentMissing = currentMissingItems.filter((item) =>
     confirmedList.includes(item),
@@ -101,13 +118,9 @@ export function formatPpeCompactLabel(detection: VideoTestDetection): {
   const pendingCurrentMissing = currentMissingItems.filter((item) => !confirmedList.includes(item));
 
   // Historical confirmed items: in confirmedList but NOT currently missing in frame
-  const historicalConfirmedItems: Array<'HARD_HAT' | 'SAFETY_VEST'> = [];
-  if (helmetStatus !== 'MISSING' && confirmedList.includes('HARD_HAT')) {
-    historicalConfirmedItems.push('HARD_HAT');
-  }
-  if (vestStatus !== 'MISSING' && confirmedList.includes('SAFETY_VEST')) {
-    historicalConfirmedItems.push('SAFETY_VEST');
-  }
+  const historicalConfirmedItems = confirmedList.filter(
+    (item) => detection.ppeStatus?.[item] !== 'MISSING',
+  );
 
   // 1. Current frame has missing item(s)
   if (currentMissingItems.length > 0) {
@@ -141,17 +154,17 @@ export function formatPpeCompactLabel(detection: VideoTestDetection): {
   // 2. Current frame has NO missing item, but has historical confirmed items
   if (historicalConfirmedItems.length > 0) {
     const historyNote = 'Có cảnh báo kỹ thuật đã xác nhận';
-    if (helmetStatus === 'PRESENT' && vestStatus === 'PRESENT') {
-      const full = `${trackText} · Mũ & Áo: Có · ${historyNote}`;
+    if (currentPresentItems.length > 0 && currentUnknownItems.length === 0) {
+      const full = `${trackText} · ${currentPresentItems.map(formatItemName).join(' & ')}: Có · ${historyNote}`;
       return {
         full,
         short: shortText,
-        accessibleSummary: `${trackText}: Ghi nhận có Mũ và Áo trong khung hình; có cảnh báo kỹ thuật đã xác nhận trước đó.`,
+        accessibleSummary: `${trackText}: Ghi nhận có ${currentPresentItems.map(formatItemName).join(' và ')} trong khung hình; có cảnh báo kỹ thuật đã xác nhận trước đó.`,
       };
     }
 
-    if (helmetStatus === 'PRESENT' || vestStatus === 'PRESENT') {
-      const presentName = helmetStatus === 'PRESENT' ? 'Mũ: Có' : 'Áo: Có';
+    if (currentPresentItems.length > 0) {
+      const presentName = `${currentPresentItems.map(formatItemName).join(' & ')}: Có`;
       const full = `${trackText} · ${presentName} · ${historyNote}`;
       return {
         full,
@@ -168,31 +181,49 @@ export function formatPpeCompactLabel(detection: VideoTestDetection): {
     };
   }
 
-  // 3. Current frame observed both items PRESENT (note: alertState COMPLIANT alone is NOT proof)
-  if (helmetStatus === 'PRESENT' && vestStatus === 'PRESENT') {
-    const full = `${trackText} · Mũ & Áo: Có`;
+  // 3. Current frame observed all items PRESENT (note: alertState COMPLIANT alone is NOT proof)
+  if (currentPresentItems.length > 0 && currentUnknownItems.length === 0) {
+    const full = `${trackText} · ${currentPresentItems.map(formatItemName).join(' & ')}: Có`;
     return {
       full,
       short: shortText,
-      accessibleSummary: `${trackText}: Bằng chứng kỹ thuật ghi nhận có Mũ bảo hộ và Áo phản quang trong khung hình này.`,
+      accessibleSummary: `${trackText}: Bằng chứng kỹ thuật ghi nhận có ${currentPresentItems.map(formatItemName).join(' và ')} trong khung hình này.`,
     };
   }
 
   // 4. Partial observations
-  if (helmetStatus === 'PRESENT' && vestStatus !== 'PRESENT') {
-    const full = `${trackText} · Mũ: Có · Áo: Chưa rõ`;
+  if (currentPresentItems.length > 0 && currentUnknownItems.length > 0) {
+    if (
+      currentPresentItems.length === 1 &&
+      currentUnknownItems.length === 1 &&
+      currentPresentItems[0] === 'HARD_HAT' &&
+      currentUnknownItems[0] === 'SAFETY_VEST'
+    ) {
+      const full = `${trackText} · Mũ: Có · Áo: Chưa rõ`;
+      return {
+        full,
+        short: shortText,
+        accessibleSummary: `${trackText}: Ghi nhận có Mũ bảo hộ; Áo phản quang chưa rõ trong khung hình này.`,
+      };
+    }
+    if (
+      currentPresentItems.length === 1 &&
+      currentUnknownItems.length === 1 &&
+      currentPresentItems[0] === 'SAFETY_VEST' &&
+      currentUnknownItems[0] === 'HARD_HAT'
+    ) {
+      const full = `${trackText} · Mũ: Chưa rõ · Áo: Có`;
+      return {
+        full,
+        short: shortText,
+        accessibleSummary: `${trackText}: Ghi nhận có Áo phản quang; Mũ bảo hộ chưa rõ trong khung hình này.`,
+      };
+    }
+    const full = `${trackText} · ${currentPresentItems.map(formatItemName).join(' & ')}: Có · ${currentUnknownItems.map(formatItemName).join(' & ')}: Chưa rõ`;
     return {
       full,
       short: shortText,
-      accessibleSummary: `${trackText}: Ghi nhận có Mũ bảo hộ; Áo phản quang chưa rõ trong khung hình này.`,
-    };
-  }
-  if (vestStatus === 'PRESENT' && helmetStatus !== 'PRESENT') {
-    const full = `${trackText} · Mũ: Chưa rõ · Áo: Có`;
-    return {
-      full,
-      short: shortText,
-      accessibleSummary: `${trackText}: Ghi nhận có Áo phản quang; Mũ bảo hộ chưa rõ trong khung hình này.`,
+      accessibleSummary: `${trackText}: Ghi nhận có ${currentPresentItems.map(formatItemName).join(' và ')}; ${currentUnknownItems.map(formatItemName).join(' và ')} chưa rõ trong khung hình này.`,
     };
   }
 
@@ -233,13 +264,12 @@ export function resolveDetectionVisualStyle(
   }
 
   // PPE Mode
-  const helmetStatus = detection.ppeStatus?.HARD_HAT;
-  const vestStatus = detection.ppeStatus?.SAFETY_VEST;
   const confirmedList = detection.confirmedMissingItems ?? [];
 
-  const currentMissingItems: Array<'HARD_HAT' | 'SAFETY_VEST'> = [];
-  if (helmetStatus === 'MISSING') currentMissingItems.push('HARD_HAT');
-  if (vestStatus === 'MISSING') currentMissingItems.push('SAFETY_VEST');
+  const currentMissingItems: PpeItem[] = [];
+  for (const item of PPE_ITEMS) {
+    if (detection.ppeStatus?.[item] === 'MISSING') currentMissingItems.push(item);
+  }
 
   const hasConfirmedCurrent = currentMissingItems.some((item) => confirmedList.includes(item));
   const hasPendingCurrent = currentMissingItems.some((item) => !confirmedList.includes(item));

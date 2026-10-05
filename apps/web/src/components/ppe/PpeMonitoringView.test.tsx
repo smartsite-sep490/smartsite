@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { PpeMonitoringView } from './PpeMonitoringView';
+import { formatPpeItemLabel } from '../cameras/monitoringUtils';
 import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import type { VideoTestDetection } from '../cameras/videoTestFixture';
 
@@ -172,5 +173,102 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
     expect(screen.getByText('PPE Replay Observations')).not.toBeNull();
     expect(screen.getByRole('table')).not.toBeNull();
     expect(screen.queryByText('Live AI Observations Active')).toBeNull();
+  });
+
+  it('renders legacy checklist with only mandatory Helmet and Safety Vest and omits unrecorded expanded items', () => {
+    state.preview = mockPreview({
+      ...mockDetection(7),
+      ppeStatus: { HARD_HAT: 'MISSING', SAFETY_VEST: 'PRESENT' },
+      confirmedMissingItems: ['HARD_HAT'],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('PPE CHECK')).not.toBeNull();
+    expect(
+      screen.getByText(
+        'Core observations: Helmet & Safety Vest. Expanded items are evaluated when reported.',
+      ),
+    ).not.toBeNull();
+    expect(screen.getByText('Helmet · Missing · confirmed')).not.toBeNull();
+    expect(screen.getByText('Safety Vest · Detected')).not.toBeNull();
+    expect(screen.queryByText(/Gloves ·/i)).toBeNull();
+    expect(screen.queryByText(/Boots ·/i)).toBeNull();
+    expect(screen.queryByText(/Goggles ·/i)).toBeNull();
+    expect(screen.queryByText(/harness/i)).toBeNull();
+  });
+
+  it('renders expanded checklist dynamically when GLOVES, BOOTS, and GOGGLES are reported', () => {
+    state.preview = mockPreview({
+      ...mockDetection(7),
+      ppeStatus: {
+        HARD_HAT: 'PRESENT',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'PRESENT',
+        BOOTS: 'MISSING',
+        GOGGLES: 'UNKNOWN',
+      },
+      confirmedMissingItems: [],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Helmet · Detected')).not.toBeNull();
+    expect(screen.getByText('Safety Vest · Detected')).not.toBeNull();
+    expect(screen.getByText('Gloves · Detected')).not.toBeNull();
+    expect(screen.getByText('Boots · Missing · checking')).not.toBeNull();
+    expect(screen.getByText('Goggles · Unknown')).not.toBeNull();
+    expect(screen.queryByText(/harness/i)).toBeNull();
+  });
+
+  it('correctly displays confirmed missing state for expanded items and unknown state for unverified items', () => {
+    state.preview = mockPreview({
+      ...mockDetection(7),
+      ppeStatus: {
+        HARD_HAT: 'UNKNOWN',
+        SAFETY_VEST: 'PRESENT',
+        GLOVES: 'MISSING',
+      },
+      confirmedMissingItems: ['GLOVES'],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Helmet · Unknown')).not.toBeNull();
+    expect(screen.getByText('Safety Vest · Detected')).not.toBeNull();
+    // Reported expanded GLOVES is confirmed missing
+    expect(screen.getByText('Gloves · Missing · confirmed')).not.toBeNull();
+    // BOOTS and GOGGLES were not reported, so they must not be in the checklist
+    expect(screen.queryByText(/Boots ·/i)).toBeNull();
+    expect(screen.queryByText(/Goggles ·/i)).toBeNull();
+  });
+});
+
+describe('formatPpeItemLabel', () => {
+  it('formats HARD_HAT and SAFETY_VEST accurately', () => {
+    expect(formatPpeItemLabel('HARD_HAT')).toBe('Hard Hat');
+    expect(formatPpeItemLabel('SAFETY_VEST')).toBe('Safety Vest');
+  });
+
+  it('formats extended PPE items (GLOVES, BOOTS, GOGGLES) without mapping to vest', () => {
+    expect(formatPpeItemLabel('GLOVES')).toBe('Gloves');
+    expect(formatPpeItemLabel('BOOTS')).toBe('Boots');
+    expect(formatPpeItemLabel('GOGGLES')).toBe('Goggles');
+  });
+
+  it('falls back to PPE for undefined or unrecognised item', () => {
+    expect(formatPpeItemLabel(undefined)).toBe('PPE');
   });
 });

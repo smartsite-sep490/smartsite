@@ -9,6 +9,7 @@
   ],
   "exports": {
     ".": "./dist/index.js",
+    "./ppe-items": "./dist/ppe-items.js",
     "./management": "./dist/management-api.js",
     "./gate-permissions": "./dist/gate-permissions-api.js"
   },
