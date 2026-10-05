@@ -324,6 +324,7 @@ test('ingestion does not pass a conflicting candidate Worker into Zone decision 
     );
     const payload = createSampleEvent({
       observations: [
+        { type: 'PERSON', trackId: 101 },
         ...ordered,
         { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion: 1 },
       ],

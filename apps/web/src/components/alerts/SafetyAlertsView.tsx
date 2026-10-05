@@ -103,6 +103,12 @@ function AlertRow({
           <p className="mt-1 font-semibold text-[#2F3437] break-words">
             {formatLabel(alert.candidateSubtype)}
           </p>
+          {alert.candidateSubtype === 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE' && (
+            <p className="mt-1 text-[11px] text-[#1F6C9F] italic leading-tight">
+              Cannot verify authorization; unknown identity does not establish unauthorized entry,
+              retrospective manual review does not grant live access.
+            </p>
+          )}
         </div>
         <span
           className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusTone(alert.status)}`}
@@ -313,6 +319,19 @@ export function SafetyAlertsView({
     ? requestedAlertId
     : (alerts.data?.items[0]?.id ?? '');
 
+  const reviewContextRef = useRef({
+    scope: effectiveScope,
+    siteId: selectedSiteId,
+    alertId: selectedAlertId,
+  });
+  useEffect(() => {
+    reviewContextRef.current = {
+      scope: effectiveScope,
+      siteId: selectedSiteId,
+      alertId: selectedAlertId,
+    };
+  }, [effectiveScope, selectedSiteId, selectedAlertId]);
+
   const detail = useQuery({
     queryKey: ['safety-alert', apiUrl, effectiveScope, selectedSiteId, selectedAlertId],
     queryFn: () => client.getSafetyAlert(effectiveToken, selectedSiteId, selectedAlertId),
@@ -327,17 +346,19 @@ export function SafetyAlertsView({
   const review = useMutation({
     mutationFn: async ({
       targetStatus,
+      targetSiteId,
       targetAlertId,
       expectedRevision,
       targetReason,
     }: {
       targetStatus: SafetyAlertReviewTargetStatus;
       targetScope: string;
+      targetSiteId: string;
       targetAlertId: string;
       expectedRevision: number;
       targetReason: string;
     }) => {
-      return client.reviewSafetyAlert(effectiveToken, selectedSiteId, targetAlertId, {
+      return client.reviewSafetyAlert(effectiveToken, targetSiteId, targetAlertId, {
         commandId: crypto.randomUUID(),
         expectedRevision,
         targetStatus,
@@ -346,20 +367,48 @@ export function SafetyAlertsView({
     },
     onSuccess: async (_data, variables) => {
       if (variables.targetScope !== effectiveScopeRef.current) return;
-      setReviewReason('');
+      const current = reviewContextRef.current;
+      if (
+        variables.targetScope === current.scope &&
+        variables.targetSiteId === current.siteId &&
+        variables.targetAlertId === current.alertId
+      ) {
+        setReviewReason('');
+      }
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ['safety-alerts', apiUrl, variables.targetScope],
+          queryKey: ['safety-alerts', apiUrl, variables.targetScope, variables.targetSiteId],
         }),
         queryClient.invalidateQueries({
-          queryKey: ['safety-alert', apiUrl, variables.targetScope],
+          queryKey: [
+            'safety-alert',
+            apiUrl,
+            variables.targetScope,
+            variables.targetSiteId,
+            variables.targetAlertId,
+          ],
+          exact: true,
         }),
       ]);
     },
     onError: async (error, variables) => {
       if (variables.targetScope !== effectiveScopeRef.current) return;
       if (error instanceof ApiError && error.status === 409) {
-        await Promise.all([alerts.refetch(), detail.refetch()]);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ['safety-alerts', apiUrl, variables.targetScope, variables.targetSiteId],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: [
+              'safety-alert',
+              apiUrl,
+              variables.targetScope,
+              variables.targetSiteId,
+              variables.targetAlertId,
+            ],
+            exact: true,
+          }),
+        ]);
       }
     },
   });
@@ -752,6 +801,19 @@ export function SafetyAlertsView({
                       Explain the evidence behind the decision. The reason is required and cannot be
                       edited after submission.
                     </p>
+                    {detail.data.candidateSubtype === 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE' && (
+                      <div
+                        role="status"
+                        data-testid="zone-entry-auth-unavailable-guidance"
+                        className="mt-3 rounded-md border border-[#1F6C9F]/20 bg-[#E1F3FE] p-2.5 text-xs text-[#1F6C9F] leading-relaxed"
+                      >
+                        <p className="font-semibold">Cannot verify authorization</p>
+                        <p className="mt-0.5">
+                          Unknown identity does not establish unauthorized entry, retrospective
+                          manual review does not grant live access.
+                        </p>
+                      </div>
+                    )}
                     <label
                       htmlFor="review-reason-textarea"
                       className="mt-3 block text-xs font-semibold text-[#2F3437]"
@@ -773,7 +835,9 @@ export function SafetyAlertsView({
                     />
                     {(() => {
                       const isCurrentReviewMutation =
-                        review.variables?.targetScope === effectiveScope;
+                        review.variables?.targetScope === effectiveScope &&
+                        review.variables.targetSiteId === selectedSiteId &&
+                        review.variables.targetAlertId === selectedAlertId;
                       const reviewPending = isCurrentReviewMutation && review.isPending;
                       const reviewSuccess = isCurrentReviewMutation && review.isSuccess;
                       const reviewError = isCurrentReviewMutation ? review.error : null;
@@ -805,6 +869,7 @@ export function SafetyAlertsView({
                                 review.mutate({
                                   targetStatus: 'CONFIRMED',
                                   targetScope: effectiveScope,
+                                  targetSiteId: selectedSiteId,
                                   targetAlertId: detail.data.id,
                                   expectedRevision: detail.data.revision,
                                   targetReason: reviewReason,
@@ -822,6 +887,7 @@ export function SafetyAlertsView({
                                 review.mutate({
                                   targetStatus: 'DISMISSED',
                                   targetScope: effectiveScope,
+                                  targetSiteId: selectedSiteId,
                                   targetAlertId: detail.data.id,
                                   expectedRevision: detail.data.revision,
                                   targetReason: reviewReason,
@@ -840,6 +906,7 @@ export function SafetyAlertsView({
                                   review.mutate({
                                     targetStatus: 'NEEDS_MORE_EVIDENCE',
                                     targetScope: effectiveScope,
+                                    targetSiteId: selectedSiteId,
                                     targetAlertId: detail.data.id,
                                     expectedRevision: detail.data.revision,
                                     targetReason: reviewReason,

@@ -219,6 +219,20 @@ test('legacy single-tier Zone decision compatibility retains allow, deny, expiry
       capturedAt: capturedAt.toISOString(),
       frameDimensions: { width: 1280, height: 720 },
       observations: [
+        // A candidate summary must bind to one original PERSON in this event.
+        // This evidence still does not verify a Worker or grant Zone access.
+        {
+          type: 'PERSON',
+          trackId: 42,
+          confidence: 0.95,
+          boundingBox: {
+            x1: 0.1,
+            y1: 0.1,
+            x2: 0.4,
+            y2: 0.8,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
         {
           type: 'IDENTITY_CANDIDATE',
           trackId: 42,
@@ -236,6 +250,7 @@ test('legacy single-tier Zone decision compatibility retains allow, deny, expiry
       .getRepository(ZoneEntryDecisionEntity)
       .findOneByOrFail({ eventId: ingestionEventId, trackId: 42, zoneId });
     assert.equal(unverifiedDecision.status, 'UNAVAILABLE');
+    assert.equal(unverifiedDecision.reasonCode, 'IDENTITY_UNAVAILABLE');
     assert.equal(unverifiedDecision.workerId, null);
     assert.equal(unverifiedDecision.candidateWorkerId, 'WORKER-001');
     const decisions = await access.listDecisions(siteId, { zoneId, offset: 0, limit: 20 });

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { render, screen, cleanup, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import type {
   LoginResponse,
   SiteResponse,
@@ -868,6 +868,198 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       expect(newConfirmBtn.disabled).toBe(false);
     });
 
+    it.each([
+      ['Site', 'success'],
+      ['Alert', 'success'],
+      ['Site', 'conflict'],
+      ['Alert', 'conflict'],
+      ['Current', 'success'],
+      ['Current', 'conflict'],
+    ] as const)(
+      'same-session stale review %s navigation / %s preserves the new draft and query context',
+      async (navigation, outcome) => {
+        type ReviewResult = Awaited<ReturnType<SmartSiteManagementClient['reviewSafetyAlert']>>;
+        let resolveReview!: (value: ReviewResult) => void;
+        let rejectReview!: (error: Error) => void;
+        const pendingReview = new Promise<ReviewResult>((resolve, reject) => {
+          resolveReview = resolve;
+          rejectReview = reject;
+        });
+        const secondAlert: SafetyAlertResponse = {
+          ...mockAlert,
+          id: 'alert-2',
+          siteId: navigation === 'Site' ? 'site-beta' : mockAlert.siteId,
+          candidateSubtype: 'NO_SAFETY_VEST',
+        };
+        const secondDetail: SafetyAlertDetailResponse = {
+          ...mockAlertDetail,
+          ...secondAlert,
+          detections: [],
+          detectionsTotal: 0,
+        };
+        vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+          items: [
+            ...mockSitesList.items,
+            {
+              id: 'site-beta',
+              code: 'SITE-B',
+              name: 'Site Beta',
+              createdAt: mockSitesList.items[0]!.createdAt,
+            },
+          ],
+          total: 2,
+        });
+        const listSpy = vi
+          .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+          .mockImplementation(async (_token, siteId) => ({
+            items:
+              navigation === 'Alert'
+                ? [mockAlert, secondAlert]
+                : siteId === 'site-beta'
+                  ? [secondAlert]
+                  : [mockAlert],
+            total: navigation === 'Alert' ? 2 : 1,
+          }));
+        const detailSpy = vi
+          .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+          .mockImplementation(async (_token, _siteId, alertId) =>
+            alertId === secondAlert.id ? secondDetail : mockAlertDetail,
+          );
+        const reviewSpy = vi
+          .spyOn(SmartSiteManagementClient.prototype, 'reviewSafetyAlert')
+          .mockImplementation(() => pendingReview);
+        const user = userEvent.setup();
+        render(
+          <QueryClientProvider client={queryClient}>
+            <SafetyAlertsView
+              apiUrl="http://127.0.0.1:3001"
+              sharedSession={{
+                accessToken: 'shared-token-1',
+                user: {
+                  id: 'admin-1',
+                  displayName: 'Admin Officer',
+                  roleAssignments: [{ role: 'ADMIN', siteId: null }],
+                },
+                sessionScope: 'scope-1',
+              }}
+            />
+          </QueryClientProvider>,
+        );
+        await screen.findByRole('heading', { name: 'Record review decision' });
+        await user.type(
+          screen.getByRole('textbox', { name: /Decision reason/i }),
+          'First alert review reason',
+        );
+        await user.click(screen.getByRole('button', { name: 'Confirm violation' }));
+        await waitFor(() => expect(reviewSpy).toHaveBeenCalledTimes(1));
+        expect(reviewSpy).toHaveBeenCalledWith(
+          'shared-token-1',
+          mockAlert.siteId,
+          mockAlert.id,
+          expect.objectContaining({ reason: 'First alert review reason' }),
+        );
+
+        if (navigation === 'Site') {
+          await user.selectOptions(screen.getByRole('combobox', { name: 'Site' }), 'site-beta');
+        } else if (navigation === 'Alert') {
+          await user.click(screen.getByRole('button', { name: /No Safety Vest/i }));
+        }
+        if (navigation !== 'Current') {
+          await waitFor(() =>
+            expect(detailSpy).toHaveBeenCalledWith(
+              'shared-token-1',
+              secondAlert.siteId,
+              secondAlert.id,
+            ),
+          );
+          const reason = await screen.findByRole('textbox', { name: /Decision reason/i });
+          await user.type(reason, 'Keep this second alert draft');
+        }
+        listSpy.mockClear();
+        detailSpy.mockClear();
+
+        let resolveRefreshedDetail!: (value: SafetyAlertDetailResponse) => void;
+        if (navigation === 'Current' && outcome === 'conflict') {
+          const refreshingDetail = new Promise<SafetyAlertDetailResponse>((resolve) => {
+            resolveRefreshedDetail = resolve;
+          });
+          detailSpy.mockImplementationOnce(() => refreshingDetail);
+        }
+
+        await act(async () => {
+          if (outcome === 'conflict') {
+            rejectReview(new ApiError('http', 'Review conflict', 409));
+          } else {
+            resolveReview({
+              alert: { ...mockAlert, status: 'CONFIRMED' },
+              review: {
+                id: 'rev-1',
+                alertId: mockAlert.id,
+                siteId: mockAlert.siteId,
+                actorUserId: 'admin-1',
+                fromStatus: 'PENDING_REVIEW',
+                toStatus: 'CONFIRMED',
+                reason: 'First alert review reason',
+                alertRevision: 1,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+              replayed: false,
+            });
+          }
+        });
+
+        if (navigation === 'Current') {
+          if (outcome === 'conflict') {
+            await waitFor(() => expect(detailSpy).toHaveBeenCalledTimes(1));
+            // TanStack awaits onError's invalidations: the old revision cannot be
+            // resubmitted while this controlled refresh is still pending.
+            expect(
+              (screen.getByRole('button', { name: 'Confirm violation' }) as HTMLButtonElement)
+                .disabled,
+            ).toBe(true);
+            await act(async () => {
+              resolveRefreshedDetail({ ...mockAlertDetail, revision: 2 });
+            });
+          }
+          expect(detailSpy).toHaveBeenCalledWith('shared-token-1', mockAlert.siteId, mockAlert.id);
+          expect(listSpy).toHaveBeenCalledWith(
+            'shared-token-1',
+            mockAlert.siteId,
+            expect.any(Object),
+          );
+          expect(
+            (screen.getByRole('textbox', { name: /Decision reason/i }) as HTMLTextAreaElement)
+              .value,
+          ).toBe(outcome === 'success' ? '' : 'First alert review reason');
+          if (outcome === 'success') {
+            expect(screen.getByText(/Review decision recorded\./i)).toBeDefined();
+          } else {
+            expect(
+              await screen.findByText(/This alert changed while you were reviewing it/i),
+            ).toBeDefined();
+          }
+          return;
+        }
+        expect(
+          (screen.getByRole('textbox', { name: /Decision reason/i }) as HTMLTextAreaElement).value,
+        ).toBe('Keep this second alert draft');
+        expect(screen.queryByText(/Review decision recorded\./i)).toBeNull();
+        expect(
+          (screen.getByRole('button', { name: 'Confirm violation' }) as HTMLButtonElement).disabled,
+        ).toBe(false);
+        expect(
+          detailSpy.mock.calls.some(
+            ([, siteId, alertId]) => siteId === secondAlert.siteId && alertId === secondAlert.id,
+          ),
+        ).toBe(false);
+        if (navigation === 'Site') {
+          expect(listSpy.mock.calls.some(([, siteId]) => siteId === secondAlert.siteId)).toBe(
+            false,
+          );
+        }
+      },
+    );
+
     it('restricted user (Worker/Rep) is denied without firing protected queries or signing out of app', async () => {
       const listSitesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listSites');
       const onSignOut = vi.fn();
@@ -897,6 +1089,54 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       expect(screen.queryByRole('heading', { name: 'Safety alert queue' })).toBeNull();
       expect(listSitesSpy).not.toHaveBeenCalled();
       expect(onSignOut).not.toHaveBeenCalled();
+    });
+
+    it('displays contextual notice for ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE explaining unknown identity does not establish unauthorized entry', async () => {
+      const unavailableZoneAlert: SafetyAlertResponse = {
+        ...mockAlert,
+        id: 'alert-zone-unavail-1',
+        alertType: 'RESTRICTED_ZONE_INTRUSION',
+        candidateSubtype: 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+      };
+      const unavailableZoneAlertDetail: SafetyAlertDetailResponse = {
+        ...mockAlertDetail,
+        id: 'alert-zone-unavail-1',
+        alertType: 'RESTRICTED_ZONE_INTRUSION',
+        candidateSubtype: 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+      };
+
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+        items: [unavailableZoneAlert],
+        total: 1,
+      });
+      vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockResolvedValue(
+        unavailableZoneAlertDetail,
+      );
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://localhost:3000"
+            sharedSession={{
+              accessToken: 'mock-so-token',
+              user: {
+                id: 'user-so-1',
+                displayName: 'Cán bộ An toàn Alpha',
+                roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }],
+              },
+              sessionScope: 'scope-so-1',
+              onSignOut: vi.fn(),
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(
+        await screen.findByText(
+          /Cannot verify authorization; unknown identity does not establish unauthorized entry, retrospective manual review does not grant live access\./i,
+        ),
+      ).toBeDefined();
     });
   });
 });

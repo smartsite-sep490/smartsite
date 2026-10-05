@@ -89,12 +89,21 @@ type IdentityEvidence = Pick<
   'candidateWorkerId' | 'similarityScore' | 'qualityScore'
 >;
 
-/** Summarize one event only; conflicting claims never select a Worker by input order. */
+/**
+ * Attach technical identity evidence only to a unique same-event PERSON.
+ * A crop box is validated separately; these summaries never verify a Worker.
+ * Conflicting claims never select a Worker by input order.
+ */
 export function summarizeIdentityEvidenceByTrack(
   observations: readonly Observation[],
 ): Map<number, IdentityEvidence> {
+  const personCounts = new Map<number, number>();
   const groups = new Map<number, IdentityCandidateObservation[]>();
   for (const observation of observations) {
+    if (observation.type === 'PERSON') {
+      personCounts.set(observation.trackId, (personCounts.get(observation.trackId) ?? 0) + 1);
+      continue;
+    }
     if (observation.type !== 'IDENTITY_CANDIDATE') continue;
     const group = groups.get(observation.trackId) ?? [];
     group.push(observation);
@@ -102,6 +111,7 @@ export function summarizeIdentityEvidenceByTrack(
   }
   const summaries = new Map<number, IdentityEvidence>();
   for (const [trackId, group] of groups) {
+    if (personCounts.get(trackId) !== 1) continue;
     const first = group[0]!;
     if (
       !group.every(

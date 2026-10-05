@@ -335,7 +335,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 : ppeResultState === 'PENDING_CONFIRMATION'
                   ? 'VERIFYING PPE'
                   : ppeResultState === 'COMPLIANT'
-                    ? 'PPE COMPLIANT'
+                    ? 'CORE PPE OBSERVED'
                     : ppeResultState === 'UNKNOWN'
                       ? 'PPE UNKNOWN'
                       : 'NO TARGETS'}{' '}
@@ -549,8 +549,12 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
 
             {/* PPE Check List */}
             <div>
-              <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
+              <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-1">
                 PPE CHECK
+              </p>
+              <p className="text-[10px] text-[#8C8C8C] mb-3">
+                Core baseline: Helmet & Safety Vest. Expanded items (gloves, boots, goggles,
+                harness) are not assessed.
               </p>
               <div className="space-y-2">
                 {ppeDetections.length === 0 ? (
@@ -654,7 +658,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                       : ppeResultState === 'PENDING_CONFIRMATION'
                         ? 'PPE CHECK PENDING'
                         : ppeResultState === 'COMPLIANT'
-                          ? 'ALL REQUIRED PPE PRESENT'
+                          ? 'HELMET AND VEST DETECTED'
                           : ppeResultState === 'UNKNOWN'
                             ? 'PPE STATUS UNKNOWN'
                             : ppeDetections.length === 0
@@ -667,11 +671,14 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     ? 'Technical observation from the YOLO + MF04 pipeline.'
                     : ppeResultState === 'PENDING_CONFIRMATION'
                       ? 'Missing evidence is waiting for multi-frame confirmation.'
-                      : ppeResultState === 'UNKNOWN'
-                        ? 'The current frame does not contain enough evidence to decide PPE compliance.'
-                        : isLive
-                          ? 'Streaming live inference from AI WebSocket.'
-                          : 'Generate ppe-ai.timeline.json, then play the matching video.'}
+                      : ppeResultState === 'COMPLIANT'
+                        ? 'Helmet and safety vest detected. Expanded items (gloves, boots, goggles, ' +
+                          'harness) are not assessed by the current baseline.'
+                        : ppeResultState === 'UNKNOWN'
+                          ? 'The current frame does not contain enough evidence to decide PPE compliance.'
+                          : isLive
+                            ? 'Streaming live inference from AI WebSocket.'
+                            : 'Generate ppe-ai.timeline.json, then play the matching video.'}
                 </p>
               </div>
             </div>
