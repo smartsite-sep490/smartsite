@@ -488,8 +488,10 @@ test('development OpenAPI separates provisionable request roles from persisted a
   assert.deepEqual(schema.components?.schemas?.RoleAssignmentDto?.properties?.role?.enum, [
     'ADMIN',
     'SITE_MANAGER',
+    'CONTRACTOR_REPRESENTATIVE',
     'SAFETY_OFFICER',
     'SECURITY_OFFICER',
+    'WORKER',
   ]);
   assert.deepEqual(schema.components?.schemas?.RoleAssignmentResponseDto?.properties?.role?.enum, [
     'ADMIN',

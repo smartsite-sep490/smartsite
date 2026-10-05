@@ -44,14 +44,18 @@ const displayName = ({ value }: { value: unknown }) =>
 const PROVISIONABLE_USER_ROLES = [
   UserRole.ADMIN,
   UserRole.SITE_MANAGER,
+  UserRole.CONTRACTOR_REPRESENTATIVE,
   UserRole.SAFETY_OFFICER,
   UserRole.SECURITY_OFFICER,
+  UserRole.WORKER,
 ] as const;
 type ProvisionableUserRole = (typeof PROVISIONABLE_USER_ROLES)[number];
 const PROVISIONABLE_SITE_ROLES: ReadonlySet<UserRole> = new Set([
   UserRole.SITE_MANAGER,
+  UserRole.CONTRACTOR_REPRESENTATIVE,
   UserRole.SAFETY_OFFICER,
   UserRole.SECURITY_OFFICER,
+  UserRole.WORKER,
 ]);
 
 export class RoleAssignmentDto {

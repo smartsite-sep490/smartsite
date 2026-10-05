@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import dataSource from '../support/test-data-source.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
-import { type RoleAssignmentDto, UsersService } from '../../src/modules/users/users.service.js';
+import { UsersService } from '../../src/modules/users/users.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import {
   AuthClientType,
@@ -108,34 +108,22 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     { role: UserRole.SAFETY_OFFICER, siteId: secondSite.id },
     { role: UserRole.SITE_MANAGER, siteId: site.id },
   ]);
-  await assert.rejects(
-    users.create({
-      username: `unsupported-${suffix}`,
-      displayName: 'Unsupported',
-      roleAssignments: [
-        {
-          role: UserRole.WORKER as unknown as RoleAssignmentDto['role'],
-          siteId: site.id,
-        },
-      ],
-      temporaryPassword: 'Unsupported123!',
-    }),
-    { status: 400 },
-  );
-  await assert.rejects(
-    users.create({
-      username: `contractor-${suffix}`,
-      displayName: 'Contractor Representative',
-      roleAssignments: [
-        {
-          role: UserRole.CONTRACTOR_REPRESENTATIVE as unknown as RoleAssignmentDto['role'],
-          siteId: site.id,
-        },
-      ],
-      temporaryPassword: 'Contractor123!',
-    }),
-    { status: 400 },
-  );
+  const provisionedWorker = await users.create({
+    username: `worker-account-${suffix}`,
+    displayName: 'Worker Account',
+    roleAssignments: [{ role: UserRole.WORKER, siteId: site.id }],
+    temporaryPassword: 'WorkerAccount123!',
+  });
+  assert.deepEqual(provisionedWorker.roleAssignments, [{ role: UserRole.WORKER, siteId: site.id }]);
+  const contractorRepresentative = await users.create({
+    username: `contractor-${suffix}`,
+    displayName: 'Contractor Representative',
+    roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: site.id }],
+    temporaryPassword: 'Contractor123!',
+  });
+  assert.deepEqual(contractorRepresentative.roleAssignments, [
+    { role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: site.id },
+  ]);
   await assert.rejects(
     users.replaceRoleAssignments(worker.id, {
       roleAssignments: [

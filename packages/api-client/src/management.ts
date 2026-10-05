@@ -55,6 +55,19 @@ import type {
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
   ZoneEntryDecisionStatus,
+  ContractorRepresentativeAssignmentResponse,
+  ShiftResponse,
+  ContractorShiftAssignmentResponse,
+  ScheduleVersionResponse,
+  WorkerScheduleResponse,
+  EligibleShiftListResponse,
+  SwapCandidateListResponse,
+  ShiftChangeRequestResponse,
+  ShiftSwapRequestResponse,
+  AbsenceRequestResponse,
+  SchedulingRequestStatus,
+  UserNotificationListResponse,
+  NotificationReadResponse,
   FaceGateVerificationResponse,
   GateFacePresenceResponse,
   GateAccessLogResponse,
@@ -62,9 +75,19 @@ import type {
   WorkerGatePermissionsResponse,
   SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
+export type { SchedulingRequestStatus };
+
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './index';
 
-type PageOptions = { offset?: number; limit?: number };
+export type PageOptions = { offset?: number; limit?: number };
+export type WorkerScheduleListOptions = PageOptions & {
+  fromDate?: string;
+  toDate?: string;
+  workerId?: string;
+  shiftId?: string;
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
+  searchName?: string;
+};
 export type SafetyAlertListOptions = PageOptions & {
   status?: SafetyAlertStatus;
   type?: SafetyAlertType;
@@ -82,6 +105,53 @@ const validTimeout = (timeoutMs: number) =>
 
 export class SmartSiteManagementClient {
   constructor(private readonly baseUrl: string) {}
+
+  listNotifications(
+    token: string,
+    options: PageOptions & { readStatus?: 'ALL' | 'UNREAD' } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<UserNotificationListResponse> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.readStatus) query.set('readStatus', options.readStatus);
+    return this.request(
+      'GET',
+      `/me/notifications?${query}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  readNotification(token: string, id: string): Promise<NotificationReadResponse> {
+    return this.request('PATCH', `/me/notifications/${pathId(id)}/read`, token);
+  }
+
+  readAllNotifications(token: string): Promise<{ updated: number }> {
+    return this.request('PATCH', '/me/notifications/read-all', token);
+  }
+
+  getShiftChangeRequest(
+    token: string,
+    siteId: string,
+    id: string,
+  ): Promise<ShiftChangeRequestResponse> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/shift-change-requests/${pathId(id)}`,
+      token,
+    );
+  }
+
+  getShiftSwapRequest(
+    token: string,
+    siteId: string,
+    id: string,
+  ): Promise<ShiftSwapRequestResponse> {
+    return this.request('GET', `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(id)}`, token);
+  }
 
   private async runRequest<T>(
     options: RequestOptions | undefined,
@@ -169,6 +239,9 @@ export class SmartSiteManagementClient {
         throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
       if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+        }
         const error = parseBackendErrorEnvelope(payload, response.status);
         throw new ApiError(
           'http',
@@ -204,6 +277,9 @@ export class SmartSiteManagementClient {
         throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
       if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+        }
         const error = parseBackendErrorEnvelope(payload, response.status);
         throw new ApiError(
           'http',
@@ -253,10 +329,11 @@ export class SmartSiteManagementClient {
     });
   }
 
-  private listPath(path: string, options: PageOptions = {}) {
+  private listPath(path: string, options: Record<string, string | number | undefined> = {}) {
     const query = new URLSearchParams();
-    if (options.offset !== undefined) query.set('offset', String(options.offset));
-    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    Object.entries(options).forEach(([key, value]) => {
+      if (value !== undefined) query.set(key, String(value));
+    });
     return `${path}${query.size ? `?${query}` : ''}`;
   }
 
@@ -679,8 +756,24 @@ export class SmartSiteManagementClient {
     );
   }
 
-  createContractor(token: string, input: { code: string; name: string }) {
-    return this.request<ContractorResponse>('POST', '/contractors', token, input);
+  createContractor(
+    token: string,
+    input: { code: string; name: string },
+  ): Promise<ContractorResponse>;
+  createContractor(
+    token: string,
+    siteId: string,
+    input: { code: string; name: string },
+  ): Promise<ContractorResponse>;
+  createContractor(
+    token: string,
+    siteIdOrInput: string | { code: string; name: string },
+    siteInput?: { code: string; name: string },
+  ) {
+    const siteScoped = typeof siteIdOrInput === 'string';
+    const input = siteScoped ? siteInput! : siteIdOrInput;
+    const path = siteScoped ? `/sites/${pathId(siteIdOrInput)}/contractors` : '/contractors';
+    return this.request<ContractorResponse>('POST', path, token, input);
   }
   createContractorParticipation(
     token: string,
@@ -1051,6 +1144,293 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions/${pathId(regionId)}/status`,
       token,
       input,
+    );
+  }
+
+  // Workforce / MF07 Endpoints
+  listContractors(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ContractorResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/contractors`, options),
+      token,
+    );
+  }
+  listContractorRepresentativeAssignments(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ContractorRepresentativeAssignmentResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/contractor-representative-assignments`, options),
+      token,
+    );
+  }
+  assignContractorRepresentative(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    input: { userId: string },
+  ) {
+    return this.request<{
+      id: string;
+      siteId: string;
+      contractorId: string;
+      userId: string;
+      createdAt: string;
+    }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/representatives`,
+      token,
+      input,
+    );
+  }
+  listCoworkers(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<WorkerResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/workers/coworkers`, options),
+      token,
+    );
+  }
+  createShift(
+    token: string,
+    siteId: string,
+    input: { name: string; startsAt: string; endsAt: string; timezone: string },
+  ) {
+    return this.request<ShiftResponse>('POST', `/sites/${pathId(siteId)}/shifts`, token, input);
+  }
+  assignShiftToContractor(
+    token: string,
+    siteId: string,
+    shiftId: string,
+    input: { contractorId: string },
+  ) {
+    return this.request<ContractorShiftAssignmentResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}/contractors`,
+      token,
+      input,
+    );
+  }
+  listShiftContractorAssignments(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ContractorShiftAssignmentResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/shift-contractor-assignments`, options),
+      token,
+    );
+  }
+  listShifts(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ShiftResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/shifts`, options),
+      token,
+    );
+  }
+  deleteShift(token: string, siteId: string, shiftId: string) {
+    return this.request<void>(
+      'DELETE',
+      `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}`,
+      token,
+    );
+  }
+  createScheduleVersion(
+    token: string,
+    siteId: string,
+    input: { effectiveFrom: string; effectiveUntil?: string },
+  ) {
+    return this.request<ScheduleVersionResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/schedule-versions`,
+      token,
+      input,
+    );
+  }
+  listScheduleVersions(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ScheduleVersionResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/schedule-versions`, options),
+      token,
+    );
+  }
+  createWorkerSchedule(
+    token: string,
+    siteId: string,
+    scheduleVersionId: string,
+    input: { workerId: string; shiftId: string; workDate: string; isActive?: boolean },
+  ) {
+    return this.request<WorkerScheduleResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/schedule-versions/${pathId(scheduleVersionId)}/worker-schedules`,
+      token,
+      input,
+    );
+  }
+  listWorkerSchedules(token: string, siteId: string, options?: WorkerScheduleListOptions) {
+    return this.request<Page<WorkerScheduleResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/worker-schedules`, options),
+      token,
+    );
+  }
+  listEligibleShifts(token: string, siteId: string, workerScheduleId: string) {
+    return this.request<EligibleShiftListResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/worker-schedules/${pathId(workerScheduleId)}/eligible-shifts`,
+      token,
+    );
+  }
+  listSwapCandidates(token: string, siteId: string, workerScheduleId: string) {
+    return this.request<SwapCandidateListResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/worker-schedules/${pathId(workerScheduleId)}/swap-candidates`,
+      token,
+    );
+  }
+
+  // Scheduling Workflow
+  listShiftChangeRequests(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ShiftChangeRequestResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/shift-change-requests`, options),
+      token,
+    );
+  }
+  listShiftSwapRequests(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<ShiftSwapRequestResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/shift-swap-requests`, options),
+      token,
+    );
+  }
+  listAbsenceRequests(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<AbsenceRequestResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/absence-requests`, options),
+      token,
+    );
+  }
+
+  // --- Shift Change Request Mutations ---
+  createShiftChangeRequest(
+    token: string,
+    siteId: string,
+    input: {
+      workerScheduleId: string;
+      toShiftId: string;
+      reason: string;
+    },
+  ) {
+    return this.request<ShiftChangeRequestResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/shift-change-requests`,
+      token,
+      input,
+    );
+  }
+  approveShiftChangeRequest(token: string, siteId: string, requestId: string) {
+    return this.request<ShiftChangeRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-change-requests/${pathId(requestId)}/approve`,
+      token,
+    );
+  }
+  rejectShiftChangeRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
+    return this.request<ShiftChangeRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-change-requests/${pathId(requestId)}/reject`,
+      token,
+      input,
+    );
+  }
+
+  // --- Shift Swap Request Mutations ---
+  createShiftSwapRequest(
+    token: string,
+    siteId: string,
+    input: {
+      requesterWorkerScheduleId: string;
+      coworkerWorkerScheduleId: string;
+      reason: string;
+    },
+  ) {
+    return this.request<ShiftSwapRequestResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/shift-swap-requests`,
+      token,
+      input,
+    );
+  }
+  confirmShiftSwapRequest(token: string, siteId: string, requestId: string) {
+    return this.request<ShiftSwapRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/confirm`,
+      token,
+    );
+  }
+  declineShiftSwapRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
+    return this.request<ShiftSwapRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/decline`,
+      token,
+      input,
+    );
+  }
+  approveShiftSwapRequest(token: string, siteId: string, requestId: string) {
+    return this.request<ShiftSwapRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/approve`,
+      token,
+    );
+  }
+  rejectShiftSwapRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
+    return this.request<ShiftSwapRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(requestId)}/reject`,
+      token,
+      input,
+    );
+  }
+
+  // --- Absence Request Mutations ---
+  createAbsenceRequest(
+    token: string,
+    siteId: string,
+    input: {
+      workerScheduleId: string;
+      reason: string;
+      replacementWorkerId?: string;
+    },
+  ) {
+    return this.request<AbsenceRequestResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/absence-requests`,
+      token,
+      input,
+    );
+  }
+  approveAbsenceRequest(token: string, siteId: string, requestId: string) {
+    return this.request<AbsenceRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/absence-requests/${pathId(requestId)}/approve`,
+      token,
+    );
+  }
+  rejectAbsenceRequest(token: string, siteId: string, requestId: string) {
+    return this.request<AbsenceRequestResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/absence-requests/${pathId(requestId)}/reject`,
+      token,
     );
   }
 

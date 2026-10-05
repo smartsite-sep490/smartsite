@@ -1,20 +1,15 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  ForeignKey,
-  Index,
-  PrimaryColumn,
-  Unique,
-} from 'typeorm';
-import { SiteEntity } from './site.entity.js';
+import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn, Unique } from 'typeorm';
 import { ContractorEntity } from './contractor.entity.js';
+import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 
 @Entity({ name: 'worker' })
 @Unique('uq_worker_site_external_id', ['siteId', 'externalId'])
+@Index('uq_worker_site_user', ['siteId', 'userId'], {
+  unique: true,
+  where: 'user_id IS NOT NULL',
+})
 @Index('idx_worker_contractor', ['contractorId'], { where: 'contractor_id IS NOT NULL' })
-@Index('uq_worker_site_user', ['siteId', 'userId'], { unique: true, where: 'user_id IS NOT NULL' })
 export class WorkerEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_worker_id' })
   id!: string;

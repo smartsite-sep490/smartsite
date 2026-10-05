@@ -3,6 +3,7 @@ import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './app';
 
@@ -14,6 +15,17 @@ vi.mock('@smartsite/api-client', async () => {
     getBackendHealth: vi.fn().mockResolvedValue({ status: 'ok', service: 'smartsite-backend' }),
   };
 });
+
+vi.mock('./features/auth/auth-session', () => ({
+  useAuth: () => ({
+    accessToken: 'test-token',
+    isSessionExpired: false,
+    dismissSessionExpired: vi.fn(),
+  }),
+  useRestoreSession: () => ({ isLoading: false }),
+  useCurrentUser: () => ({ data: { roleAssignments: [] } }),
+  SessionExpiredModal: () => null,
+}));
 
 vi.mock('./components/landing/LandingPage', () => ({
   LandingPage: ({ onEnterApp }: { onEnterApp: (tab?: string) => void }) => (
@@ -56,10 +68,10 @@ vi.mock('./components/layout/AppLayout', () => ({
   AppLayout: ({
     children,
     onSelectTab,
-  }: {
-    children: React.ReactNode;
-    currentTab: string;
-    onSelectTab: (tab: string) => void;
+    }: {
+      children: React.ReactNode;
+      currentTab?: string;
+      onSelectTab: (tab: string) => void;
   }) => (
     <div>
       <nav>
@@ -92,9 +104,11 @@ describe('App Navigation and Context Lifecycle', () => {
     const user = userEvent.setup();
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     // 1. Enter app at PPE tab
@@ -120,9 +134,11 @@ describe('App Navigation and Context Lifecycle', () => {
     const user = userEvent.setup();
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     // 1. Enter app at PPE tab

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type LoginResponse } from '@smartsite/api-client';
+import { useCallback, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { SmartSiteManagementClient } from '@smartsite/api-client';
 import {
   IconAlertTriangle,
   IconBuilding2,
@@ -8,7 +8,6 @@ import {
   IconKey,
   IconRefresh,
   IconShield,
-  IconUser,
   IconUsers,
 } from '../icons';
 import { SecurityGateDeskView } from './SecurityGateDeskView';
@@ -16,6 +15,7 @@ import { WorkerEnrollmentView } from './WorkerEnrollmentView';
 import { VisitorAccessView } from './VisitorAccessView';
 import { WorkerGatePermissionsView } from './WorkerGatePermissionsView';
 import { ZonePermissionsView } from './ZonePermissionsView';
+import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
 
 type AccessSubTab =
   'zone-permissions' | 'gate-desk' | 'worker-enrollment' | 'gate-permissions' | 'visitor-passes';
@@ -84,11 +84,9 @@ function errorMessage(error: unknown): string {
 export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
-  const activeSession = useRef<{ token: string; userId: string } | null>(null);
-  const lifecycleGeneration = useRef(0);
-  const [session, setSession] = useState<LoginResponse | null>(null);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const { accessToken } = useAuth();
+  const currentUserQuery = useCurrentUser(apiUrl);
+  const logoutMutation = useLogout(apiUrl);
   const [requestedSiteId, setRequestedSiteId] = useState('');
   const [accessSubTab, setAccessSubTab] = useState<AccessSubTab>('zone-permissions');
 
@@ -100,41 +98,14 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     [apiUrl, queryClient],
   );
 
-  const login = useMutation({
-    mutationFn: async () => {
-      const generation = lifecycleGeneration.current;
-      const result = await client.login(username, password);
-      const isGlobalAdmin = result.user.roleAssignments.some(
-        (role) => role.role === 'ADMIN' && role.siteId === null,
-      );
-      if (!isGlobalAdmin || result.user.mustChangePassword) {
-        await client.logout('WEB').catch(() => undefined);
-        throw new Error('Use an active Admin account with its permanent password.');
-      }
-      if (generation !== lifecycleGeneration.current) {
-        await client.logout('WEB').catch(() => undefined);
-        throw new Error('The sign-in request was cancelled.');
-      }
-      activeSession.current = { token: result.accessToken, userId: result.user.id };
-      setSession(result);
-      setPassword('');
-    },
-  });
-
-  useEffect(() => {
-    lifecycleGeneration.current += 1;
-    return () => {
-      lifecycleGeneration.current += 1;
-      const current = activeSession.current;
-      activeSession.current = null;
-      if (!current) return;
-      removeSessionQueries(current.userId);
-      void client.logout('WEB').catch(() => undefined);
-    };
-  }, [client, removeSessionQueries]);
-
-  const token = session?.accessToken ?? '';
-  const sessionScope = session?.user.id ?? '';
+  // Site Access uses the authenticated app session. It must not create a second
+  // login session or log the shared session out when this view unmounts.
+  const currentUser = currentUserQuery.data;
+  const token = accessToken ?? '';
+  const sessionScope = currentUser?.id ?? '';
+  const isGlobalAdmin = currentUser?.roleAssignments.some(
+    (role) => role.role === 'ADMIN' && role.siteId === null,
+  );
 
   const sites = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, 'sites'],
@@ -149,123 +120,43 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const activeSiteName = sites.data?.items.find((site) => site.id === siteId)?.name ?? 'Site';
 
   const logout = () => {
-    const current = activeSession.current;
-    lifecycleGeneration.current += 1;
-    activeSession.current = null;
-    setSession(null);
     setRequestedSiteId('');
     setAccessSubTab('zone-permissions');
-    if (current) {
-      removeSessionQueries(current.userId);
-      void client.logout('WEB').catch(() => undefined);
-    }
+    if (sessionScope) removeSessionQueries(sessionScope);
+    logoutMutation.mutate();
   };
 
-  const submitLogin = (event: FormEvent) => {
-    event.preventDefault();
-    login.mutate();
-  };
-
-  if (!session) {
+  if (!accessToken || currentUserQuery.isPending) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-xl border border-[#EAEAEA] bg-white p-8 shadow-xs space-y-6">
-          <div className="text-center space-y-2">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50 text-[#F66B17] border border-orange-200/80">
-              <IconShield className="h-6 w-6" />
-            </div>
-            <div className="pt-2">
-              <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
-                Security & Identity Portal
-              </span>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
-              Site access & identity control
-            </h1>
-            <p className="text-xs text-[#6B6B6B] leading-relaxed">
-              Sign in as Admin to manage biometrics, gate desks, worker gate permissions, and
-              visitor QR passes.
-            </p>
-          </div>
+        <div className="flex items-center gap-2 rounded-xl border border-[#EAEAEA] bg-white p-5 text-xs text-[#6B6B6B] shadow-xs">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
+          <span>Restoring your authenticated session…</span>
+        </div>
+      </div>
+    );
+  }
 
-          <form onSubmit={submitLogin} className="space-y-4 pt-1">
-            <div>
-              <label
-                htmlFor="login-username"
-                className="block text-xs font-bold uppercase tracking-wider text-[#2F3437]"
-              >
-                Username
-              </label>
-              <div className="relative mt-1.5">
-                <IconUser className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B6B6B]" />
-                <input
-                  id="login-username"
-                  required
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="Enter Admin username"
-                  className="w-full rounded-lg border border-[#EAEAEA] bg-white py-2.5 pl-9 pr-3 text-sm text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-colors"
-                />
-              </div>
-            </div>
+  if (currentUserQuery.isError) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-4">
+        <div role="alert" className="flex max-w-md items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-5 text-xs font-semibold text-red-700">
+          <IconAlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{errorMessage(currentUserQuery.error)}</span>
+        </div>
+      </div>
+    );
+  }
 
-            <div>
-              <label
-                htmlFor="login-password"
-                className="block text-xs font-bold uppercase tracking-wider text-[#2F3437]"
-              >
-                Password
-              </label>
-              <div className="relative mt-1.5">
-                <IconKey className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B6B6B]" />
-                <input
-                  id="login-password"
-                  required
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full rounded-lg border border-[#EAEAEA] bg-white py-2.5 pl-9 pr-3 text-sm text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-colors"
-                />
-              </div>
-            </div>
-
-            {login.error && (
-              <div
-                role="alert"
-                className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700"
-              >
-                <IconAlertTriangle className="h-4 w-4 shrink-0" />
-                <span>{errorMessage(login.error)}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={login.isPending}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#111111] py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#2F3437] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {login.isPending ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Signing in…</span>
-                </>
-              ) : (
-                <>
-                  <IconShield className="h-4 w-4" />
-                  <span>Open access control</span>
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="pt-2 text-center border-t border-[#EAEAEA]">
-            <p className="text-[11px] text-[#6B6B6B]">
-              SmartSite Enterprise Safety & Access Control • Authenticated Session
-            </p>
-          </div>
+  if (!currentUser || !currentUser.isActive || !isGlobalAdmin || currentUser.mustChangePassword) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-4">
+        <div role="alert" className="w-full max-w-md space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center shadow-xs">
+          <IconShield className="mx-auto h-8 w-8 text-amber-600" />
+          <h1 className="text-lg font-bold text-[#2F3437]">Site Access is restricted</h1>
+          <p className="text-xs leading-relaxed text-amber-900">
+            An active Global Admin account with its permanent password is required to manage site access.
+          </p>
         </div>
       </div>
     );
@@ -299,11 +190,11 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3 rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-3.5 py-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#111111] text-xs font-bold text-white">
-                {session.user.displayName.slice(0, 2).toUpperCase()}
+                {currentUser.displayName.slice(0, 2).toUpperCase()}
               </div>
               <div className="text-left">
                 <span className="block text-xs font-bold text-[#2F3437] leading-tight">
-                  {session.user.displayName}
+                  {currentUser.displayName}
                 </span>
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
@@ -314,6 +205,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             <button
               onClick={logout}
               type="button"
+              disabled={logoutMutation.isPending}
               className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3.5 py-2 text-xs font-bold text-[#2F3437] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
             >
               <span>Sign out</span>

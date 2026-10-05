@@ -32,8 +32,8 @@ import { pagination } from '../../common/http/pagination.js';
 import type { WorkerEntity } from '../../database/entities/worker.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { CreateWorkerDto } from './dto/workforce.dto.js';
 import {
-  CreateWorkerCommand,
   LinkWorkerAccountCommand,
   WorkforceConfigurationService,
 } from './workforce-configuration.service.js';
@@ -60,7 +60,7 @@ function workerResponse(worker: WorkerEntity) {
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard)
 @Controller('sites/:siteId/workers')
 export class WorkforceController {
   private readonly logger = new Logger(WorkforceController.name);
@@ -103,11 +103,12 @@ export class WorkforceController {
   }
 
   @Post()
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse({ type: WorkerResponseDto })
   async create(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() input: CreateWorkerCommand,
+    @Body() input: CreateWorkerDto,
   ) {
     const worker = await this.workforce.create(siteId, input);
     this.logger.log({
@@ -122,12 +123,26 @@ export class WorkforceController {
   @Get()
   @ApiOkResponse({ type: WorkerPageResponseDto })
   async list(
+    @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
     const value = pagination(offset, limit);
-    const result = await this.workforce.list(siteId, value.offset, value.limit);
+    const result = await this.workforce.list(request.user!, siteId, value.offset, value.limit);
     return { items: result.items.map(workerResponse), total: result.total };
+  }
+
+  @Get('coworkers')
+  @ApiOkResponse()
+  async listCoworkers(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const value = pagination(offset, limit);
+    const result = await this.workforce.listCoworkers(request.user!, siteId, value.offset, value.limit);
+    return { items: result.items, total: result.total };
   }
 }

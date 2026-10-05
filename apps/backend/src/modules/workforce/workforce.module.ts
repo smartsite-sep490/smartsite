@@ -1,8 +1,15 @@
 import { Module } from '@nestjs/common';
+import { NotificationsController } from './notifications.controller.js';
+import { SchedulingNotificationService } from './scheduling-notification.service.js';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DatabaseModule } from '../../database/database.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { ContractorsController } from './contractors.controller.js';
+import { ScheduleConfigurationController } from './schedule-configuration.controller.js';
+import { ScheduleConfigurationService } from './schedule-configuration.service.js';
+import { SchedulingController } from './scheduling.controller.js';
+import { SchedulingWorkflowService } from './scheduling-workflow.service.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
 import { WorkforceController } from './workforce.controller.js';
 import { ContractorOperationsService } from './contractor-operations.service.js';
@@ -23,7 +30,11 @@ import {
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [
+    NotificationsController,
     WorkforceController,
+    ContractorsController,
+    ScheduleConfigurationController,
+    SchedulingController,
     ContractorOperationsController,
     WorkerAssignmentController,
     FaceEnrollmentController,
@@ -31,7 +42,10 @@ import {
     WorkerGatePermissionsController,
   ],
   providers: [
+    SchedulingNotificationService,
     WorkforceConfigurationService,
+    ScheduleConfigurationService,
+    SchedulingWorkflowService,
     ContractorOperationsService,
     FaceEnrollmentService,
     FaceGateService,
