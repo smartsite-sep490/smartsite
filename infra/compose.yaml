@@ -46,6 +46,8 @@ services:
       DATABASE_TIMEOUT_MS: '2000'
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       # The runtime image contains production dependencies only (no pino-pretty).
+      SAFETY_UPLOAD_LOCAL_ROOT: /var/lib/smartsite/uploads
+      EVIDENCE_LOCAL_ROOT: /var/lib/smartsite/demo-evidence
       LOG_LEVEL: info
       LOG_FORMAT: json
       HTTP_RATE_LIMIT_TTL_MS: '60000'
@@ -64,6 +66,8 @@ services:
       MAX_FUTURE_CLOCK_SKEW_SECONDS: '30'
     ports:
       - '127.0.0.1:3000:3000'
+    volumes:
+      - safety-upload-data:/var/lib/smartsite
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,5 +134,6 @@ services:
       - ai-face-data:/var/lib/smartsite-ai
 
 volumes:
+  safety-upload-data:
   postgres-data:
   ai-face-data:
