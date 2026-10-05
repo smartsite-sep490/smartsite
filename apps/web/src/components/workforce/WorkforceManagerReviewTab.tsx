@@ -323,16 +323,7 @@ export function WorkforceManagerReviewTab({
           </button>
         </div>
       )}
-      {target.data && (
-        <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
-          Selected {target.data.requestType === 'CHANGE' ? 'shift change' : 'shift swap'} ·{' '}
-          {target.data.status}
-          <p className="mt-1 text-xs text-slate-600">{target.data.reason}</p>
-          {target.data.reviewReason && (
-            <p className="mt-1 text-xs">Review message: {target.data.reviewReason}</p>
-          )}
-        </div>
-      )}
+
 
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">

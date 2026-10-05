@@ -111,7 +111,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }]
               : []),
             ...(isAdmin ? [{ id: 'site-setup', label: 'Site Setup', icon: IconBuilding }] : []),
-            { id: 'access', label: 'Site Access', icon: IconKey },
+            ...(!isContractorRep || isAdmin
+              ? [{ id: 'access', label: 'Site Access', icon: IconKey }]
+              : []),
           ],
         },
         {

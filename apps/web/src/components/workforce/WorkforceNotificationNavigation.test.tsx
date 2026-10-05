@@ -121,7 +121,7 @@ describe('notification request navigation', () => {
       ],
     };
     mount('schedule', 'coworker');
-    expect(await screen.findByText(/Selected shift swap · APPLIED/)).toBeTruthy();
+    expect(await screen.findByText(/Synthetic request outside first page/)).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Shift Swap')).toBeTruthy());
     expect(SmartSiteManagementClient.prototype.getShiftSwapRequest).toHaveBeenCalledWith(
       'synthetic-token',
@@ -138,7 +138,6 @@ describe('notification request navigation', () => {
       roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-2' }],
     };
     mount('review', 'pending');
-    expect(await screen.findByText(/Selected shift swap · APPLIED/)).toBeTruthy();
     expect(screen.queryByText('Approve Swap')).toBeNull();
     expect(await screen.findByText('APPLIED')).toBeTruthy();
   });
