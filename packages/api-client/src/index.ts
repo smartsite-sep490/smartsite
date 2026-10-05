@@ -250,3 +250,4 @@ export async function getBackendHealth(
     signal?.removeEventListener('abort', onAbort);
   }
 }
+export type * from '@smartsite/contracts';

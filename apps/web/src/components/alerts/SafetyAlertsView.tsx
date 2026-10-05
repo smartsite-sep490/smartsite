@@ -1,3 +1,6 @@
+import { StatusBadge, TechnicalDetails } from '../safety/SafetyWorkflowUi';
+import { IncidentView } from '../safety/IncidentView';
+import { SafetyTasksView } from '../safety/SafetyTasksView';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -117,6 +120,11 @@ export function SafetyAlertsView({
 }: SafetyAlertsViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
+  const [workspaceTab, setWorkspaceTab] = useState<'Alerts' | 'Incidents' | 'Safety Tasks'>(
+    'Alerts',
+  );
+  const [incidentSourceAlert, setIncidentSourceAlert] = useState('');
+  const [mobileAlertDetail, setMobileAlertDetail] = useState(false);
   const [session, setSession] = useState<LoginResponse | null>(null);
   const [sessionScope, setSessionScope] = useState('');
   const [username, setUsername] = useState('');
@@ -149,6 +157,9 @@ export function SafetyAlertsView({
   if (prevInitialSiteId !== initialSiteId) {
     setPrevInitialSiteId(initialSiteId);
     setRequestedSiteId(initialSiteId ?? '');
+    setRequestedAlertId('');
+    setMobileAlertDetail(false);
+    setIncidentSourceAlert('');
   }
 
   const [prevInitialAlertId, setPrevInitialAlertId] = useState(initialAlertId);
@@ -159,6 +170,14 @@ export function SafetyAlertsView({
 
   const removeSessionQueries = useCallback(
     (scope: string) => {
+      void queryClient.cancelQueries({ queryKey: ['sites', apiUrl, scope] });
+      void queryClient.cancelQueries({ queryKey: ['safety-alerts', apiUrl, scope] });
+      void queryClient.cancelQueries({ queryKey: ['safety-alert', apiUrl, scope] });
+      void queryClient.cancelQueries({ queryKey: ['safety-workflow', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['safety-workflow', apiUrl, scope] });
+      for (const mutation of queryClient.getMutationCache().getAll())
+        if (mutation.options.meta?.safetySession === scope)
+          queryClient.getMutationCache().remove(mutation);
       // Cancel sensitive in-flight queries
       void queryClient.cancelQueries({ queryKey: ['safety-alert-evidence', apiUrl, scope] });
       void queryClient.cancelQueries({ queryKey: ['observation-identity-context', apiUrl, scope] });
@@ -185,11 +204,15 @@ export function SafetyAlertsView({
       const result = await client.login(username, password);
       const canReviewSafetyAlerts = result.user.roleAssignments.some(
         ({ role, siteId }) =>
-          (role === 'ADMIN' && siteId === null) || (role === 'SAFETY_OFFICER' && siteId !== null),
+          (role === 'ADMIN' && siteId === null) ||
+          (['SAFETY_OFFICER', 'SECURITY_OFFICER', 'SITE_MANAGER'].includes(role) &&
+            siteId !== null),
       );
       if (!canReviewSafetyAlerts) {
         await client.logout().catch(() => undefined);
-        throw new Error('A global Admin or Site-scoped Safety Officer role is required.');
+        throw new Error(
+          'A global Admin or Site-scoped Safety, Security or Manager role is required.',
+        );
       }
       if (result.user.mustChangePassword) {
         await client.logout().catch(() => undefined);
@@ -205,8 +228,16 @@ export function SafetyAlertsView({
         userId: result.user.id,
         sessionScope: freshScope,
       };
+      setWorkspaceTab(
+        result.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' || r.role === 'ADMIN')
+          ? 'Alerts'
+          : result.user.roleAssignments.some((r) => r.role === 'SECURITY_OFFICER')
+            ? 'Incidents'
+            : 'Safety Tasks',
+      );
       setSession(result);
       setSessionScope(freshScope);
+      setIncidentSourceAlert('');
       setPassword('');
       // Do not retain LoginResponse in TanStack mutation data because it contains the access token.
     },
@@ -227,7 +258,7 @@ export function SafetyAlertsView({
   const token = session?.accessToken ?? '';
   const sites = useQuery({
     queryKey: ['sites', apiUrl, sessionScope],
-    queryFn: () => client.listSites(token, { limit: 100 }),
+    queryFn: ({ signal }) => client.listSites(token, { limit: 100 }, { signal }),
     enabled: token.length > 0,
   });
 
@@ -238,7 +269,9 @@ export function SafetyAlertsView({
     () =>
       new Set(
         session?.user.roleAssignments.flatMap(({ role, siteId }) =>
-          role === 'SAFETY_OFFICER' && siteId !== null ? [siteId] : [],
+          ['SAFETY_OFFICER', 'SECURITY_OFFICER', 'SITE_MANAGER'].includes(role) && siteId !== null
+            ? [siteId]
+            : [],
         ) ?? [],
       ),
     [session],
@@ -253,26 +286,46 @@ export function SafetyAlertsView({
     ? requestedSiteId
     : (visibleSites[0]?.id ?? '');
 
+  const canAlerts =
+    isGlobalAdmin ||
+    session?.user.roleAssignments.some(
+      (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
+    );
+  const canTasks =
+    isGlobalAdmin ||
+    session?.user.roleAssignments.some(
+      (r) => ['SAFETY_OFFICER', 'SITE_MANAGER'].includes(r.role) && r.siteId === selectedSiteId,
+    );
   const alerts = useQuery({
     queryKey: ['safety-alerts', apiUrl, sessionScope, selectedSiteId, status, type, offset],
-    queryFn: () =>
-      client.listSafetyAlerts(token, selectedSiteId, {
-        offset,
-        limit: alertPageSize,
-        ...(status === 'ALL' ? {} : { status }),
-        ...(type === 'ALL' ? {} : { type }),
-      }),
-    enabled: token.length > 0 && selectedSiteId.length > 0,
+    queryFn: ({ signal }) =>
+      client.listSafetyAlerts(
+        token,
+        selectedSiteId,
+        {
+          offset,
+          limit: alertPageSize,
+          ...(status === 'ALL' ? {} : { status }),
+          ...(type === 'ALL' ? {} : { type }),
+        },
+        { signal },
+      ),
+    enabled:
+      token.length > 0 && selectedSiteId.length > 0 && !!canAlerts && workspaceTab === 'Alerts',
   });
 
-  const selectedAlertId = alerts.data?.items.some((alert) => alert.id === requestedAlertId)
-    ? requestedAlertId
-    : (alerts.data?.items[0]?.id ?? '');
+  const selectedAlertId = requestedAlertId || alerts.data?.items[0]?.id || '';
 
   const detail = useQuery({
     queryKey: ['safety-alert', apiUrl, sessionScope, selectedSiteId, selectedAlertId],
-    queryFn: () => client.getSafetyAlert(token, selectedSiteId, selectedAlertId),
-    enabled: token.length > 0 && selectedSiteId.length > 0 && selectedAlertId.length > 0,
+    queryFn: ({ signal }) =>
+      client.getSafetyAlert(token, selectedSiteId, selectedAlertId, { signal }),
+    enabled:
+      token.length > 0 &&
+      selectedSiteId.length > 0 &&
+      selectedAlertId.length > 0 &&
+      !!canAlerts &&
+      workspaceTab === 'Alerts',
   });
 
   const review = useMutation({
@@ -285,7 +338,9 @@ export function SafetyAlertsView({
         reason: reviewReason,
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (activeSession.current?.sessionScope !== sessionScope) return;
+      setRequestedAlertId(result.alert.id);
       setReviewReason('');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['safety-alerts', apiUrl, sessionScope] }),
@@ -316,6 +371,7 @@ export function SafetyAlertsView({
     login.reset();
     setSession(null);
     setSessionScope('');
+    setIncidentSourceAlert('');
     setRequestedSiteId('');
     setRequestedAlertId('');
     setOffset(0);
@@ -326,11 +382,13 @@ export function SafetyAlertsView({
   if (!session) {
     return (
       <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
+        <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#6B6B6B]">
+          Site safety workspace
+        </p>
         <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">Safety alert queue</h1>
         <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
-          Sign in as a global Admin or Site-scoped Safety Officer to inspect AI evidence and record
-          an auditable review decision.
+          Sign in with your Site role to manage incidents, corrective work and Safety Tasks, or
+          record an auditable review decision.
         </p>
         <form className="mt-6 space-y-4" onSubmit={handleLogin}>
           <label className="block text-sm font-semibold text-[#2F3437]">
@@ -375,83 +433,125 @@ export function SafetyAlertsView({
     <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-6 pb-10 text-[#2F3437]">
       <header className="flex flex-wrap items-start justify-between gap-4 min-w-0">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF04 / MF05</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#111111]">Safety alerts</h1>
+          <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#6B6B6B]">
+            Site safety workspace
+          </p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#111111]">
+            Safety operations
+          </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6B6B6B]">
-            Review durable AI observations, request more evidence, confirm a safety violation, or
-            dismiss a false alert. Every decision requires a reason and is kept in the audit trail.
+            Review alerts, manage corrective work and verify safety tasks for your Site.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] shrink-0 max-w-full truncate"
-        >
-          Sign out {session.user.displayName}
-        </button>
+        <div className="flex min-w-0 flex-wrap items-end gap-3">
+          <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+            Site
+            <select
+              value={selectedSiteId}
+              onChange={(event) => {
+                setRequestedSiteId(event.target.value);
+                setMobileAlertDetail(false);
+                setIncidentSourceAlert('');
+                setRequestedAlertId('');
+                setOffset(0);
+                resetReviewDraft();
+              }}
+              disabled={sites.isPending || visibleSites.length === 0}
+              className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+            >
+              {visibleSites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.code} · {site.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] shrink-0 max-w-full truncate"
+          >
+            Sign out {session.user.displayName}
+          </button>
+        </div>
       </header>
 
-      <section className="grid gap-3 sm:gap-4 rounded-lg border border-[#EAEAEA] bg-white p-3 sm:p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
-        <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
-          Site
-          <select
-            value={selectedSiteId}
-            onChange={(event) => {
-              setRequestedSiteId(event.target.value);
-              setRequestedAlertId('');
-              setOffset(0);
-              resetReviewDraft();
-            }}
-            disabled={sites.isPending || visibleSites.length === 0}
-            className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+      <nav
+        className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-2"
+        aria-label="Safety workspace"
+      >
+        {(['Alerts', 'Incidents', 'Safety Tasks'] as const).map((tab) => (
+          <button
+            type="button"
+            key={tab}
+            aria-pressed={workspaceTab === tab}
+            disabled={(tab === 'Alerts' && !canAlerts) || (tab === 'Safety Tasks' && !canTasks)}
+            onClick={() => setWorkspaceTab(tab)}
+            className={
+              'min-h-11 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ' +
+              (workspaceTab === tab
+                ? 'bg-[#111] text-white'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-bone)]')
+            }
           >
-            {visibleSites.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.code} · {site.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
-          Status
-          <select
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value as 'ALL' | SafetyAlertStatus);
-              setRequestedAlertId('');
-              setOffset(0);
-              resetReviewDraft();
-            }}
-            className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
-          >
-            <option value="ALL">All statuses</option>
-            {statusOptions.map((value) => (
-              <option key={value} value={value}>
-                {formatLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B] sm:col-span-2 lg:col-span-1">
-          Alert type
-          <select
-            value={type}
-            onChange={(event) => {
-              setType(event.target.value as 'ALL' | SafetyAlertType);
-              setRequestedAlertId('');
-              setOffset(0);
-              resetReviewDraft();
-            }}
-            className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
-          >
-            <option value="ALL">All types</option>
-            {alertTypeOptions.map((value) => (
-              <option key={value} value={value}>
-                {formatLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
+            {tab}
+          </button>
+        ))}
+      </nav>
+      <section
+        className={
+          'grid gap-3 sm:gap-4 rounded-xl border border-[#EAEAEA] bg-white p-4 grid-cols-1 sm:grid-cols-2 min-w-0 ' +
+          (workspaceTab === 'Alerts' && canAlerts
+            ? mobileAlertDetail
+              ? 'hidden lg:grid'
+              : ''
+            : 'hidden')
+        }
+      >
+        {workspaceTab === 'Alerts' && canAlerts && (
+          <>
+            <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+              Status
+              <select
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value as 'ALL' | SafetyAlertStatus);
+                  setRequestedAlertId('');
+                  setOffset(0);
+                  resetReviewDraft();
+                }}
+                className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+              >
+                <option value="ALL">All statuses</option>
+                {statusOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {formatLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B] sm:col-span-2 lg:col-span-1">
+              Alert type
+              <select
+                value={type}
+                onChange={(event) => {
+                  setType(event.target.value as 'ALL' | SafetyAlertType);
+                  setRequestedAlertId('');
+                  setOffset(0);
+                  resetReviewDraft();
+                }}
+                className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
+              >
+                <option value="ALL">All types</option>
+                {alertTypeOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {formatLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
       </section>
 
       {sites.isPending && <p className="rounded-lg bg-white p-5 text-sm">Loading Sites…</p>}
@@ -462,13 +562,40 @@ export function SafetyAlertsView({
       )}
       {sites.data && visibleSites.length === 0 && (
         <p className="rounded-lg bg-white p-5 text-sm text-[#6B6B6B]">
-          No Site with Safety Officer access is assigned to this account.
+          No Site with Safety workflow access is assigned to this account.
         </p>
       )}
 
-      {selectedSiteId && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)] min-w-0">
-          <section className="space-y-3 min-w-0">
+      {selectedSiteId && workspaceTab === 'Incidents' && (
+        <IncidentView
+          key={sessionScope + selectedSiteId}
+          client={client}
+          apiUrl={apiUrl}
+          scope={sessionScope}
+          token={token}
+          siteId={selectedSiteId}
+          user={session.user}
+          initialAlertId={incidentSourceAlert}
+          onSourceConsumed={() => setIncidentSourceAlert('')}
+        />
+      )}
+      {selectedSiteId && workspaceTab === 'Safety Tasks' && canTasks && (
+        <SafetyTasksView
+          key={sessionScope + selectedSiteId}
+          client={client}
+          apiUrl={apiUrl}
+          scope={sessionScope}
+          token={token}
+          siteId={selectedSiteId}
+          user={session.user}
+        />
+      )}
+      {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
+          <section
+            aria-label="Alert list"
+            className={'space-y-3 min-w-0 ' + (mobileAlertDetail ? 'hidden lg:block' : '')}
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-[#111111]">Alert queue</h2>
@@ -510,6 +637,7 @@ export function SafetyAlertsView({
                 onSelect={() => {
                   if (alert.id !== selectedAlertId) resetReviewDraft();
                   setRequestedAlertId(alert.id);
+                  setMobileAlertDetail(true);
                 }}
               />
             ))}
@@ -518,7 +646,12 @@ export function SafetyAlertsView({
                 <button
                   type="button"
                   disabled={offset === 0 || alerts.isFetching}
-                  onClick={() => setOffset((value) => Math.max(0, value - alertPageSize))}
+                  onClick={() => {
+                    resetReviewDraft();
+                    setRequestedAlertId('');
+                    setMobileAlertDetail(false);
+                    setOffset((value) => Math.max(0, value - alertPageSize));
+                  }}
                   className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Previous
@@ -528,7 +661,12 @@ export function SafetyAlertsView({
                   disabled={
                     offset + alerts.data.items.length >= alerts.data.total || alerts.isFetching
                   }
-                  onClick={() => setOffset((value) => value + alertPageSize)}
+                  onClick={() => {
+                    resetReviewDraft();
+                    setRequestedAlertId('');
+                    setMobileAlertDetail(false);
+                    setOffset((value) => value + alertPageSize);
+                  }}
                   className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Next
@@ -537,7 +675,20 @@ export function SafetyAlertsView({
             )}
           </section>
 
-          <aside className="min-h-80 rounded-lg border border-[#EAEAEA] bg-white p-4 sm:p-5 min-w-0">
+          <aside
+            aria-label="Alert detail"
+            className={
+              'min-h-80 rounded-xl border border-[#EAEAEA] bg-white p-4 sm:p-5 min-w-0 ' +
+              (!mobileAlertDetail ? 'hidden lg:block' : '')
+            }
+          >
+            <button
+              type="button"
+              className="mb-4 min-h-10 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold lg:hidden"
+              onClick={() => setMobileAlertDetail(false)}
+            >
+              Back to alerts
+            </button>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold text-[#111111]">Alert detail</h2>
               {selectedAlertId && (
@@ -563,6 +714,9 @@ export function SafetyAlertsView({
             )}
             {detail.data && (
               <div className="mt-4 space-y-5 min-w-0">
+                <TechnicalDetails>
+                  Alert {detail.data.id} · Revision {detail.data.revision}
+                </TechnicalDetails>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
                   <div>
                     <dt className="text-[#6B6B6B]">Candidate identity</dt>
@@ -579,7 +733,7 @@ export function SafetyAlertsView({
                   <div>
                     <dt className="text-[#6B6B6B]">Status</dt>
                     <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {formatLabel(detail.data.status)} · revision {detail.data.revision}
+                      <StatusBadge value={detail.data.status} />
                     </dd>
                   </div>
                   <div>
@@ -596,7 +750,7 @@ export function SafetyAlertsView({
                   </div>
                 </dl>
                 <div>
-                  <h3 className="text-sm font-bold text-[#2F3437]">Source observations</h3>
+                  <h3 className="text-sm font-bold text-[#2F3437]">Evidence &amp; sources</h3>
                   <div
                     className={`mt-2 space-y-2 ${safetyOfficerSiteIds.has(selectedSiteId) ? '' : 'max-h-80 overflow-auto'}`}
                   >
@@ -614,9 +768,9 @@ export function SafetyAlertsView({
                           </span>
                         </div>
                         <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
-                        <p className="mt-1 break-all font-mono text-[#6B6B6B]">
-                          {detection.eventId}
-                        </p>
+                        <TechnicalDetails>
+                          Observation <span>{detection.eventId}</span>
+                        </TechnicalDetails>
                         <SafetyAlertEvidencePanel
                           client={client}
                           apiUrl={apiUrl}
@@ -709,6 +863,22 @@ export function SafetyAlertsView({
                     </div>
                   </section>
                 )}
+                {detail.data.status === 'CONFIRMED' &&
+                  !detail.data.incidentId &&
+                  session.user.roleAssignments.some(
+                    (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
+                  ) && (
+                    <button
+                      type="button"
+                      className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
+                      onClick={() => {
+                        setIncidentSourceAlert(detail.data!.id);
+                        setWorkspaceTab('Incidents');
+                      }}
+                    >
+                      Create incident from alert
+                    </button>
+                  )}
                 <section className="min-w-0">
                   <h3 className="text-sm font-bold text-[#2F3437]">
                     Review history ({detail.data.reviewsTotal})
@@ -728,9 +898,9 @@ export function SafetyAlertsView({
                         <p className="mt-2 whitespace-pre-wrap break-words text-[#2F3437]">
                           {item.reason}
                         </p>
-                        <p className="mt-2 font-mono text-[10px] text-[#6B6B6B] break-all">
-                          Actor {item.actorUserId} · revision {item.alertRevision}
-                        </p>
+                        <TechnicalDetails>
+                          Actor {item.actorUserId} · Revision {item.alertRevision}
+                        </TechnicalDetails>
                       </article>
                     ))}
                     {detail.data.reviews.length === 0 && (

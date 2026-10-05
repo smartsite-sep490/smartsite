@@ -9,5 +9,6 @@ import { UsersService } from './users.service.js';
   imports: [DatabaseModule, AuthModule, SitesModule],
   controllers: [UsersController],
   providers: [UsersService],
+  exports: [UsersService],
 })
 export class UsersModule {}
