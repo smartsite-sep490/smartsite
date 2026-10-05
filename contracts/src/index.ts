@@ -83,3 +83,4 @@ export type {
   ZoneEntryDecisionStatus,
   ZoneEntryDecisionResponse,
 } from './management-api.js';
+export * from './safety-workflow-api.js';

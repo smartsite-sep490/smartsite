@@ -98,6 +98,7 @@ export type SafetyAlertStatus =
   'PENDING_REVIEW' | 'NEEDS_MORE_EVIDENCE' | 'CONFIRMED' | 'DISMISSED' | 'CLOSED';
 
 export interface SafetyAlertResponse {
+  incidentId?: string | null;
   id: string;
   siteId: string;
   zoneId: string | null;

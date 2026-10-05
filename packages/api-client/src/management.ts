@@ -1,3 +1,21 @@
+import type {
+  IncidentResponse,
+  IncidentDetailResponse,
+  SafetyTaskResponse,
+  SafetyTaskDetailResponse,
+  SafetyAssigneeResponse,
+  WorkflowMutationResponse,
+  CreateIncidentCommand,
+  CreateSafetyTaskCommand,
+  VersionCommand,
+  ReasonCommand,
+  LinkIncidentAlertsCommand,
+  AssignCorrectiveActionCommand,
+  SubmitSafetyResultCommand,
+  ReviewSubmissionCommand,
+  ReopenIncidentCommand,
+} from '@smartsite/contracts';
+
 import {
   parseObservationIdentityContextResponse,
   parseObservationIdentityDecisionPage,
@@ -163,34 +181,39 @@ export class SmartSiteManagementClient {
     });
   }
 
-  private async requestFormData<T>(method: string, path: string, token: string, body: FormData) {
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+  private async requestFormData<T>(
+    method: string,
+    path: string,
+    token: string,
+    body: FormData,
+    options?: RequestOptions,
+  ): Promise<T> {
+    return this.runRequest(options, async (signal) => {
+      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
         method,
         headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
         body,
+        signal,
       });
-    } catch {
-      throw new ApiError('network', 'Could not connect to the backend.');
-    }
-    if (response.status === 204) return undefined as T;
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
-    }
-    if (!response.ok) {
-      const error = parseBackendErrorEnvelope(payload, response.status);
-      throw new ApiError(
-        'http',
-        error?.message ?? `Backend returned HTTP ${response.status}.`,
-        response.status,
-        error,
-      );
-    }
-    return payload as T;
+      if (response.status === 204) return undefined as T;
+      let payload: unknown;
+      try {
+        payload = await this.readBody(() => response.json(), signal);
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+      }
+      if (!response.ok) {
+        const error = parseBackendErrorEnvelope(payload, response.status);
+        throw new ApiError(
+          'http',
+          error?.message ?? `Backend returned HTTP ${response.status}.`,
+          response.status,
+          error,
+        );
+      }
+      return payload as T;
+    });
   }
 
   private async requestBlob(path: string, token: string, options?: RequestOptions): Promise<Blob> {
@@ -235,6 +258,237 @@ export class SmartSiteManagementClient {
     if (options.offset !== undefined) query.set('offset', String(options.offset));
     if (options.limit !== undefined) query.set('limit', String(options.limit));
     return `${path}${query.size ? `?${query}` : ''}`;
+  }
+
+  private workflowListPath(
+    path: string,
+    filters: PageOptions & { status?: string; assignedTo?: string } = {},
+  ) {
+    const query = new URLSearchParams();
+    for (const [name, value] of Object.entries(filters))
+      if (value !== undefined) query.set(name, String(value));
+    return path + (query.size ? '?' + query : '');
+  }
+  listSafetyAssignees(
+    token: string,
+    siteId: string,
+    role: 'SAFETY_OFFICER' | 'SECURITY_OFFICER',
+    page: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<SafetyAssigneeResponse>>(
+      'GET',
+      this.workflowListPath(`/sites/${pathId(siteId)}/safety-assignees`, {
+        ...page,
+        role,
+      } as PageOptions),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listIncidents(
+    token: string,
+    siteId: string,
+    filters: PageOptions & { status?: string; assignedTo?: string } = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<IncidentResponse>>(
+      'GET',
+      this.workflowListPath(`/sites/${pathId(siteId)}/incidents`, filters),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getIncident(token: string, siteId: string, id: string, options?: RequestOptions) {
+    return this.request<IncidentDetailResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/incidents/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  createIncident(
+    token: string,
+    siteId: string,
+    input: CreateIncidentCommand,
+    options?: RequestOptions,
+  ) {
+    return this.request<WorkflowMutationResponse<IncidentDetailResponse>>(
+      'POST',
+      `/sites/${pathId(siteId)}/incidents`,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+  incidentCommand(
+    token: string,
+    siteId: string,
+    id: string,
+    operation: 'link' | 'assign' | 'start' | 'submit' | 'review' | 'close' | 'reopen',
+    input:
+      | VersionCommand
+      | ReasonCommand
+      | LinkIncidentAlertsCommand
+      | AssignCorrectiveActionCommand
+      | SubmitSafetyResultCommand
+      | ReviewSubmissionCommand
+      | ReopenIncidentCommand,
+    actionId?: string,
+    file?: File,
+    options?: RequestOptions,
+  ) {
+    const segment = {
+      link: 'alerts',
+      assign: 'actions',
+      start: 'start',
+      submit: 'submissions',
+      review: 'reviews',
+      close: 'close',
+      reopen: 'reopen',
+    }[operation];
+    const path = `/sites/${pathId(siteId)}/incidents/${pathId(id)}${actionId ? `/actions/${pathId(actionId)}` : ''}/${segment}`;
+    if (operation === 'submit')
+      return this.requestFormData<WorkflowMutationResponse<IncidentDetailResponse>>(
+        'POST',
+        path,
+        token,
+        this.resultForm(input, file),
+        options,
+      );
+    return this.request<WorkflowMutationResponse<IncidentDetailResponse>>(
+      'POST',
+      path,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+  listSafetyTasks(
+    token: string,
+    siteId: string,
+    filters: PageOptions & { status?: string; assignedTo?: string } = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<SafetyTaskResponse>>(
+      'GET',
+      this.workflowListPath(`/sites/${pathId(siteId)}/safety-tasks`, filters),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyTask(token: string, siteId: string, id: string, options?: RequestOptions) {
+    return this.request<SafetyTaskDetailResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-tasks/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  createSafetyTask(
+    token: string,
+    siteId: string,
+    input: CreateSafetyTaskCommand,
+    options?: RequestOptions,
+  ) {
+    return this.request<WorkflowMutationResponse<SafetyTaskDetailResponse>>(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-tasks`,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+  safetyTaskCommand(
+    token: string,
+    siteId: string,
+    id: string,
+    operation: 'start' | 'submit' | 'verify' | 'return' | 'cancel',
+    input: VersionCommand | SubmitSafetyResultCommand | ReasonCommand,
+    file?: File,
+    options?: RequestOptions,
+  ) {
+    const path = `/sites/${pathId(siteId)}/safety-tasks/${pathId(id)}/${operation === 'submit' ? 'submissions' : operation}`;
+    if (operation === 'submit')
+      return this.requestFormData<WorkflowMutationResponse<SafetyTaskDetailResponse>>(
+        'POST',
+        path,
+        token,
+        this.resultForm(input, file),
+        options,
+      );
+    return this.request<WorkflowMutationResponse<SafetyTaskDetailResponse>>(
+      'POST',
+      path,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+  private resultForm(input: VersionCommand, file?: File) {
+    const form = new FormData();
+    for (const [name, value] of Object.entries(input)) form.set(name, String(value));
+    if (file) form.set('file', file);
+    return form;
+  }
+  getWorkflowEvidence(
+    token: string,
+    siteId: string,
+    type: 'incidents' | 'safety-tasks',
+    id: string,
+    evidenceId: string,
+    options?: RequestOptions,
+  ) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/${type}/${pathId(id)}/evidence/${pathId(evidenceId)}`,
+      token,
+      options,
+    );
+  }
+  getIncidentAlert(
+    token: string,
+    siteId: string,
+    id: string,
+    alertId: string,
+    options?: RequestOptions,
+  ) {
+    return this.request<SafetyAlertDetailResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/incidents/${pathId(id)}/alerts/${pathId(alertId)}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getIncidentAlertEvidence(
+    token: string,
+    siteId: string,
+    id: string,
+    alertId: string,
+    eventId: string,
+    index: number,
+    options?: RequestOptions,
+  ) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/incidents/${pathId(id)}/alerts/${pathId(alertId)}/detections/${pathId(eventId)}/evidence/${index}`,
+      token,
+      options,
+    );
   }
 
   login(username: string, password: string, clientType: AuthClientType = 'WEB') {
@@ -317,13 +571,25 @@ export class SmartSiteManagementClient {
   createSite(token: string, input: { code: string; name: string }) {
     return this.request<SiteResponse>('POST', '/sites', token, input);
   }
-  listSites(token: string, options?: PageOptions) {
-    return this.request<Page<SiteResponse>>('GET', this.listPath('/sites', options), token);
+  listSites(token: string, options?: PageOptions, requestOptions?: RequestOptions) {
+    return this.request<Page<SiteResponse>>(
+      'GET',
+      this.listPath('/sites', options),
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
   }
   getSite(token: string, siteId: string) {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
-  listSafetyAlerts(token: string, siteId: string, options: SafetyAlertListOptions = {}) {
+  listSafetyAlerts(
+    token: string,
+    siteId: string,
+    options: SafetyAlertListOptions = {},
+    requestOptions?: RequestOptions,
+  ) {
     const query = new URLSearchParams();
     if (options.offset !== undefined) query.set('offset', String(options.offset));
     if (options.limit !== undefined) query.set('limit', String(options.limit));
@@ -334,13 +600,19 @@ export class SmartSiteManagementClient {
       'GET',
       `${path}${query.size ? `?${query}` : ''}`,
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
-  getSafetyAlert(token: string, siteId: string, alertId: string) {
+  getSafetyAlert(token: string, siteId: string, alertId: string, requestOptions?: RequestOptions) {
     return this.request<SafetyAlertDetailResponse>(
       'GET',
       `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}`,
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getSafetyAlertEvidence(
