@@ -15,6 +15,53 @@ const zoneId = '44444444-4444-4444-8444-444444444444';
 const regionId = '55555555-5555-4555-8555-555555555555';
 const geometryVersion = 1;
 
+for (const [item, subtype] of [
+  ['GLOVES', 'PPE_GLOVES_MISSING'],
+  ['BOOTS', 'PPE_BOOTS_MISSING'],
+  ['GOGGLES', 'PPE_GOGGLES_MISSING'],
+] as const) {
+  test(`explicit ${item} missing has its own subtype, only where required`, () => {
+    const observation = {
+      type: 'PPE',
+      trackId: 101,
+      ppeItem: item,
+      status: 'MISSING',
+      regionId,
+      geometryVersion,
+    };
+    // Exercise the runtime boundary, including the pre-expansion legacy type.
+    const event = createBaseEvent([observation] as unknown as EvaluationEvent['observations']);
+    const evaluator = new AlertCandidateEvaluator();
+    const lookup = () => createTestContext({ requiredPpe: [item] });
+    const result = evaluator.evaluate(event, lookup);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.candidateSubtype, subtype);
+    assert.equal(result[0]?.details.ppeItem, item);
+    assert.equal(evaluator.evaluate(event, () => createTestContext()).length, 0);
+    const presentEvent = createBaseEvent([
+      { ...observation, status: 'PRESENT' },
+    ] as unknown as EvaluationEvent['observations']);
+    assert.equal(evaluator.evaluate(presentEvent, lookup).length, 0);
+  });
+}
+
+test('unexpected PPE cannot fall through into vest alerts even with invalid policy input', () => {
+  const event = createBaseEvent([
+    {
+      type: 'PPE',
+      trackId: 101,
+      ppeItem: 'UNSUPPORTED',
+      status: 'MISSING',
+      regionId,
+      geometryVersion,
+    },
+  ] as unknown as EvaluationEvent['observations']);
+  const result = new AlertCandidateEvaluator().evaluate(event, () =>
+    createTestContext({ requiredPpe: ['UNSUPPORTED'] }),
+  );
+  assert.equal(result.length, 0);
+});
+
 function createTestContext(overrides?: {
   requiredPpe?: string[];
   restrictionPolicy?: ZoneRestrictionPolicy;

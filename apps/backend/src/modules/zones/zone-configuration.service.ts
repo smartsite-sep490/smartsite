@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { PPE_ITEMS } from '@smartsite/contracts';
 import { Transform } from 'class-transformer';
 import {
   ArrayUnique,
@@ -47,7 +48,7 @@ export class CreateZoneCommand {
   restrictionPolicy!: ZoneRestrictionPolicy;
   @IsArray()
   @ArrayUnique()
-  @IsIn(['HARD_HAT', 'SAFETY_VEST'], { each: true })
+  @IsIn(PPE_ITEMS, { each: true })
   requiredPpe!: string[];
 }
 
@@ -67,7 +68,7 @@ export class UpdateZonePolicyCommand {
   restrictionPolicy!: ZoneRestrictionPolicy;
   @IsArray()
   @ArrayUnique()
-  @IsIn(['HARD_HAT', 'SAFETY_VEST'], { each: true })
+  @IsIn(PPE_ITEMS, { each: true })
   requiredPpe!: string[];
 }
 

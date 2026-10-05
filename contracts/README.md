@@ -2,6 +2,14 @@
 
 Thư mục này giữ contract chuẩn giữa `smartsite-ai` và SmartSite Backend.
 
+Observation envelope `1.1.0` bổ sung `GLOVES`, `BOOTS`, `GOGGLES` tại
+`schemas/v1.1/technical-observation-event.json`. Validator chọn schema theo
+`schemaVersion` chính xác; payload `1.0.0` vẫn chỉ cho phép mũ/vest, schema v1
+không đổi bytes. Các bounds, geometry và trạng thái PRESENT/MISSING giữ nguyên.
+Producer cũ tiếp tục dùng v1; producer mở rộng chỉ được bật khi consumer hỗ trợ
+v1.1 và model/item đã qua capability/evaluation gate. Enum và Zone policy không
+chứng minh model có khả năng detect item; không suy MISSING từ absence hoặc UNKNOWN.
+
 Contract v1 hiện có:
 
 - JSON Schema `schemas/v1/technical-observation-event.json`;

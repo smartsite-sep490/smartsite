@@ -1,5 +1,8 @@
 export const CONTRACTS_VERSION = '1.0.0';
 
+export { PPE_ITEMS } from './ppe-items.js';
+export type { PpeItem } from './ppe-items.js';
+
 export * from './observation-identity-management.js';
 
 export { canonicalizeJson, computeCanonicalPayloadHash } from './hashing/canonical-hash.js';

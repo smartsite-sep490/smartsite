@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PpeItem } from '@smartsite/contracts';
 import type { ResolvedObservationContext } from '../../zones/observation-context-resolver.service.js';
 import { ZoneAuthorizationService } from '../../zones/zone-authorization.service.js';
 import type { ZoneAuthorizationResult } from '../../zones/zone-authorization.interface.js';
@@ -8,6 +9,9 @@ export interface AlertCandidate {
   candidateSubtype:
     | 'PPE_HARD_HAT_MISSING'
     | 'PPE_SAFETY_VEST_MISSING'
+    | 'PPE_GLOVES_MISSING'
+    | 'PPE_BOOTS_MISSING'
+    | 'PPE_GOGGLES_MISSING'
     | 'ZONE_ENTRY_PROHIBITED'
     | 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE'
     | 'ZONE_ENTRY_UNAUTHORIZED';
@@ -32,7 +36,7 @@ export interface PersonObservation {
 export interface PpeObservation {
   type: 'PPE';
   trackId: number;
-  ppeItem: 'HARD_HAT' | 'SAFETY_VEST';
+  ppeItem: PpeItem;
   status: 'PRESENT' | 'MISSING';
   regionId: string;
   geometryVersion: number;
@@ -59,6 +63,14 @@ export interface IdentityCandidateObservation {
 
 export type Observation =
   PersonObservation | PpeObservation | ZoneEntryObservation | IdentityCandidateObservation;
+
+const PPE_MISSING_SUBTYPES: Record<PpeItem, AlertCandidate['candidateSubtype']> = {
+  HARD_HAT: 'PPE_HARD_HAT_MISSING',
+  SAFETY_VEST: 'PPE_SAFETY_VEST_MISSING',
+  GLOVES: 'PPE_GLOVES_MISSING',
+  BOOTS: 'PPE_BOOTS_MISSING',
+  GOGGLES: 'PPE_GOGGLES_MISSING',
+};
 
 export interface EvaluationEvent {
   streamSessionId: string;
@@ -209,8 +221,10 @@ export class AlertCandidateEvaluator {
           continue;
         }
 
-        const candidateSubtype =
-          obs.ppeItem === 'HARD_HAT' ? 'PPE_HARD_HAT_MISSING' : 'PPE_SAFETY_VEST_MISSING';
+        const candidateSubtype = Object.hasOwn(PPE_MISSING_SUBTYPES, obs.ppeItem)
+          ? PPE_MISSING_SUBTYPES[obs.ppeItem]
+          : undefined;
+        if (!candidateSubtype) continue;
 
         const identity = identityEvidenceByTrack.get(obs.trackId);
         const groupingKey = buildGroupingKey(
