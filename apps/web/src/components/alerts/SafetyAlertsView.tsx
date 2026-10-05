@@ -141,6 +141,11 @@ export function SafetyAlertsView({
   const [password, setPassword] = useState('');
   const [requestedSiteId, setRequestedSiteId] = useState(initialSiteId ?? '');
   const [requestedAlertId, setRequestedAlertId] = useState(initialAlertId ?? '');
+  const [retainedReviewContext, setRetainedReviewContext] = useState<{
+    scope: string;
+    siteId: string;
+    alertId: string;
+  } | null>(null);
   const [status, setStatus] = useState<'ALL' | SafetyAlertStatus>(initialStatus ?? 'ALL');
   const [type, setType] = useState<'ALL' | SafetyAlertType>(initialType ?? 'ALL');
   const [offset, setOffset] = useState(0);
@@ -183,12 +188,14 @@ export function SafetyAlertsView({
   if (prevInitialSiteId !== initialSiteId) {
     setPrevInitialSiteId(initialSiteId);
     setRequestedSiteId(initialSiteId ?? '');
+    setRetainedReviewContext(null);
   }
 
   const [prevInitialAlertId, setPrevInitialAlertId] = useState(initialAlertId);
   if (prevInitialAlertId !== initialAlertId) {
     setPrevInitialAlertId(initialAlertId);
     setRequestedAlertId(initialAlertId ?? '');
+    setRetainedReviewContext(null);
   }
 
   const removeSessionQueries = useCallback(
@@ -315,9 +322,15 @@ export function SafetyAlertsView({
       selectedSiteId.length > 0,
   });
 
-  const selectedAlertId = alerts.data?.items.some((alert) => alert.id === requestedAlertId)
-    ? requestedAlertId
-    : (alerts.data?.items[0]?.id ?? '');
+  const canRetainReviewedAlert =
+    retainedReviewContext?.scope === effectiveScope &&
+    retainedReviewContext.siteId === selectedSiteId &&
+    retainedReviewContext.alertId === requestedAlertId;
+
+  const selectedAlertId =
+    alerts.data?.items.some((alert) => alert.id === requestedAlertId) || canRetainReviewedAlert
+      ? requestedAlertId
+      : (alerts.data?.items[0]?.id ?? '');
 
   const reviewContextRef = useRef({
     scope: effectiveScope,
@@ -373,6 +386,12 @@ export function SafetyAlertsView({
         variables.targetSiteId === current.siteId &&
         variables.targetAlertId === current.alertId
       ) {
+        setRetainedReviewContext({
+          scope: variables.targetScope,
+          siteId: variables.targetSiteId,
+          alertId: variables.targetAlertId,
+        });
+        setRequestedAlertId(variables.targetAlertId);
         setReviewReason('');
       }
       await Promise.all([
@@ -424,6 +443,7 @@ export function SafetyAlertsView({
       removeSessionQueries(prevScopeRef.current);
       setRequestedSiteId(initialSiteId ?? '');
       setRequestedAlertId(initialAlertId ?? '');
+      setRetainedReviewContext(null);
       setOffset(0);
       setReviewReason('');
       review.reset();
@@ -450,6 +470,7 @@ export function SafetyAlertsView({
     setSessionScope('');
     setRequestedSiteId('');
     setRequestedAlertId('');
+    setRetainedReviewContext(null);
     setOffset(0);
     setReviewReason('');
     if (current) void client.logout().catch(() => undefined);
@@ -556,6 +577,7 @@ export function SafetyAlertsView({
             onChange={(event) => {
               setRequestedSiteId(event.target.value);
               setRequestedAlertId('');
+              setRetainedReviewContext(null);
               setOffset(0);
               resetReviewDraft();
             }}
@@ -576,6 +598,7 @@ export function SafetyAlertsView({
             onChange={(event) => {
               setStatus(event.target.value as 'ALL' | SafetyAlertStatus);
               setRequestedAlertId('');
+              setRetainedReviewContext(null);
               setOffset(0);
               resetReviewDraft();
             }}
@@ -596,6 +619,7 @@ export function SafetyAlertsView({
             onChange={(event) => {
               setType(event.target.value as 'ALL' | SafetyAlertType);
               setRequestedAlertId('');
+              setRetainedReviewContext(null);
               setOffset(0);
               resetReviewDraft();
             }}
@@ -665,7 +689,10 @@ export function SafetyAlertsView({
                 alert={alert}
                 selected={selectedAlertId === alert.id}
                 onSelect={() => {
-                  if (alert.id !== selectedAlertId) resetReviewDraft();
+                  if (alert.id !== selectedAlertId) {
+                    resetReviewDraft();
+                    setRetainedReviewContext(null);
+                  }
                   setRequestedAlertId(alert.id);
                 }}
               />
@@ -675,7 +702,12 @@ export function SafetyAlertsView({
                 <button
                   type="button"
                   disabled={offset === 0 || alerts.isFetching}
-                  onClick={() => setOffset((value) => Math.max(0, value - alertPageSize))}
+                  onClick={() => {
+                    resetReviewDraft();
+                    setRequestedAlertId('');
+                    setRetainedReviewContext(null);
+                    setOffset((value) => Math.max(0, value - alertPageSize));
+                  }}
                   className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Previous
@@ -685,7 +717,12 @@ export function SafetyAlertsView({
                   disabled={
                     offset + alerts.data.items.length >= alerts.data.total || alerts.isFetching
                   }
-                  onClick={() => setOffset((value) => value + alertPageSize)}
+                  onClick={() => {
+                    resetReviewDraft();
+                    setRequestedAlertId('');
+                    setRetainedReviewContext(null);
+                    setOffset((value) => value + alertPageSize);
+                  }}
                   className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Next

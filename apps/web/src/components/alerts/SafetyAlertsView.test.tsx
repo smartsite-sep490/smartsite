@@ -1138,5 +1138,183 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
         ),
       ).toBeDefined();
     });
+
+    it('confirming selected PENDING_REVIEW alert preserves detail and review history when alert leaves filtered list', async () => {
+      let resolveReview!: (value: unknown) => void;
+      const pendingReview = new Promise((resolve) => {
+        resolveReview = resolve;
+      });
+
+      const confirmedAlertDetail: SafetyAlertDetailResponse = {
+        ...mockAlertDetail,
+        status: 'CONFIRMED',
+        revision: 2,
+        reviewsTotal: 1,
+        reviews: [
+          {
+            id: 'rev-101',
+            alertId: mockAlert.id,
+            siteId: mockAlert.siteId,
+            actorUserId: 'admin-1',
+            fromStatus: 'PENDING_REVIEW',
+            toStatus: 'CONFIRMED',
+            reason: 'Confirmed violation observed on CAM-01',
+            alertRevision: 1,
+            createdAt: '2026-10-01T01:00:00Z',
+          },
+        ],
+      };
+
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+
+      let listCallCount = 0;
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockImplementation(
+        async () => {
+          listCallCount++;
+          if (listCallCount === 1) {
+            return { items: [mockAlert], total: 1 };
+          }
+          return { items: [], total: 0 };
+        },
+      );
+
+      vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockImplementation(
+        async () => {
+          if (listCallCount > 1) {
+            return confirmedAlertDetail;
+          }
+          return mockAlertDetail;
+        },
+      );
+
+      vi.spyOn(SmartSiteManagementClient.prototype, 'reviewSafetyAlert').mockImplementation(
+        () => pendingReview as never,
+      );
+
+      const user = userEvent.setup();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://127.0.0.1:3001"
+            initialStatus="PENDING_REVIEW"
+            sharedSession={{
+              accessToken: 'shared-token-1',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin Officer',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-1',
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByRole('heading', { name: 'Record review decision' });
+      expect(screen.getByText('Alert queue')).toBeDefined();
+
+      await user.type(
+        screen.getByRole('textbox', { name: /Decision reason/i }),
+        'Confirmed violation observed on CAM-01',
+      );
+      await user.click(screen.getByRole('button', { name: 'Confirm violation' }));
+
+      await act(async () => {
+        resolveReview({
+          alert: { ...mockAlert, status: 'CONFIRMED', revision: 2 },
+          review: confirmedAlertDetail.reviews[0],
+          replayed: false,
+        });
+      });
+
+      await screen.findByText(/No alerts match the selected Site and filters\./i);
+
+      expect(screen.queryByText('Select an alert to inspect its sources.')).toBeNull();
+      await screen.findByText('Confirmed violation observed on CAM-01');
+      expect(screen.getByText(/Review history \(1\)/i)).toBeDefined();
+    });
+
+    it('switching Alert during pending review prevents stale retention of the reviewed alert', async () => {
+      let resolveReview!: (value: unknown) => void;
+      const pendingReview = new Promise((resolve) => {
+        resolveReview = resolve;
+      });
+
+      const secondAlert: SafetyAlertResponse = {
+        ...mockAlert,
+        id: 'alert-2',
+        candidateSubtype: 'NO_SAFETY_VEST',
+      };
+      const secondDetail: SafetyAlertDetailResponse = {
+        ...mockAlertDetail,
+        id: 'alert-2',
+        candidateSubtype: 'NO_SAFETY_VEST',
+      };
+
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+        items: [mockAlert, secondAlert],
+        total: 2,
+      });
+      vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockImplementation(
+        async (...args) => {
+          const alertId = args[2];
+          return alertId === 'alert-2' ? secondDetail : mockAlertDetail;
+        },
+      );
+      vi.spyOn(SmartSiteManagementClient.prototype, 'reviewSafetyAlert').mockImplementation(
+        () => pendingReview as never,
+      );
+
+      const user = userEvent.setup();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://127.0.0.1:3001"
+            sharedSession={{
+              accessToken: 'shared-token-1',
+              user: {
+                id: 'admin-1',
+                displayName: 'Admin Officer',
+                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+              },
+              sessionScope: 'scope-1',
+            }}
+          />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByRole('heading', { name: 'Record review decision' });
+      await user.type(
+        screen.getByRole('textbox', { name: /Decision reason/i }),
+        'Reason for alert 1',
+      );
+      await user.click(screen.getByRole('button', { name: 'Confirm violation' }));
+
+      // While review of alert-1 is pending, switch to alert-2
+      await user.click(screen.getByRole('button', { name: /No Safety Vest/i }));
+
+      // Now resolve the review for alert-1
+      await act(async () => {
+        resolveReview({
+          alert: { ...mockAlert, status: 'CONFIRMED', revision: 2 },
+          review: {
+            id: 'rev-1',
+            alertId: mockAlert.id,
+            siteId: mockAlert.siteId,
+            actorUserId: 'admin-1',
+            fromStatus: 'PENDING_REVIEW',
+            toStatus: 'CONFIRMED',
+            reason: 'Reason for alert 1',
+            alertRevision: 1,
+            createdAt: '2026-10-01T00:00:00Z',
+          },
+          replayed: false,
+        });
+      });
+
+      // Assert that alert-2 remains selected, no stale review success feedback for alert-1 is shown
+      expect(screen.queryByText(/Review decision recorded\./i)).toBeNull();
+    });
   });
 });

@@ -290,10 +290,10 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      {/* Main Interactive Viewport: Camera Video Feed (829px) + Right Card (355px) */}
-      <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
+      {/* Main Interactive Viewport: Camera Video Feed (responsive minmax) + Right Card (355px) */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_355px] gap-4 items-start mt-4">
         {/* Left: Camera Feed */}
-        <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
+        <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full min-w-0 aspect-video xl:h-[466px] flex flex-col justify-between select-none">
           {/* Local MF04 test fixture driven by the video timeline. */}
           <div className="absolute inset-0">
             <video
@@ -476,7 +476,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
         </div>
 
         {/* Right: AI Detection & PPE Check Card (355px) */}
-        <div className="bg-white rounded-lg border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
+        <div className="bg-white rounded-lg border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto min-w-0">
           <div className="p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between pb-2">
