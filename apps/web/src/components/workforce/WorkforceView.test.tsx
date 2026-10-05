@@ -13,9 +13,9 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
   });
 
   // ── Scenario 2: Contractor Rep visibility ──────────────────────────────────
-  it('Contractor Representative sees Schedule and Contractor Review tabs', () => {
+  it('Contractor Representative sees only Contractor Review tab by default (no personal Worker schedule)', () => {
     const tabs = getWorkforceTabs(['CONTRACTOR_REPRESENTATIVE']);
-    expect(tabs.showSchedule).toBe(true);
+    expect(tabs.showSchedule).toBe(false);
     expect(tabs.showReview).toBe(true);
     expect(tabs.defaultTab).toBe('review');
   });
@@ -46,10 +46,11 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
     expect(tabs2.defaultTab).toBe('review');
 
     const tabs3 = getWorkforceTabs(['CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER']);
-    expect(tabs3.showSchedule).toBe(true);
+    expect(tabs3.showSchedule).toBe(false);
     expect(tabs3.showReview).toBe(true);
     expect(tabs3.defaultTab).toBe('review');
   });
+
 
   // ── Scenario 4: Hard-refresh / transient session cache ─────────────────────
   it('Workforce handles hard refresh with empty roleAssignments cleanly (no auth-session cache error)', () => {

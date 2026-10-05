@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { QrAccessService } from './qr-access.service.js';
 import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
+import { NotificationsController } from './notifications.controller.js';
+import { SchedulingNotificationService } from './scheduling-notification.service.js';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DatabaseModule } from '../../database/database.module.js';
@@ -32,6 +34,7 @@ import {
   controllers: [
     QrAccessController,
     VisitorRegistrationController,
+    NotificationsController,
     WorkforceController,
     ContractorsController,
     ScheduleConfigurationController,
@@ -44,6 +47,7 @@ import {
   ],
   providers: [
     QrAccessService,
+    SchedulingNotificationService,
     WorkforceConfigurationService,
     ScheduleConfigurationService,
     SchedulingWorkflowService,

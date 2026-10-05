@@ -256,6 +256,18 @@ export class SchedulingController {
     return { items: result.items, total: result.total };
   }
 
+  @Get('shift-change-requests/:requestId')
+  @ApiOkResponse()
+  getShiftChange(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string, @Param('requestId') requestId: string) {
+    return this.scheduling.getShiftRequest(request.user!, siteId, requestId, 'CHANGE');
+  }
+
+  @Get('shift-swap-requests/:requestId')
+  @ApiOkResponse()
+  getShiftSwap(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string, @Param('requestId') requestId: string) {
+    return this.scheduling.getShiftRequest(request.user!, siteId, requestId, 'SWAP');
+  }
+
   @Get('shift-swap-requests')
   @ApiOkResponse()
   async listShiftSwaps(

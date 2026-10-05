@@ -46,6 +46,11 @@ export type {
   SwapCandidateResponse,
   SwapCandidateListResponse,
   SchedulingRequestStatus,
+  SchedulingNotificationEvent,
+  SchedulingNotificationTarget,
+  UserNotificationResponse,
+  UserNotificationListResponse,
+  NotificationReadResponse,
   ShiftChangeRequestResponse,
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
@@ -238,3 +243,4 @@ export async function getBackendHealth(
     signal?.removeEventListener('abort', onAbort);
   }
 }
+export type * from '@smartsite/contracts';

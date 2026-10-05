@@ -103,6 +103,7 @@ export type SafetyAlertStatus =
   'PENDING_REVIEW' | 'NEEDS_MORE_EVIDENCE' | 'CONFIRMED' | 'DISMISSED' | 'CLOSED';
 
 export interface SafetyAlertResponse {
+  incidentId?: string | null;
   id: string;
   siteId: string;
   zoneId: string | null;
@@ -364,6 +365,49 @@ export type SchedulingRequestStatus =
   | 'CONFLICTED'
   | 'CANCELLED'
   | 'EXPIRED';
+
+export type SchedulingNotificationEvent =
+  | 'CHANGE_REQUESTED'
+  | 'SWAP_REQUESTED'
+  | 'SWAP_CONFIRMED'
+  | 'SWAP_DECLINED'
+  | 'REQUEST_APPLIED'
+  | 'REQUEST_REJECTED'
+  | 'REQUEST_CONFLICTED';
+
+export interface SchedulingNotificationTarget {
+  siteId: string;
+  requestType: 'CHANGE' | 'SWAP';
+  requestId: string;
+  tab: 'schedule' | 'review';
+  view: 'requests' | 'coworker' | 'pending' | 'history';
+}
+
+export interface UserNotificationResponse {
+  id: string;
+  event: SchedulingNotificationEvent;
+  siteId: string;
+  siteName: string;
+  title: string;
+  message: string;
+  workDate: string;
+  fromShiftName: string;
+  toShiftName: string;
+  createdAt: string;
+  readAt: string | null;
+  target: SchedulingNotificationTarget;
+}
+
+export interface UserNotificationListResponse {
+  items: UserNotificationResponse[];
+  total: number;
+  unreadCount: number;
+}
+
+export interface NotificationReadResponse {
+  id: string;
+  readAt: string;
+}
 
 export interface ShiftChangeRequestResponse {
   id: string;

@@ -1,3 +1,7 @@
+import { UsersModule } from '../users/users.module.js';
+import { SafetyWorkflowService } from './safety-workflow.service.js';
+import { SafetyWorkflowController } from './safety-workflow.controller.js';
+import { SafetyUploadService } from './safety-upload.service.js';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -23,9 +27,11 @@ import { DataSource } from 'typeorm';
 import { ZoneAccessManagementService } from '../zones/zone-access-management.service.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, ZonesModule, WorkforceModule],
-  controllers: [SafetyAlertsController, ObservationIdentityController],
+  imports: [DatabaseModule, AuthModule, ZonesModule, WorkforceModule, UsersModule],
+  controllers: [SafetyAlertsController, ObservationIdentityController, SafetyWorkflowController],
   providers: [
+    SafetyWorkflowService,
+    SafetyUploadService,
     AlertCandidateEvaluator,
     DurableGroupingService,
     SafetyAlertQueryService,

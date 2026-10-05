@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useNotificationRequest } from './useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
@@ -24,6 +26,7 @@ import {
   IconUsers,
   IconChevronLeft,
   IconChevronRight,
+  IconX,
 } from '../icons';
 import {
   Button,
@@ -33,6 +36,9 @@ import {
   Tabs,
   Card,
   SmartSelect,
+  Alert,
+  AlertTitle,
+  AlertDescription,
 } from '../ui';
 
 function localDateIso(date: Date) {
@@ -111,10 +117,14 @@ export function WorkforceScheduleTab({
 }) {
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const [params] = useSearchParams();
+  const target = useNotificationRequest(apiUrl, siteId, token);
 
   const [selectedSchedule, setSelectedSchedule] = useState<WorkerScheduleResponse | null>(null);
   const [modalType, setModalType] = useState<'swap' | 'change' | null>(null);
-  const [activeView, setActiveView] = useState<'schedule' | 'requests' | 'coworker'>('schedule');
+  const [userView, setActiveView] = useState<'schedule' | 'requests' | 'coworker' | null>(null);
+  const activeView = userView ?? (target.data && target.data.status !== 'PENDING_COWORKER' ? 'requests'
+    : params.get('view') === 'coworker' ? 'coworker' : params.get('requestId') ? 'requests' : 'schedule');
   const [scheduleViewMode, setScheduleViewMode] = useState<'timetable' | 'list'>('timetable');
   const [changeTargetShiftId, setChangeTargetShiftId] = useState('');
   const [changeReason, setChangeReason] = useState('');
@@ -128,6 +138,8 @@ export function WorkforceScheduleTab({
   const [scheduleFromDate, setScheduleFromDate] = useState(todayIso);
   const [scheduleToDate, setScheduleToDate] = useState(todayIso);
   const [schedulePage, setSchedulePage] = useState(0);
+  const [requestsPage, setRequestsPage] = useState(0);
+  const [requestsPageSize, setRequestsPageSize] = useState(10);
   const [collapsedScheduleDates, setCollapsedScheduleDates] = useState<Set<string>>(new Set());
 
   const activeWeekRange = useMemo(() => getWeekRangeFromOffset(weekOffset), [weekOffset]);
@@ -193,7 +205,7 @@ export function WorkforceScheduleTab({
     queryFn: () => client.listCoworkers(token, siteId, { limit: 25 }),
   });
 
-  const { data: swapRequests } = useQuery({
+  const { data: swapPage } = useQuery({
     queryKey: ['swap-requests', siteId],
     queryFn: () => client.listShiftSwapRequests(token, siteId, { limit: 25 }),
     refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
@@ -202,7 +214,7 @@ export function WorkforceScheduleTab({
     refetchOnReconnect: true,
   });
 
-  const { data: changeRequests } = useQuery({
+  const { data: changePage } = useQuery({
     queryKey: ['shift-change-requests', siteId],
     queryFn: () => client.listShiftChangeRequests(token, siteId, { limit: 25 }),
     refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
@@ -211,6 +223,14 @@ export function WorkforceScheduleTab({
     refetchOnReconnect: true,
   });
 
+  const swapRequests = useMemo(() => {
+    if (target.data?.requestType !== 'SWAP') return swapPage;
+    return { items: [target.data, ...(swapPage?.items ?? []).filter(r => r.id !== target.data!.id)], total: swapPage?.total ?? 1 };
+  }, [swapPage, target.data]);
+  const changeRequests = useMemo(() => {
+    if (target.data?.requestType !== 'CHANGE') return changePage;
+    return { items: [target.data, ...(changePage?.items ?? []).filter(r => r.id !== target.data!.id)], total: changePage?.total ?? 1 };
+  }, [changePage, target.data]);
   // 2. Discovery queries when schedule is selected for Change/Swap
   const { data: eligibleShifts } = useQuery({
     queryKey: ['eligible-shifts', siteId, selectedSchedule?.id],
@@ -232,6 +252,8 @@ export function WorkforceScheduleTab({
       reason: string;
     }) => client.createShiftSwapRequest(token, siteId, data),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       setModalType(null);
@@ -245,6 +267,8 @@ export function WorkforceScheduleTab({
     mutationFn: (data: { workerScheduleId: string; toShiftId: string; reason: string }) =>
       client.createShiftChangeRequest(token, siteId, data),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
       queryClient.invalidateQueries({ queryKey: ['shift-change-requests', siteId] });
       setModalType(null);
@@ -257,6 +281,8 @@ export function WorkforceScheduleTab({
   const confirmCoworkerSwap = useMutation({
     mutationFn: (id: string) => client.confirmShiftSwapRequest(token, siteId, id),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
     },
@@ -266,6 +292,8 @@ export function WorkforceScheduleTab({
     mutationFn: (input: { requestId: string; reason: string }) =>
       client.declineShiftSwapRequest(token, siteId, input.requestId, { reason: input.reason }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications', apiUrl] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-request', apiUrl, siteId] });
       queryClient.invalidateQueries({ queryKey: ['swap-requests', siteId] });
       queryClient.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
       setDeclineTarget(null);
@@ -322,11 +350,55 @@ export function WorkforceScheduleTab({
 
   const allMyRequests = useMemo(() => {
     const changes = myChanges.map((c) => ({ ...c, requestType: 'CHANGE' as const }));
-    const swaps = mySwaps.map((s) => ({ ...s, requestType: 'SWAP' as const }));
+    const swaps = (swapRequests?.items ?? [])
+      .filter(s => s.requesterWorkerId === currentWorkerId || s.coworkerWorkerId === currentWorkerId)
+      .map((s) => ({ ...s, requestType: 'SWAP' as const }));
     return [...changes, ...swaps].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [myChanges, mySwaps]);
+  }, [myChanges, swapRequests, currentWorkerId]);
+
+  const requestsTotal = allMyRequests.length;
+  const requestsPageCount = Math.max(1, Math.ceil(requestsTotal / requestsPageSize));
+  const paginatedRequests = useMemo(() => {
+    const start = requestsPage * requestsPageSize;
+    return allMyRequests.slice(start, start + requestsPageSize);
+  }, [allMyRequests, requestsPage, requestsPageSize]);
+
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('smartsite_dismissed_schedule_notifs');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const dismissNotification = (id: string) => {
+    setDismissedNotificationIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem('smartsite_dismissed_schedule_notifs', JSON.stringify(Array.from(next)));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  };
+
+  const latestDecidedRequest = useMemo(() => {
+    return (
+      allMyRequests.find(
+        (req) =>
+          (req.status === 'APPROVED' ||
+            req.status === 'APPLIED' ||
+            req.status === 'REJECTED' ||
+            req.status === 'CONFLICTED') &&
+          !dismissedNotificationIds.has(req.id),
+      ) ?? null
+    );
+  }, [allMyRequests, dismissedNotificationIds]);
   const pendingScheduleIds = useMemo(() => {
     const ids = new Set<string>();
     for (const request of myChanges) {
@@ -402,6 +474,15 @@ export function WorkforceScheduleTab({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
+      {target.isLoading && <p role="status">Loading selected request…</p>}
+      {target.isError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        This request is unavailable or you no longer have access. <button type="button" onClick={() => void target.refetch()} className="underline">Retry</button>
+      </div>}
+      {target.data && <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm">
+        Selected {target.data.requestType === 'CHANGE' ? 'shift change' : 'shift swap'} · {target.data.status}
+        <p className="mt-1 text-xs text-slate-600">{target.data.reason}</p>
+        {target.data.reviewReason && <p className="mt-1 text-xs">Review message: {target.data.reviewReason}</p>}
+      </div>}
 
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
@@ -459,9 +540,21 @@ export function WorkforceScheduleTab({
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div
+          onClick={() => setActiveView('coworker')}
+          className={`border rounded-xl p-4 shadow-xs flex items-center justify-between transition-all cursor-pointer ${
+            coworkerPendingSwaps.length > 0
+              ? 'bg-amber-50/50 border-amber-300 ring-2 ring-amber-400/20 hover:bg-amber-50 hover:border-amber-400'
+              : 'bg-white border-slate-200/90 hover:border-slate-300'
+          }`}
+        >
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Coworker Swap Requests</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Coworker Swap Requests</span>
+              {coworkerPendingSwaps.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </div>
             <p className="text-2xl font-black tracking-tight text-amber-600">
               {coworkerPendingSwaps.length}
             </p>
@@ -472,6 +565,143 @@ export function WorkforceScheduleTab({
         </div>
       </div>
 
+      {/* ── WORKFORCE ACTIVITY NOTIFICATIONS ─────────────────────────────── */}
+      {(coworkerPendingSwaps.length > 0 || latestDecidedRequest !== null) && (
+        <div className="space-y-3">
+          {/* 1. Pending Incoming Coworker Swap Requests */}
+          {coworkerPendingSwaps.length > 0 && (
+            <Alert variant="warning" className="animate-in slide-in-from-top-2 fade-in duration-200">
+              <IconUser className="w-5 h-5" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <AlertTitle className="text-amber-950 font-bold flex items-center gap-2 text-xs">
+                    <span>Action Required · Coworker Shift Swap</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-900/90 font-medium text-xs">
+                    {coworkerPendingSwaps.length === 1 ? (
+                      <>
+                        <span className="font-semibold text-slate-950">
+                          {getWorkerName(coworkerPendingSwaps[0]!.requesterWorkerId)}
+                        </span>{' '}
+                        wants to swap with your shift ({getShiftName(coworkerPendingSwaps[0]!.coworkerShiftId)}).
+                      </>
+                    ) : (
+                      <>
+                        You have <span className="font-semibold text-slate-950">{coworkerPendingSwaps.length} shift swap requests</span> from coworkers waiting for your confirmation.
+                      </>
+                    )}
+                  </AlertDescription>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setActiveView('coworker')}
+                    rightIcon={<IconArrowRight className="w-3.5 h-3.5 text-[#F66B17]" />}
+                    className="bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs text-xs"
+                  >
+                    Review ({coworkerPendingSwaps.length})
+                  </Button>
+                </div>
+              </div>
+            </Alert>
+          )}
+
+          {/* 2. Latest Decided Shift Change / Swap Request (Approved or Rejected by Contractor) */}
+          {latestDecidedRequest && (() => {
+            const req = latestDecidedRequest;
+            const isApproved = req.status === 'APPROVED' || req.status === 'APPLIED';
+            const isChange = req.requestType === 'CHANGE';
+            const shiftName = isChange ? getShiftName((req as { toShiftId: string }).toShiftId) : undefined;
+            const swapReq = !isChange ? (req as { coworkerWorkerId: string; requesterWorkerId: string }) : null;
+            const coworkerName = swapReq
+              ? getWorkerName(swapReq.coworkerWorkerId === currentWorkerId ? swapReq.requesterWorkerId : swapReq.coworkerWorkerId)
+              : undefined;
+            const reviewReason = (req as { reviewReason?: string | null }).reviewReason;
+
+            return (
+              <Alert
+                key={req.id}
+                variant={isApproved ? 'success' : 'destructive'}
+                className="animate-in slide-in-from-top-2 fade-in duration-200"
+              >
+                {isApproved ? (
+                  <IconCheck className="w-5 h-5" />
+                ) : (
+                  <IconAlertCircle className="w-5 h-5" />
+                )}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <AlertTitle
+                      className={`font-bold flex items-center gap-2 text-xs ${
+                        isApproved ? 'text-emerald-950' : 'text-rose-950'
+                      }`}
+                    >
+                      <span>
+                        {isApproved
+                          ? isChange
+                            ? 'Shift Change Approved'
+                            : 'Shift Swap Approved'
+                          : isChange
+                          ? 'Shift Change Rejected'
+                          : 'Shift Swap Declined'}
+                      </span>
+                      <span className={`w-2 h-2 rounded-full ${isApproved ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    </AlertTitle>
+                    <AlertDescription className="text-xs text-slate-700 font-medium">
+                      {isApproved ? (
+                        isChange ? (
+                          <>
+                            Your shift change request to <span className="font-bold text-[#071A2B]">{shiftName}</span> has been <span className="font-bold text-emerald-700">approved</span> by the contractor!
+                          </>
+                        ) : (
+                          <>
+                            Your shift swap request with <span className="font-bold text-[#071A2B]">{coworkerName}</span> has been <span className="font-bold text-emerald-700">approved</span> by the contractor!
+                          </>
+                        )
+                      ) : (
+                        <>
+                          Your shift request was not approved.{' '}
+                          {reviewReason && (
+                            <span className="italic text-slate-600 font-normal">
+                              (Reason: &quot;{reviewReason}&quot;)
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </AlertDescription>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => {
+                        if (isApproved) setActiveView('schedule');
+                        else setActiveView('requests');
+                      }}
+                      rightIcon={<IconArrowRight className="w-3.5 h-3.5 text-[#F66B17]" />}
+                      className="bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs text-xs font-semibold"
+                    >
+                      {isApproved ? 'View Timetable' : 'View Requests'}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => dismissNotification(req.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                      aria-label="Dismiss notification"
+                      title="Dismiss notification"
+                    >
+                      <IconX className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </Alert>
+            );
+          })()}
+        </div>
+      )}
       {/* 3. Sub-Tabs */}
       <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex items-center justify-between">
         <Tabs
@@ -954,70 +1184,141 @@ export function WorkforceScheduleTab({
       {/* ── TAB 2: MY REQUESTS ─────────────────────────────────────────────── */}
       {activeView === 'requests' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          {myChanges.length === 0 && mySwaps.length === 0 ? (
+          {allMyRequests.length === 0 ? (
             <EmptyState
               icon={<IconArrowRight className="w-6 h-6 text-slate-400" />}
               title="No Requests Filed"
               description="When you request a shift change or coworker swap, tracking status will appear here."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Shift Details</th>
-                    <th className="py-3 px-4">Reason</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Filed Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {allMyRequests.map((req) => (
-                    <tr key={`${req.requestType}-${req.id}`} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-800">
-                        {req.requestType === 'CHANGE' ? 'Shift Change' : 'Shift Swap'}
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold text-slate-900">
-                        {req.requestType === 'CHANGE' ? (
-                          <span className="font-normal text-slate-700">To: {getShiftName(req.toShiftId)}</span>
-                        ) : (
-                          `Swap with ${getWorkerName(req.coworkerWorkerId)}`
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600 italic">
-                        <div>{req.reason || 'No reason specified'}</div>
-                        {req.reviewReason && (
-                          <div className="mt-1 border-t border-slate-200/70 pt-1 text-[11px] not-italic text-rose-700">
-                            Review message: {req.reviewReason}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <Badge
-                          variant={
-                            req.status === 'APPROVED' || req.status === 'APPLIED'
-                              ? 'success'
-                              : req.status === 'REJECTED'
-                              ? 'danger'
-                              : 'warning'
-                          }
-                          dot
-                        >
-                          {req.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-400 text-[11px]">
-                        {formatDateTime(req.createdAt)}
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Shift Details</th>
+                      <th className="py-3 px-4">Reason</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Filed Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedRequests.map((req) => (
+                      <tr key={`${req.requestType}-${req.id}`} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-slate-800">
+                          {req.requestType === 'CHANGE' ? 'Shift Change' : 'Shift Swap'}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-900">
+                          {req.requestType === 'CHANGE' ? (
+                            <span className="font-normal text-slate-700">To: {getShiftName(req.toShiftId)}</span>
+                          ) : (
+                            `Swap with ${getWorkerName(req.coworkerWorkerId === currentWorkerId ? req.requesterWorkerId : req.coworkerWorkerId)}`
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 italic">
+                          <div>{req.reason || 'No reason specified'}</div>
+                          {req.reviewReason && (
+                            <div className="mt-1 border-t border-slate-200/70 pt-1 text-[11px] not-italic text-rose-700 font-medium">
+                              Review message: {req.reviewReason}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            variant={
+                              req.status === 'APPROVED' || req.status === 'APPLIED'
+                                ? 'success'
+                                : req.status === 'REJECTED'
+                                ? 'danger'
+                                : 'warning'
+                            }
+                            dot
+                          >
+                            {req.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">
+                          {formatDateTime(req.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500 font-medium">
+                <div className="flex items-center gap-2">
+                  <span>
+                    Showing <span className="font-bold text-slate-900">{requestsTotal === 0 ? 0 : requestsPage * requestsPageSize + 1}</span> to{' '}
+                    <span className="font-bold text-slate-900">{Math.min((requestsPage + 1) * requestsPageSize, requestsTotal)}</span> of{' '}
+                    <span className="font-bold text-slate-900">{requestsTotal}</span> requests
+                  </span>
+                  <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
+                    <span className="text-[11px] text-slate-400">Per page:</span>
+                    <select
+                      value={requestsPageSize}
+                      onChange={(e) => {
+                        setRequestsPageSize(Number(e.target.value));
+                        setRequestsPage(0);
+                      }}
+                      className="bg-white border border-slate-200 rounded-md px-1.5 py-0.5 text-xs text-slate-700 outline-none focus:border-[#F66B17] cursor-pointer"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                </div>
+
+                {requestsPageCount > 1 && (
+                  <div className="flex items-center gap-1 self-end sm:self-center">
+                    <button
+                      type="button"
+                      disabled={requestsPage === 0}
+                      onClick={() => setRequestsPage((p) => Math.max(0, p - 1))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
+                    >
+                      <IconChevronLeft className="w-3.5 h-3.5" />
+                      <span>Prev</span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: requestsPageCount }).map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setRequestsPage(idx)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            requestsPage === idx
+                              ? 'bg-[#071A2B] text-white shadow-2xs'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={requestsPage + 1 >= requestsPageCount}
+                      onClick={() => setRequestsPage((p) => Math.min(requestsPageCount - 1, p + 1))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
+                    >
+                      <span>Next</span>
+                      <IconChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
+
 
       {/* ── TAB 3: COWORKER SWAPS ──────────────────────────────────────────── */}
       {activeView === 'coworker' && (

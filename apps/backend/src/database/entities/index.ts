@@ -1,3 +1,11 @@
+import {
+  IncidentEntity,
+  CorrectiveActionEntity,
+  CorrectiveActionSubmissionEntity,
+  SafetyTaskEntity,
+  SafetyEvidenceEntity,
+  SafetyWorkflowAuditEntity,
+} from './safety-workflow.entity.js';
 import { SiteEntity } from './site.entity.js';
 import {
   VisitorVisitEntity,
@@ -41,6 +49,7 @@ import { FaceProfileEntity } from './face-profile.entity.js';
 import { FaceEnrollmentSessionEntity } from './face-enrollment-session.entity.js';
 import { GateAccessLogEntity } from './gate-access-log.entity.js';
 import { WorkerGatePermissionEntity } from './worker-gate-permission.entity.js';
+import { UserNotificationEntity } from './user-notification.entity.js';
 
 export * from './enums.js';
 export * from './numeric.transformer.js';
@@ -81,12 +90,20 @@ export * from './face-profile.entity.js';
 export * from './face-enrollment-session.entity.js';
 export * from './gate-access-log.entity.js';
 export * from './worker-gate-permission.entity.js';
+export * from './user-notification.entity.js';
 
+export * from './safety-workflow.entity.js';
 export const ENTITIES = [
   VisitorVisitEntity,
   QrFallbackSessionEntity,
   QrCredentialEntity,
   VisitorGateEventEntity,
+  IncidentEntity,
+  CorrectiveActionEntity,
+  CorrectiveActionSubmissionEntity,
+  SafetyTaskEntity,
+  SafetyEvidenceEntity,
+  SafetyWorkflowAuditEntity,
   SiteEntity,
   CameraEntity,
   ZoneEntity,
@@ -124,4 +141,5 @@ export const ENTITIES = [
   FaceEnrollmentSessionEntity,
   GateAccessLogEntity,
   WorkerGatePermissionEntity,
+  UserNotificationEntity,
 ] as const;

@@ -104,7 +104,13 @@ export type {
   SwapCandidateResponse,
   SwapCandidateListResponse,
   SchedulingRequestStatus,
+  SchedulingNotificationEvent,
+  SchedulingNotificationTarget,
+  UserNotificationResponse,
+  UserNotificationListResponse,
+  NotificationReadResponse,
   ShiftChangeRequestResponse,
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
 } from './management-api.js';
+export * from './safety-workflow-api.js';

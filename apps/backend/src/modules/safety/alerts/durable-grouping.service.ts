@@ -56,6 +56,9 @@ export class DurableGroupingService {
       .setLock('pessimistic_write')
       .where('alert.siteId = :siteId', { siteId })
       .andWhere('alert.groupingKey = :groupingKey', { groupingKey: candidate.groupingKey })
+      .andWhere(
+        "NOT EXISTS (SELECT 1 FROM incident i WHERE i.id=alert.incident_id AND i.status='CLOSED')",
+      )
       .andWhere('alert.status IN (:...openStatuses)', { openStatuses: OPEN_ALERT_STATUSES })
       .andWhere('alert.firstDetectedAt <= :maxFirstDetectedAt', { maxFirstDetectedAt })
       .andWhere('alert.lastDetectedAt >= :minLastDetectedAt', { minLastDetectedAt })
