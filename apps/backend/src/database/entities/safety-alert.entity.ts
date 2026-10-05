@@ -12,11 +12,13 @@ import { AlertStatus, AlertType } from './enums.js';
 import { numericTransformer } from './numeric.transformer.js';
 import { SiteEntity } from './site.entity.js';
 import { ZoneEntity } from './zone.entity.js';
+import { IncidentEntity } from './safety-workflow.entity.js';
 
 @Entity({ name: 'safety_alert' })
 @Check('chk_safety_alert_revision', 'revision >= 0')
 @Index('idx_alert_grouping', ['groupingKey', 'status'])
 @Index('idx_alert_site_last_detected', { synchronize: false })
+@Index('idx_alert_incident', { synchronize: false })
 export class SafetyAlertEntity {
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_safety_alert_id' })
   id!: string;
@@ -28,6 +30,13 @@ export class SafetyAlertEntity {
   @Column({ name: 'zone_id', type: 'uuid', nullable: true })
   @ForeignKey(() => ZoneEntity, { name: 'fk_alert_zone', onDelete: 'SET NULL' })
   zoneId!: string | null;
+
+  @Column({ name: 'incident_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => IncidentEntity, {
+    name: 'safety_alert_incident_id_fkey',
+    onDelete: 'NO ACTION',
+  })
+  incidentId!: string | null;
 
   @Column({ name: 'candidate_worker_id', type: 'varchar', length: 128, nullable: true })
   candidateWorkerId!: string | null;

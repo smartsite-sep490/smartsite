@@ -120,7 +120,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             { id: 'live-monitoring', label: 'Live Monitoring', icon: IconCamera },
             { id: 'ppe', label: 'PPE Monitoring', icon: IconHardHat },
             { id: 'zones', label: 'Restricted Zones', icon: IconShield },
-            { id: 'incidents', label: 'Safety Alerts', icon: IconAlertTriangle },
+            { id: 'incidents', label: 'Safety Operations', icon: IconAlertTriangle },
           ],
         },
         {

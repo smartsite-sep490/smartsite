@@ -30,6 +30,7 @@ COPY --from=build --chown=node:node /workspace/contracts/dist /workspace/contrac
 COPY --from=build --chown=node:node /workspace/contracts/schemas /workspace/contracts/schemas
 COPY --from=build --chown=node:node /workspace/apps/backend/dist ./dist
 COPY --from=build --chown=node:node /workspace/apps/backend/package.json ./package.json
+RUN mkdir -p /var/lib/smartsite && chown node:node /var/lib/smartsite && chmod 700 /var/lib/smartsite
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=15s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

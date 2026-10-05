@@ -102,3 +102,4 @@ export type {
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
 } from './management-api.js';
+export * from './safety-workflow-api.js';

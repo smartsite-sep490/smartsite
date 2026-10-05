@@ -1,3 +1,11 @@
+import {
+  IncidentEntity,
+  CorrectiveActionEntity,
+  CorrectiveActionSubmissionEntity,
+  SafetyTaskEntity,
+  SafetyEvidenceEntity,
+  SafetyWorkflowAuditEntity,
+} from './safety-workflow.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { CameraEntity } from './camera.entity.js';
 import { ZoneEntity } from './zone.entity.js';
@@ -77,7 +85,14 @@ export * from './gate-access-log.entity.js';
 export * from './worker-gate-permission.entity.js';
 export * from './user-notification.entity.js';
 
+export * from './safety-workflow.entity.js';
 export const ENTITIES = [
+  IncidentEntity,
+  CorrectiveActionEntity,
+  CorrectiveActionSubmissionEntity,
+  SafetyTaskEntity,
+  SafetyEvidenceEntity,
+  SafetyWorkflowAuditEntity,
   SiteEntity,
   CameraEntity,
   ZoneEntity,
