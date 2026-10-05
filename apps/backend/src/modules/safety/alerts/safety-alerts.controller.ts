@@ -31,7 +31,7 @@ import {
   SafetyAlertReviewMutationResponseDto,
 } from '../../../common/http/management-response.dto.js';
 import { pagination } from '../../../common/http/pagination.js';
-import type { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
+import { alertResponse } from './safety-alert-response.js';
 import type { SafetyAlertReviewEntity } from '../../../database/entities/safety-alert-review.entity.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
@@ -45,24 +45,6 @@ import {
   SafetyAlertQueryService,
   type SafetyAlertDetectionSummary,
 } from './safety-alert-query.service.js';
-
-function alertResponse(alert: SafetyAlertEntity) {
-  return {
-    id: alert.id,
-    siteId: alert.siteId,
-    zoneId: alert.zoneId,
-    candidateWorkerId: alert.candidateWorkerId,
-    alertType: alert.alertType,
-    candidateSubtype: alert.candidateSubtype,
-    status: alert.status,
-    firstDetectedAt: alert.firstDetectedAt,
-    lastDetectedAt: alert.lastDetectedAt,
-    detectionCount: alert.detectionCount,
-    revision: alert.revision,
-    createdAt: alert.createdAt,
-    updatedAt: alert.updatedAt,
-  };
-}
 
 function reviewResponse(review: SafetyAlertReviewEntity) {
   return {

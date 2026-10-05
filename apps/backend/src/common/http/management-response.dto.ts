@@ -81,6 +81,7 @@ export class RegionMutationResponseDto {
 }
 
 export class SafetyAlertResponseDto {
+  @ApiProperty({ format: 'uuid', nullable: true, required: false }) incidentId?: string | null;
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;
   @ApiProperty({ format: 'uuid', nullable: true }) zoneId!: string | null;

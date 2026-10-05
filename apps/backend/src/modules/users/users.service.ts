@@ -114,6 +114,57 @@ export class UsersService {
     private readonly sites: SiteConfigurationService,
   ) {}
 
+  /** Lock the account so disable/role replacement cannot race a workflow command. */
+  async safetyActor(manager: EntityManager, id: string) {
+    const user = await manager.getRepository(UserEntity).findOne({
+      where: { id: uuid(id) },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!user?.isActive || user.mustChangePassword)
+      throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
+    const assignments = await manager
+      .getRepository(UserRoleAssignmentEntity)
+      .findBy({ userId: user.id });
+    return publicUser(user, assignments);
+  }
+  async requireSafetyAssignee(manager: EntityManager, id: string, siteId: string, role: UserRole) {
+    const user = await manager.getRepository(UserEntity).findOne({
+      where: { id: uuid(id), isActive: true },
+      lock: { mode: 'pessimistic_read' },
+    });
+    const assignment =
+      user &&
+      (await manager
+        .getRepository(UserRoleAssignmentEntity)
+        .findOneBy({ userId: user.id, siteId, role }));
+    if (!assignment)
+      throw new PublicHttpException(403, {
+        code: 'FORBIDDEN',
+        message: 'Assignee must be active with the required Site role',
+      });
+  }
+  async listSafetyAssignees(siteId: string, role: UserRole, offset = 0, limit = 20) {
+    const pagination = page(offset, limit);
+    const query = this.dataSource
+      .getRepository(UserEntity)
+      .createQueryBuilder('user')
+      .innerJoin(
+        UserRoleAssignmentEntity,
+        'role',
+        'role.userId=user.id AND role.siteId=:siteId AND role.role=:role',
+        { siteId: uuid(siteId), role },
+      )
+      .where('user.isActive=TRUE')
+      .orderBy('user.displayName', 'ASC')
+      .addOrderBy('user.id', 'ASC');
+    const total = await query.getCount();
+    const items = await query
+      .select(['user.id', 'user.displayName'])
+      .skip(pagination.offset)
+      .take(pagination.limit)
+      .getMany();
+    return { items: items.map(({ id, displayName }) => ({ id, displayName })), total };
+  }
   private invalidAssignments(): never {
     throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
       code: 'VALIDATION_FAILED',

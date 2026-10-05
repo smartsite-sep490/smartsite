@@ -166,9 +166,7 @@ export const backendEnvironmentSchema = z
         try {
           const parsed = new URL(value);
           return (
-            ['http:', 'https:'].includes(parsed.protocol) &&
-            !parsed.username &&
-            !parsed.password
+            ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password
           );
         } catch {
           return false;
@@ -189,6 +187,13 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_TTL_MS: integer(60000, 1, MAX_TIMER_MS),
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
+    SAFETY_UPLOAD_LOCAL_ROOT: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2048)
+      .refine(isAbsolute, 'must be an absolute path')
+      .optional(),
     EVIDENCE_LOCAL_ROOT: z
       .string({ error: 'must be a string' })
       .trim()
