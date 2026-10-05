@@ -189,7 +189,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     // Đăng nhập thành công, hàng đợi cảnh báo hiển thị
-    await screen.findByRole('heading', { name: 'Safety alerts' });
+    await screen.findByRole('heading', { name: 'Safety operations' });
     await screen.findByText(/Công trường Alpha/i);
 
     // Chờ chi tiết cảnh báo được tải
@@ -259,7 +259,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.type(screen.getByLabelText(/Password/i), 'password123');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    await screen.findByRole('heading', { name: 'Safety alerts' });
+    await screen.findByRole('heading', { name: 'Safety operations' });
     const signOutBtn = await screen.findByRole('button', {
       name: /Sign out Cán bộ An toàn Alpha/i,
     });
@@ -429,7 +429,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.type(screen.getByLabelText(/Password/i), 'password123');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    await screen.findByRole('heading', { name: 'Safety alerts' });
+    await screen.findByRole('heading', { name: 'Safety operations' });
     expect(loginSpy).toHaveBeenCalledTimes(2);
 
     // Capture second sessionScope from active queries
@@ -474,7 +474,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.type(screen.getByLabelText(/Password/i), 'password123');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    await screen.findByRole('heading', { name: 'Safety alerts' });
+    await screen.findByRole('heading', { name: 'Safety operations' });
 
     // Alert type select dropdown should be set to PPE_VIOLATION
     const typeSelect = screen.getByLabelText(/Alert type/i) as HTMLSelectElement;
@@ -484,6 +484,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       mockAdminLoginResponse.accessToken,
       'site-alpha',
       expect.objectContaining({ type: 'PPE_VIOLATION' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -536,7 +537,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.type(screen.getByLabelText(/Password/i), 'password123');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    await screen.findByRole('heading', { name: 'Safety alerts' });
+    await screen.findByRole('heading', { name: 'Safety operations' });
 
     const typeSelect = screen.getByLabelText(/Alert type/i) as HTMLSelectElement;
     expect(typeSelect.value).toBe('PPE_VIOLATION');
@@ -551,6 +552,42 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     expect(typeSelect.value).toBe('ALL');
     // Session đăng nhập vẫn còn nguyên vẹn, không bị mất
     expect(screen.queryByRole('heading', { name: 'Safety alert queue' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Safety alerts' })).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Safety operations' })).not.toBeNull();
+  });
+  it('Changing alert pages clears the selected previous-page alert detail', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
+      mockAdminLoginResponse,
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    const first = { ...mockAlert, id: 'first', candidateSubtype: 'FIRST_ALERT' };
+    const second = { ...mockAlert, id: 'second', candidateSubtype: 'SECOND_ALERT' };
+    const pageOne = Array.from({ length: 20 }, (_, i) =>
+      i === 0 ? first : { ...mockAlert, id: 'other-' + i, candidateSubtype: 'OTHER_ALERT_' + i },
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockImplementation(
+      async (_token, _site, page) => ({ items: page?.offset ? [second] : pageOne, total: 21 }),
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockImplementation(
+      async (_token, _site, id) => ({
+        ...mockAlertDetail,
+        ...(id === 'first' ? first : second),
+        detections: [],
+        detectionsTotal: 0,
+      }),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" />
+      </QueryClientProvider>,
+    );
+    await user.type(screen.getByLabelText('Username'), 'admin');
+    await user.type(screen.getByLabelText('Password'), 'Fake123!');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(await screen.findByRole('button', { name: /First Alert/ }));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByRole('button', { name: /Second Alert/ });
+    expect(await screen.findByText(/Alert second · Revision 1/)).not.toBeNull();
+    expect(screen.queryByText(/Alert first · Revision 1/)).toBeNull();
   });
 });
