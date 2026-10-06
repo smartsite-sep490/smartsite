@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Logger, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -23,6 +34,8 @@ import {
   RejectSchedulingRequestDto,
 } from './dto/scheduling-request.dto.js';
 import { SchedulingWorkflowService } from './scheduling-workflow.service.js';
+import { ShiftRequestReaderService } from './shift-request-reader.service.js';
+import { ShiftRequestListDto } from './dto/shift-request-list.dto.js';
 
 @ApiTags('scheduling')
 @ApiBearerAuth('user-token')
@@ -38,7 +51,20 @@ import { SchedulingWorkflowService } from './scheduling-workflow.service.js';
 export class SchedulingController {
   private readonly logger = new Logger(SchedulingController.name);
 
-  constructor(private readonly scheduling: SchedulingWorkflowService) {}
+  constructor(
+    private readonly scheduling: SchedulingWorkflowService,
+    private readonly requestReader: ShiftRequestReaderService,
+  ) {}
+
+  @Get('shift-requests')
+  @ApiOkResponse()
+  listRequests(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query() query: ShiftRequestListDto,
+  ) {
+    return this.requestReader.list(request.user!, siteId, query);
+  }
 
   @Post('shift-change-requests')
   @ApiCreatedResponse()
@@ -258,13 +284,21 @@ export class SchedulingController {
 
   @Get('shift-change-requests/:requestId')
   @ApiOkResponse()
-  getShiftChange(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string, @Param('requestId') requestId: string) {
+  getShiftChange(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('requestId') requestId: string,
+  ) {
     return this.scheduling.getShiftRequest(request.user!, siteId, requestId, 'CHANGE');
   }
 
   @Get('shift-swap-requests/:requestId')
   @ApiOkResponse()
-  getShiftSwap(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string, @Param('requestId') requestId: string) {
+  getShiftSwap(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('requestId') requestId: string,
+  ) {
     return this.scheduling.getShiftRequest(request.user!, siteId, requestId, 'SWAP');
   }
 

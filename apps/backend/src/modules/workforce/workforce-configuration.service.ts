@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
-import { DataSource, IsNull, type EntityManager, type FindOptionsWhere } from 'typeorm';
+import { DataSource, In, IsNull, type EntityManager, type FindOptionsWhere } from 'typeorm';
 import {
   command,
   conflict,
@@ -58,6 +58,170 @@ export class LinkWorkerAccountCommand {
 export class WorkforceConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /** Labels for an authorized Incident; historical subjects need not remain active. */
+  async incidentLabels(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string | null,
+    workerIds: string[],
+  ) {
+    const contractor = contractorId
+      ? await manager.getRepository(ContractorEntity).findOneBy({ id: contractorId })
+      : null;
+    const workers = workerIds.length
+      ? await manager.getRepository(WorkerEntity).findBy({ siteId, id: In(workerIds) })
+      : [];
+    return {
+      contractorName: contractor?.name ?? null,
+      workers: workers.map(({ id, displayName, externalId }) => ({ id, displayName, externalId })),
+    };
+  }
+  /** Safety owns decisions; Workforce supplies current Site/Contractor membership. */
+  async requireIncidentContractor(manager: EntityManager, siteId: string, contractorId: string) {
+    await manager
+      .getRepository(ContractorEntity)
+      .findOne({ where: { id: uuid(contractorId) }, lock: { mode: 'pessimistic_read' } });
+    await manager
+      .getRepository(ContractorSiteParticipationEntity)
+      .find({ where: { contractorId, siteId: uuid(siteId) }, lock: { mode: 'pessimistic_read' } });
+    if (!(await hasActiveContractorParticipation(manager, uuid(contractorId), uuid(siteId))))
+      conflict('An active contractor participating in this Site is required');
+  }
+  async requireIncidentWorkers(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    workerIds: string[],
+  ) {
+    await this.requireIncidentContractor(manager, siteId, contractorId);
+    for (const id of [...workerIds].sort()) {
+      const worker = await manager.getRepository(WorkerEntity).findOne({
+        where: { id: uuid(id), siteId, contractorId, isActive: true },
+        lock: { mode: 'pessimistic_read' },
+      });
+      if (!worker)
+        conflict('Every confirmed Worker must belong to the Incident contractor and Site');
+    }
+  }
+  async incidentRepresentativeAllowed(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    userId: string,
+  ) {
+    const contractor = await manager
+      .getRepository(ContractorEntity)
+      .findOne({ where: { id: contractorId, isActive: true }, lock: { mode: 'pessimistic_read' } });
+    if (!contractor) return false;
+    await manager
+      .getRepository(ContractorSiteParticipationEntity)
+      .find({ where: { contractorId, siteId }, lock: { mode: 'pessimistic_read' } });
+    if (!(await hasActiveContractorParticipation(manager, contractorId, siteId))) return false;
+    return (
+      !!(await manager
+        .getRepository(UserEntity)
+        .findOne({ where: { id: userId, isActive: true }, lock: { mode: 'pessimistic_read' } })) &&
+      !!(await manager.getRepository(UserRoleAssignmentEntity).findOne({
+        where: { userId, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE },
+        lock: { mode: 'pessimistic_read' },
+      })) &&
+      !!(await manager
+        .getRepository(ContractorRepresentativeGrantEntity)
+        .findOne({ where: { userId, contractorId }, lock: { mode: 'pessimistic_read' } }))
+    );
+  }
+  async requireSingleIncidentContractor(
+    manager: EntityManager,
+    siteId: string,
+    workerIds: string[],
+  ) {
+    const contractors = new Set<string>();
+    for (const id of workerIds) {
+      const worker = await manager
+        .getRepository(WorkerEntity)
+        .findOneBy({ id, siteId, isActive: true });
+      if (!worker?.contractorId) conflict('Verified subject has unavailable contractor membership');
+      contractors.add(worker!.contractorId!);
+    }
+    if (contractors.size > 1)
+      conflict('Confirmed Workers from different contractors need separate Incidents');
+  }
+  async incidentRepresentativeContractors(manager: EntityManager, siteId: string, userId: string) {
+    const grants = await manager
+      .getRepository(ContractorRepresentativeGrantEntity)
+      .findBy({ userId });
+    const ids: string[] = [];
+    for (const grant of grants)
+      if (await this.incidentRepresentativeAllowed(manager, siteId, grant.contractorId, userId))
+        ids.push(grant.contractorId);
+    return ids;
+  }
+  async incidentContractors(manager: EntityManager, siteId: string, offset: number, limit: number) {
+    const paging = page(offset, limit);
+    const query = manager
+      .getRepository(ContractorEntity)
+      .createQueryBuilder('c')
+      .where('c.isActive = TRUE')
+      .andWhere(
+        `EXISTS(SELECT 1 FROM contractor_site_participation p WHERE p.contractor_id=c.id AND p.site_id=:siteId AND p.is_active=TRUE AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP))`,
+        { siteId },
+      );
+    const [rows, total] = await query
+      .orderBy('c.name', 'ASC')
+      .addOrderBy('c.id', 'ASC')
+      .skip(paging.offset)
+      .take(paging.limit)
+      .getManyAndCount();
+    return { items: rows.map(({ id, name }) => ({ id, name })), total };
+  }
+  async incidentWorkers(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    offset: number,
+    limit: number,
+  ) {
+    await this.requireIncidentContractor(manager, siteId, contractorId);
+    const paging = page(offset, limit);
+    const [rows, total] = await manager.getRepository(WorkerEntity).findAndCount({
+      where: { siteId, contractorId, isActive: true },
+      order: { displayName: 'ASC', id: 'ASC' },
+      skip: paging.offset,
+      take: paging.limit,
+    });
+    return {
+      items: rows.map(({ id, displayName, externalId }) => ({ id, displayName, externalId })),
+      total,
+    };
+  }
+  async incidentRepresentatives(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string | undefined,
+    offset: number,
+    limit: number,
+  ) {
+    if (contractorId) await this.requireIncidentContractor(manager, siteId, contractorId);
+    const paging = page(offset, limit);
+    const [rows, total] = await manager
+      .getRepository(UserEntity)
+      .createQueryBuilder('u')
+      .where('u.isActive=TRUE')
+      .andWhere(
+        `EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=u.id AND r.site_id=:siteId AND r.role=:role)`,
+        { siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE },
+      )
+      .andWhere(
+        `EXISTS(SELECT 1 FROM contractor_representative_grant g JOIN contractor c ON c.id=g.contractor_id AND c.is_active=TRUE JOIN contractor_site_participation p ON p.contractor_id=c.id AND p.site_id=:siteId AND p.is_active=TRUE AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP) WHERE g.user_id=u.id ${contractorId ? 'AND g.contractor_id=:contractorId' : ''})`,
+        { siteId, ...(contractorId ? { contractorId } : {}) },
+      )
+      .orderBy('u.displayName', 'ASC')
+      .addOrderBy('u.id', 'ASC')
+      .skip(paging.offset)
+      .take(paging.limit)
+      .getManyAndCount();
+    return { items: rows.map(({ id, displayName }) => ({ id, displayName })), total };
+  }
   private async assertWorkerAssignment(siteId: string, contractorId: string, userId: string) {
     const [contractor, user, assignment] = await Promise.all([
       this.dataSource
@@ -69,21 +233,28 @@ export class WorkforceConfigurationService {
         .findOneBy({ userId, role: UserRole.WORKER, siteId }),
     ]);
     if (!contractor || !user || !assignment) missing();
-    const participations = await this.dataSource.getRepository(ContractorSiteParticipationEntity).findBy({
-      contractorId,
-      siteId,
-      isActive: true,
-    });
+    const participations = await this.dataSource
+      .getRepository(ContractorSiteParticipationEntity)
+      .findBy({
+        contractorId,
+        siteId,
+        isActive: true,
+      });
     const now = Date.now();
-    if (!participations.some(({ validFrom, validUntil }) =>
-      validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now))) missing();
+    if (
+      !participations.some(
+        ({ validFrom, validUntil }) =>
+          validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now),
+      )
+    )
+      missing();
   }
 
   /** Account-first enrollment used by Face/Identity flows; remains idempotent. */
   async forAccount(siteIdValue: string, input: LinkWorkerAccountCommand) {
     const siteId = uuid(siteIdValue);
     const value = command(LinkWorkerAccountCommand, input);
-    return this.dataSource.transaction(async manager => {
+    return this.dataSource.transaction(async (manager) => {
       const user = await manager
         .getRepository(UserEntity)
         .createQueryBuilder('user')
@@ -119,7 +290,7 @@ export class WorkforceConfigurationService {
     const workerId = uuid(workerIdValue);
     const value = command(LinkWorkerAccountCommand, input);
     try {
-      return await this.dataSource.transaction(async manager => {
+      return await this.dataSource.transaction(async (manager) => {
         const worker = await manager
           .getRepository(WorkerEntity)
           .createQueryBuilder('worker')
@@ -176,10 +347,12 @@ export class WorkforceConfigurationService {
     const scopedSiteId = uuid(siteId);
     const value = command(CreateContractorDto, input);
     try {
-      return await this.dataSource.transaction(async manager => {
+      return await this.dataSource.transaction(async (manager) => {
         const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
         if (!site) missing();
-        let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code: value.code });
+        let contractor = await manager
+          .getRepository(ContractorEntity)
+          .findOneBy({ code: value.code });
         if (contractor && (contractor.name !== value.name || !contractor.isActive))
           conflict('Contractor code belongs to another name or an inactive contractor');
         contractor ??= await manager.getRepository(ContractorEntity).save({
@@ -188,14 +361,21 @@ export class WorkforceConfigurationService {
           name: value.name,
           isActive: true,
         });
-        const participations = await manager.getRepository(ContractorSiteParticipationEntity).findBy({
-          contractorId: contractor.id,
-          siteId: scopedSiteId,
-          isActive: true,
-        });
+        const participations = await manager
+          .getRepository(ContractorSiteParticipationEntity)
+          .findBy({
+            contractorId: contractor.id,
+            siteId: scopedSiteId,
+            isActive: true,
+          });
         const now = new Date();
-        if (!participations.some(({ validFrom, validUntil }) =>
-          validFrom.getTime() <= now.getTime() && (validUntil === null || validUntil.getTime() > now.getTime()))) {
+        if (
+          !participations.some(
+            ({ validFrom, validUntil }) =>
+              validFrom.getTime() <= now.getTime() &&
+              (validUntil === null || validUntil.getTime() > now.getTime()),
+          )
+        ) {
           await manager.getRepository(ContractorSiteParticipationEntity).save({
             id: randomUUID(),
             contractorId: contractor.id,
@@ -221,9 +401,11 @@ export class WorkforceConfigurationService {
     const scopedContractorId = uuid(contractorId);
     const value = command(AssignContractorRepresentativeDto, input);
     try {
-      return await this.dataSource.transaction(async manager => {
+      return await this.dataSource.transaction(async (manager) => {
         const [contractor, user, assignment, participations] = await Promise.all([
-          manager.getRepository(ContractorEntity).findOneBy({ id: scopedContractorId, isActive: true }),
+          manager
+            .getRepository(ContractorEntity)
+            .findOneBy({ id: scopedContractorId, isActive: true }),
           manager.getRepository(UserEntity).findOneBy({ id: value.userId, isActive: true }),
           manager.getRepository(UserRoleAssignmentEntity).findOneBy({
             userId: value.userId,
@@ -237,26 +419,44 @@ export class WorkforceConfigurationService {
           }),
         ]);
         const now = Date.now();
-        if (!contractor || !user || !assignment || !participations.some(({ validFrom, validUntil }) =>
-          validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now))) missing();
+        if (
+          !contractor ||
+          !user ||
+          !assignment ||
+          !participations.some(
+            ({ validFrom, validUntil }) =>
+              validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now),
+          )
+        )
+          missing();
         const grants = manager.getRepository(ContractorRepresentativeGrantEntity);
         if (!(await grants.existsBy({ userId: value.userId, contractorId: scopedContractorId })))
-          await grants.save({ id: randomUUID(), userId: value.userId, contractorId: scopedContractorId });
+          await grants.save({
+            id: randomUUID(),
+            userId: value.userId,
+            contractorId: scopedContractorId,
+          });
         const assignments = manager.getRepository(ContractorRepresentativeAssignmentEntity);
         const existing = await assignments.findOneBy({
           siteId: scopedSiteId,
           contractorId: scopedContractorId,
           userId: value.userId,
         });
-        return existing ?? assignments.save({
-          id: randomUUID(),
-          siteId: scopedSiteId,
-          contractorId: scopedContractorId,
-          userId: value.userId,
-        });
+        return (
+          existing ??
+          assignments.save({
+            id: randomUUID(),
+            siteId: scopedSiteId,
+            contractorId: scopedContractorId,
+            userId: value.userId,
+          })
+        );
       });
     } catch (error) {
-      knownUnique(error, ['uq_contractor_representative_assignment', 'uq_contractor_representative_grant']);
+      knownUnique(error, [
+        'uq_contractor_representative_assignment',
+        'uq_contractor_representative_grant',
+      ]);
     }
   }
 
@@ -286,39 +486,70 @@ export class WorkforceConfigurationService {
     const scopedSiteId = uuid(siteId);
     // Authorization check
     let contractorIdScope: string | undefined;
-    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
+    if (
+      !user.roleAssignments.some(
+        (r) =>
+          r.role === UserRole.ADMIN ||
+          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+      )
+    ) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER
-      const rep = user.roleAssignments.some(r => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId)
-        ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+      const rep = user.roleAssignments.some(
+        (r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId,
+      )
+        ? await this.dataSource
+            .getRepository(ContractorRepresentativeAssignmentEntity)
+            .findOneBy({ siteId: scopedSiteId, userId: user.id })
         : null;
       if (rep) {
-        if (!(await hasActiveContractorParticipation(this.dataSource.manager, rep.contractorId, scopedSiteId)))
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        if (
+          !(await hasActiveContractorParticipation(
+            this.dataSource.manager,
+            rep.contractorId,
+            scopedSiteId,
+          ))
+        )
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         contractorIdScope = rep.contractorId;
       } else {
-        const worker = user.roleAssignments.some(r => r.role === UserRole.WORKER && r.siteId === scopedSiteId)
-          ? await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+        const worker = user.roleAssignments.some(
+          (r) => r.role === UserRole.WORKER && r.siteId === scopedSiteId,
+        )
+          ? await this.dataSource
+              .getRepository(WorkerEntity)
+              .findOneBy({ siteId: scopedSiteId, userId: user.id })
           : null;
         if (worker && worker.contractorId) {
           contractorIdScope = worker.contractorId;
         } else {
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         }
       }
     }
 
     const pagination = page(offset, limit);
     const now = new Date();
-    const query = this.dataSource.getRepository(ContractorEntity)
+    const query = this.dataSource
+      .getRepository(ContractorEntity)
       .createQueryBuilder('contractor')
-      .innerJoin(ContractorSiteParticipationEntity, 'participation',
+      .innerJoin(
+        ContractorSiteParticipationEntity,
+        'participation',
         'participation.contractor_id = contractor.id AND participation.site_id = :siteId AND participation.is_active = TRUE AND participation.valid_from <= :now AND (participation.valid_until IS NULL OR participation.valid_until > :now)',
-        { siteId: scopedSiteId, now })
+        { siteId: scopedSiteId, now },
+      )
       .distinct(true)
       .orderBy('contractor.name', 'ASC')
       .skip(pagination.offset)
       .take(pagination.limit);
-    if (contractorIdScope) query.andWhere('contractor.id = :contractorIdScope', { contractorIdScope });
+    if (contractorIdScope)
+      query.andWhere('contractor.id = :contractorIdScope', { contractorIdScope });
     const [items, total] = await query.getManyAndCount();
     return { items, total };
   }
@@ -334,22 +565,48 @@ export class WorkforceConfigurationService {
     // Authorization check
     let contractorIdScope: string | undefined;
     let workerIdScope: string | undefined;
-    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
-      const rep = user.roleAssignments.some(r => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId)
-        ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+    if (
+      !user.roleAssignments.some(
+        (r) =>
+          r.role === UserRole.ADMIN ||
+          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+      )
+    ) {
+      const rep = user.roleAssignments.some(
+        (r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId,
+      )
+        ? await this.dataSource
+            .getRepository(ContractorRepresentativeAssignmentEntity)
+            .findOneBy({ siteId: scopedSiteId, userId: user.id })
         : null;
       if (rep) {
-        if (!(await hasActiveContractorParticipation(this.dataSource.manager, rep.contractorId, scopedSiteId)))
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        if (
+          !(await hasActiveContractorParticipation(
+            this.dataSource.manager,
+            rep.contractorId,
+            scopedSiteId,
+          ))
+        )
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         contractorIdScope = rep.contractorId;
       } else {
-        const worker = user.roleAssignments.some(r => r.role === UserRole.WORKER && r.siteId === scopedSiteId)
-          ? await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+        const worker = user.roleAssignments.some(
+          (r) => r.role === UserRole.WORKER && r.siteId === scopedSiteId,
+        )
+          ? await this.dataSource
+              .getRepository(WorkerEntity)
+              .findOneBy({ siteId: scopedSiteId, userId: user.id })
           : null;
         if (worker) {
           workerIdScope = worker.id;
         } else {
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         }
       }
     }
@@ -377,22 +634,48 @@ export class WorkforceConfigurationService {
     const scopedSiteId = uuid(siteId);
 
     let contractorIdScope: string | undefined;
-    if (!user.roleAssignments.some(r => r.role === UserRole.ADMIN || (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER))) {
-      const rep = user.roleAssignments.some(r => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId)
-        ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+    if (
+      !user.roleAssignments.some(
+        (r) =>
+          r.role === UserRole.ADMIN ||
+          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+      )
+    ) {
+      const rep = user.roleAssignments.some(
+        (r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId,
+      )
+        ? await this.dataSource
+            .getRepository(ContractorRepresentativeAssignmentEntity)
+            .findOneBy({ siteId: scopedSiteId, userId: user.id })
         : null;
       if (rep) {
-        if (!(await hasActiveContractorParticipation(this.dataSource.manager, rep.contractorId, scopedSiteId)))
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+        if (
+          !(await hasActiveContractorParticipation(
+            this.dataSource.manager,
+            rep.contractorId,
+            scopedSiteId,
+          ))
+        )
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         contractorIdScope = rep.contractorId;
       } else {
-        const worker = user.roleAssignments.some(r => r.role === UserRole.WORKER && r.siteId === scopedSiteId)
-          ? await this.dataSource.getRepository(WorkerEntity).findOneBy({ siteId: scopedSiteId, userId: user.id })
+        const worker = user.roleAssignments.some(
+          (r) => r.role === UserRole.WORKER && r.siteId === scopedSiteId,
+        )
+          ? await this.dataSource
+              .getRepository(WorkerEntity)
+              .findOneBy({ siteId: scopedSiteId, userId: user.id })
           : null;
         if (worker && worker.contractorId) {
           contractorIdScope = worker.contractorId;
         } else {
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message: 'Forbidden' });
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
         }
       }
     }

@@ -14,6 +14,8 @@ export { validateCameraRegionConfiguration } from './validation/schema-validator
 
 export type { ValidationResult } from './validation/schema-validator.js';
 export { SITE_GATES } from './gate-permissions-api.js';
+export { isPastWorkDate } from './scheduling-date.js';
+
 export type {
   WorkerGatePermissionResponse,
   WorkerGatePermissionsResponse,
@@ -98,8 +100,13 @@ export type {
   UserNotificationResponse,
   UserNotificationListResponse,
   NotificationReadResponse,
+  NotificationDeleteReadResponse,
+  NotificationDeleteResponse,
   ShiftChangeRequestResponse,
   ShiftSwapRequestResponse,
+  ShiftRequestListOptions,
+  ShiftRequestListResponse,
+  ShiftRequestResponse,
   AbsenceRequestResponse,
 } from './management-api.js';
 export * from './safety-workflow-api.js';

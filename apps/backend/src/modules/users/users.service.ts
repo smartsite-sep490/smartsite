@@ -281,6 +281,18 @@ export class UsersService {
     });
   }
 
+  /** Labels for references already authorized by the consuming use case, including inactive accounts. */
+  async displayNames(
+    manager: EntityManager,
+    ids: Array<string | null>,
+  ): Promise<Record<string, string>> {
+    const unique = [...new Set(ids.filter((id): id is string => !!id))];
+    if (!unique.length) return {};
+    const rows = await manager
+      .getRepository(UserEntity)
+      .find({ where: { id: In(unique) }, select: { id: true, displayName: true } });
+    return Object.fromEntries(rows.map((row) => [row.id, row.displayName]));
+  }
   async get(id: string) {
     const user = await this.dataSource.getRepository(UserEntity).findOneBy({ id: uuid(id) });
     if (!user) throw new NotFoundException();
