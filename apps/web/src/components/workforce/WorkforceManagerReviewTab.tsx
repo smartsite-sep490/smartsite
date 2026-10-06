@@ -350,8 +350,8 @@ export function WorkforceManagerReviewTab({
 
       {/* 2. Top Summary Metrics */}
       <div className="flex items-center gap-3">
-        <div className="bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 shadow-2xs flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl px-4 py-2.5 shadow-xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500">
             <IconUsers className="w-4 h-4" />
           </div>
           <div>
@@ -360,8 +360,8 @@ export function WorkforceManagerReviewTab({
           </div>
         </div>
 
-        <div className={`bg-white border rounded-xl px-4 py-2.5 shadow-2xs flex items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200/80'}`}>
-          <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${totalPending > 0 ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+        <div className={`bg-white border rounded-2xl px-4 py-2.5 shadow-xs flex items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-[#E2E8F0]'}`}>
+          <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${totalPending > 0 ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
             <IconAlertCircle className="w-4 h-4" />
           </div>
           <div>
@@ -434,7 +434,7 @@ export function WorkforceManagerReviewTab({
       )}
 
       {/* 3. Controls & Tabs */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white p-3 rounded-2xl border border-[#E2E8F0] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <Tabs
           items={[
             {
@@ -524,12 +524,12 @@ export function WorkforceManagerReviewTab({
       {subTab === 'pending' && (
         <div className="space-y-4">
           {isLoading ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 shadow-xs">
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 shadow-xs">
               <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
               <span>Loading review requests...</span>
             </div>
           ) : filteredPending.total === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs">
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs">
               <EmptyState
                 icon={<IconCheckCircle2 className="w-6 h-6 text-emerald-500" />}
                 title="All Caught Up!"
@@ -707,7 +707,7 @@ export function WorkforceManagerReviewTab({
 
       {/* 5. Content Area: Request History Table */}
       {subTab === 'history' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
           {isLoading ? (
             <p role="status" className="p-4">
               Loading request history...
