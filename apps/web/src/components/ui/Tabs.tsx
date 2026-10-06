@@ -22,7 +22,7 @@ export function Tabs<T extends string>({
 }: TabsProps<T>) {
   return (
     <div
-      className={`inline-flex items-center gap-1.5 p-1 rounded-xl bg-slate-100/90 border border-slate-200/70 select-none ${className}`}
+      className={`flex items-center gap-3 select-none flex-wrap ${className}`}
       role="tablist"
     >
       {items.map((tab) => {
@@ -34,20 +34,20 @@ export function Tabs<T extends string>({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold transition-all shadow-xs border cursor-pointer ${
               isActive
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                ? 'bg-[#071A2B] text-white border-[#071A2B]'
+                : 'bg-white text-slate-700 border-[#E2E8F0] hover:bg-slate-50'
             }`}
           >
-            {tab.icon && <span className="shrink-0">{tab.icon}</span>}
+            {tab.icon && <span className={isActive ? 'text-blue-400' : 'text-slate-500'}>{tab.icon}</span>}
             <span>{tab.label}</span>
             {tab.count !== undefined && (
               <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
                   isActive
-                    ? 'bg-[#071A2B] text-white'
-                    : 'bg-slate-200/80 text-slate-600'
+                    ? 'bg-white text-[#071A2B]'
+                    : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {tab.count}

@@ -9,10 +9,10 @@ import {
   type AccountResponse,
   type ShiftSwapRequestResponse,
 } from '@smartsite/api-client';
-import { WorkforceView } from './WorkforceView';
+import { WorkforceView } from '../components/WorkforceView';
 
 let user: Pick<AccountResponse, 'id' | 'roleAssignments' | 'mustChangePassword'>;
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../../features/auth/auth-session', () => ({
   useAuth: () => ({ accessToken: 'synthetic-token' }),
   useCurrentUser: () => ({ data: user, isLoading: false, isError: false }),
 }));

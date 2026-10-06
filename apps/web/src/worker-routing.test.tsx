@@ -41,7 +41,7 @@ vi.mock('./components/dashboard/DashboardView', () => ({
     return <div>Management dashboard</div>;
   },
 }));
-vi.mock('./components/workforce/WorkforceView', () => ({
+vi.mock('./components/workforce/components/WorkforceView', () => ({
   WorkforceView: () => <div>Worker schedule</div>,
 }));
 vi.mock('./components/landing/LandingPage', () => ({

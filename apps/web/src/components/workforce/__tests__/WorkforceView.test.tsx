@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getWorkforceTabs } from './WorkforceView';
-import { filterContractorReviewRequests, filterManagerReviewRequests } from './WorkforceManagerReviewUtils';
-import { splitWorkerSwapRequests } from './WorkforceScheduleUtils';
+import { getWorkforceTabs } from '../utils/workforce-tabs';
+import { filterContractorReviewRequests, filterManagerReviewRequests } from '../utils/WorkforceManagerReviewUtils';
+import { splitWorkerSwapRequests } from '../utils/WorkforceScheduleUtils';
 
 describe('WorkforceView & MF07 Workflow Logic', () => {
   // ── Scenario 1: Worker tab visibility ─────────────────────────────────────

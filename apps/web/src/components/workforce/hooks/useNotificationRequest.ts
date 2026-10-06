@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 
 export function useNotificationRequest(apiUrl: string, siteId: string, token: string) {
   const [params] = useSearchParams();

@@ -4,7 +4,7 @@ import {
   SmartSiteManagementClient,
   ApiError,
 } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import {
   IconBuilding,
   IconBuilding2,
@@ -20,15 +20,15 @@ import {
   IconX,
   IconChevronRight,
   IconUsers,
-} from '../icons';
-import { SmartSelect } from '../ui';
+} from '../../icons';
+import { SmartSelect } from '../../ui';
 import {
   addSiteManagerAssignment,
   getAssignableRepresentatives,
   getAssignableSiteManagers,
   getContractorRepresentativeUserIds,
   getSiteManagers,
-} from './site-setup-helpers';
+} from '../utils/site-setup-helpers';
 
 interface SiteSetupViewProps {
   apiUrl: string;

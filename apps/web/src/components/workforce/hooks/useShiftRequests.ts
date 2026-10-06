@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient, type ShiftRequestListOptions } from '@smartsite/api-client';
-import { WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 
 export function useShiftRequests(
   apiUrl: string,

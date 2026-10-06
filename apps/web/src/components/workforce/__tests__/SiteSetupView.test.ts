@@ -6,7 +6,7 @@ import {
   getAssignableSiteManagers,
   getContractorRepresentativeUserIds,
   getSiteManagers,
-} from './site-setup-helpers';
+} from '../utils/site-setup-helpers';
 
 const representative = (id: string, isActive = true) =>
   ({

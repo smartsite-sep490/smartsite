@@ -18,9 +18,9 @@ import { IconRadio, IconTrendingUp } from './components/icons';
 import { useAuth, useRestoreSession, useCurrentUser, SessionExpiredModal } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
-import { WorkforceView } from './components/workforce/WorkforceView';
-import { SiteSetupView } from './components/workforce/SiteSetupView';
-import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
+import { WorkforceView } from './components/workforce/components/WorkforceView';
+import { SiteSetupView } from './components/workforce/components/SiteSetupView';
+import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
