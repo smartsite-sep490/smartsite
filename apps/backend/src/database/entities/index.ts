@@ -1,5 +1,6 @@
 import {
   IncidentEntity,
+  IncidentWorkerEntity,
   CorrectiveActionEntity,
   CorrectiveActionSubmissionEntity,
   SafetyTaskEntity,
@@ -88,6 +89,7 @@ export * from './user-notification.entity.js';
 export * from './safety-workflow.entity.js';
 export const ENTITIES = [
   IncidentEntity,
+  IncidentWorkerEntity,
   CorrectiveActionEntity,
   CorrectiveActionSubmissionEntity,
   SafetyTaskEntity,

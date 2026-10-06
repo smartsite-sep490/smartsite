@@ -23,6 +23,7 @@ vi.mock('./features/auth/auth-session', () => ({
     isSessionExpired: false,
     dismissSessionExpired: vi.fn(),
   }),
+  useLogout: () => ({ mutate: vi.fn() }),
   useRestoreSession: () => ({ isLoading: state.restoring }),
   useCurrentUser: () => ({
     data: state.profile,
@@ -48,7 +49,7 @@ vi.mock('./components/landing/LandingPage', () => ({
   LandingPage: () => <div>Public landing page</div>,
 }));
 vi.mock('./features/auth/LoginScreen', () => ({
-  LoginScreen: ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
+  LoginScreen: ({ onLoginSuccess }: { onLoginSuccess?: () => void }) => {
     state.loginSuccess = onLoginSuccess;
     return <div>Sign in form</div>;
   },
@@ -113,12 +114,12 @@ it('waits for the Worker profile after login without rendering Dashboard', async
 
 it('does not let a delayed login callback use a stale Dashboard default', async () => {
   const refresh = mount('/login');
-  const delayedSuccess = state.loginSuccess!;
+  const delayedSuccess = state.loginSuccess;
   state.accessToken = 'synthetic-token';
   profile(['WORKER']);
   refresh();
   await screen.findByText('Worker schedule');
-  delayedSuccess();
+  delayedSuccess?.();
   await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/workforce'));
   expect(state.dashboardRender).not.toHaveBeenCalled();
 });

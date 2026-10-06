@@ -13,7 +13,28 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
+import {
+  CorrectResponsibilityDto,
+  ConfirmResponsibilityDto,
+  TransferActionDto,
+  CreateIncidentDto,
+  LinkAlertsDto,
+  AssignActionDto,
+  SubmitResultDto,
+  ReviewSubmissionDto,
+  ReasonCommandDto,
+  ReopenIncidentDto,
+  CreateSafetyTaskDto,
+  VersionCommandDto,
+} from './safety-workflow.commands.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import { pagination } from '../../common/http/pagination.js';
@@ -24,7 +45,16 @@ import { SafetyAlertQueryService } from './alerts/safety-alert-query.service.js'
 import { SafetyAlertEvidenceService } from './alerts/safety-alert-evidence.service.js';
 import { alertResponse } from './alerts/safety-alert-response.js';
 
-@ApiTags('MF08 safety workflow')
+@ApiResponse({
+  status: 403,
+  description:
+    'Active business role and current Site/contractor scope are required; no self-review',
+})
+@ApiResponse({
+  status: 409,
+  description:
+    'Stale expectedVersion, changed commandId input or invalid state; reload before retry',
+})
 @ApiBearerAuth('user-token')
 @UseGuards(UserAuthGuard)
 @Controller('sites/:siteId')
@@ -35,6 +65,7 @@ export class SafetyWorkflowController {
     private readonly cameraEvidence: SafetyAlertEvidenceService,
   ) {}
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Lookups')
   @Get('safety-assignees')
   assignees(
     @Req() req: AuthenticatedRequest,
@@ -42,11 +73,106 @@ export class SafetyWorkflowController {
     @Query('role') role: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
+    @Query('contractorId') contractorId?: string,
   ) {
     const page = pagination(offset, limit);
-    return this.workflow.assignees(siteId, req.user!.id, role, page.offset, page.limit);
+    return this.workflow.assignees(
+      siteId,
+      req.user!.id,
+      role,
+      page.offset,
+      page.limit,
+      contractorId,
+    );
+  }
+  @ApiTags('Safety Lookups')
+  @ApiTags('Incidents')
+  @Header('Cache-Control', 'private, no-store')
+  @Get('safety-contractors')
+  contractors(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const page = pagination(offset, limit);
+    return this.workflow.responsibilityLookup(
+      siteId,
+      req.user!.id,
+      undefined,
+      page.offset,
+      page.limit,
+    );
+  }
+  @ApiTags('Safety Lookups')
+  @ApiTags('Incidents')
+  @Header('Cache-Control', 'private, no-store')
+  @Get('safety-contractors/:contractorId/workers')
+  workers(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const page = pagination(offset, limit);
+    return this.workflow.responsibilityLookup(
+      siteId,
+      req.user!.id,
+      contractorId,
+      page.offset,
+      page.limit,
+    );
+  }
+  @ApiOperation({
+    summary: 'Confirm responsible contractor and involved Workers',
+    description:
+      'Safety Officer in this Site. Worker is a violation subject, never the corrective assignee. Reason and expectedVersion required.',
+  })
+  @ApiTags('Incidents')
+  @Header('Cache-Control', 'private, no-store')
+  @Post('incidents/:id/responsibility')
+  responsibility(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Body() body: ConfirmResponsibilityDto,
+  ) {
+    return this.workflow.incidentCommand(siteId, id, req.user!.id, 'responsibility', body);
+  }
+  @ApiOperation({
+    summary: 'Correct responsibility and replace earlier handovers without deleting history',
+  })
+  @ApiTags('Incidents')
+  @Header('Cache-Control', 'private, no-store')
+  @Post('incidents/:id/correct-responsibility')
+  correctResponsibility(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Body() body: CorrectResponsibilityDto,
+  ) {
+    return this.workflow.incidentCommand(siteId, id, req.user!.id, 'correct-responsibility', body);
+  }
+  @ApiOperation({
+    summary: 'Transfer unfinished action to a scoped contractor representative',
+    description:
+      'Safety only. Pending results must be reviewed first. Verified history is preserved.',
+  })
+  @ApiTags('Corrective Actions')
+  @Header('Cache-Control', 'private, no-store')
+  @Post('incidents/:id/actions/:actionId/transfer')
+  transfer(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Param('actionId') actionId: string,
+    @Body() body: TransferActionDto,
+  ) {
+    return this.workflow.incidentCommand(siteId, id, req.user!.id, 'transfer', body, actionId);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Get('incidents')
   incidents(
     @Req() req: AuthenticatedRequest,
@@ -67,15 +193,17 @@ export class SafetyWorkflowController {
     );
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Post('incidents')
   createIncident(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() body: unknown,
+    @Body() body: CreateIncidentDto,
   ) {
     return this.workflow.createIncident(siteId, req.user!.id, body);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Get('incidents/:id')
   incident(
     @Req() req: AuthenticatedRequest,
@@ -85,6 +213,7 @@ export class SafetyWorkflowController {
     return this.workflow.getIncident(siteId, id, req.user!.id);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Corrective Actions')
   @Get('incidents/:id/actions')
   async actions(
     @Req() req: AuthenticatedRequest,
@@ -94,58 +223,99 @@ export class SafetyWorkflowController {
     return (await this.workflow.getIncident(siteId, id, req.user!.id)).actions;
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Post('incidents/:id/alerts')
   link(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
-    @Body() body: unknown,
+    @Body() body: LinkAlertsDto,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'link', body);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Corrective Actions')
+  @ApiOperation({
+    summary: 'Assign corrective action',
+    description:
+      'Safety Officer assigns an active Contractor Representative of the confirmed Incident contractor in this Site.',
+  })
   @Post('incidents/:id/actions')
   assign(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
-    @Body() body: unknown,
+    @Body() body: AssignActionDto,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'assign', body);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Post('incidents/:id/close')
   close(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
-    @Body() body: unknown,
+    @Body() body: ReasonCommandDto,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'close', body);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Post('incidents/:id/reopen')
   reopen(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
-    @Body() body: unknown,
+    @Body() body: ReopenIncidentDto,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'reopen', body);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Corrective Actions')
+  @ApiOperation({
+    summary: 'Start assigned corrective work',
+    description:
+      'Assigned Contractor Representative with current Site role, contractor grant and active participation only.',
+  })
   @Post('incidents/:id/actions/:actionId/start')
   start(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
     @Param('actionId') actionId: string,
-    @Body() body: unknown,
+    @Body() body: VersionCommandDto,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'start', body, actionId);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Corrective Actions')
+  @ApiOperation({
+    summary: 'Submit corrective result',
+    description:
+      'Assigned Contractor Representative; description required; one pending submission per action.',
+  })
   @Post('incidents/:id/actions/:actionId/submissions')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['commandId', 'expectedVersion', 'resultDescription'],
+      properties: {
+        commandId: { type: 'string', format: 'uuid' },
+        expectedVersion: { type: 'integer', minimum: 1 },
+        resultDescription: { type: 'string', minLength: 1, maxLength: 10000 },
+        file: { type: 'string', format: 'binary', description: 'Optional JPEG, at most 1 MiB' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Stale version, command collision or invalid transition; reload before retrying',
+  })
+  @ApiResponse({ status: 413, description: 'Image exceeds 1 MiB' })
+  @ApiResponse({ status: 415, description: 'JPEG MIME/signature required' })
+  @ApiResponse({ status: 503, description: 'Private storage unavailable' })
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_SAFETY_UPLOAD, files: 1, fields: 3, fieldSize: 12000, parts: 4 },
@@ -156,23 +326,30 @@ export class SafetyWorkflowController {
     @Param('siteId') siteId: string,
     @Param('id') id: string,
     @Param('actionId') actionId: string,
-    @Body() body: unknown,
+    @Body() body: SubmitResultDto,
     @UploadedFile() file?: SafetyUpload,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'submit', body, actionId, file);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Corrective Actions')
+  @ApiOperation({
+    summary: 'Review corrective result',
+    description:
+      'Safety Officer other than submitter. Immutable APPROVED/REJECTED decision with reason.',
+  })
   @Post('incidents/:id/actions/:actionId/reviews')
   review(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
     @Param('actionId') actionId: string,
-    @Body() body: unknown,
+    @Body() body: ReviewSubmissionDto,
   ) {
     return this.workflow.incidentCommand(siteId, id, req.user!.id, 'review', body, actionId);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Incidents')
   @Get('incidents/:id/alerts/:alertId')
   async alert(
     @Req() req: AuthenticatedRequest,
@@ -191,6 +368,7 @@ export class SafetyWorkflowController {
     };
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Evidence')
   @Get('incidents/:id/alerts/:alertId/detections/:eventId/evidence/:index')
   @Header('X-Content-Type-Options', 'nosniff')
   async alertEvidence(
@@ -209,6 +387,7 @@ export class SafetyWorkflowController {
     });
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Tasks')
   @Get('safety-tasks')
   tasks(
     @Req() req: AuthenticatedRequest,
@@ -229,21 +408,44 @@ export class SafetyWorkflowController {
     );
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Tasks')
   @Post('safety-tasks')
   createTask(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() body: unknown,
+    @Body() body: CreateSafetyTaskDto,
   ) {
     return this.workflow.createTask(siteId, req.user!.id, body);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Tasks')
   @Get('safety-tasks/:id')
   task(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string, @Param('id') id: string) {
     return this.workflow.getTask(siteId, id, req.user!.id);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Tasks')
   @Post('safety-tasks/:id/submissions')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['commandId', 'expectedVersion', 'resultDescription'],
+      properties: {
+        commandId: { type: 'string', format: 'uuid' },
+        expectedVersion: { type: 'integer', minimum: 1 },
+        resultDescription: { type: 'string', minLength: 1, maxLength: 10000 },
+        file: { type: 'string', format: 'binary', description: 'Optional JPEG, at most 1 MiB' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Stale version, command collision or invalid transition; reload before retrying',
+  })
+  @ApiResponse({ status: 413, description: 'Image exceeds 1 MiB' })
+  @ApiResponse({ status: 415, description: 'JPEG MIME/signature required' })
+  @ApiResponse({ status: 503, description: 'Private storage unavailable' })
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_SAFETY_UPLOAD, files: 1, fields: 3, fieldSize: 12000, parts: 4 },
@@ -253,12 +455,13 @@ export class SafetyWorkflowController {
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
-    @Body() body: unknown,
+    @Body() body: SubmitResultDto,
     @UploadedFile() file?: SafetyUpload,
   ) {
     return this.workflow.taskCommand(siteId, id, req.user!.id, 'submit', body, file);
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Tasks')
   @Post('safety-tasks/:id/:operation')
   taskCommand(
     @Req() req: AuthenticatedRequest,
@@ -278,6 +481,7 @@ export class SafetyWorkflowController {
     );
   }
   @Header('Cache-Control', 'private, no-store')
+  @ApiTags('Safety Evidence')
   @Get(':type/:id/evidence/:evidenceId')
   @Header('X-Content-Type-Options', 'nosniff')
   async evidence(

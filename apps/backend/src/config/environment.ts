@@ -187,6 +187,58 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_TTL_MS: integer(60000, 1, MAX_TIMER_MS),
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
+    STORAGE_PROVIDER: z.enum(['LOCAL', 'R2']).default('LOCAL'),
+    STORAGE_LOCAL_ROOT: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2048)
+      .refine(isAbsolute, 'must be an absolute path')
+      .optional(),
+    R2_ENDPOINT: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => value || undefined)
+      .pipe(
+        z
+          .url()
+          .refine((value) => {
+            const url = new URL(value);
+            return (
+              url.protocol === 'https:' &&
+              /^[a-z0-9]+(?:\.(?:eu|fedramp))?\.r2\.cloudflarestorage\.com$/.test(url.hostname) &&
+              !url.username &&
+              !url.password &&
+              url.pathname === '/' &&
+              !url.search &&
+              !url.hash
+            );
+          }, 'must be an HTTPS Cloudflare R2 S3 endpoint without credentials')
+          .optional(),
+      ),
+    R2_BUCKET: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => value || undefined)
+      .pipe(
+        z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+          .optional(),
+      ),
+    R2_ACCESS_KEY_ID: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => value || undefined),
+    R2_SECRET_ACCESS_KEY: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => value || undefined),
+    // Compatibility for existing local files; new deployments use STORAGE_LOCAL_ROOT.
     SAFETY_UPLOAD_LOCAL_ROOT: z
       .string()
       .trim()

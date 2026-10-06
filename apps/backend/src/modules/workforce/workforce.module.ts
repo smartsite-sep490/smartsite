@@ -65,6 +65,11 @@ import {
       },
     },
   ],
-  exports: [WorkforceConfigurationService, ContractorOperationsService, FaceEnrollmentService],
+  exports: [
+    SchedulingNotificationService,
+    WorkforceConfigurationService,
+    ContractorOperationsService,
+    FaceEnrollmentService,
+  ],
 })
 export class WorkforceModule {}

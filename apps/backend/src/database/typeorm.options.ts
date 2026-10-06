@@ -1,4 +1,6 @@
+import { SafetyHandoverNotifications1791590400000 } from './migrations/1791590400000-SafetyHandoverNotifications.js';
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
+import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
 import { ENTITIES } from './entities/index.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
@@ -65,7 +67,9 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf08SafetyWorkflow1791000000000,
       Mf07SharedContractorCompatibility1791331200000,
       Mf07Notifications1791417600000,
+      IncidentContractorResponsibility1791504000000,
       Mf07NotificationDeletion1791504000000,
+      SafetyHandoverNotifications1791590400000,
     ],
     logging: false,
     extra: {

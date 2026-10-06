@@ -20,7 +20,7 @@ import { ShiftRequestStatus } from '../../database/entities/enums.js';
 import type { AuthenticatedUser } from '../auth/auth.service.js';
 
 // The same SQL policy gates list/count/read and event delivery. Tokens alone do not prove current scope.
-const scope = `
+const schedulingScope = `
   EXISTS (SELECT 1 FROM app_user u WHERE u.id = n.recipient_user_id AND u.is_active = true)
   AND EXISTS (SELECT 1 FROM user_role_assignment r WHERE r.user_id = n.recipient_user_id
     AND r.site_id = n.site_id AND r.role = n.recipient_role)
@@ -35,6 +35,17 @@ const scope = `
       (SELECT 1 FROM contractor_representative_assignment a WHERE a.user_id = n.recipient_user_id
         AND a.site_id = n.site_id AND a.contractor_id = n.contractor_id)))`;
 
+// Safety uses its own grants and current handover, without changing scheduling policy.
+const safetyScope = `
+  EXISTS (SELECT 1 FROM app_user u WHERE u.id=n.recipient_user_id AND u.is_active=true)
+  AND EXISTS (SELECT 1 FROM user_role_assignment r WHERE r.user_id=n.recipient_user_id AND r.site_id=n.site_id AND r.role='CONTRACTOR_REPRESENTATIVE')
+  AND EXISTS (SELECT 1 FROM contractor_representative_grant g WHERE g.user_id=n.recipient_user_id AND g.contractor_id=n.contractor_id)
+  AND EXISTS (SELECT 1 FROM contractor c WHERE c.id=n.contractor_id AND c.is_active=true)
+  AND EXISTS (SELECT 1 FROM contractor_site_participation p WHERE p.contractor_id=n.contractor_id AND p.site_id=n.site_id AND p.is_active=true AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP))
+  AND EXISTS (SELECT 1 FROM incident i JOIN corrective_action a ON a.incident_id=i.id
+    WHERE i.id=(n.content->>'incidentId')::uuid AND a.id=(n.content->>'actionId')::uuid
+      AND i.site_id=n.site_id AND i.contractor_id=n.contractor_id AND a.assigned_to=n.recipient_user_id AND a.superseded_at IS NULL)`;
+const scope = `((n.request_type IN ('CHANGE','SWAP') AND (${schedulingScope})) OR (n.request_type='SAFETY' AND (${safetyScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
   UserNotificationEntity,
@@ -153,7 +164,7 @@ export class SchedulingNotificationService {
       const eligible: unknown[] = await manager.query(
         `SELECT 1 FROM (
         SELECT $1::uuid AS recipient_user_id, $2::uuid AS site_id, $3::uuid AS contractor_id,
-        $4::uuid AS worker_id, $5::varchar AS recipient_role) n WHERE ${scope}`,
+        $4::uuid AS worker_id, $5::varchar AS recipient_role) n WHERE ${schedulingScope}`,
         [
           candidate.recipientUserId,
           candidate.siteId,
@@ -204,7 +215,61 @@ export class SchedulingNotificationService {
     });
   }
 
+  /** The workflow validates the recipient under lock; delivery is part of the same transaction. */
+  async recordSafetyHandover(
+    manager: EntityManager,
+    input: {
+      commandId: string;
+      siteId: string;
+      contractorId: string;
+      incidentId: string;
+      actionId: string;
+      recipientId: string;
+      title: string;
+    },
+  ): Promise<void> {
+    const site = await manager.getRepository(SiteEntity).findOneByOrFail({ id: input.siteId });
+    const content = {
+      siteName: site.name,
+      title: 'Safety case handed over',
+      message: input.title,
+      incidentId: input.incidentId,
+      actionId: input.actionId,
+    };
+    // SAFETY request_id is the handover command, so repeated transfers can notify again without replay duplicates.
+    await manager.query(
+      `INSERT INTO user_notification
+      (id,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,request_id,event,content)
+      VALUES($1,$2,$3,$4,NULL,'CONTRACTOR_REPRESENTATIVE','SAFETY',$5,'SAFETY_HANDOVER',$6::jsonb)
+      ON CONFLICT ON CONSTRAINT uq_notification_event_recipient DO NOTHING`,
+      [
+        randomUUID(),
+        input.recipientId,
+        input.siteId,
+        input.contractorId,
+        input.commandId,
+        JSON.stringify(content),
+      ],
+    );
+  }
   private response(n: UserNotificationEntity): UserNotificationResponse {
+    if (n.requestType === 'SAFETY')
+      return {
+        id: n.id,
+        event: n.event,
+        siteId: n.siteId,
+        siteName: n.content.siteName,
+        title: n.content.title,
+        message: n.content.message,
+        createdAt: n.createdAt.toISOString(),
+        readAt: n.readAt?.toISOString() ?? null,
+        target: {
+          siteId: n.siteId,
+          incidentId: n.content.incidentId!,
+          actionId: n.content.actionId!,
+          tab: 'incidents',
+        },
+      };
     const review = n.recipientRole === 'CONTRACTOR_REPRESENTATIVE';
     const pending = n.event === 'CHANGE_REQUESTED' || n.event === 'SWAP_CONFIRMED';
     return {

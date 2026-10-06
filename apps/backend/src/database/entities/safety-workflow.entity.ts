@@ -9,6 +9,8 @@ import {
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
+import { ContractorEntity } from './contractor.entity.js';
+import { WorkerEntity } from './worker.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { UserEntity } from './user.entity.js';
@@ -35,8 +37,28 @@ import type {
   'chk_incident_closure',
   "(status='CLOSED' AND closed_by IS NOT NULL AND closed_at IS NOT NULL) OR (status<>'CLOSED' AND closed_by IS NULL AND closed_at IS NULL)",
 )
+@Check(
+  'incident_responsibility_check',
+  '(contractor_id IS NULL AND responsibility_reason IS NULL AND responsibility_confirmed_by IS NULL AND responsibility_confirmed_at IS NULL) OR (contractor_id IS NOT NULL AND responsibility_reason IS NOT NULL AND length(trim(responsibility_reason))>0 AND responsibility_confirmed_by IS NOT NULL AND responsibility_confirmed_at IS NOT NULL)',
+)
 @Index('idx_incident_site_order', { synchronize: false })
 export class IncidentEntity {
+  @Column({ name: 'contractor_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorEntity, {
+    name: 'incident_contractor_id_fkey',
+    onDelete: 'NO ACTION',
+  })
+  contractorId!: string | null;
+  @Column({ name: 'responsibility_reason', type: 'text', nullable: true }) responsibilityReason!:
+    string | null;
+  @Column({ name: 'responsibility_confirmed_by', type: 'uuid', nullable: true })
+  @ForeignKey(() => UserEntity, {
+    name: 'incident_responsibility_confirmed_by_fkey',
+    onDelete: 'NO ACTION',
+  })
+  responsibilityConfirmedBy!: string | null;
+  @Column({ name: 'responsibility_confirmed_at', type: 'timestamptz', nullable: true })
+  responsibilityConfirmedAt!: Date | null;
   @PrimaryColumn({ type: 'uuid' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'incident_site_id_fkey', onDelete: 'NO ACTION' })
@@ -68,6 +90,19 @@ export class IncidentEntity {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt!: Date;
 }
 
+@Entity({ name: 'incident_worker' })
+export class IncidentWorkerEntity {
+  @PrimaryColumn({ name: 'incident_id', type: 'uuid' })
+  @ForeignKey(() => IncidentEntity, {
+    name: 'incident_worker_incident_id_fkey',
+    onDelete: 'NO ACTION',
+  })
+  incidentId!: string;
+  @PrimaryColumn({ name: 'worker_id', type: 'uuid' })
+  @ForeignKey(() => WorkerEntity, { name: 'incident_worker_worker_id_fkey', onDelete: 'NO ACTION' })
+  workerId!: string;
+}
+
 @Entity({ name: 'corrective_action' })
 @Check('corrective_action_description_check', 'length(trim(description))>0')
 @Check(
@@ -75,9 +110,20 @@ export class IncidentEntity {
   "status IN ('ASSIGNED','IN_PROGRESS','SUBMITTED','VERIFIED','CLOSED')",
 )
 @Check('corrective_action_version_check', 'version>=1')
+@Check(
+  'action_supersession_check',
+  '(superseded_at IS NULL AND superseded_by IS NULL AND superseded_reason IS NULL) OR (superseded_at IS NOT NULL AND superseded_by IS NOT NULL AND length(trim(superseded_reason))>0 AND superseded_reason IS NOT NULL)',
+)
 @Index('idx_action_incident', { synchronize: false })
 @Index('idx_action_assignee', { synchronize: false })
 export class CorrectiveActionEntity {
+  @Column({ name: 'superseded_at', type: 'timestamptz', nullable: true })
+  supersededAt!: Date | null;
+  @Column({ name: 'superseded_by', type: 'uuid', nullable: true })
+  @ForeignKey(() => UserEntity, { name: 'action_superseded_by_fkey', onDelete: 'NO ACTION' })
+  supersededBy!: string | null;
+  @Column({ name: 'superseded_reason', type: 'text', nullable: true }) supersededReason!:
+    string | null;
   @PrimaryColumn({ type: 'uuid' }) id!: string;
   @Column({ name: 'incident_id', type: 'uuid' })
   @ForeignKey(() => IncidentEntity, {
@@ -238,13 +284,16 @@ export class SafetyTaskEntity {
 @Check('safety_evidence_media_type_check', "media_type='image/jpeg'")
 @Check('safety_evidence_sha256_check', "sha256 ~ '^[0-9a-f]{64}$'")
 @Check('safety_evidence_size_check', 'size BETWEEN 1 AND 1048576')
-@Unique('safety_evidence_storage_key_key', ['storageKey'])
+@Check('safety_evidence_provider_check', "storage_provider IN ('LOCAL','R2')")
+@Unique('safety_evidence_provider_key_unique', ['storageProvider', 'storageKey'])
 export class SafetyEvidenceEntity {
+  @Column({ name: 'storage_provider', type: 'varchar', length: 8, default: 'LOCAL' })
+  storageProvider!: 'LOCAL' | 'R2';
   @PrimaryColumn({ type: 'uuid' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'safety_evidence_site_id_fkey', onDelete: 'NO ACTION' })
   siteId!: string;
-  @Column({ name: 'storage_key', type: 'varchar', length: 64 })
+  @Column({ name: 'storage_key', type: 'varchar', length: 512 })
   storageKey!: string;
   @Column({ name: 'media_type', type: 'varchar', length: 32 })
   mediaType!: string;

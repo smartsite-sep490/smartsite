@@ -23,6 +23,7 @@ vi.mock('./features/auth/auth-session', () => ({
     dismissSessionExpired: vi.fn(),
   }),
   useRestoreSession: () => ({ isLoading: false }),
+  useLogout: () => ({ mutate: vi.fn() }),
   useCurrentUser: () => ({ data: { roleAssignments: [] } }),
   SessionExpiredModal: () => null,
 }));

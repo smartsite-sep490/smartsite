@@ -18,6 +18,9 @@ export interface ActionInput {
   dueAt?: string | null;
 }
 export interface CreateIncidentCommand {
+  contractorId?: string | null;
+  workerIds?: string[];
+  responsibilityReason?: string;
   commandId: string;
   title: string;
   description: string;
@@ -28,6 +31,24 @@ export interface CreateIncidentCommand {
 }
 export interface LinkIncidentAlertsCommand extends VersionCommand {
   alertIds: string[];
+}
+export interface ConfirmIncidentResponsibilityCommand extends ReasonCommand {
+  contractorId: string;
+  workerIds: string[];
+}
+export interface CorrectIncidentResponsibilityCommand
+  extends ConfirmIncidentResponsibilityCommand, ActionInput {}
+export interface TransferCorrectiveActionCommand extends ReasonCommand {
+  assignedTo: string;
+}
+export interface SafetyContractorResponse {
+  id: string;
+  name: string;
+}
+export interface IncidentWorkerResponse {
+  id: string;
+  displayName: string;
+  externalId: string;
 }
 export interface AssignCorrectiveActionCommand extends VersionCommand, ActionInput {}
 export interface SubmitSafetyResultCommand extends VersionCommand {
@@ -54,6 +75,7 @@ export interface SafetyAssigneeResponse {
   displayName: string;
 }
 export interface SafetyAuditResponse {
+  actorName?: string | null;
   id: string;
   actorId: string;
   action: string;
@@ -69,6 +91,8 @@ export interface SafetyEvidenceResponse {
   size: number;
 }
 export interface CorrectiveActionSubmissionResponse {
+  submittedByName?: string | null;
+  reviewedByName?: string | null;
   id: string;
   correctiveActionId: string;
   submittedBy: string;
@@ -81,6 +105,11 @@ export interface CorrectiveActionSubmissionResponse {
   reviewNote: string | null;
 }
 export interface CorrectiveActionResponse {
+  assignedToName?: string | null;
+  assignedByName?: string | null;
+  supersededAt?: string | null;
+  supersededBy?: string | null;
+  supersededReason?: string | null;
   id: string;
   incidentId: string;
   assignedTo: string;
@@ -94,6 +123,15 @@ export interface CorrectiveActionResponse {
   submissions: CorrectiveActionSubmissionResponse[];
 }
 export interface IncidentResponse {
+  reportedByName?: string | null;
+  contractorName?: string | null;
+  zoneName?: string | null;
+  responsibilityConfirmedByName?: string | null;
+  closedByName?: string | null;
+  contractorId: string | null;
+  responsibilityReason: string | null;
+  responsibilityConfirmedBy: string | null;
+  responsibilityConfirmedAt: string | null;
   id: string;
   siteId: string;
   zoneId: string | null;
@@ -110,11 +148,17 @@ export interface IncidentResponse {
   updatedAt: string;
 }
 export interface IncidentDetailResponse extends IncidentResponse {
+  workers?: IncidentWorkerResponse[];
+  workerIds: string[];
   alerts: import('./management-api.js').SafetyAlertResponse[];
   actions: CorrectiveActionResponse[];
   audit: SafetyAuditResponse[];
 }
 export interface SafetyTaskResponse {
+  assignedToName?: string | null;
+  assignedByName?: string | null;
+  verifiedByName?: string | null;
+  zoneName?: string | null;
   id: string;
   siteId: string;
   zoneId: string | null;
