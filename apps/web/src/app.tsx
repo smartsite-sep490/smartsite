@@ -48,7 +48,16 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     <AppLayout onSelectTab={onNavigate}>
       <Routes>
         <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
-        <Route path="/dashboard" element={<DashboardView onNavigate={tab => onNavigate(tab)} />} />
+        <Route
+          path="/dashboard"
+          element={
+            defaultAuthTab === 'workforce' ? (
+              <Navigate to="/workforce" replace />
+            ) : (
+              <DashboardView onNavigate={tab => onNavigate(tab)} />
+            )
+          }
+        />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
@@ -118,7 +127,8 @@ export function App() {
   const navigate = useNavigate();
   const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
   const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
-  const { data: currentUser } = useCurrentUser(apiUrl);
+  const currentUserQuery = useCurrentUser(apiUrl);
+  const currentUser = currentUserQuery.data;
 
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const isWorkerOnly = roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
@@ -138,10 +148,38 @@ export function App() {
     navigate(`/${tab}`);
   };
 
-  if (isRestoringSession) {
+  if (isRestoringSession || (accessToken && !currentUser && !currentUserQuery.isError)) {
     return (
-      <div className="min-h-screen bg-[#041D2E] flex items-center justify-center">
+      <div
+        role="status"
+        aria-label="Loading account permissions"
+        className="min-h-screen bg-[#041D2E] flex items-center justify-center"
+      >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (accessToken && currentUserQuery.isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div
+          role="alert"
+          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
+        >
+          <h1 className="text-lg font-bold text-slate-900">Could not load your account</h1>
+          <p className="text-sm text-slate-600">
+            Your permissions could not be loaded. Please try again.
+          </p>
+          <button
+            type="button"
+            disabled={currentUserQuery.isFetching}
+            onClick={() => void currentUserQuery.refetch()}
+            className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-blue-600"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -169,7 +207,8 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
-                onLoginSuccess={() => navigate(`/${defaultAuthTab}`)}
+                // PublicOnlyRoute chooses the destination after the account profile loads.
+                onLoginSuccess={() => navigate('/login', { replace: true })}
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />

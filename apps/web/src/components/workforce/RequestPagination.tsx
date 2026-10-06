@@ -12,6 +12,7 @@ export function RequestPagination({
   total: number;
   onChange: (page: number) => void;
 }) {
+  if (total <= 0) return null;
   const last = Math.max(0, Math.ceil(total / size) - 1);
   return (
     <nav

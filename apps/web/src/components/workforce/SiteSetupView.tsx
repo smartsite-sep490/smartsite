@@ -634,37 +634,37 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
       {/* 2. Top Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Sites</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">{sites.length}</p>
+            <span className="text-xs font-medium text-slate-500">Total Sites</span>
+            <p className="text-xl font-bold tracking-tight text-[#071A2B]">{sites.length}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconBuilding className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <IconBuilding className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Contractors on Site</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">
+            <span className="text-xs font-medium text-slate-500">Contractors on Site</span>
+            <p className="text-xl font-bold tracking-tight text-[#071A2B]">
               {contractorsQuery.isLoading ? '...' : contractors.length}
             </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconBuilding2 className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <IconBuilding2 className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Representatives</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">
+            <span className="text-xs font-medium text-slate-500">Representatives</span>
+            <p className="text-xl font-bold tracking-tight text-[#071A2B]">
               {usersQuery.isLoading ? '...' : siteRepresentatives.length}
             </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconUsers className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <IconUsers className="w-4 h-4" />
           </div>
         </div>
       </div>
@@ -676,24 +676,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col">
           <div className="p-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Sites</h2>
+              <h2 className="text-xs font-bold tracking-wider text-slate-800">Sites</h2>
               <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
                 {sites.length}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSiteError(null);
-                setSiteName('');
-                setSiteCode('');
-                setShowCreateSiteModal(true);
-              }}
-              className="text-[11px] font-bold text-[#F66B17] hover:text-[#d4550b] flex items-center gap-1 cursor-pointer"
-            >
-              <IconPlus className="w-3 h-3" />
-              <span>Add</span>
-            </button>
           </div>
 
           {/* Search input for sites */}
@@ -953,7 +940,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       <span>Loading contractors...</span>
                     </div>
                   ) : contractors.length === 0 ? (
-                    <div className="p-5 sm:p-7 bg-gradient-to-br from-white to-slate-50/80">
+                    <div className="p-5 sm:p-7 bg-slate-50/50">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4 max-w-2xl">
                         <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
                           <IconBuilding2 className="w-6 h-6" />
@@ -969,19 +956,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                             Register a contractor for this site before adding representatives or assigning worker schedules.
                           </p>
                         </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setContractorError(null);
-                          setContractorCode('');
-                          setContractorName('');
-                          setShowCreateContractorModal(true);
-                        }}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs shrink-0 active:scale-[0.98]"
-                      >
-                        <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-                        <span>Register First Contractor</span>
-                      </button>
                       </div>
                     </div>
                   ) : (

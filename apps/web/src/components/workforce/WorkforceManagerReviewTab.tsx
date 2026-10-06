@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, type ShiftRequestResponse } from '@smartsite/api-client';
 import {
   IconUsers,
-  IconCalendar,
   IconAlertCircle,
   IconCheckCircle2,
   IconSearch,
@@ -18,7 +17,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
 } from '../icons';
-import { formatShiftTime, formatDateTime, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+import { formatShiftTime, formatDateTime } from './WorkforceSharedUI';
 import { useShiftRequests } from './useShiftRequests';
 import { RequestPagination } from './RequestPagination';
 import { schedulingError } from './scheduling-error';
@@ -91,15 +90,6 @@ export function WorkforceManagerReviewTab({
   const { data: shifts } = useQuery({
     queryKey: ['shifts', siteId],
     queryFn: () => client.listShifts(token, siteId, { limit: 25 }),
-  });
-
-  const { data: schedules } = useQuery({
-    queryKey: ['worker-schedules', siteId],
-    queryFn: () => client.listWorkerSchedules(token, siteId, { limit: 25 }),
-    refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
   });
 
   const getWorkerName = React.useCallback(
@@ -262,7 +252,6 @@ export function WorkforceManagerReviewTab({
   const paginatedHistory = allHistory;
 
   const activeWorkerCount = workers?.items.length || 0;
-  const totalAssignedShifts = schedules?.total || 0;
 
   // ── Access Denied ──────────────────────────────────────────────────────────
   const is403 =
@@ -360,52 +349,24 @@ export function WorkforceManagerReviewTab({
       </div>
 
       {/* 2. Top Summary Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Workers
-            </span>
-            <p className="text-xl font-black text-[#071A2B]">{activeWorkerCount}</p>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+      <div className="flex items-center gap-3">
+        <div className="bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 shadow-2xs flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500">
             <IconUsers className="w-4 h-4" />
           </div>
-        </div>
-
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Assigned Shifts
-            </span>
-            <p className="text-xl font-black text-[#071A2B]">{totalAssignedShifts}</p>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconCalendar className="w-4 h-4" />
+          <div>
+            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Workers</p>
+            <p className="text-sm font-bold text-[#071A2B]">{activeWorkerCount}</p>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
-              Pending Action
-            </span>
-            <p className="text-xl font-black text-amber-600">{totalPending}</p>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+        <div className={`bg-white border rounded-xl px-4 py-2.5 shadow-2xs flex items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200/80'}`}>
+          <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${totalPending > 0 ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
             <IconAlertCircle className="w-4 h-4" />
           </div>
-        </div>
-
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-              Coverage Risk
-            </span>
-            <p className="text-xl font-black text-emerald-600">0 Shifts</p>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-            <IconCheckCircle2 className="w-4 h-4" />
+          <div>
+            <p className={`text-[11px] font-medium uppercase tracking-wider ${totalPending > 0 ? 'text-amber-800 font-semibold' : 'text-slate-500'}`}>Pending Action</p>
+            <p className={`text-sm font-bold ${totalPending > 0 ? 'text-amber-600' : 'text-slate-700'}`}>{totalPending}</p>
           </div>
         </div>
       </div>
@@ -418,8 +379,8 @@ export function WorkforceManagerReviewTab({
               <div
                 className={`w-9 h-9 rounded-xl text-white flex items-center justify-center shrink-0 ${
                   actionFeedback.type === 'success'
-                    ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_16px_rgba(16,185,129,0.45)]'
-                    : 'bg-gradient-to-br from-rose-400 to-rose-600 shadow-[0_0_16px_rgba(244,63,94,0.45)]'
+                    ? 'bg-emerald-500 shadow-sm'
+                    : 'bg-rose-500 shadow-sm'
                 }`}
               >
                 {actionFeedback.type === 'success' ? (

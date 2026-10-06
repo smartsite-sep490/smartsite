@@ -20,7 +20,7 @@ export function getWorkforceTabs(roles: string[]) {
   return {
     showSchedule,
     showReview,
-    defaultTab: (showReview ? 'review' : 'schedule') as 'schedule' | 'review',
+    defaultTab: (showSchedule || !showReview ? 'schedule' : 'review') as 'schedule' | 'review',
   };
 }
 
@@ -218,14 +218,14 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
           <Tabs
             items={[
               {
-                id: 'review' as const,
-                label: 'Contractor Review',
-                icon: <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />,
-              },
-              {
                 id: 'schedule' as const,
                 label: 'My Schedule & Requests',
                 icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" />,
+              },
+              {
+                id: 'review' as const,
+                label: 'Contractor Review',
+                icon: <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />,
               },
             ]}
             activeTab={activeTab as 'review' | 'schedule'}
