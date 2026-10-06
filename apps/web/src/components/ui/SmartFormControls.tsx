@@ -13,7 +13,7 @@ import 'react-day-picker/style.css';
 
 // ── Shared field base class ────────────────────────────────────────────────────
 const FIELD_BASE =
-  'w-full px-3.5 py-2.5 rounded-xl border border-[#DCE6EF] bg-[#F9FAFC] text-sm font-semibold text-[#071A2B] placeholder-[#94A3B8] outline-none transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-[#B0C4D8] focus:border-[#071A2B] focus:bg-white focus:ring-2 focus:ring-[#071A2B]/8 shadow-[inset_0_1px_2px_rgba(7,26,43,0.04)]';
+  'w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 outline-none transition-all duration-300 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm';
 
 // ── SmartInput ────────────────────────────────────────────────────────────────
 export interface SmartInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -33,7 +33,7 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
     return (
       <div className="space-y-1.5">
         {label && (
-          <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+          <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
             {label}
             {fieldRequired && <span className="text-red-400 ml-1">*</span>}
           </label>
@@ -159,11 +159,7 @@ export function SmartSelect({
       {label && (
         <label
           htmlFor={id}
-          className={
-            size === 'sm'
-              ? 'block text-[10px] font-bold uppercase tracking-wider text-slate-500'
-              : 'block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]'
-          }
+          className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
         >
           {label}
           {fieldRequired && <span className="text-red-400 ml-1">*</span>}

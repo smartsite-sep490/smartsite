@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   getBackendHealth,
@@ -15,12 +15,18 @@ import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
 import { IconRadio, IconTrendingUp } from './components/icons';
-import { useAuth, useRestoreSession, useCurrentUser, SessionExpiredModal } from './features/auth/auth-session';
+import {
+  useAuth,
+  useRestoreSession,
+  useCurrentUser,
+  useLogout,
+  SessionExpiredModal,
+} from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
-import { WorkforceView } from './components/workforce/WorkforceView';
-import { SiteSetupView } from './components/workforce/SiteSetupView';
-import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
+import { WorkforceView } from './components/workforce/components/WorkforceView';
+import { SiteSetupView } from './components/workforce/components/SiteSetupView';
+import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -39,6 +45,10 @@ interface ProtectedRoutesProps {
 
 function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
   const { accessToken } = useAuth();
+  const profile = useCurrentUser(apiUrl);
+  const logout = useLogout(apiUrl);
+  const location = useLocation();
+  const incidentLink = new URLSearchParams(location.search);
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
@@ -48,28 +58,61 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     <AppLayout onSelectTab={onNavigate}>
       <Routes>
         <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
-        <Route path="/dashboard" element={<DashboardView onNavigate={tab => onNavigate(tab)} />} />
+        <Route
+          path="/dashboard"
+          element={
+            defaultAuthTab === 'workforce' ? (
+              <Navigate to="/workforce" replace />
+            ) : (
+              <DashboardView onNavigate={(tab) => onNavigate(tab)} />
+            )
+          }
+        />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
-        <Route path="/live-monitoring" element={<LiveMonitoringView onNavigate={tab => onNavigate(tab)} />} />
-        <Route path="/ppe" element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />} />
+        <Route
+          path="/live-monitoring"
+          element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
+        />
+        <Route
+          path="/ppe"
+          element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
+        />
         <Route
           path="/zones"
-          element={<RestrictedZoneView apiUrl={apiUrl} onNavigate={(tab, context) => onNavigate(tab, context)} />}
+          element={
+            <RestrictedZoneView
+              apiUrl={apiUrl}
+              onNavigate={(tab, context) => onNavigate(tab, context)}
+            />
+          }
         />
         <Route
           path="/incidents"
           element={
-            <SafetyAlertsView
-              key={JSON.stringify(alertsContext ?? {})}
-              apiUrl={apiUrl}
-              initialSiteId={alertsContext?.siteId}
-              initialAlertId={alertsContext?.alertId}
-              initialStatus={alertsContext?.status}
-              initialType={alertsContext?.alertType}
-            />
+            profile.data ? (
+              <SafetyAlertsView
+                key={profile.data.id + JSON.stringify(alertsContext ?? {})}
+                authenticatedSession={{ accessToken, user: profile.data }}
+                onSignOut={() => logout.mutate()}
+                apiUrl={apiUrl}
+                initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
+                initialIncidentId={incidentLink.get('incidentId') ?? undefined}
+                initialActionId={incidentLink.get('actionId') ?? undefined}
+                initialAlertId={alertsContext?.alertId}
+                initialStatus={alertsContext?.status}
+                initialType={alertsContext?.alertType}
+              />
+            ) : profile.isError ? (
+              <div role="alert">
+                Could not load your account.{' '}
+                <button onClick={() => void profile.refetch()}>Retry</button>
+              </div>
+            ) : (
+              <p role="status">Loading your account…</p>
+            )
           }
         />
         <Route
@@ -106,7 +149,13 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
   );
 }
 
-function PublicOnlyRoute({ children, defaultAuthTab }: { children: React.ReactNode; defaultAuthTab: string }) {
+function PublicOnlyRoute({
+  children,
+  defaultAuthTab,
+}: {
+  children: React.ReactNode;
+  defaultAuthTab: string;
+}) {
   const { accessToken } = useAuth();
   if (accessToken) {
     return <Navigate to={`/${defaultAuthTab}`} replace />;
@@ -118,10 +167,12 @@ export function App() {
   const navigate = useNavigate();
   const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
   const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
-  const { data: currentUser } = useCurrentUser(apiUrl);
+  const currentUserQuery = useCurrentUser(apiUrl);
+  const currentUser = currentUserQuery.data;
 
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isWorkerOnly = roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
+  const isWorkerOnly =
+    roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
   const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
@@ -138,10 +189,38 @@ export function App() {
     navigate(`/${tab}`);
   };
 
-  if (isRestoringSession) {
+  if (isRestoringSession || (accessToken && !currentUser && !currentUserQuery.isError)) {
     return (
-      <div className="min-h-screen bg-[#041D2E] flex items-center justify-center">
+      <div
+        role="status"
+        aria-label="Loading account permissions"
+        className="min-h-screen bg-[#041D2E] flex items-center justify-center"
+      >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (accessToken && currentUserQuery.isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div
+          role="alert"
+          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
+        >
+          <h1 className="text-lg font-bold text-slate-900">Could not load your account</h1>
+          <p className="text-sm text-slate-600">
+            Your permissions could not be loaded. Please try again.
+          </p>
+          <button
+            type="button"
+            disabled={currentUserQuery.isFetching}
+            onClick={() => void currentUserQuery.refetch()}
+            className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-blue-600"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -169,7 +248,6 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
-                onLoginSuccess={() => navigate(`/${defaultAuthTab}`)}
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />

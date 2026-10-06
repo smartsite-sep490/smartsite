@@ -35,7 +35,6 @@ import {
   Dialog,
   StatusBadge,
   TechnicalDetails,
-  OfficerName,
 } from './SafetyWorkflowUi';
 const statuses = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED', 'CANCELLED'];
 type Editor = 'create' | 'submit' | 'review' | 'cancel';
@@ -242,9 +241,14 @@ export function SafetyTasksView(p: WorkflowProps) {
                 </div>
                 <h3 className="break-words text-xl font-bold">{current.description}</h3>
                 <p className="text-sm text-[var(--text-secondary)]">
-                  <OfficerName p={p} role="SAFETY_OFFICER" id={current.assignedTo} /> · Deadline{' '}
-                  {date(current.dueAt)}
+                  {current.assignedToName ?? 'Account unavailable'} · Deadline {date(current.dueAt)}
                 </p>
+                <p className="text-sm">
+                  Assigned by {current.assignedByName ?? 'Account unavailable'}
+                </p>
+                {current.zoneId && (
+                  <p className="text-sm">Zone: {current.zoneName ?? 'Zone unavailable'}</p>
+                )}
                 {current.dueAt &&
                   new Date(current.dueAt).getTime() < detail.dataUpdatedAt &&
                   !['VERIFIED', 'CANCELLED'].includes(current.status) && (

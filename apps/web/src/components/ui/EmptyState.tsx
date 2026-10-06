@@ -19,8 +19,8 @@ export function EmptyState({
   actionIcon,
 }: EmptyStateProps) {
   return (
-    <div className="py-14 px-4 text-center space-y-3.5">
-      <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200/80 mx-auto flex items-center justify-center text-slate-500 shadow-xs">
+    <div className="py-8 sm:py-10 px-4 text-center space-y-2.5">
+      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 mx-auto flex items-center justify-center text-slate-500 shadow-xs">
         {icon}
       </div>
       <div className="space-y-1">

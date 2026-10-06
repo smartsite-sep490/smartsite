@@ -122,6 +122,7 @@ export function useRestoreSession(apiUrl: string) {
   return useQuery({
     queryKey: ['auth', 'session'],
     queryFn: async () => {
+      if (sessionStorage.getItem('smartsite:signed-out')) return null;
       const client = new SmartSiteManagementClient(apiUrl);
       try {
         const response = await client.refresh('WEB');
@@ -148,6 +149,7 @@ export function useLogin(apiUrl: string) {
       return client.login(username, password, 'WEB');
     },
     onSuccess: (data) => {
+      sessionStorage.removeItem('smartsite:signed-out');
       queryClient.clear();
       dismissSessionExpired();
       setAccessToken(data.accessToken);
@@ -166,11 +168,14 @@ export function useLogout(apiUrl: string) {
       const client = new SmartSiteManagementClient(apiUrl);
       return client.logout('WEB');
     },
-    onSuccess: () => {
+    onSettled: async () => {
+      // A failed server revocation must still end the local session.
+      sessionStorage.setItem('smartsite:signed-out', 'true');
+      await queryClient.cancelQueries();
       dismissSessionExpired();
       setAccessToken(null);
-      queryClient.setQueryData(['auth', 'session'], null);
       queryClient.clear(); // Clear all cached data on logout
+      queryClient.setQueryData(['auth', 'session'], null);
     },
   });
 }

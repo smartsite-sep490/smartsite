@@ -1,0 +1,1 @@
+export const WORKFORCE_POLL_INTERVAL_MS = 3_000;
