@@ -2,28 +2,13 @@ import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 
 import { WorkforceScheduleTab } from './WorkforceScheduleTab';
 import { WorkforceManagerReviewTab } from './WorkforceManagerReviewTab';
-import { IconCalendar, IconShield, IconLoader, IconAlertCircle } from '../icons';
-import { Button, Tabs } from '../ui';
-
-// Exported so WorkforceView.test.tsx can test tab logic independently
-export function getWorkforceTabs(roles: string[]) {
-  const isWorker = roles.includes('WORKER');
-  const isContractorRep = roles.includes('CONTRACTOR_REPRESENTATIVE');
-
-  const showSchedule = isWorker;
-  const showReview = isContractorRep;
-
-  return {
-    showSchedule,
-    showReview,
-    defaultTab: (showSchedule || !showReview ? 'schedule' : 'review') as 'schedule' | 'review',
-  };
-}
-
+import { IconCalendar, IconShield, IconLoader, IconAlertCircle } from '../../icons';
+import { Button, Tabs } from '../../ui';
+import { getWorkforceTabs } from '../utils/workforce-tabs';
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 function LoadingState() {

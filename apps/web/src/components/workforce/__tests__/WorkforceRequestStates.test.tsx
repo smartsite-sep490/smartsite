@@ -9,8 +9,8 @@ import {
   SmartSiteManagementClient,
   type ShiftRequestResponse,
 } from '@smartsite/api-client';
-import { WorkforceScheduleTab } from './WorkforceScheduleTab';
-import { schedulingError } from './scheduling-error';
+import { WorkforceScheduleTab } from '../components/WorkforceScheduleTab';
+import { schedulingError } from '../utils/scheduling-error';
 
 const empty = { items: [], total: 0, pendingCount: 0, incomingCount: 0, pendingScheduleIds: [] };
 const change: ShiftRequestResponse = {

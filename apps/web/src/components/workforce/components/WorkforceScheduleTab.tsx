@@ -1,18 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useNotificationRequest } from './useNotificationRequest';
+import { useNotificationRequest } from '../hooks/useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
   ShiftSwapRequestResponse,
   WorkerScheduleResponse,
 } from '@smartsite/api-client';
-import { formatShiftTime, formatShiftRange, formatDateTime, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+import { formatShiftTime, formatShiftRange, formatDateTime } from '../utils/workforce-format';
+import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import { useEffect } from 'react';
 import { isPastWorkDate } from '@smartsite/contracts/management';
-import { useShiftRequests } from './useShiftRequests';
+import { useShiftRequests } from '../hooks/useShiftRequests';
 import { RequestPagination } from './RequestPagination';
-import { schedulingError } from './scheduling-error';
+import { schedulingError } from '../utils/scheduling-error';
 import {
   IconCalendar,
   IconArrowRight,
@@ -25,7 +26,7 @@ import {
   IconUsers,
   IconChevronLeft,
   IconChevronRight,
-} from '../icons';
+} from '../../icons';
 import {
   Button,
   Badge,
@@ -36,7 +37,7 @@ import {
   Alert,
   AlertTitle,
   AlertDescription,
-} from '../ui';
+} from '../../ui';
 
 function localDateIso(date: Date) {
   const year = date.getFullYear();

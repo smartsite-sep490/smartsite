@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '../ui';
+import { Button } from '../../ui';
 
 export function RequestPagination({
   page,

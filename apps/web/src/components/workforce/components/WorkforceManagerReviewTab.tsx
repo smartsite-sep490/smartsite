@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNotificationRequest } from './useNotificationRequest';
+import { useNotificationRequest } from '../hooks/useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, type ShiftRequestResponse } from '@smartsite/api-client';
 import {
@@ -16,11 +16,11 @@ import {
   IconArrowRight,
   IconChevronLeft,
   IconChevronRight,
-} from '../icons';
-import { formatShiftTime, formatDateTime } from './WorkforceSharedUI';
-import { useShiftRequests } from './useShiftRequests';
+} from '../../icons';
+import { formatShiftTime, formatDateTime } from '../utils/workforce-format';
+import { useShiftRequests } from '../hooks/useShiftRequests';
 import { RequestPagination } from './RequestPagination';
-import { schedulingError } from './scheduling-error';
+import { schedulingError } from '../utils/scheduling-error';
 import {
   Button,
   Badge,
@@ -31,7 +31,7 @@ import {
   Alert,
   AlertTitle,
   AlertDescription,
-} from '../ui';
+} from '../../ui';
 
 export function WorkforceManagerReviewTab({
   apiUrl,

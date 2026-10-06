@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import {
   IconCalendar,
   IconClock,
@@ -16,8 +16,9 @@ import {
   IconX,
   IconRefreshCw,
   IconCheck,
-} from '../icons';
-import { formatShiftTime, formatShiftRange, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+} from '../../icons';
+import { formatShiftTime, formatShiftRange } from '../utils/workforce-format';
+import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import {
   Button,
   Badge,
@@ -33,7 +34,7 @@ import {
   SmartSelect,
   SmartDatePicker,
   SmartTimePicker,
-} from '../ui';
+} from '../../ui';
 
 function currentDateIso() {
   const now = new Date();
