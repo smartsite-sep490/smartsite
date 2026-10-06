@@ -20,6 +20,13 @@ export function formatShiftTime(timeStr?: string): string {
   return timeStr;
 }
 
+export function formatShiftRange(startsAt?: string, endsAt?: string): string {
+  const start = formatShiftTime(startsAt);
+  const end = formatShiftTime(endsAt);
+  if (!startsAt || !endsAt) return `${start} - ${end}`;
+  return `${start} - ${end}`;
+}
+
 export function formatDateTime(dateStr?: string): string {
   if (!dateStr) return '';
   try {

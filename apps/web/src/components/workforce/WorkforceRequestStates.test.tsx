@@ -50,6 +50,12 @@ function mount(view: string) {
   );
 }
 beforeEach(() => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getSite').mockResolvedValue({
+    id: 'site-1',
+    code: 'SYNTHETIC',
+    name: 'Synthetic Site',
+    createdAt: '2030-01-01T00:00:00Z',
+  });
   for (const method of [
     'listShifts',
     'listWorkers',
@@ -103,7 +109,7 @@ it('shows discovery failure with Retry and does not substitute the full shift ca
     new ApiError('network', 'Synthetic private detail'),
   );
   mount('schedule');
-  fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Request change' }));
   expect(await screen.findByRole('alert')).toBeTruthy();
   expect(screen.getByText('The request could not be completed. Please try again.')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
@@ -160,12 +166,22 @@ it.each(['Change', 'Swap'])(
       action === 'Change' ? 'createShiftChangeRequest' : 'createShiftSwapRequest',
     );
     mount('schedule');
-    fireEvent.click(await screen.findByRole('button', { name: action }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: action === 'Change' ? 'Request change' : 'Swap shift',
+      }),
+    );
     const reason = screen.getByRole('textbox', { name: /Reason/ });
     const button = screen.getByRole('button', { name: `Submit ${action} Request` });
     for (const value of ['', 'abc', '     ', ' abcd ']) {
       fireEvent.change(reason, { target: { value } });
-      expect(screen.getByText('Reason must be at least 5 characters.')).toBeTruthy();
+      expect(
+        screen.getByText(
+          value.length > 0
+            ? 'Reason must be at least 5 characters.'
+            : 'Reason must be 5 to 1000 characters.',
+        ),
+      ).toBeTruthy();
       expect(reason.getAttribute('aria-invalid')).toBe('true');
       expect(button.hasAttribute('disabled')).toBe(true);
       fireEvent.submit(reason.closest('form')!);

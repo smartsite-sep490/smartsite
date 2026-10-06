@@ -191,7 +191,7 @@ export function NotificationBell({
           <IconBell className="w-4 h-4 text-slate-600 group-hover:text-[#071A2B]" />
           {count !== undefined && count > 0 && (
             <span
-              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-gradient-to-r from-[#F66B17] to-amber-500 text-white font-black text-[9px] flex items-center justify-center px-1 shadow-[0_0_8px_rgba(246,107,23,0.5)] border-2 border-white animate-in zoom-in duration-200"
+              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-[#F66B17] text-white font-bold text-[9px] flex items-center justify-center px-1 shadow-[0_2px_6px_rgba(246,107,23,0.4)] border-2 border-white animate-in zoom-in duration-200"
               aria-hidden="true"
             >
               {count > 99 ? '99+' : count}
@@ -212,15 +212,15 @@ export function NotificationBell({
           align="end"
           role="dialog"
           aria-label="Notifications"
-          className="z-50 w-[min(440px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_20px_60px_-15px_rgba(7,26,43,0.22),0_0_0_1px_rgba(0,0,0,0.04)] text-slate-900 animate-in fade-in-0 zoom-in-95 duration-200"
+          className="z-50 w-[min(440px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-2xl shadow-[0_24px_60px_-12px_rgba(7,26,43,0.18)] text-slate-900 animate-in fade-in-0 zoom-in-95 duration-200"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-[#071A2B] text-white flex items-center justify-center shadow-2xs">
                 <IconBell className="w-3.5 h-3.5 text-[#F66B17]" />
               </div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-[#071A2B]">
+              <h2 className="text-xs font-bold tracking-wider text-[#071A2B]">
                 Notifications
               </h2>
               {count !== undefined && count > 0 && (
@@ -440,7 +440,7 @@ export function NotificationBell({
                     </div>
                   )}
 
-                  <ul>
+                  <ul className="p-2.5 space-y-2">
                     {data.items.map((item) => {
                       const isUnread = !item.readAt;
                       const isApplied = item.event === 'REQUEST_APPLIED';
@@ -461,23 +461,15 @@ export function NotificationBell({
                                 markRead.mutate(item);
                               }
                             }}
-                            className={`relative flex w-full items-start gap-3 p-3.5 text-left transition-all duration-150 hover:bg-slate-50/90 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#F66B17] cursor-pointer ${
+                            className={`relative flex w-full items-start gap-3 p-3 rounded-xl border transition-all duration-200 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#F66B17] cursor-pointer ${
                               isUnread
-                                ? 'bg-gradient-to-r from-amber-500/8 via-amber-50/30 to-transparent'
-                                : 'bg-white'
+                                ? 'bg-amber-50/60 border-amber-200/80 hover:bg-amber-50/90 hover:border-amber-300 shadow-2xs'
+                                : 'bg-white border-slate-200/70 hover:bg-slate-50 hover:border-slate-300'
                             }`}
                           >
-                            {/* Unread Accent Bar */}
-                            {isUnread && (
-                              <span
-                                className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-[#F66B17]"
-                                aria-label="Unread"
-                              />
-                            )}
-
                             {/* Event Icon Badge */}
                             <div
-                              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border mt-0.5 ${
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border mt-0.5 ${
                                 isApplied
                                   ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
                                   : isRejected
@@ -501,13 +493,18 @@ export function NotificationBell({
                             {/* Main Content */}
                             <div className="min-w-0 flex-1 space-y-1">
                               <div className="flex items-center justify-between gap-2">
-                                <span
-                                  className={`text-xs font-bold leading-tight line-clamp-1 ${
-                                    isUnread ? 'text-[#071A2B]' : 'text-slate-800'
-                                  }`}
-                                >
-                                  {item.title}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {isUnread && (
+                                    <span className="w-2 h-2 rounded-full bg-[#F66B17] shrink-0" aria-label="Unread" />
+                                  )}
+                                  <span
+                                    className={`text-xs font-bold leading-tight line-clamp-1 ${
+                                      isUnread ? 'text-[#071A2B]' : 'text-slate-800'
+                                    }`}
+                                  >
+                                    {item.title}
+                                  </span>
+                                </div>
                                 <time
                                   dateTime={item.createdAt}
                                   className="text-[10px] font-medium text-slate-400 shrink-0 font-mono"

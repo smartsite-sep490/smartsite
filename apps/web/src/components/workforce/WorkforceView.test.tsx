@@ -34,7 +34,7 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
     expect(tabs.defaultTab).toBe('schedule');
   });
 
-  it('Multiple roles combines visibility correctly', () => {
+  it('Multiple roles combines visibility and prioritizes the personal Worker schedule', () => {
     const tabs1 = getWorkforceTabs(['WORKER', 'SITE_MANAGER']);
     expect(tabs1.showSchedule).toBe(true);
     expect(tabs1.showReview).toBe(false);
@@ -43,7 +43,7 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
     const tabs2 = getWorkforceTabs(['CONTRACTOR_REPRESENTATIVE', 'WORKER']);
     expect(tabs2.showSchedule).toBe(true);
     expect(tabs2.showReview).toBe(true);
-    expect(tabs2.defaultTab).toBe('review');
+    expect(tabs2.defaultTab).toBe('schedule');
 
     const tabs3 = getWorkforceTabs(['CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER']);
     expect(tabs3.showSchedule).toBe(false);
