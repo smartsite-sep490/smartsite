@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { App } from './app';
@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   profileError: false,
   refetch: vi.fn(),
   dashboardRender: vi.fn(),
+  loginSuccess: undefined as (() => void) | undefined,
 }));
 
 vi.mock('./features/auth/auth-session', () => ({
@@ -48,7 +49,10 @@ vi.mock('./components/landing/LandingPage', () => ({
   LandingPage: () => <div>Public landing page</div>,
 }));
 vi.mock('./features/auth/LoginScreen', () => ({
-  LoginScreen: () => <div>Sign in form</div>,
+  LoginScreen: ({ onLoginSuccess }: { onLoginSuccess?: () => void }) => {
+    state.loginSuccess = onLoginSuccess;
+    return <div>Sign in form</div>;
+  },
 }));
 vi.mock('@smartsite/api-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@smartsite/api-client')>()),
@@ -86,6 +90,7 @@ beforeEach(() => {
   state.profileError = false;
   state.refetch.mockReset();
   state.dashboardRender.mockReset();
+  state.loginSuccess = undefined;
 });
 afterEach(() => {
   cleanup();
@@ -104,6 +109,18 @@ it('waits for the Worker profile after login without rendering Dashboard', async
   refresh();
   await screen.findByText('Worker schedule');
   expect(screen.getByTestId('location').textContent).toBe('/workforce');
+  expect(state.dashboardRender).not.toHaveBeenCalled();
+});
+
+it('does not let a delayed login callback use a stale Dashboard default', async () => {
+  const refresh = mount('/login');
+  const delayedSuccess = state.loginSuccess;
+  state.accessToken = 'synthetic-token';
+  profile(['WORKER']);
+  refresh();
+  await screen.findByText('Worker schedule');
+  delayedSuccess?.();
+  await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/workforce'));
   expect(state.dashboardRender).not.toHaveBeenCalled();
 });
 
