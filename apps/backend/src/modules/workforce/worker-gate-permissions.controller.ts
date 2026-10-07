@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Logger, Param, Put, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import {
   SetGatePermissionsCommand,
@@ -9,7 +9,7 @@ import {
 
 @ApiTags('worker-gate-permissions')
 @ApiBearerAuth('user-token')
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard)
 @Controller('sites/:siteId/workers/:workerId/gate-permissions')
 export class WorkerGatePermissionsController {
   private readonly logger = new Logger(WorkerGatePermissionsController.name);

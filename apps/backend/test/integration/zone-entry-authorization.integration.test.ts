@@ -14,6 +14,14 @@ import {
   ZoneEntryDecisionEntity,
   ZoneRestrictionPolicy,
   ZoneType,
+  UserEntity,
+  WorkerEntity,
+  ContractorEntity,
+  ContractorSiteParticipationEntity,
+  WorkerSiteZoneAssignmentEntity,
+  WorkerSiteZoneAssignmentStatus,
+  ContractorZonePermissionEntity,
+  WorkerZonePermissionEntity,
 } from '../../src/database/entities/index.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
@@ -102,11 +110,68 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
     });
 
     const access = new ZoneAccessManagementService(source);
-    await access.createGrant(siteId, zoneId, {
+    await assert.rejects(
+      access.createGrant(siteId, zoneId, {
+        workerId: actualWorkerId,
+        effect: ZoneAccessEffect.ALLOW,
+        validFrom: '2026-09-28T07:00:00.000Z',
+        validUntil: '2026-09-28T09:00:00.000Z',
+      }),
+      /Contractor and Worker Zone permissions/,
+    );
+    const actorId = randomUUID(),
+      contractorId = randomUUID(),
+      participationId = randomUUID(),
+      assignmentId = randomUUID(),
+      permissionId = randomUUID();
+    const from = new Date('2026-09-28T07:00:00.000Z'),
+      until = new Date('2026-09-28T09:00:00.000Z');
+    await source.getRepository(UserEntity).save({
+      id: actorId,
+      username: actorId,
+      displayName: 'Synthetic manager',
+      passwordHash: 'synthetic-not-login',
+      isActive: true,
+      mustChangePassword: false,
+    });
+    await source
+      .getRepository(ContractorEntity)
+      .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });
+    await source.getRepository(WorkerEntity).update(actualWorkerId, { contractorId });
+    await source.getRepository(ContractorSiteParticipationEntity).save({
+      id: participationId,
+      siteId,
+      contractorId,
+      validFrom: from,
+      validUntil: until,
+      isActive: true,
+    });
+    await source.getRepository(WorkerSiteZoneAssignmentEntity).save({
+      id: assignmentId,
+      siteId,
       workerId: actualWorkerId,
-      effect: ZoneAccessEffect.ALLOW,
-      validFrom: '2026-09-28T07:00:00.000Z',
-      validUntil: '2026-09-28T09:00:00.000Z',
+      siteContractorId: participationId,
+      zoneIds: [zoneId],
+      status: WorkerSiteZoneAssignmentStatus.APPROVED,
+      validFrom: from,
+      validUntil: until,
+      requestedByUserId: actorId,
+    });
+    await source.getRepository(ContractorZonePermissionEntity).save({
+      id: permissionId,
+      siteContractorId: participationId,
+      zoneId,
+      validFrom: from,
+      validUntil: until,
+      grantedBy: actorId,
+    });
+    await source.getRepository(WorkerZonePermissionEntity).save({
+      id: randomUUID(),
+      workerAssignmentId: assignmentId,
+      contractorZonePermissionId: permissionId,
+      validFrom: from,
+      validUntil: until,
+      grantedBy: actorId,
     });
 
     const service = new ZoneEntryAuthorizationService();

@@ -14,8 +14,10 @@ import { SecurityGateDeskView } from './SecurityGateDeskView';
 import { WorkerEnrollmentView } from './WorkerEnrollmentView';
 import { VisitorAccessView } from './VisitorAccessView';
 import { WorkerGatePermissionsView } from './WorkerGatePermissionsView';
-import { ZonePermissionsView } from './ZonePermissionsView';
+import { SiteAccessSetupView } from './SiteAccessSetupView';
+import { ZoneDecisionHistory } from './ZoneDecisionHistory';
 import { WorkerMobileQrView } from './WorkerMobileQrView';
+import { AttendanceView } from './AttendanceView';
 import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
 
 type AccessSubTab =
@@ -137,16 +139,28 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const visibleTabs = ACCESS_TABS.filter((tab) =>
     tab.id === 'worker-qr'
       ? siteRoles.includes('WORKER')
-      : ['worker-enrollment', 'gate-permissions', 'zone-permissions'].includes(tab.id)
-        ? isGlobalAdmin
-        : isGlobalAdmin ||
-          siteRoles.some((r) => ['SITE_MANAGER', 'SECURITY_OFFICER', 'SAFETY_OFFICER'].includes(r)),
+      : tab.id === 'worker-enrollment'
+        ? isGlobalAdmin ||
+          siteRoles.includes('CONTRACTOR_REPRESENTATIVE') ||
+          siteRoles.includes('WORKER')
+        : tab.id === 'gate-permissions'
+          ? isGlobalAdmin || siteRoles.includes('SITE_MANAGER')
+          : tab.id === 'zone-permissions'
+            ? isGlobalAdmin ||
+              siteRoles.includes('SITE_MANAGER') ||
+              siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+            : isGlobalAdmin ||
+              siteRoles.some((r) =>
+                ['SITE_MANAGER', 'SECURITY_OFFICER', 'SAFETY_OFFICER'].includes(r),
+              ),
   );
   const activeTab = visibleTabs.some((t) => t.id === accessSubTab)
     ? accessSubTab
-    : siteRoles.includes('SITE_MANAGER')
-      ? 'visitor-passes'
-      : visibleTabs[0]?.id;
+    : siteRoles.includes('WORKER') && !isGlobalAdmin
+      ? 'worker-qr'
+      : siteRoles.includes('SITE_MANAGER')
+        ? 'visitor-passes'
+        : visibleTabs[0]?.id;
 
   const logout = () => {
     setRequestedSiteId('');
@@ -185,7 +199,13 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     !currentUser.isActive ||
     (!isGlobalAdmin &&
       !currentUser.roleAssignments.some((r) =>
-        ['SITE_MANAGER', 'SECURITY_OFFICER', 'SAFETY_OFFICER', 'WORKER'].includes(r.role),
+        [
+          'SITE_MANAGER',
+          'SECURITY_OFFICER',
+          'SAFETY_OFFICER',
+          'WORKER',
+          'CONTRACTOR_REPRESENTATIVE',
+        ].includes(r.role),
       )) ||
     currentUser.mustChangePassword
   ) {
@@ -198,8 +218,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           <IconShield className="mx-auto h-8 w-8 text-amber-600" />
           <h1 className="text-lg font-bold text-[#2F3437]">Site Access is restricted</h1>
           <p className="text-xs leading-relaxed text-amber-900">
-            An active gate operator, Site Manager, Worker or Admin account with a permanent password
-            is required.
+            An active Site staff, Contractor Representative, Worker or Admin account with a
+            permanent password is required.
           </p>
         </div>
       </div>
@@ -416,17 +436,28 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       {siteId && (
         <div className="transition-all duration-150">
           {activeTab === 'zone-permissions' && (
-            <ZonePermissionsView
-              key={`${sessionScope}:${siteId}`}
-              apiUrl={apiUrl}
-              token={token}
-              siteId={siteId}
-              sessionScope={sessionScope}
-            />
+            <div className="space-y-6">
+              <SiteAccessSetupView
+                key={`${sessionScope}:${siteId}`}
+                apiUrl={apiUrl}
+                token={token}
+                siteId={siteId}
+                sessionScope={sessionScope}
+              />
+              {isGlobalAdmin && (
+                <ZoneDecisionHistory
+                  apiUrl={apiUrl}
+                  token={token}
+                  siteId={siteId}
+                  sessionScope={sessionScope}
+                />
+              )}
+            </div>
           )}
 
           {activeTab === 'gate-desk' && (
             <SecurityGateDeskView
+              canManualVerify={siteRoles.includes('SECURITY_OFFICER')}
               key={`${sessionScope}:${siteId}`}
               apiUrl={apiUrl}
               token={token}
@@ -439,6 +470,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
           {activeTab === 'worker-enrollment' && (
             <WorkerEnrollmentView
+              canManageAccounts={!!isGlobalAdmin}
               key={`${sessionScope}:${siteId}`}
               apiUrl={apiUrl}
               token={token}
@@ -458,16 +490,25 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           )}
 
           {activeTab === 'worker-qr' && (
-            <WorkerMobileQrView
-              key={`${sessionScope}:${siteId}`}
-              apiUrl={apiUrl}
-              token={token}
-              siteId={siteId}
-              workerName={currentUser.displayName}
-            />
+            <div className="space-y-6">
+              <WorkerMobileQrView
+                key={`${sessionScope}:${siteId}`}
+                apiUrl={apiUrl}
+                token={token}
+                siteId={siteId}
+                workerName={currentUser.displayName}
+              />
+              <AttendanceView
+                apiUrl={apiUrl}
+                token={token}
+                siteId={siteId}
+                sessionScope={sessionScope}
+              />
+            </div>
           )}
           {activeTab === 'visitor-passes' && (
             <VisitorAccessView
+              canManualCheckout={siteRoles.includes('SECURITY_OFFICER')}
               key={`${sessionScope}:${siteId}`}
               token={token}
               sessionScope={sessionScope}

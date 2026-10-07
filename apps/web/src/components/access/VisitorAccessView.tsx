@@ -25,6 +25,7 @@ export function VisitorAccessView({
   siteName = 'Site',
   sessionScope,
   canApprove,
+  canManualCheckout = false,
 }: {
   apiUrl: string;
   token: string;
@@ -32,6 +33,7 @@ export function VisitorAccessView({
   siteName?: string;
   sessionScope: string;
   canApprove: boolean;
+  canManualCheckout?: boolean;
 }) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
@@ -45,16 +47,50 @@ export function VisitorAccessView({
 
   const [qrToken, setQrToken] = useState('');
   const [gateId, setGateId] = useState<string>(SITE_GATES[0].id);
-  const [count, setCount] = useState(1);
+  const [reviewNote, setReviewNote] = useState('');
+  const [representativeConfirmed, setRepresentativeConfirmed] = useState(false);
+  const manualRetry = useRef<{ visitId: string; note: string; id: string } | null>(null);
+  const manualCheckout = useMutation({
+    mutationFn: (visitId: string) => {
+      if (
+        manualRetry.current?.visitId !== visitId ||
+        manualRetry.current.note !== reviewNote.trim()
+      )
+        manualRetry.current = { visitId, note: reviewNote.trim(), id: crypto.randomUUID() };
+      return client.manualVisitCheckout(token, siteId, visitId, {
+        requestId: manualRetry.current.id,
+        reviewNote: reviewNote.trim(),
+        representativeConfirmed: true,
+      });
+    },
+    onSuccess: () => {
+      manualRetry.current = null;
+      setRepresentativeConfirmed(false);
+      void cache.invalidateQueries({ queryKey: key });
+    },
+  });
   const [message, setMessage] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'INSIDE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<
+    'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'INSIDE'
+  >('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   const pending = useRef<{ gateId: string; input: VisitorGateCommand } | null>(null);
 
   const decide = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'APPROVED' | 'REJECTED' }) =>
-      client.decideVisit(token, siteId, id, status),
+    mutationFn: ({
+      id,
+      status,
+      version,
+    }: {
+      id: string;
+      status: 'APPROVED' | 'REJECTED' | 'CANCELLED';
+      version?: number;
+    }) =>
+      client.decideVisit(token, siteId, id, status, {
+        expectedVersion: version,
+        reviewNote: reviewNote.trim() || undefined,
+      }),
     onSuccess: () => cache.invalidateQueries({ queryKey: key }),
   });
 
@@ -76,10 +112,9 @@ export function VisitorAccessView({
       old &&
       old.gateId === gateId &&
       old.input.token === qrToken.trim() &&
-      old.input.direction === direction &&
-      old.input.count === count
+      old.input.direction === direction
         ? old.input
-        : { token: qrToken.trim(), direction, count, requestId: crypto.randomUUID() };
+        : { token: qrToken.trim(), direction, requestId: crypto.randomUUID() };
     pending.current = { gateId, input };
     setMessage('');
     verify.mutate(input);
@@ -91,7 +126,10 @@ export function VisitorAccessView({
   const metrics = useMemo(() => {
     const total = rawItems.length;
     const pendingCount = rawItems.filter((v) => v.status === 'PENDING').length;
-    const currentlyInside = rawItems.reduce((acc, v) => acc + Math.max(0, v.enteredCount - v.exitedCount), 0);
+    const currentlyInside = rawItems.reduce(
+      (acc, v) => acc + Math.max(0, v.enteredCount - v.exitedCount),
+      0,
+    );
     const approved = rawItems.filter((v) => v.status === 'APPROVED').length;
     return { total, pendingCount, currentlyInside, approved };
   }, [rawItems]);
@@ -311,7 +349,9 @@ export function VisitorAccessView({
         {rawItems.length === 0 && !visits.isPending && !visits.error && (
           <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
             <IconUsers className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-            <p className="text-sm font-semibold text-slate-600">No visitor pass requests at this site.</p>
+            <p className="text-sm font-semibold text-slate-600">
+              No visitor pass requests at this site.
+            </p>
             <p className="mt-1 text-xs text-slate-400">
               Share the registration portal with visitors or contractors to receive requests.
             </p>
@@ -324,19 +364,44 @@ export function VisitorAccessView({
           </div>
         )}
 
+        {(canApprove || canManualCheckout) && (
+          <label className="block text-xs text-slate-700">
+            Review / cancellation reason
+            <input
+              value={reviewNote}
+              maxLength={1000}
+              onChange={(e) => setReviewNote(e.target.value)}
+              className="mt-1 block w-full rounded-lg border p-2"
+            />
+          </label>
+        )}
+        {canManualCheckout && (
+          <label className="flex gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={representativeConfirmed}
+              onChange={(e) => setRepresentativeConfirmed(e.target.checked)}
+            />
+            The representative confirmed the entire group has left.
+          </label>
+        )}
+        {manualCheckout.error && <p role="alert">{manualCheckout.error.message}</p>}
         {/* Table View */}
         {filteredVisits.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-200 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  {['Representative / Contact', 'Schedule / Gate / Target Area', 'Headcount', 'Status / Clearance'].map(
-                    (header) => (
-                      <th key={header} className="px-4 py-3.5 font-semibold">
-                        {header}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    'Representative / Contact',
+                    'Schedule / Gate / Target Area',
+                    'Headcount',
+                    'Status / Clearance',
+                  ].map((header) => (
+                    <th key={header} className="px-4 py-3.5 font-semibold">
+                      {header}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -357,9 +422,7 @@ export function VisitorAccessView({
                             <strong className="block text-sm font-bold text-slate-900">
                               {v.visitorName}
                             </strong>
-                            {v.company && (
-                              <p className="text-slate-600 font-medium">{v.company}</p>
-                            )}
+                            {v.company && <p className="text-slate-600 font-medium">{v.company}</p>}
                             <p className="font-mono text-[11px] text-slate-500">{v.contact}</p>
                             <p className="text-[11px] text-slate-600">
                               <span className="text-slate-400">Host:</span> {v.hostName}
@@ -445,7 +508,9 @@ export function VisitorAccessView({
                             <button
                               disabled={decide.isPending}
                               className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition-all"
-                              onClick={() => decide.mutate({ id: v.id, status: 'APPROVED' })}
+                              onClick={() =>
+                                decide.mutate({ id: v.id, status: 'APPROVED', version: v.version })
+                              }
                             >
                               <IconCheck className="h-3.5 w-3.5" />
                               <span>Approve</span>
@@ -453,12 +518,47 @@ export function VisitorAccessView({
                             <button
                               disabled={decide.isPending}
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-all"
-                              onClick={() => decide.mutate({ id: v.id, status: 'REJECTED' })}
+                              onClick={() =>
+                                decide.mutate({ id: v.id, status: 'REJECTED', version: v.version })
+                              }
                             >
                               <IconX className="h-3.5 w-3.5 text-slate-400" />
                               <span>Reject</span>
                             </button>
                           </div>
+                        )}
+                        {['CANCELLED', 'EXPIRED'].includes(v.status) && (
+                          <span className="text-xs font-bold">{v.status}</span>
+                        )}
+                        {v.reviewNote && <p className="text-xs text-slate-600">{v.reviewNote}</p>}
+                        {v.presence === 'NEEDS_REVIEW' && (
+                          <p role="alert" className="text-xs text-amber-700">
+                            Legacy group count needs reconciliation at the gate.
+                          </p>
+                        )}
+                        {canManualCheckout && inside > 0 && (
+                          <button
+                            disabled={
+                              manualCheckout.isPending ||
+                              !reviewNote.trim() ||
+                              !representativeConfirmed
+                            }
+                            onClick={() => manualCheckout.mutate(v.id)}
+                            className="rounded border px-3 py-1"
+                          >
+                            Manual group checkout
+                          </button>
+                        )}
+                        {canApprove && ['PENDING', 'APPROVED'].includes(v.status) && (
+                          <button
+                            disabled={decide.isPending || !reviewNote.trim()}
+                            onClick={() =>
+                              decide.mutate({ id: v.id, status: 'CANCELLED', version: v.version })
+                            }
+                            className="mt-2 block rounded-lg border px-3 py-1 text-xs disabled:opacity-50"
+                          >
+                            Cancel visit
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -481,7 +581,7 @@ export function VisitorAccessView({
               Scan Visitor QR at Gate
             </h2>
             <p className="text-xs text-slate-500">
-              Verify dynamic visitor QR code and record actual group entry / exit headcount
+              The representative confirms entry or exit for the entire approved group.
             </p>
           </div>
         </div>
@@ -536,52 +636,17 @@ export function VisitorAccessView({
               </label>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Actual Headcount
-              </label>
-              <div className="mt-1.5 flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={verify.isPending || count <= 1}
-                  onClick={() => setCount((prev) => Math.max(1, prev - 1))}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                >
-                  -
-                </button>
-                <input
-                  disabled={verify.isPending}
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={count}
-                  onChange={(e) => setCount(Number(e.target.value))}
-                  className="h-10 w-24 rounded-xl border border-slate-200 bg-slate-50/50 text-center font-bold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
-                />
-                <button
-                  type="button"
-                  disabled={verify.isPending}
-                  onClick={() => setCount((prev) => prev + 1)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                >
-                  +
-                </button>
-                <span className="text-xs text-slate-500 ml-2">visitors passing through gate</span>
-              </div>
-            </div>
+            <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+              Headcount comes from the approved visit and includes the representative. Confirm only
+              when the entire group passes together.
+            </p>
 
             {/* Confirmation Buttons */}
             <div className="pt-2 flex flex-wrap gap-3">
               {(['IN', 'OUT'] as const).map((d) => (
                 <button
                   key={d}
-                  disabled={
-                    !qrToken.trim() ||
-                    verify.isPending ||
-                    !Number.isInteger(count) ||
-                    count < 1 ||
-                    count > 1000
-                  }
+                  disabled={!qrToken.trim() || verify.isPending}
                   className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-bold text-white shadow-xs transition-all disabled:opacity-40 ${
                     d === 'IN'
                       ? 'bg-emerald-600 hover:bg-emerald-700'

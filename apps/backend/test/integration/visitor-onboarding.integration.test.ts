@@ -11,6 +11,7 @@ import { QrAccessService } from '../../src/modules/workforce/qr-access.service.j
 import { AuthClientType, UserRole } from '../../src/database/entities/index.js';
 import { createTestConfig } from '../support/config.js';
 import dataSource from '../support/test-data-source.js';
+import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 
 test('new Site Manager must change their temporary password before visitor registration, approval and QR entry', async () => {
   await dataSource.initialize();
@@ -94,6 +95,7 @@ test('new Site Manager must change their temporary password before visitor regis
     assert.equal(entry.visit.decidedByUserId, account.id);
   } finally {
     try {
+      await cleanupSiteAccess(dataSource, [siteId]);
       await dataSource.query(
         'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
         [siteId],

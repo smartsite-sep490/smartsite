@@ -58,6 +58,19 @@ function createManager(workers: WorkerEntity[], grants: ZoneAccessGrantEntity[])
   const workerQueries: Record<string, unknown>[] = [];
   const grantQueries: Record<string, unknown>[] = [];
   const manager = {
+    async query(_sql: string, params: unknown[]) {
+      const [scopeWorker, scopeSite, scopeZone] = params;
+      grantQueries.push({ siteId: scopeSite, zoneId: scopeZone, workerId: scopeWorker });
+      return grants
+        .filter(
+          (g) =>
+            g.effect === ZoneAccessEffect.ALLOW &&
+            g.siteId === scopeSite &&
+            g.zoneId === scopeZone &&
+            g.workerId === scopeWorker,
+        )
+        .map((g) => ({ validFrom: g.validFrom, validUntil: g.validUntil }));
+    },
     getRepository(target: unknown) {
       if (target === WorkerEntity) {
         return {
@@ -70,7 +83,6 @@ function createManager(workers: WorkerEntity[], grants: ZoneAccessGrantEntity[])
       if (target === ZoneAccessGrantEntity) {
         return {
           findBy: async (criteria: Record<string, unknown>) => {
-            grantQueries.push({ ...criteria });
             return grants.filter((item) => matches(item, criteria));
           },
         };

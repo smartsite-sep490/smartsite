@@ -11,6 +11,9 @@ import {
   IssueWorkerQrCommand,
   VerifyVisitorQrCommand,
   VerifyWorkerQrCommand,
+  ConfirmPassageCommand,
+  ManualWorkerVerificationCommand,
+  ManualVisitCheckoutCommand,
 } from './qr-access.commands.js';
 @ApiTags('visitor-registration')
 @Controller('visitor-registration')
@@ -18,6 +21,9 @@ export class VisitorRegistrationController {
   constructor(private readonly access: QrAccessService) {}
   @Get('sites') sites() {
     return this.access.publicSites();
+  }
+  @Get('sites/:siteId/zones') zones(@Param('siteId') siteId: string) {
+    return this.access.publicZones(siteId);
   }
   @Post('sites/:siteId/visits') register(
     @Param('siteId') siteId: string,
@@ -35,6 +41,30 @@ export class VisitorRegistrationController {
 @Controller('sites/:siteId')
 export class QrAccessController {
   constructor(private readonly access: QrAccessService) {}
+  @Post('visits/:visitId/manual-checkout') manualVisitCheckout(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('visitId') visitId: string,
+    @Body() input: ManualVisitCheckoutCommand,
+  ) {
+    return this.access.manualVisitCheckout(req.user!, siteId, visitId, input);
+  }
+  @Post('gates/:gateId/manual-verifications') manual(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('gateId') gateId: string,
+    @Body() input: ManualWorkerVerificationCommand,
+  ) {
+    return this.access.manualWorker(req.user!, siteId, gateId, input);
+  }
+  @Post('access-attempts/:attemptId/confirm') confirmPassage(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('attemptId') attemptId: string,
+    @Body() input: ConfirmPassageCommand,
+  ) {
+    return this.access.confirmPassage(req.user!, siteId, attemptId, input);
+  }
   @Get('visits') visits(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string) {
     return this.access.listVisits(req.user!, siteId);
   }

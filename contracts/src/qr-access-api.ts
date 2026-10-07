@@ -12,6 +12,7 @@ export interface CreateVisitCommand {
   gateId: string;
   validFrom: string;
   validUntil: string;
+  zoneIds?: string[];
 }
 export interface VisitResponse {
   id: string;
@@ -26,7 +27,13 @@ export interface VisitResponse {
   gateId: string;
   validFrom: string;
   validUntil: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+  representativeVisitorId?: string;
+  siteManagerId?: string;
+  version?: number;
+  reviewNote?: string | null;
+  zoneIds?: string[];
+  presence?: 'OUTSIDE' | 'INSIDE' | 'NEEDS_REVIEW';
   enteredCount: number;
   exitedCount: number;
   createdAt: string;
@@ -35,6 +42,7 @@ export interface VisitResponse {
 export interface QrPassResponse {
   token: string;
   expiresAt: string;
+  direction?: 'IN' | 'OUT';
 }
 export interface VisitorPassResponse {
   visit: VisitResponse;
@@ -53,9 +61,11 @@ export interface VerifyQrCommand {
   requestId: string;
 }
 export interface VisitorGateCommand extends VerifyQrCommand {
-  count: number;
+  /** Legacy clients may send the complete approved headcount; partial groups are rejected. */
+  count?: number;
 }
 export interface WorkerQrVerificationResponse {
+  attempt?: import('./access-flow-api.js').AccessAttemptResponse;
   authorization: 'ALLOWED' | 'DENIED' | 'MANUAL_REVIEW';
   reasonCode: string;
   worker: NonNullable<FaceGateVerificationResponse['worker']>;

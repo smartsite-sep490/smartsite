@@ -114,3 +114,6 @@ export type {
   AbsenceRequestResponse,
 } from './management-api.js';
 export * from './safety-workflow-api.js';
+export * from './access-flow-api.js';
+export * from './access-setup-api.js';
+export * from './attendance-api.js';

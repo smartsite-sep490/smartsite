@@ -3,7 +3,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsEnum, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
-import { command, missing, page, uuid } from '../../common/configuration/commands.js';
+import { command, conflict, missing, page, uuid } from '../../common/configuration/commands.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import {
   ZoneAccessEffect,
@@ -113,6 +113,8 @@ export class ZoneAccessManagementService {
         .findOneBy({ id: uuid(value.workerId), siteId: scopedSiteId, isActive: true }),
     ]);
     if (!zone || !worker) missing();
+    if (value.effect === ZoneAccessEffect.ALLOW)
+      conflict('Use Contractor and Worker Zone permissions within approved assignment bounds');
     return await this.dataSource.getRepository(ZoneAccessGrantEntity).save({
       id: randomUUID(),
       siteId: scopedSiteId,

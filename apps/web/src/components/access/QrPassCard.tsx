@@ -64,6 +64,11 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
         )}
       </div>
 
+      {pass.direction && (
+        <p className="text-sm font-bold text-slate-800">
+          {pass.direction === 'IN' ? 'Entry (IN)' : 'Exit (OUT)'}
+        </p>
+      )}
       {/* QR Code Container */}
       {remaining > 0 ? (
         <div className="relative mx-auto my-3 w-fit rounded-2xl border-2 border-slate-200/90 bg-white p-4 shadow-sm transition-all hover:border-[#FF7A1A]/40">
@@ -166,7 +171,12 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
                 </>
               ) : (
                 <>
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"

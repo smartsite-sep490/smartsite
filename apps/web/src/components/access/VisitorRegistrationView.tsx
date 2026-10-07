@@ -46,6 +46,12 @@ export function VisitorRegistrationView({
     queryKey: ['visitor-registration', apiUrl, 'sites'],
     queryFn: () => client.listVisitorSites(),
   });
+  const selectedSiteId = siteId || sites.data?.items[0]?.id || '';
+  const zones = useQuery({
+    queryKey: ['visitor-registration', apiUrl, selectedSiteId, 'zones'],
+    enabled: !!selectedSiteId && !reference,
+    queryFn: () => client.listVisitorZones(selectedSiteId),
+  });
 
   const pass = useQuery({
     queryKey: ['visitor-registration', apiUrl, reference?.visitId, reference?.accessKey],
@@ -82,6 +88,7 @@ export function VisitorRegistrationView({
       purpose: String(f.get('purpose')),
       targetArea: String(f.get('targetArea')),
       groupSize: Number(f.get('groupSize')),
+      zoneIds: f.getAll('zoneIds').map(String),
       gateId: String(f.get('gateId')),
       validFrom: new Date(String(f.get('validFrom'))).toISOString(),
       validUntil: new Date(String(f.get('validUntil'))).toISOString(),
@@ -148,7 +155,10 @@ export function VisitorRegistrationView({
                   Save Tracking Link
                 </span>
                 {message && (
-                  <span role="status" className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                  <span
+                    role="status"
+                    className="text-xs font-semibold text-emerald-700 flex items-center gap-1"
+                  >
                     <IconCheck className="h-3.5 w-3.5" />
                     {message}
                   </span>
@@ -174,7 +184,12 @@ export function VisitorRegistrationView({
                   }}
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition-all shadow-xs"
                 >
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -189,7 +204,10 @@ export function VisitorRegistrationView({
 
             {/* Loading / Error States */}
             {pass.isPending && (
-              <div role="status" className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
+              <div
+                role="status"
+                className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500"
+              >
                 <IconLoader className="h-4 w-4" />
                 <span>Checking approval status…</span>
               </div>
@@ -249,7 +267,7 @@ export function VisitorRegistrationView({
                             ? 'Pending Site Manager Approval'
                             : pass.data.visit.status === 'APPROVED'
                               ? 'Approved'
-                              : 'Rejected'}
+                              : pass.data.visit.status}
                         </span>
                       </span>
                     </div>
@@ -280,7 +298,8 @@ export function VisitorRegistrationView({
                         Entry / Exit Headcount
                       </span>
                       <p className="font-medium text-slate-800">
-                        In: {pass.data.visit.enteredCount} · Out: {pass.data.visit.exitedCount} · On-site:{' '}
+                        In: {pass.data.visit.enteredCount} · Out: {pass.data.visit.exitedCount} ·
+                        On-site:{' '}
                         <span className="font-bold text-[#FF7A1A]">
                           {pass.data.visit.enteredCount - pass.data.visit.exitedCount}
                         </span>{' '}
@@ -369,7 +388,10 @@ export function VisitorRegistrationView({
                 )}
 
                 {sites.error && (
-                  <div role="alert" className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 sm:col-span-2">
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 sm:col-span-2"
+                  >
                     <span>{sites.error.message}</span>
                     <button
                       type="button"
@@ -469,6 +491,27 @@ export function VisitorRegistrationView({
                   />
                 </label>
 
+                <fieldset className="sm:col-span-2 space-y-2">
+                  <legend className="text-xs font-bold">Requested Zones</legend>
+                  {zones.isPending && selectedSiteId && <p role="status">Loading Site zones…</p>}
+                  {zones.error && (
+                    <p role="alert">
+                      Unable to load Site zones.{' '}
+                      <button type="button" onClick={() => void zones.refetch()}>
+                        Retry
+                      </button>
+                    </p>
+                  )}
+                  {zones.data?.items.map((z) => (
+                    <label key={z.id} className="mr-4 inline-flex items-center gap-2 text-sm">
+                      <input name="zoneIds" type="checkbox" value={z.id} />
+                      {z.name}
+                    </label>
+                  ))}
+                  <p className="text-xs text-slate-500">
+                    Requested access takes effect only after Site Manager approval.
+                  </p>
+                </fieldset>
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Visit Purpose
                   <input

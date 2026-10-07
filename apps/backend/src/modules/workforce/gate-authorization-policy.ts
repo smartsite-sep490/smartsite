@@ -36,7 +36,8 @@ export interface GateAuthorizationDecision {
     | 'SITE_MISMATCH'
     | 'GATE_MISMATCH'
     | 'ASSIGNMENT_EXPIRED'
-    | 'VALID_ASSIGNMENT';
+    | 'VALID_ASSIGNMENT'
+    | 'EXIT_RECORD_ONLY';
 }
 
 /** Backend authorization after a face adapter has supplied only technical evidence. */

@@ -39,8 +39,13 @@ export class FaceEnrollmentSessionEntity {
   @Column({ name: 'consent_version', type: 'varchar', length: 64 })
   consentVersion!: string;
 
-  @Column({ name: 'consented_at', type: 'timestamptz' })
-  consentedAt!: Date;
+  @Column({ name: 'consented_at', type: 'timestamptz', nullable: true })
+  consentedAt!: Date | null;
+  @Column({ name: 'consent_method', type: 'varchar', length: 50, nullable: true }) consentMethod!:
+    string | null;
+  @Column({ name: 'consent_token_hash', type: 'char', length: 64, nullable: true, select: false })
+  consentTokenHash!: string | null;
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true }) expiresAt!: Date | null;
 
   @Column({ type: 'varchar', length: 32 })
   status!: FaceEnrollmentSessionStatus;

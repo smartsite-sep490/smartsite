@@ -44,7 +44,9 @@ if (!process.exitCode) {
     .map((file) => `${directory}/${file}`);
   const result = spawnSync(
     process.execPath,
-    ['--test', ...(integration ? ['--test-concurrency=1'] : []), ...files],
+    // Nest bootstrap fixtures spawn children; keep startup contention bounded
+    // when Turbo also runs the browser suite. Assertion/time limits stay intact.
+    ['--test', '--test-concurrency=1', ...files],
     {
       cwd: backendDirectory,
       env: process.env,

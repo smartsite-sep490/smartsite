@@ -8,12 +8,12 @@ export type UserRole =
   | 'SECURITY_OFFICER'
   | 'WORKER';
 export type ProvisionableUserRole =
-  'ADMIN' |
-  'SITE_MANAGER' |
-  'CONTRACTOR_REPRESENTATIVE' |
-  'SAFETY_OFFICER' |
-  'SECURITY_OFFICER' |
-  'WORKER';
+  | 'ADMIN'
+  | 'SITE_MANAGER'
+  | 'CONTRACTOR_REPRESENTATIVE'
+  | 'SAFETY_OFFICER'
+  | 'SECURITY_OFFICER'
+  | 'WORKER';
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export * from './observation-identity-management.js';
@@ -191,6 +191,10 @@ export interface ContractorRepresentativeGrantResponse {
 }
 
 export interface WorkerSiteZoneAssignmentResponse {
+  siteContractorId?: string | null;
+  version?: number;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
   id: string;
   workerId: string;
   siteId: string;
@@ -208,6 +212,8 @@ export type FaceEnrollmentSessionStatus =
   'PENDING' | 'COLLECTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export interface FaceEnrollmentSessionResponse {
+  consentToken?: string;
+  consentedAt?: string | null;
   id: string;
   workerId: string;
   consentVersion: string;
@@ -229,7 +235,9 @@ export interface FaceProfileResponse {
   workerId: string;
   userId?: string | null;
   modelVersion: string;
-  status: 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+  status: 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL' | 'DELETED';
+  consentMethod?: string;
+  deletedAt?: string | null;
   consentVersion: string;
   consentedAt: string;
   createdAt: string;

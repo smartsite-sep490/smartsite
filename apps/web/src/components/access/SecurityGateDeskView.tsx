@@ -3,7 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
-import type { QrFallbackResponse, VerifyQrCommand } from '@smartsite/contracts';
+import type {
+  QrFallbackResponse,
+  VerifyQrCommand,
+  AccessAttemptResponse,
+  GateEventResponse,
+} from '@smartsite/contracts';
 import { QrScannerView } from './QrScannerView';
 import { inspectGateCamera } from './gateCameraReadiness';
 import { GateCameraSession } from './gateCameraSession';
@@ -41,6 +46,7 @@ export interface GateDeskEventRecord {
 }
 
 export interface SecurityGateDeskViewProps {
+  canManualVerify?: boolean;
   apiUrl: string;
   token?: string;
   sessionScope: string;
@@ -74,6 +80,7 @@ function getGateFaceMessage(reasonCode: string): string {
 }
 
 export function SecurityGateDeskView({
+  canManualVerify = false,
   apiUrl,
   token,
   sessionScope,
@@ -109,6 +116,92 @@ export function SecurityGateDeskView({
   const [isScanning, setIsScanning] = useState(false);
   const [networkError, setNetworkError] = useState(false);
   const [lastDecision, setLastDecision] = useState<FaceGateDecisionResponse | null>(null);
+  const [currentAttempt, setCurrentAttempt] = useState<AccessAttemptResponse | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [confirmedEvent, setConfirmedEvent] = useState<GateEventResponse | null>(null);
+  const attendanceKey = useRef<{ eventId: string; requestId: string } | null>(null);
+  const attendance = useMutation({
+    mutationFn: () => {
+      if (!confirmedEvent) throw new Error('Confirm an actual passage first.');
+      if (attendanceKey.current?.eventId !== confirmedEvent.id)
+        attendanceKey.current = { eventId: confirmedEvent.id, requestId: crypto.randomUUID() };
+      return client.recordAttendance(token!, selectedSiteId, confirmedEvent.id, {
+        requestId: attendanceKey.current.requestId,
+        kind: confirmedEvent.direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['attendance', apiUrl, sessionScope, selectedSiteId],
+      });
+    },
+  });
+  const [manualWorkerId, setManualWorkerId] = useState('');
+  const [manualIdentityConfirmed, setManualIdentityConfirmed] = useState(false);
+  const manualWorkers = useQuery({
+    queryKey: ['access-control', apiUrl, sessionScope, selectedSiteId, 'manual-worker-choices'],
+    enabled: canManualVerify && !!token && !!selectedSiteId,
+    queryFn: () => client.listWorkers(token!, selectedSiteId, { limit: 100 }),
+  });
+  const manualRequest = useRef<{ fingerprint: string; id: string } | null>(null);
+  const manual = useMutation({
+    mutationFn: () => {
+      const fingerprint = JSON.stringify([
+        selectedSiteId,
+        selectedGateId,
+        direction,
+        manualWorkerId,
+        reviewNote,
+      ]);
+      if (manualRequest.current?.fingerprint !== fingerprint)
+        manualRequest.current = { fingerprint, id: crypto.randomUUID() };
+      return client.manuallyVerifyWorker(token!, selectedSiteId, selectedGateId, {
+        requestId: manualRequest.current.id,
+        workerId: manualWorkerId,
+        direction,
+        identityConfirmed: true,
+        reviewNote: reviewNote.trim(),
+      });
+    },
+    onSuccess: (attempt) => {
+      const worker = manualWorkers.data?.items.find((w) => w.id === manualWorkerId);
+      setCurrentAttempt(attempt);
+      setLastDecision(null);
+      setCandidateWorker(
+        worker
+          ? {
+              id: worker.id,
+              userId: worker.userId ?? null,
+              username: '',
+              externalId: worker.externalId,
+              displayName: worker.displayName,
+              contractorName: '',
+              assignmentStatus: attempt.status,
+            }
+          : null,
+      );
+    },
+  });
+  const passageKey = useRef<{ attemptId: string; idempotencyKey: string } | null>(null);
+  const passage = useMutation({
+    mutationFn: () => {
+      if (!currentAttempt) throw new Error('Verify the worker first.');
+      if (passageKey.current?.attemptId !== currentAttempt.id)
+        passageKey.current = { attemptId: currentAttempt.id, idempotencyKey: crypto.randomUUID() };
+      return client.confirmGatePassage(token!, selectedSiteId, currentAttempt.id, {
+        idempotencyKey: passageKey.current.idempotencyKey,
+        reviewNote: reviewNote.trim() || undefined,
+      });
+    },
+    onSuccess: (event) => {
+      setCurrentAttempt(null);
+      setConfirmedEvent(event);
+      attendance.reset();
+      void queryClient.invalidateQueries({
+        queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
+      });
+    },
+  });
   const [candidateWorker, setCandidateWorker] = useState<
     FaceGateVerificationResponse['worker'] | null
   >(null);
@@ -135,6 +228,7 @@ export function SecurityGateDeskView({
         `${r.authorization}: ${r.worker.displayName} · ${getSafeReasonMessage(r.reasonCode)}`,
       );
       setCandidateWorker(r.worker);
+      setCurrentAttempt(r.attempt ?? null);
       setQrCodeInput('');
       setFallback(null);
       qrCommand.current = null;
@@ -283,6 +377,7 @@ export function SecurityGateDeskView({
         );
         if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         setLastDecision(data.decision);
+        setCurrentAttempt(data.attempt ?? null);
         setFallback(data.fallback ?? null);
         // Historical display only: unknown scans never inherit this worker's identity or access.
         setCandidateWorker((previous) => retainGateWorker(previous, data.worker));
@@ -317,6 +412,7 @@ export function SecurityGateDeskView({
   useEffect(() => {
     if (!cameraActive || networkError || !selectedSiteId || !token || qrModalOpen || fallback)
       return;
+    if (currentAttempt && candidateWorker) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
@@ -330,7 +426,17 @@ export function SecurityGateDeskView({
       clearTimeout(timer);
       scanGeneration.current += 1;
     };
-  }, [cameraActive, handleScanFace, networkError, selectedSiteId, token, qrModalOpen, fallback]);
+  }, [
+    cameraActive,
+    handleScanFace,
+    networkError,
+    selectedSiteId,
+    token,
+    qrModalOpen,
+    fallback,
+    currentAttempt,
+    candidateWorker,
+  ]);
 
   // Reset scan to prepare for next worker
   const handleResetScan = () => {
@@ -340,6 +446,10 @@ export function SecurityGateDeskView({
     setScanMessage('Awaiting face…');
     updateCapturedPreview(null);
     setLastDecision(null);
+    setCurrentAttempt(null);
+    setConfirmedEvent(null);
+    passageKey.current = null;
+    setReviewNote('');
     setCandidateWorker(null);
     setNetworkError(false);
     setFallback(null);
@@ -852,19 +962,28 @@ export function SecurityGateDeskView({
                     {fallback.id}
                   </div>
                   <p className="text-[11px] text-blue-700">
-                    Expires: <span className="font-semibold">{new Date(fallback.expiresAt).toLocaleTimeString()}</span>
+                    Expires:{' '}
+                    <span className="font-semibold">
+                      {new Date(fallback.expiresAt).toLocaleTimeString()}
+                    </span>
                   </p>
                 </div>
               )}
               <QrScannerView disabled={qrProcessing || !fallback} onScan={setQrCodeInput} />
               {qrVerification.error && (
-                <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700"
+                >
                   <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
                   <span>{qrVerification.error.message}</span>
                 </div>
               )}
               {qrResultMessage && (
-                <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800"
+                >
                   <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
                   <span>{qrResultMessage}</span>
                 </div>
@@ -915,7 +1034,122 @@ export function SecurityGateDeskView({
         </div>
       )}
 
-      {/* Recent Gate Events Audit Trail */}
+      {canManualVerify && (
+        <section className="space-y-3 rounded-xl border bg-white p-5">
+          <h3 className="font-semibold">Security manual verification</h3>
+          <label className="block text-xs">
+            Worker profile
+            <select
+              value={manualWorkerId}
+              onChange={(e) => {
+                setManualWorkerId(e.target.value);
+                setManualIdentityConfirmed(false);
+              }}
+              className="mt-1 block w-full rounded border p-2"
+            >
+              <option value="">Select Worker</option>
+              {manualWorkers.data?.items.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.displayName} · {w.externalId}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs">
+            Verification reason
+            <input
+              className="mt-1 block w-full rounded border p-2"
+              value={reviewNote}
+              maxLength={1000}
+              onChange={(e) => setReviewNote(e.target.value)}
+            />
+          </label>
+          <label className="block text-xs">
+            <input
+              type="checkbox"
+              checked={manualIdentityConfirmed}
+              onChange={(e) => setManualIdentityConfirmed(e.target.checked)}
+            />{' '}
+            I physically verified this Worker&apos;s identity.
+          </label>
+          <button
+            className="rounded border px-4 py-2 text-sm disabled:opacity-50"
+            disabled={
+              !manualIdentityConfirmed || !manualWorkerId || !reviewNote.trim() || manual.isPending
+            }
+            onClick={() => manual.mutate()}
+          >
+            Verify Worker manually
+          </button>
+          {manualWorkers.error && <p role="alert">{manualWorkers.error.message}</p>}
+          {manual.error && <p role="alert">{manual.error.message}</p>}
+          {manual.data?.status === 'DENIED' && (
+            <p role="alert">Worker identity verified. Site entry permission was denied.</p>
+          )}
+        </section>
+      )}
+      {currentAttempt &&
+        ['READY', 'PENDING'].includes(currentAttempt.status) &&
+        candidateWorker && (
+          <section className="rounded-xl border bg-white p-5 space-y-3">
+            <p className="font-semibold">
+              Verification recorded. Confirm the actual passage for {candidateWorker.displayName}.
+            </p>
+            <p className="text-xs">
+              Schedule: {currentAttempt.scheduleStatus}. Temporary passage does not create
+              attendance.
+            </p>
+            <label className="block text-xs">
+              Security review reason (required outside a scheduled shift)
+              <input
+                className="mt-1 block w-full rounded border p-2"
+                value={reviewNote}
+                maxLength={1000}
+                onChange={(e) => setReviewNote(e.target.value)}
+              />
+            </label>
+            <button
+              className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              disabled={
+                passage.isPending ||
+                (direction === 'IN' &&
+                  currentAttempt.scheduleStatus !== 'SCHEDULED' &&
+                  !canManualVerify)
+              }
+              onClick={() => passage.mutate()}
+            >
+              Confirm actual passage
+            </button>
+            {passage.error && <p role="alert">{passage.error.message}</p>}
+            {direction === 'IN' &&
+              currentAttempt.scheduleStatus !== 'SCHEDULED' &&
+              !canManualVerify && (
+                <p className="text-sm text-amber-700">
+                  Security must verify and confirm entry outside a scheduled shift.
+                </p>
+              )}
+          </section>
+        )}
+      {passage.isSuccess && <p role="status">Actual passage recorded.</p>}
+      {confirmedEvent && canManualVerify && (
+        <section className="space-y-3 rounded-xl border bg-white p-5">
+          <p className="text-sm">
+            This {confirmedEvent.direction === 'IN' ? 'entry' : 'exit'} is recorded. Record work{' '}
+            {confirmedEvent.direction === 'IN' ? 'check-in' : 'check-out'} only if the Worker is{' '}
+            {confirmedEvent.direction === 'IN' ? 'starting' : 'ending'} their work session.
+          </p>
+          <button
+            className="rounded border px-4 py-2 text-sm disabled:opacity-50"
+            disabled={attendance.isPending || attendance.isSuccess}
+            onClick={() => attendance.mutate()}
+          >
+            Record work {confirmedEvent.direction === 'IN' ? 'check-in' : 'check-out'}
+          </button>
+          {attendance.error && <p role="alert">{attendance.error.message}</p>}
+          {attendance.isSuccess && <p role="status">Work attendance recorded.</p>}
+        </section>
+      )}
+      {/* Recent verification decisions */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2.5">
@@ -925,7 +1159,7 @@ export function SecurityGateDeskView({
             <div>
               <h3 className="font-bold text-slate-900">Gate Access & Clearance Audit Trail</h3>
               <p className="text-[11px] text-slate-500">
-                Verified clearance decisions logged to database
+                Verification decisions; actual passage requires confirmation
               </p>
             </div>
           </div>

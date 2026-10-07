@@ -46,6 +46,9 @@ it('routes a representative group registration to the selected site and shows QR
   const register = vi
     .spyOn(SmartSiteManagementClient.prototype, 'registerVisit')
     .mockResolvedValue(visit);
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisitorZones').mockResolvedValue({
+    items: [{ id: 'zone-beta', name: 'Beta office' }],
+  });
   const lookup = vi
     .spyOn(SmartSiteManagementClient.prototype, 'getVisitorPass')
     .mockResolvedValue({ visit, pass: null });
@@ -61,13 +64,18 @@ it('routes a representative group registration to the selected site and shows QR
   await user.type(screen.getByLabelText('Host Contact at Site'), visit.hostName);
   await user.type(screen.getByLabelText('Visit Purpose'), visit.purpose);
   await user.type(screen.getByLabelText('Target Visit Area'), visit.targetArea);
+  await user.click(await screen.findByLabelText('Beta office'));
   await user.clear(screen.getByLabelText('Total Visitors (Headcount)'));
   await user.type(screen.getByLabelText('Total Visitors (Headcount)'), '20');
   await user.click(screen.getByRole('button', { name: 'Submit for Site Manager Approval' }));
   await screen.findByText('Status: Pending Site Manager Approval');
   expect(register).toHaveBeenCalledWith(
     'site-beta',
-    expect.objectContaining({ groupSize: 20, visitorName: visit.visitorName }),
+    expect.objectContaining({
+      groupSize: 20,
+      visitorName: visit.visitorName,
+      zoneIds: ['zone-beta'],
+    }),
   );
   expect(screen.queryByTitle('SmartSite access QR')).toBeNull();
   const reference = screen.getByLabelText('Visitor Pass Tracking Link') as HTMLInputElement;
