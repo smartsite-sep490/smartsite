@@ -34,7 +34,9 @@ export function QrScannerView({
     );
     void scanner.start().catch(() => {
       if (!cancelled) {
-        setError('Unable to access camera. Try uploading a QR image or entering the token manually.');
+        setError(
+          'Unable to access camera. Try uploading a QR image or entering the token manually.',
+        );
         setActive(false);
       }
     });
@@ -79,7 +81,12 @@ export function QrScannerView({
             disabled ? 'opacity-50 pointer-events-none' : ''
           }`}
         >
-          <svg className="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="h-4 w-4 text-slate-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -110,12 +117,7 @@ export function QrScannerView({
       {/* Video Viewport with Reticle */}
       {active && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-slate-900 bg-black aspect-video max-h-72 w-full flex items-center justify-center shadow-inner">
-          <video
-            ref={video}
-            playsInline
-            muted
-            className="h-full w-full object-cover"
-          />
+          <video ref={video} playsInline muted className="h-full w-full object-cover" />
 
           {/* Scanner Viewfinder Reticle */}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-6">
@@ -125,7 +127,7 @@ export function QrScannerView({
               <div className="absolute -top-1 -right-1 h-6 w-6 border-t-4 border-r-4 border-[#FF7A1A] rounded-tr-sm" />
               <div className="absolute -bottom-1 -left-1 h-6 w-6 border-b-4 border-l-4 border-[#FF7A1A] rounded-bl-sm" />
               <div className="absolute -bottom-1 -right-1 h-6 w-6 border-b-4 border-r-4 border-[#FF7A1A] rounded-br-sm" />
-              
+
               {/* Laser line */}
               <div className="absolute inset-x-2 top-1/2 h-0.5 bg-gradient-to-r from-transparent via-[#FF7A1A] to-transparent animate-pulse shadow-[0_0_8px_#FF7A1A]" />
             </div>
@@ -138,7 +140,10 @@ export function QrScannerView({
 
       {/* Error Banner */}
       {error && (
-        <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+        >
           <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
           <span>{error}</span>
         </div>
