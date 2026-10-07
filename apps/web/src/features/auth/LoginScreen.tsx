@@ -5,14 +5,13 @@ import { useLogin } from './auth-session';
 import { IconArrowRight, IconAlertTriangle, IconUser, IconKey } from '../../components/icons';
 
 interface LoginScreenProps {
-  onLoginSuccess: () => void;
   onBack: () => void;
   onNavigateToRegister: () => void;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: LoginScreenProps) {
+export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -99,7 +98,6 @@ export function LoginScreen({ onLoginSuccess, onBack, onNavigateToRegister }: Lo
             opacity: 0,
             duration: 0.5,
             ease: 'power3.in',
-            onComplete: onLoginSuccess,
             delay: 0.5, // let them see the success glow briefly
           });
           // Turn orb to green/success

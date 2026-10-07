@@ -17,8 +17,12 @@ import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
 
 export interface SafetyAlertsViewProps {
   apiUrl: string;
+  authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
+  onSignOut?: () => void;
   initialSiteId?: string;
   initialAlertId?: string;
+  initialIncidentId?: string;
+  initialActionId?: string;
   initialStatus?: 'ALL' | SafetyAlertStatus;
   initialType?: 'ALL' | SafetyAlertType;
 }
@@ -111,22 +115,49 @@ function AlertRow({
   );
 }
 
+function initialWorkspaceTab(
+  session: Pick<LoginResponse, 'user'>,
+): 'Alerts' | 'Incidents' | 'Safety Tasks' {
+  const roles = session.user.roleAssignments;
+  return roles.some(({ role }) => role === 'SAFETY_OFFICER' || role === 'ADMIN')
+    ? 'Alerts'
+    : roles.some(({ role }) => role === 'CONTRACTOR_REPRESENTATIVE')
+      ? 'Incidents'
+      : 'Safety Tasks';
+}
+
 export function SafetyAlertsView({
   apiUrl,
+  authenticatedSession,
+  onSignOut,
   initialSiteId,
   initialAlertId,
+  initialIncidentId,
+  initialActionId,
   initialStatus,
   initialType,
 }: SafetyAlertsViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const [workspaceTab, setWorkspaceTab] = useState<'Alerts' | 'Incidents' | 'Safety Tasks'>(
-    'Alerts',
+    initialIncidentId
+      ? 'Incidents'
+      : authenticatedSession
+        ? initialWorkspaceTab(authenticatedSession)
+        : 'Alerts',
   );
+  const incidentLink = (initialIncidentId ?? '') + ':' + (initialActionId ?? '');
+  const [previousIncidentLink, setPreviousIncidentLink] = useState(incidentLink);
+  if (previousIncidentLink !== incidentLink) {
+    setPreviousIncidentLink(incidentLink);
+    if (initialIncidentId) setWorkspaceTab('Incidents');
+  }
   const [incidentSourceAlert, setIncidentSourceAlert] = useState('');
   const [mobileAlertDetail, setMobileAlertDetail] = useState(false);
-  const [session, setSession] = useState<LoginResponse | null>(null);
-  const [sessionScope, setSessionScope] = useState('');
+  const [localSession, setSession] = useState<LoginResponse | null>(null);
+  const session = authenticatedSession ?? localSession;
+  const externalSession = authenticatedSession !== undefined;
+  const [sessionScope, setSessionScope] = useState<string>(() => crypto.randomUUID());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [requestedSiteId, setRequestedSiteId] = useState(initialSiteId ?? '');
@@ -139,6 +170,7 @@ export function SafetyAlertsView({
     null,
   );
   const lifecycleGeneration = useRef(0);
+  const externalScope = useRef(sessionScope);
 
   // Minimal appropriate mount semantics: adjust filters when navigation initial* props change without useEffect
   const [prevInitialType, setPrevInitialType] = useState(initialType);
@@ -205,13 +237,13 @@ export function SafetyAlertsView({
       const canReviewSafetyAlerts = result.user.roleAssignments.some(
         ({ role, siteId }) =>
           (role === 'ADMIN' && siteId === null) ||
-          (['SAFETY_OFFICER', 'SECURITY_OFFICER', 'SITE_MANAGER'].includes(role) &&
+          (['SAFETY_OFFICER', 'CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'].includes(role) &&
             siteId !== null),
       );
       if (!canReviewSafetyAlerts) {
         await client.logout().catch(() => undefined);
         throw new Error(
-          'A global Admin or Site-scoped Safety, Security or Manager role is required.',
+          'A global Admin or Site-scoped Safety, Contractor Representative or Manager role is required.',
         );
       }
       if (result.user.mustChangePassword) {
@@ -228,13 +260,7 @@ export function SafetyAlertsView({
         userId: result.user.id,
         sessionScope: freshScope,
       };
-      setWorkspaceTab(
-        result.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' || r.role === 'ADMIN')
-          ? 'Alerts'
-          : result.user.roleAssignments.some((r) => r.role === 'SECURITY_OFFICER')
-            ? 'Incidents'
-            : 'Safety Tasks',
-      );
+      setWorkspaceTab(initialWorkspaceTab(result));
       setSession(result);
       setSessionScope(freshScope);
       setIncidentSourceAlert('');
@@ -244,16 +270,30 @@ export function SafetyAlertsView({
   });
 
   useEffect(() => {
+    if (authenticatedSession)
+      activeSession.current = {
+        token: authenticatedSession.accessToken,
+        userId: authenticatedSession.user.id,
+        sessionScope,
+      };
+  }, [authenticatedSession, sessionScope]);
+
+  useEffect(() => {
     lifecycleGeneration.current += 1;
+    const scope = externalScope.current;
     return () => {
       lifecycleGeneration.current += 1;
       const current = activeSession.current;
       activeSession.current = null;
+      if (externalSession) {
+        removeSessionQueries(scope);
+        return;
+      }
       if (!current) return;
       removeSessionQueries(current.sessionScope);
       void client.logout().catch(() => undefined);
     };
-  }, [client, removeSessionQueries]);
+  }, [client, removeSessionQueries, externalSession]);
 
   const token = session?.accessToken ?? '';
   const sites = useQuery({
@@ -269,7 +309,8 @@ export function SafetyAlertsView({
     () =>
       new Set(
         session?.user.roleAssignments.flatMap(({ role, siteId }) =>
-          ['SAFETY_OFFICER', 'SECURITY_OFFICER', 'SITE_MANAGER'].includes(role) && siteId !== null
+          ['SAFETY_OFFICER', 'CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'].includes(role) &&
+          siteId !== null
             ? [siteId]
             : [],
         ) ?? [],
@@ -365,6 +406,11 @@ export function SafetyAlertsView({
   };
 
   const handleLogout = () => {
+    if (externalSession) {
+      removeSessionQueries(sessionScope);
+      onSignOut?.();
+      return;
+    }
     const current = activeSession.current;
     activeSession.current = null;
     if (current) removeSessionQueries(current.sessionScope);
@@ -568,6 +614,8 @@ export function SafetyAlertsView({
 
       {selectedSiteId && workspaceTab === 'Incidents' && (
         <IncidentView
+          initialIncidentId={initialIncidentId}
+          initialActionId={initialActionId}
           key={sessionScope + selectedSiteId}
           client={client}
           apiUrl={apiUrl}

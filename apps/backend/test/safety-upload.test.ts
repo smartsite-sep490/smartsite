@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { StorageService } from '../src/integrations/storage/storage.service.js';
 import { ConfigService } from '@nestjs/config';
 import { validateEnvironment } from '../src/config/environment.js';
 import {
@@ -70,7 +71,9 @@ test('MF08 boundaries reject forged JPEG, excess size, extra actor fields, naive
 test('MF08 private store verifies digest, fails unavailable and refuses path traversal', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mf08-upload-'));
   const store = new SafetyUploadService(
-    new ConfigService(validateEnvironment({ NODE_ENV: 'test', SAFETY_UPLOAD_LOCAL_ROOT: root })),
+    new StorageService(
+      new ConfigService(validateEnvironment({ NODE_ENV: 'test', STORAGE_LOCAL_ROOT: root })),
+    ),
   );
   try {
     const saved = await store.save({ buffer: bytes, mimetype: 'image/jpeg', size: bytes.length });
@@ -88,7 +91,7 @@ test('MF08 private store verifies digest, fails unavailable and refuses path tra
       error('SERVICE_UNAVAILABLE'),
     );
     const unconfigured = new SafetyUploadService(
-      new ConfigService(validateEnvironment({ NODE_ENV: 'test' })),
+      new StorageService(new ConfigService(validateEnvironment({ NODE_ENV: 'test' }))),
     );
     await assert.rejects(
       unconfigured.save({ buffer: bytes, mimetype: 'image/jpeg', size: bytes.length }),

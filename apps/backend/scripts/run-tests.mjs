@@ -44,7 +44,8 @@ if (!process.exitCode) {
     .map((file) => `${directory}/${file}`);
   const result = spawnSync(
     process.execPath,
-    ['--test', ...(integration ? ['--test-concurrency=1'] : []), ...files],
+    // ponytail: serial files bound startup/memory contention; raise file concurrency only after measuring cold bootstrap budgets.
+    ['--test', '--test-concurrency=1', ...files],
     {
       cwd: backendDirectory,
       env: process.env,

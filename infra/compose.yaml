@@ -42,11 +42,16 @@ services:
       # Local only. Production disables interactive Swagger and uses real secrets.
       NODE_ENV: development
       PORT: '3000'
-      DATABASE_URL: postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite
-      DATABASE_TIMEOUT_MS: '2000'
+      DATABASE_URL: ${DATABASE_URL:-postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite}
+      DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-2000}
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       # The runtime image contains production dependencies only (no pino-pretty).
-      SAFETY_UPLOAD_LOCAL_ROOT: /var/lib/smartsite/uploads
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-LOCAL}
+      STORAGE_LOCAL_ROOT: /var/lib/smartsite/uploads
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       EVIDENCE_LOCAL_ROOT: /var/lib/smartsite/demo-evidence
       LOG_LEVEL: info
       LOG_FORMAT: json
@@ -80,8 +85,8 @@ services:
       dockerfile: infra/docker/backend.Dockerfile
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite
-      DATABASE_TIMEOUT_MS: '2000'
+      DATABASE_URL: ${DIRECT_URL:-${DATABASE_URL_UNPOOLED:-${DATABASE_URL:-postgresql://smartsite:smartsite_local_only@postgres:5432/smartsite}}}
+      DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-2000}
     depends_on:
       postgres:
         condition: service_healthy

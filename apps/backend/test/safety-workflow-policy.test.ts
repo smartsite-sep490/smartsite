@@ -17,3 +17,29 @@ test('closure requires work, verification, and no pending submission', () => {
   assert.equal(canCloseIncident(['VERIFIED'], true), false);
   assert.equal(canCloseIncident(['CLOSED', 'VERIFIED'], false), true);
 });
+
+test('Worker subjects reject UUID duplicates regardless of letter case in create and confirm', async () => {
+  const { command } = await import('../src/common/configuration/commands.js');
+  const { CreateIncidentDto, ConfirmResponsibilityDto } =
+    await import('../src/modules/safety/safety-workflow.commands.js');
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const common = {
+    commandId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    contractorId: id,
+    workerIds: [id, id.toUpperCase()],
+  };
+  assert.throws(() =>
+    command(CreateIncidentDto, {
+      ...common,
+      title: 'Synthetic',
+      description: 'Synthetic',
+      severity: 'HIGH',
+      occurredAt: '2026-10-05T00:00:00Z',
+      responsibilityReason: 'Confirmed',
+      alertIds: [],
+    }),
+  );
+  assert.throws(() =>
+    command(ConfirmResponsibilityDto, { ...common, expectedVersion: 1, reason: 'Confirmed' }),
+  );
+});

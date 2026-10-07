@@ -14,9 +14,12 @@ import {
   cardClass,
   useWorkflowCommand,
 } from './safety-workflow';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
+  ConfirmIncidentResponsibilityCommand,
+  CorrectIncidentResponsibilityCommand,
+  TransferCorrectiveActionCommand,
   CreateIncidentCommand,
   CorrectiveActionResponse,
   IncidentDetailResponse,
@@ -44,14 +47,18 @@ import {
   Dialog,
   StatusBadge,
   TechnicalDetails,
-  OfficerName,
 } from './SafetyWorkflowUi';
 export interface IncidentViewProps extends WorkflowProps {
   initialAlertId?: string;
+  initialIncidentId?: string;
+  initialActionId?: string;
   onSourceConsumed?: () => void;
 }
 const statuses = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'VERIFIED', 'CLOSED', 'REOPENED'];
 type Command =
+  | ConfirmIncidentResponsibilityCommand
+  | CorrectIncidentResponsibilityCommand
+  | TransferCorrectiveActionCommand
   | VersionCommand
   | ReasonCommand
   | LinkIncidentAlertsCommand
@@ -60,16 +67,29 @@ type Command =
   | ReviewSubmissionCommand
   | ReopenIncidentCommand;
 type Editor = {
-  op: 'create' | 'link' | 'assign' | 'submit' | 'review' | 'close' | 'reopen';
+  op:
+    | 'responsibility'
+    | 'correct-responsibility'
+    | 'transfer'
+    | 'create'
+    | 'link'
+    | 'assign'
+    | 'submit'
+    | 'review'
+    | 'close'
+    | 'reopen';
   actionId?: string;
   submissionId?: string;
 };
 const titles = {
+  responsibility: 'Confirm responsibility',
+  'correct-responsibility': 'Correct responsibility',
+  transfer: 'Transfer action',
   create: 'New incident',
   link: 'Link alerts',
-  assign: 'Assign corrective action',
-  submit: 'Submit result',
-  review: 'Review result',
+  assign: 'Hand over to contractor',
+  submit: 'Report handling outcome',
+  review: 'Record handling outcome',
   close: 'Close incident',
   reopen: 'Reopen incident',
 };
@@ -78,15 +98,23 @@ export function IncidentView(p: IncidentViewProps) {
     new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
   );
   const safety = hasRole(p, 'SAFETY_OFFICER'),
-    security = hasRole(p, 'SECURITY_OFFICER');
-  const [selected, setSelected] = useState(''),
+    representative = hasRole(p, 'CONTRACTOR_REPRESENTATIVE');
+  const [selected, setSelected] = useState(p.initialIncidentId ?? ''),
     [status, setStatus] = useState(''),
     [assignedTo, setAssignedTo] = useState(''),
     [offset, setOffset] = useState(0),
-    [mobileDetail, setMobileDetail] = useState(false),
+    [mobileDetail, setMobileDetail] = useState(!!p.initialIncidentId),
     [editor, setEditor] = useState<Editor | undefined>(
       p.initialAlertId ? { op: 'create' } : undefined,
     );
+  const [previousIncidentLink, setPreviousIncidentLink] = useState(p.initialIncidentId);
+  if (previousIncidentLink !== p.initialIncidentId) {
+    setPreviousIncidentLink(p.initialIncidentId);
+    if (p.initialIncidentId) {
+      setSelected(p.initialIncidentId);
+      setMobileDetail(true);
+    }
+  }
   const mutation = useWorkflowCommand(p, (id) => {
     setSelected(id);
     setMobileDetail(true);
@@ -130,7 +158,17 @@ export function IncidentView(p: IncidentViewProps) {
     setEditor(next);
   };
   const command = (
-    op: 'link' | 'assign' | 'start' | 'submit' | 'review' | 'close' | 'reopen',
+    op:
+      | 'responsibility'
+      | 'correct-responsibility'
+      | 'transfer'
+      | 'link'
+      | 'assign'
+      | 'start'
+      | 'submit'
+      | 'review'
+      | 'close'
+      | 'reopen',
     input: WithoutCommandId<Command>,
     actionId?: string,
     file?: File,
@@ -155,16 +193,26 @@ export function IncidentView(p: IncidentViewProps) {
   };
   const current = detail.data,
     action = current?.actions.find((a) => a.id === editor?.actionId);
+  useEffect(() => {
+    if (p.initialActionId && current)
+      document
+        .getElementById('action-' + p.initialActionId)
+        ?.scrollIntoView?.({ block: 'nearest' });
+  }, [p.initialActionId, current]);
+  const currentActions = current?.actions.filter((a) => !a.supersededAt) ?? [];
   const ready =
     current &&
-    current.actions.length > 0 &&
-    current.actions.every((a) => a.status === 'VERIFIED' || a.status === 'CLOSED') &&
-    !current.actions.some((a) => a.submissions.some((s) => s.status === 'PENDING'));
-  const closeHint = !current?.actions.length
-    ? 'Assign at least one corrective action before closing.'
-    : !ready
-      ? 'Verify every corrective action and review all pending results before closing.'
-      : 'All corrective actions are verified. This incident can be closed.';
+    !!current.contractorId &&
+    currentActions.length > 0 &&
+    currentActions.every((a) => a.status === 'VERIFIED' || a.status === 'CLOSED') &&
+    !currentActions.some((a) => a.submissions.some((s) => s.status === 'PENDING'));
+  const closeHint = !current?.contractorId
+    ? 'Confirm the responsible contractor before assigning or closing this incident.'
+    : !currentActions.length
+      ? 'Hand over the case before closing.'
+      : !ready
+        ? 'Record every current handling outcome before closing.'
+        : 'All current handling outcomes are recorded. This incident can be closed.';
   return (
     <div className="space-y-5">
       <div
@@ -175,12 +223,12 @@ export function IncidentView(p: IncidentViewProps) {
       >
         <div>
           <h2 className="text-xl font-bold">
-            {security && !safety ? 'My corrective work' : 'Incidents'}
+            {representative && !safety ? 'My assigned cases' : 'Incidents'}
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {security && !safety
-              ? 'Start your assigned work and submit results for Safety review.'
-              : 'Manage corrective work from the first report to verified closure.'}
+            {representative && !safety
+              ? 'Handle cases independently and report the outcome to Safety.'
+              : 'Confirm responsibility, hand over to the contractor and record the handling outcome.'}
           </p>
         </div>
         {safety && (
@@ -230,7 +278,7 @@ export function IncidentView(p: IncidentViewProps) {
           p.user.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null)) && (
           <Assignee
             p={p}
-            role="SECURITY_OFFICER"
+            role="CONTRACTOR_REPRESENTATIVE"
             value={assignedTo}
             onChange={(value) => {
               setAssignedTo(value);
@@ -315,12 +363,67 @@ export function IncidentView(p: IncidentViewProps) {
                   Occurred {date(current.occurredAt)}
                   {current.closedAt && ' · Closed ' + date(current.closedAt)}
                 </p>
+                <p className="text-sm">
+                  Reported by {current.reportedByName ?? 'Account unavailable'}
+                </p>
+                {current.zoneId && (
+                  <p className="text-sm">Zone: {current.zoneName ?? 'Zone unavailable'}</p>
+                )}
+                <section className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-4">
+                  <h3 className="font-bold">Responsibility</h3>
+                  <p className="text-sm">
+                    {current.contractorId ? (
+                      <strong>{current.contractorName ?? 'Contractor unavailable'}</strong>
+                    ) : (
+                      'Unresolved — Safety must confirm the contractor'
+                    )}
+                  </p>
+                  <p className="text-sm">
+                    {current.workerIds?.length
+                      ? current.workers?.length
+                        ? current.workers
+                            .map((w) => w.displayName + ' · ' + w.externalId)
+                            .join(', ')
+                        : 'Worker references unavailable'
+                      : 'Worker identity unknown. The contractor can handle the case after Safety confirms responsibility.'}
+                  </p>
+                  {current.responsibilityReason && (
+                    <p className="whitespace-pre-wrap text-sm">{current.responsibilityReason}</p>
+                  )}
+                  {safety && (current.status !== 'CLOSED' || !current.contractorId) && (
+                    <button
+                      className={buttonClass}
+                      disabled={mutation.isPending}
+                      onClick={() => open({ op: 'responsibility' })}
+                    >
+                      Confirm responsibility
+                    </button>
+                  )}
+                  {safety && current.contractorId && current.actions.length > 0 && (
+                    <button
+                      className={buttonClass}
+                      disabled={mutation.isPending}
+                      onClick={() => open({ op: 'correct-responsibility' })}
+                    >
+                      Correct responsibility
+                    </button>
+                  )}
+                  {current.contractorId && (
+                    <TechnicalDetails>
+                      Contractor {current.contractorId}
+                      <br />
+                      Workers {current.workerIds?.join(', ') || 'Unknown'}
+                      <br />
+                      Confirmed {date(current.responsibilityConfirmedAt)}
+                    </TechnicalDetails>
+                  )}
+                </section>
                 {safety && (
                   <div className="flex flex-wrap gap-2">
                     {current.status === 'CLOSED' ? (
                       <button
                         className={primaryClass}
-                        disabled={mutation.isPending}
+                        disabled={mutation.isPending || !current.contractorId}
                         onClick={() => open({ op: 'reopen' })}
                       >
                         Reopen incident
@@ -329,10 +432,10 @@ export function IncidentView(p: IncidentViewProps) {
                       <>
                         <button
                           className={primaryClass}
-                          disabled={mutation.isPending}
+                          disabled={mutation.isPending || !current.contractorId}
                           onClick={() => open({ op: 'assign' })}
                         >
-                          Assign corrective action
+                          Hand over to contractor
                         </button>
                         <button
                           className={buttonClass}
@@ -381,18 +484,15 @@ export function IncidentView(p: IncidentViewProps) {
               </section>
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold">Corrective actions ({current.actions.length})</h3>
+                  <h3 className="font-bold">Handovers ({currentActions.length} current)</h3>
                   <span className="text-xs text-[var(--text-secondary)]">
-                    {
-                      current.actions.filter((a) => ['VERIFIED', 'CLOSED'].includes(a.status))
-                        .length
-                    }{' '}
-                    verified
+                    {currentActions.filter((a) => ['VERIFIED', 'CLOSED'].includes(a.status)).length}{' '}
+                    outcomes recorded
                   </span>
                 </div>
                 {!current.actions.length && (
                   <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
-                    No corrective action assigned yet.
+                    No handover yet.
                   </p>
                 )}
                 {current.actions.map((a) => (
@@ -430,7 +530,7 @@ export function IncidentView(p: IncidentViewProps) {
               editor.op === 'create'
                 ? 'Create incident'
                 : editor.op === 'review'
-                  ? 'Record review'
+                  ? 'Record handling outcome'
                   : titles[editor.op]
             }
             onSubmit={(form) => {
@@ -451,7 +551,34 @@ export function IncidentView(p: IncidentViewProps) {
                 return;
               }
               if (!current) return;
-              if (editor.op === 'link')
+              if (editor.op === 'correct-responsibility')
+                command('correct-responsibility', {
+                  expectedVersion: current.version,
+                  contractorId: text(form, 'contractorId'),
+                  workerIds: ids(form, 'workerIds'),
+                  reason: text(form, 'reason'),
+                  assignedTo: text(form, 'assignedTo'),
+                  description: text(form, 'description'),
+                  dueAt: deadline(form),
+                } as CorrectIncidentResponsibilityCommand);
+              else if (editor.op === 'responsibility')
+                command('responsibility', {
+                  expectedVersion: current.version,
+                  contractorId: text(form, 'contractorId'),
+                  workerIds: ids(form, 'workerIds'),
+                  reason: text(form, 'reason'),
+                } as ConfirmIncidentResponsibilityCommand);
+              else if (editor.op === 'transfer' && action)
+                command(
+                  'transfer',
+                  {
+                    expectedVersion: action.version,
+                    assignedTo: text(form, 'assignedTo'),
+                    reason: text(form, 'reason'),
+                  } as TransferCorrectiveActionCommand,
+                  action.id,
+                );
+              else if (editor.op === 'link')
                 command('link', {
                   expectedVersion: current.version,
                   alertIds: ids(form, 'alertIds'),
@@ -485,7 +612,7 @@ export function IncidentView(p: IncidentViewProps) {
                   {
                     expectedVersion: action.version,
                     submissionId: editor.submissionId!,
-                    decision: text(form, 'decision') as 'APPROVED' | 'REJECTED',
+                    decision: 'APPROVED',
                     reason: text(form, 'reason'),
                   } as ReviewSubmissionCommand,
                   action.id,
@@ -524,14 +651,45 @@ export function IncidentView(p: IncidentViewProps) {
                 </p>
               </>
             )}
+            {(editor.op === 'responsibility' || editor.op === 'correct-responsibility') &&
+              current && (
+                <ResponsibilityFields
+                  p={p}
+                  incident={current}
+                  handover={editor.op === 'correct-responsibility'}
+                />
+              )}
+            {editor.op === 'transfer' && current && (
+              <>
+                <Assignee
+                  p={p}
+                  role="CONTRACTOR_REPRESENTATIVE"
+                  contractorId={current.contractorId ?? undefined}
+                />
+                <Field
+                  name="reason"
+                  label="Transfer reason"
+                  type="textarea"
+                  required
+                  maxLength={2000}
+                />
+                <p className="text-sm">
+                  The action returns to Assigned. Earlier submissions and reviews are preserved.
+                </p>
+              </>
+            )}
             {editor.op === 'link' && <ConfirmedAlerts p={p} />}
             {(editor.op === 'assign' || editor.op === 'reopen') && (
               <>
                 {editor.op === 'reopen' && (
                   <Field name="reason" label="Reopening reason" type="textarea" required />
                 )}
-                <Assignee p={p} role="SECURITY_OFFICER" />
-                <Field name="description" label="Action description" type="textarea" required />
+                <Assignee
+                  p={p}
+                  role="CONTRACTOR_REPRESENTATIVE"
+                  contractorId={current?.contractorId ?? undefined}
+                />
+                <Field name="description" label="Handling request" type="textarea" required />
                 <Field name="dueAt" label="Deadline (optional, local time)" type="datetime-local" />
               </>
             )}
@@ -544,14 +702,11 @@ export function IncidentView(p: IncidentViewProps) {
             {editor.op === 'submit' && <ResultFields />}
             {editor.op === 'review' && (
               <>
-                <label className="block text-sm font-semibold">
-                  Decision
-                  <select name="decision" className={fieldClass}>
-                    <option value="APPROVED">Approve</option>
-                    <option value="REJECTED">Return for correction</option>
-                  </select>
-                </label>
-                <Field name="reason" label="Review reason" type="textarea" required />
+                <p className="text-sm">
+                  Record the contractor's handling outcome. The contractor determines how to handle
+                  the violation.
+                </p>
+                <Field name="reason" label="Recording note" type="textarea" required />
               </>
             )}
           </CommandForm>
@@ -577,9 +732,14 @@ function Action({
   command: (op: 'start', input: WithoutCommandId<VersionCommand>, actionId: string) => void;
   open: (editor: Editor) => void;
 }) {
-  const mine = hasRole(p, 'SECURITY_OFFICER') && action.assignedTo === p.user.id;
-  const waiting = action.submissions.filter((s) => s.status === 'PENDING'),
-    history = action.submissions.filter((s) => s.status !== 'PENDING');
+  const mine =
+    !action.supersededAt &&
+    hasRole(p, 'CONTRACTOR_REPRESENTATIVE') &&
+    action.assignedTo === p.user.id;
+  const waiting = action.supersededAt
+      ? []
+      : action.submissions.filter((s) => s.status === 'PENDING'),
+    history = action.submissions.filter((s) => action.supersededAt || s.status !== 'PENDING');
   const result = (submission: CorrectiveActionResponse['submissions'][number]) => (
     <section
       key={submission.id}
@@ -592,6 +752,10 @@ function Action({
         </time>
       </div>
       <p className="whitespace-pre-wrap break-words text-sm">{submission.resultDescription}</p>
+      <p className="text-xs">Reported by {submission.submittedByName ?? 'Account unavailable'}</p>
+      {submission.reviewedBy && (
+        <p className="text-xs">Recorded by {submission.reviewedByName ?? 'Account unavailable'}</p>
+      )}
       {submission.reviewNote && (
         <p className="text-sm">
           Review: {submission.reviewNote} · {date(submission.reviewedAt)}
@@ -600,7 +764,8 @@ function Action({
       {submission.evidence && (
         <Evidence p={p} type="incidents" id={incident.id} evidenceId={submission.evidence.id} />
       )}
-      {hasRole(p, 'SAFETY_OFFICER') &&
+      {!action.supersededAt &&
+        hasRole(p, 'SAFETY_OFFICER') &&
         submission.status === 'PENDING' &&
         submission.submittedBy !== p.user.id && (
           <button
@@ -608,25 +773,51 @@ function Action({
             disabled={pending}
             onClick={() => open({ op: 'review', actionId: action.id, submissionId: submission.id })}
           >
-            Review result
+            Record handling outcome
           </button>
         )}
     </section>
   );
   return (
-    <article className={cardClass}>
+    <article id={'action-' + action.id} className={cardClass}>
+      {action.supersededAt && (
+        <p className="text-sm font-semibold">
+          Superseded handover · {date(action.supersededAt)}
+          <br />
+          {action.supersededReason}
+        </p>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h4 className="min-w-0 break-words font-semibold">{action.description}</h4>
-        <StatusBadge value={action.status} />
+        <StatusBadge
+          value={action.status}
+          text={action.status === 'VERIFIED' ? 'Outcome recorded' : undefined}
+        />
       </div>
       <p className="text-xs text-[var(--text-secondary)]">
-        <OfficerName p={p} role="SECURITY_OFFICER" id={action.assignedTo} /> · Deadline{' '}
-        {date(action.dueAt)}
+        {action.assignedToName ?? 'Account unavailable'} · Deadline {date(action.dueAt)}
       </p>
       {action.dueAt &&
         new Date(action.dueAt).getTime() < checkedAt &&
         !['CLOSED', 'VERIFIED'].includes(action.status) && (
           <p className="text-xs font-semibold text-[var(--semantic-red-text)]">Past deadline</p>
+        )}
+      {!action.supersededAt &&
+        hasRole(p, 'SAFETY_OFFICER') &&
+        incident.status !== 'CLOSED' &&
+        !['VERIFIED', 'CLOSED'].includes(action.status) && (
+          <div className="space-y-2">
+            <button
+              className={buttonClass}
+              disabled={pending || !incident.contractorId || waiting.length > 0}
+              onClick={() => open({ op: 'transfer', actionId: action.id })}
+            >
+              Transfer action
+            </button>
+            {waiting.length > 0 && (
+              <p className="text-xs">Review the pending result before transferring this action.</p>
+            )}
+          </div>
         )}
       {mine && action.status === 'ASSIGNED' && (
         <button
@@ -634,7 +825,7 @@ function Action({
           disabled={pending}
           onClick={() => command('start', { expectedVersion: action.version }, action.id)}
         >
-          Start action
+          Start handling
         </button>
       )}
       {mine && action.status === 'IN_PROGRESS' && (
@@ -643,12 +834,12 @@ function Action({
           disabled={pending}
           onClick={() => open({ op: 'submit', actionId: action.id })}
         >
-          Submit result
+          Report handling outcome
         </button>
       )}
       {waiting.length > 0 && (
         <div className="space-y-3">
-          <h5 className="text-sm font-bold">Awaiting Safety review</h5>
+          <h5 className="text-sm font-bold">Awaiting Safety recording</h5>
           {waiting.map(result)}
         </div>
       )}
@@ -769,6 +960,150 @@ function CameraPhoto({
     <>
       <RequestError error={query.error} retry={() => void query.refetch()} />
       {query.data && <BlobImage blob={query.data} alt="Original camera observation" />}
+    </>
+  );
+}
+
+function ResponsibilityFields({
+  p,
+  incident,
+  handover = false,
+}: {
+  p: WorkflowProps;
+  incident: IncidentDetailResponse;
+  handover?: boolean;
+}) {
+  const [contractorId, setContractorId] = useState(incident.contractorId ?? '');
+  const [contractorOffset, setContractorOffset] = useState(0),
+    [workerOffset, setWorkerOffset] = useState(0);
+  const [chosen, setChosen] = useState<string[]>(incident.workerIds ?? []);
+  const contractors = useQuery({
+    queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'contractors', contractorOffset],
+    queryFn: ({ signal }) =>
+      p.client.listSafetyContractors(
+        p.token,
+        p.siteId,
+        { offset: contractorOffset, limit: 20 },
+        { signal },
+      ),
+    retry: false,
+  });
+  const workers = useQuery({
+    queryKey: [
+      'safety-workflow',
+      p.apiUrl,
+      p.scope,
+      p.siteId,
+      'contractor-workers',
+      contractorId,
+      workerOffset,
+    ],
+    queryFn: ({ signal }) =>
+      p.client.listIncidentWorkers(
+        p.token,
+        p.siteId,
+        contractorId,
+        { offset: workerOffset, limit: 20 },
+        { signal },
+      ),
+    enabled: !!contractorId,
+    retry: false,
+  });
+  return (
+    <>
+      <label className="block text-sm font-semibold">
+        Responsible contractor
+        <select
+          className={fieldClass}
+          name="contractorId"
+          required
+          value={contractorId}
+          onChange={(e) => {
+            setContractorId(e.target.value);
+            setChosen([]);
+            setWorkerOffset(0);
+          }}
+        >
+          <option value="">Choose a contractor participating in this Site</option>
+          {contractorId && !contractors.data?.items.some((c) => c.id === contractorId) && (
+            <option value={contractorId}>Current confirmed contractor</option>
+          )}
+          {contractors.data?.items.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {contractors.isPending && <p>Loading contractors…</p>}
+      <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
+      {contractors.data && contractors.data.total > 20 && (
+        <Pager
+          offset={contractorOffset}
+          total={contractors.data.total}
+          onChange={setContractorOffset}
+        />
+      )}
+      {contractorId && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold">Confirmed Worker subjects (optional)</legend>
+          <p className="text-sm">
+            Select only Workers you have verified. Leave empty when identity is unknown; camera
+            candidates never prove identity.
+          </p>
+          {workers.isPending && <p>Loading Workers…</p>}
+          <RequestError error={workers.error} retry={() => void workers.refetch()} />
+          {workers.data?.items.map((w) => (
+            <label key={w.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={chosen.includes(w.id)}
+                onChange={(e) =>
+                  setChosen((old) =>
+                    e.target.checked ? [...old, w.id] : old.filter((id) => id !== w.id),
+                  )
+                }
+              />
+              {w.displayName} · {w.externalId}
+            </label>
+          ))}
+          {workers.data && !workers.data.total && (
+            <p>No active Workers registered for this contractor. Identity may remain unknown.</p>
+          )}
+          <p className="text-xs">{chosen.length} selected</p>
+          {workers.data && workers.data.total > 20 && (
+            <Pager offset={workerOffset} total={workers.data.total} onChange={setWorkerOffset} />
+          )}
+        </fieldset>
+      )}
+      <input type="hidden" name="workerIds" value={chosen.join(',')} />
+      <Field
+        name="reason"
+        label={handover ? 'Correction reason' : 'Verification reason'}
+        type="textarea"
+        required
+        maxLength={2000}
+      />
+      {handover && (
+        <>
+          <Assignee
+            key={contractorId}
+            p={p}
+            role="CONTRACTOR_REPRESENTATIVE"
+            contractorId={contractorId || undefined}
+          />
+          <Field name="description" label="Handling request" type="textarea" required />
+          <Field name="dueAt" label="Deadline (optional, local time)" type="datetime-local" />
+          <p className="text-sm">
+            Previous handovers and reports are preserved for Safety. The previous contractor loses
+            access.
+          </p>
+        </>
+      )}
+      <p className="text-sm">
+        Explain how you confirmed the contractor and any Worker identity. Do not infer the
+        contractor from the Zone.
+      </p>
     </>
   );
 }

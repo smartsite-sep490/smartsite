@@ -92,6 +92,13 @@ export class ZoneConfigurationService {
     }
   }
 
+  async referenceName(siteId: string, zoneId: string | null): Promise<string | null> {
+    if (!zoneId) return null;
+    return (
+      (await this.dataSource.getRepository(ZoneEntity).findOneBy({ siteId, id: zoneId }))?.name ??
+      null
+    );
+  }
   async get(siteId: string, zoneId: string): Promise<ZoneEntity> {
     const zone = await this.dataSource
       .getRepository(ZoneEntity)

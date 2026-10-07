@@ -145,7 +145,9 @@ describe('durable Web notification bell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete notification' }));
     expect(screen.getByRole('alertdialog', { name: 'Delete notification?' })).toBeTruthy();
     expect(
-      screen.getByText(`Delete notification “${notification.title}”? This cannot be undone from the app.`),
+      screen.getByText(
+        `Delete notification “${notification.title}”? This cannot be undone from the app.`,
+      ),
     ).toBeTruthy();
     expect(SmartSiteManagementClient.prototype.deleteNotification).not.toHaveBeenCalled();
 
@@ -240,21 +242,45 @@ describe('durable Web notification bell', () => {
       ).toBe(false),
     );
   });
-  it('shows unread count, opening does not read, and clicking marks read before navigating to the exact site/request', async () => {
-    mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
-    expect(await screen.findByText(notification.title)).toBeTruthy();
-    expect(SmartSiteManagementClient.prototype.readNotification).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText(notification.title));
-    await waitFor(() =>
-      expect(screen.getByTestId('location').textContent).toContain('requestId=older-request'),
-    );
-    expect(screen.getByTestId('location').textContent).toContain('siteId=site-2');
-    expect(SmartSiteManagementClient.prototype.readNotification).toHaveBeenCalledWith(
-      'synthetic-token',
-      notification.id,
-    );
-  });
+  it.each(['schedule', 'safety'] as const)(
+    'reads and opens the exact scoped %s target',
+    async (kind) => {
+      const notice: UserNotificationResponse =
+        kind === 'safety'
+          ? {
+              ...notification,
+              event: 'SAFETY_HANDOVER',
+              target: {
+                siteId: 'site-2',
+                incidentId: 'case-1',
+                actionId: 'action-1',
+                tab: 'incidents',
+              },
+            }
+          : notification;
+      vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+        ...page,
+        items: [notice],
+      });
+      mount();
+      fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+      expect(await screen.findByText(notification.title)).toBeTruthy();
+      expect(SmartSiteManagementClient.prototype.readNotification).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByText(notification.title));
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toContain(
+          kind === 'safety'
+            ? '/incidents?siteId=site-2&incidentId=case-1&actionId=action-1'
+            : '/workforce?siteId=site-2&requestType=SWAP&requestId=older-request',
+        ),
+      );
+      expect(screen.getByTestId('location').textContent).toContain('siteId=site-2');
+      expect(SmartSiteManagementClient.prototype.readNotification).toHaveBeenCalledWith(
+        'synthetic-token',
+        notification.id,
+      );
+    },
+  );
 
   it('filters unread and marks all read through the server', async () => {
     const list = vi.mocked(SmartSiteManagementClient.prototype.listNotifications);

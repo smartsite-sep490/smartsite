@@ -1,4 +1,9 @@
 import type {
+  ConfirmIncidentResponsibilityCommand,
+  CorrectIncidentResponsibilityCommand,
+  TransferCorrectiveActionCommand,
+  SafetyContractorResponse,
+  IncidentWorkerResponse,
   IncidentResponse,
   IncidentDetailResponse,
   SafetyTaskResponse,
@@ -374,8 +379,8 @@ export class SmartSiteManagementClient {
   listSafetyAssignees(
     token: string,
     siteId: string,
-    role: 'SAFETY_OFFICER' | 'SECURITY_OFFICER',
-    page: PageOptions = {},
+    role: 'SAFETY_OFFICER' | 'CONTRACTOR_REPRESENTATIVE',
+    page: PageOptions & { contractorId?: string } = {},
     options?: RequestOptions,
   ) {
     return this.request<Page<SafetyAssigneeResponse>>(
@@ -384,6 +389,40 @@ export class SmartSiteManagementClient {
         ...page,
         role,
       } as PageOptions),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listSafetyContractors(
+    token: string,
+    siteId: string,
+    page: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<SafetyContractorResponse>>(
+      'GET',
+      this.workflowListPath(`/sites/${pathId(siteId)}/safety-contractors`, page),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listIncidentWorkers(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    page: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<IncidentWorkerResponse>>(
+      'GET',
+      this.workflowListPath(
+        `/sites/${pathId(siteId)}/safety-contractors/${pathId(contractorId)}/workers`,
+        page,
+      ),
       token,
       undefined,
       undefined,
@@ -434,8 +473,21 @@ export class SmartSiteManagementClient {
     token: string,
     siteId: string,
     id: string,
-    operation: 'link' | 'assign' | 'start' | 'submit' | 'review' | 'close' | 'reopen',
+    operation:
+      | 'responsibility'
+      | 'correct-responsibility'
+      | 'transfer'
+      | 'link'
+      | 'assign'
+      | 'start'
+      | 'submit'
+      | 'review'
+      | 'close'
+      | 'reopen',
     input:
+      | ConfirmIncidentResponsibilityCommand
+      | CorrectIncidentResponsibilityCommand
+      | TransferCorrectiveActionCommand
       | VersionCommand
       | ReasonCommand
       | LinkIncidentAlertsCommand
@@ -448,6 +500,9 @@ export class SmartSiteManagementClient {
     options?: RequestOptions,
   ) {
     const segment = {
+      responsibility: 'responsibility',
+      'correct-responsibility': 'correct-responsibility',
+      transfer: 'transfer',
       link: 'alerts',
       assign: 'actions',
       start: 'start',

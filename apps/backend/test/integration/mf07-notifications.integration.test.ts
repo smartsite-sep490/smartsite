@@ -198,7 +198,8 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       for (const rep of [repA, repB]) {
         const page = await notifications.list(rep);
         assert.equal(
-          page.items.find((n) => n.target.requestId === request.id)?.event,
+          page.items.find((n) => 'requestId' in n.target && n.target.requestId === request.id)
+            ?.event,
           'CHANGE_REQUESTED',
         );
       }
@@ -249,34 +250,45 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         reason: 'Synthetic swap reason',
       });
       const incoming = (await notifications.list(workerB)).items.find(
-        (n) => n.target.requestId === request.id,
+        (n) => 'requestId' in n.target && n.target.requestId === request.id,
       )!;
       assert.equal(incoming.event, 'SWAP_REQUESTED');
+      assert.ok('view' in incoming.target);
       assert.equal(incoming.target.view, 'coworker');
       assert.equal(
-        (await notifications.list(repA)).items.some((n) => n.target.requestId === request.id),
+        (await notifications.list(repA)).items.some(
+          (n) => 'requestId' in n.target && n.target.requestId === request.id,
+        ),
         false,
       );
       await workflow.confirmShiftSwap(workerB, siteId, request.id);
       assert.equal(
-        (await notifications.list(workerA)).items.find((n) => n.target.requestId === request.id)
-          ?.event,
+        (await notifications.list(workerA)).items.find(
+          (n) => 'requestId' in n.target && n.target.requestId === request.id,
+        )?.event,
         'SWAP_CONFIRMED',
       );
       assert.equal(
-        (await notifications.list(repA)).items.find((n) => n.target.requestId === request.id)
-          ?.event,
+        (await notifications.list(repA)).items.find(
+          (n) => 'requestId' in n.target && n.target.requestId === request.id,
+        )?.event,
         'SWAP_CONFIRMED',
       );
       await workflow.approveShiftSwap(repA, siteId, request.id);
       for (const actor of [workerA, workerB])
         assert.ok(
           (await notifications.list(actor)).items.some(
-            (n) => n.target.requestId === request.id && n.event === 'REQUEST_APPLIED',
+            (n) =>
+              'requestId' in n.target &&
+              n.target.requestId === request.id &&
+              n.event === 'REQUEST_APPLIED',
           ),
         );
       const coworkerOutcome = (await notifications.list(workerB)).items.find(
-        (n) => n.target.requestId === request.id && n.event === 'REQUEST_APPLIED',
+        (n) =>
+          'requestId' in n.target &&
+          n.target.requestId === request.id &&
+          n.event === 'REQUEST_APPLIED',
       )!;
       assert.equal(coworkerOutcome.fromShiftName, 'Evening');
       assert.equal(coworkerOutcome.toShiftName, 'Morning');
@@ -304,12 +316,14 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         reason: 'Coworker cannot attend',
       });
       const notice = (await notifications.list(workerA)).items.find(
-        (n) => n.target.requestId === request.id,
+        (n) => 'requestId' in n.target && n.target.requestId === request.id,
       )!;
       assert.equal(notice.event, 'SWAP_DECLINED');
       assert.match(notice.message, /Coworker cannot attend/);
       assert.equal(
-        (await notifications.list(repA)).items.some((n) => n.target.requestId === request.id),
+        (await notifications.list(repA)).items.some(
+          (n) => 'requestId' in n.target && n.target.requestId === request.id,
+        ),
         false,
       );
       const [c, d] = await schedules();
@@ -324,7 +338,10 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       });
       for (const actor of [workerA, workerB]) {
         const outcome = (await notifications.list(actor)).items.find(
-          (n) => n.target.requestId === swap.id && n.event === 'REQUEST_REJECTED',
+          (n) =>
+            'requestId' in n.target &&
+            n.target.requestId === swap.id &&
+            n.event === 'REQUEST_REJECTED',
         )!;
         assert.match(outcome.message, /Contractor cannot approve/);
       }
@@ -339,7 +356,10 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       });
       assert.ok(
         (await notifications.list(workerA)).items.some(
-          (n) => n.target.requestId === change.id && n.event === 'REQUEST_REJECTED',
+          (n) =>
+            'requestId' in n.target &&
+            n.target.requestId === change.id &&
+            n.event === 'REQUEST_REJECTED',
         ),
       );
     },
@@ -359,7 +379,10 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
     );
     assert.ok(
       (await notifications.list(workerA)).items.some(
-        (n) => n.target.requestId === request.id && n.event === 'REQUEST_CONFLICTED',
+        (n) =>
+          'requestId' in n.target &&
+          n.target.requestId === request.id &&
+          n.event === 'REQUEST_CONFLICTED',
       ),
     );
     assert.equal(
@@ -746,7 +769,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         reason: 'Synthetic dismissible request',
       });
       const notice = (await notifications.list(repA, 'ALL', 0, 100)).items.find(
-        (n) => n.target.requestId === request.id,
+        (n) => 'requestId' in n.target && n.target.requestId === request.id,
       )!;
       await notifications.read(repA, notice.id);
       const repository = dataSource.getRepository(UserNotificationEntity);

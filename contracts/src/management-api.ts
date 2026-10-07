@@ -384,19 +384,25 @@ export interface SchedulingNotificationTarget {
   view: 'requests' | 'coworker' | 'pending' | 'history';
 }
 
+export interface SafetyNotificationTarget {
+  siteId: string;
+  incidentId: string;
+  actionId: string;
+  tab: 'incidents';
+}
 export interface UserNotificationResponse {
   id: string;
-  event: SchedulingNotificationEvent;
+  event: SchedulingNotificationEvent | 'SAFETY_HANDOVER';
   siteId: string;
   siteName: string;
   title: string;
   message: string;
-  workDate: string;
-  fromShiftName: string;
-  toShiftName: string;
+  workDate?: string;
+  fromShiftName?: string;
+  toShiftName?: string;
   createdAt: string;
   readAt: string | null;
-  target: SchedulingNotificationTarget;
+  target: SchedulingNotificationTarget | SafetyNotificationTarget;
 }
 
 export interface UserNotificationListResponse {

@@ -86,3 +86,7 @@ Deploy the reviewed `Mf07NotificationDeletion1791504000000` migration first, the
 Web. No response shape or AI contract changes; existing clients continue to work. Roll back Web
 and Backend before reverting the migration; dropping `deleted_at` makes dismissed records visible
 again. The migration adds a nullable timestamp and a constraint requiring deleted rows to be read.
+
+## Safety handover integration — 06/10/2026
+
+MF08 uses the same inbox, read/delete APIs and Web bell. SAFETY_HANDOVER targets /incidents with siteId/incidentId/actionId; scheduling targets remain /workforce. Safety notices use current incident contractor, active grants/participation and an assigned non-superseded handover. Scheduling keeps its original representative assignment policy. New event delivery is transactional and deduplicated by command/recipient; reading or dismissing a notice does not handle or delete the Incident.

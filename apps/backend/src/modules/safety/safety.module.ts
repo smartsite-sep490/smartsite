@@ -1,3 +1,4 @@
+import { StorageModule } from '../../integrations/storage/storage.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { SafetyWorkflowController } from './safety-workflow.controller.js';
@@ -27,7 +28,7 @@ import { DataSource } from 'typeorm';
 import { ZoneAccessManagementService } from '../zones/zone-access-management.service.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, ZonesModule, WorkforceModule, UsersModule],
+  imports: [StorageModule, DatabaseModule, AuthModule, ZonesModule, WorkforceModule, UsersModule],
   controllers: [SafetyAlertsController, ObservationIdentityController, SafetyWorkflowController],
   providers: [
     SafetyWorkflowService,
