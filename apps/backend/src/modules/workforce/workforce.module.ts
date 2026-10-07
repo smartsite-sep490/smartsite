@@ -1,4 +1,10 @@
 import { Module } from '@nestjs/common';
+import { QrAccessService } from './qr-access.service.js';
+import { SiteAccessSetupService } from './site-access-setup.service.js';
+import { SiteAccessSetupController } from './site-access-setup.controller.js';
+import { AttendanceService } from './attendance.service.js';
+import { AttendanceController } from './attendance.controller.js';
+import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
 import { NotificationsController } from './notifications.controller.js';
 import { SchedulingNotificationService } from './scheduling-notification.service.js';
 import { ConfigService } from '@nestjs/config';
@@ -16,7 +22,7 @@ import { WorkforceController } from './workforce.controller.js';
 import { ContractorOperationsService } from './contractor-operations.service.js';
 import { ContractorOperationsController } from './contractor-operations.controller.js';
 import { WorkerAssignmentController } from './worker-assignment.controller.js';
-import { FaceEnrollmentController } from './face-enrollment.controller.js';
+import { FaceEnrollmentController, FaceConsentController } from './face-enrollment.controller.js';
 import { FaceEnrollmentService } from './face-enrollment.service.js';
 import { FaceGateController } from './face-gate.controller.js';
 import { FaceGateService } from './face-gate.service.js';
@@ -31,6 +37,10 @@ import {
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [
+    AttendanceController,
+    SiteAccessSetupController,
+    QrAccessController,
+    VisitorRegistrationController,
     NotificationsController,
     WorkforceController,
     ContractorsController,
@@ -39,10 +49,14 @@ import {
     ContractorOperationsController,
     WorkerAssignmentController,
     FaceEnrollmentController,
+    FaceConsentController,
     FaceGateController,
     WorkerGatePermissionsController,
   ],
   providers: [
+    AttendanceService,
+    SiteAccessSetupService,
+    QrAccessService,
     SchedulingNotificationService,
     WorkforceConfigurationService,
     ScheduleConfigurationService,

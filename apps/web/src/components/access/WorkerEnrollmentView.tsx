@@ -11,6 +11,7 @@ export interface WorkerEnrollmentViewProps {
   token?: string;
   siteId: string;
   sessionScope: string;
+  canManageAccounts?: boolean;
 }
 
 type EnrollmentStep = 'consent' | 'capture-front' | 'capture-left' | 'capture-right' | 'review';
@@ -29,11 +30,13 @@ const CONSENT_VERSION = 'v1.0-2026';
 const EN_CAPTURE_GUIDANCE: Record<CaptureTarget, { title: string; detail: string }> = {
   front: {
     title: 'Step 1/3: Look directly into camera',
-    detail: 'Position your entire face in the frame, look straight ahead, keep head level and hold still.',
+    detail:
+      'Position your entire face in the frame, look straight ahead, keep head level and hold still.',
   },
   left: {
     title: 'Step 2/3: Turn slightly to your left',
-    detail: 'Turn your whole head slowly to your left without tilting. Keep face in frame and hold still.',
+    detail:
+      'Turn your whole head slowly to your left without tilting. Keep face in frame and hold still.',
   },
   right: {
     title: 'Step 3/3: Turn slightly to your right',
@@ -60,10 +63,13 @@ function getEnrollmentEnglishMessage(reasonCode: string): string {
     FACE_POSE_LEFT_REQUIRED: 'Left angle required. Turn slightly to your left and retake.',
     FACE_POSE_RIGHT_REQUIRED: 'Right angle required. Turn slightly to your right and retake.',
     FACE_NOT_CLEAR: 'Face not clearly visible. Hold still, remove coverings, and adjust light.',
-    FACE_LANDMARKS_UNAVAILABLE: 'Facial landmarks could not be identified. Remove coverings and pose directly.',
+    FACE_LANDMARKS_UNAVAILABLE:
+      'Facial landmarks could not be identified. Remove coverings and pose directly.',
     FACE_IMAGE_INVALID: 'Captured image could not be processed. Please retake.',
   };
-  return map[reasonCode] ?? 'Sample does not meet quality requirements. Adjust lighting and hold still.';
+  return (
+    map[reasonCode] ?? 'Sample does not meet quality requirements. Adjust lighting and hold still.'
+  );
 }
 
 function captureTargetForStep(step: EnrollmentStep): CaptureTarget | null {
@@ -78,14 +84,24 @@ export function WorkerEnrollmentView({
   token,
   siteId,
   sessionScope,
+  canManageAccounts = true,
 }: WorkerEnrollmentViewProps) {
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const [accountId, setAccountId] = useState('');
+  const [directWorkerId, setDirectWorkerId] = useState('');
+  const enrollmentSession = useRef<{ id: string; workerId: string; consentToken?: string } | null>(
+    null,
+  );
+  const workerChoices = useQuery({
+    queryKey: ['access-control', apiUrl, sessionScope, siteId, 'enrollment-worker-choices'],
+    enabled: !!token && !!siteId,
+    queryFn: () => client.listWorkers(token!, siteId, { limit: 100 }),
+  });
   const [accountSearch, setAccountSearch] = useState('');
   const accounts = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, siteId, 'face-enrollment-accounts'],
-    enabled: !!token && !!siteId,
+    enabled: canManageAccounts && !!token && !!siteId,
     queryFn: async () => {
       const items = [];
       for (let offset = 0; ; offset += 100) {
@@ -113,14 +129,17 @@ export function WorkerEnrollmentView({
     siteId,
     'face-enrollment-account-worker',
     accountId,
+    directWorkerId,
   ];
   const linkedWorker = useQuery({
     queryKey: linkedWorkerKey,
-    enabled: !!token && !!siteId && !!accountId,
+    enabled: !!token && !!siteId && (!!accountId || !!directWorkerId),
     queryFn: async () => {
       for (let offset = 0; ; offset += 100) {
         const page = await client.listWorkers(token!, siteId, { offset, limit: 100 });
-        const worker = page.items.find((item) => item.userId === accountId);
+        const worker = page.items.find((item) =>
+          directWorkerId ? item.id === directWorkerId : item.userId === accountId,
+        );
         if (worker) return worker;
         if (offset + page.items.length >= page.total || page.items.length === 0) return null;
       }
@@ -319,9 +338,7 @@ export function WorkerEnrollmentView({
     } catch {
       if (generation !== captureGenerationRef.current) return;
       setCapturePhase('rejected');
-      setQualityMessage(
-        'Unable to verify image with server. Please check connection and retake.',
-      );
+      setQualityMessage('Unable to verify image with server. Please check connection and retake.');
     } finally {
       qualityCheckInFlightRef.current = false;
       if (generation === captureGenerationRef.current) setIsQualityChecking(false);
@@ -376,8 +393,8 @@ export function WorkerEnrollmentView({
 
   // Submit enrollment with 3 in-memory samples
   const handleSubmitEnrollment = async () => {
-    if (!selectedWorkerId || !token || !linkedWorker.data?.userId) {
-      setSubmissionError('Select an existing account before enrolling face biometrics.');
+    if (!selectedWorkerId || !token || enrollmentSession.current?.workerId !== selectedWorkerId) {
+      setSubmissionError('The Worker must confirm consent before enrolling face biometrics.');
       return;
     }
     if (!samples.front || !samples.left || !samples.right) {
@@ -389,7 +406,7 @@ export function WorkerEnrollmentView({
     setSubmissionError(null);
 
     try {
-      const session = await client.startFaceEnrollment(token, selectedWorkerId, CONSENT_VERSION);
+      const session = enrollmentSession.current;
 
       for (const sample of [samples.front.blob, samples.left.blob, samples.right.blob]) {
         await client.uploadFaceEnrollmentSample(token, session.id, sample);
@@ -409,6 +426,7 @@ export function WorkerEnrollmentView({
         ],
       });
       setSubmissionSuccess(true);
+      enrollmentSession.current = null;
       setStatusMessage('Face biometric profile successfully registered and active.');
     } catch (err) {
       setSubmissionError(
@@ -420,7 +438,7 @@ export function WorkerEnrollmentView({
   };
 
   // Revoke profile action
-  const handleRevokeProfile = async () => {
+  const handleRevokeProfile = async (erase = false) => {
     if (
       window.confirm(
         'Are you sure you want to revoke this biometric profile? The worker will need to re-enroll before using face gate.',
@@ -428,7 +446,8 @@ export function WorkerEnrollmentView({
     ) {
       if (!token) return;
       try {
-        await client.revokeFaceProfile(token, selectedWorkerId);
+        if (erase) await client.deleteWorkerFaceTemplate(token, selectedWorkerId);
+        else await client.revokeFaceProfile(token, selectedWorkerId);
         await queryClient.invalidateQueries({
           queryKey: [
             'access-control',
@@ -451,6 +470,17 @@ export function WorkerEnrollmentView({
 
   // Reset workflow
   const handleResetWorkflow = () => {
+    const session = enrollmentSession.current;
+    enrollmentSession.current = null;
+    if (token && session) {
+      setIsSubmitting(true);
+      void client
+        .cancelFaceEnrollment(token, session.id)
+        .catch(() =>
+          setSubmissionError('Unable to cancel enrollment. Retry before starting a new capture.'),
+        )
+        .finally(() => setIsSubmitting(false));
+    }
     clearCaptureResult();
     setIsQualityChecking(false);
     stopCamera();
@@ -466,158 +496,169 @@ export function WorkerEnrollmentView({
 
   return (
     <div className="space-y-6">
+      {submissionError && currentStep === 'consent' && (
+        <p role="alert" className="text-red-700">
+          {submissionError}
+        </p>
+      )}
       {/* STEP 0: Account Selection Card */}
-      <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100/80 text-[#F66B17] ring-1 ring-orange-500/20">
-              <IconUsers className="h-5 w-5" />
+      {canManageAccounts && (
+        <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100/80 text-[#F66B17] ring-1 ring-orange-500/20">
+                <IconUsers className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Enroll Biometrics for Existing Account
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Search and select an active account assigned to this construction site. Free-form
+                  worker creation is disabled.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Enroll Biometrics for Existing Account
-              </h2>
-              <p className="text-xs text-slate-500">
-                Search and select an active account assigned to this construction site. Free-form worker
-                creation is disabled.
-              </p>
-            </div>
-          </div>
-          <span className="rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-orange-700 ring-1 ring-orange-500/20">
-            Step 0: Select Account
-          </span>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-12 pt-1">
-          <div className="sm:col-span-5">
-            <label
-              htmlFor="face-account-search"
-              className="block text-xs font-bold uppercase tracking-wider text-slate-700"
-            >
-              Search Account
-            </label>
-            <div className="relative mt-1.5">
-              <input
-                id="face-account-search"
-                value={accountSearch}
-                onChange={(event) => setAccountSearch(event.target.value)}
-                placeholder="Username or display name"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
-                disabled={isSubmitting || currentStep !== 'consent'}
-              />
-            </div>
+            <span className="rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-orange-700 ring-1 ring-orange-500/20">
+              Step 0: Select Account
+            </span>
           </div>
 
-          <div className="sm:col-span-7">
-            <label
-              htmlFor="face-account"
-              className="block text-xs font-bold uppercase tracking-wider text-slate-700"
-            >
-              Target Account
-            </label>
-            <div className="mt-1.5 flex gap-2">
-              <select
-                id="face-account"
-                value={accountId}
-                onChange={(event) => {
-                  handleResetWorkflow();
-                  setStatusMessage(null);
-                  linkAccount.reset();
-                  setAccountId(event.target.value);
-                }}
-                disabled={
-                  accounts.isPending ||
-                  accounts.isError ||
-                  linkAccount.isPending ||
-                  isSubmitting ||
-                  currentStep !== 'consent'
-                }
-                className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-sm font-medium text-slate-900 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all disabled:bg-slate-100"
+          <div className="grid gap-4 sm:grid-cols-12 pt-1">
+            <div className="sm:col-span-5">
+              <label
+                htmlFor="face-account-search"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700"
               >
-                <option value="">Select existing account (Chọn account đã có trên hệ thống)</option>
-                {accounts.data
-                  ?.filter(
-                    (user) =>
-                      user.id === accountId ||
-                      (user.username + ' ' + user.displayName)
-                        .toLocaleLowerCase()
-                        .includes(accountSearch.trim().toLocaleLowerCase()),
-                  )
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.username} — {user.displayName}
-                    </option>
-                  ))}
-              </select>
+                Search Account
+              </label>
+              <div className="relative mt-1.5">
+                <input
+                  id="face-account-search"
+                  value={accountSearch}
+                  onChange={(event) => setAccountSearch(event.target.value)}
+                  placeholder="Username or display name"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
+                  disabled={isSubmitting || currentStep !== 'consent'}
+                />
+              </div>
+            </div>
+
+            <div className="sm:col-span-7">
+              <label
+                htmlFor="face-account"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+              >
+                Target Account
+              </label>
+              <div className="mt-1.5 flex gap-2">
+                <select
+                  id="face-account"
+                  value={accountId}
+                  onChange={(event) => {
+                    handleResetWorkflow();
+                    setStatusMessage(null);
+                    setDirectWorkerId('');
+                    linkAccount.reset();
+                    setAccountId(event.target.value);
+                  }}
+                  disabled={
+                    accounts.isPending ||
+                    accounts.isError ||
+                    linkAccount.isPending ||
+                    isSubmitting ||
+                    currentStep !== 'consent'
+                  }
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-sm font-medium text-slate-900 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all disabled:bg-slate-100"
+                >
+                  <option value="">
+                    Select existing account (Chọn account đã có trên hệ thống)
+                  </option>
+                  {accounts.data
+                    ?.filter(
+                      (user) =>
+                        user.id === accountId ||
+                        (user.username + ' ' + user.displayName)
+                          .toLocaleLowerCase()
+                          .includes(accountSearch.trim().toLocaleLowerCase()),
+                    )
+                    .map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.username} — {user.displayName}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => linkAccount.mutate(accountId)}
+                  disabled={
+                    !accountId ||
+                    linkedWorker.isPending ||
+                    linkedWorker.isError ||
+                    !!selectedWorkerId ||
+                    linkAccount.isPending
+                  }
+                  className="shrink-0 rounded-xl bg-[#F66B17] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#e05b0d] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {linkAccount.isPending
+                    ? 'Preparing…'
+                    : selectedWorkerId
+                      ? 'Account Selected'
+                      : 'Use This Account'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {accounts.isError && (
+            <div
+              role="alert"
+              className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+            >
+              <span>Unable to load accounts.</span>
               <button
                 type="button"
-                onClick={() => linkAccount.mutate(accountId)}
-                disabled={
-                  !accountId ||
-                  linkedWorker.isPending ||
-                  linkedWorker.isError ||
-                  !!selectedWorkerId ||
-                  linkAccount.isPending
-                }
-                className="shrink-0 rounded-xl bg-[#F66B17] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#e05b0d] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void accounts.refetch()}
+                className="font-bold underline hover:text-red-900"
               >
-                {linkAccount.isPending
-                  ? 'Preparing…'
-                  : selectedWorkerId
-                    ? 'Account Selected'
-                    : 'Use This Account'}
+                Retry
               </button>
             </div>
-          </div>
-        </div>
+          )}
 
-        {accounts.isError && (
-          <div
-            role="alert"
-            className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
-          >
-            <span>Unable to load accounts.</span>
-            <button
-              type="button"
-              onClick={() => void accounts.refetch()}
-              className="font-bold underline hover:text-red-900"
+          {linkedWorker.isError && (
+            <div
+              role="alert"
+              className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
             >
-              Retry
-            </button>
-          </div>
-        )}
+              <span>Unable to load worker profile.</span>
+              <button
+                type="button"
+                onClick={() => void linkedWorker.refetch()}
+                className="font-bold underline hover:text-red-900"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
-        {linkedWorker.isError && (
-          <div
-            role="alert"
-            className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
-          >
-            <span>Unable to load worker profile.</span>
-            <button
-              type="button"
-              onClick={() => void linkedWorker.refetch()}
-              className="font-bold underline hover:text-red-900"
+          {accounts.data?.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+              No eligible accounts found. Create an account and assign it to this site in Account
+              Management first.
+            </p>
+          )}
+
+          {linkAccount.error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
             >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {accounts.data?.length === 0 && (
-          <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-            No eligible accounts found. Create an account and assign it to this site in Account Management first.
-          </p>
-        )}
-
-        {linkAccount.error && (
-          <div
-            role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
-          >
-            {linkAccount.error.message}
-          </div>
-        )}
-      </section>
+              {linkAccount.error.message}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Header and Worker Status Bar */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
@@ -675,12 +716,23 @@ export function WorkerEnrollmentView({
                   ? 'REVOKED'
                   : profileStatus === 'NEEDS_REENROLL'
                     ? 'NEEDS RE-ENROLLMENT'
-                    : 'NOT ENROLLED'}
+                    : profileStatus === 'DELETED'
+                      ? 'DELETED'
+                      : 'NOT ENROLLED'}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
+          {profileStatus === 'REVOKED' && (
+            <button
+              type="button"
+              onClick={() => void handleRevokeProfile(true)}
+              className="rounded-xl border border-red-200 px-3 py-2 text-xs text-red-700"
+            >
+              Delete Template Record
+            </button>
+          )}
           {profileStatus === 'ACTIVE' && (
             <button
               type="button"
@@ -750,6 +802,32 @@ export function WorkerEnrollmentView({
       {/* STEP 1: Consent Acknowledgment */}
       {currentStep === 'consent' && (
         <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
+          <label className="mb-4 block text-xs font-semibold">
+            Existing Worker profile (account optional)
+            <select
+              className="mt-1 block w-full rounded border p-2"
+              value={directWorkerId}
+              onChange={(e) => {
+                handleResetWorkflow();
+                setAccountId('');
+                setDirectWorkerId(e.target.value);
+              }}
+            >
+              <option value="">Use selected account</option>
+              {workerChoices.data?.items
+                .filter((w) => w.isActive)
+                .map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.displayName} · {w.externalId}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {workerChoices.error && <p role="alert">{workerChoices.error.message}</p>}
+          <p className="mb-3 text-xs text-slate-600">
+            Hand the screen to the Worker. Only the Worker may confirm consent; the assisting
+            operator must not confirm on their behalf.
+          </p>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-[#F66B17]">
               <IconShield className="h-5 w-5" />
@@ -764,9 +842,8 @@ export function WorkerEnrollmentView({
 
           <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-700">
             <p className="font-semibold text-slate-800">
-              SmartSite stores encrypted face vectors in a secure PostgreSQL database, strictly
-              linked to the worker&apos;s site account, derived from 3 guided angle captures to
-              facilitate site gate access control.
+              SmartSite stores an encrypted face template linked to the Worker profile, derived from
+              3 guided angle captures to facilitate site gate access control.
             </p>
             <ul className="list-disc space-y-1.5 pl-4 text-slate-600">
               <li>
@@ -792,8 +869,8 @@ export function WorkerEnrollmentView({
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#F66B17] focus:ring-[#F66B17]"
             />
             <span>
-              I confirm that the worker ({selectedWorker?.displayName ?? 'selected'}) has read,
-              understood, and consented to biometric data processing under policy version{' '}
+              Worker confirmation: I am {selectedWorker?.displayName ?? 'the selected Worker'}. I
+              have read and agree to biometric data processing under policy version{' '}
               {CONSENT_VERSION}.
             </span>
           </label>
@@ -804,12 +881,35 @@ export function WorkerEnrollmentView({
               disabled={
                 !consentAcknowledged ||
                 !selectedWorker ||
-                !linkedWorker.data?.userId ||
+                isSubmitting ||
                 !linkedWorker.data?.isActive ||
                 linkedWorker.isPending ||
                 linkedWorker.isError
               }
-              onClick={() => retakeCapture('front')}
+              onClick={() => {
+                setIsSubmitting(true);
+                setSubmissionError(null);
+                void (async () => {
+                  const session =
+                    enrollmentSession.current ??
+                    (await client.startFaceEnrollment(token!, selectedWorkerId, CONSENT_VERSION));
+                  if (!session.consentToken)
+                    throw new Error('Worker consent handoff is unavailable.');
+                  enrollmentSession.current = {
+                    id: session.id,
+                    workerId: selectedWorkerId,
+                    consentToken: session.consentToken,
+                  };
+                  await client.confirmWorkerFaceConsent(session.id, session.consentToken);
+                  retakeCapture('front');
+                })()
+                  .catch((error) =>
+                    setSubmissionError(
+                      error instanceof Error ? error.message : 'Unable to confirm consent.',
+                    ),
+                  )
+                  .finally(() => setIsSubmitting(false));
+              }}
               className="rounded-xl bg-[#F66B17] px-6 py-3 text-xs font-bold text-white shadow-md shadow-orange-500/15 hover:bg-[#e05b0d] hover:shadow-lg disabled:opacity-50 transition-all"
             >
               Begin Guided Face Captures →
@@ -1182,8 +1282,8 @@ export function WorkerEnrollmentView({
                 Biometric Enrollment Completed
               </h4>
               <p className="mt-1 text-xs text-emerald-700 max-w-md mx-auto">
-                Face biometric profile has been encrypted and activated in the system. The worker can
-                now authenticate at security gate desks.
+                Face biometric profile has been encrypted and activated in the system. The worker
+                can now authenticate at security gate desks.
               </p>
               <button
                 type="button"

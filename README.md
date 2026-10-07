@@ -157,7 +157,40 @@ Unknown, low-confidence, poor-quality and unavailable scans without an identifie
 Authorized site gate operators can read the latest 50 records through
 `GET /api/v1/sites/:siteId/gates/:gateId/access-logs`; Gate Desk shows these DB records,
 including denied scans of identified people. These are software access decisions, not proof of physical passage.
-QR/manual clearance is not implemented and never fabricates successful access logs.
+Worker QR fallback is implemented in Site Access on the responsive Web portal. Inconclusive face
+verification creates a five-minute fallback session. For unavailable hardware, the authorized gate
+operator explicitly reports `CAMERA_UNAVAILABLE` and opens a session. The worker signs in, selects
+the same site, enters the operator's session code in **QR của tôi**, and presents the generated QR.
+The opening operator scans/confirms at the same gate and direction. Backend checks the account,
+worker, face profile, contractor participation and current gate permissions; QR does not bypass a
+denial. QR decisions persist as `method: QR`; manual clearance remains unimplemented.
+
+Before registering visitors, an Admin opens **Site Setup**, selects the site and uses **Assign Site
+Manager → Create New Site Manager**, or assigns an existing manager. Assigned accounts show whether
+they are disabled, require a password change, or are ready to approve. Only an active manager with
+a permanent password makes the site ready for visitor registration. Site Setup loads every page of
+sites, accounts, contractors and representative assignments, and reports unavailable data.
+New accounts sign in with their temporary password and must complete the password-change screen
+before any internal workflow opens. Saving revokes existing sessions and returns to sign-in; a Site
+Manager then opens **Site Access → Visitor Passes** for their assigned site.
+
+Visitor registration is available at `/visits/register`, without a login. One representative registers
+the site, group size, contact, host, requested area, gate and schedule. The request appears in
+**Visitor Passes** for the Site Manager assigned to that site; only that scoped role may approve or
+reject it. This is an in-app approval queue, without email/SMS delivery. A site without an active
+Site Manager rejects registration. The representative saves the private tracking link returned after
+submission, then opens it to see approval and the real QR pass. Tokens expire after five minutes,
+refresh automatically while the pass page is open, are stored hashed and consumed on confirmation.
+Refresh invalidates the previous unconsumed token. Security scans by camera, uploaded QR image or
+scanner/manual token, then confirms actual headcount for each IN/OUT. Counts cannot exceed the
+approved group size or people inside. Identical retries produce one event; departure remains possible
+after the schedule ends while people are inside. Requested area is recorded with approval, not an
+MF06 Zone grant or individual visitor identity. Keep the tracking link with the representative.
+
+Apply migration `QrAccess1791417600000` before the updated Backend/Web. Browser QR scanning requires
+camera permission and HTTPS or localhost. If the face camera is unavailable, use another scanning
+device, an uploaded QR image or a scanner/manual token. Worker QR is available through Web on a
+phone; it is not an Expo native QR screen.
 
 Face templates now live as encrypted ciphertext in PostgreSQL `face_profile.encrypted_template`.
 `worker.user_id` links an explicitly selected account to the worker; `face_profile.user_id` records

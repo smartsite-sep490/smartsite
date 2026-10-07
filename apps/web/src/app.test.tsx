@@ -7,6 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './app';
 
+const accountState = vi.hoisted(() => ({ mustChangePassword: false }));
+
 vi.mock('@smartsite/api-client', async () => {
   const actual =
     await vi.importActual<typeof import('@smartsite/api-client')>('@smartsite/api-client');
@@ -24,8 +26,14 @@ vi.mock('./features/auth/auth-session', () => ({
   }),
   useRestoreSession: () => ({ isLoading: false }),
   useLogout: () => ({ mutate: vi.fn() }),
-  useCurrentUser: () => ({ data: { roleAssignments: [] } }),
+  useCurrentUser: () => ({
+    data: { roleAssignments: [], mustChangePassword: accountState.mustChangePassword },
+  }),
   SessionExpiredModal: () => null,
+}));
+
+vi.mock('./features/auth/ChangePasswordScreen', () => ({
+  ChangePasswordScreen: () => <h1>Change your temporary password</h1>,
 }));
 
 vi.mock('./components/landing/LandingPage', () => ({
@@ -69,10 +77,10 @@ vi.mock('./components/layout/AppLayout', () => ({
   AppLayout: ({
     children,
     onSelectTab,
-    }: {
-      children: React.ReactNode;
-      currentTab?: string;
-      onSelectTab: (tab: string) => void;
+  }: {
+    children: React.ReactNode;
+    currentTab?: string;
+    onSelectTab: (tab: string) => void;
   }) => (
     <div>
       <nav>
@@ -88,12 +96,31 @@ describe('App Navigation and Context Lifecycle', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    accountState.mustChangePassword = false;
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, gcTime: 0 },
       },
     });
   });
+
+  it.each(['/access', '/site-setup', '/schedule-setup', '/dashboard'])(
+    'requires password change before mounting protected route %s',
+    async (path) => {
+      accountState.mustChangePassword = true;
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <QueryClientProvider client={queryClient}>
+            <App />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      expect(
+        screen.getByRole('heading', { name: 'Change your temporary password' }),
+      ).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Sidebar Incidents' })).toBeNull();
+    },
+  );
 
   afterEach(() => {
     cleanup();

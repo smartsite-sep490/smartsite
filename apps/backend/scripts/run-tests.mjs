@@ -44,7 +44,8 @@ if (!process.exitCode) {
     .map((file) => `${directory}/${file}`);
   const result = spawnSync(
     process.execPath,
-    // ponytail: serial files bound startup/memory contention; raise file concurrency only after measuring cold bootstrap budgets.
+    // Nest bootstrap fixtures spawn children; keep startup contention bounded
+    // when Turbo also runs the browser suite. Assertion/time limits stay intact.
     ['--test', '--test-concurrency=1', ...files],
     {
       cwd: backendDirectory,

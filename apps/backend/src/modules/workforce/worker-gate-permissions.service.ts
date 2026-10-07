@@ -1,18 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ArrayMaxSize, ArrayUnique, IsArray, IsIn, IsUUID } from 'class-validator';
 import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import { SITE_GATES, type WorkerGatePermissionsResponse } from '@smartsite/contracts';
 import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
-import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import {
   WorkerEntity,
   WorkerGatePermissionEntity,
-  UserEntity,
   UserRole,
-  UserRoleAssignmentEntity,
+  WorkerSiteZoneAssignmentEntity,
+  ContractorSiteParticipationEntity,
 } from '../../database/entities/index.js';
+import { requireSiteRole } from './qr-access.service.js';
 import type { WorkforceActor } from './contractor-operations.service.js';
+import { auditAccess } from './access-audit.js';
 
 export class SetGatePermissionsCommand {
   @IsArray()
@@ -30,16 +31,6 @@ export class SetGatePermissionsCommand {
 @Injectable()
 export class WorkerGatePermissionsService {
   constructor(private readonly dataSource: DataSource) {}
-  private requireAdmin(actor: WorkforceActor) {
-    if (
-      actor.mustChangePassword ||
-      !actor.roleAssignments.some((role) => role.role === UserRole.ADMIN && role.siteId === null)
-    )
-      throw new PublicHttpException(HttpStatus.FORBIDDEN, {
-        code: 'FORBIDDEN',
-        message: 'Admin access is required',
-      });
-  }
   private async requireWorker(
     manager: EntityManager,
     siteId: string,
@@ -75,7 +66,7 @@ export class WorkerGatePermissionsService {
     };
   }
   async list(actor: WorkforceActor, siteIdValue: string, workerIdValue: string) {
-    this.requireAdmin(actor);
+    requireSiteRole(actor, siteIdValue, [UserRole.SITE_MANAGER]);
     const siteId = uuid(siteIdValue),
       workerId = uuid(workerIdValue);
     return this.dataSource.transaction(async (manager) => {
@@ -89,7 +80,7 @@ export class WorkerGatePermissionsService {
     workerIdValue: string,
     input: SetGatePermissionsCommand,
   ) {
-    this.requireAdmin(actor);
+    requireSiteRole(actor, siteIdValue, [UserRole.SITE_MANAGER]);
     const siteId = uuid(siteIdValue),
       workerId = uuid(workerIdValue);
     const value = command(SetGatePermissionsCommand, input);
@@ -103,20 +94,27 @@ export class WorkerGatePermissionsService {
           .join(',') !== [...value.expectedPermissionIds].sort().join(',')
       )
         conflict('Gate permissions changed. Reload before saving.');
-      if (value.gateIds.length > 0) {
-        const account = worker.userId
-          ? await manager.getRepository(UserEntity).findOneBy({ id: worker.userId, isActive: true })
-          : null;
-        const role = account
-          ? await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
-              { userId: account.id, siteId },
-              { userId: account.id, siteId: IsNull(), role: UserRole.ADMIN },
-            ])
-          : null;
-        if (!worker.isActive || !account || !role)
-          conflict('An active worker linked to an active site account is required');
-      }
       const now = new Date();
+      const assignments = await manager
+        .getRepository(WorkerSiteZoneAssignmentEntity)
+        .find({ where: { workerId, siteId }, order: { validFrom: 'DESC', id: 'ASC' } });
+      const assignment = assignments.find(
+        (a) => a.status === 'APPROVED' && a.siteContractorId && a.validUntil && a.validUntil > now,
+      );
+      if (value.gateIds.length && (!worker.isActive || !assignment))
+        conflict('An approved worker assignment with an expiry is required');
+      if (value.gateIds.length && assignment) {
+        const participation = await manager
+          .getRepository(ContractorSiteParticipationEntity)
+          .findOneBy({ id: assignment.siteContractorId!, siteId, isActive: true });
+        if (
+          !participation ||
+          participation.contractorId !== worker.contractorId ||
+          participation.validFrom > assignment.validFrom ||
+          (participation.validUntil && participation.validUntil < assignment.validUntil!)
+        )
+          conflict('Assignment exceeds active contractor participation');
+      }
       await manager
         .getRepository(WorkerGatePermissionEntity)
         .update(
@@ -129,12 +127,23 @@ export class WorkerGatePermissionsService {
           workerId,
           siteId,
           gateId,
-          validFrom: now,
-          validUntil: null,
+          validFrom: assignment!.validFrom > now ? assignment!.validFrom : now,
+          validUntil: assignment!.validUntil,
+          workerAssignmentId: assignment!.id,
           createdByUserId: actor.id,
           revokedAt: null,
           revokedByUserId: null,
         });
+      await auditAccess(
+        manager,
+        actor.id,
+        siteId,
+        'GATE_PERMISSIONS_CHANGED',
+        'worker',
+        worker.id,
+        null,
+        { gateIds: value.gateIds, assignmentId: assignment?.id ?? null },
+      );
       return this.snapshot(manager, siteId, workerId);
     });
   }

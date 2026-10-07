@@ -1,9 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  SmartSiteManagementClient,
-  ApiError,
-} from '@smartsite/api-client';
+import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
 import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import {
   IconBuilding,
@@ -28,7 +25,9 @@ import {
   getAssignableSiteManagers,
   getContractorRepresentativeUserIds,
   getSiteManagers,
+  getReadySiteManagers,
 } from '../utils/site-setup-helpers';
+import { loadAllPages } from '../load-all-pages';
 
 interface SiteSetupViewProps {
   apiUrl: string;
@@ -40,8 +39,8 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
 
-  const roles = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isAdmin = roles.includes('ADMIN');
+  const isAdmin =
+    currentUser?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null) ?? false;
 
   // Navigation & Selection state
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
@@ -91,12 +90,14 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
   // ── Queries ─────────────────────────────────────────────────────────────────
   const sitesQuery = useQuery({
-    queryKey: ['sites'],
-    queryFn: () => client.listSites(accessToken!),
+    queryKey: ['site-setup', apiUrl, currentUser?.id, 'sites'],
+    queryFn: ({ signal }) =>
+      loadAllPages((options) => client.listSites(accessToken!, options), signal),
     enabled: Boolean(accessToken && isAdmin),
   });
 
   const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data]);
+  const setupKey = ['site-setup', apiUrl, currentUser?.id];
 
   // Auto-select first site if none selected
   const selectedSite = useMemo(() => {
@@ -110,22 +111,32 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const activeSiteId = selectedSite?.id ?? null;
 
   const contractorsQuery = useQuery({
-    queryKey: ['contractors', activeSiteId],
-    queryFn: () => client.listContractors(accessToken!, activeSiteId!),
+    queryKey: [...setupKey, 'contractors', activeSiteId],
+    queryFn: ({ signal }) =>
+      loadAllPages(
+        (options) => client.listContractors(accessToken!, activeSiteId!, options),
+        signal,
+      ),
     enabled: Boolean(accessToken && activeSiteId),
   });
 
   const contractors = useMemo(() => contractorsQuery.data?.items ?? [], [contractorsQuery.data]);
 
   const usersQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => client.listUsers(accessToken!),
+    queryKey: [...setupKey, 'users'],
+    queryFn: ({ signal }) =>
+      loadAllPages((options) => client.listUsers(accessToken!, options), signal),
     enabled: Boolean(accessToken && isAdmin),
   });
 
   const representativeAssignmentsQuery = useQuery({
-    queryKey: ['contractor-representative-assignments', activeSiteId],
-    queryFn: () => client.listContractorRepresentativeAssignments(accessToken!, activeSiteId!),
+    queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
+    queryFn: ({ signal }) =>
+      loadAllPages(
+        (options) =>
+          client.listContractorRepresentativeAssignments(accessToken!, activeSiteId!, options),
+        signal,
+      ),
     enabled: Boolean(accessToken && isAdmin && activeSiteId),
   });
 
@@ -149,6 +160,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     () => (activeSiteId ? getSiteManagers(allUsers, activeSiteId) : []),
     [allUsers, activeSiteId],
   );
+
+  const readySiteManagers = activeSiteId ? getReadySiteManagers(allUsers, activeSiteId) : [];
+  const managersLoaded = usersQuery.isSuccess;
 
   const assignableSiteManagers = useMemo(
     () => (activeSiteId ? getAssignableSiteManagers(allUsers, activeSiteId) : []),
@@ -185,14 +199,13 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
   // ── Mutations ───────────────────────────────────────────────────────────────
   const createSiteMutation = useMutation({
-    mutationFn: (input: { code: string; name: string }) =>
-      client.createSite(accessToken!, input),
+    mutationFn: (input: { code: string; name: string }) => client.createSite(accessToken!, input),
     onSuccess: (newSite) => {
       setSiteError(null);
       setSiteName('');
       setSiteCode('');
       setShowCreateSiteModal(false);
-      queryClient.invalidateQueries({ queryKey: ['sites'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'sites'] });
       setSelectedSiteId(newSite.id);
     },
     onError: (err: unknown) => {
@@ -209,11 +222,13 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       client.createContractor(accessToken!, activeSiteId!, input),
     onSuccess: (newContractor) => {
       setContractorError(null);
-      setContractorSuccessMsg(`Contractor "${newContractor.name}" (${newContractor.code}) created successfully.`);
+      setContractorSuccessMsg(
+        `Contractor "${newContractor.name}" (${newContractor.code}) created successfully.`,
+      );
       setContractorCode('');
       setContractorName('');
       setShowCreateContractorModal(false);
-      queryClient.invalidateQueries({ queryKey: ['contractors', activeSiteId] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'contractors', activeSiteId] });
       setTimeout(() => setContractorSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -236,9 +251,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         username: input.username,
         displayName: input.displayName,
         temporaryPassword: input.temporaryPassword,
-        roleAssignments: [
-          { role: 'CONTRACTOR_REPRESENTATIVE', siteId: activeSiteId! },
-        ],
+        roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: activeSiteId! }],
       });
       await client.assignContractorRepresentative(accessToken!, activeSiteId!, input.contractorId, {
         userId: user.id,
@@ -255,18 +268,20 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setRepPassword('');
       setRepContractorId('');
       setShowCreateRepModal(false);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       queryClient.invalidateQueries({
-        queryKey: ['contractor-representative-assignments', activeSiteId],
+        queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
       });
-      queryClient.invalidateQueries({ queryKey: ['contractors', activeSiteId] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'contractors', activeSiteId] });
       setTimeout(() => setRepSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
         setRepError(err.message);
       } else {
-        setRepError('Could not create the representative account. Verify password policy and inputs.');
+        setRepError(
+          'Could not create the representative account. Verify password policy and inputs.',
+        );
       }
     },
   });
@@ -288,7 +303,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setAssignRepContractorId('');
       setShowAssignRepModal(false);
       queryClient.invalidateQueries({
-        queryKey: ['contractor-representative-assignments', activeSiteId],
+        queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
       });
       setTimeout(() => setRepSuccessMsg(null), 5000);
     },
@@ -296,7 +311,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       if (err instanceof ApiError) {
         setAssignRepError(err.message);
       } else {
-        setAssignRepError('Could not assign the representative account. Verify the account and contractor scope.');
+        setAssignRepError(
+          'Could not assign the representative account. Verify the account and contractor scope.',
+        );
       }
     },
   });
@@ -304,7 +321,8 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const assignSiteManagerMutation = useMutation({
     mutationFn: async (input: { siteId: string; userId: string }) => {
       const user = allUsers.find((candidate) => candidate.id === input.userId);
-      if (!user) throw new Error('The selected account could not be found. Refresh the page and try again.');
+      if (!user)
+        throw new Error('The selected account could not be found. Refresh the page and try again.');
 
       return client.replaceUserRoleAssignments(
         accessToken!,
@@ -317,7 +335,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setManagerSuccessMsg(`Site Manager account "${user.username}" assigned successfully.`);
       setSelectedManagerId('');
       setShowAssignManagerModal(false);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -326,7 +344,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       } else if (err instanceof Error) {
         setManagerError(err.message);
       } else {
-        setManagerError('Could not assign the Site Manager account. Refresh the page and try again.');
+        setManagerError(
+          'Could not assign the Site Manager account. Refresh the page and try again.',
+        );
       }
     },
   });
@@ -348,20 +368,24 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onSuccess: (user) => {
       setCreateManagerError(null);
-      setManagerSuccessMsg(`Site Manager account "${user.username}" created and assigned successfully.`);
+      setManagerSuccessMsg(
+        `Site Manager account "${user.username}" created for this site. They must sign in and change their temporary password before visitor registration and approval are available.`,
+      );
       setManagerUsername('');
       setManagerDisplayName('');
       setManagerPassword('');
       setShowCreateManagerModal(false);
       setShowAssignManagerModal(false);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
         setCreateManagerError(err.message);
       } else {
-        setCreateManagerError('Could not create the Site Manager account. Verify the inputs and password policy.');
+        setCreateManagerError(
+          'Could not create the Site Manager account. Verify the inputs and password policy.',
+        );
       }
     },
   });
@@ -375,7 +399,8 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         </div>
         <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Site &amp; Contractor Setup is reserved for System Administrators. Your current role does not grant permission to configure site infrastructure.
+          Site &amp; Contractor Setup is reserved for System Administrators. Your current role does
+          not grant permission to configure site infrastructure.
         </p>
       </div>
     );
@@ -391,7 +416,12 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     }
     const code = siteCode.trim()
       ? siteCode.trim().toUpperCase()
-      : siteName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '-') + '-' + Math.floor(1000 + Math.random() * 9000);
+      : siteName
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '-') +
+        '-' +
+        Math.floor(1000 + Math.random() * 9000);
 
     createSiteMutation.mutate({ code, name: siteName.trim() });
   };
@@ -539,7 +569,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-3">
@@ -575,7 +604,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
             title="Refresh sites and contractors data"
           >
-            <IconRefreshCw className={`w-3.5 h-3.5 text-slate-500 ${sitesQuery.isFetching ? 'animate-spin' : ''}`} />
+            <IconRefreshCw
+              className={`w-3.5 h-3.5 text-slate-500 ${sitesQuery.isFetching ? 'animate-spin' : ''}`}
+            />
             <span>Refresh</span>
           </button>
 
@@ -596,13 +627,29 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       </div>
 
       {/* Success Notification Banners */}
+      {(sitesQuery.isError ||
+        usersQuery.isError ||
+        contractorsQuery.isError ||
+        representativeAssignmentsQuery.isError) && (
+        <div
+          role="alert"
+          className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs"
+        >
+          Could not load complete site setup data. Use Refresh to try again. Manager readiness
+          cannot be confirmed until accounts load successfully.
+        </div>
+      )}
       {contractorSuccessMsg && (
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
           <div className="flex items-center gap-2.5 font-medium">
             <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{contractorSuccessMsg}</span>
           </div>
-          <button type="button" onClick={() => setContractorSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => setContractorSuccessMsg(null)}
+            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
+          >
             <IconX className="w-4 h-4" />
           </button>
         </div>
@@ -614,7 +661,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{repSuccessMsg}</span>
           </div>
-          <button type="button" onClick={() => setRepSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => setRepSuccessMsg(null)}
+            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
+          >
             <IconX className="w-4 h-4" />
           </button>
         </div>
@@ -626,7 +677,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{managerSuccessMsg}</span>
           </div>
-          <button type="button" onClick={() => setManagerSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => setManagerSuccessMsg(null)}
+            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
+          >
             <IconX className="w-4 h-4" />
           </button>
         </div>
@@ -671,7 +726,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
       {/* 3. Main Master-Detail Hub */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-
         {/* Left Column: Sites Navigator (4 cols) */}
         <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col">
           <div className="p-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
@@ -755,7 +809,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                         >
                           {site.code}
                         </span>
-                        <h3 className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                        <h3
+                          className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}
+                        >
                           {site.name}
                         </h3>
                       </div>
@@ -814,23 +870,38 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
                     <div
                       className={`mt-3 inline-flex max-w-full items-center gap-2.5 rounded-xl border px-3 py-2 ${
-                        siteManagers.length > 0
+                        managersLoaded && readySiteManagers.length > 0
                           ? 'border-emerald-100 bg-emerald-50/70'
                           : 'border-amber-100 bg-amber-50/70'
                       }`}
                     >
                       <div
                         className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          siteManagers.length > 0 ? 'bg-white text-emerald-600' : 'bg-white text-amber-600'
+                          managersLoaded && readySiteManagers.length > 0
+                            ? 'bg-white text-emerald-600'
+                            : 'bg-white text-amber-600'
                         }`}
                       >
                         <IconShield className="w-3.5 h-3.5" />
                       </div>
                       <div className="min-w-0 leading-tight">
-                        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Site Manager</div>
-                        {siteManagers.length > 0 ? (
+                        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                          Site Manager
+                        </div>
+                        {!managersLoaded ? (
+                          <div className="text-xs font-bold text-amber-700">
+                            {usersQuery.isError
+                              ? 'Account data unavailable'
+                              : 'Loading accounts...'}
+                          </div>
+                        ) : siteManagers.length > 0 ? (
                           <div className="text-xs font-bold text-slate-800 truncate">
-                            {siteManagers.map((manager) => manager.displayName || `@${manager.username}`).join(', ')}
+                            {siteManagers
+                              .map(
+                                (manager) =>
+                                  `${manager.displayName || `@${manager.username}`} (${!manager.isActive ? 'Disabled' : manager.mustChangePassword ? 'Password change required' : 'Ready to approve'})`,
+                              )
+                              .join(', ')}
                           </div>
                         ) : (
                           <div className="text-xs font-bold text-amber-700">Not assigned yet</div>
@@ -838,7 +909,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       </div>
                       <span
                         className={`ml-1 w-2 h-2 rounded-full shrink-0 ${
-                          siteManagers.length > 0 ? 'bg-emerald-500' : 'bg-amber-500'
+                          managersLoaded && readySiteManagers.length > 0
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-500'
                         }`}
                         aria-hidden="true"
                       />
@@ -847,16 +920,17 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
                   {/* Actions Bar */}
                   <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2">
-                    {siteManagers.length === 0 && (
-                      <button
-                        type="button"
-                        onClick={openAssignSiteManagerModal}
-                        className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
-                      >
-                        <IconShield className="w-3.5 h-3.5" />
-                        <span>Assign Site Manager</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={!managersLoaded}
+                      onClick={openAssignSiteManagerModal}
+                      className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
+                    >
+                      <IconShield className="w-3.5 h-3.5" />
+                      <span>
+                        {siteManagers.length === 0 ? 'Assign Site Manager' : 'Manage Site Managers'}
+                      </span>
+                    </button>
 
                     <button
                       type="button"
@@ -877,7 +951,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       onClick={() => openRepModalForContractor('')}
                       disabled={contractors.length === 0}
                       className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={contractors.length === 0 ? 'Create a contractor first' : 'Create contractor representative login'}
+                      title={
+                        contractors.length === 0
+                          ? 'Create a contractor first'
+                          : 'Create contractor representative login'
+                      }
                     >
                       <IconUser className="w-3.5 h-3.5 text-slate-600" />
                       <span>Create Representative</span>
@@ -947,13 +1025,16 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-bold text-slate-900">No Subcontractors Registered</h3>
+                            <h3 className="text-sm font-bold text-slate-900">
+                              No Subcontractors Registered
+                            </h3>
                             <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-amber-700 bg-amber-100/80 px-2 py-1 rounded-md">
                               Setup required
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 max-w-xl mt-1 leading-relaxed">
-                            Register a contractor for this site before adding representatives or assigning worker schedules.
+                            Register a contractor for this site before adding representatives or
+                            assigning worker schedules.
                           </p>
                         </div>
                       </div>
@@ -976,11 +1057,15 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                               representativeAssignments,
                               contractor.id,
                             );
-                            const linkedRepresentatives = siteRepresentatives.filter((representative) =>
-                              linkedRepresentativeIds.includes(representative.id),
+                            const linkedRepresentatives = siteRepresentatives.filter(
+                              (representative) =>
+                                linkedRepresentativeIds.includes(representative.id),
                             );
                             return (
-                              <tr key={contractor.id} className="hover:bg-slate-50/70 transition-colors">
+                              <tr
+                                key={contractor.id}
+                                className="hover:bg-slate-50/70 transition-colors"
+                              >
                                 <td className="py-3.5 px-4">
                                   <div className="font-bold text-slate-900">{contractor.name}</div>
                                 </td>
@@ -994,13 +1079,21 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                                     <span className="text-[11px] text-slate-400">Loading...</span>
                                   ) : linkedRepresentativeIds.length > 0 ? (
                                     <div className="space-y-0.5">
-                                      {linkedRepresentatives.length > 0 ? linkedRepresentatives.map((representative) => (
-                                        <div key={representative.id}>
-                                          <div className="font-bold text-slate-900">{representative.displayName}</div>
-                                          <div className="font-mono text-[10px] text-slate-400">@{representative.username}</div>
-                                        </div>
-                                      )) : (
-                                        <span className="text-[11px] font-semibold text-emerald-700">Assigned</span>
+                                      {linkedRepresentatives.length > 0 ? (
+                                        linkedRepresentatives.map((representative) => (
+                                          <div key={representative.id}>
+                                            <div className="font-bold text-slate-900">
+                                              {representative.displayName}
+                                            </div>
+                                            <div className="font-mono text-[10px] text-slate-400">
+                                              @{representative.username}
+                                            </div>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <span className="text-[11px] font-semibold text-emerald-700">
+                                          Assigned
+                                        </span>
                                       )}
                                     </div>
                                   ) : (
@@ -1018,8 +1111,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                                   {new Date(contractor.createdAt).toLocaleDateString('vi-VN')}
                                 </td>
                                 <td className="py-3.5 px-4 text-right">
-                                  {representativeAssignmentsQuery.isLoading ? null : linkedRepresentativeIds.length > 0 ? (
-                                    <span className="text-[11px] font-semibold text-emerald-700">Assigned</span>
+                                  {representativeAssignmentsQuery.isLoading ? null : linkedRepresentativeIds.length >
+                                    0 ? (
+                                    <span className="text-[11px] font-semibold text-emerald-700">
+                                      Assigned
+                                    </span>
                                   ) : (
                                     <button
                                       type="button"
@@ -1054,7 +1150,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                         <IconUsers className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900">No Representatives Found</h3>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          No Representatives Found
+                        </h3>
                         <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
                           No contractor representative accounts are linked to this site yet.
                         </p>
@@ -1085,51 +1183,69 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                           {siteRepresentatives.map((rep) => {
                             const linkedContractors = representativeAssignments
                               .filter((assignment) => assignment.userId === rep.id)
-                              .map((assignment) => contractors.find((contractor) => contractor.id === assignment.contractorId))
-                              .filter((contractor): contractor is (typeof contractors)[number] => Boolean(contractor));
+                              .map((assignment) =>
+                                contractors.find(
+                                  (contractor) => contractor.id === assignment.contractorId,
+                                ),
+                              )
+                              .filter((contractor): contractor is (typeof contractors)[number] =>
+                                Boolean(contractor),
+                              );
                             return (
-                            <tr key={rep.id} className="hover:bg-slate-50/70 transition-colors">
-                              <td className="py-3.5 px-4">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase">
-                                    {rep.displayName.charAt(0) || 'R'}
-                                  </div>
-                                  <div>
-                                    <div className="font-bold text-slate-900">{rep.displayName}</div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
-                                @{rep.username}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                {linkedContractors.length > 0 ? (
-                                  <div className="space-y-0.5">
-                                    {linkedContractors.map((contractor) => (
-                                      <div key={contractor.id}>
-                                        <div className="font-bold text-slate-900">{contractor.name}</div>
-                                        <div className="font-mono text-[10px] text-slate-400">{contractor.code}</div>
+                              <tr key={rep.id} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase">
+                                      {rep.displayName.charAt(0) || 'R'}
+                                    </div>
+                                    <div>
+                                      <div className="font-bold text-slate-900">
+                                        {rep.displayName}
                                       </div>
-                                    ))}
+                                    </div>
                                   </div>
-                                ) : (
-                                  <span className="text-amber-700 font-semibold">Not linked</span>
-                                )}
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700">
-                                  CONTRACTOR_REPRESENTATIVE
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  rep.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full ${rep.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                                  {rep.isActive ? 'Active' : 'Inactive'}
-                                </span>
-                              </td>
-                            </tr>
+                                </td>
+                                <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
+                                  @{rep.username}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  {linkedContractors.length > 0 ? (
+                                    <div className="space-y-0.5">
+                                      {linkedContractors.map((contractor) => (
+                                        <div key={contractor.id}>
+                                          <div className="font-bold text-slate-900">
+                                            {contractor.name}
+                                          </div>
+                                          <div className="font-mono text-[10px] text-slate-400">
+                                            {contractor.code}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-amber-700 font-semibold">Not linked</span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700">
+                                    CONTRACTOR_REPRESENTATIVE
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      rep.isActive
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : 'bg-slate-100 text-slate-600'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${rep.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                                    />
+                                    {rep.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </td>
+                              </tr>
                             );
                           })}
                         </tbody>
@@ -1141,7 +1257,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             </>
           )}
         </div>
-
       </div>
 
       {/* ── MODAL 1: Assign Site Manager Modal ───────────────────────────────── */}
@@ -1155,7 +1270,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Assign Site Manager</h3>
-                  <p className="text-[11px] text-slate-500">Assign an existing account to {selectedSite?.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    Assign an existing account to {selectedSite?.name}
+                  </p>
                 </div>
               </div>
               <button
@@ -1176,13 +1293,19 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               )}
 
               {siteManagers.length > 0 ? (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs leading-relaxed">
-                  This site already has a Site Manager: {' '}
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+                  Assigned Site Managers:{' '}
                   <span className="font-bold">
-                    {siteManagers.map((manager) => manager.displayName || `@${manager.username}`).join(', ')}
+                    {siteManagers
+                      .map(
+                        (manager) =>
+                          `${manager.displayName || `@${manager.username}`} (${!manager.isActive ? 'Disabled' : manager.mustChangePassword ? 'Password change required' : 'Ready to approve'})`,
+                      )
+                      .join(', ')}
                   </span>
                 </div>
-              ) : assignableSiteManagers.length > 0 ? (
+              ) : null}
+              {assignableSiteManagers.length > 0 ? (
                 <SmartSelect
                   id="site-manager-select"
                   label="Site Manager Account"
@@ -1200,22 +1323,22 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 />
               ) : (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
-                  No active account with the <span className="font-bold">SITE_MANAGER</span> role is available for this site.
+                  No active account with the <span className="font-bold">SITE_MANAGER</span> role is
+                  available for this site.
                 </div>
               )}
 
-              {siteManagers.length === 0 && (
-                <button
-                  type="button"
-                  onClick={openCreateSiteManagerModal}
-                  className="w-full px-3 py-2.5 rounded-xl border border-dashed border-[#F66B17]/50 bg-orange-50/50 text-xs font-bold text-[#C6530E] hover:bg-orange-50 transition-colors cursor-pointer"
-                >
-                  + Create New Site Manager
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={openCreateSiteManagerModal}
+                className="w-full px-3 py-2.5 rounded-xl border border-dashed border-[#F66B17]/50 bg-orange-50/50 text-xs font-bold text-[#C6530E] hover:bg-orange-50 transition-colors cursor-pointer"
+              >
+                + Create New Site Manager
+              </button>
 
               <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
-                Existing role assignments for this account will be preserved. The Site Manager role will be added only for this site.
+                Existing role assignments for this account will be preserved. The Site Manager role
+                will be added only for this site.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1230,7 +1353,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 <button
                   type="submit"
                   disabled={
-                    siteManagers.length > 0 ||
                     assignSiteManagerMutation.isPending ||
                     assignableSiteManagers.length === 0 ||
                     !selectedManagerId
@@ -1242,7 +1364,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   ) : (
                     <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
                   )}
-                  <span>{assignSiteManagerMutation.isPending ? 'Assigning...' : 'Assign Site Manager'}</span>
+                  <span>
+                    {assignSiteManagerMutation.isPending ? 'Assigning...' : 'Assign Site Manager'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1261,7 +1385,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Create Site Manager</h3>
-                  <p className="text-[11px] text-slate-500">Create a Site Manager account for {selectedSite?.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    Create a Site Manager account for {selectedSite?.name}
+                  </p>
                 </div>
               </div>
               <button
@@ -1283,7 +1409,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label htmlFor="site-manager-username-input" className="block text-xs font-bold text-slate-700">
+                  <label
+                    htmlFor="site-manager-username-input"
+                    className="block text-xs font-bold text-slate-700"
+                  >
                     Username <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1298,7 +1427,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="site-manager-displayname-input" className="block text-xs font-bold text-slate-700">
+                  <label
+                    htmlFor="site-manager-displayname-input"
+                    className="block text-xs font-bold text-slate-700"
+                  >
                     Display Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1314,7 +1446,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="site-manager-password-input" className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="site-manager-password-input"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Temporary Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -1338,7 +1473,8 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </div>
 
               <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
-                This account will be created with the <span className="font-bold">SITE_MANAGER</span> role for this site.
+                This account will be created with the{' '}
+                <span className="font-bold">SITE_MANAGER</span> role for this site.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1359,7 +1495,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   ) : (
                     <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
                   )}
-                  <span>{createSiteManagerMutation.isPending ? 'Creating...' : 'Create Site Manager'}</span>
+                  <span>
+                    {createSiteManagerMutation.isPending ? 'Creating...' : 'Create Site Manager'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1378,7 +1516,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Create New Site</h3>
-                  <p className="text-[11px] text-slate-500">Add a new project site to the organization</p>
+                  <p className="text-[11px] text-slate-500">
+                    Add a new project site to the organization
+                  </p>
                 </div>
               </div>
               <button
@@ -1415,7 +1555,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
               <div className="space-y-1">
                 <label htmlFor="site-code-input" className="block text-xs font-bold text-slate-700">
-                  Site Code <span className="text-slate-400 font-normal">(Optional, auto-generated if blank)</span>
+                  Site Code{' '}
+                  <span className="text-slate-400 font-normal">
+                    (Optional, auto-generated if blank)
+                  </span>
                 </label>
                 <input
                   id="site-code-input"
@@ -1486,7 +1629,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               )}
 
               <div className="space-y-1">
-                <label htmlFor="contractor-code-input" className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="contractor-code-input"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Contractor Code <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -1501,7 +1647,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="contractor-name-input" className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="contractor-name-input"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Contractor Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -1534,7 +1683,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   ) : (
                     <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
                   )}
-                  <span>{createContractorMutation.isPending ? 'Registering...' : 'Register Contractor'}</span>
+                  <span>
+                    {createContractorMutation.isPending ? 'Registering...' : 'Register Contractor'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1552,7 +1703,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   <IconUsers className="w-4 h-4 text-[#F66B17]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Assign Existing Representative</h3>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Assign Existing Representative
+                  </h3>
                   <p className="text-[11px] text-slate-500">
                     Link an existing representative account to a contractor on {selectedSite?.name}
                   </p>
@@ -1609,8 +1762,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 />
               ) : (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
-                  No eligible active representative account is available for this contractor. Create one with
-                  <span className="font-bold"> Create Representative</span> first, or choose another contractor.
+                  No eligible active representative account is available for this contractor. Create
+                  one with
+                  <span className="font-bold"> Create Representative</span> first, or choose another
+                  contractor.
                 </div>
               )}
 
@@ -1625,7 +1780,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
                 <button
                   type="submit"
-                  disabled={assignExistingRepresentativeMutation.isPending || assignableRepresentatives.length === 0}
+                  disabled={
+                    assignExistingRepresentativeMutation.isPending ||
+                    assignableRepresentatives.length === 0
+                  }
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
                 >
                   {assignExistingRepresentativeMutation.isPending ? (
@@ -1633,7 +1791,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   ) : (
                     <IconUsers className="w-3.5 h-3.5 text-[#F66B17]" />
                   )}
-                  <span>{assignExistingRepresentativeMutation.isPending ? 'Assigning...' : 'Assign Representative'}</span>
+                  <span>
+                    {assignExistingRepresentativeMutation.isPending
+                      ? 'Assigning...'
+                      : 'Assign Representative'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1651,8 +1813,12 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   <IconUser className="w-4 h-4 text-[#F66B17]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Create Contractor Representative</h3>
-                  <p className="text-[11px] text-slate-500">Provision login and link to contractor on {selectedSite?.name}</p>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Create Contractor Representative
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Provision login and link to contractor on {selectedSite?.name}
+                  </p>
                 </div>
               </div>
               <button
@@ -1690,7 +1856,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
-                  <label htmlFor="rep-username-input" className="block text-xs font-bold text-slate-700">
+                  <label
+                    htmlFor="rep-username-input"
+                    className="block text-xs font-bold text-slate-700"
+                  >
                     Username <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1705,7 +1874,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="rep-displayname-input" className="block text-xs font-bold text-slate-700">
+                  <label
+                    htmlFor="rep-displayname-input"
+                    className="block text-xs font-bold text-slate-700"
+                  >
                     Display Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1721,7 +1893,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="rep-password-input" className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="rep-password-input"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Temporary Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -1768,7 +1943,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                     <IconUser className="w-3.5 h-3.5 text-[#F66B17]" />
                   )}
                   <span>
-                    {createRepresentativeMutation.isPending ? 'Provisioning...' : 'Create & Assign Account'}
+                    {createRepresentativeMutation.isPending
+                      ? 'Provisioning...'
+                      : 'Create & Assign Account'}
                   </span>
                 </button>
               </div>
@@ -1776,7 +1953,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { Column, CreateDateColumn, Entity, PrimaryColumn, Unique } from 'typeorm
 @Entity({ name: 'site' })
 @Unique('uq_site_code', ['code'])
 export class SiteEntity {
+  @Column({ name: 'access_policy_version', type: 'integer', default: 1 })
+  accessPolicyVersion!: number;
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_site_id' })
   id!: string;
 

@@ -5,13 +5,14 @@ import { useLogin } from './auth-session';
 import { IconArrowRight, IconAlertTriangle, IconUser, IconKey } from '../../components/icons';
 
 interface LoginScreenProps {
+  notice?: string;
   onBack: () => void;
   onNavigateToRegister: () => void;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) {
+export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -30,26 +31,32 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
       gsap.set('.login-loading-content', { display: 'none' });
 
       const tl = gsap.timeline({ delay: 0.01 });
-      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' })
-        .to('.login-form-content', {
+      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' }).to(
+        '.login-form-content',
+        {
           opacity: 1,
           scale: 1,
-          duration: 0.3
-        }, '-=0.1');
+          duration: 0.3,
+        },
+        '-=0.1',
+      );
     },
-    { scope: containerRef }
+    { scope: containerRef },
   );
 
   const handleNavigateRegister = () => {
     const tl = gsap.timeline();
-    tl.to('.login-form-content', { opacity: 0, scale: 0.95, duration: 0.2 })
-      .to(panelRef.current, {
+    tl.to('.login-form-content', { opacity: 0, scale: 0.95, duration: 0.2 }).to(
+      panelRef.current,
+      {
         width: 240,
         height: 240,
         duration: 0.4,
         ease: 'back.in(1.2)',
-        onComplete: onNavigateToRegister
-      }, '-=0.1');
+        onComplete: onNavigateToRegister,
+      },
+      '-=0.1',
+    );
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -76,7 +83,7 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
           duration: 0.7,
           ease: 'back.inOut(1.2)',
         },
-        'morph'
+        'morph',
       )
       .to(
         '.login-loading-content',
@@ -86,7 +93,7 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
           duration: 0.4,
           ease: 'power2.out',
         },
-        'morph+=0.4'
+        'morph+=0.4',
       );
 
     loginMutation.mutate(
@@ -101,7 +108,10 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
             delay: 0.5, // let them see the success glow briefly
           });
           // Turn orb to green/success
-          gsap.to('.orb-core', { backgroundColor: '#10B981', boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)' });
+          gsap.to('.orb-core', {
+            backgroundColor: '#10B981',
+            boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)',
+          });
         },
         onError: (err: unknown) => {
           let msg = 'An unexpected error occurred.';
@@ -117,9 +127,10 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
           setErrorMessage(msg);
 
           // Shake effect on error
-          gsap.fromTo(panelRef.current,
+          gsap.fromTo(
+            panelRef.current,
             { x: -10 },
-            { x: 0, duration: 0.4, ease: "elastic.out(2, 0.2)" }
+            { x: 0, duration: 0.4, ease: 'elastic.out(2, 0.2)' },
           );
 
           // Revert back to form
@@ -142,7 +153,7 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
                 duration: 0.5,
                 ease: 'back.out(1.2)',
               },
-              'revert'
+              'revert',
             )
             .to(
               '.login-form-content',
@@ -151,10 +162,10 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
                 scale: 1,
                 duration: 0.4,
               },
-              'revert+=0.2'
+              'revert+=0.2',
             );
         },
-      }
+      },
     );
   };
 
@@ -185,20 +196,28 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
       </div>
 
       {/* Cyber-Chamfered Panel */}
-      <div ref={panelRef} className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4">
-
+      <div
+        ref={panelRef}
+        className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4"
+      >
         {/* Outer Thin Border Layer */}
         <div
           className="absolute inset-0 bg-white/20 transition-all"
-          style={{ clipPath: 'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)' }}
+          style={{
+            clipPath:
+              'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)',
+          }}
         />
 
         {/* Inner Dark Glass Layer */}
         <div
           className="absolute inset-[1px] bg-[#0A1118]/80 backdrop-blur-2xl transition-all"
-          style={{ clipPath: 'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)' }}
+          style={{
+            clipPath:
+              'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)',
+          }}
         >
-           <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent pointer-events-none" />
         </div>
 
         {/* Top Left Glass Accent */}
@@ -224,11 +243,12 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5 flex-1 flex flex-col justify-center">
-
             <div className="space-y-4">
               {/* Username Input */}
               <div>
-                <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">Username</label>
+                <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">
+                  Username
+                </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
@@ -244,7 +264,9 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
 
               {/* Password Input */}
               <div>
-                <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">Password</label>
+                <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">
+                  Password
+                </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl pl-4 pr-3 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
@@ -262,12 +284,32 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
                     tabIndex={-1}
                   >
                     {showPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
                         <line x1="1" y1="1" x2="23" y2="23"></line>
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
                       </svg>
@@ -277,6 +319,14 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
               </div>
             </div>
 
+            {notice && (
+              <p
+                role="status"
+                className="rounded-lg border border-emerald-500/40 bg-emerald-950/50 p-3 text-xs text-emerald-200"
+              >
+                {notice}
+              </p>
+            )}
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                 <IconAlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
@@ -304,7 +354,6 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
                 Sign Up
               </button>
             </div>
-
           </form>
         </div>
 
@@ -316,7 +365,10 @@ export function LoginScreen({ onBack, onNavigateToRegister }: LoginScreenProps) 
 
             {/* Outer animated rings */}
             <div className="absolute w-24 h-24 border border-[#F66B17]/20 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
-            <div className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" style={{ animationDelay: '1s' }} />
+            <div
+              className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"
+              style={{ animationDelay: '1s' }}
+            />
 
             {/* The glowing orb */}
             <div className="orb-core relative w-8 h-8 bg-[#F66B17] rounded-full shadow-[0_0_40px_20px_rgba(246,107,23,0.4)] animate-pulse" />

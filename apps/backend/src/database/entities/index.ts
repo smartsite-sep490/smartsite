@@ -8,6 +8,30 @@ import {
   SafetyWorkflowAuditEntity,
 } from './safety-workflow.entity.js';
 import { SiteEntity } from './site.entity.js';
+import { AccessAttemptEntity, GateEventEntity } from './access-flow.entity.js';
+import { AccessAuditEntity } from './access-audit.entity.js';
+import {
+  AttendanceEventEntity,
+  AttendanceSessionEntity,
+  AttendanceCorrectionEntity,
+} from './attendance-flow.entity.js';
+export * from './attendance-flow.entity.js';
+export * from './access-audit.entity.js';
+import {
+  ContractorZonePermissionEntity,
+  WorkerZonePermissionEntity,
+} from './zone-permission.entity.js';
+export * from './zone-permission.entity.js';
+export * from './access-flow.entity.js';
+import {
+  VisitorVisitEntity,
+  QrFallbackSessionEntity,
+  QrCredentialEntity,
+  VisitorGateEventEntity,
+  VisitorEntity,
+  VisitZoneEntity,
+} from './qr-access.entity.js';
+export * from './qr-access.entity.js';
 import { CameraEntity } from './camera.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { CameraObservationRegionEntity } from './camera-observation-region.entity.js';
@@ -88,6 +112,20 @@ export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
 export const ENTITIES = [
+  AttendanceEventEntity,
+  AttendanceSessionEntity,
+  AttendanceCorrectionEntity,
+  AccessAuditEntity,
+  ContractorZonePermissionEntity,
+  WorkerZonePermissionEntity,
+  AccessAttemptEntity,
+  GateEventEntity,
+  VisitorEntity,
+  VisitZoneEntity,
+  VisitorVisitEntity,
+  QrFallbackSessionEntity,
+  QrCredentialEntity,
+  VisitorGateEventEntity,
   IncidentEntity,
   IncidentWorkerEntity,
   CorrectiveActionEntity,

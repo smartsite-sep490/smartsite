@@ -1,8 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import type {
+  QrFallbackResponse,
+  VerifyQrCommand,
+  AccessAttemptResponse,
+  GateEventResponse,
+} from '@smartsite/contracts';
+import { QrScannerView } from './QrScannerView';
 import { inspectGateCamera } from './gateCameraReadiness';
 import { GateCameraSession } from './gateCameraSession';
 import {
@@ -39,6 +46,7 @@ export interface GateDeskEventRecord {
 }
 
 export interface SecurityGateDeskViewProps {
+  canManualVerify?: boolean;
   apiUrl: string;
   token?: string;
   sessionScope: string;
@@ -72,6 +80,7 @@ function getGateFaceMessage(reasonCode: string): string {
 }
 
 export function SecurityGateDeskView({
+  canManualVerify = false,
   apiUrl,
   token,
   sessionScope,
@@ -107,6 +116,92 @@ export function SecurityGateDeskView({
   const [isScanning, setIsScanning] = useState(false);
   const [networkError, setNetworkError] = useState(false);
   const [lastDecision, setLastDecision] = useState<FaceGateDecisionResponse | null>(null);
+  const [currentAttempt, setCurrentAttempt] = useState<AccessAttemptResponse | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [confirmedEvent, setConfirmedEvent] = useState<GateEventResponse | null>(null);
+  const attendanceKey = useRef<{ eventId: string; requestId: string } | null>(null);
+  const attendance = useMutation({
+    mutationFn: () => {
+      if (!confirmedEvent) throw new Error('Confirm an actual passage first.');
+      if (attendanceKey.current?.eventId !== confirmedEvent.id)
+        attendanceKey.current = { eventId: confirmedEvent.id, requestId: crypto.randomUUID() };
+      return client.recordAttendance(token!, selectedSiteId, confirmedEvent.id, {
+        requestId: attendanceKey.current.requestId,
+        kind: confirmedEvent.direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['attendance', apiUrl, sessionScope, selectedSiteId],
+      });
+    },
+  });
+  const [manualWorkerId, setManualWorkerId] = useState('');
+  const [manualIdentityConfirmed, setManualIdentityConfirmed] = useState(false);
+  const manualWorkers = useQuery({
+    queryKey: ['access-control', apiUrl, sessionScope, selectedSiteId, 'manual-worker-choices'],
+    enabled: canManualVerify && !!token && !!selectedSiteId,
+    queryFn: () => client.listWorkers(token!, selectedSiteId, { limit: 100 }),
+  });
+  const manualRequest = useRef<{ fingerprint: string; id: string } | null>(null);
+  const manual = useMutation({
+    mutationFn: () => {
+      const fingerprint = JSON.stringify([
+        selectedSiteId,
+        selectedGateId,
+        direction,
+        manualWorkerId,
+        reviewNote,
+      ]);
+      if (manualRequest.current?.fingerprint !== fingerprint)
+        manualRequest.current = { fingerprint, id: crypto.randomUUID() };
+      return client.manuallyVerifyWorker(token!, selectedSiteId, selectedGateId, {
+        requestId: manualRequest.current.id,
+        workerId: manualWorkerId,
+        direction,
+        identityConfirmed: true,
+        reviewNote: reviewNote.trim(),
+      });
+    },
+    onSuccess: (attempt) => {
+      const worker = manualWorkers.data?.items.find((w) => w.id === manualWorkerId);
+      setCurrentAttempt(attempt);
+      setLastDecision(null);
+      setCandidateWorker(
+        worker
+          ? {
+              id: worker.id,
+              userId: worker.userId ?? null,
+              username: '',
+              externalId: worker.externalId,
+              displayName: worker.displayName,
+              contractorName: '',
+              assignmentStatus: attempt.status,
+            }
+          : null,
+      );
+    },
+  });
+  const passageKey = useRef<{ attemptId: string; idempotencyKey: string } | null>(null);
+  const passage = useMutation({
+    mutationFn: () => {
+      if (!currentAttempt) throw new Error('Verify the worker first.');
+      if (passageKey.current?.attemptId !== currentAttempt.id)
+        passageKey.current = { attemptId: currentAttempt.id, idempotencyKey: crypto.randomUUID() };
+      return client.confirmGatePassage(token!, selectedSiteId, currentAttempt.id, {
+        idempotencyKey: passageKey.current.idempotencyKey,
+        reviewNote: reviewNote.trim() || undefined,
+      });
+    },
+    onSuccess: (event) => {
+      setCurrentAttempt(null);
+      setConfirmedEvent(event);
+      attendance.reset();
+      void queryClient.invalidateQueries({
+        queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
+      });
+    },
+  });
   const [candidateWorker, setCandidateWorker] = useState<
     FaceGateVerificationResponse['worker'] | null
   >(null);
@@ -114,8 +209,35 @@ export function SecurityGateDeskView({
   // QR Fallback modal state
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrCodeInput, setQrCodeInput] = useState('');
-  const [qrOfficerNotes, setQrOfficerNotes] = useState('');
-  const qrProcessing = false;
+  const [fallback, setFallback] = useState<QrFallbackResponse | null>(null);
+  const [qrResultMessage, setQrResultMessage] = useState('');
+  const qrCommand = useRef<VerifyQrCommand | null>(null);
+  const fallbackMutation = useMutation({
+    mutationFn: () =>
+      client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction),
+    onSuccess: (r) => {
+      setFallback(r);
+      setQrModalOpen(true);
+    },
+  });
+  const qrVerification = useMutation({
+    mutationFn: (input: VerifyQrCommand) =>
+      client.verifyWorkerQr(token!, selectedSiteId, selectedGateId, input),
+    onSuccess: (r) => {
+      setQrResultMessage(
+        `${r.authorization}: ${r.worker.displayName} · ${getSafeReasonMessage(r.reasonCode)}`,
+      );
+      setCandidateWorker(r.worker);
+      setCurrentAttempt(r.attempt ?? null);
+      setQrCodeInput('');
+      setFallback(null);
+      qrCommand.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
+      });
+    },
+  });
+  const qrProcessing = qrVerification.isPending;
 
   // Recent Gate Events log
   const logQueryKey = ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId];
@@ -131,7 +253,7 @@ export function SecurityGateDeskView({
     workerExternalId: log.workerExternalId ?? '—',
     contractorName: log.contractorName ?? '—',
     direction: log.direction,
-    method: 'FACE',
+    method: log.method ?? 'FACE',
     outcome: log.decision.authorization,
     reasonCode: log.decision.reasonCode,
     gateName: gates.find((gate) => gate.id === log.gateId)?.name ?? log.gateId,
@@ -231,14 +353,11 @@ export function SecurityGateDeskView({
         frameBlob,
       );
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
-      if (presence.state !== 'NEW_FACE') {
+      if (presence.state !== 'NEW_FACE' && presence.state !== 'AI_UNAVAILABLE') {
         if (presence.state === 'SAME_FACE')
           setScanMessage('Worker already scanned. Awaiting next worker or step out of frame.');
         else if (presence.state === 'WAITING') {
           setScanMessage('Face detected. Hold still to verify…');
-        } else if (presence.state === 'AI_UNAVAILABLE') {
-          setNetworkError(true);
-          setScanMessage('AI unavailable. Check connection and retry.');
         } else {
           setScanMessage(getGateFaceMessage(presence.reasonCode));
         }
@@ -258,6 +377,8 @@ export function SecurityGateDeskView({
         );
         if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         setLastDecision(data.decision);
+        setCurrentAttempt(data.attempt ?? null);
+        setFallback(data.fallback ?? null);
         // Historical display only: unknown scans never inherit this worker's identity or access.
         setCandidateWorker((previous) => retainGateWorker(previous, data.worker));
         await queryClient.invalidateQueries({
@@ -289,7 +410,9 @@ export function SecurityGateDeskView({
   ]);
 
   useEffect(() => {
-    if (!cameraActive || networkError || !selectedSiteId || !token) return;
+    if (!cameraActive || networkError || !selectedSiteId || !token || qrModalOpen || fallback)
+      return;
+    if (currentAttempt && candidateWorker) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
@@ -303,7 +426,17 @@ export function SecurityGateDeskView({
       clearTimeout(timer);
       scanGeneration.current += 1;
     };
-  }, [cameraActive, handleScanFace, networkError, selectedSiteId, token]);
+  }, [
+    cameraActive,
+    handleScanFace,
+    networkError,
+    selectedSiteId,
+    token,
+    qrModalOpen,
+    fallback,
+    currentAttempt,
+    candidateWorker,
+  ]);
 
   // Reset scan to prepare for next worker
   const handleResetScan = () => {
@@ -313,8 +446,15 @@ export function SecurityGateDeskView({
     setScanMessage('Awaiting face…');
     updateCapturedPreview(null);
     setLastDecision(null);
+    setCurrentAttempt(null);
+    setConfirmedEvent(null);
+    passageKey.current = null;
+    setReviewNote('');
     setCandidateWorker(null);
     setNetworkError(false);
+    setFallback(null);
+    setQrCodeInput('');
+    qrCommand.current = null;
   };
 
   // Face decisions are already saved by the Backend. Never fabricate clearance logs.
@@ -323,7 +463,19 @@ export function SecurityGateDeskView({
   };
 
   const handleConfirmQrFallback = () => {
-    setQrOfficerNotes('QR clearance is not implemented. No access or log was granted.');
+    if (!fallback || !token) return;
+    const old = qrCommand.current;
+    const input =
+      old && old.token === qrCodeInput.trim() && old.direction === fallback.direction
+        ? old
+        : {
+            token: qrCodeInput.trim(),
+            direction: fallback.direction,
+            requestId: crypto.randomUUID(),
+          };
+    qrCommand.current = input;
+    setQrResultMessage('');
+    qrVerification.mutate(input);
   };
 
   const uiState = resolveGateUiState({
@@ -509,7 +661,36 @@ export function SecurityGateDeskView({
               <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-slate-400">
                 <IconCamera className="mb-3 h-12 w-12 text-slate-600" />
                 <p className="text-sm font-semibold text-slate-300">Webcam Not Active</p>
-                {cameraError && <p className="mt-2 max-w-sm text-xs text-red-400">{cameraError}</p>}
+                {cameraError && (
+                  <div className="mt-2 max-w-sm space-y-2">
+                    <p className="text-xs text-red-400">{cameraError}</p>
+                    {lastDecision?.authorization !== 'DENIED' && (
+                      <button
+                        type="button"
+                        disabled={!token || fallbackMutation.isPending}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 px-3.5 py-2.5 text-xs font-bold text-white shadow-xs transition-all disabled:opacity-50"
+                        onClick={() => {
+                          stopCamera();
+                          qrVerification.reset();
+                          setQrResultMessage('');
+                          fallbackMutation.mutate();
+                        }}
+                      >
+                        <IconKey className="h-3.5 w-3.5" />
+                        <span>
+                          {fallbackMutation.isPending
+                            ? 'Opening Session…'
+                            : 'Camera Error · Use Fallback QR'}
+                        </span>
+                      </button>
+                    )}
+                    {fallbackMutation.error && (
+                      <p role="alert" className="text-red-400">
+                        {fallbackMutation.error.message}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -683,7 +864,12 @@ export function SecurityGateDeskView({
               {uiState.canUseQrFallback && (
                 <button
                   type="button"
-                  onClick={() => setQrModalOpen(true)}
+                  onClick={() => {
+                    stopCamera();
+                    qrVerification.reset();
+                    setQrResultMessage('');
+                    setQrModalOpen(true);
+                  }}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-100/90 py-3 text-xs font-bold text-amber-950 hover:bg-amber-200 transition-all"
                 >
                   <span>⚡ Launch Dynamic QR Fallback</span>
@@ -730,8 +916,8 @@ export function SecurityGateDeskView({
                 supervisor authorization.
               </li>
               <li>
-                For inconclusive face matches, request the worker present their dynamic QR pass via
-                the SmartSite mobile app.
+                For inconclusive face matches, give the worker a fallback session ID and request
+                their dynamic pass from “My QR Pass”.
               </li>
             </ul>
           </div>
@@ -749,6 +935,7 @@ export function SecurityGateDeskView({
               </div>
               <button
                 type="button"
+                aria-label="Close QR fallback modal"
                 onClick={() => setQrModalOpen(false)}
                 className="rounded-lg p-1 text-slate-400 hover:text-slate-600"
               >
@@ -757,6 +944,50 @@ export function SecurityGateDeskView({
             </div>
 
             <div className="mt-4 space-y-4">
+              {fallback && (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                      <IconKey className="h-3.5 w-3.5 text-blue-600" />
+                      Worker Fallback Session
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800">
+                      Direction: {fallback.direction}
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-800">
+                    Provide this session code to the worker to enter in “My QR Pass”:
+                  </p>
+                  <div className="rounded-xl border border-blue-200 bg-white p-2.5 font-mono text-xs text-blue-950 font-bold break-all select-all shadow-inner">
+                    {fallback.id}
+                  </div>
+                  <p className="text-[11px] text-blue-700">
+                    Expires:{' '}
+                    <span className="font-semibold">
+                      {new Date(fallback.expiresAt).toLocaleTimeString()}
+                    </span>
+                  </p>
+                </div>
+              )}
+              <QrScannerView disabled={qrProcessing || !fallback} onScan={setQrCodeInput} />
+              {qrVerification.error && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700"
+                >
+                  <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                  <span>{qrVerification.error.message}</span>
+                </div>
+              )}
+              {qrResultMessage && (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800"
+                >
+                  <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>{qrResultMessage}</span>
+                </div>
+              )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
                 ⚠️ Dynamic QR is a fallback method when facial recognition is inconclusive. Security
                 officers must physically verify worker credentials and contractor badge before
@@ -773,27 +1004,11 @@ export function SecurityGateDeskView({
                 <input
                   id="qr-code-input"
                   type="text"
-                  placeholder="e.g. WKR-FALLBACK-9281-EXP..."
+                  placeholder="SSQ-..."
+                  disabled={qrProcessing}
                   value={qrCodeInput}
                   onChange={(e) => setQrCodeInput(e.target.value)}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-mono focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="qr-notes-input"
-                  className="block text-xs font-bold uppercase tracking-wider text-slate-700"
-                >
-                  Officer Notes (Optional)
-                </label>
-                <input
-                  id="qr-notes-input"
-                  type="text"
-                  placeholder="e.g. Physically verified badge and contractor credentials"
-                  value={qrOfficerNotes}
-                  onChange={(e) => setQrOfficerNotes(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
                 />
               </div>
 
@@ -807,7 +1022,7 @@ export function SecurityGateDeskView({
                 </button>
                 <button
                   type="button"
-                  disabled={!qrCodeInput.trim() || qrProcessing}
+                  disabled={!fallback || !qrCodeInput.trim() || qrProcessing}
                   onClick={handleConfirmQrFallback}
                   className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-xs"
                 >
@@ -819,7 +1034,122 @@ export function SecurityGateDeskView({
         </div>
       )}
 
-      {/* Recent Gate Events Audit Trail */}
+      {canManualVerify && (
+        <section className="space-y-3 rounded-xl border bg-white p-5">
+          <h3 className="font-semibold">Security manual verification</h3>
+          <label className="block text-xs">
+            Worker profile
+            <select
+              value={manualWorkerId}
+              onChange={(e) => {
+                setManualWorkerId(e.target.value);
+                setManualIdentityConfirmed(false);
+              }}
+              className="mt-1 block w-full rounded border p-2"
+            >
+              <option value="">Select Worker</option>
+              {manualWorkers.data?.items.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.displayName} · {w.externalId}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs">
+            Verification reason
+            <input
+              className="mt-1 block w-full rounded border p-2"
+              value={reviewNote}
+              maxLength={1000}
+              onChange={(e) => setReviewNote(e.target.value)}
+            />
+          </label>
+          <label className="block text-xs">
+            <input
+              type="checkbox"
+              checked={manualIdentityConfirmed}
+              onChange={(e) => setManualIdentityConfirmed(e.target.checked)}
+            />{' '}
+            I physically verified this Worker&apos;s identity.
+          </label>
+          <button
+            className="rounded border px-4 py-2 text-sm disabled:opacity-50"
+            disabled={
+              !manualIdentityConfirmed || !manualWorkerId || !reviewNote.trim() || manual.isPending
+            }
+            onClick={() => manual.mutate()}
+          >
+            Verify Worker manually
+          </button>
+          {manualWorkers.error && <p role="alert">{manualWorkers.error.message}</p>}
+          {manual.error && <p role="alert">{manual.error.message}</p>}
+          {manual.data?.status === 'DENIED' && (
+            <p role="alert">Worker identity verified. Site entry permission was denied.</p>
+          )}
+        </section>
+      )}
+      {currentAttempt &&
+        ['READY', 'PENDING'].includes(currentAttempt.status) &&
+        candidateWorker && (
+          <section className="rounded-xl border bg-white p-5 space-y-3">
+            <p className="font-semibold">
+              Verification recorded. Confirm the actual passage for {candidateWorker.displayName}.
+            </p>
+            <p className="text-xs">
+              Schedule: {currentAttempt.scheduleStatus}. Temporary passage does not create
+              attendance.
+            </p>
+            <label className="block text-xs">
+              Security review reason (required outside a scheduled shift)
+              <input
+                className="mt-1 block w-full rounded border p-2"
+                value={reviewNote}
+                maxLength={1000}
+                onChange={(e) => setReviewNote(e.target.value)}
+              />
+            </label>
+            <button
+              className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              disabled={
+                passage.isPending ||
+                (direction === 'IN' &&
+                  currentAttempt.scheduleStatus !== 'SCHEDULED' &&
+                  !canManualVerify)
+              }
+              onClick={() => passage.mutate()}
+            >
+              Confirm actual passage
+            </button>
+            {passage.error && <p role="alert">{passage.error.message}</p>}
+            {direction === 'IN' &&
+              currentAttempt.scheduleStatus !== 'SCHEDULED' &&
+              !canManualVerify && (
+                <p className="text-sm text-amber-700">
+                  Security must verify and confirm entry outside a scheduled shift.
+                </p>
+              )}
+          </section>
+        )}
+      {passage.isSuccess && <p role="status">Actual passage recorded.</p>}
+      {confirmedEvent && canManualVerify && (
+        <section className="space-y-3 rounded-xl border bg-white p-5">
+          <p className="text-sm">
+            This {confirmedEvent.direction === 'IN' ? 'entry' : 'exit'} is recorded. Record work{' '}
+            {confirmedEvent.direction === 'IN' ? 'check-in' : 'check-out'} only if the Worker is{' '}
+            {confirmedEvent.direction === 'IN' ? 'starting' : 'ending'} their work session.
+          </p>
+          <button
+            className="rounded border px-4 py-2 text-sm disabled:opacity-50"
+            disabled={attendance.isPending || attendance.isSuccess}
+            onClick={() => attendance.mutate()}
+          >
+            Record work {confirmedEvent.direction === 'IN' ? 'check-in' : 'check-out'}
+          </button>
+          {attendance.error && <p role="alert">{attendance.error.message}</p>}
+          {attendance.isSuccess && <p role="status">Work attendance recorded.</p>}
+        </section>
+      )}
+      {/* Recent verification decisions */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2.5">
@@ -829,7 +1159,7 @@ export function SecurityGateDeskView({
             <div>
               <h3 className="font-bold text-slate-900">Gate Access & Clearance Audit Trail</h3>
               <p className="text-[11px] text-slate-500">
-                Verified clearance decisions logged to database
+                Verification decisions; actual passage requires confirmation
               </p>
             </div>
           </div>

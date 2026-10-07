@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { AccountResponse, ContractorRepresentativeAssignmentResponse } from '@smartsite/api-client';
+import type {
+  AccountResponse,
+  ContractorRepresentativeAssignmentResponse,
+} from '@smartsite/api-client';
 import {
   addSiteManagerAssignment,
   getAssignableRepresentatives,
   getAssignableSiteManagers,
   getContractorRepresentativeUserIds,
   getSiteManagers,
+  getReadySiteManagers,
 } from '../utils/site-setup-helpers';
 
 const representative = (id: string, isActive = true) =>
@@ -33,12 +37,19 @@ const account = (
   }) as AccountResponse;
 
 const assignment = (userId: string, contractorId: string) =>
-  ({ userId, contractorId }) as Pick<ContractorRepresentativeAssignmentResponse, 'userId' | 'contractorId'>;
+  ({ userId, contractorId }) as Pick<
+    ContractorRepresentativeAssignmentResponse,
+    'userId' | 'contractorId'
+  >;
 
 describe('SiteSetupView representative assignment options', () => {
   it('keeps active site representatives that are not linked to the selected contractor', () => {
     const options = getAssignableRepresentatives(
-      [representative('chanh'), representative('already-linked'), representative('inactive', false)],
+      [
+        representative('chanh'),
+        representative('already-linked'),
+        representative('inactive', false),
+      ],
       [assignment('already-linked', 'contractor-a'), assignment('chanh', 'contractor-b')],
       'contractor-a',
     );
@@ -67,6 +78,23 @@ describe('SiteSetupView representative assignment options', () => {
 });
 
 describe('SiteSetupView Site Manager assignment options', () => {
+  it('only marks active managers with permanent passwords as ready to approve visitors', () => {
+    const users = [
+      account('ready', [{ role: 'SITE_MANAGER', siteId: 'site-a' }]),
+      account('disabled', [{ role: 'SITE_MANAGER', siteId: 'site-a' }], false),
+      {
+        ...account('temporary', [{ role: 'SITE_MANAGER', siteId: 'site-a' }]),
+        mustChangePassword: true,
+      },
+      account('other-site', [{ role: 'SITE_MANAGER', siteId: 'site-b' }]),
+    ];
+    expect(getSiteManagers(users, 'site-a').map((user) => user.id)).toEqual([
+      'ready',
+      'disabled',
+      'temporary',
+    ]);
+    expect(getReadySiteManagers(users, 'site-a').map((user) => user.id)).toEqual(['ready']);
+  });
   it('shows managers assigned to the selected site and excludes inactive or already assigned accounts', () => {
     const users = [
       account('manager-a', [{ role: 'SITE_MANAGER', siteId: 'site-a' }]),
@@ -77,7 +105,9 @@ describe('SiteSetupView Site Manager assignment options', () => {
     ];
 
     expect(getSiteManagers(users, 'site-a').map((user) => user.id)).toEqual(['manager-a']);
-    expect(getAssignableSiteManagers(users, 'site-a').map((user) => user.id)).toEqual(['manager-b']);
+    expect(getAssignableSiteManagers(users, 'site-a').map((user) => user.id)).toEqual([
+      'manager-b',
+    ]);
   });
 
   it('preserves existing role assignments and deduplicates the Site Manager assignment', () => {

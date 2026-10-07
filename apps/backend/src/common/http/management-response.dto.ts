@@ -190,6 +190,12 @@ export class WorkerPageResponseDto {
 }
 
 export class FaceEnrollmentSessionResponseDto {
+  @ApiProperty({
+    required: false,
+    description:
+      'One-session capability handed to the Worker; present only when starting enrollment',
+  })
+  consentToken?: string;
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) workerId!: string;
   @ApiProperty() consentVersion!: string;
@@ -212,8 +218,10 @@ export class FaceProfileResponseDto {
   @ApiProperty({ format: 'uuid' }) workerId!: string;
   @ApiProperty({ format: 'uuid', nullable: true }) userId!: string | null;
   @ApiProperty() modelVersion!: string;
-  @ApiProperty({ enum: ['ACTIVE', 'REVOKED', 'NEEDS_REENROLL'] }) status!:
-    'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+  @ApiProperty({ enum: ['ACTIVE', 'REVOKED', 'NEEDS_REENROLL', 'DELETED'] }) status!:
+    'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL' | 'DELETED';
+  @ApiProperty() consentMethod!: string;
+  @ApiProperty({ format: 'date-time', nullable: true }) deletedAt!: string | null;
   @ApiProperty() consentVersion!: string;
   @ApiProperty({ format: 'date-time' }) consentedAt!: string;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;

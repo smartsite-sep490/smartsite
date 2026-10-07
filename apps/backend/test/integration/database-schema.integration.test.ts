@@ -148,6 +148,7 @@ site|id|uuid|NO||||
 site|code|varchar|NO|64|||
 site|name|varchar|NO|255|||
 site|created_at|timestamptz|NO||||now()
+site|access_policy_version|int4|NO||32|0|1
 zone|id|uuid|NO||||
 zone|site_id|uuid|NO||||
 zone|code|varchar|NO|64|||

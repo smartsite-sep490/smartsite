@@ -10,6 +10,18 @@ function createFetchMock(responseFactory: () => Response | Promise<Response>) {
 }
 
 describe('management client', () => {
+  it('includes web credentials when changing a password so the revoked refresh cookie can be cleared', async () => {
+    const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await new SmartSiteManagementClient('https://api.example.test').changePassword('temporary-token', 'TempDemo2026!', 'NewDemo2026!');
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/auth/change-password');
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST', credentials: 'include',
+        body: JSON.stringify({ currentPassword: 'TempDemo2026!', newPassword: 'NewDemo2026!' }),
+      });
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('creates a contractor representative link with encoded scope IDs', async () => {
     const fetchMock = createFetchMock(
       () => new Response(JSON.stringify({ id: 'assignment-1' }), { status: 201 }),

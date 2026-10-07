@@ -1,4 +1,15 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export type {
+  CreateVisitCommand,
+  VisitResponse,
+  QrPassResponse,
+  VisitorPassResponse,
+  QrFallbackResponse,
+  VerifyQrCommand,
+  VisitorGateCommand,
+  WorkerQrVerificationResponse,
+  VisitorGateEventResponse,
+} from './qr-access-api.js';
 
 export * from './observation-identity-management.js';
 
@@ -110,3 +121,6 @@ export type {
   AbsenceRequestResponse,
 } from './management-api.js';
 export * from './safety-workflow-api.js';
+export * from './access-flow-api.js';
+export * from './access-setup-api.js';
+export * from './attendance-api.js';

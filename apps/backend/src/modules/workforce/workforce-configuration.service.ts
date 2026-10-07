@@ -564,12 +564,16 @@ export class WorkforceConfigurationService {
 
     // Authorization check
     let contractorIdScope: string | undefined;
+    let contractorIdsScope: string[] | undefined;
     let workerIdScope: string | undefined;
     if (
       !user.roleAssignments.some(
         (r) =>
-          r.role === UserRole.ADMIN ||
-          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+          (r.role === UserRole.ADMIN && r.siteId === null) ||
+          (r.siteId === scopedSiteId &&
+            [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(
+              r.role,
+            )),
       )
     ) {
       const rep = user.roleAssignments.some(
@@ -593,20 +597,39 @@ export class WorkforceConfigurationService {
           });
         contractorIdScope = rep.contractorId;
       } else {
-        const worker = user.roleAssignments.some(
-          (r) => r.role === UserRole.WORKER && r.siteId === scopedSiteId,
+        const grants = user.roleAssignments.some(
+          (r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === scopedSiteId,
         )
           ? await this.dataSource
-              .getRepository(WorkerEntity)
-              .findOneBy({ siteId: scopedSiteId, userId: user.id })
-          : null;
-        if (worker) {
-          workerIdScope = worker.id;
-        } else {
-          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
-            code: 'FORBIDDEN',
-            message: 'Forbidden',
-          });
+              .getRepository(ContractorRepresentativeGrantEntity)
+              .findBy({ userId: user.id })
+          : [];
+        const participations = grants.length
+          ? await this.dataSource.getRepository(ContractorSiteParticipationEntity).findBy({
+              siteId: scopedSiteId,
+              contractorId: In(grants.map((g) => g.contractorId)),
+              isActive: true,
+            })
+          : [];
+        contractorIdsScope = participations
+          .filter((p) => p.validFrom <= new Date() && (!p.validUntil || p.validUntil > new Date()))
+          .map((p) => p.contractorId);
+        if (!contractorIdsScope.length) {
+          const worker = user.roleAssignments.some(
+            (r) => r.role === UserRole.WORKER && r.siteId === scopedSiteId,
+          )
+            ? await this.dataSource
+                .getRepository(WorkerEntity)
+                .findOneBy({ siteId: scopedSiteId, userId: user.id })
+            : null;
+          if (worker) {
+            workerIdScope = worker.id;
+          } else {
+            throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+              code: 'FORBIDDEN',
+              message: 'Forbidden',
+            });
+          }
         }
       }
     }
@@ -614,6 +637,7 @@ export class WorkforceConfigurationService {
     const pagination = page(offset, limit);
     const where: FindOptionsWhere<WorkerEntity> = { siteId: scopedSiteId };
     if (contractorIdScope) where.contractorId = contractorIdScope;
+    if (contractorIdsScope?.length) where.contractorId = In(contractorIdsScope);
     if (workerIdScope) where.id = workerIdScope;
 
     const [items, total] = await this.dataSource.getRepository(WorkerEntity).findAndCount({

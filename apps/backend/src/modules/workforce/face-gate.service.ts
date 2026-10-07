@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { QrAccessService } from './qr-access.service.js';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource } from 'typeorm';
 import type {
   FaceGateVerificationResponse,
   GateAccessLogResponse,
@@ -10,18 +11,15 @@ import { GateAccessLogEntity } from '../../database/entities/gate-access-log.ent
 import { uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ContractorEntity } from '../../database/entities/contractor.entity.js';
-import { ContractorSiteParticipationEntity } from '../../database/entities/contractor-site-participation.entity.js';
 import {
   FaceProfileEntity,
   FaceProfileStatus,
 } from '../../database/entities/face-profile.entity.js';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
-import { WorkerGatePermissionEntity } from '../../database/entities/worker-gate-permission.entity.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
-import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assignment.entity.js';
 import type { WorkforceActor } from './contractor-operations.service.js';
-import { authorizeGateEntry } from './gate-authorization-policy.js';
+import { evaluateWorkerAccess } from './worker-access-evaluation.js';
 import { decideFaceGate } from './face-gate-policy.js';
 import { FACE_ENROLLMENT_ADAPTER, type UploadedFaceSample } from './face-enrollment.service.js';
 import {
@@ -38,6 +36,7 @@ export class FaceGateService {
     private readonly dataSource: DataSource,
     @Inject(FACE_ENROLLMENT_ADAPTER)
     private readonly adapter: FaceVerificationAdapter = new UnavailableFaceEnrollmentAdapter(),
+    private readonly qrAccess: QrAccessService = new QrAccessService(dataSource),
   ) {}
 
   async verify(
@@ -53,9 +52,43 @@ export class FaceGateService {
         code: 'VALIDATION_FAILED',
         message: 'Invalid gate direction',
       });
-    const result = await this.evaluate(siteId, gateId, frame);
-    // Unidentified scans carry no business identity and are not retained.
-    if (!result.worker) return result;
+    const { evaluation, ...result } = await this.evaluate(siteId, gateId, frame, direction);
+    const attempt = await this.dataSource.transaction(async (manager) =>
+      this.qrAccess.recordAttempt(manager, {
+        actor,
+        siteId,
+        gateId,
+        direction,
+        method: 'FACE',
+        identityStatus: result.worker
+          ? 'MATCHED'
+          : result.decision.technicalOutcome === 'MATCHED' ||
+              result.decision.technicalOutcome === 'AI_UNAVAILABLE'
+            ? 'UNAVAILABLE'
+            : result.decision.technicalOutcome,
+        authorization: result.decision.authorization,
+        reasonCode: result.decision.reasonCode,
+        workerId: result.worker?.id,
+        assignmentId: evaluation?.assignment?.id,
+        assignmentVersion: evaluation?.assignment?.version,
+        scheduleStatus: evaluation?.scheduleStatus,
+      }),
+    );
+    // Inconclusive verification is retained as an attempt, never as passage.
+    if (!result.worker)
+      return result.decision.qrFallbackAllowed
+        ? {
+            ...result,
+            attempt,
+            fallback: await this.qrAccess.openFallback(
+              actor,
+              siteId,
+              gateId,
+              direction,
+              result.decision.technicalOutcome,
+            ),
+          }
+        : { ...result, attempt };
     // A decision is acknowledged only after its audit record is durably stored.
     const log = await this.dataSource.getRepository(GateAccessLogEntity).save({
       id: randomUUID(),
@@ -71,7 +104,7 @@ export class FaceGateService {
       username: result.worker?.username ?? null,
       decision: result.decision,
     });
-    return { ...result, log: this.logResponse(log) };
+    return { ...result, attempt, log: this.logResponse(log) };
   }
   async observe(
     actor: WorkforceActor,
@@ -136,6 +169,7 @@ export class FaceGateService {
   private logResponse(log: GateAccessLogEntity): GateAccessLogResponse {
     return {
       id: log.id,
+      method: log.method,
       createdAt: log.createdAt.toISOString(),
       gateId: log.gateId,
       direction: log.direction,
@@ -176,25 +210,25 @@ export class FaceGateService {
       });
   }
 
-  private async evaluate(siteId: string, gateId: string, frame: UploadedFaceSample | undefined) {
+  private async evaluate(
+    siteId: string,
+    gateId: string,
+    frame: UploadedFaceSample | undefined,
+    direction: 'IN' | 'OUT',
+  ): Promise<
+    FaceGateVerificationResponse & { evaluation?: Awaited<ReturnType<typeof evaluateWorkerAccess>> }
+  > {
     this.validateFrame(frame);
     // Only authorized site operators may scan; account linkage does not grant
     // gate access. Authorization of the identified worker remains server-side.
     const templates = await this.dataSource
       .getRepository(FaceProfileEntity)
       .createQueryBuilder('profile')
-      .innerJoin(
-        WorkerEntity,
-        'worker',
-        'worker.id = profile.worker_id AND worker.user_id = profile.user_id',
-      )
-      .innerJoin(UserEntity, 'account', 'account.id = profile.user_id AND account.is_active = TRUE')
+      .innerJoin(WorkerEntity, 'worker', 'worker.id = profile.worker_id')
       .select('profile.profile_reference_hash', 'profileReferenceHash')
       .addSelect('profile.encrypted_template', 'encryptedTemplate')
-      .where('worker.site_id = :siteId AND worker.is_active = TRUE', { siteId })
-      .andWhere(
-        "EXISTS (SELECT 1 FROM user_role_assignment role WHERE role.user_id = account.id AND (role.site_id = worker.site_id OR (role.role = 'ADMIN' AND role.site_id IS NULL)))",
-      )
+      .where('worker.site_id = :siteId', { siteId })
+      .andWhere(direction === 'OUT' ? 'TRUE' : 'worker.is_active = TRUE')
       .andWhere('profile.status = :status AND profile.encrypted_template IS NOT NULL', {
         status: FaceProfileStatus.ACTIVE,
       })
@@ -219,6 +253,7 @@ export class FaceGateService {
           message: 'Not found',
         });
       const profile = await manager.getRepository(FaceProfileEntity).findOneBy({
+        status: FaceProfileStatus.ACTIVE,
         profileReferenceHash: createHash('sha256')
           .update(evidence.candidateProfileReference!, 'utf8')
           .digest('hex'),
@@ -238,59 +273,22 @@ export class FaceGateService {
       const account = profile.userId
         ? await manager.getRepository(UserEntity).findOneBy({ id: profile.userId, isActive: true })
         : null;
-      const accountRole = account
-        ? await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
-            { userId: account.id, siteId },
-            { userId: account.id, siteId: IsNull(), role: UserRole.ADMIN },
-          ])
-        : null;
-      if (
-        !worker ||
-        worker.siteId !== siteId ||
-        worker.userId !== profile.userId ||
-        !account ||
-        !accountRole ||
-        profile.status !== FaceProfileStatus.ACTIVE
-      ) {
+      if (!worker || worker.siteId !== siteId || profile.status !== FaceProfileStatus.ACTIVE) {
         return { decision: decideFaceGate({ technicalOutcome: 'UNKNOWN' }) };
       }
       const contractor = worker?.contractorId
         ? await manager.getRepository(ContractorEntity).findOneBy({ id: worker.contractorId })
         : null;
       const now = new Date();
-      const participation = contractor
-        ? await manager.getRepository(ContractorSiteParticipationEntity).findOneBy({
-            contractorId: contractor.id,
-            siteId,
-            isActive: true,
-          })
-        : null;
-      const assignments = worker
-        ? await manager.getRepository(WorkerGatePermissionEntity).find({
-            where: { workerId: worker.id, siteId, gateId, revokedAt: IsNull() },
-            order: { validFrom: 'DESC' },
-          })
-        : [];
-      const assignment = assignments.find(
-        (entry) =>
-          entry.gateId === gateId &&
-          entry.validFrom.getTime() <= now.getTime() &&
-          (entry.validUntil === null || entry.validUntil.getTime() > now.getTime()),
-      );
-      const authorization = authorizeGateEntry({
-        authorizationDataAvailable: !!worker && !!contractor,
-        workerActive: worker?.isActive ?? false,
-        contractorActive: contractor?.isActive ?? false,
-        contractorParticipatesAtSite:
-          !!participation &&
-          participation.validFrom.getTime() <= now.getTime() &&
-          (participation.validUntil === null || participation.validUntil.getTime() > now.getTime()),
-        faceProfileStatus: profile.status,
-        assignment: assignment ? { ...assignment, status: 'APPROVED' } : undefined,
+      const evaluation = await evaluateWorkerAccess(
+        manager,
+        worker,
         siteId,
         gateId,
-        evaluatedAt: now,
-      });
+        direction,
+        now,
+      );
+      const authorization = evaluation.decision;
       const decision =
         authorization.authorization === 'MANUAL_REVIEW'
           ? decideFaceGate({ technicalOutcome: 'MATCHED' })
@@ -301,16 +299,17 @@ export class FaceGateService {
             });
       return {
         decision,
+        evaluation,
         ...(worker
           ? {
               worker: {
                 id: worker.id,
-                userId: account.id,
-                username: account.username,
+                userId: account?.id ?? null,
+                username: account?.username ?? '',
                 externalId: worker.externalId,
                 displayName: worker.displayName,
                 contractorName: contractor?.name ?? 'Chưa gán nhà thầu',
-                assignmentStatus: assignment ? 'APPROVED' : 'MISSING',
+                assignmentStatus: evaluation.assignment ? 'APPROVED' : 'MISSING',
               },
             }
           : {}),

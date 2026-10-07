@@ -32,6 +32,27 @@ import {
   type ObservationIdentityWorkerResponse,
 } from '@smartsite/contracts/management';
 import type {
+  CreateVisitCommand,
+  VisitResponse,
+  QrPassResponse,
+  VisitorPassResponse,
+  QrFallbackResponse,
+  VerifyQrCommand,
+  VisitorGateCommand,
+  WorkerQrVerificationResponse,
+  VisitorGateEventResponse,
+  ConfirmPassageCommand,
+  GateEventResponse,
+  AccessSetupResponse,
+  GrantContractorZoneCommand,
+  GrantWorkerZoneCommand,
+  ManualWorkerVerificationCommand,
+  AccessAttemptResponse,
+  AttendanceOverviewResponse,
+  AttendanceSessionResponse,
+  RecordAttendanceCommand,
+  RequestAttendanceCorrectionCommand,
+  ReviewAttendanceCorrectionCommand,
   AccountResponse,
   AuthClientType,
   CameraResponse,
@@ -113,7 +134,170 @@ const validTimeout = (timeoutMs: number) =>
   Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
 
 export class SmartSiteManagementClient {
+  attendanceOverview(token: string, siteId: string) {
+    return this.request<AttendanceOverviewResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance`,
+      token,
+    );
+  }
+  recordAttendance(token: string, siteId: string, eventId: string, input: RecordAttendanceCommand) {
+    return this.request<AttendanceSessionResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gate-events/${pathId(eventId)}/attendance`,
+      token,
+      input,
+    );
+  }
+  requestAttendanceCorrection(
+    token: string,
+    siteId: string,
+    sessionId: string,
+    input: RequestAttendanceCorrectionCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-sessions/${pathId(sessionId)}/corrections`,
+      token,
+      input,
+    );
+  }
+  reviewAttendanceCorrection(
+    token: string,
+    siteId: string,
+    correctionId: string,
+    input: ReviewAttendanceCorrectionCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-corrections/${pathId(correctionId)}/review`,
+      token,
+      input,
+    );
+  }
+  manuallyVerifyWorker(
+    token: string,
+    siteId: string,
+    gateId: string,
+    input: ManualWorkerVerificationCommand,
+  ) {
+    return this.request<AccessAttemptResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${encodeURIComponent(gateId)}/manual-verifications`,
+      token,
+      input,
+    );
+  }
+  accessSetup(token: string, siteId: string) {
+    return this.request<AccessSetupResponse>('GET', `/sites/${pathId(siteId)}/access-setup`, token);
+  }
+  grantContractorZone(token: string, siteId: string, input: GrantContractorZoneCommand) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions`,
+      token,
+      input,
+    );
+  }
+  grantWorkerZone(token: string, siteId: string, input: GrantWorkerZoneCommand) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/worker-zone-permissions`,
+      token,
+      input,
+    );
+  }
+  revokeZonePermission(token: string, siteId: string, id: string, kind: 'worker' | 'contractor') {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/${kind}-zone-permissions/${pathId(id)}/revoke`,
+      token,
+    );
+  }
+  confirmGatePassage(
+    token: string,
+    siteId: string,
+    attemptId: string,
+    input: ConfirmPassageCommand,
+  ) {
+    return this.request<GateEventResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-attempts/${pathId(attemptId)}/confirm`,
+      token,
+      input,
+    );
+  }
   constructor(private readonly baseUrl: string) {}
+  listVisitorSites() {
+    return this.request<{ items: Array<{ id: string; name: string; code: string }> }>(
+      'GET',
+      '/visitor-registration/sites',
+    );
+  }
+  registerVisit(siteId: string, input: CreateVisitCommand) {
+    return this.request<VisitResponse>(
+      'POST',
+      `/visitor-registration/sites/${pathId(siteId)}/visits`,
+      undefined,
+      input,
+    );
+  }
+  getVisitorPass(visitId: string, accessKey: string) {
+    return this.request<VisitorPassResponse>('POST', '/visitor-registration/pass', undefined, {
+      visitId,
+      accessKey,
+    });
+  }
+  listVisits(token: string, siteId: string) {
+    return this.request<{ items: VisitResponse[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/visits`,
+      token,
+    );
+  }
+  decideVisit(
+    token: string,
+    siteId: string,
+    visitId: string,
+    status: 'APPROVED' | 'REJECTED' | 'CANCELLED',
+    review?: { expectedVersion?: number; reviewNote?: string },
+  ) {
+    return this.request<VisitResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/visits/${pathId(visitId)}/decision`,
+      token,
+      { status, ...review },
+    );
+  }
+  issueWorkerQr(token: string, siteId: string, fallbackSessionId: string) {
+    return this.request<QrPassResponse>('POST', `/sites/${pathId(siteId)}/worker-qr`, token, {
+      fallbackSessionId,
+    });
+  }
+  openCameraQrFallback(token: string, siteId: string, gateId: string, direction: 'IN' | 'OUT') {
+    return this.request<QrFallbackResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-fallback`,
+      token,
+      { direction, reason: 'CAMERA_UNAVAILABLE' },
+    );
+  }
+  verifyWorkerQr(token: string, siteId: string, gateId: string, input: VerifyQrCommand) {
+    return this.request<WorkerQrVerificationResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-verifications`,
+      token,
+      input,
+    );
+  }
+  verifyVisitorQr(token: string, siteId: string, gateId: string, input: VisitorGateCommand) {
+    return this.request<VisitorGateEventResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/visitor-gate-events`,
+      token,
+      input,
+    );
+  }
 
   listShiftRequests(token: string, siteId: string, options: ShiftRequestListOptions) {
     const query = new URLSearchParams({ view: options.view });
@@ -670,10 +854,16 @@ export class SmartSiteManagementClient {
     return this.request<AccountResponse>('GET', '/auth/me', token);
   }
   changePassword(token: string, currentPassword: string, newPassword: string) {
-    return this.request<void>('POST', '/auth/change-password', token, {
-      currentPassword,
-      newPassword,
-    });
+    return this.request<void>(
+      'POST',
+      '/auth/change-password',
+      token,
+      {
+        currentPassword,
+        newPassword,
+      },
+      'include',
+    );
   }
   logout(clientType: AuthClientType = 'WEB', refreshToken?: string) {
     return this.request<void>(
@@ -906,12 +1096,17 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  decideWorkerSiteZoneAssignment(token: string, requestId: string, approve: boolean) {
+  decideWorkerSiteZoneAssignment(
+    token: string,
+    requestId: string,
+    approve: boolean,
+    review?: { expectedVersion?: number; reviewNote?: string },
+  ) {
     return this.request<WorkerSiteZoneAssignmentResponse>(
       'POST',
       `/site-zone-assignment-requests/${pathId(requestId)}/site-manager-decision`,
       token,
-      { approve },
+      { approve, ...review },
     );
   }
   startFaceEnrollment(token: string, workerId: string, consentVersion: string) {
@@ -920,6 +1115,62 @@ export class SmartSiteManagementClient {
       `/workers/${pathId(workerId)}/face-enrollments`,
       token,
       { consentVersion },
+    );
+  }
+
+  revokeWorkerAssignment(
+    token: string,
+    assignmentId: string,
+    expectedVersion: number,
+    reviewNote: string,
+  ) {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(assignmentId)}/revoke`,
+      token,
+      { expectedVersion, reviewNote },
+    );
+  }
+  confirmWorkerFaceConsent(sessionId: string, consentToken: string) {
+    return this.request<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/face-consent/${pathId(sessionId)}`,
+      undefined,
+      { consentToken, workerConfirmed: true },
+    );
+  }
+
+  cancelFaceEnrollment(token: string, sessionId: string) {
+    return this.request<FaceEnrollmentSessionResponse>(
+      'POST',
+      `/face-enrollments/${pathId(sessionId)}/cancel`,
+      token,
+    );
+  }
+  listVisitorZones(siteId: string) {
+    return this.request<{ items: Array<{ id: string; name: string }> }>(
+      'GET',
+      `/visitor-registration/sites/${pathId(siteId)}/zones`,
+    );
+  }
+  manualVisitCheckout(
+    token: string,
+    siteId: string,
+    visitId: string,
+    input: { requestId: string; representativeConfirmed: true; reviewNote: string },
+  ) {
+    return this.request<VisitResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/visits/${pathId(visitId)}/manual-checkout`,
+      token,
+      input,
+    );
+  }
+  deleteWorkerFaceTemplate(token: string, workerId: string) {
+    return this.request<FaceProfileResponse>(
+      'POST',
+      `/workers/${pathId(workerId)}/face-profile/delete-template`,
+      token,
     );
   }
   verifyFaceGate(

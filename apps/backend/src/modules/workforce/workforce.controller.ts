@@ -68,6 +68,7 @@ export class WorkforceController {
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
   @Post('for-account')
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse({ type: WorkerResponseDto })
   async forAccount(
     @Req() request: AuthenticatedRequest,
@@ -85,6 +86,7 @@ export class WorkforceController {
   }
 
   @Put(':workerId/account')
+  @UseGuards(AdminGuard)
   @ApiOkResponse({ type: WorkerResponseDto })
   async linkAccount(
     @Req() request: AuthenticatedRequest,
@@ -142,7 +144,12 @@ export class WorkforceController {
     @Query('limit') limit?: string,
   ) {
     const value = pagination(offset, limit);
-    const result = await this.workforce.listCoworkers(request.user!, siteId, value.offset, value.limit);
+    const result = await this.workforce.listCoworkers(
+      request.user!,
+      siteId,
+      value.offset,
+      value.limit,
+    );
     return { items: result.items, total: result.total };
   }
 }
