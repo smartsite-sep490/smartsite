@@ -112,7 +112,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }]
               : []),
             ...(isAdmin ? [{ id: 'site-setup', label: 'Site Setup', icon: IconBuilding }] : []),
-            { id: 'access', label: 'Site Access', icon: IconKey },
+            ...(!isContractorRep || isAdmin
+              ? [{ id: 'access', label: 'Site Access', icon: IconKey }]
+              : []),
           ],
         },
         {
@@ -138,7 +140,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
-          isCollapsed ? 'w-20' : 'w-64'
+          isCollapsed ? 'w-20' : 'w-20 lg:w-64'
         } bg-gradient-to-b from-[#071320] via-[#04121D] to-[#020B13] text-white flex flex-col justify-between shrink-0 select-none border-r border-white/10 transition-all duration-300 ease-in-out sticky top-0 h-screen z-30 shadow-2xl`}
       >
         <div>
@@ -161,7 +163,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                 </div>
               </div>
               {!isCollapsed && (
-                <div className="flex flex-col whitespace-nowrap overflow-hidden transition-opacity duration-200">
+                <div className="hidden lg:flex flex-col whitespace-nowrap overflow-hidden transition-opacity duration-200">
                   <div className="text-lg font-black tracking-tight leading-none text-white">
                     Smart
                     <span className="text-[#FF7A1A] bg-gradient-to-r from-[#FF7A1A] to-[#FF9B42] bg-clip-text text-transparent">
@@ -178,7 +180,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             {/* Toggle Button for Sidebar to/nhỏ */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
+              className="hidden lg:flex w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
               title={isCollapsed ? 'Mở rộng sidebar' : 'Thu nhỏ sidebar'}
               aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
@@ -196,7 +198,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               {navGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1.5">
                   {!isCollapsed && (
-                    <div className="px-3 mb-2 flex items-center gap-1.5">
+                    <div className="hidden lg:flex px-3 mb-2 items-center gap-1.5">
                       <span className="w-1 h-1 rounded-full bg-[#FF7A1A]/70" />
                       <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400/80">
                         {group.label}
@@ -213,7 +215,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                         title={isCollapsed ? item.label : undefined}
                         aria-label={item.label}
                         aria-current={isActive ? 'page' : undefined}
-                        className={`w-full flex items-center ${
+                        className={`w-full min-h-11 lg:min-h-0 flex items-center ${
                           isCollapsed
                             ? 'justify-center px-0 py-2.5'
                             : 'justify-between px-3.5 py-2.5'
@@ -266,13 +268,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             onClick={() => navigate('/')}
             title={isCollapsed ? 'Public SmartSite Homepage' : undefined}
             aria-label="Public SmartSite Homepage"
-            className={`w-full flex items-center ${
+            className={`w-full min-h-11 lg:min-h-0 flex items-center ${
               isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
             } rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-xs group`}
           >
             <IconHome className="w-4 h-4 text-[#FF7A1A] shrink-0 group-hover:scale-110 transition-transform filter drop-shadow-[0_0_6px_rgba(246,107,23,0.4)]" />
             {!isCollapsed && (
-              <span className="whitespace-nowrap overflow-hidden font-medium">
+              <span className="hidden lg:inline whitespace-nowrap overflow-hidden font-medium">
                 Public SmartSite Homepage
               </span>
             )}
@@ -285,7 +287,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-xs">
           {/* Left: Brand/Context info */}
-          <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-4">
             <span className="text-xs font-semibold text-[#62748E] uppercase tracking-wider">
               SmartSite Operations Platform
             </span>
@@ -304,8 +306,12 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               />
             </div>
 
-            <NotificationBell key={currentUser?.id ?? 'signed-out'} apiUrl={apiUrl}
-              userId={currentUser?.id ?? ''} enabled={!!currentUser && !currentUser.mustChangePassword} />
+            <NotificationBell
+              key={currentUser?.id ?? 'signed-out'}
+              apiUrl={apiUrl}
+              userId={currentUser?.id ?? ''}
+              enabled={!!currentUser && !currentUser.mustChangePassword}
+            />
 
             {/* User Profile */}
             <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">

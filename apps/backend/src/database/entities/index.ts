@@ -1,5 +1,6 @@
 import {
   IncidentEntity,
+  IncidentWorkerEntity,
   CorrectiveActionEntity,
   CorrectiveActionSubmissionEntity,
   SafetyTaskEntity,
@@ -126,6 +127,7 @@ export const ENTITIES = [
   QrCredentialEntity,
   VisitorGateEventEntity,
   IncidentEntity,
+  IncidentWorkerEntity,
   CorrectiveActionEntity,
   CorrectiveActionSubmissionEntity,
   SafetyTaskEntity,

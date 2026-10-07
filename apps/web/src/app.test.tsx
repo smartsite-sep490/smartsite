@@ -25,7 +25,10 @@ vi.mock('./features/auth/auth-session', () => ({
     dismissSessionExpired: vi.fn(),
   }),
   useRestoreSession: () => ({ isLoading: false }),
-  useCurrentUser: () => ({ data: { roleAssignments: [], mustChangePassword: accountState.mustChangePassword } }),
+  useLogout: () => ({ mutate: vi.fn() }),
+  useCurrentUser: () => ({
+    data: { roleAssignments: [], mustChangePassword: accountState.mustChangePassword },
+  }),
   SessionExpiredModal: () => null,
 }));
 
@@ -74,10 +77,10 @@ vi.mock('./components/layout/AppLayout', () => ({
   AppLayout: ({
     children,
     onSelectTab,
-    }: {
-      children: React.ReactNode;
-      currentTab?: string;
-      onSelectTab: (tab: string) => void;
+  }: {
+    children: React.ReactNode;
+    currentTab?: string;
+    onSelectTab: (tab: string) => void;
   }) => (
     <div>
       <nav>
@@ -101,12 +104,23 @@ describe('App Navigation and Context Lifecycle', () => {
     });
   });
 
-  it.each(['/access', '/site-setup', '/schedule-setup', '/dashboard'])('requires password change before mounting protected route %s', async (path) => {
-    accountState.mustChangePassword = true;
-    render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={queryClient}><App /></QueryClientProvider></MemoryRouter>);
-    expect(screen.getByRole('heading', { name: 'Change your temporary password' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Sidebar Incidents' })).toBeNull();
-  });
+  it.each(['/access', '/site-setup', '/schedule-setup', '/dashboard'])(
+    'requires password change before mounting protected route %s',
+    async (path) => {
+      accountState.mustChangePassword = true;
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <QueryClientProvider client={queryClient}>
+            <App />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      expect(
+        screen.getByRole('heading', { name: 'Change your temporary password' }),
+      ).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Sidebar Incidents' })).toBeNull();
+    },
+  );
 
   afterEach(() => {
     cleanup();

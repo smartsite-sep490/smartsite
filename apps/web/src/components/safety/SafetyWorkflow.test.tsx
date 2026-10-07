@@ -23,10 +23,10 @@ const props = {
   user: {
     id: 'security',
     username: 'security',
-    displayName: 'Security',
+    displayName: 'Contractor representative',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: 'SECURITY_OFFICER' as const, siteId: 'site' }],
+    roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE' as const, siteId: 'site' }],
   },
 };
 function mount(child: React.ReactNode) {
@@ -36,7 +36,7 @@ function mount(child: React.ReactNode) {
   return { ...render(<QueryClientProvider client={cache}>{child}</QueryClientProvider>), cache };
 }
 describe('MF08 role screens', () => {
-  it('Security sees own incidents without create controls, and supports retry', async () => {
+  it('Contractor representative sees own incidents without create controls, and supports retry', async () => {
     vi.spyOn(props.client, 'listIncidents')
       .mockRejectedValueOnce(new Error('Unavailable'))
       .mockResolvedValue({ items: [], total: 0 });
@@ -73,7 +73,7 @@ describe('MF08 role screens', () => {
 });
 
 const timestamp = '2026-10-02T10:00:00Z';
-it('Security can resubmit a rejected action while retaining the earlier submission', async () => {
+it('Contractor representative can resubmit a rejected action while retaining the earlier submission', async () => {
   const action = {
     id: 'action',
     incidentId: 'incident',
@@ -102,8 +102,15 @@ it('Security can resubmit a rejected action while retaining the earlier submissi
   };
   const initial = {
     id: 'incident',
+    contractorId: 'contractor',
+    responsibilityReason: 'Reviewed',
+    responsibilityConfirmedBy: 'safety',
+    responsibilityConfirmedAt: timestamp,
+    workerIds: [],
     siteId: 'site',
     zoneId: null,
+    reportedByName: 'Safety A',
+    contractorName: 'Contractor A',
     title: 'Synthetic incident',
     description: 'Hazard',
     severity: 'HIGH' as const,
@@ -149,13 +156,15 @@ it('Security can resubmit a rejected action while retaining the earlier submissi
     .mockResolvedValue({ resource: updated, replayed: false });
   mount(<IncidentView {...props} />);
   fireEvent.click(await screen.findByRole('button', { name: /Synthetic incident/ }));
+  expect(await screen.findByText('Reported by Safety A')).not.toBeNull();
+  expect(screen.getByText('Contractor A')).not.toBeNull();
   expect(await screen.findByText(/Review: Incomplete/)).not.toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Submit result' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Report handling outcome' }));
   fireEvent.change(screen.getByLabelText('Result description'), {
     target: { value: 'New result' },
   });
   fireEvent.click(
-    within(screen.getByRole('dialog')).getByRole('button', { name: 'Submit result' }),
+    within(screen.getByRole('dialog')).getByRole('button', { name: 'Report handling outcome' }),
   );
   expect(await screen.findByText('New result')).not.toBeNull();
   expect(screen.getByText('Old result')).not.toBeNull();
@@ -267,7 +276,7 @@ it('Logout cancels MF08 queries and removes sensitive caches before switching ac
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
   await waitFor(() => expect(signal).toBeDefined());
   expect(screen.queryByLabelText('Alert type')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: /Sign out Security/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Sign out Contractor representative/ }));
   await waitFor(() => expect(signal?.aborted).toBe(true));
   finish?.({ items: [], total: 0 });
   await waitFor(() =>
@@ -554,7 +563,7 @@ it('Assignee selection survives paging through other active officers', async () 
       total: 21,
     }),
   );
-  mount(<Assignee p={p} role="SECURITY_OFFICER" />);
+  mount(<Assignee p={p} role="CONTRACTOR_REPRESENTATIVE" />);
   await screen.findByRole('option', { name: 'First officer' });
   fireEvent.change(screen.getByLabelText('Assignee'), { target: { value: 'first' } });
   fireEvent.click(screen.getByRole('button', { name: 'More assignees' }));
@@ -677,6 +686,11 @@ it('Reopened Incident can close after its new action is verified while old actio
   });
   const incident = {
     id: 'incident',
+    contractorId: 'contractor',
+    responsibilityReason: 'Reviewed',
+    responsibilityConfirmedBy: 'safety',
+    responsibilityConfirmedAt: timestamp,
+    workerIds: [],
     siteId: 'site',
     zoneId: null,
     title: 'Reopened verified case',
@@ -719,4 +733,217 @@ it('Dialog keeps keyboard focus cycling between its first and last control', () 
   expect(document.activeElement).toBe(send);
   fireEvent.keyDown(send, { key: 'Tab' });
   expect(document.activeElement).toBe(cancel);
+});
+
+it('Safety must confirm responsibility before assignment and unknown Worker remains allowed', async () => {
+  const officer = {
+    ...props,
+    user: {
+      ...props.user,
+      id: 'safety',
+      roleAssignments: [{ role: 'SAFETY_OFFICER' as const, siteId: 'site' }],
+    },
+  };
+  const incident = {
+    id: 'incident',
+    siteId: 'site',
+    zoneId: null,
+    title: 'Unresolved hazard',
+    description: 'Observed hazard',
+    severity: 'HIGH' as const,
+    status: 'OPEN' as const,
+    occurredAt: timestamp,
+    reportedBy: 'safety',
+    closedBy: null,
+    closedAt: null,
+    version: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    contractorId: null,
+    responsibilityReason: null,
+    responsibilityConfirmedBy: null,
+    responsibilityConfirmedAt: null,
+    workerIds: [],
+    alerts: [],
+    actions: [],
+    audit: [],
+  };
+  vi.spyOn(props.client, 'listIncidents').mockResolvedValue({ items: [incident], total: 1 });
+  vi.spyOn(props.client, 'getIncident').mockResolvedValue(incident);
+  vi.spyOn(props.client, 'listSafetyAssignees').mockResolvedValue({
+    items: [{ id: 'rep', displayName: 'Representative A' }],
+    total: 1,
+  });
+  vi.spyOn(props.client, 'listSafetyContractors').mockResolvedValue({
+    items: [{ id: 'contractor', name: 'Contractor A' }],
+    total: 1,
+  });
+  vi.spyOn(props.client, 'listIncidentWorkers').mockResolvedValue({ items: [], total: 0 });
+  const command = vi
+    .spyOn(props.client, 'incidentCommand')
+    .mockRejectedValue(new ApiError('http', 'Conflict', 409));
+  mount(<IncidentView {...officer} />);
+  fireEvent.click(await screen.findByRole('button', { name: /Unresolved hazard/ }));
+  expect(
+    ((await screen.findByRole('button', { name: 'Hand over to contractor' })) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm responsibility' }));
+  await screen.findByRole('option', { name: 'Contractor A' });
+  fireEvent.change(await screen.findByLabelText('Responsible contractor'), {
+    target: { value: 'contractor' },
+  });
+  fireEvent.change(screen.getByLabelText('Verification reason'), {
+    target: { value: 'Safety verified contractor; Worker unknown' },
+  });
+  fireEvent.click(
+    within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirm responsibility' }),
+  );
+  await waitFor(() => expect(command).toHaveBeenCalled());
+  expect(command.mock.calls[0]?.[4]).toMatchObject({
+    contractorId: 'contractor',
+    workerIds: [],
+    expectedVersion: 1,
+    reason: 'Safety verified contractor; Worker unknown',
+  });
+  expect(await screen.findByRole('dialog', { name: 'Confirm responsibility' })).not.toBeNull();
+  expect(await screen.findByRole('button', { name: 'Reload data' })).not.toBeNull();
+});
+it('Security has no start or submit controls for legacy Incident actions', async () => {
+  const user = {
+    ...props.user,
+    roleAssignments: [{ role: 'SECURITY_OFFICER' as const, siteId: 'site' }],
+  };
+  vi.spyOn(props.client, 'listIncidents').mockRejectedValue(new ApiError('http', 'Forbidden', 403));
+  mount(<IncidentView {...props} user={user} />);
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    'This account does not have access.',
+  );
+  expect(screen.queryByRole('button', { name: 'Start handling' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Report handling outcome' })).toBeNull();
+});
+
+it('reuses the app session, clears workspace data on navigation and delegates sign out', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+    items: [{ id: 'site', code: 'A', name: 'Site A', createdAt: timestamp }],
+    total: 1,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listIncidents').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  const logout = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'logout')
+    .mockResolvedValue(undefined);
+  const onSignOut = vi.fn();
+  const sessionProps = {
+    authenticatedSession: { accessToken: 'test-token', user: props.user },
+    onSignOut,
+  };
+  const view = mount(<SafetyAlertsView apiUrl="http://local" {...sessionProps} />);
+  expect(await screen.findByText('No incidents found.')).not.toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Sign out Contractor representative' }));
+  expect(onSignOut).toHaveBeenCalledOnce();
+  view.unmount();
+  expect(logout).not.toHaveBeenCalled();
+  expect(view.cache.getQueryCache().findAll({ queryKey: ['safety-workflow'] })).toHaveLength(0);
+});
+
+it('Incident deep link records the outcome with a mandatory note and no disciplinary approval choice', async () => {
+  const user = {
+    ...props.user,
+    id: 'safety',
+    roleAssignments: [{ role: 'SAFETY_OFFICER' as const, siteId: 'site' }],
+  };
+  const incident = {
+    id: 'incident',
+    siteId: 'site',
+    zoneId: null,
+    contractorId: 'contractor',
+    contractorName: 'Contractor A',
+    workerIds: [],
+    responsibilityReason: 'Confirmed',
+    responsibilityConfirmedBy: 'safety',
+    responsibilityConfirmedAt: timestamp,
+    title: 'Outcome case',
+    description: 'Synthetic',
+    severity: 'LOW' as const,
+    status: 'IN_PROGRESS' as const,
+    occurredAt: timestamp,
+    reportedBy: 'safety',
+    reportedByName: 'Safety A',
+    closedBy: null,
+    closedAt: null,
+    version: 4,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    alerts: [],
+    audit: [],
+    actions: [
+      {
+        id: 'action',
+        incidentId: 'incident',
+        assignedTo: 'security',
+        assignedToName: 'Representative A',
+        assignedBy: 'safety',
+        description: 'Handling request',
+        dueAt: null,
+        status: 'SUBMITTED' as const,
+        version: 3,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        submissions: [
+          {
+            id: 'submission',
+            correctiveActionId: 'action',
+            submittedBy: 'security',
+            submittedByName: 'Representative A',
+            resultDescription: 'Contractor outcome',
+            submittedAt: timestamp,
+            status: 'PENDING' as const,
+            evidence: null,
+            reviewedBy: null,
+            reviewedAt: null,
+            reviewNote: null,
+          },
+        ],
+      },
+    ],
+  };
+  vi.spyOn(props.client, 'listIncidents').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(props.client, 'getIncident').mockResolvedValue(incident);
+  vi.spyOn(props.client, 'listSafetyAssignees').mockResolvedValue({ items: [], total: 0 });
+  const command = vi
+    .spyOn(props.client, 'incidentCommand')
+    .mockResolvedValue({ resource: incident, replayed: false });
+  mount(
+    <IncidentView {...props} user={user} initialIncidentId="incident" initialActionId="action" />,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Record handling outcome' }));
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).queryByLabelText('Decision')).toBeNull();
+  expect((within(dialog).getByLabelText('Recording note') as HTMLTextAreaElement).required).toBe(
+    true,
+  );
+  fireEvent.change(within(dialog).getByLabelText('Recording note'), {
+    target: { value: 'Outcome recorded' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Record handling outcome' }));
+  await waitFor(() =>
+    expect(command).toHaveBeenCalledWith(
+      'test-token',
+      'site',
+      'incident',
+      'review',
+      expect.objectContaining({
+        expectedVersion: 3,
+        submissionId: 'submission',
+        decision: 'APPROVED',
+        reason: 'Outcome recorded',
+      }),
+      'action',
+      undefined,
+      expect.anything(),
+    ),
+  );
 });

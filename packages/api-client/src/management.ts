@@ -1,4 +1,9 @@
 import type {
+  ConfirmIncidentResponsibilityCommand,
+  CorrectIncidentResponsibilityCommand,
+  TransferCorrectiveActionCommand,
+  SafetyContractorResponse,
+  IncidentWorkerResponse,
   IncidentResponse,
   IncidentDetailResponse,
   SafetyTaskResponse,
@@ -87,8 +92,12 @@ import type {
   ShiftSwapRequestResponse,
   AbsenceRequestResponse,
   SchedulingRequestStatus,
+  ShiftRequestListOptions,
+  ShiftRequestListResponse,
   UserNotificationListResponse,
   NotificationReadResponse,
+  NotificationDeleteReadResponse,
+  NotificationDeleteResponse,
   FaceGateVerificationResponse,
   GateFacePresenceResponse,
   GateAccessLogResponse,
@@ -290,6 +299,19 @@ export class SmartSiteManagementClient {
     );
   }
 
+  listShiftRequests(token: string, siteId: string, options: ShiftRequestListOptions) {
+    const query = new URLSearchParams({ view: options.view });
+    if (options.requestType) query.set('requestType', options.requestType);
+    if (options.search) query.set('search', options.search);
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    return this.request<ShiftRequestListResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/shift-requests?${query}`,
+      token,
+    );
+  }
+
   listNotifications(
     token: string,
     options: PageOptions & { readStatus?: 'ALL' | 'UNREAD' } = {},
@@ -315,6 +337,14 @@ export class SmartSiteManagementClient {
 
   readAllNotifications(token: string): Promise<{ updated: number }> {
     return this.request('PATCH', '/me/notifications/read-all', token);
+  }
+
+  deleteReadNotifications(token: string): Promise<NotificationDeleteReadResponse> {
+    return this.request('DELETE', '/me/notifications/read', token);
+  }
+
+  deleteNotification(token: string, id: string): Promise<NotificationDeleteResponse> {
+    return this.request('DELETE', `/me/notifications/${pathId(id)}`, token);
   }
 
   getShiftChangeRequest(
@@ -533,8 +563,8 @@ export class SmartSiteManagementClient {
   listSafetyAssignees(
     token: string,
     siteId: string,
-    role: 'SAFETY_OFFICER' | 'SECURITY_OFFICER',
-    page: PageOptions = {},
+    role: 'SAFETY_OFFICER' | 'CONTRACTOR_REPRESENTATIVE',
+    page: PageOptions & { contractorId?: string } = {},
     options?: RequestOptions,
   ) {
     return this.request<Page<SafetyAssigneeResponse>>(
@@ -543,6 +573,40 @@ export class SmartSiteManagementClient {
         ...page,
         role,
       } as PageOptions),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listSafetyContractors(
+    token: string,
+    siteId: string,
+    page: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<SafetyContractorResponse>>(
+      'GET',
+      this.workflowListPath(`/sites/${pathId(siteId)}/safety-contractors`, page),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listIncidentWorkers(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    page: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<IncidentWorkerResponse>>(
+      'GET',
+      this.workflowListPath(
+        `/sites/${pathId(siteId)}/safety-contractors/${pathId(contractorId)}/workers`,
+        page,
+      ),
       token,
       undefined,
       undefined,
@@ -593,8 +657,21 @@ export class SmartSiteManagementClient {
     token: string,
     siteId: string,
     id: string,
-    operation: 'link' | 'assign' | 'start' | 'submit' | 'review' | 'close' | 'reopen',
+    operation:
+      | 'responsibility'
+      | 'correct-responsibility'
+      | 'transfer'
+      | 'link'
+      | 'assign'
+      | 'start'
+      | 'submit'
+      | 'review'
+      | 'close'
+      | 'reopen',
     input:
+      | ConfirmIncidentResponsibilityCommand
+      | CorrectIncidentResponsibilityCommand
+      | TransferCorrectiveActionCommand
       | VersionCommand
       | ReasonCommand
       | LinkIncidentAlertsCommand
@@ -607,6 +684,9 @@ export class SmartSiteManagementClient {
     options?: RequestOptions,
   ) {
     const segment = {
+      responsibility: 'responsibility',
+      'correct-responsibility': 'correct-responsibility',
+      transfer: 'transfer',
       link: 'alerts',
       assign: 'actions',
       start: 'start',

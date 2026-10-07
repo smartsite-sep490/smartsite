@@ -17,6 +17,7 @@ export type ProvisionableUserRole =
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export * from './observation-identity-management.js';
+export { isPastWorkDate } from './scheduling-date.js';
 
 export interface ProvisionableRoleAssignment {
   role: ProvisionableUserRole;
@@ -391,19 +392,25 @@ export interface SchedulingNotificationTarget {
   view: 'requests' | 'coworker' | 'pending' | 'history';
 }
 
+export interface SafetyNotificationTarget {
+  siteId: string;
+  incidentId: string;
+  actionId: string;
+  tab: 'incidents';
+}
 export interface UserNotificationResponse {
   id: string;
-  event: SchedulingNotificationEvent;
+  event: SchedulingNotificationEvent | 'SAFETY_HANDOVER';
   siteId: string;
   siteName: string;
   title: string;
   message: string;
-  workDate: string;
-  fromShiftName: string;
-  toShiftName: string;
+  workDate?: string;
+  fromShiftName?: string;
+  toShiftName?: string;
   createdAt: string;
   readAt: string | null;
-  target: SchedulingNotificationTarget;
+  target: SchedulingNotificationTarget | SafetyNotificationTarget;
 }
 
 export interface UserNotificationListResponse {
@@ -415,6 +422,14 @@ export interface UserNotificationListResponse {
 export interface NotificationReadResponse {
   id: string;
   readAt: string;
+}
+
+export interface NotificationDeleteReadResponse {
+  deleted: number;
+}
+
+export interface NotificationDeleteResponse {
+  id: string;
 }
 
 export interface ShiftChangeRequestResponse {
@@ -471,4 +486,22 @@ export interface AbsenceRequestResponse {
   reviewedByUserId: string | null;
   reviewedAt: string | null;
   createdAt: string;
+}
+
+export type ShiftRequestResponse =
+  | (ShiftChangeRequestResponse & { requestType: 'CHANGE' })
+  | (ShiftSwapRequestResponse & { requestType: 'SWAP' });
+
+export interface ShiftRequestListOptions {
+  view: 'WORKER' | 'INCOMING' | 'REVIEW' | 'HISTORY';
+  requestType?: 'ALL' | 'CHANGE' | 'SWAP';
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface ShiftRequestListResponse extends Page<ShiftRequestResponse> {
+  pendingCount: number;
+  incomingCount: number;
+  pendingScheduleIds: string[];
 }

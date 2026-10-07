@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
-import { SiteSetupView } from './SiteSetupView';
+import { SiteSetupView } from './components/SiteSetupView';
 
 vi.mock('../../features/auth/auth-session', () => ({
   useAuth: () => ({ accessToken: 'admin-token' }),

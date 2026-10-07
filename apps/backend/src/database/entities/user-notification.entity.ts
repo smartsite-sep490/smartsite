@@ -15,26 +15,38 @@ import { ContractorEntity } from './contractor.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 
 export interface NotificationContent {
+  incidentId?: string;
+  actionId?: string;
   siteName: string;
   title: string;
   message: string;
-  workDate: string;
-  fromShiftName: string;
-  toShiftName: string;
+  workDate?: string;
+  fromShiftName?: string;
+  toShiftName?: string;
 }
 
 @Entity({ name: 'user_notification' })
 @Unique('uq_notification_event_recipient', ['recipientUserId', 'requestType', 'requestId', 'event'])
 @Index('idx_notification_recipient_created', ['recipientUserId', 'createdAt', 'id'])
 @Index('idx_notification_unread', ['recipientUserId', 'createdAt'], { where: 'read_at IS NULL' })
-@Check('chk_notification_request_type', "request_type IN ('CHANGE', 'SWAP')")
+@Check('chk_notification_request_type', "request_type IN ('CHANGE', 'SWAP', 'SAFETY')")
+@Check('chk_notification_deleted_read', 'deleted_at IS NULL OR read_at IS NOT NULL')
 @Check(
   'chk_notification_role',
   "(recipient_role = 'WORKER' AND worker_id IS NOT NULL) OR (recipient_role = 'CONTRACTOR_REPRESENTATIVE' AND worker_id IS NULL)",
 )
 @Check(
   'chk_notification_event',
-  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED')",
+  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER')",
+)
+@Check(
+  'chk_notification_safety_target',
+  `(request_type<>'SAFETY' AND event<>'SAFETY_HANDOVER') OR
+  (request_type='SAFETY' AND event='SAFETY_HANDOVER' AND recipient_role='CONTRACTOR_REPRESENTATIVE'
+    AND jsonb_typeof(content->'incidentId')='string' AND jsonb_typeof(content->'actionId')='string'
+    AND COALESCE(content->>'incidentId','')<>'' AND COALESCE(content->>'actionId','')<>''
+    AND (content->>'incidentId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    AND (content->>'actionId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')`,
 )
 export class UserNotificationEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_user_notification' })
@@ -60,13 +72,13 @@ export class UserNotificationEntity {
   recipientRole!: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE';
 
   @Column({ name: 'request_type', type: 'varchar', length: 6 })
-  requestType!: 'CHANGE' | 'SWAP';
+  requestType!: 'CHANGE' | 'SWAP' | 'SAFETY';
 
   @Column({ name: 'request_id', type: 'uuid' })
   requestId!: string;
 
   @Column({ type: 'varchar', length: 24 })
-  event!: SchedulingNotificationEvent;
+  event!: SchedulingNotificationEvent | 'SAFETY_HANDOVER';
 
   @Column({ type: 'jsonb' })
   content!: NotificationContent;
@@ -76,4 +88,7 @@ export class UserNotificationEntity {
 
   @Column({ name: 'read_at', type: 'timestamptz', nullable: true })
   readAt!: Date | null;
+
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
 }

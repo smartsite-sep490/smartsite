@@ -84,6 +84,7 @@ export async function configureApplication(app: NestExpressApplication): Promise
         .addBearerAuth({ type: 'http', scheme: 'bearer' }, 'user-token')
         .addBearerAuth({ type: 'http', scheme: 'bearer' }, 'ai-service-token')
         .build(),
+      { autoTagControllers: false },
     );
     SwaggerModule.setup('api/docs', app, document);
   }

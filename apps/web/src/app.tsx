@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   getBackendHealth,
@@ -20,14 +20,15 @@ import {
   useAuth,
   useRestoreSession,
   useCurrentUser,
+  useLogout,
   SessionExpiredModal,
 } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
 import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
-import { WorkforceView } from './components/workforce/WorkforceView';
-import { SiteSetupView } from './components/workforce/SiteSetupView';
-import { ScheduleSetupView } from './components/workforce/ScheduleSetupView';
+import { WorkforceView } from './components/workforce/components/WorkforceView';
+import { SiteSetupView } from './components/workforce/components/SiteSetupView';
+import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -45,22 +46,39 @@ interface ProtectedRoutesProps {
   onPasswordChanged: () => void;
 }
 
-function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate, onPasswordChanged }: ProtectedRoutesProps) {
+function ProtectedRoutes({
+  defaultAuthTab,
+  alertsContext,
+  onNavigate,
+  onPasswordChanged,
+}: ProtectedRoutesProps) {
   const { accessToken } = useAuth();
   const currentUser = useCurrentUser(apiUrl);
+  const profile = currentUser;
+  const logout = useLogout(apiUrl);
+  const location = useLocation();
+  const incidentLink = new URLSearchParams(location.search);
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
   }
 
   if (currentUser.isPending) {
-    return <main className="min-h-screen flex items-center justify-center" role="status">Loading your account...</main>;
+    return (
+      <main className="min-h-screen flex items-center justify-center" role="status">
+        Loading your account...
+      </main>
+    );
   }
   if (currentUser.isError) {
-    return <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-      <p role="alert">Could not load your account.</p>
-      <button type="button" onClick={() => currentUser.refetch()}>Try again</button>
-    </main>;
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <p role="alert">Could not load your account.</p>
+        <button type="button" onClick={() => currentUser.refetch()}>
+          Try again
+        </button>
+      </main>
+    );
   }
   if (currentUser.data?.mustChangePassword) {
     return <ChangePasswordScreen apiUrl={apiUrl} onComplete={onPasswordChanged} />;
@@ -72,7 +90,13 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate, onPassword
         <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
         <Route
           path="/dashboard"
-          element={<DashboardView onNavigate={(tab) => onNavigate(tab)} />}
+          element={
+            defaultAuthTab === 'workforce' ? (
+              <Navigate to="/workforce" replace />
+            ) : (
+              <DashboardView onNavigate={(tab) => onNavigate(tab)} />
+            )
+          }
         />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
@@ -98,14 +122,27 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate, onPassword
         <Route
           path="/incidents"
           element={
-            <SafetyAlertsView
-              key={JSON.stringify(alertsContext ?? {})}
-              apiUrl={apiUrl}
-              initialSiteId={alertsContext?.siteId}
-              initialAlertId={alertsContext?.alertId}
-              initialStatus={alertsContext?.status}
-              initialType={alertsContext?.alertType}
-            />
+            profile.data ? (
+              <SafetyAlertsView
+                key={profile.data.id + JSON.stringify(alertsContext ?? {})}
+                authenticatedSession={{ accessToken, user: profile.data }}
+                onSignOut={() => logout.mutate()}
+                apiUrl={apiUrl}
+                initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
+                initialIncidentId={incidentLink.get('incidentId') ?? undefined}
+                initialActionId={incidentLink.get('actionId') ?? undefined}
+                initialAlertId={alertsContext?.alertId}
+                initialStatus={alertsContext?.status}
+                initialType={alertsContext?.alertType}
+              />
+            ) : profile.isError ? (
+              <div role="alert">
+                Could not load your account.{' '}
+                <button onClick={() => void profile.refetch()}>Retry</button>
+              </div>
+            ) : (
+              <p role="status">Loading your account…</p>
+            )
           }
         />
         <Route
@@ -160,12 +197,13 @@ export function App() {
   const navigate = useNavigate();
   const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
   const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
-  const { data: currentUser } = useCurrentUser(apiUrl);
+  const currentUserQuery = useCurrentUser(apiUrl);
+  const currentUser = currentUserQuery.data;
 
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const isWorkerOnly =
     roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
-  const defaultAuthTab = isWorkerOnly ? 'workforce' : roles.includes('SITE_MANAGER') ? 'access' : 'dashboard';
+  const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
@@ -182,10 +220,38 @@ export function App() {
     navigate(`/${tab}`);
   };
 
-  if (isRestoringSession) {
+  if (isRestoringSession || (accessToken && !currentUser && !currentUserQuery.isError)) {
     return (
-      <div className="min-h-screen bg-[#041D2E] flex items-center justify-center">
+      <div
+        role="status"
+        aria-label="Loading account permissions"
+        className="min-h-screen bg-[#041D2E] flex items-center justify-center"
+      >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (accessToken && currentUserQuery.isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div
+          role="alert"
+          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
+        >
+          <h1 className="text-lg font-bold text-slate-900">Could not load your account</h1>
+          <p className="text-sm text-slate-600">
+            Your permissions could not be loaded. Please try again.
+          </p>
+          <button
+            type="button"
+            disabled={currentUserQuery.isFetching}
+            onClick={() => void currentUserQuery.refetch()}
+            className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-blue-600"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -213,8 +279,11 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
-                notice={passwordChanged ? 'Password changed successfully. Sign in with your new password.' : undefined}
-                onLoginSuccess={() => { setPasswordChanged(false); navigate(`/${defaultAuthTab}`); }}
+                notice={
+                  passwordChanged
+                    ? 'Password changed successfully. Sign in with your new password.'
+                    : undefined
+                }
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />
@@ -245,7 +314,10 @@ export function App() {
               defaultAuthTab={defaultAuthTab}
               alertsContext={alertsContext}
               onNavigate={handleNavigate}
-              onPasswordChanged={() => { setPasswordChanged(true); navigate('/login', { replace: true }); }}
+              onPasswordChanged={() => {
+                setPasswordChanged(true);
+                navigate('/login', { replace: true });
+              }}
             />
           }
         />

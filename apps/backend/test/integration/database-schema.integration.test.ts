@@ -344,6 +344,31 @@ test('zero metadata drift: createSchemaBuilder().log() produces 0 upQueries', as
   });
 });
 
+test('notification metadata CHECK executes and rejects malformed Safety targets', async () => {
+  await withDataSource(async (source) => {
+    const check = source
+      .getMetadata('user_notification')
+      .checks.find(({ name }) => name === 'chk_notification_safety_target');
+    assert.ok(check);
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    for (const [actionId, expected] of [
+      [id, true],
+      ['not-a-uuid', false],
+    ] as const) {
+      const [row]: { allowed: boolean }[] = await source.query(
+        'SELECT (' +
+          check.expression +
+          ') AS allowed FROM (SELECT ' +
+          "'SAFETY'::text AS request_type, 'SAFETY_HANDOVER'::text AS event, " +
+          "'CONTRACTOR_REPRESENTATIVE'::text AS recipient_role, $1::jsonb AS content) n",
+        [JSON.stringify({ incidentId: id, actionId })],
+      );
+      assert.ok(row);
+      assert.equal(row.allowed, expected);
+    }
+  });
+});
+
 test('numeric runtime correctness: identity scores round-trip as finite numbers and parse back from string', async () => {
   await withDataSource(async (source) => {
     const siteRepo = source.getRepository(SiteEntity);

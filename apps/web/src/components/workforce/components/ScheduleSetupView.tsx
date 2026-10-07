@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import {
   IconCalendar,
   IconClock,
@@ -16,8 +16,9 @@ import {
   IconX,
   IconRefreshCw,
   IconCheck,
-} from '../icons';
-import { formatShiftTime, WORKFORCE_POLL_INTERVAL_MS } from './WorkforceSharedUI';
+} from '../../icons';
+import { formatShiftTime, formatShiftRange } from '../utils/workforce-format';
+import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import {
   Button,
   Badge,
@@ -33,7 +34,7 @@ import {
   SmartSelect,
   SmartDatePicker,
   SmartTimePicker,
-} from '../ui';
+} from '../../ui';
 
 function currentDateIso() {
   const now = new Date();
@@ -608,12 +609,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              <span className="text-xs font-semibold text-slate-500">
                 Workforce Management
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                MF07 Scheduling
               </span>
             </div>
             <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
@@ -664,7 +661,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
           >
             <div className="flex items-start gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center shadow-[0_0_16px_rgba(16,185,129,0.45)] shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-sm shrink-0">
                 <IconCheck className="w-5 h-5 text-white" />
               </div>
 
@@ -787,41 +784,41 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
       {/* 2. Top Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Configured Shifts</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">{shifts.length}</p>
+            <span className="text-xs font-medium text-slate-500">Configured Shifts</span>
+            <p className="text-xl font-bold tracking-tight text-[#071A2B]">{shifts.length}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconClock className="w-5 h-5 text-[#F66B17]" />
+          <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <IconClock className="w-4 h-4 text-[#F66B17]" />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Schedule Versions</span>
-            <p className="text-2xl font-black tracking-tight text-[#071A2B]">{versions.length}</p>
+            <span className="text-xs font-medium text-slate-500">Schedule Versions</span>
+            <p className="text-xl font-bold tracking-tight text-[#071A2B]">{versions.length}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconCalendar className="w-5 h-5 text-blue-600" />
+          <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <IconCalendar className="w-4 h-4 text-blue-600" />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Site</span>
-            <p className="text-sm font-black tracking-tight text-[#071A2B] truncate max-w-[180px]">
+            <span className="text-xs font-medium text-slate-500">Active Site</span>
+            <p className="text-sm font-bold tracking-tight text-[#071A2B] truncate max-w-[180px]">
               {activeSite?.name || 'No Site'}
             </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconBuilding className="w-5 h-5 text-slate-700" />
+          <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <IconBuilding className="w-4 h-4 text-slate-700" />
           </div>
         </div>
       </div>
 
       {/* 3. Navigation Tabs Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-[#E2E8F0] shadow-xs">
         <Tabs
           items={tabItems}
           activeTab={activeTab}
@@ -920,12 +917,12 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                           <span className="w-2 h-2 rounded-full bg-[#F66B17]" />
                           <h3 className="text-sm font-bold text-slate-900">{shift.name}</h3>
                         </div>
-                        <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md w-fit">
+                        <div className="flex items-center gap-1.5 font-mono text-[11.5px] font-medium text-slate-700 bg-slate-50 border border-[#E2E8F0] px-2.5 py-1 rounded-lg w-fit">
                           <IconClock className="w-3 h-3 text-slate-400" />
                           <span>
-                            {formatShiftTime(shift.startsAt)} - {formatShiftTime(shift.endsAt)}
+                            {formatShiftRange(shift.startsAt, shift.endsAt)}
                           </span>
-                          <span className="text-[10px] text-slate-400 font-normal">({shift.timezone || 'UTC'})</span>
+                          <span className="text-[9px] text-slate-400 font-medium opacity-70 ml-0.5">{shift.timezone || 'UTC'}</span>
                         </div>
                       </div>
 
@@ -980,7 +977,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
       {/* ── TAB 2: SCHEDULE VERSIONS ───────────────────────────────────────── */}
       {activeTab === 'version' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
           {versionsQuery.isLoading ? (
             <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
               <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
@@ -1046,7 +1043,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
           {/* Assignment Form Card (4 cols) */}
-          <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+          <div className="lg:col-span-4 bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
             <CardHeader
               title="Assign Worker Schedule"
               subtitle="Schedule worker to a shift"
@@ -1182,7 +1179,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
 
           {/* Existing Schedules Table (8 cols) */}
-          <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+          <div className="lg:col-span-8 bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 space-y-4">
               <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
@@ -1360,7 +1357,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                                   </span>
                                   {shiftObj && (
                                     <span className="block text-[10px] font-mono text-slate-500">
-                                      {formatShiftTime(shiftObj.startsAt)} - {formatShiftTime(shiftObj.endsAt)}
+                                      {formatShiftRange(shiftObj.startsAt, shiftObj.endsAt)}
                                     </span>
                                   )}
                                 </td>

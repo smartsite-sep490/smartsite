@@ -16,6 +16,7 @@ import { ScheduleConfigurationController } from './schedule-configuration.contro
 import { ScheduleConfigurationService } from './schedule-configuration.service.js';
 import { SchedulingController } from './scheduling.controller.js';
 import { SchedulingWorkflowService } from './scheduling-workflow.service.js';
+import { ShiftRequestReaderService } from './shift-request-reader.service.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
 import { WorkforceController } from './workforce.controller.js';
 import { ContractorOperationsService } from './contractor-operations.service.js';
@@ -60,6 +61,7 @@ import {
     WorkforceConfigurationService,
     ScheduleConfigurationService,
     SchedulingWorkflowService,
+    ShiftRequestReaderService,
     ContractorOperationsService,
     FaceEnrollmentService,
     FaceGateService,
@@ -77,6 +79,11 @@ import {
       },
     },
   ],
-  exports: [WorkforceConfigurationService, ContractorOperationsService, FaceEnrollmentService],
+  exports: [
+    SchedulingNotificationService,
+    WorkforceConfigurationService,
+    ContractorOperationsService,
+    FaceEnrollmentService,
+  ],
 })
 export class WorkforceModule {}

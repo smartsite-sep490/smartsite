@@ -1,4 +1,6 @@
+import { SafetyHandoverNotifications1791590400000 } from './migrations/1791590400000-SafetyHandoverNotifications.js';
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
+import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
 import { ENTITIES } from './entities/index.js';
 import { QrAccess1791417600000 } from './migrations/1791417600000-QrAccess.js';
@@ -32,6 +34,7 @@ import { ErdZonePermissions1791504000003 } from './migrations/1791504000003-ErdZ
 import { ErdAccessAudit1791504000004 } from './migrations/1791504000004-ErdAccessAudit.js';
 import { ErdAttendanceFlow1791504000005 } from './migrations/1791504000005-ErdAttendanceFlow.js';
 import { ErdAccessPolicy1791504000006 } from './migrations/1791504000006-ErdAccessPolicy.js';
+import { Mf07NotificationDeletion1791504000000 } from './migrations/1791504000000-Mf07NotificationDeletion.js';
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
@@ -80,6 +83,9 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ErdAccessAudit1791504000004,
       ErdAttendanceFlow1791504000005,
       ErdAccessPolicy1791504000006,
+      IncidentContractorResponsibility1791504000000,
+      Mf07NotificationDeletion1791504000000,
+      SafetyHandoverNotifications1791590400000,
     ],
     logging: false,
     extra: {

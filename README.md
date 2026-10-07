@@ -284,7 +284,7 @@ pnpm --filter @smartsite/backend test:integration
 docker compose -f infra/compose.yaml --profile test down
 ```
 
-Only `TEST_DATABASE_URL` from the process or the explicit Backend `.env.test` is accepted, with local host and `smartsite_test` user/database. The test runner applies migrations once before sequential test files; concurrency within race tests is preserved. Unit/HTTP tests set `NODE_ENV=test` before imports and discard inherited runtime configuration. See the [Backend guide](apps/backend/README.md) for the complete quality and Compose readiness checks.
+Only `TEST_DATABASE_URL` from the process or the explicit Backend `.env.test` is accepted, with local host and `smartsite_test` user/database. The test runner applies migrations once before sequential integration files. Backend unit files also run sequentially to bound bootstrap/memory contention; concurrency within explicit race tests is preserved. Unit/HTTP tests set `NODE_ENV=test` before imports and discard inherited runtime configuration. See the [Backend guide](apps/backend/README.md) for the complete quality and Compose readiness checks.
 
 Architecture quality is enforced through module boundaries, authorization, validation, tests, auditability, and integration contracts rather than folder structure alone.
 

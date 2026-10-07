@@ -131,7 +131,7 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
     </div>
   );
 }
-export function StatusBadge({ value }: { value: string }) {
+export function StatusBadge({ value, text: caption }: { value: string; text?: string }) {
   const tone = ['VERIFIED', 'APPROVED'].includes(value)
     ? 'bg-[var(--semantic-green-bg)] text-[var(--semantic-green-text)]'
     : ['REJECTED', 'CONFIRMED', 'CRITICAL', 'HIGH'].includes(value)
@@ -143,7 +143,7 @@ export function StatusBadge({ value }: { value: string }) {
           : 'bg-[var(--semantic-amber-bg)] text-[var(--semantic-amber-text)]';
   return (
     <span className={'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ' + tone}>
-      {label(value)}
+      {caption ?? label(value)}
     </span>
   );
 }
@@ -241,19 +241,36 @@ export function Assignee({
   role,
   value,
   onChange,
+  contractorId,
 }: {
   p: WorkflowProps;
-  role: 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+  role: 'SAFETY_OFFICER' | 'CONTRACTOR_REPRESENTATIVE';
   value?: string;
   onChange?: (value: string) => void;
+  contractorId?: string;
 }) {
   const [offset, setOffset] = useState(0);
   const [choice, setChoice] = useState({ id: '', name: '' });
   const selected = onChange ? (value ?? '') : choice.id;
   const query = useQuery({
-    queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'assignees', role, offset],
+    queryKey: [
+      'safety-workflow',
+      p.apiUrl,
+      p.scope,
+      p.siteId,
+      'assignees',
+      role,
+      contractorId ?? '',
+      offset,
+    ],
     queryFn: ({ signal }) =>
-      p.client.listSafetyAssignees(p.token, p.siteId, role, { offset, limit: 20 }, { signal }),
+      p.client.listSafetyAssignees(
+        p.token,
+        p.siteId,
+        role,
+        { offset, limit: 20, ...(contractorId ? { contractorId } : {}) },
+        { signal },
+      ),
     retry: false,
   });
   return (
@@ -271,7 +288,13 @@ export function Assignee({
             onChange?.(id);
           }}
         >
-          <option value="">{onChange ? 'All officers' : 'Choose an active officer'}</option>
+          <option value="">
+            {onChange
+              ? 'All assignees'
+              : role === 'CONTRACTOR_REPRESENTATIVE'
+                ? 'Choose a contractor representative'
+                : 'Choose an active officer'}
+          </option>
           {selected && !query.data?.items.some((u) => u.id === selected) && (
             <option value={selected}>
               {choice.id === selected ? choice.name : 'Selected officer'}
@@ -315,10 +338,12 @@ export function OfficerName({
   p,
   role,
   id,
+  contractorId,
 }: {
   p: WorkflowProps;
-  role: 'SAFETY_OFFICER' | 'SECURITY_OFFICER';
+  role: 'SAFETY_OFFICER' | 'CONTRACTOR_REPRESENTATIVE';
   id: string;
+  contractorId?: string;
 }) {
   const allowed = p.user.roleAssignments.some(
     (r) =>
@@ -327,9 +352,24 @@ export function OfficerName({
         r.role === (role === 'SAFETY_OFFICER' ? 'SITE_MANAGER' : 'SAFETY_OFFICER')),
   );
   const query = useQuery({
-    queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'assignees', role, 0],
+    queryKey: [
+      'safety-workflow',
+      p.apiUrl,
+      p.scope,
+      p.siteId,
+      'assignees',
+      role,
+      contractorId ?? '',
+      0,
+    ],
     queryFn: ({ signal }) =>
-      p.client.listSafetyAssignees(p.token, p.siteId, role, { offset: 0, limit: 20 }, { signal }),
+      p.client.listSafetyAssignees(
+        p.token,
+        p.siteId,
+        role,
+        { offset: 0, limit: 20, ...(contractorId ? { contractorId } : {}) },
+        { signal },
+      ),
     enabled: allowed && id !== p.user.id,
     retry: false,
   });
@@ -337,7 +377,8 @@ export function OfficerName({
     <>
       {id === p.user.id
         ? 'You'
-        : (query.data?.items.find((u) => u.id === id)?.displayName ?? 'Assigned officer')}
+        : (query.data?.items.find((u) => u.id === id)?.displayName ??
+          'Assigned account (historical or unavailable)')}
     </>
   );
 }
@@ -350,9 +391,31 @@ export function Audit({ items }: { items: SafetyAuditResponse[] }) {
         {items.map((item) => (
           <li key={item.id} className="border-l-2 border-[var(--accent)] pl-4 text-sm">
             <div className="flex flex-wrap justify-between gap-2">
-              <strong>{label(item.action)}</strong>
+              <strong>
+                {item.resourceType === 'INCIDENT'
+                  ? ((
+                      {
+                        assign: 'Case handed over',
+                        start: 'Handling started',
+                        submit: 'Handling outcome reported',
+                        review:
+                          item.changes.decision === 'REJECTED'
+                            ? 'Result returned (legacy)'
+                            : 'Handling outcome recorded',
+                        'correct-responsibility': 'Responsibility corrected',
+                      } as Record<string, string>
+                    )[item.action] ?? label(item.action))
+                  : label(item.action)}
+              </strong>
               <time className="text-xs text-[var(--text-secondary)]">{date(item.occurredAt)}</time>
             </div>
+            <p className="mt-1">By {item.actorName ?? 'Account unavailable'}</p>
+            {typeof item.changes.assignedToName === 'string' && (
+              <p>Recipient: {item.changes.assignedToName}</p>
+            )}
+            {typeof item.changes.contractorName === 'string' && (
+              <p>Contractor: {item.changes.contractorName}</p>
+            )}
             {item.reason && <p className="mt-2 whitespace-pre-wrap break-words">{item.reason}</p>}
             {typeof item.changes.resultDescription === 'string' && (
               <p className="mt-2 break-words">{item.changes.resultDescription}</p>

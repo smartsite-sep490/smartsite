@@ -44,7 +44,9 @@ Legacy Face ACTIVE giữ `consent_method=LEGACY_UNVERIFIED`; giá trị này kh�
 
 ## Kiểm chứng
 
-Kiểm tra ngày 05/10/2026 trên nhánh `codex/qr-access`: `pnpm install --frozen-lockfile`, `pnpm peers check`, `pnpm check` và `pnpm --filter @smartsite/mobile check:dependencies` đều qua. Bộ kiểm tra toàn repo có 658 test qua và build Web/Backend/Mobile thành công. `pnpm --filter @smartsite/backend test:integration` có 98/98 test qua trên PostgreSQL riêng, gồm migration nâng/hạ cấp và kiểm tra không có TypeORM metadata drift. Các file thay đổi qua Prettier và `git diff --check`.
+Kiểm tra ngày 05/10/2026 trên nhánh hiện có tên `feat/qr-access`: `pnpm install --frozen-lockfile`, `pnpm peers check`, `pnpm check` và `pnpm --filter @smartsite/mobile check:dependencies` đều qua. Bộ kiểm tra toàn repo có 658 test qua và build Web/Backend/Mobile thành công. `pnpm --filter @smartsite/backend test:integration` có 98/98 test qua trên PostgreSQL riêng, gồm migration nâng/hạ cấp và kiểm tra không có TypeORM metadata drift. Các file thay đổi qua Prettier và `git diff --check`.
+
+Sau merge main `550ca49` ngày 07/10/2026: frozen install, peer check và `pnpm check` qua với 712 test và toàn bộ build. Bộ PostgreSQL chạy từ thư mục build test riêng có 109/109 test qua, gồm các migration ERD và Safety/Notifications mới. Compose đã build và kiểm tra trong project tạm riêng: Backend readiness báo database up, Web healthcheck trả 200; project test và các image tạm đã được dọn. Dependency check Mobile online báo bốn gói Expo cần patch mới; phiên bản giống main và được giữ nguyên trong đợt xử lý conflict này.
 
 Integration dùng PostgreSQL test riêng, fixture tổng hợp, không camera thật hoặc API trả phí. Test bao gồm Site/Contractor scope, bounds, replay đồng thời, thu hồi giữa scan và confirm, QR sai chiều, cả đoàn/re-entry/expiry, consent trước sample, Worker không account, history profile, temporary passage, correction/version và downgrade. Schema catalog và TypeORM drift được kiểm tra trên DB thật. Mức nhận diện AI và webcam thực tế cần được đo trên thiết bị triển khai; mock adapter chỉ xác nhận luồng Backend.
 

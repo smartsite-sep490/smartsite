@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
-import { DataSource, IsNull, In, type EntityManager, type FindOptionsWhere } from 'typeorm';
+import { DataSource, In, IsNull, type EntityManager, type FindOptionsWhere } from 'typeorm';
 import {
   command,
   conflict,
@@ -58,6 +58,170 @@ export class LinkWorkerAccountCommand {
 export class WorkforceConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /** Labels for an authorized Incident; historical subjects need not remain active. */
+  async incidentLabels(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string | null,
+    workerIds: string[],
+  ) {
+    const contractor = contractorId
+      ? await manager.getRepository(ContractorEntity).findOneBy({ id: contractorId })
+      : null;
+    const workers = workerIds.length
+      ? await manager.getRepository(WorkerEntity).findBy({ siteId, id: In(workerIds) })
+      : [];
+    return {
+      contractorName: contractor?.name ?? null,
+      workers: workers.map(({ id, displayName, externalId }) => ({ id, displayName, externalId })),
+    };
+  }
+  /** Safety owns decisions; Workforce supplies current Site/Contractor membership. */
+  async requireIncidentContractor(manager: EntityManager, siteId: string, contractorId: string) {
+    await manager
+      .getRepository(ContractorEntity)
+      .findOne({ where: { id: uuid(contractorId) }, lock: { mode: 'pessimistic_read' } });
+    await manager
+      .getRepository(ContractorSiteParticipationEntity)
+      .find({ where: { contractorId, siteId: uuid(siteId) }, lock: { mode: 'pessimistic_read' } });
+    if (!(await hasActiveContractorParticipation(manager, uuid(contractorId), uuid(siteId))))
+      conflict('An active contractor participating in this Site is required');
+  }
+  async requireIncidentWorkers(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    workerIds: string[],
+  ) {
+    await this.requireIncidentContractor(manager, siteId, contractorId);
+    for (const id of [...workerIds].sort()) {
+      const worker = await manager.getRepository(WorkerEntity).findOne({
+        where: { id: uuid(id), siteId, contractorId, isActive: true },
+        lock: { mode: 'pessimistic_read' },
+      });
+      if (!worker)
+        conflict('Every confirmed Worker must belong to the Incident contractor and Site');
+    }
+  }
+  async incidentRepresentativeAllowed(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    userId: string,
+  ) {
+    const contractor = await manager
+      .getRepository(ContractorEntity)
+      .findOne({ where: { id: contractorId, isActive: true }, lock: { mode: 'pessimistic_read' } });
+    if (!contractor) return false;
+    await manager
+      .getRepository(ContractorSiteParticipationEntity)
+      .find({ where: { contractorId, siteId }, lock: { mode: 'pessimistic_read' } });
+    if (!(await hasActiveContractorParticipation(manager, contractorId, siteId))) return false;
+    return (
+      !!(await manager
+        .getRepository(UserEntity)
+        .findOne({ where: { id: userId, isActive: true }, lock: { mode: 'pessimistic_read' } })) &&
+      !!(await manager.getRepository(UserRoleAssignmentEntity).findOne({
+        where: { userId, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE },
+        lock: { mode: 'pessimistic_read' },
+      })) &&
+      !!(await manager
+        .getRepository(ContractorRepresentativeGrantEntity)
+        .findOne({ where: { userId, contractorId }, lock: { mode: 'pessimistic_read' } }))
+    );
+  }
+  async requireSingleIncidentContractor(
+    manager: EntityManager,
+    siteId: string,
+    workerIds: string[],
+  ) {
+    const contractors = new Set<string>();
+    for (const id of workerIds) {
+      const worker = await manager
+        .getRepository(WorkerEntity)
+        .findOneBy({ id, siteId, isActive: true });
+      if (!worker?.contractorId) conflict('Verified subject has unavailable contractor membership');
+      contractors.add(worker!.contractorId!);
+    }
+    if (contractors.size > 1)
+      conflict('Confirmed Workers from different contractors need separate Incidents');
+  }
+  async incidentRepresentativeContractors(manager: EntityManager, siteId: string, userId: string) {
+    const grants = await manager
+      .getRepository(ContractorRepresentativeGrantEntity)
+      .findBy({ userId });
+    const ids: string[] = [];
+    for (const grant of grants)
+      if (await this.incidentRepresentativeAllowed(manager, siteId, grant.contractorId, userId))
+        ids.push(grant.contractorId);
+    return ids;
+  }
+  async incidentContractors(manager: EntityManager, siteId: string, offset: number, limit: number) {
+    const paging = page(offset, limit);
+    const query = manager
+      .getRepository(ContractorEntity)
+      .createQueryBuilder('c')
+      .where('c.isActive = TRUE')
+      .andWhere(
+        `EXISTS(SELECT 1 FROM contractor_site_participation p WHERE p.contractor_id=c.id AND p.site_id=:siteId AND p.is_active=TRUE AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP))`,
+        { siteId },
+      );
+    const [rows, total] = await query
+      .orderBy('c.name', 'ASC')
+      .addOrderBy('c.id', 'ASC')
+      .skip(paging.offset)
+      .take(paging.limit)
+      .getManyAndCount();
+    return { items: rows.map(({ id, name }) => ({ id, name })), total };
+  }
+  async incidentWorkers(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    offset: number,
+    limit: number,
+  ) {
+    await this.requireIncidentContractor(manager, siteId, contractorId);
+    const paging = page(offset, limit);
+    const [rows, total] = await manager.getRepository(WorkerEntity).findAndCount({
+      where: { siteId, contractorId, isActive: true },
+      order: { displayName: 'ASC', id: 'ASC' },
+      skip: paging.offset,
+      take: paging.limit,
+    });
+    return {
+      items: rows.map(({ id, displayName, externalId }) => ({ id, displayName, externalId })),
+      total,
+    };
+  }
+  async incidentRepresentatives(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string | undefined,
+    offset: number,
+    limit: number,
+  ) {
+    if (contractorId) await this.requireIncidentContractor(manager, siteId, contractorId);
+    const paging = page(offset, limit);
+    const [rows, total] = await manager
+      .getRepository(UserEntity)
+      .createQueryBuilder('u')
+      .where('u.isActive=TRUE')
+      .andWhere(
+        `EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=u.id AND r.site_id=:siteId AND r.role=:role)`,
+        { siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE },
+      )
+      .andWhere(
+        `EXISTS(SELECT 1 FROM contractor_representative_grant g JOIN contractor c ON c.id=g.contractor_id AND c.is_active=TRUE JOIN contractor_site_participation p ON p.contractor_id=c.id AND p.site_id=:siteId AND p.is_active=TRUE AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP) WHERE g.user_id=u.id ${contractorId ? 'AND g.contractor_id=:contractorId' : ''})`,
+        { siteId, ...(contractorId ? { contractorId } : {}) },
+      )
+      .orderBy('u.displayName', 'ASC')
+      .addOrderBy('u.id', 'ASC')
+      .skip(paging.offset)
+      .take(paging.limit)
+      .getManyAndCount();
+    return { items: rows.map(({ id, displayName }) => ({ id, displayName })), total };
+  }
   private async assertWorkerAssignment(siteId: string, contractorId: string, userId: string) {
     const [contractor, user, assignment] = await Promise.all([
       this.dataSource
