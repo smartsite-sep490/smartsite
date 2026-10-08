@@ -1,8 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { IsNotEmpty, IsString, MaxLength, Matches } from 'class-validator';
-import { DataSource, In, IsNull, type EntityManager } from 'typeorm';
+import { IsNotEmpty, IsString, MaxLength, Matches, Equals } from 'class-validator';
+import { DataSource, In, IsNull, LessThan, MoreThan, Not, type EntityManager } from 'typeorm';
 import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
@@ -18,6 +18,7 @@ import {
 } from '../../database/entities/face-profile.entity.js';
 import type { WorkforceActor } from './contractor-operations.service.js';
 import { ContractorOperationsService } from './contractor-operations.service.js';
+import { auditAccess } from './access-audit.js';
 import {
   UnavailableFaceEnrollmentAdapter,
   type FaceEnrollmentAdapter,
@@ -41,6 +42,10 @@ export interface UploadedFaceSample {
   mimetype: string;
   size: number;
   buffer: Buffer;
+}
+export class ConfirmFaceConsentCommand {
+  @Matches(/^[a-f0-9]{64}$/) consentToken!: string;
+  @Equals(true) workerConfirmed!: boolean;
 }
 
 @Injectable()
@@ -86,6 +91,17 @@ export class FaceEnrollmentService {
         workerIdValue,
       );
       await this.requireLinkedAccount(manager, worker);
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `face-enrollment:${worker.id}`,
+      ]);
+      await manager.getRepository(FaceEnrollmentSessionEntity).update(
+        {
+          workerId: worker.id,
+          status: In([FaceEnrollmentSessionStatus.PENDING, FaceEnrollmentSessionStatus.COLLECTING]),
+          expiresAt: LessThan(new Date()),
+        },
+        { status: FaceEnrollmentSessionStatus.CANCELLED, completedAt: new Date() },
+      );
       const active = await manager.getRepository(FaceEnrollmentSessionEntity).findOne({
         where: {
           workerId: worker.id,
@@ -94,17 +110,80 @@ export class FaceEnrollmentService {
       });
       if (active) conflict('An active face enrollment already exists');
       const now = new Date();
-      return manager.getRepository(FaceEnrollmentSessionEntity).save({
+      const consentToken = randomBytes(32).toString('hex');
+      const session = await manager.getRepository(FaceEnrollmentSessionEntity).save({
         id: randomUUID(),
         workerId: worker.id,
         actorUserId: actor.id,
         consentVersion: value.consentVersion,
-        consentedAt: now,
+        consentedAt: null,
+        consentTokenHash: createHash('sha256').update(consentToken).digest('hex'),
+        consentMethod: null,
+        expiresAt: new Date(now.getTime() + 30 * 60_000),
         status: FaceEnrollmentSessionStatus.PENDING,
         acceptedSampleCount: 0,
         startedAt: now,
         completedAt: null,
       });
+      return { ...session, consentToken };
+    });
+  }
+  async confirmConsent(sessionIdValue: string, input: ConfirmFaceConsentCommand) {
+    const value = command(ConfirmFaceConsentCommand, input);
+    return this.dataSource.transaction(async (manager) => {
+      const session = await manager.getRepository(FaceEnrollmentSessionEntity).findOne({
+        where: {
+          id: uuid(sessionIdValue),
+          consentTokenHash: createHash('sha256').update(value.consentToken).digest('hex'),
+        },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!session) missing();
+      if (
+        !session.expiresAt ||
+        session.expiresAt <= new Date() ||
+        session.status !== FaceEnrollmentSessionStatus.PENDING
+      )
+        conflict('Consent session is unavailable');
+      if (session.consentedAt) return session;
+      session.consentedAt = new Date();
+      session.consentMethod = 'SUPERVISED_WORKER_CONFIRMATION';
+      await auditAccess(
+        manager,
+        null,
+        null,
+        'WORKER_FACE_CONSENT_CONFIRMED',
+        'face_enrollment_session',
+        session.id,
+        'Worker personal confirmation',
+        {
+          workerId: session.workerId,
+          consentVersion: session.consentVersion,
+          method: session.consentMethod,
+        },
+      );
+      return manager.getRepository(FaceEnrollmentSessionEntity).save(session);
+    });
+  }
+
+  async cancel(actor: WorkforceActor, sessionIdValue: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const session = await manager.getRepository(FaceEnrollmentSessionEntity).findOne({
+        where: { id: uuid(sessionIdValue), actorUserId: actor.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!session) missing();
+      await this.workforce.requireWorkerEnrollmentAccess(manager, actor, session.workerId);
+      if (
+        [FaceEnrollmentSessionStatus.PENDING, FaceEnrollmentSessionStatus.COLLECTING].includes(
+          session.status,
+        )
+      ) {
+        session.status = FaceEnrollmentSessionStatus.CANCELLED;
+        session.completedAt = new Date();
+        await manager.getRepository(FaceEnrollmentSessionEntity).save(session);
+      }
+      return session;
     });
   }
 
@@ -117,13 +196,17 @@ export class FaceEnrollmentService {
       );
       const profile = await manager
         .getRepository(FaceProfileEntity)
-        .findOneBy({ workerId: worker.id });
+        .findOne({ where: { workerId: worker.id }, order: { createdAt: 'DESC', id: 'DESC' } });
       if (!profile) missing();
       return profile;
     });
   }
 
-  async revokeProfile(actor: WorkforceActor, workerIdValue: string): Promise<FaceProfileEntity> {
+  async revokeProfile(
+    actor: WorkforceActor,
+    workerIdValue: string,
+    erase = false,
+  ): Promise<FaceProfileEntity> {
     return this.dataSource.transaction(async (manager) => {
       const worker = await this.workforce.requireWorkerEnrollmentAccess(
         manager,
@@ -135,13 +218,30 @@ export class FaceEnrollmentService {
         .createQueryBuilder('profile')
         .setLock('pessimistic_write')
         .where('profile.worker_id = :workerId', { workerId: worker.id })
+        .orderBy('profile.created_at', 'DESC')
+        .addOrderBy('profile.id', 'DESC')
         .getOne();
       if (!profile) missing();
-      if (profile.status === FaceProfileStatus.REVOKED) return profile;
-      profile.status = FaceProfileStatus.REVOKED;
+      if (
+        profile.status === FaceProfileStatus.DELETED ||
+        (!erase && profile.status === FaceProfileStatus.REVOKED)
+      )
+        return profile;
+      profile.status = erase ? FaceProfileStatus.DELETED : FaceProfileStatus.REVOKED;
       profile.revokedAt = new Date();
       profile.revokedByUserId = actor.id;
       profile.encryptedTemplate = null;
+      profile.deletedAt = new Date();
+      await auditAccess(
+        manager,
+        actor.id,
+        worker.siteId,
+        erase ? 'FACE_TEMPLATE_DELETED' : 'FACE_CONSENT_REVOKED',
+        'face_profile',
+        profile.id,
+        null,
+        { workerId: worker.id, status: profile.status },
+      );
       return manager.getRepository(FaceProfileEntity).save(profile);
     });
   }
@@ -189,7 +289,21 @@ export class FaceEnrollmentService {
   ): Promise<FaceSampleQuality> {
     this.validateJpeg(sample);
     await this.dataSource.transaction(async (manager) => {
-      await this.workforce.requireWorkerEnrollmentAccess(manager, actor, workerIdValue);
+      const worker = await this.workforce.requireWorkerEnrollmentAccess(
+        manager,
+        actor,
+        workerIdValue,
+      );
+      if (
+        !(await manager.getRepository(FaceEnrollmentSessionEntity).existsBy({
+          workerId: worker.id,
+          actorUserId: actor.id,
+          consentedAt: Not(IsNull()),
+          expiresAt: MoreThan(new Date()),
+          status: In([FaceEnrollmentSessionStatus.PENDING, FaceEnrollmentSessionStatus.COLLECTING]),
+        }))
+      )
+        conflict('Worker consent is required before face quality assessment');
     });
     if (!['front', 'left', 'right'].includes(target))
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
@@ -226,6 +340,9 @@ export class FaceEnrollmentService {
       const current = await this.requireOpenSession(manager, actor, session.id, true);
       if (current.acceptedSampleCount !== 3)
         conflict('Face enrollment requires three accepted samples');
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `face-enrollment:${current.workerId}`,
+      ]);
       const profileReferenceHash = createHash('sha256')
         .update(completion.profileReference, 'utf8')
         .digest('hex');
@@ -234,10 +351,18 @@ export class FaceEnrollmentService {
         .createQueryBuilder('profile')
         .setLock('pessimistic_write')
         .where('profile.worker_id = :workerId', { workerId: current.workerId })
+        .andWhere('profile.status = :status', { status: FaceProfileStatus.ACTIVE })
         .getOne();
       const now = new Date();
-      const profile =
-        existing ?? manager.getRepository(FaceProfileEntity).create({ id: randomUUID() });
+      if (existing?.status === FaceProfileStatus.ACTIVE) {
+        existing.status = FaceProfileStatus.REVOKED;
+        existing.revokedAt = now;
+        existing.revokedByUserId = actor.id;
+        existing.encryptedTemplate = null;
+        existing.deletedAt = now;
+        await manager.getRepository(FaceProfileEntity).save(existing);
+      }
+      const profile = manager.getRepository(FaceProfileEntity).create({ id: randomUUID() });
       const worker = await this.workforce.requireWorkerEnrollmentAccess(
         manager,
         actor,
@@ -251,13 +376,31 @@ export class FaceEnrollmentService {
       profile.modelVersion = completion.modelVersion;
       profile.status = FaceProfileStatus.ACTIVE;
       profile.consentVersion = current.consentVersion;
+      if (!current.consentedAt || !current.consentMethod) conflict('Worker consent is required');
       profile.consentedAt = current.consentedAt;
+      profile.consentMethod = current.consentMethod;
+      profile.deletedAt = null;
       profile.createdByUserId = actor.id;
       profile.revokedAt = null;
       profile.revokedByUserId = null;
       current.status = FaceEnrollmentSessionStatus.COMPLETED;
       current.completedAt = now;
       await manager.getRepository(FaceEnrollmentSessionEntity).save(current);
+      await auditAccess(
+        manager,
+        actor.id,
+        worker.siteId,
+        'FACE_PROFILE_ACTIVATED',
+        'face_profile',
+        profile.id,
+        null,
+        {
+          workerId: worker.id,
+          modelVersion: profile.modelVersion,
+          consentMethod: profile.consentMethod,
+          consentVersion: profile.consentVersion,
+        },
+      );
       return manager.getRepository(FaceProfileEntity).save(profile);
     });
   }
@@ -302,6 +445,18 @@ export class FaceEnrollmentService {
           .getOne()
       : await manager.getRepository(FaceEnrollmentSessionEntity).findOneBy({ id: sessionId });
     if (!session) missing();
+    if (
+      !session.consentedAt ||
+      !session.consentMethod ||
+      !session.expiresAt ||
+      session.expiresAt <= new Date()
+    )
+      conflict('Worker must confirm consent before face capture');
+    if (session.actorUserId !== actor.id)
+      throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+        code: 'FORBIDDEN',
+        message: 'Use your own enrollment session',
+      });
     const worker = await this.workforce.requireWorkerEnrollmentAccess(
       manager,
       actor,
@@ -317,7 +472,7 @@ export class FaceEnrollmentService {
   }
 
   private async requireLinkedAccount(manager: EntityManager, worker: WorkerEntity) {
-    if (!worker.userId) conflict('Link an account before enrolling a face');
+    if (!worker.userId) return;
     const user = await manager
       .getRepository(UserEntity)
       .findOneBy({ id: worker.userId, isActive: true });

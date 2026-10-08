@@ -2,6 +2,7 @@ import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColu
 import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 import { WorkerEntity } from './worker.entity.js';
+import { ContractorSiteParticipationEntity } from './contractor-site-participation.entity.js';
 
 export enum WorkerSiteZoneAssignmentStatus {
   PENDING = 'PENDING',
@@ -9,6 +10,8 @@ export enum WorkerSiteZoneAssignmentStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   CANCELLED = 'CANCELLED',
+  REVOKED = 'REVOKED',
+  EXPIRED = 'EXPIRED',
 }
 
 @Entity({ name: 'worker_site_zone_assignment' })
@@ -16,7 +19,7 @@ export enum WorkerSiteZoneAssignmentStatus {
 @Index('idx_worker_site_zone_assignment_gate_lookup', ['workerId', 'siteId', 'status', 'validFrom'])
 @Check(
   'chk_worker_site_zone_assignment_status',
-  "status IN ('PENDING', 'SAFETY_REVIEWED', 'APPROVED', 'REJECTED', 'CANCELLED')",
+  "status IN ('PENDING', 'SAFETY_REVIEWED', 'APPROVED', 'REJECTED', 'CANCELLED', 'REVOKED', 'EXPIRED')",
 )
 @Check(
   'chk_worker_site_zone_assignment_interval',
@@ -24,6 +27,18 @@ export enum WorkerSiteZoneAssignmentStatus {
 )
 @Check('chk_worker_site_zone_assignment_zone_ids', 'cardinality(zone_ids) > 0')
 export class WorkerSiteZoneAssignmentEntity {
+  @Column({ name: 'site_contractor_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorSiteParticipationEntity, {
+    name: 'fk_assignment_participation',
+    onDelete: 'RESTRICT',
+  })
+  siteContractorId!: string | null;
+  @Column({ type: 'integer', default: 1 })
+  version!: number;
+  @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
+  reviewedAt!: Date | null;
+  @Column({ name: 'review_note', type: 'text', nullable: true })
+  reviewNote!: string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_worker_site_zone_assignment_id' })
   id!: string;
 

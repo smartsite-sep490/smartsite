@@ -14,11 +14,19 @@ import { SecurityGateDeskView } from './SecurityGateDeskView';
 import { WorkerEnrollmentView } from './WorkerEnrollmentView';
 import { VisitorAccessView } from './VisitorAccessView';
 import { WorkerGatePermissionsView } from './WorkerGatePermissionsView';
-import { ZonePermissionsView } from './ZonePermissionsView';
+import { SiteAccessSetupView } from './SiteAccessSetupView';
+import { ZoneDecisionHistory } from './ZoneDecisionHistory';
+import { WorkerMobileQrView } from './WorkerMobileQrView';
+import { AttendanceView } from './AttendanceView';
 import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
 
 type AccessSubTab =
-  'zone-permissions' | 'gate-desk' | 'worker-enrollment' | 'gate-permissions' | 'visitor-passes';
+  | 'zone-permissions'
+  | 'gate-desk'
+  | 'worker-enrollment'
+  | 'gate-permissions'
+  | 'visitor-passes'
+  | 'worker-qr';
 
 interface TabDefinition {
   id: AccessSubTab;
@@ -30,6 +38,14 @@ interface TabDefinition {
 }
 
 const ACCESS_TABS: readonly TabDefinition[] = [
+  {
+    id: 'worker-qr',
+    code: 'MF02 QR',
+    label: 'My QR Pass',
+    subLabel: 'Worker QR Fallback',
+    description: 'Dynamic QR pass for an authorized gate fallback session',
+    icon: IconKey,
+  },
   {
     id: 'zone-permissions',
     code: 'MF06',
@@ -118,6 +134,33 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     : (sites.data?.items[0]?.id ?? '');
 
   const activeSiteName = sites.data?.items.find((site) => site.id === siteId)?.name ?? 'Site';
+  const siteRoles =
+    currentUser?.roleAssignments.filter((r) => r.siteId === siteId).map((r) => r.role) ?? [];
+  const visibleTabs = ACCESS_TABS.filter((tab) =>
+    tab.id === 'worker-qr'
+      ? siteRoles.includes('WORKER')
+      : tab.id === 'worker-enrollment'
+        ? isGlobalAdmin ||
+          siteRoles.includes('CONTRACTOR_REPRESENTATIVE') ||
+          siteRoles.includes('WORKER')
+        : tab.id === 'gate-permissions'
+          ? isGlobalAdmin || siteRoles.includes('SITE_MANAGER')
+          : tab.id === 'zone-permissions'
+            ? isGlobalAdmin ||
+              siteRoles.includes('SITE_MANAGER') ||
+              siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+            : isGlobalAdmin ||
+              siteRoles.some((r) =>
+                ['SITE_MANAGER', 'SECURITY_OFFICER', 'SAFETY_OFFICER'].includes(r),
+              ),
+  );
+  const activeTab = visibleTabs.some((t) => t.id === accessSubTab)
+    ? accessSubTab
+    : siteRoles.includes('WORKER') && !isGlobalAdmin
+      ? 'worker-qr'
+      : siteRoles.includes('SITE_MANAGER')
+        ? 'visitor-passes'
+        : visibleTabs[0]?.id;
 
   const logout = () => {
     setRequestedSiteId('');
@@ -140,7 +183,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   if (currentUserQuery.isError) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-4">
-        <div role="alert" className="flex max-w-md items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-5 text-xs font-semibold text-red-700">
+        <div
+          role="alert"
+          className="flex max-w-md items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-5 text-xs font-semibold text-red-700"
+        >
           <IconAlertTriangle className="h-4 w-4 shrink-0" />
           <span>{errorMessage(currentUserQuery.error)}</span>
         </div>
@@ -148,14 +194,32 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     );
   }
 
-  if (!currentUser || !currentUser.isActive || !isGlobalAdmin || currentUser.mustChangePassword) {
+  if (
+    !currentUser ||
+    !currentUser.isActive ||
+    (!isGlobalAdmin &&
+      !currentUser.roleAssignments.some((r) =>
+        [
+          'SITE_MANAGER',
+          'SECURITY_OFFICER',
+          'SAFETY_OFFICER',
+          'WORKER',
+          'CONTRACTOR_REPRESENTATIVE',
+        ].includes(r.role),
+      )) ||
+    currentUser.mustChangePassword
+  ) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-4">
-        <div role="alert" className="w-full max-w-md space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center shadow-xs">
+        <div
+          role="alert"
+          className="w-full max-w-md space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center shadow-xs"
+        >
           <IconShield className="mx-auto h-8 w-8 text-amber-600" />
           <h1 className="text-lg font-bold text-[#2F3437]">Site Access is restricted</h1>
           <p className="text-xs leading-relaxed text-amber-900">
-            An active Global Admin account with its permanent password is required to manage site access.
+            An active Site staff, Contractor Representative, Worker or Admin account with a
+            permanent password is required.
           </p>
         </div>
       </div>
@@ -198,7 +262,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 </span>
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                  Global Admin
+                  {isGlobalAdmin ? 'Global Admin' : siteRoles.join(' · ')}
                 </span>
               </div>
             </div>
@@ -214,13 +278,21 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         </div>
       </header>
 
-      {/* Modern 5-Tab Card Navigation Grid */}
+      {/* Modern Sub-Navigation Tabs */}
       <nav
         aria-label="Access control tabs"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
+        className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${
+          visibleTabs.length >= 6
+            ? 'lg:grid-cols-6'
+            : visibleTabs.length === 5
+              ? 'lg:grid-cols-5'
+              : visibleTabs.length === 4
+                ? 'lg:grid-cols-4'
+                : 'lg:grid-cols-3'
+        } gap-3`}
       >
-        {ACCESS_TABS.map((tab) => {
-          const isActive = accessSubTab === tab.id;
+        {visibleTabs.map((tab) => {
+          const isActive = activeTab === tab.id;
           const TabIcon = tab.icon;
           return (
             <button
@@ -363,18 +435,29 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       {/* Active Tab Viewport */}
       {siteId && (
         <div className="transition-all duration-150">
-          {accessSubTab === 'zone-permissions' && (
-            <ZonePermissionsView
-              key={`${sessionScope}:${siteId}`}
-              apiUrl={apiUrl}
-              token={token}
-              siteId={siteId}
-              sessionScope={sessionScope}
-            />
+          {activeTab === 'zone-permissions' && (
+            <div className="space-y-6">
+              <SiteAccessSetupView
+                key={`${sessionScope}:${siteId}`}
+                apiUrl={apiUrl}
+                token={token}
+                siteId={siteId}
+                sessionScope={sessionScope}
+              />
+              {isGlobalAdmin && (
+                <ZoneDecisionHistory
+                  apiUrl={apiUrl}
+                  token={token}
+                  siteId={siteId}
+                  sessionScope={sessionScope}
+                />
+              )}
+            </div>
           )}
 
-          {accessSubTab === 'gate-desk' && (
+          {activeTab === 'gate-desk' && (
             <SecurityGateDeskView
+              canManualVerify={siteRoles.includes('SECURITY_OFFICER')}
               key={`${sessionScope}:${siteId}`}
               apiUrl={apiUrl}
               token={token}
@@ -385,8 +468,9 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             />
           )}
 
-          {accessSubTab === 'worker-enrollment' && (
+          {activeTab === 'worker-enrollment' && (
             <WorkerEnrollmentView
+              canManageAccounts={!!isGlobalAdmin}
               key={`${sessionScope}:${siteId}`}
               apiUrl={apiUrl}
               token={token}
@@ -395,7 +479,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             />
           )}
 
-          {accessSubTab === 'gate-permissions' && (
+          {activeTab === 'gate-permissions' && (
             <WorkerGatePermissionsView
               key={`${sessionScope}:${siteId}`}
               apiUrl={apiUrl}
@@ -405,8 +489,30 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             />
           )}
 
-          {accessSubTab === 'visitor-passes' && (
+          {activeTab === 'worker-qr' && (
+            <div className="space-y-6">
+              <WorkerMobileQrView
+                key={`${sessionScope}:${siteId}`}
+                apiUrl={apiUrl}
+                token={token}
+                siteId={siteId}
+                workerName={currentUser.displayName}
+              />
+              <AttendanceView
+                apiUrl={apiUrl}
+                token={token}
+                siteId={siteId}
+                sessionScope={sessionScope}
+              />
+            </div>
+          )}
+          {activeTab === 'visitor-passes' && (
             <VisitorAccessView
+              canManualCheckout={siteRoles.includes('SECURITY_OFFICER')}
+              key={`${sessionScope}:${siteId}`}
+              token={token}
+              sessionScope={sessionScope}
+              canApprove={siteRoles.includes('SITE_MANAGER')}
               apiUrl={apiUrl}
               siteId={siteId}
               siteName={sites.data?.items.find((site) => site.id === siteId)?.name}

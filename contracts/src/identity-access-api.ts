@@ -7,10 +7,10 @@ export type FaceVerificationTechnicalOutcome =
 
 export type GateAuthorizationOutcome = 'ALLOWED' | 'DENIED' | 'MANUAL_REVIEW';
 
-export type FaceProfileStatus = 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL';
+export type FaceProfileStatus = 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL' | 'DELETED';
 
 export type WorkerSiteZoneAssignmentStatus =
-  'PENDING' | 'SAFETY_REVIEWED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  'PENDING' | 'SAFETY_REVIEWED' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'REVOKED' | 'EXPIRED';
 
 export type FaceGateReasonCode =
   | 'MATCH_CONFIRMED'
@@ -30,7 +30,8 @@ export type FaceGateReasonCode =
   | 'ASSIGNMENT_EXPIRED'
   | 'SITE_MISMATCH'
   | 'GATE_MISMATCH'
-  | 'VALID_ASSIGNMENT';
+  | 'VALID_ASSIGNMENT'
+  | 'EXIT_RECORD_ONLY';
 
 export interface FaceGateDecisionResponse {
   technicalOutcome: FaceVerificationTechnicalOutcome;
@@ -41,11 +42,13 @@ export interface FaceGateDecisionResponse {
 }
 
 export interface FaceGateVerificationResponse {
+  attempt?: import('./access-flow-api.js').AccessAttemptResponse;
+  fallback?: import('./qr-access-api.js').QrFallbackResponse;
   decision: FaceGateDecisionResponse;
   log?: GateAccessLogResponse;
   worker?: {
     id: string;
-    userId: string;
+    userId: string | null;
     username: string;
     externalId: string;
     displayName: string;
@@ -55,6 +58,7 @@ export interface FaceGateVerificationResponse {
 }
 
 export interface GateAccessLogResponse {
+  method?: 'FACE' | 'QR';
   id: string;
   createdAt: string;
   gateId: string;
@@ -65,7 +69,7 @@ export interface GateAccessLogResponse {
   workerExternalId: string | null;
   contractorName: string | null;
   username: string | null;
-  decision: FaceGateDecisionResponse;
+  decision: { authorization: GateAuthorizationOutcome; reasonCode: string };
 }
 export interface GateFacePresenceResponse {
   state: 'NEW_FACE' | 'SAME_FACE' | 'WAITING' | 'QUALITY_FAILED' | 'AI_UNAVAILABLE';

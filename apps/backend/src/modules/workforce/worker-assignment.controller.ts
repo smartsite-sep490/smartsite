@@ -19,6 +19,7 @@ import {
   ContractorOperationsService,
   CreateWorkerSiteZoneAssignmentCommand,
   SiteManagerDecisionCommand,
+  RevokeWorkerAssignmentCommand,
 } from './contractor-operations.service.js';
 
 @ApiTags('worker-site-zone-assignments')
@@ -36,6 +37,15 @@ export class WorkerAssignmentController {
   private readonly logger = new Logger(WorkerAssignmentController.name);
 
   constructor(private readonly contractors: ContractorOperationsService) {}
+
+  @Post('site-zone-assignment-requests/:requestId/revoke')
+  revoke(
+    @Req() request: AuthenticatedRequest,
+    @Param('requestId') requestId: string,
+    @Body() input: RevokeWorkerAssignmentCommand,
+  ) {
+    return this.contractors.revokeAssignment(request.user!, requestId, input);
+  }
 
   @Post('workers/:workerId/site-zone-assignment-requests')
   @ApiCreatedResponse()

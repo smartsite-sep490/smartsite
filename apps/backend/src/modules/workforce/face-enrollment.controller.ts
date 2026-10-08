@@ -45,6 +45,7 @@ import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   FaceEnrollmentService,
   StartFaceEnrollmentCommand,
+  ConfirmFaceConsentCommand,
   type UploadedFaceSample,
 } from './face-enrollment.service.js';
 
@@ -80,6 +81,8 @@ function profileResponse(profile: {
   consentedAt: Date;
   createdAt: Date;
   revokedAt: Date | null;
+  consentMethod?: string;
+  deletedAt?: Date | null;
 }) {
   return {
     id: profile.id,
@@ -91,6 +94,8 @@ function profileResponse(profile: {
     consentedAt: profile.consentedAt,
     createdAt: profile.createdAt,
     revokedAt: profile.revokedAt,
+    consentMethod: profile.consentMethod,
+    deletedAt: profile.deletedAt,
   };
 }
 
@@ -111,6 +116,11 @@ export class FaceEnrollmentController {
 
   constructor(private readonly enrollment: FaceEnrollmentService) {}
 
+  @Post('face-enrollments/:sessionId/cancel')
+  async cancel(@Req() request: AuthenticatedRequest, @Param('sessionId') sessionId: string) {
+    return sessionResponse(await this.enrollment.cancel(request.user!, sessionId));
+  }
+
   @Post('workers/:workerId/face-enrollments')
   @ApiCreatedResponse({ type: FaceEnrollmentSessionResponseDto })
   async start(
@@ -125,7 +135,7 @@ export class FaceEnrollmentController {
       resourceId: session.id,
       workerId: session.workerId,
     });
-    return sessionResponse(session);
+    return { ...sessionResponse(session), consentToken: session.consentToken };
   }
 
   @Post('face-enrollments/:sessionId/samples')
@@ -182,5 +192,24 @@ export class FaceEnrollmentController {
       workerId: profile.workerId,
     });
     return profileResponse(profile);
+  }
+  @Post('workers/:workerId/face-profile/delete-template') async deleteTemplate(
+    @Req() request: AuthenticatedRequest,
+    @Param('workerId') workerId: string,
+  ) {
+    return profileResponse(await this.enrollment.revokeProfile(request.user!, workerId, true));
+  }
+}
+
+/** The operator hands this capability to the Worker for personal confirmation. */
+@ApiTags('face-consent')
+@Controller('face-consent')
+export class FaceConsentController {
+  constructor(private readonly enrollment: FaceEnrollmentService) {}
+  @Post(':sessionId') async confirm(
+    @Param('sessionId') sessionId: string,
+    @Body() input: ConfirmFaceConsentCommand,
+  ) {
+    return sessionResponse(await this.enrollment.confirmConsent(sessionId, input));
   }
 }

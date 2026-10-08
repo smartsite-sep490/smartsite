@@ -811,6 +811,7 @@ test('MF08 migration reverses and re-applies inside an isolated PostgreSQL trans
     assert.deepEqual(
       coexist.map((row: { name: string }) => row.name).sort(),
       [
+        'ErdVisitorAccess1791504000000',
         'IncidentContractorResponsibility1791504000000',
         'Mf07NotificationDeletion1791504000000',
       ].sort(),

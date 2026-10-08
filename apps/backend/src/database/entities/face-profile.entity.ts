@@ -6,18 +6,23 @@ export enum FaceProfileStatus {
   ACTIVE = 'ACTIVE',
   REVOKED = 'REVOKED',
   NEEDS_REENROLL = 'NEEDS_REENROLL',
+  DELETED = 'DELETED',
 }
 
 /** Encrypted templates are persisted here; the encryption key stays in the AI runtime. */
 @Entity({ name: 'face_profile' })
-@Index('uq_face_profile_worker', ['workerId'], { unique: true })
+@Index('uq_face_profile_worker_active', ['workerId'], { unique: true, where: "status = 'ACTIVE'" })
 @Index('uq_face_profile_reference_hash', ['profileReferenceHash'], { unique: true })
-@Check('chk_face_profile_status', "status IN ('ACTIVE', 'REVOKED', 'NEEDS_REENROLL')")
+@Check('chk_face_profile_status', "status IN ('ACTIVE', 'REVOKED', 'DELETED')")
+@Check('ck_face_profile_deleted', "status <> 'DELETED' OR encrypted_template IS NULL")
 @Check(
   'chk_face_profile_database_template',
-  "status <> 'ACTIVE' OR (user_id IS NOT NULL AND encrypted_template IS NOT NULL AND length(encrypted_template) BETWEEN 100 AND 32768)",
+  "status <> 'ACTIVE' OR (encrypted_template IS NOT NULL AND length(encrypted_template) BETWEEN 100 AND 32768)",
 )
 export class FaceProfileEntity {
+  @Column({ name: 'consent_method', type: 'varchar', length: 50, default: 'LEGACY_UNVERIFIED' })
+  consentMethod!: string;
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true }) deletedAt!: Date | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_face_profile_id' })
   id!: string;
 

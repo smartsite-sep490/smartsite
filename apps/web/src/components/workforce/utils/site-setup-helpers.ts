@@ -31,6 +31,10 @@ export function getSiteManagers(users: readonly AccountResponse[], siteId: strin
   );
 }
 
+export function getReadySiteManagers(users: readonly AccountResponse[], siteId: string) {
+  return getSiteManagers(users, siteId).filter((user) => user.isActive && !user.mustChangePassword);
+}
+
 export function getAssignableSiteManagers(users: readonly AccountResponse[], siteId: string) {
   const assignedManagerIds = new Set(getSiteManagers(users, siteId).map((user) => user.id));
   return users.filter(

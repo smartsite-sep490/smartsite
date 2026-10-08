@@ -151,7 +151,7 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
       `/sites/${site.id}/zones/${zone.id}/access-grants`,
       {
         workerId: worker.id,
-        effect: 'ALLOW',
+        effect: 'DENY',
         validFrom: '2026-09-28T00:00:00',
         validUntil: null,
       },
@@ -162,7 +162,7 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
       `/sites/${site.id}/zones/${zone.id}/access-grants`,
       {
         workerId: worker.id,
-        effect: 'ALLOW',
+        effect: 'DENY',
         validFrom: '2026-09-28T00:00:00.000Z',
         validUntil: null,
       },

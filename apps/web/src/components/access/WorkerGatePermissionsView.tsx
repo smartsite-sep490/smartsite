@@ -136,10 +136,13 @@ export function GatePermissionEditor({
           <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <div className="space-y-1">
             <p className="font-semibold">
-              Saving will replace current permissions with selected gates, effective immediately until revoked. No gate selected (Không chọn cửa nào = không được vào cửa nào) means the worker is denied access to all gates.
+              Saving will replace current permissions with selected gates, effective immediately
+              within the approved assignment dates. No gate selected (Không chọn cửa nào = không
+              được vào cửa nào) means the worker is denied access to all gates.
             </p>
             <p className="text-amber-800/90">
-              Gate permissions do not bypass facial verification, account validation, or active contractor assignment checks.
+              Gate permissions require an approved Worker assignment and expire with it. Worker
+              identity is verified separately by Face, QR or Security.
             </p>
           </div>
         </div>
@@ -261,7 +264,10 @@ export function WorkerGatePermissionsView({
         <div className="space-y-4 lg:col-span-5">
           <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 space-y-4 shadow-2xs">
             <div>
-              <label htmlFor="gate-worker-search" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              <label
+                htmlFor="gate-worker-search"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+              >
                 Find Worker
               </label>
               <div className="relative mt-1.5">
@@ -300,7 +306,10 @@ export function WorkerGatePermissionsView({
             )}
 
             <div>
-              <label htmlFor="gate-worker-select" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              <label
+                htmlFor="gate-worker-select"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+              >
                 Select Worker
               </label>
               <select
@@ -340,7 +349,9 @@ export function WorkerGatePermissionsView({
                   <h4 className="truncate text-sm font-bold text-slate-900">
                     {selectedWorker.displayName}
                   </h4>
-                  <p className="font-mono text-xs text-slate-500">ID: {selectedWorker.externalId}</p>
+                  <p className="font-mono text-xs text-slate-500">
+                    ID: {selectedWorker.externalId}
+                  </p>
                 </div>
               </div>
 
@@ -391,7 +402,8 @@ export function WorkerGatePermissionsView({
               </div>
               <h3 className="text-sm font-bold text-slate-700">No Worker Selected</h3>
               <p className="mt-1 max-w-sm text-xs text-slate-500">
-                Select a worker from the left list to view and configure their authorized gate clearance.
+                Select a worker from the left list to view and configure their authorized gate
+                clearance.
               </p>
             </div>
           ) : (

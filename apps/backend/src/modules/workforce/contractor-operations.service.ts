@@ -10,6 +10,9 @@ import {
   IsNotEmpty,
   IsString,
   IsUUID,
+  IsOptional,
+  IsInt,
+  Min,
   Matches,
   MaxLength,
   ValidateIf,
@@ -35,6 +38,7 @@ import {
 } from '../../database/entities/worker-site-zone-assignment.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
+import { auditAccess } from './access-audit.js';
 
 export interface WorkforceActor {
   id: string;
@@ -113,8 +117,21 @@ export class CreateWorkerSiteZoneAssignmentCommand {
 }
 
 export class SiteManagerDecisionCommand {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expectedVersion?: number;
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reviewNote?: string;
   @IsBoolean()
   approve!: boolean;
+}
+
+export class RevokeWorkerAssignmentCommand {
+  @IsInt() @Min(1) expectedVersion!: number;
+  @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(1000) reviewNote!: string;
 }
 
 function timeRange(
@@ -245,6 +262,12 @@ export class ContractorOperationsService {
     const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: uuid(workerIdValue) });
     if (!worker) missing();
     if (!worker.isActive) this.forbidden();
+    if (
+      !actor.mustChangePassword &&
+      worker.userId === actor.id &&
+      actor.roleAssignments.some((r) => r.role === UserRole.WORKER && r.siteId === worker.siteId)
+    )
+      return worker;
     if (!worker.contractorId) {
       this.assertWorkerEnrollmentOperator(actor, worker.siteId);
       return worker;
@@ -369,18 +392,26 @@ export class ContractorOperationsService {
     const zoneIds = [...new Set(value.zoneIds.map(uuid))];
     if (zoneIds.length !== value.zoneIds.length) conflict('Zone IDs must be unique');
     const range = timeRange(value.validFrom, value.validUntil);
+    if (!range.until) conflict('Worker assignment requires an expiry');
     return this.dataSource.transaction(async (manager) => {
       const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
       if (!worker?.contractorId || !worker.isActive) this.forbidden();
       await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
       await this.requireActiveParticipation(manager, worker.contractorId, siteId, range.from);
+      const participation = await manager
+        .getRepository(ContractorSiteParticipationEntity)
+        .findOneBy({ contractorId: worker.contractorId, siteId, isActive: true });
+      if (!participation || (participation.validUntil && participation.validUntil < range.until!))
+        conflict('Assignment must fit the contractor participation interval');
       const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
       if (zones.length !== zoneIds.length) this.forbidden();
-      return manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
+      const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
         id: randomUUID(),
         workerId,
         siteId,
         zoneIds,
+        siteContractorId: participation.id,
+        version: 1,
         status: WorkerSiteZoneAssignmentStatus.PENDING,
         validFrom: range.from,
         validUntil: range.until,
@@ -388,6 +419,17 @@ export class ContractorOperationsService {
         safetyReviewedByUserId: null,
         siteManagerDecidedByUserId: null,
       });
+      await auditAccess(
+        manager,
+        actor.id,
+        siteId,
+        'WORKER_ASSIGNMENT_REQUESTED',
+        'worker_assignment',
+        assignment.id,
+        null,
+        { workerId, siteContractorId: participation.id },
+      );
+      return assignment;
     });
   }
 
@@ -406,6 +448,17 @@ export class ContractorOperationsService {
         conflict('Assignment is not pending');
       request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
       request.safetyReviewedByUserId = actor.id;
+      request.version += 1;
+      await auditAccess(
+        manager,
+        actor.id,
+        request.siteId,
+        'WORKER_ASSIGNMENT_SAFETY_REVIEWED',
+        'worker_assignment',
+        request.id,
+        null,
+        { version: request.version },
+      );
       return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
     });
   }
@@ -426,13 +479,97 @@ export class ContractorOperationsService {
         .getOne();
       if (!request) missing();
       await this.requireSiteRole(actor, request.siteId, UserRole.SITE_MANAGER);
-      if (request.status !== WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED)
-        conflict('Assignment requires Safety review');
+      if (
+        ![
+          WorkerSiteZoneAssignmentStatus.PENDING,
+          WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED,
+        ].includes(request.status)
+      )
+        conflict('Assignment has already been reviewed');
+      if (value.expectedVersion !== undefined && request.version !== value.expectedVersion)
+        conflict('Assignment changed. Reload before reviewing');
+      if (value.approve) {
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOneBy({ id: request.workerId, isActive: true });
+        const participation = request.siteContractorId
+          ? await manager
+              .getRepository(ContractorSiteParticipationEntity)
+              .findOneBy({ id: request.siteContractorId, siteId: request.siteId, isActive: true })
+          : null;
+        if (
+          !worker ||
+          worker.contractorId !== participation?.contractorId ||
+          !request.validUntil ||
+          request.validUntil <= new Date() ||
+          !participation ||
+          participation.validFrom > request.validFrom ||
+          (participation.validUntil && participation.validUntil < request.validUntil)
+        )
+          conflict('Assignment participation or validity is unavailable');
+      }
       request.status = value.approve
         ? WorkerSiteZoneAssignmentStatus.APPROVED
         : WorkerSiteZoneAssignmentStatus.REJECTED;
       request.siteManagerDecidedByUserId = actor.id;
+      request.reviewedAt = new Date();
+      request.reviewNote = value.reviewNote?.trim() || null;
+      request.version += 1;
+      await auditAccess(
+        manager,
+        actor.id,
+        request.siteId,
+        'WORKER_ASSIGNMENT_REVIEWED',
+        'worker_assignment',
+        request.id,
+        request.reviewNote,
+        { status: request.status, version: request.version },
+      );
       return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
+    });
+  }
+
+  async revokeAssignment(
+    actor: WorkforceActor,
+    requestIdValue: string,
+    input: RevokeWorkerAssignmentCommand,
+  ) {
+    const value = command(RevokeWorkerAssignmentCommand, input);
+    return this.dataSource.transaction(async (manager) => {
+      const assignment = await manager
+        .getRepository(WorkerSiteZoneAssignmentEntity)
+        .findOne({ where: { id: uuid(requestIdValue) }, lock: { mode: 'pessimistic_write' } });
+      if (!assignment) missing();
+      await this.requireSiteRole(actor, assignment.siteId, UserRole.SITE_MANAGER);
+      if (
+        assignment.status === WorkerSiteZoneAssignmentStatus.REVOKED &&
+        assignment.siteManagerDecidedByUserId === actor.id &&
+        assignment.reviewNote === value.reviewNote &&
+        assignment.version === value.expectedVersion + 1
+      )
+        return assignment;
+      if (
+        assignment.version !== value.expectedVersion ||
+        assignment.status !== WorkerSiteZoneAssignmentStatus.APPROVED
+      )
+        conflict('Assignment changed or is not approved');
+      assignment.status = WorkerSiteZoneAssignmentStatus.REVOKED;
+      assignment.version += 1;
+      assignment.reviewedAt = new Date();
+      assignment.reviewNote = value.reviewNote;
+      assignment.siteManagerDecidedByUserId = actor.id;
+      await manager.getRepository(WorkerSiteZoneAssignmentEntity).save(assignment);
+      await auditAccess(
+        manager,
+        actor.id,
+        assignment.siteId,
+        'WORKER_ASSIGNMENT_REVOKED',
+        'worker_assignment',
+        assignment.id,
+        value.reviewNote,
+        { version: assignment.version },
+      );
+      return assignment;
     });
   }
 }
