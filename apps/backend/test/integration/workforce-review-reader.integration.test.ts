@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { WorkerEntity } from '../../src/database/entities/worker.entity.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
 import type { WorkerReferenceReader } from '../../src/modules/safety/identity/worker-reference.port.js';
 import { observationIdentityFixture } from '../support/observation-identity-fixture.js';
 import dataSource from '../support/test-data-source.js';

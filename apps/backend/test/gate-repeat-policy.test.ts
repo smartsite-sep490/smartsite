@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isRepeatedGatePassage } from '../src/modules/workforce/gate-repeat-policy.js';
+import { isRepeatedGatePassage } from '../src/modules/workforce/access/gate-repeat-policy.js';
 
 test('repeated scans are blocked until the opposite passage or a new workday', () => {
   const previous = { direction: 'IN' as const, occurredAt: new Date('2030-01-01T01:00:00Z') };

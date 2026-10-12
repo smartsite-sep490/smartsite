@@ -23,11 +23,11 @@ import {
   ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/contractor-operations.service.js';
-import { SiteAccessSetupService } from '../../src/modules/workforce/site-access-setup.service.js';
-import { WorkerGatePermissionsService } from '../../src/modules/workforce/worker-gate-permissions.service.js';
-import { QrAccessService } from '../../src/modules/workforce/qr-access.service.js';
-import { AttendanceService } from '../../src/modules/workforce/attendance.service.js';
+import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
+import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
+import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
+import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';

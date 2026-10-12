@@ -5,7 +5,7 @@ import type { DataSource } from 'typeorm';
 import { UserRole } from '../src/database/entities/user.entity.js';
 import { WorkerEntity } from '../src/database/entities/worker.entity.js';
 import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
-import { ShiftRequestReaderService } from '../src/modules/workforce/shift-request-reader.service.js';
+import { ShiftRequestReaderService } from '../src/modules/workforce/scheduling/shift-request-reader.service.js';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
 
 const siteId = randomUUID();

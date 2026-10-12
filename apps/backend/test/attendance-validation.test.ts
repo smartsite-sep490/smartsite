@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ValidationPipe } from '@nestjs/common';
 import { command } from '../src/common/configuration/commands.js';
-import { ReviewAttendanceCorrectionCommand } from '../src/modules/workforce/attendance.service.js';
+import { ReviewAttendanceCorrectionCommand } from '../src/modules/workforce/attendance/attendance.service.js';
 import {
   AttendanceDaysDto,
   AttendanceTimeRequestsDto,
   ReviewAttendanceTimeDto,
-} from '../src/modules/workforce/dto/attendance.dto.js';
+} from '../src/modules/workforce/attendance/dto/attendance.dto.js';
 
 test('attendance query can be revalidated after the HTTP pipe without inventing pagination values', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });

@@ -1,6 +1,6 @@
-import { SchedulingNotificationService } from '../workforce/scheduling-notification.service.js';
+import { SchedulingNotificationService } from '../workforce/notifications/scheduling-notification.service.js';
 import type { StoredObject } from '../../integrations/storage/storage.service.js';
-import { WorkforceConfigurationService } from '../workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../workforce/directory/workforce-configuration.service.js';
 import { reviewRawEventIsConsistent } from './identity/observation-identity-event.js';
 import { observationSubjectRefMatchesEvent } from './identity/observation-identity-subject-ref.js';
 import { AiObservationEventEntity } from '../../database/entities/ai-observation-event.entity.js';
@@ -806,18 +806,16 @@ export class SafetyWorkflowService {
             old.version++;
             await manager.getRepository(CorrectiveActionEntity).save(old);
           }
-          touched = await manager
-            .getRepository(CorrectiveActionEntity)
-            .save({
-              id: randomUUID(),
-              incidentId: incident.id,
-              assignedTo: corrected.assignedTo,
-              assignedBy: actor.id,
-              description: corrected.description,
-              dueAt: corrected.dueAt ? new Date(corrected.dueAt) : null,
-              status: 'ASSIGNED',
-              version: 1,
-            });
+          touched = await manager.getRepository(CorrectiveActionEntity).save({
+            id: randomUUID(),
+            incidentId: incident.id,
+            assignedTo: corrected.assignedTo,
+            assignedBy: actor.id,
+            description: corrected.description,
+            dueAt: corrected.dueAt ? new Date(corrected.dueAt) : null,
+            status: 'ASSIGNED',
+            version: 1,
+          });
           actions.push(touched);
           incident.status = wasClosed ? 'REOPENED' : 'ASSIGNED';
           incident.closedAt = null;
@@ -949,12 +947,10 @@ export class SafetyWorkflowService {
         if (operation === 'close') {
           if (!incident.contractorId) conflict('Confirm Incident responsibility before closing');
           const pending = currentActions.length
-            ? await manager
-                .getRepository(CorrectiveActionSubmissionEntity)
-                .existsBy({
-                  correctiveActionId: In(currentActions.map((a) => a.id)),
-                  status: 'PENDING',
-                })
+            ? await manager.getRepository(CorrectiveActionSubmissionEntity).existsBy({
+                correctiveActionId: In(currentActions.map((a) => a.id)),
+                status: 'PENDING',
+              })
             : false;
           if (
             !canCloseIncident(

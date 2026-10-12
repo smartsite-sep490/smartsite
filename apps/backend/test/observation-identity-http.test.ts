@@ -17,7 +17,7 @@ import { AuthService } from '../src/modules/auth/auth.service.js';
 import { ObservationIdentityContextService } from '../src/modules/safety/identity/observation-identity-context.service.js';
 import { ObservationIdentityResolutionService } from '../src/modules/safety/identity/observation-identity-resolution.service.js';
 import { WORKER_REFERENCE_READER } from '../src/modules/safety/identity/worker-reference.port.js';
-import { WorkforceConfigurationService } from '../src/modules/workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../src/modules/workforce/directory/workforce-configuration.service.js';
 
 test('normal application registers identity routes with the existing Workforce reader and requires authentication', async (t) => {
   const config = new ConfigService<BackendEnvironment, true>(

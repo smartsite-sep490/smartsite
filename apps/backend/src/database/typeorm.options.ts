@@ -2,6 +2,7 @@ import { ShiftArchival1791763200000 } from './migrations/1791763200000-ShiftArch
 import { ShiftBreak1791763200001 } from './migrations/1791763200001-ShiftBreak.js';
 import { GateScheduleDenial1791849600000 } from './migrations/1791849600000-GateScheduleDenial.js';
 import { ScheduleAssignmentBatches1791849600001 } from './migrations/1791849600001-ScheduleAssignmentBatches.js';
+import { ScheduleChangeNotifications1791849600002 } from './migrations/1791849600002-ScheduleChangeNotifications.js';
 import { SafetyHandoverNotifications1791590400000 } from './migrations/1791590400000-SafetyHandoverNotifications.js';
 import { ContractorTeams1791676800004 } from './migrations/1791676800004-ContractorTeams.js';
 import { Mf03AttendanceReconciliation1791676800000 } from './migrations/1791676800000-Mf03AttendanceReconciliation.js';
@@ -104,6 +105,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ShiftBreak1791763200001,
       GateScheduleDenial1791849600000,
       ScheduleAssignmentBatches1791849600001,
+      ScheduleChangeNotifications1791849600002,
     ],
     logging: false,
     extra: {

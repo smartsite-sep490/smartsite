@@ -92,7 +92,10 @@ test('workforce scheduling schema identifies dated worker assignments for MF03 a
     ),
     'utf8',
   );
-  assert.match(multipleShiftsMigration, /DROP INDEX IF EXISTS uq_worker_schedule_active_worker_date/);
+  assert.match(
+    multipleShiftsMigration,
+    /DROP INDEX IF EXISTS uq_worker_schedule_active_worker_date/,
+  );
   assert.match(
     multipleShiftsMigration,
     /ON worker_schedule \(site_id, worker_id, shift_id, work_date\)/,
@@ -135,7 +138,10 @@ test('MF07 workforce access scope binds workers and contractor representatives e
 
   assert.doesNotMatch(migration, /CREATE TABLE contractor\s*\(/);
   assert.match(migration, /CREATE TABLE contractor_representative_assignment/);
-  assert.match(migration, /uq_contractor_representative_assignment UNIQUE \(site_id, contractor_id, user_id\)/);
+  assert.match(
+    migration,
+    /uq_contractor_representative_assignment UNIQUE \(site_id, contractor_id, user_id\)/,
+  );
   assert.doesNotMatch(migration, /ALTER TABLE worker ADD COLUMN contractor_id uuid/);
   assert.match(migration, /ALTER TABLE worker ADD COLUMN user_id uuid/);
   assert.match(migration, /uq_worker_site_user/);

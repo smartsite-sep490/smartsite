@@ -27,12 +27,12 @@ import {
   AbsenceRequestEntity,
   AbsenceRequestStatus,
 } from '../../src/database/entities/index.js';
-import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance-reconciliation.service.js';
-import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
-import { AttendanceDaysService } from '../../src/modules/workforce/attendance-days.service.js';
-import { AttendanceService } from '../../src/modules/workforce/attendance.service.js';
-import { workDateAt } from '../../src/modules/workforce/attendance-calculation.js';
-import { ScheduleConfigurationService } from '../../src/modules/workforce/schedule-configuration.service.js';
+import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance/attendance-reconciliation.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
+import { AttendanceDaysService } from '../../src/modules/workforce/attendance/attendance-days.service.js';
+import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
+import { workDateAt } from '../../src/modules/workforce/attendance/attendance-calculation.js';
+import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
 test('MF03: interval totals, missing checkout, notifications, approvals, scope and database concurrency', async (t) => {
   // Keep generated day shifts away from midnight in both UTC and the site timezone.

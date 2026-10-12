@@ -29,7 +29,7 @@ import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-c
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { createTestConfig } from '../support/config.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
 import { ZoneAccessManagementService } from '../../src/modules/zones/zone-access-management.service.js';
 import dataSource from '../support/test-data-source.js';
 

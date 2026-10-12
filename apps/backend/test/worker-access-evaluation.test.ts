@@ -11,7 +11,7 @@ import {
   ContractorEntity,
   ContractorSiteParticipationEntity,
 } from '../src/database/entities/index.js';
-import { evaluateWorkerAccess } from '../src/modules/workforce/worker-access-evaluation.js';
+import { evaluateWorkerAccess } from '../src/modules/workforce/access/worker-access-evaluation.js';
 
 const at = new Date('2026-10-11T10:00:00+07:00');
 const worker = {

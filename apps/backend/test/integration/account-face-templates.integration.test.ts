@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
-import { FaceEnrollmentService } from '../../src/modules/workforce/face-enrollment.service.js';
-import { FaceEnrollmentController } from '../../src/modules/workforce/face-enrollment.controller.js';
-import { FaceGateService } from '../../src/modules/workforce/face-gate.service.js';
-import { WorkerGatePermissionsService } from '../../src/modules/workforce/worker-gate-permissions.service.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/contractor-operations.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
+import { FaceEnrollmentService } from '../../src/modules/workforce/identity/face-enrollment.service.js';
+import { FaceEnrollmentController } from '../../src/modules/workforce/identity/face-enrollment.controller.js';
+import { FaceGateService } from '../../src/modules/workforce/access/face-gate.service.js';
+import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
+import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
 import {
   FaceProfileEntity,
   UserEntity,
@@ -21,7 +21,7 @@ import {
   WorkerSiteZoneAssignmentStatus,
   GateAccessLogEntity,
 } from '../../src/database/entities/index.js';
-import type { FaceVerificationInput } from '../../src/modules/workforce/face-enrollment.adapter.js';
+import type { FaceVerificationInput } from '../../src/modules/workforce/identity/face-enrollment.adapter.js';
 import type { FaceVerificationTechnicalOutcome } from '@smartsite/contracts';
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';

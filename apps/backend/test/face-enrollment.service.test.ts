@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
-import { FaceEnrollmentService } from '../src/modules/workforce/face-enrollment.service.js';
+import { FaceEnrollmentService } from '../src/modules/workforce/identity/face-enrollment.service.js';
 
 const actor = {
   id: '00000000-0000-4000-8000-000000000001',

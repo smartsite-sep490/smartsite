@@ -23,12 +23,12 @@ import {
   ContractorTeamMembershipEntity,
 } from '../../src/database/entities/index.js';
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
-import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling-workflow.service.js';
-import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
+import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling/scheduling-workflow.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
-import { ShiftRequestReaderService } from '../../src/modules/workforce/shift-request-reader.service.js';
+import { ShiftRequestReaderService } from '../../src/modules/workforce/scheduling/shift-request-reader.service.js';
 import { ShiftSwapRequestEntity } from '../../src/database/entities/shift-swap-request.entity.js';
-import { ScheduleConfigurationService } from '../../src/modules/workforce/schedule-configuration.service.js';
+import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
 test('MF07 durable notifications: delivery, scope, transactions, history and reads', async (t) => {
   await dataSource.initialize();

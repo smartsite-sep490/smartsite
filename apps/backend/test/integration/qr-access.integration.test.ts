@@ -1,12 +1,12 @@
 ﻿import type {
   VerifyVisitorQrCommand,
   VerifyWorkerQrCommand,
-} from '../../src/modules/workforce/qr-access.commands.js';
+} from '../../src/modules/workforce/access/qr-access.commands.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { QrAccessService } from '../../src/modules/workforce/qr-access.service.js';
+import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
   SiteEntity,

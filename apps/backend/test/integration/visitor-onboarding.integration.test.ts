@@ -7,7 +7,7 @@ import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
-import { QrAccessService } from '../../src/modules/workforce/qr-access.service.js';
+import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AuthClientType, UserRole } from '../../src/database/entities/index.js';
 import { createTestConfig } from '../support/config.js';
 import dataSource from '../support/test-data-source.js';

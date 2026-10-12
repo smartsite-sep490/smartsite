@@ -1,11 +1,11 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NotificationsController } from '../src/modules/workforce/notifications.controller.js';
+import { NotificationsController } from '../src/modules/workforce/notifications/notifications.controller.js';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
-import type { SchedulingNotificationService } from '../src/modules/workforce/scheduling-notification.service.js';
+import type { SchedulingNotificationService } from '../src/modules/workforce/notifications/scheduling-notification.service.js';
 import type { AuthenticatedRequest } from '../src/modules/auth/auth.service.js';
-import { SchedulingNotificationService as NotificationService } from '../src/modules/workforce/scheduling-notification.service.js';
+import { SchedulingNotificationService as NotificationService } from '../src/modules/workforce/notifications/scheduling-notification.service.js';
 import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
 import type { DataSource } from 'typeorm';
 

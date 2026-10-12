@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { command } from '../src/common/configuration/commands.js';
-import { ScheduleAssignmentDto } from '../src/modules/workforce/dto/schedule-assignment.dto.js';
-import { assignmentDates } from '../src/modules/workforce/schedule-assignment-dates.js';
+import { ScheduleAssignmentDto } from '../src/modules/workforce/scheduling/dto/schedule-assignment.dto.js';
+import { assignmentDates } from '../src/modules/workforce/scheduling/schedule-assignment-dates.js';
 
 const base = {
   contractorId: randomUUID(),

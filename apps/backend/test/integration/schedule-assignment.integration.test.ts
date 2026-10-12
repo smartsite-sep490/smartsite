@@ -5,7 +5,9 @@ import test from 'node:test';
 import { IsNull } from 'typeorm';
 import source from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
-import { ScheduleAssignmentService } from '../../src/modules/workforce/schedule-assignment.service.js';
+import { ScheduleAssignmentService } from '../../src/modules/workforce/scheduling/schedule-assignment.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
+import { ScheduleChangeNotifications1791849600002 } from '../../src/database/migrations/1791849600002-ScheduleChangeNotifications.js';
 import { ScheduleAssignmentBatches1791849600001 } from '../../src/database/migrations/1791849600001-ScheduleAssignmentBatches.js';
 import {
   SiteEntity,
@@ -25,9 +27,10 @@ import {
   ScheduleAssignmentBatchEntity,
   AccessAuditEntity,
   AttendanceDayEntity,
+  UserNotificationEntity,
 } from '../../src/database/entities/index.js';
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
-import { ScheduleConfigurationService } from '../../src/modules/workforce/schedule-configuration.service.js';
+import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
 test('team assignments: scope, finite recurrence, stale preview, concurrent retry, exceptions, protected attendance and rollback', async (t) => {
   await source.initialize();
@@ -36,6 +39,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     repId = randomUUID(),
     teamId = randomUUID(),
     workerIds = [randomUUID(), randomUUID()],
+    workerUserIds = [randomUUID(), randomUUID()],
     shiftId = randomUUID(),
     otherShift = randomUUID(),
     versionId = randomUUID();
@@ -47,7 +51,8 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     mustChangePassword: false,
     roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
   };
-  const service = new ScheduleAssignmentService(source);
+  const notifications = new SchedulingNotificationService(source);
+  const service = new ScheduleAssignmentService(source, notifications);
   try {
     await source
       .getRepository(SiteEntity)
@@ -77,9 +82,28 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     await source
       .getRepository(ContractorRepresentativeAssignmentEntity)
       .save({ id: randomUUID(), siteId, contractorId, userId: repId });
+    await source.getRepository(UserEntity).save(
+      workerUserIds.map((id) => ({
+        id,
+        username: id,
+        displayName: 'Synthetic worker',
+        passwordHash: 'synthetic-test-only',
+        isActive: true,
+        mustChangePassword: false,
+      })),
+    );
+    await source.getRepository(UserRoleAssignmentEntity).save(
+      workerUserIds.map((userId) => ({
+        id: randomUUID(),
+        userId,
+        siteId,
+        role: UserRole.WORKER,
+      })),
+    );
     await source.getRepository(WorkerEntity).save(
       workerIds.map((id, i) => ({
         id,
+        userId: workerUserIds[i],
         siteId,
         contractorId,
         externalId: id,
@@ -225,9 +249,60 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
       shiftId: otherShift,
       reason: 'Individual exception',
     };
+    // Notification failure must roll back schedules, batch version and audit together.
+    const delivery = t.mock.method(notifications, 'recordScheduleChange', async () => {
+      throw new Error('Synthetic delivery failure');
+    });
+    await assert.rejects(service.change(rep, siteId, batch.id, change), /delivery failure/);
+    delivery.mock.restore();
+    assert.equal(
+      (await source.getRepository(ScheduleAssignmentBatchEntity).findOneByOrFail({ id: batch.id }))
+        .version,
+      1,
+    );
+    assert.equal(
+      await source.getRepository(WorkerScheduleEntity).countBy({ siteId, shiftId: otherShift }),
+      0,
+    );
+    assert.equal(
+      await source.getRepository(AccessAuditEntity).countBy({ id: change.requestId }),
+      0,
+    );
     const changed = await service.change(rep, siteId, batch.id, change);
     assert.equal(changed.version, 2);
     assert.deepEqual(await service.change(rep, siteId, batch.id, change), changed);
+    const workerActor: AuthenticatedUser = {
+      ...rep,
+      id: workerUserIds[0]!,
+      roleAssignments: [{ siteId, role: UserRole.WORKER }],
+    };
+    const inbox = await notifications.list(workerActor);
+    assert.equal(inbox.unreadCount, 1);
+    assert.equal(inbox.items[0]!.event, 'SCHEDULE_CHANGED');
+    assert.equal(inbox.items[0]!.fromShiftName, 'Morning');
+    assert.equal(inbox.items[0]!.toShiftName, 'Evening');
+    assert.match(inbox.items[0]!.message, /Individual exception/);
+    assert.deepEqual(inbox.items[0]!.target, { siteId, workDate: '2030-10-07', tab: 'schedule' });
+    assert.equal((await notifications.list({ ...workerActor, id: workerUserIds[1]! })).total, 0);
+    assert.equal((await notifications.list(rep)).total, 0);
+    await assert.rejects(
+      source.query(
+        `INSERT INTO user_notification(id,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,request_id,event,content)
+      SELECT $1,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,$2,event,content - 'workDate' FROM user_notification WHERE id=$3`,
+        [randomUUID(), randomUUID(), inbox.items[0]!.id],
+      ),
+      /chk_notification_schedule_target/,
+    );
+    await source.getRepository(WorkerEntity).update(workerIds[0]!, { contractorId: null });
+    assert.equal((await notifications.list(workerActor)).total, 0);
+    await assert.rejects(notifications.read(workerActor, inbox.items[0]!.id));
+    await source.getRepository(WorkerEntity).update(workerIds[0]!, { contractorId });
+    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: workerActor.id, siteId });
+    assert.equal((await notifications.list(workerActor)).total, 0);
+    await assert.rejects(notifications.read(workerActor, inbox.items[0]!.id));
+    await source
+      .getRepository(UserRoleAssignmentEntity)
+      .save({ id: randomUUID(), userId: workerActor.id, siteId, role: UserRole.WORKER });
     assert.equal(
       await source.getRepository(WorkerScheduleEntity).countBy({ siteId, shiftId: otherShift }),
       1,
@@ -265,6 +340,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
       reason: 'Cancel remaining days',
     };
     await assert.rejects(service.change(rep, siteId, batch.id, cancel), /attendance/i);
+    assert.equal(await source.getRepository(UserNotificationEntity).countBy({ siteId }), 1);
     assert.equal(
       await source.getRepository(WorkerScheduleEntity).countBy({ siteId, isActive: true }),
       40,
@@ -287,6 +363,13 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     assert.equal(edited.changedCount, 37);
     assert.equal(edited.skippedCount, 3);
     assert.deepEqual(await service.change(rep, siteId, batch.id, remaining), edited);
+    const bulkNotices = await source
+      .getRepository(UserNotificationEntity)
+      .findBy({ requestId: remaining.requestId });
+    assert.equal(bulkNotices.length, 2);
+    const protectedWorkerNotice = bulkNotices.find((notice) => notice.workerId === workerIds[1])!;
+    assert.equal(protectedWorkerNotice.content.workDate, '2030-10-09');
+    assert.doesNotMatch(protectedWorkerNotice.content.message, /2030-10-08/);
     assert.equal(
       (await source.getRepository(WorkerScheduleEntity).findOneByOrFail({ id: protectedRow.id }))
         .shiftId,
@@ -333,6 +416,25 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     assert.equal(cancelled.changedCount, 19);
     assert.equal(cancelled.skippedCount, 1);
     assert.deepEqual(await service.change(rep, siteId, batch.id, cancelUnstarted), cancelled);
+    const cancelNotices = await source
+      .getRepository(UserNotificationEntity)
+      .findBy({ requestId: cancelUnstarted.requestId });
+    assert.equal(cancelNotices.length, 1);
+    assert.equal(cancelNotices[0]!.workerId, workerIds[0]);
+    assert.equal(cancelNotices[0]!.event, 'SCHEDULE_CANCELLED');
+    assert.match(cancelNotices[0]!.content.message, /19 schedule\(s\)/);
+    const migrationRunner = source.createQueryRunner();
+    await migrationRunner.connect();
+    await migrationRunner.startTransaction();
+    try {
+      await assert.rejects(
+        new ScheduleChangeNotifications1791849600002().down(migrationRunner),
+        /history/,
+      );
+    } finally {
+      await migrationRunner.rollbackTransaction();
+      await migrationRunner.release();
+    }
     assert.equal(
       (await source.getRepository(WorkerScheduleEntity).findOneByOrFail({ id: protectedRow.id }))
         .isActive,
@@ -440,6 +542,37 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
       1,
     );
     await assert.rejects(service.create(rep, siteId, { ...command, weekdays: [1] }), /different/i);
+    const singleBatch = competing.find((result) => result.status === 'fulfilled');
+    assert.ok(singleBatch && singleBatch.status === 'fulfilled');
+    const noop = {
+      ...change,
+      requestId: randomUUID(),
+      expectedVersion: 1,
+      workDate: single.fromDate,
+      shiftId,
+    };
+    await service.change(rep, siteId, singleBatch.value.id, noop);
+    assert.equal(
+      await source.getRepository(UserNotificationEntity).countBy({ requestId: noop.requestId }),
+      0,
+    );
+    // A disabled linked account must not receive a notice even though its schedule can be corrected.
+    await source.getRepository(UserEntity).update(workerActor.id, { isActive: false });
+    const disabledChange = {
+      ...noop,
+      requestId: randomUUID(),
+      expectedVersion: 2,
+      shiftId: otherShift,
+    };
+    await service.change(rep, siteId, singleBatch.value.id, disabledChange);
+    assert.equal(
+      await source
+        .getRepository(UserNotificationEntity)
+        .countBy({ requestId: disabledChange.requestId }),
+      0,
+    );
+    assert.equal((await notifications.list(workerActor)).total, 0);
+    await source.getRepository(UserEntity).update(workerActor.id, { isActive: true });
     await source.getRepository(UserRoleAssignmentEntity).delete({ userId: repId });
     await assert.rejects(service.list(rep, siteId, contractorId));
   } finally {
@@ -457,7 +590,10 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     await source.getRepository(ContractorSiteParticipationEntity).delete({ siteId });
     await source.getRepository(UserRoleAssignmentEntity).delete({ userId: repId });
     await source.getRepository(AccessAuditEntity).delete({ siteId });
+    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: workerUserIds[0]! });
+    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: workerUserIds[1]! });
     await source.getRepository(UserEntity).delete(repId);
+    await source.getRepository(UserEntity).delete(workerUserIds);
     await source.getRepository(ContractorEntity).delete(contractorId);
     await source.getRepository(SiteEntity).delete(siteId);
     await source.destroy();

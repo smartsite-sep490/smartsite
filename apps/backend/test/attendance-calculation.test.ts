@@ -5,7 +5,7 @@ import {
   workedMilliseconds,
   workDateAt,
   scheduledShiftWindow,
-} from '../src/modules/workforce/attendance-calculation.js';
+} from '../src/modules/workforce/attendance/attendance-calculation.js';
 const minute = 60000;
 const interval = (start: number, end: number) => ({ start: start * minute, end: end * minute });
 test('MF03 deducts only lunch overlapping actual presence and never deducts leave twice', () => {

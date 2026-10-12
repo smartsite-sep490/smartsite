@@ -14,8 +14,8 @@ import type {
   CreateAbsenceRequestDto,
   CreateShiftChangeRequestDto,
   CreateShiftSwapRequestDto,
-} from '../src/modules/workforce/dto/scheduling-request.dto.js';
-import { SchedulingWorkflowService } from '../src/modules/workforce/scheduling-workflow.service.js';
+} from '../src/modules/workforce/scheduling/dto/scheduling-request.dto.js';
+import { SchedulingWorkflowService } from '../src/modules/workforce/scheduling/scheduling-workflow.service.js';
 
 function actor(
   id: string,

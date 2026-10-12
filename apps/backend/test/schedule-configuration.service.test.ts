@@ -8,8 +8,8 @@ import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
 import type {
   CreateShiftDto,
   CreateWorkerScheduleDto,
-} from '../src/modules/workforce/dto/schedule-configuration.dto.js';
-import { ScheduleConfigurationService } from '../src/modules/workforce/schedule-configuration.service.js';
+} from '../src/modules/workforce/scheduling/dto/schedule-configuration.dto.js';
+import { ScheduleConfigurationService } from '../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
 function publicCode(code: string) {
   return (error: unknown) =>

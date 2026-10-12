@@ -121,6 +121,7 @@ export type {
   SwapCandidateListResponse,
   SchedulingRequestStatus,
   SchedulingNotificationEvent,
+  ScheduleAssignmentNotificationEvent,
   SchedulingNotificationTarget,
   UserNotificationResponse,
   UserNotificationListResponse,

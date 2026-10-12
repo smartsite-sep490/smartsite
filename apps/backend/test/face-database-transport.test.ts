@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
-import { HttpFaceEnrollmentAdapter } from '../src/modules/workforce/face-enrollment.adapter.js';
+import { HttpFaceEnrollmentAdapter } from '../src/modules/workforce/identity/face-enrollment.adapter.js';
 
 test('DB template transport requires encrypted enrollment and keeps candidates in the authenticated service request', async () => {
   const ciphertext = 'gAAAA' + 'a'.repeat(150) + '==';

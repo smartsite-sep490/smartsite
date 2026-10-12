@@ -1,4 +1,4 @@
-import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { observationIdentityFixture } from '../support/observation-identity-fixture.js';
 import { buildGroupingKey } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { IncidentContractorResponsibility1791504000000 } from '../../src/database/migrations/1791504000000-IncidentContractorResponsibility.js';
@@ -47,7 +47,7 @@ import {
 } from '../../src/database/entities/index.js';
 import { SafetyWorkflowService } from '../../src/modules/safety/safety-workflow.service.js';
 import { SafetyUploadService } from '../../src/modules/safety/safety-upload.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';

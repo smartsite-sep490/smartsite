@@ -18,6 +18,8 @@ API: `http://localhost:3000/api/v1`; Swagger chỉ trong development tại `http
 
 ## Ranh giới module
 
+Workforce được chia thành các module nghiệp vụ `directory`, `teams`, `scheduling`, `attendance`, `identity`, `access` và `notifications`; `workforce.module.ts` chỉ ghép các module và giữ các export đang được Safety sử dụng. Controller/service/DTO được đặt cạnh nhau theo luồng. Xem [bản đồ Workforce](src/modules/workforce/README.md) để tìm điểm bắt đầu của MF03/MF07, Face/QR và quan hệ giữa các module.
+
 ```text
 AppModule
   ├── ConfigModule       → cấu hình Zod đã kiểm tra

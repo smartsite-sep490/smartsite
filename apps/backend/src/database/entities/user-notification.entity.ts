@@ -8,7 +8,10 @@ import {
   PrimaryColumn,
   Unique,
 } from 'typeorm';
-import type { SchedulingNotificationEvent } from '@smartsite/contracts';
+import type {
+  SchedulingNotificationEvent,
+  ScheduleAssignmentNotificationEvent,
+} from '@smartsite/contracts';
 import type { AttendanceNotificationEvent } from '@smartsite/contracts';
 import { UserEntity } from './user.entity.js';
 import { SiteEntity } from './site.entity.js';
@@ -33,7 +36,7 @@ export interface NotificationContent {
 @Index('idx_notification_unread', ['recipientUserId', 'createdAt'], { where: 'read_at IS NULL' })
 @Check(
   'chk_notification_request_type',
-  "request_type IN ('CHANGE', 'SWAP', 'SAFETY', 'ATTENDANCE')",
+  "request_type IN ('CHANGE', 'SWAP', 'SAFETY', 'ATTENDANCE', 'SCHEDULE')",
 )
 @Check('chk_notification_deleted_read', 'deleted_at IS NULL OR read_at IS NOT NULL')
 @Check(
@@ -42,7 +45,11 @@ export interface NotificationContent {
 )
 @Check(
   'chk_notification_event',
-  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED')",
+  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED')",
+)
+@Check(
+  'chk_notification_schedule_target',
+  `(request_type <> 'SCHEDULE' AND event NOT IN ('SCHEDULE_CHANGED','SCHEDULE_CANCELLED')) OR (request_type = 'SCHEDULE' AND event IN ('SCHEDULE_CHANGED','SCHEDULE_CANCELLED') AND recipient_role = 'WORKER' AND COALESCE(content->>'workDate','') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')`,
 )
 @Check(
   'chk_notification_safety_target',
@@ -77,13 +84,17 @@ export class UserNotificationEntity {
   recipientRole!: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE';
 
   @Column({ name: 'request_type', type: 'varchar', length: 16 })
-  requestType!: 'CHANGE' | 'SWAP' | 'SAFETY' | 'ATTENDANCE';
+  requestType!: 'CHANGE' | 'SWAP' | 'SAFETY' | 'ATTENDANCE' | 'SCHEDULE';
 
   @Column({ name: 'request_id', type: 'uuid' })
   requestId!: string;
 
   @Column({ type: 'varchar', length: 24 })
-  event!: SchedulingNotificationEvent | 'SAFETY_HANDOVER' | AttendanceNotificationEvent;
+  event!:
+    | SchedulingNotificationEvent
+    | ScheduleAssignmentNotificationEvent
+    | 'SAFETY_HANDOVER'
+    | AttendanceNotificationEvent;
 
   @Column({ type: 'jsonb' })
   content!: NotificationContent;

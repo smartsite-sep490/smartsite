@@ -1,12 +1,12 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { oppositeShiftWindows } from '../src/modules/workforce/team-swap-eligibility.js';
+import { oppositeShiftWindows } from '../src/modules/workforce/teams/team-swap-eligibility.js';
 import { command } from '../src/common/configuration/commands.js';
 import {
   AssignContractorTeamDto,
   ContractorTeamWorkersQueryDto,
-} from '../src/modules/workforce/dto/contractor-team.dto.js';
+} from '../src/modules/workforce/teams/dto/contractor-team.dto.js';
 test('opposite shifts are non-overlapping real intervals, including adjacent and overnight shifts', () => {
   const window = (start: string, end: string) => ({
     startsAt: new Date(start),

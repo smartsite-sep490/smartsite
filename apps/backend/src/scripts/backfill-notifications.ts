@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import dataSource from '../database/typeorm.data-source.js';
-import { SchedulingNotificationService } from '../modules/workforce/scheduling-notification.service.js';
+import { SchedulingNotificationService } from '../modules/workforce/notifications/scheduling-notification.service.js';
 
 async function main() {
   await dataSource.initialize();

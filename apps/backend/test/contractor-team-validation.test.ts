@@ -4,7 +4,7 @@ import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { ValidationPipe } from '@nestjs/common';
 import { command } from '../src/common/configuration/commands.js';
-import { AssignContractorTeamDto } from '../src/modules/workforce/dto/contractor-team.dto.js';
+import { AssignContractorTeamDto } from '../src/modules/workforce/teams/dto/contractor-team.dto.js';
 
 test('initial team assignment accepts no reason; existing membership changes require one', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });

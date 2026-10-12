@@ -15,11 +15,11 @@ import { validateEnvironment, type BackendEnvironment } from '../../src/config/e
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { AuthService, type AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
-import { ContractorTeamsService } from '../../src/modules/workforce/contractor-teams.service.js';
-import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling-workflow.service.js';
-import { ScheduleConfigurationService } from '../../src/modules/workforce/schedule-configuration.service.js';
-import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance-reconciliation.service.js';
-import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
+import { ContractorTeamsService } from '../../src/modules/workforce/teams/contractor-teams.service.js';
+import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling/scheduling-workflow.service.js';
+import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
+import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance/attendance-reconciliation.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import {
   SiteEntity,

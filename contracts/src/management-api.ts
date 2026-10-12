@@ -388,6 +388,8 @@ export type SchedulingNotificationEvent =
   | 'REQUEST_REJECTED'
   | 'REQUEST_CONFLICTED';
 
+export type ScheduleAssignmentNotificationEvent = 'SCHEDULE_CHANGED' | 'SCHEDULE_CANCELLED';
+
 export interface SchedulingNotificationTarget {
   siteId: string;
   requestType: 'CHANGE' | 'SWAP';
@@ -406,6 +408,7 @@ export interface UserNotificationResponse {
   id: string;
   event:
     | SchedulingNotificationEvent
+    | ScheduleAssignmentNotificationEvent
     | 'SAFETY_HANDOVER'
     | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
