@@ -243,7 +243,7 @@ describe('durable Web notification bell', () => {
       ).toBe(false),
     );
   });
-  it.each(['schedule', 'safety'] as const)(
+  it.each(['schedule', 'safety', 'assignment'] as const)(
     'reads and opens the exact scoped %s target',
     async (kind) => {
       const notice: UserNotificationResponse =
@@ -258,7 +258,13 @@ describe('durable Web notification bell', () => {
                 tab: 'incidents',
               },
             }
-          : notification;
+          : kind === 'assignment'
+            ? {
+                ...notification,
+                event: 'SCHEDULE_CHANGED',
+                target: { siteId: 'site-2', workDate: '2030-01-01', tab: 'schedule' },
+              }
+            : notification;
       vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
         ...page,
         items: [notice],
@@ -272,7 +278,9 @@ describe('durable Web notification bell', () => {
         expect(screen.getByTestId('location').textContent).toContain(
           kind === 'safety'
             ? '/incidents?siteId=site-2&incidentId=case-1&actionId=action-1'
-            : '/workforce?siteId=site-2&requestType=SWAP&requestId=older-request',
+            : kind === 'assignment'
+              ? '/workforce?siteId=site-2&workDate=2030-01-01&tab=schedule'
+              : '/workforce?siteId=site-2&requestType=SWAP&requestId=older-request',
         ),
       );
       expect(screen.getByTestId('location').textContent).toContain('siteId=site-2');

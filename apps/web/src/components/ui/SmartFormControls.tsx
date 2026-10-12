@@ -33,7 +33,10 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
     return (
       <div className="space-y-1.5">
         {label && (
-          <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <label
+            htmlFor={id}
+            className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+          >
             {label}
             {fieldRequired && <span className="text-red-400 ml-1">*</span>}
           </label>
@@ -54,12 +57,32 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
               tabIndex={-1}
             >
               {showPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
                   <line x1="1" y1="1" x2="23" y2="23"></line>
                 </svg>
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                   <circle cx="12" cy="12" r="3"></circle>
                 </svg>
@@ -70,7 +93,7 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
         {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
       </div>
     );
-  }
+  },
 );
 SmartInput.displayName = 'SmartInput';
 
@@ -137,7 +160,7 @@ export function SmartSelect({
       (opt) =>
         opt.label.toLowerCase().includes(q) ||
         (opt.description && opt.description.toLowerCase().includes(q)) ||
-        (opt.badge && opt.badge.toLowerCase().includes(q))
+        (opt.badge && opt.badge.toLowerCase().includes(q)),
     );
   }, [options, searchQuery]);
 
@@ -312,7 +335,13 @@ export interface SmartCheckboxProps {
   description?: string;
 }
 
-export function SmartCheckbox({ id: propId, label, checked, onChange, description }: SmartCheckboxProps) {
+export function SmartCheckbox({
+  id: propId,
+  label,
+  checked,
+  onChange,
+  description,
+}: SmartCheckboxProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   return (
@@ -335,7 +364,13 @@ export function SmartCheckbox({ id: propId, label, checked, onChange, descriptio
         >
           {checked && (
             <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
-              <path d="M1 4L4.2 7.5L10 1" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M1 4L4.2 7.5L10 1"
+                stroke="white"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           )}
         </div>
@@ -367,7 +402,8 @@ const rdpClassNames: Partial<Record<string, string>> = {
   day: 'h-7 w-8 flex items-center justify-center rounded-lg text-sm font-medium text-[#071A2B] cursor-pointer transition-all duration-200 hover:bg-[#F5F8FB] mx-auto aria-selected:bg-[#071A2B] aria-selected:text-white',
   day_button:
     'h-7 w-8 flex items-center justify-center rounded-lg text-sm font-medium text-inherit cursor-pointer transition-all duration-200 hover:bg-[#F5F8FB] hover:text-[#071A2B]',
-  selected: 'bg-[#071A2B] !text-white rounded-lg shadow-[0_2px_8px_rgba(7,26,43,0.25)] [&_button]:!text-white',
+  selected:
+    'bg-[#071A2B] !text-white rounded-lg shadow-[0_2px_8px_rgba(7,26,43,0.25)] [&_button]:!text-white',
   today: 'font-black text-[#F66B17]',
   outside: 'text-[#94A3B8] opacity-40',
   disabled: 'opacity-25 cursor-not-allowed',
@@ -378,7 +414,15 @@ const rdpClassNames: Partial<Record<string, string>> = {
 function IconCalSm({ className = '' }: { className?: string }) {
   return (
     <svg className={`w-4 h-4 shrink-0 ${className}`} viewBox="0 0 16 16" fill="none">
-      <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.25" />
+      <rect
+        x="1.5"
+        y="2.5"
+        width="13"
+        height="12"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.25"
+      />
       <path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       <path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       <circle cx="5.5" cy="10" r="0.8" fill="currentColor" />
@@ -394,7 +438,13 @@ function IconChevDown({ open }: { open: boolean }) {
       viewBox="0 0 14 14"
       fill="none"
     >
-      <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M3.5 5.25L7 8.75L10.5 5.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -402,7 +452,13 @@ function IconClockSm({ className = '' }: { className?: string }) {
   return (
     <svg className={`w-4 h-4 shrink-0 ${className}`} viewBox="0 0 16 16" fill="none">
       <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
-      <path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M8 5v3l2 1.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -451,7 +507,10 @@ export function SmartDatePicker({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+        <label
+          htmlFor={id}
+          className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+        >
           {label}
           {fieldRequired && <span className="text-red-400 ml-1">*</span>}
         </label>
@@ -544,13 +603,22 @@ export function formatDisplayTime(timeStr: string) {
 export interface LuxuryTimeSelectorProps {
   timeStr: string; // "HH:mm"
   onChange: (newTimeStr: string) => void;
+  minuteStep?: number;
+  embedded?: boolean;
 }
 
-export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProps) {
+export function LuxuryTimeSelector({
+  timeStr,
+  onChange,
+  minuteStep = 5,
+  embedded = false,
+}: LuxuryTimeSelectorProps) {
   const { hour12, minute, period } = parseHHMM(timeStr);
 
   const hoursList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-  const minutesList = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  const minutesList = Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => i * minuteStep);
+  if (!minutesList.includes(minute)) minutesList.push(minute);
+  minutesList.sort((a, b) => a - b);
 
   const handleHourSelect = (h: number) => {
     onChange(format24h(h, minute, period));
@@ -572,7 +640,15 @@ export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProp
   ];
 
   return (
-    <div className="p-3 bg-white rounded-2xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)] min-w-[270px]">
+    <div
+      data-slot="time-picker-panel"
+      style={{ width: 'min(320px, calc(100vw - 24px))', maxWidth: '100%', boxSizing: 'border-box' }}
+      className={`min-w-0 ${
+        embedded
+          ? 'p-2'
+          : 'p-3 bg-white rounded-2xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)]'
+      }`}
+    >
       {/* Presets Header */}
       <div className="pb-2.5 mb-2.5 border-b border-[#F5F8FB] space-y-2">
         <div className="flex items-center justify-between">
@@ -583,15 +659,15 @@ export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProp
             {formatDisplayTime(timeStr)}
           </span>
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {presets.map((p) => (
             <button
               key={p.val}
               type="button"
               onClick={() => onChange(p.val)}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+              className={`py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer text-center ${
                 timeStr === p.val
-                  ? 'bg-[#071A2B] text-white'
+                  ? 'bg-[#071A2B] text-white shadow-xs'
                   : 'bg-[#F5F8FB] text-[#607A96] hover:bg-[#EBF1F6] hover:text-[#071A2B]'
               }`}
             >
@@ -602,7 +678,10 @@ export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProp
       </div>
 
       {/* 3 Columns Layout: Hours | Minutes | AM/PM */}
-      <div className="grid grid-cols-3 gap-2 text-center">
+      <div
+        className="grid grid-cols-3 gap-2 text-center"
+        style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
+      >
         {/* Hours Column */}
         <div className="space-y-1">
           <span className="block text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">
@@ -615,6 +694,8 @@ export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProp
                 <button
                   key={h}
                   type="button"
+                  aria-label={`Hour ${String(h).padStart(2, '0')}`}
+                  aria-pressed={isSelected}
                   onClick={() => handleHourSelect(h)}
                   className={`w-full py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     isSelected
@@ -636,11 +717,13 @@ export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProp
           </span>
           <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1 pr-0.5">
             {minutesList.map((m) => {
-              const isSelected = Math.abs(minute - m) < 3 || (m === 55 && minute >= 53);
+              const isSelected = minute === m;
               return (
                 <button
                   key={m}
                   type="button"
+                  aria-label={`Minute ${String(m).padStart(2, '0')}`}
+                  aria-pressed={isSelected}
                   onClick={() => handleMinuteSelect(m)}
                   className={`w-full py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     isSelected
@@ -667,6 +750,7 @@ export function LuxuryTimeSelector({ timeStr, onChange }: LuxuryTimeSelectorProp
                 <button
                   key={p}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => handlePeriodSelect(p)}
                   className={`w-full py-2 rounded-lg text-xs font-black tracking-wider transition-all cursor-pointer uppercase ${
                     isSelected
@@ -695,6 +779,7 @@ export interface SmartTimePickerProps {
   error?: string;
   id?: string;
   className?: string;
+  minuteStep?: number;
 }
 
 export function SmartTimePicker({
@@ -706,6 +791,7 @@ export function SmartTimePicker({
   error,
   id: propId,
   className = '',
+  minuteStep = 5,
 }: SmartTimePickerProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -716,7 +802,10 @@ export function SmartTimePicker({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+        <label
+          htmlFor={id}
+          className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+        >
           {label}
           {fieldRequired && <span className="text-red-400 ml-1">*</span>}
         </label>
@@ -743,15 +832,29 @@ export function SmartTimePicker({
             sideOffset={8}
             align="start"
             collisionPadding={12}
-            className="z-50 w-auto"
-            style={{ outline: 'none' }}
+            className="z-50"
+            aria-label={label ? `Choose ${label.toLowerCase()}` : 'Choose time'}
+            style={{
+              outline: 'none',
+              width: 'min(320px, calc(100vw - 24px))',
+              maxWidth: 'var(--radix-popover-content-available-width)',
+            }}
           >
             <LuxuryTimeSelector
               timeStr={value || '08:00'}
+              minuteStep={minuteStep}
               onChange={(newTime) => {
                 onChange(newTime);
               }}
             />
+            <Popover.Close asChild>
+              <button
+                type="button"
+                className="mt-2 w-full rounded-xl bg-[#071A2B] px-3 py-2 text-xs font-bold text-white"
+              >
+                Done
+              </button>
+            </Popover.Close>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
@@ -796,7 +899,9 @@ export function SmartDateTimePicker({
     return '08:00';
   });
 
-  const displayValue = validParsed ? `${format(validParsed, 'dd MMM yyyy')}, ${formatDisplayTime(timeStr)}` : '';
+  const displayValue = validParsed
+    ? `${format(validParsed, 'dd MMM yyyy')}, ${formatDisplayTime(timeStr)}`
+    : '';
 
   const selectedDay = validParsed
     ? new Date(validParsed.getFullYear(), validParsed.getMonth(), validParsed.getDate())
@@ -827,7 +932,10 @@ export function SmartDateTimePicker({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
+        <label
+          htmlFor={id}
+          className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+        >
           {label}
           {fieldRequired && <span className="text-red-400 ml-1">*</span>}
         </label>
@@ -866,11 +974,8 @@ export function SmartDateTimePicker({
                 classNames={rdpClassNames as Parameters<typeof DayPicker>[0]['classNames']}
               />
               {/* Luxury Time row */}
-              <div className="border-t border-[#F5F8FB] pt-2 px-1 pb-1 bg-[#F9FAFC] rounded-b-xl">
-                <LuxuryTimeSelector
-                  timeStr={timeStr}
-                  onChange={handleTimeChange}
-                />
+              <div className="border-t border-[#F5F8FB] pt-2 px-1 pb-1 bg-[#F9FAFC] rounded-b-xl flex justify-center">
+                <LuxuryTimeSelector timeStr={timeStr} embedded onChange={handleTimeChange} />
               </div>
             </div>
           </Popover.Content>

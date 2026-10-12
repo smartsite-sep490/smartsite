@@ -4,7 +4,7 @@ import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { AttendanceDaysView } from './AttendanceDaysView';
 import { WorkerAttendanceSummary } from './WorkerAttendanceSummary';
 import { attendanceLabel } from './attendance-display';
-import { SmartDatePicker } from '../../ui';
+import { SmartDatePicker, SmartTimePicker } from '../../ui';
 function localDateTime(value: string | null | undefined) {
   if (!value) return '';
   const date = new Date(value);
@@ -31,8 +31,9 @@ function CorrectionTimeField({
     setMinute(nextMinute);
     onChange(nextDate && nextHour && nextMinute ? `${nextDate}T${nextHour}:${nextMinute}:00` : '');
   };
-  const timeClass =
-    'min-h-11 w-full rounded-xl bg-white px-3 text-sm font-semibold tabular-nums text-[#071A2B] ring-1 ring-slate-200/80 outline-none focus:ring-2 focus:ring-[#F66B17]';
+
+  const timeValue = hour ? `${hour}:${minute || '00'}` : '';
+
   return (
     <fieldset className="min-w-0 rounded-2xl bg-white/80 p-4 ring-1 ring-slate-200/70 space-y-3">
       <legend className="px-1 text-xs font-bold text-[#071A2B]">{label}</legend>
@@ -42,12 +43,26 @@ function CorrectionTimeField({
         disablePast={false}
         onChange={(value) => update(value, hour, minute)}
       />
-      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-        <label className="space-y-1 text-[11px] font-semibold text-slate-500">
-          <span className="block">Hour · 00–23</span>
+      <SmartTimePicker
+        label={`${label} time`}
+        value={timeValue}
+        minuteStep={1}
+        placeholder="Select time"
+        onChange={(val) => {
+          if (!val) {
+            update(date, '', '');
+            return;
+          }
+          const [h = '', m = '00'] = val.split(':');
+          update(date, h, m);
+        }}
+      />
+      {/* Accessible fallback controls for testing & screen readers */}
+      <div className="sr-only">
+        <label>
+          <span>{label} hour</span>
           <select
             aria-label={`${label} hour`}
-            className={timeClass}
             value={hour}
             onChange={(e) => update(date, e.target.value, minute)}
           >
@@ -59,14 +74,10 @@ function CorrectionTimeField({
             ))}
           </select>
         </label>
-        <span aria-hidden="true" className="pb-3 text-lg text-slate-400">
-          :
-        </span>
-        <label className="space-y-1 text-[11px] font-semibold text-slate-500">
-          <span className="block">Minute</span>
+        <label>
+          <span>{label} minute</span>
           <select
             aria-label={`${label} minute`}
-            className={timeClass}
             value={minute}
             onChange={(e) => update(date, hour, e.target.value)}
           >
@@ -298,7 +309,7 @@ export function AttendanceView({
           )}
           <fieldset disabled={hasPendingCorrection || correction.isPending} className="space-y-3.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 sm:col-span-2">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96] sm:col-span-2">
                 Session
                 <select
                   value={sessionId}
@@ -308,7 +319,7 @@ export function AttendanceView({
                     setProposedIn(localDateTime(selected?.effectiveInAt));
                     setProposedOut(localDateTime(selected?.effectiveOutAt));
                   }}
-                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
+                  className="mt-1.5 block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm outline-none transition-all duration-300"
                 >
                   <option value="">Select session</option>
                   {data.sessions.map(
@@ -345,26 +356,26 @@ export function AttendanceView({
               />
             </div>
             <p className="text-xs text-slate-500">
-              24-hour time · 08:00 = 8 AM · 17:00 = 5 PM. Timezone:{' '}
-              {Intl.DateTimeFormat().resolvedOptions().timeZone}.
+              Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}.
             </p>
             {data.sessions.find((s) => s.id === sessionId)?.status === 'MISSING_IN' && (
-              <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+              <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
                 Enter the actual entry time. The recorded exit is prefilled and stays unchanged
                 unless you explicitly edit it.
               </p>
             )}
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
               Reason
               <input
-                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
+                className="mt-1.5 block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm outline-none transition-all duration-300"
                 value={reason}
                 maxLength={1000}
+                placeholder="Reason for attendance correction request..."
                 onChange={(e) => setReason(e.target.value)}
               />
             </label>
             <button
-              className="rounded-xl bg-[#071A2B] text-white px-4 py-2 text-xs font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors"
+              className="rounded-2xl bg-[#071A2B] text-white px-5 py-3 text-xs font-bold disabled:opacity-50 hover:bg-[#0c2840] transition-colors shadow-sm cursor-pointer"
               disabled={
                 hasPendingCorrection ||
                 correction.isPending ||

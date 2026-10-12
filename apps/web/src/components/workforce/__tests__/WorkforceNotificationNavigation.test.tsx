@@ -37,7 +37,12 @@ const request: ShiftSwapRequestResponse = {
   createdAt: '2029-12-01T00:00:00Z',
 };
 let client: QueryClient;
-function mount(tab: 'schedule' | 'review', view: string, targetRequest = request) {
+function mount(
+  tab: 'schedule' | 'review',
+  view: string,
+  targetRequest = request,
+  workDate?: string,
+) {
   for (const method of [
     'listShifts',
     'listCoworkers',
@@ -80,7 +85,9 @@ function mount(tab: 'schedule' | 'review', view: string, targetRequest = request
     <QueryClientProvider client={client}>
       <MemoryRouter
         initialEntries={[
-          `/workforce?siteId=site-2&tab=${tab}&view=${view}&requestType=SWAP&requestId=older-request`,
+          workDate
+            ? `/workforce?siteId=site-2&tab=schedule&workDate=${workDate}`
+            : `/workforce?siteId=site-2&tab=${tab}&view=${view}&requestType=SWAP&requestId=older-request`,
         ]}
       >
         <WorkforceView apiUrl="https://api.example.test" />
@@ -95,6 +102,22 @@ afterEach(() => {
 });
 
 describe('notification request navigation', () => {
+  it('opens the affected date in My Schedule for a direct contractor change without loading a request', async () => {
+    user = {
+      id: 'user-b',
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'WORKER', siteId: 'site-2' }],
+    };
+    mount('schedule', '', request, '2030-01-01');
+    await waitFor(() =>
+      expect(SmartSiteManagementClient.prototype.listWorkerSchedules).toHaveBeenCalledWith(
+        'synthetic-token',
+        'site-2',
+        expect.objectContaining({ fromDate: '2030-01-01', toDate: '2030-01-01' }),
+      ),
+    );
+    expect(SmartSiteManagementClient.prototype.getShiftSwapRequest).not.toHaveBeenCalled();
+  });
   it('shows each worker team and scheduled date in contractor review for a notification outside the first page', async () => {
     user = {
       id: 'rep-1',

@@ -65,9 +65,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
 
   // 2. Determine site scope from roleAssignments
   const roleAssignments = currentUser?.roleAssignments ?? [];
-  const isGlobalAdmin = roleAssignments.some(
-    (r) => r.role === 'ADMIN' && r.siteId === null,
-  );
+  const isGlobalAdmin = roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null);
   const scopedSiteIds = roleAssignments
     .map((r) => r.siteId)
     .filter((id): id is string => id !== null && id !== undefined);
@@ -85,34 +83,30 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
   // 3. Resolve selectedSiteId
   const requestedSiteId = searchParams.get('siteId');
   const autoSiteId = isGlobalAdmin
-    ? sitesQuery.data?.items?.[0]?.id ?? null
-    : scopedSiteIds[0] ?? null;
-  const targetSiteAllowed = !requestedSiteId || scopedSiteIds.includes(requestedSiteId) || isGlobalAdmin;
+    ? (sitesQuery.data?.items?.[0]?.id ?? null)
+    : (scopedSiteIds[0] ?? null);
+  const targetSiteAllowed =
+    !requestedSiteId || scopedSiteIds.includes(requestedSiteId) || isGlobalAdmin;
   const selectedSiteId = requestedSiteId ?? autoSiteId;
 
   // 4. Role-based tab visibility
   const effectiveRoles = roleAssignments
-    .filter(
-      (r) =>
-        r.siteId === selectedSiteId ||
-        (r.role === 'ADMIN' && r.siteId === null),
-    )
+    .filter((r) => r.siteId === selectedSiteId || (r.role === 'ADMIN' && r.siteId === null))
     .map((r) => r.role);
 
-  const { showSchedule, showReview, defaultTab } =
-    getWorkforceTabs(effectiveRoles);
+  const { showSchedule, showReview, defaultTab } = getWorkforceTabs(effectiveRoles);
 
-  const [userSelectedTab, setUserSelectedTab] = useState<
-    'schedule' | 'review' | null
-  >(null);
+  const [userSelectedTab, setUserSelectedTab] = useState<'schedule' | 'review' | null>(null);
 
   const activeTab =
-    searchParams.get('tab') === 'review' && showReview ? 'review' :
-    searchParams.get('tab') === 'schedule' && showSchedule ? 'schedule' :
-    (userSelectedTab === 'review' && showReview) ||
-    (userSelectedTab === 'schedule' && showSchedule)
-      ? userSelectedTab
-      : defaultTab;
+    searchParams.get('tab') === 'review' && showReview
+      ? 'review'
+      : searchParams.get('tab') === 'schedule' && showSchedule
+        ? 'schedule'
+        : (userSelectedTab === 'review' && showReview) ||
+            (userSelectedTab === 'schedule' && showSchedule)
+          ? userSelectedTab
+          : defaultTab;
 
   // ── 5. Render states ──────────────────────────────────────────────────────
   if (!accessToken || userLoading) {
@@ -137,7 +131,6 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
       />
     );
   }
-
 
   if (isGlobalAdmin && sitesQuery.isLoading) {
     return <LoadingState />;
@@ -166,7 +159,8 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
         </div>
         <h2 className="text-lg font-bold text-slate-900">No site assigned</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Your account is not assigned to any site yet. Ask your Site Manager or Admin to add you to a site.
+          Your account is not assigned to any site yet. Ask your Site Manager or Admin to add you to
+          a site.
         </p>
       </div>
     );
@@ -220,7 +214,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
       <div>
         {activeTab === 'schedule' && (
           <WorkforceScheduleTab
-            key={`${selectedSiteId}-${searchParams.get('requestId') ?? ''}`}
+            key={`${selectedSiteId}-${searchParams.get('requestId') ?? ''}-${searchParams.get('workDate') ?? ''}`}
             apiUrl={resolvedApiUrl}
             siteId={selectedSiteId}
             token={accessToken}

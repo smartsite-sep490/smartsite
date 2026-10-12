@@ -61,7 +61,7 @@ export function ScheduleAssignmentForm({
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['schedule-assignment-batches', apiUrl, token, siteId];
-  const [contractorChoice, setContractor] = useState(
+  const [contractorChoice] = useState(
     () => new URLSearchParams(window.location.search).get('contractorId') ?? '',
   );
   const [target, setTarget] = useState<'TEAM' | 'WORKER'>('TEAM');
@@ -699,30 +699,6 @@ export function ScheduleAssignmentForm({
               client.changeScheduleAssignment(token, siteId, batch.id, command)
             }
             onSaved={invalidate}
-            onApplyMembers={() => {
-              setContractor(batch.input.contractorId);
-              setTarget('TEAM');
-              setTargetId(batch.teamId!);
-              setVersion(batch.input.scheduleVersionId);
-              setShift(batch.input.shiftId);
-              setMode(batch.input.mode === 'DAY' ? 'DAY' : 'REPEAT');
-              setFrom(today() > batch.input.fromDate ? today() : batch.input.fromDate);
-              setTo(batch.input.toDate);
-              setDays(batch.input.weekdays);
-              setMembers(
-                workers.data
-                  ?.filter(
-                    (worker) =>
-                      worker.teamId === batch.teamId &&
-                      !batch.members.some((member) => member.workerId === worker.workerId),
-                  )
-                  .map((worker) => worker.workerId) ?? [],
-              );
-              preview.reset();
-              setMessage(
-                'New current members selected. Check remaining dates and preview before applying. Existing schedules stay unchanged.',
-              );
-            }}
           />
         ))}
         {(batches.data?.total ?? 0) > 10 && (
@@ -748,13 +724,11 @@ function BatchEditor({
   shifts,
   onChange,
   onSaved,
-  onApplyMembers,
 }: {
   batch: ScheduleAssignmentBatchResponse;
   shifts: ShiftResponse[];
   onChange: (input: ChangeScheduleAssignmentCommand) => Promise<ScheduleAssignmentChangeResponse>;
   onSaved: () => Promise<unknown>;
-  onApplyMembers: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [actionValue, setAction] = useState<ChangeScheduleAssignmentCommand['action']>('CANCEL');
@@ -803,29 +777,13 @@ function BatchEditor({
       <p className="text-xs text-slate-500">
         {batch.dates[0]} – {batch.dates.at(-1)}
       </p>
-      <button className="text-xs font-bold text-blue-700" onClick={() => setOpen(!open)}>
+      <button
+        className="text-xs font-bold text-blue-700"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         Edit or cancel schedules
       </button>
-      <button
-        className="ml-3 text-xs font-bold text-blue-700"
-        onClick={() => {
-          mutation.reset();
-          setScope('UNSTARTED');
-          setAction('CHANGE_SHIFT');
-          setOpen(true);
-        }}
-      >
-        Edit unstarted schedules
-      </button>
-      {batch.teamId && (
-        <button
-          disabled={!batch.dates.some((date) => date >= today())}
-          className="ml-3 text-xs font-bold text-blue-700 disabled:opacity-50"
-          onClick={onApplyMembers}
-        >
-          Apply remaining dates to new members
-        </button>
-      )}
       {open && (
         <form
           className="space-y-2"

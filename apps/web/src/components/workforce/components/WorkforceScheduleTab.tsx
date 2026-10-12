@@ -207,10 +207,15 @@ export function WorkforceScheduleTab({
     return () => clearInterval(timer);
   }, []);
   const todayIso = localDateIso(now);
+  const requestedWorkDate = params.get('workDate');
+  const notificationWorkDate =
+    requestedWorkDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedWorkDate) ? requestedWorkDate : null;
   const [weekOffset, setWeekOffset] = useState(0);
-  const [scheduleRange, setScheduleRange] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('WEEK');
-  const [scheduleFromDate, setScheduleFromDate] = useState(todayIso);
-  const [scheduleToDate, setScheduleToDate] = useState(todayIso);
+  const [scheduleRange, setScheduleRange] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>(
+    notificationWorkDate ? 'CUSTOM' : 'WEEK',
+  );
+  const [scheduleFromDate, setScheduleFromDate] = useState(notificationWorkDate ?? todayIso);
+  const [scheduleToDate, setScheduleToDate] = useState(notificationWorkDate ?? todayIso);
   const [schedulePage, setSchedulePage] = useState(0);
   const [requestsPage, setRequestsPage] = useState(0);
   const [requestsPageSize, setRequestsPageSize] = useState(10);
