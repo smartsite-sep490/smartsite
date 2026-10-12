@@ -8,6 +8,10 @@ import { WorkerEntity } from './worker.entity.js';
 import { WorkerScheduleEntity } from './worker-schedule.entity.js';
 
 @Entity({ name: 'absence_request' })
+@Check(
+  'ck_absence_interval',
+  '(starts_at IS NULL AND ends_at IS NULL) OR (starts_at IS NOT NULL AND ends_at > starts_at)',
+)
 @Index('idx_absence_request_site_status', ['siteId', 'status', 'createdAt'])
 @Check(
   'chk_absence_request_status',
@@ -19,6 +23,9 @@ import { WorkerScheduleEntity } from './worker-schedule.entity.js';
   'replacement_worker_id IS NULL OR replacement_worker_id <> worker_id',
 )
 export class AbsenceRequestEntity {
+  @Column({ name: 'starts_at', type: 'timestamptz', nullable: true }) startsAt!: Date | null;
+  @Column({ name: 'ends_at', type: 'timestamptz', nullable: true }) endsAt!: Date | null;
+  @Column({ name: 'review_note', type: 'text', nullable: true }) reviewNote!: string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_absence_request_id' })
   id!: string;
 

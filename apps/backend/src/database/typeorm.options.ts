@@ -1,4 +1,13 @@
+import { ShiftArchival1791763200000 } from './migrations/1791763200000-ShiftArchival.js';
+import { ShiftBreak1791763200001 } from './migrations/1791763200001-ShiftBreak.js';
+import { GateScheduleDenial1791849600000 } from './migrations/1791849600000-GateScheduleDenial.js';
+import { ScheduleAssignmentBatches1791849600001 } from './migrations/1791849600001-ScheduleAssignmentBatches.js';
 import { SafetyHandoverNotifications1791590400000 } from './migrations/1791590400000-SafetyHandoverNotifications.js';
+import { ContractorTeams1791676800004 } from './migrations/1791676800004-ContractorTeams.js';
+import { Mf03AttendanceReconciliation1791676800000 } from './migrations/1791676800000-Mf03AttendanceReconciliation.js';
+import { Mf03DailyOpenSessions1791676800001 } from './migrations/1791676800001-Mf03DailyOpenSessions.js';
+import { OptionalPasswordChange1791676800002 } from './migrations/1791676800002-OptionalPasswordChange.js';
+import { Mf03AttendanceDuplicateReview1791676800003 } from './migrations/1791676800003-AttendanceDuplicateReview.js';
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
 import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
@@ -86,6 +95,15 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       IncidentContractorResponsibility1791504000000,
       Mf07NotificationDeletion1791504000000,
       SafetyHandoverNotifications1791590400000,
+      Mf03AttendanceReconciliation1791676800000,
+      Mf03DailyOpenSessions1791676800001,
+      OptionalPasswordChange1791676800002,
+      Mf03AttendanceDuplicateReview1791676800003,
+      ContractorTeams1791676800004,
+      ShiftArchival1791763200000,
+      ShiftBreak1791763200001,
+      GateScheduleDenial1791849600000,
+      ScheduleAssignmentBatches1791849600001,
     ],
     logging: false,
     extra: {

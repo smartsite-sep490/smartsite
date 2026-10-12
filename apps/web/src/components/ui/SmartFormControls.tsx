@@ -417,6 +417,7 @@ export interface SmartDatePickerProps {
   error?: string;
   id?: string;
   disablePast?: boolean;
+  disabledWeekdays?: number[];
 }
 
 export function SmartDatePicker({
@@ -428,6 +429,7 @@ export function SmartDatePicker({
   error,
   id: propId,
   disablePast = true,
+  disabledWeekdays = [],
 }: SmartDatePickerProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -440,7 +442,7 @@ export function SmartDatePicker({
   const displayValue = validDate ? format(validDate, 'dd MMM yyyy') : '';
 
   const handleSelect = (day: Date | undefined) => {
-    if (day && (!disablePast || day >= today)) {
+    if (day && (!disablePast || day >= today) && !disabledWeekdays.includes(day.getDay())) {
       onChange(format(day, 'yyyy-MM-dd'));
       setOpen(false);
     }
@@ -483,8 +485,12 @@ export function SmartDatePicker({
               <DayPicker
                 mode="single"
                 selected={validDate}
+                defaultMonth={validDate}
                 onSelect={handleSelect}
-                disabled={disablePast ? { before: today } : undefined}
+                disabled={[
+                  ...(disablePast ? [{ before: today }] : []),
+                  { dayOfWeek: disabledWeekdays },
+                ]}
                 classNames={rdpClassNames as Parameters<typeof DayPicker>[0]['classNames']}
               />
             </div>

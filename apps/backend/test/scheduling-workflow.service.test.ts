@@ -6,6 +6,9 @@ import { PublicHttpException } from '../src/common/http/public-http-exception.js
 import { UserRole } from '../src/database/entities/user.entity.js';
 import { WorkerEntity } from '../src/database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../src/database/entities/worker-schedule.entity.js';
+import { ShiftEntity } from '../src/database/entities/shift.entity.js';
+import { ContractorEntity } from '../src/database/entities/contractor.entity.js';
+import { ContractorSiteParticipationEntity } from '../src/database/entities/contractor-site-participation.entity.js';
 import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
 import type {
   CreateAbsenceRequestDto,
@@ -34,14 +37,76 @@ function publicCode(code: string) {
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
 
+test('shift-change creation rejects an ended shift but reaches pending-request validation during work', async (t) => {
+  const siteId = randomUUID(),
+    actorId = randomUUID(),
+    workerId = randomUUID();
+  const scheduleId = randomUUID(),
+    shiftId = randomUUID(),
+    contractorId = randomUUID();
+  const schedule = {
+    id: scheduleId,
+    siteId,
+    workerId,
+    shiftId,
+    isActive: true,
+    workDate: '2030-01-01',
+  };
+  const worker = { id: workerId, siteId, userId: actorId, contractorId, isActive: true };
+  const builder = {
+    setLock: () => builder,
+    where: () => builder,
+    andWhere: () => builder,
+    getOne: async () => schedule,
+  };
+  const manager = {
+    getRepository(entity: unknown) {
+      if (entity === WorkerScheduleEntity) return { createQueryBuilder: () => builder };
+      if (entity === WorkerEntity) return { findOneBy: async () => worker };
+      if (entity === ContractorEntity) return { findOneBy: async () => ({ id: contractorId }) };
+      if (entity === ContractorSiteParticipationEntity)
+        return {
+          findBy: async () => [{ validFrom: new Date('2029-01-01'), validUntil: null }],
+        };
+      if (entity === ShiftEntity)
+        return {
+          findOneBy: async () => ({
+            id: shiftId,
+            siteId,
+            timezone: 'Asia/Ho_Chi_Minh',
+            startsAt: new Date('2026-01-01T01:00:00Z'),
+            endsAt: new Date('2026-01-01T10:00:00Z'),
+          }),
+        };
+      // A pending request is an observable conflict after the time guard succeeds.
+      return { createQueryBuilder: () => builder };
+    },
+  };
+  const service = new SchedulingWorkflowService({
+    transaction: async (callback: (value: typeof manager) => Promise<unknown>) => callback(manager),
+  } as unknown as DataSource);
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2030-01-01T09:59:59.999Z') });
+  const request = () =>
+    service.createShiftChange(actor(actorId, [{ role: UserRole.WORKER, siteId }]), siteId, {
+      workerScheduleId: scheduleId,
+      toShiftId: randomUUID(),
+      reason: 'Need a different shift',
+    });
+  await assert.rejects(request(), publicCode('CONFLICT'));
+  t.mock.timers.tick(1);
+  await assert.rejects(request(), publicCode('SHIFT_WORK_DATE_PASSED'));
+  t.mock.timers.tick(3600000);
+  await assert.rejects(request(), publicCode('SHIFT_WORK_DATE_PASSED'));
+});
+
 test('SchedulingWorkflowService validates shift-change input before database access', async () => {
   const service = new SchedulingWorkflowService(undefined as unknown as DataSource);
   await assert.rejects(
-    service.createShiftChange(
-      actor(randomUUID(), []),
-      randomUUID(),
-      { workerScheduleId: 'not-a-uuid', toShiftId: randomUUID(), reason: 'x' } as never,
-    ),
+    service.createShiftChange(actor(randomUUID(), []), randomUUID(), {
+      workerScheduleId: 'not-a-uuid',
+      toShiftId: randomUUID(),
+      reason: 'x',
+    } as never),
     publicCode('VALIDATION_FAILED'),
   );
 });
@@ -53,31 +118,26 @@ test('SchedulingWorkflowService rejects scheduling reasons shorter than five cha
   const shiftId = randomUUID();
 
   await assert.rejects(
-    service.createShiftChange(
-      actor(randomUUID(), []),
-      siteId,
-      { workerScheduleId: scheduleId, toShiftId: shiftId, reason: 'abcd' } as CreateShiftChangeRequestDto,
-    ),
+    service.createShiftChange(actor(randomUUID(), []), siteId, {
+      workerScheduleId: scheduleId,
+      toShiftId: shiftId,
+      reason: 'abcd',
+    } as CreateShiftChangeRequestDto),
     publicCode('VALIDATION_FAILED'),
   );
   await assert.rejects(
-    service.createShiftSwap(
-      actor(randomUUID(), []),
-      siteId,
-      {
-        requesterWorkerScheduleId: scheduleId,
-        coworkerWorkerScheduleId: randomUUID(),
-        reason: 'abcd',
-      } as CreateShiftSwapRequestDto,
-    ),
+    service.createShiftSwap(actor(randomUUID(), []), siteId, {
+      requesterWorkerScheduleId: scheduleId,
+      coworkerWorkerScheduleId: randomUUID(),
+      reason: 'abcd',
+    } as CreateShiftSwapRequestDto),
     publicCode('VALIDATION_FAILED'),
   );
   await assert.rejects(
-    service.createAbsence(
-      actor(randomUUID(), []),
-      siteId,
-      { workerScheduleId: scheduleId, reason: 'abcd' } as CreateAbsenceRequestDto,
-    ),
+    service.createAbsence(actor(randomUUID(), []), siteId, {
+      workerScheduleId: scheduleId,
+      reason: 'abcd',
+    } as CreateAbsenceRequestDto),
     publicCode('VALIDATION_FAILED'),
   );
 });
@@ -138,15 +198,11 @@ test('SchedulingWorkflowService denies a Worker who attempts to request a change
   const service = new SchedulingWorkflowService(source);
 
   await assert.rejects(
-    service.createShiftChange(
-      actor(actorId, [{ role: UserRole.WORKER, siteId }]),
-      siteId,
-      {
-        workerScheduleId: scheduleId,
-        toShiftId: randomUUID(),
-        reason: 'Need a different shift',
-      } as CreateShiftChangeRequestDto,
-    ),
+    service.createShiftChange(actor(actorId, [{ role: UserRole.WORKER, siteId }]), siteId, {
+      workerScheduleId: scheduleId,
+      toShiftId: randomUUID(),
+      reason: 'Need a different shift',
+    } as CreateShiftChangeRequestDto),
     publicCode('FORBIDDEN'),
   );
 });
@@ -218,7 +274,8 @@ test('SchedulingWorkflowService rejects a shift swap across contractors', async 
       if (entity === WorkerScheduleEntity) return scheduleRepository;
       if (entity === WorkerEntity)
         return {
-          findOneBy: async ({ id }: { id: string }) => id === requesterWorkerId ? requester : coworker,
+          findOneBy: async ({ id }: { id: string }) =>
+            id === requesterWorkerId ? requester : coworker,
         };
       throw new Error('Unexpected repository access');
     },
@@ -229,15 +286,11 @@ test('SchedulingWorkflowService rejects a shift swap across contractors', async 
   const service = new SchedulingWorkflowService(source);
 
   await assert.rejects(
-    service.createShiftSwap(
-      actor(actorId, [{ role: UserRole.WORKER, siteId }]),
-      siteId,
-      {
-        requesterWorkerScheduleId: requesterScheduleId,
-        coworkerWorkerScheduleId: coworkerScheduleId,
-        reason: 'Need to swap shifts',
-      },
-    ),
+    service.createShiftSwap(actor(actorId, [{ role: UserRole.WORKER, siteId }]), siteId, {
+      requesterWorkerScheduleId: requesterScheduleId,
+      coworkerWorkerScheduleId: coworkerScheduleId,
+      reason: 'Need to swap shifts',
+    }),
     (error: unknown) =>
       error instanceof PublicHttpException &&
       error.getStatus() === 409 &&
@@ -255,10 +308,22 @@ test('SchedulingWorkflowService allows only Contractor Representatives to review
     actor(randomUUID(), [{ role: UserRole.ADMIN, siteId: null }]),
     actor(randomUUID(), [{ role: UserRole.SITE_MANAGER, siteId }]),
   ]) {
-    await assert.rejects(service.approveShiftChange(reviewer, siteId, requestId), publicCode('FORBIDDEN'));
-    await assert.rejects(service.rejectShiftChange(reviewer, siteId, requestId, reviewReason), publicCode('FORBIDDEN'));
-    await assert.rejects(service.approveShiftSwap(reviewer, siteId, requestId), publicCode('FORBIDDEN'));
-    await assert.rejects(service.rejectShiftSwap(reviewer, siteId, requestId, reviewReason), publicCode('FORBIDDEN'));
+    await assert.rejects(
+      service.approveShiftChange(reviewer, siteId, requestId),
+      publicCode('FORBIDDEN'),
+    );
+    await assert.rejects(
+      service.rejectShiftChange(reviewer, siteId, requestId, reviewReason),
+      publicCode('FORBIDDEN'),
+    );
+    await assert.rejects(
+      service.approveShiftSwap(reviewer, siteId, requestId),
+      publicCode('FORBIDDEN'),
+    );
+    await assert.rejects(
+      service.rejectShiftSwap(reviewer, siteId, requestId, reviewReason),
+      publicCode('FORBIDDEN'),
+    );
   }
 });
 
@@ -276,7 +341,9 @@ test('SchedulingWorkflowService requires a changed password before any schedulin
 
 test('SchedulingWorkflowService requires a reason when a change or swap is rejected', async () => {
   const service = new SchedulingWorkflowService(undefined as unknown as DataSource);
-  const actorValue = actor(randomUUID(), [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: randomUUID() }]);
+  const actorValue = actor(randomUUID(), [
+    { role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: randomUUID() },
+  ]);
   const siteId = randomUUID();
 
   await assert.rejects(

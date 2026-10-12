@@ -139,6 +139,33 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
     items: [{ id: 'site', code: 'A', name: 'Site A', createdAt: '2026-10-05T00:00:00Z' }],
     total: 1,
   });
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'contractorDashboardScopes').mockResolvedValue({
+    items: [
+      {
+        siteId: 'site',
+        siteName: 'Site A',
+        siteCode: 'A',
+        contractorId: 'c1',
+        contractorName: 'Contractor 1',
+      },
+    ],
+  });
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'contractorDashboard').mockResolvedValue({
+    scope: {
+      siteId: 'site',
+      siteName: 'Site A',
+      siteCode: 'A',
+      contractorId: 'c1',
+      contractorName: 'Contractor 1',
+    },
+    workerCount: 10,
+    teamCount: 2,
+    unassignedWorkerCount: 0,
+  });
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'listContractorTeams').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
   vi.spyOn(api.SmartSiteManagementClient.prototype, 'listIncidents').mockResolvedValue({
     items: [],
     total: 0,
@@ -162,7 +189,7 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
   });
   fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'test-password' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-  await screen.findByRole('heading', { name: 'Site Operational Overview' });
+  await screen.findByRole('heading', { name: /Site A/i });
   fireEvent.click(screen.getByRole('button', { name: 'Open Safety' }));
   await screen.findByRole('button', { name: 'Sign out Representative' });
   act(() => {

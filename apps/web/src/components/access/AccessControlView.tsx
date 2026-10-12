@@ -10,17 +10,18 @@ import {
   IconShield,
   IconUsers,
 } from '../icons';
-import { SecurityGateDeskView } from './SecurityGateDeskView';
-import { WorkerEnrollmentView } from './WorkerEnrollmentView';
-import { VisitorAccessView } from './VisitorAccessView';
-import { WorkerGatePermissionsView } from './WorkerGatePermissionsView';
-import { SiteAccessSetupView } from './SiteAccessSetupView';
-import { ZoneDecisionHistory } from './ZoneDecisionHistory';
-import { WorkerMobileQrView } from './WorkerMobileQrView';
-import { AttendanceView } from './AttendanceView';
+import { SecurityGateDeskView } from './gate/SecurityGateDeskView';
+import { WorkerEnrollmentView } from './enrollment/WorkerEnrollmentView';
+import { VisitorAccessView } from './visitor/VisitorAccessView';
+import { WorkerGatePermissionsView } from './permissions/WorkerGatePermissionsView';
+import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
+import { ZoneDecisionHistory } from './permissions/ZoneDecisionHistory';
+import { WorkerMobileQrView } from './gate/WorkerMobileQrView';
+import { AttendanceView } from './attendance/AttendanceView';
 import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
 
 type AccessSubTab =
+  | 'attendance'
   | 'zone-permissions'
   | 'gate-desk'
   | 'worker-enrollment'
@@ -38,6 +39,14 @@ interface TabDefinition {
 }
 
 const ACCESS_TABS: readonly TabDefinition[] = [
+  {
+    id: 'attendance',
+    code: 'MF03',
+    label: 'Attendance',
+    subLabel: 'Hours & Approvals',
+    description: 'Daily work hours, overtime, leave and attendance corrections',
+    icon: IconUsers,
+  },
   {
     id: 'worker-qr',
     code: 'MF02 QR',
@@ -103,8 +112,14 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const { accessToken } = useAuth();
   const currentUserQuery = useCurrentUser(apiUrl);
   const logoutMutation = useLogout(apiUrl);
-  const [requestedSiteId, setRequestedSiteId] = useState('');
-  const [accessSubTab, setAccessSubTab] = useState<AccessSubTab>('zone-permissions');
+  const [requestedSiteId, setRequestedSiteId] = useState(
+    () => new URLSearchParams(window.location.search).get('siteId') ?? '',
+  );
+  const [accessSubTab, setAccessSubTab] = useState<AccessSubTab>(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'attendance'
+      ? 'attendance'
+      : 'zone-permissions',
+  );
 
   const removeSessionQueries = useCallback(
     (userId: string) => {
@@ -137,30 +152,34 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const siteRoles =
     currentUser?.roleAssignments.filter((r) => r.siteId === siteId).map((r) => r.role) ?? [];
   const visibleTabs = ACCESS_TABS.filter((tab) =>
-    tab.id === 'worker-qr'
-      ? siteRoles.includes('WORKER')
-      : tab.id === 'worker-enrollment'
-        ? isGlobalAdmin ||
-          siteRoles.includes('CONTRACTOR_REPRESENTATIVE') ||
-          siteRoles.includes('WORKER')
-        : tab.id === 'gate-permissions'
-          ? isGlobalAdmin || siteRoles.includes('SITE_MANAGER')
-          : tab.id === 'zone-permissions'
-            ? isGlobalAdmin ||
-              siteRoles.includes('SITE_MANAGER') ||
-              siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
-            : isGlobalAdmin ||
-              siteRoles.some((r) =>
-                ['SITE_MANAGER', 'SECURITY_OFFICER', 'SAFETY_OFFICER'].includes(r),
-              ),
+    tab.id === 'attendance'
+      ? siteRoles.includes('CONTRACTOR_REPRESENTATIVE') ||
+        siteRoles.includes('WORKER') ||
+        isGlobalAdmin
+      : tab.id === 'worker-qr'
+        ? siteRoles.includes('WORKER')
+        : tab.id === 'worker-enrollment'
+          ? isGlobalAdmin || siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+          : tab.id === 'gate-permissions'
+            ? isGlobalAdmin || siteRoles.includes('SITE_MANAGER')
+            : tab.id === 'zone-permissions'
+              ? isGlobalAdmin ||
+                siteRoles.includes('SITE_MANAGER') ||
+                siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+              : isGlobalAdmin ||
+                siteRoles.some((r) =>
+                  ['SITE_MANAGER', 'SECURITY_OFFICER', 'SAFETY_OFFICER'].includes(r),
+                ),
   );
   const activeTab = visibleTabs.some((t) => t.id === accessSubTab)
     ? accessSubTab
     : siteRoles.includes('WORKER') && !isGlobalAdmin
       ? 'worker-qr'
-      : siteRoles.includes('SITE_MANAGER')
-        ? 'visitor-passes'
-        : visibleTabs[0]?.id;
+      : siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+        ? 'attendance'
+        : siteRoles.includes('SITE_MANAGER')
+          ? 'visitor-passes'
+          : visibleTabs[0]?.id;
 
   const logout = () => {
     setRequestedSiteId('');
@@ -244,10 +263,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
               Site Access & Biometric Identity Control
             </h1>
-            <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-              Manage gate security desks, register multi-angle worker facial profiles, assign
-              physical gate permissions, and verify visitor QR credentials.
-            </p>
           </div>
 
           {/* User Profile Chip & Session Actions */}
@@ -315,18 +330,9 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 >
                   <TabIcon className="h-5 w-5" />
                 </div>
-                <span
-                  className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                    isActive
-                      ? 'bg-orange-50 text-[#F66B17] border border-orange-200/80'
-                      : 'bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]'
-                  }`}
-                >
-                  {tab.code}
-                </span>
               </div>
 
-              {/* Bottom Content: Labels */}
+              {/* Bottom Content: Label only */}
               <div className="mt-3.5">
                 <h3
                   className={`text-sm font-bold tracking-tight transition-colors ${
@@ -335,13 +341,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 >
                   {tab.label}
                 </h3>
-                <p
-                  className={`mt-0.5 text-xs line-clamp-1 transition-colors ${
-                    isActive ? 'font-medium text-[#F66B17]' : 'text-[#6B6B6B]'
-                  }`}
-                >
-                  {tab.subLabel}
-                </p>
               </div>
 
               {/* Active Bottom Indicator Accent */}
@@ -364,7 +363,11 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               htmlFor="access-site-select"
               className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
             >
-              Active Managed Site:
+              {siteRoles.includes('WORKER') &&
+              !isGlobalAdmin &&
+              !siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+                ? 'My Site:'
+                : 'Active Managed Site:'}
             </label>
             <select
               id="access-site-select"
@@ -490,21 +493,27 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           )}
 
           {activeTab === 'worker-qr' && (
-            <div className="space-y-6">
-              <WorkerMobileQrView
-                key={`${sessionScope}:${siteId}`}
-                apiUrl={apiUrl}
-                token={token}
-                siteId={siteId}
-                workerName={currentUser.displayName}
-              />
-              <AttendanceView
-                apiUrl={apiUrl}
-                token={token}
-                siteId={siteId}
-                sessionScope={sessionScope}
-              />
-            </div>
+            <WorkerMobileQrView
+              key={`${sessionScope}:${siteId}`}
+              apiUrl={apiUrl}
+              token={token}
+              siteId={siteId}
+              workerName={currentUser.displayName}
+            />
+          )}
+          {activeTab === 'attendance' && (
+            <AttendanceView
+              key={`${sessionScope}:${siteId}:attendance`}
+              apiUrl={apiUrl}
+              token={token}
+              siteId={siteId}
+              sessionScope={sessionScope}
+              isWorker={
+                siteRoles.includes('WORKER') &&
+                !isGlobalAdmin &&
+                !siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+              }
+            />
           )}
           {activeTab === 'visitor-passes' && (
             <VisitorAccessView

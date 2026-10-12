@@ -1,7 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { workDateAt } from './attendance-calculation.js';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import type {
+  AttendanceNotificationEvent,
   SchedulingNotificationEvent,
   UserNotificationListResponse,
   UserNotificationResponse,
@@ -20,7 +22,7 @@ import { ShiftRequestStatus } from '../../database/entities/enums.js';
 import type { AuthenticatedUser } from '../auth/auth.service.js';
 
 // The same SQL policy gates list/count/read and event delivery. Tokens alone do not prove current scope.
-const schedulingScope = `
+export const schedulingScope = `
   EXISTS (SELECT 1 FROM app_user u WHERE u.id = n.recipient_user_id AND u.is_active = true)
   AND EXISTS (SELECT 1 FROM user_role_assignment r WHERE r.user_id = n.recipient_user_id
     AND r.site_id = n.site_id AND r.role = n.recipient_role)
@@ -45,7 +47,7 @@ const safetyScope = `
   AND EXISTS (SELECT 1 FROM incident i JOIN corrective_action a ON a.incident_id=i.id
     WHERE i.id=(n.content->>'incidentId')::uuid AND a.id=(n.content->>'actionId')::uuid
       AND i.site_id=n.site_id AND i.contractor_id=n.contractor_id AND a.assigned_to=n.recipient_user_id AND a.superseded_at IS NULL)`;
-const scope = `((n.request_type IN ('CHANGE','SWAP') AND (${schedulingScope})) OR (n.request_type='SAFETY' AND (${safetyScope})))`;
+const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role='WORKER')) OR (n.request_type='SAFETY' AND (${safetyScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
   UserNotificationEntity,
@@ -56,6 +58,98 @@ type Recipient = Pick<
 export class SchedulingNotificationService {
   private readonly logger = new Logger(SchedulingNotificationService.name);
   constructor(private readonly dataSource: DataSource) {}
+  async recordNoScheduleDenial(manager: EntityManager, worker: WorkerEntity, at = new Date()) {
+    const workDate = workDateAt(at, 'Asia/Ho_Chi_Minh');
+    // One durable warning per Worker/Site/day across Face, QR and manual retries.
+    const digest = createHash('sha256')
+      .update(`no-schedule:${worker.siteId}:${worker.id}:${workDate}`)
+      .digest('hex');
+    const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+    await this.recordAttendance(manager, {
+      worker,
+      id,
+      event: 'ENTRY_DENIED_NO_SCHEDULE',
+      representatives: false,
+      workDate,
+      message: `You are not scheduled for a shift on ${workDate} at this site and entry is not permitted. Please contact your contractor representative.`,
+    });
+  }
+  async recordAttendance(
+    manager: EntityManager,
+    input: {
+      worker: WorkerEntity;
+      id: string;
+      event: AttendanceNotificationEvent;
+      message: string;
+      representatives: boolean;
+      workDate: string;
+      dayId?: string;
+    },
+  ) {
+    const worker = input.worker;
+    if (!worker.contractorId) return;
+    const recipients: Recipient[] = [];
+    if (worker.userId && input.event !== 'TIME_REQUESTED')
+      recipients.push({
+        recipientUserId: worker.userId,
+        recipientRole: 'WORKER',
+        workerId: worker.id,
+        contractorId: worker.contractorId,
+      });
+    if (input.representatives) {
+      const representatives: Array<{ user_id: string }> = await manager.query(
+        'SELECT user_id FROM contractor_representative_assignment WHERE site_id=$1 AND contractor_id=$2',
+        [worker.siteId, worker.contractorId],
+      );
+      recipients.push(
+        ...representatives.map((r) => ({
+          recipientUserId: r.user_id,
+          recipientRole: 'CONTRACTOR_REPRESENTATIVE' as const,
+          workerId: null,
+          contractorId: worker.contractorId!,
+        })),
+      );
+      if (!representatives.length)
+        this.logger.warn({
+          action: 'attendance.notification.no_representative',
+          siteId: worker.siteId,
+          workerId: worker.id,
+        });
+    }
+    const site = await manager.getRepository(SiteEntity).findOneByOrFail({ id: worker.siteId });
+    const seen = new Set<string>();
+    for (const r of recipients) {
+      if (seen.has(r.recipientUserId)) continue;
+      const eligible: unknown[] = await manager.query(
+        `SELECT 1 FROM (SELECT $1::uuid AS recipient_user_id,$2::uuid AS site_id,$3::uuid AS contractor_id,$4::uuid AS worker_id,$5::varchar AS recipient_role) n WHERE ${schedulingScope}`,
+        [r.recipientUserId, worker.siteId, r.contractorId, r.workerId, r.recipientRole],
+      );
+      if (!eligible.length) continue;
+      seen.add(r.recipientUserId);
+      await manager.query(
+        `INSERT INTO user_notification(id,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,request_id,event,content) VALUES($1,$2,$3,$4,$5,$6,'ATTENDANCE',$7,$8,$9::jsonb) ON CONFLICT ON CONSTRAINT uq_notification_event_recipient DO NOTHING`,
+        [
+          randomUUID(),
+          r.recipientUserId,
+          worker.siteId,
+          r.contractorId,
+          r.workerId,
+          r.recipientRole,
+          input.id,
+          input.event,
+          JSON.stringify({
+            siteName: site.name,
+            title: input.event.replaceAll('_', ' '),
+            message: input.message,
+            workDate: input.workDate,
+            ...(input.event === 'ENTRY_DENIED_NO_SCHEDULE'
+              ? {}
+              : { dayId: input.dayId ?? input.id }),
+          }),
+        ],
+      );
+    }
+  }
 
   private assertActor(actor: AuthenticatedUser) {
     if (!actor.isActive || actor.mustChangePassword) {
@@ -253,6 +347,28 @@ export class SchedulingNotificationService {
     );
   }
   private response(n: UserNotificationEntity): UserNotificationResponse {
+    if (n.requestType === 'ATTENDANCE') {
+      const message =
+        n.event === 'ENTRY_DENIED_NO_SCHEDULE' &&
+        n.content.message?.startsWith('Bạn chưa được phân công ca làm')
+          ? `You are not scheduled for a shift on ${n.content.workDate ?? ''} at this site and entry is not permitted. Please contact your contractor representative.`
+          : n.content.message;
+      return {
+        id: n.id,
+        event: n.event,
+        siteId: n.siteId,
+        siteName: n.content.siteName,
+        title: n.content.title,
+        message,
+        workDate: n.content.workDate,
+        createdAt: n.createdAt.toISOString(),
+        readAt: n.readAt?.toISOString() ?? null,
+        target:
+          n.event === 'ENTRY_DENIED_NO_SCHEDULE'
+            ? { siteId: n.siteId, workDate: n.content.workDate ?? '', tab: 'schedule' }
+            : { siteId: n.siteId, dayId: n.content.dayId ?? n.requestId, tab: 'attendance' },
+      };
+    }
     if (n.requestType === 'SAFETY')
       return {
         id: n.id,

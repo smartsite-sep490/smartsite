@@ -1,3 +1,4 @@
+import { ScheduleAssignmentForm } from './ScheduleAssignmentForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
@@ -12,13 +13,13 @@ import {
   IconShield,
   IconBuilding,
   IconBuilding2,
-  IconTrash,
   IconX,
   IconRefreshCw,
   IconCheck,
 } from '../../icons';
-import { formatShiftTime, formatShiftRange } from '../utils/workforce-format';
+import { formatShiftRange, formatWorkDate } from '../utils/workforce-format';
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
+import type { WorkerResponse } from '@smartsite/contracts';
 import {
   Button,
   Badge,
@@ -26,10 +27,6 @@ import {
   EmptyState,
   Tabs,
   Card,
-  CardHeader,
-  Alert,
-  AlertTitle,
-  AlertDescription,
   SmartInput,
   SmartSelect,
   SmartDatePicker,
@@ -85,10 +82,12 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const isAdmin = roleAssignments.some(
     (assignment) => assignment.role === 'ADMIN' && assignment.siteId === null,
   );
-  const canDiscoverSites = isAdmin || roleAssignments.some(
-    (assignment) =>
-      assignment.role === 'SITE_MANAGER' || assignment.role === 'CONTRACTOR_REPRESENTATIVE',
-  );
+  const canDiscoverSites =
+    isAdmin ||
+    roleAssignments.some(
+      (assignment) =>
+        assignment.role === 'SITE_MANAGER' || assignment.role === 'CONTRACTOR_REPRESENTATIVE',
+    );
 
   // Site Scope Determination
   const scopedSiteIds = useMemo(
@@ -105,23 +104,34 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     [roleAssignments],
   );
 
-  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>('shifts');
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('siteId'),
+  );
+  const [activeTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'assignment'
+      ? 'assignment'
+      : 'shifts',
+  );
   const defaultWeekRange = useMemo(() => currentWeekRange(), []);
-  const [assignmentRange, setAssignmentRange] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('WEEK');
+  const [assignmentRange, setAssignmentRange] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>(
+    'WEEK',
+  );
   const [assignmentFromDate, setAssignmentFromDate] = useState(defaultWeekRange.fromDate);
   const [assignmentToDate, setAssignmentToDate] = useState(defaultWeekRange.toDate);
   const [assignmentWorkerFilter, setAssignmentWorkerFilter] = useState('');
+  const [assignmentTeamFilter, setAssignmentTeamFilter] = useState('');
   const [assignmentShiftFilter, setAssignmentShiftFilter] = useState('');
   const [assignmentSearchName, setAssignmentSearchName] = useState('');
   const [assignmentPage, setAssignmentPage] = useState(0);
+  const [assignmentScope, setAssignmentScope] = useState({ siteId: '', contractorId: '' });
   const [collapsedAssignmentDates, setCollapsedAssignmentDates] = useState<Set<string>>(new Set());
 
   // Modal open states
   const [showCreateShiftModal, setShowCreateShiftModal] = useState(false);
   const [showAssignContractorModal, setShowAssignContractorModal] = useState(false);
   const [showCreateVersionModal, setShowCreateVersionModal] = useState(false);
-  const [shiftToDelete, setShiftToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [shiftToArchive, setShiftToArchive] = useState<{ id: string; name: string } | null>(null);
+  const [showArchivedShifts, setShowArchivedShifts] = useState(false);
 
   // ── Query Sites ─────────────────────────────────────────────────────────
   const sitesQuery = useQuery({
@@ -173,6 +183,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     enabled: Boolean(accessToken && activeSiteId),
   });
   const shifts = useMemo(() => shiftsQuery.data?.items ?? [], [shiftsQuery.data]);
+  const availableShifts = useMemo(() => shifts.filter((shift) => !shift.archivedAt), [shifts]);
 
   const versionsQuery = useQuery({
     queryKey: ['schedule-versions', activeSiteId],
@@ -182,11 +193,26 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const versions = useMemo(() => versionsQuery.data?.items ?? [], [versionsQuery.data]);
 
   const workersQuery = useQuery({
-    queryKey: ['workers', activeSiteId],
-    queryFn: () => client.listWorkers(accessToken!, activeSiteId!),
+    queryKey: ['schedule-workers', apiUrl, accessToken, activeSiteId],
+    queryFn: async () => {
+      const items: WorkerResponse[] = [];
+      for (let offset = 0; ; offset += 100) {
+        const page = await client.listWorkers(accessToken!, activeSiteId!, { offset, limit: 100 });
+        items.push(...page.items);
+        if (items.length >= page.total || !page.items.length) return { items, total: page.total };
+      }
+    },
     enabled: Boolean(accessToken && activeSiteId && canAssignWorker),
   });
-  const workers = useMemo(() => workersQuery.data?.items ?? [], [workersQuery.data]);
+  const workers = useMemo(
+    () =>
+      workersQuery.data?.items.filter(
+        (worker) =>
+          assignmentScope.siteId === activeSiteId &&
+          worker.contractorId === assignmentScope.contractorId,
+      ) ?? [],
+    [workersQuery.data, assignmentScope, activeSiteId],
+  );
 
   const contractorsQuery = useQuery({
     queryKey: ['contractors', activeSiteId],
@@ -204,6 +230,45 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     () => shiftContractorAssignmentsQuery.data?.items ?? [],
     [shiftContractorAssignmentsQuery.data],
   );
+
+  const contractorTeamsQuery = useQuery({
+    queryKey: ['contractor-teams', activeSiteId, assignmentScope.contractorId],
+    queryFn: () =>
+      client.listContractorTeams(accessToken!, activeSiteId!, assignmentScope.contractorId, {
+        status: 'ACTIVE',
+        offset: 0,
+        limit: 100,
+      }),
+    enabled: Boolean(accessToken && activeSiteId && assignmentScope.contractorId),
+  });
+  const contractorTeams = useMemo(
+    () => contractorTeamsQuery.data?.items ?? [],
+    [contractorTeamsQuery.data],
+  );
+
+  const contractorTeamWorkersQuery = useQuery({
+    queryKey: ['contractor-team-workers', activeSiteId, assignmentScope.contractorId],
+    queryFn: () =>
+      client.listContractorTeamWorkers(accessToken!, activeSiteId!, assignmentScope.contractorId, {
+        offset: 0,
+        limit: 200,
+      }),
+    enabled: Boolean(accessToken && activeSiteId && assignmentScope.contractorId),
+  });
+  const contractorTeamWorkers = useMemo(
+    () => contractorTeamWorkersQuery.data?.items ?? [],
+    [contractorTeamWorkersQuery.data],
+  );
+
+  const visibleWorkers = useMemo(() => {
+    if (!assignmentTeamFilter) return workers;
+    const memberIds = new Set(
+      contractorTeamWorkers
+        .filter((tw) => tw.teamId === assignmentTeamFilter)
+        .map((tw) => tw.workerId),
+    );
+    return workers.filter((w) => memberIds.has(w.id));
+  }, [workers, assignmentTeamFilter, contractorTeamWorkers]);
 
   const assignmentDateRange = useMemo(() => {
     if (assignmentRange === 'TODAY') {
@@ -224,9 +289,13 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     queryKey: [
       'worker-schedules',
       activeSiteId,
+      apiUrl,
+      accessToken,
+      assignmentScope.contractorId,
       assignmentDateRange.fromDate,
       assignmentDateRange.toDate,
       assignmentWorkerFilter,
+      assignmentTeamFilter,
       assignmentShiftFilter,
       assignmentSearchName,
       assignmentPage,
@@ -235,13 +304,21 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       client.listWorkerSchedules(accessToken!, activeSiteId!, {
         offset: assignmentPage * 25,
         limit: 25,
+        contractorId: assignmentScope.contractorId,
         fromDate: assignmentDateRange.fromDate,
         toDate: assignmentDateRange.toDate,
         workerId: assignmentWorkerFilter || undefined,
+        teamId: assignmentTeamFilter || undefined,
         shiftId: assignmentShiftFilter || undefined,
         searchName: assignmentSearchName || undefined,
       }),
-    enabled: Boolean(accessToken && activeSiteId && canAssignWorker),
+    enabled: Boolean(
+      accessToken &&
+      activeSiteId &&
+      canAssignWorker &&
+      assignmentScope.siteId === activeSiteId &&
+      assignmentScope.contractorId,
+    ),
     refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -267,7 +344,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [shiftName, setShiftName] = useState('');
   const [shiftStartsAt, setShiftStartsAt] = useState('08:00');
   const [shiftEndsAt, setShiftEndsAt] = useState('17:00');
-  const [shiftTimezone, setShiftTimezone] = useState('UTC');
+  const [hasShiftBreak, setHasShiftBreak] = useState(false);
+  const [shiftBreakStartsAt, setShiftBreakStartsAt] = useState('12:00');
+  const [shiftBreakEndsAt, setShiftBreakEndsAt] = useState('13:00');
   const [shiftError, setShiftError] = useState<string | null>(null);
   const [shiftSuccess, setShiftSuccess] = useState<string | null>(null);
 
@@ -284,32 +363,15 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [versionError, setVersionError] = useState<string | null>(null);
   const [versionSuccess, setVersionSuccess] = useState<string | null>(null);
 
-  interface AssignSuccessInfo {
-    workerName: string;
-    shiftName: string;
-    shiftHours?: string;
-    workDate: string;
-  }
-
-  // Worker Schedule Assignment Form
-  const [assignVersionId, setAssignVersionId] = useState('');
-  const [assignWorkerId, setAssignWorkerId] = useState('');
-  const [assignShiftId, setAssignShiftId] = useState('');
-  const [assignWorkDate, setAssignWorkDate] = useState(currentDateIso());
-  const [assignError, setAssignError] = useState<string | null>(null);
-  const [assignSuccess, setAssignSuccess] = useState<AssignSuccessInfo | null>(null);
-
-  // Default selected version for worker assignment
-  const selectedVersionId = assignVersionId || versions[0]?.id || '';
-
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createShiftMutation = useMutation({
-    mutationFn: (input: { name: string; startsAt: string; endsAt: string; timezone: string }) =>
+    mutationFn: (input: Parameters<typeof client.createShift>[2]) =>
       client.createShift(accessToken!, activeSiteId!, input),
     onSuccess: (newShift) => {
       setShiftSuccess(`Shift "${newShift.name}" created successfully.`);
       setShiftError(null);
       setShiftName('');
+      setHasShiftBreak(false);
       setShowCreateShiftModal(false);
       queryClient.invalidateQueries({ queryKey: ['shifts', activeSiteId] });
       setTimeout(() => setShiftSuccess(null), 5000);
@@ -324,22 +386,18 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     },
   });
 
-  const deleteShiftMutation = useMutation({
-    mutationFn: (shiftId: string) => client.deleteShift(accessToken!, activeSiteId!, shiftId),
+  const archiveShiftMutation = useMutation({
+    mutationFn: (shiftId: string) => client.archiveShift(accessToken!, activeSiteId!, shiftId),
     onSuccess: () => {
-      setShiftSuccess('Shift deleted successfully.');
+      setShiftSuccess('Shift archived successfully.');
       setShiftError(null);
-      setShiftToDelete(null);
+      setShiftToArchive(null);
+      setAssignContractorShiftId('');
       queryClient.invalidateQueries({ queryKey: ['shifts', activeSiteId] });
-      setTimeout(() => setShiftSuccess(null), 5000);
+      queryClient.invalidateQueries({ queryKey: ['eligible-shifts'] });
     },
     onError: (err: unknown) => {
-      setShiftSuccess(null);
-      if (err instanceof ApiError) {
-        setShiftError(err.message);
-      } else {
-        setShiftError('Failed to delete shift.');
-      }
+      setShiftError(err instanceof Error ? err.message : 'Failed to archive shift.');
     },
   });
 
@@ -383,44 +441,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     },
   });
 
-  const assignWorkerScheduleMutation = useMutation({
-    mutationFn: (input: {
-      versionId: string;
-      workerId: string;
-      shiftId: string;
-      workDate: string;
-    }) =>
-      client.createWorkerSchedule(accessToken!, activeSiteId!, input.versionId, {
-        workerId: input.workerId,
-        shiftId: input.shiftId,
-        workDate: input.workDate,
-      }),
-    onSuccess: (_, variables) => {
-      const worker = workers.find((w) => w.id === variables.workerId);
-      const shift = shifts.find((s) => s.id === variables.shiftId);
-      const workerName = worker?.displayName || 'Worker';
-      const shiftName = shift?.name || 'Shift';
-      const shiftHours = shift ? `${formatShiftTime(shift.startsAt)} - ${formatShiftTime(shift.endsAt)}` : undefined;
-      setAssignSuccess({
-        workerName,
-        shiftName,
-        shiftHours,
-        workDate: variables.workDate,
-      });
-      setAssignError(null);
-      queryClient.invalidateQueries({ queryKey: ['worker-schedules', activeSiteId] });
-      setTimeout(() => setAssignSuccess(null), 6000);
-    },
-    onError: (err: unknown) => {
-      setAssignSuccess(null);
-      if (err instanceof ApiError) {
-        setAssignError(err.message);
-      } else {
-        setAssignError('Failed to assign worker schedule.');
-      }
-    },
-  });
-
   // ── Form Handlers ─────────────────────────────────────────────────────────
   const handleCreateShift = (e: React.FormEvent) => {
     e.preventDefault();
@@ -441,23 +461,47 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     }
 
     const formatIso = (timeStr: string, isEnd: boolean = false) => {
-      const [hhStr] = timeStr.split(':');
+      const [hhStr, mmStr] = timeStr.split(':');
       const hh = parseInt(hhStr || '0', 10);
+      const mm = (mmStr || '00').slice(0, 2);
+      const paddedHh = String(hh).padStart(2, '0');
       let day = '01';
       if (isEnd) {
-        const startHh = parseInt(shiftStartsAt.split(':')[0] || '0', 10);
-        if (hh < startHh) {
+        if (timeStr < shiftStartsAt) {
           day = '02';
         }
       }
-      return `2026-10-${day}T${timeStr}:00.000Z`;
+      return new Date(`2026-10-${day}T${paddedHh}:${mm}:00+07:00`).toISOString();
     };
 
+    const startsAt = formatIso(shiftStartsAt);
+    const endsAt = formatIso(shiftEndsAt, true);
+    const breakStartsAt =
+      hasShiftBreak && shiftBreakStartsAt ? formatIso(shiftBreakStartsAt, true) : null;
+    const breakEndsAt =
+      hasShiftBreak && shiftBreakEndsAt ? formatIso(shiftBreakEndsAt, true) : null;
+    if (endsAt <= startsAt) {
+      setShiftError('Shift end must be after its start.');
+      return;
+    }
+    if (
+      hasShiftBreak &&
+      (!breakStartsAt ||
+        !breakEndsAt ||
+        breakStartsAt < startsAt ||
+        breakEndsAt > endsAt ||
+        breakEndsAt <= breakStartsAt)
+    ) {
+      setShiftError('Enter both break times within the shift, with the end after the start.');
+      return;
+    }
     createShiftMutation.mutate({
       name: shiftName.trim(),
       startsAt: formatIso(shiftStartsAt, false),
       endsAt: formatIso(shiftEndsAt, true),
-      timezone: shiftTimezone.trim() || 'UTC',
+      timezone: 'Asia/Ho_Chi_Minh',
+      breakStartsAt,
+      breakEndsAt,
     });
   };
 
@@ -470,8 +514,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       setAssignContractorError('No site selected.');
       return;
     }
-    if (!assignContractorShiftId) {
-      setAssignContractorError('Please select a shift.');
+    if (!availableShifts.some((shift) => shift.id === assignContractorShiftId)) {
+      setAssignContractorError('Please select an available shift.');
       return;
     }
     if (!assignContractorId) {
@@ -522,40 +566,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     });
   };
 
-  const handleAssignWorkerSchedule = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAssignError(null);
-    setAssignSuccess(null);
-
-    if (!activeSiteId) {
-      setAssignError('No site selected.');
-      return;
-    }
-    if (!selectedVersionId) {
-      setAssignError('Please select a Schedule Version first.');
-      return;
-    }
-    if (!assignWorkerId) {
-      setAssignError('Please select a Worker.');
-      return;
-    }
-    if (!assignShiftId) {
-      setAssignError('Please select a Shift.');
-      return;
-    }
-    if (!assignWorkDate) {
-      setAssignError('Please select a Work Date.');
-      return;
-    }
-
-    assignWorkerScheduleMutation.mutate({
-      versionId: selectedVersionId,
-      workerId: assignWorkerId,
-      shiftId: assignShiftId,
-      workDate: assignWorkDate,
-    });
-  };
-
   const openAssignContractorForShift = (shiftId: string) => {
     setAssignContractorShiftId(shiftId);
     setAssignContractorId(contractors[0]?.id || '');
@@ -564,13 +574,28 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   };
 
   // Filtered shifts
-  const filteredShifts = shifts;
+  const filteredShifts = showArchivedShifts ? shifts : availableShifts;
 
   // Tab items config
   const tabItems = useMemo(() => {
-    const items: { id: 'shifts' | 'version' | 'assignment'; label: string; count?: number; icon?: React.ReactNode }[] = [
-      { id: 'shifts', label: 'Shifts', count: shifts.length, icon: <IconClock className="w-3.5 h-3.5 text-[#F66B17]" /> },
-      { id: 'version', label: 'Schedule Versions', count: versions.length, icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" /> },
+    const items: {
+      id: 'shifts' | 'version' | 'assignment';
+      label: string;
+      count?: number;
+      icon?: React.ReactNode;
+    }[] = [
+      {
+        id: 'shifts',
+        label: 'Shifts',
+        count: shifts.length,
+        icon: <IconClock className="w-3.5 h-3.5 text-[#F66B17]" />,
+      },
+      {
+        id: 'version',
+        label: 'Schedule Versions',
+        count: versions.length,
+        icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" />,
+      },
     ];
     if (canAssignWorker) {
       items.push({
@@ -592,7 +617,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         </div>
         <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Schedule Setup is reserved for Contractor Representatives, Site Managers, and Administrators.
+          Schedule Setup is reserved for Contractor Representatives, Site Managers, and
+          Administrators.
         </p>
       </div>
     );
@@ -600,7 +626,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-3">
@@ -609,13 +634,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">
-                Workforce Management
-              </span>
+              <span className="text-xs font-semibold text-slate-500">Workforce Management</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              Schedule Setup
-            </h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">Schedule Setup</h1>
           </div>
         </div>
 
@@ -623,7 +644,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         <div className="flex items-center gap-2.5">
           {availableSites.length > 1 && (
             <div className="flex items-center gap-1.5 min-w-[200px]">
-              <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">Site:</span>
+              <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
+                Site:
+              </span>
               <SmartSelect
                 size="sm"
                 value={activeSiteId || ''}
@@ -655,63 +678,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
       {/* ── HIGH-END FLOATING TOAST NOTIFICATIONS ───────────────────────── */}
       <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)]">
-        {assignSuccess && (
-          <div
-            role="status"
-            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
-          >
-            <div className="flex items-start gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-sm shrink-0">
-                <IconCheck className="w-5 h-5 text-white" />
-              </div>
-
-              <div className="flex-1 min-w-0 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">
-                      Schedule Assigned
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAssignSuccess(null)}
-                    className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
-                    aria-label="Dismiss notification"
-                  >
-                    <IconX className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <p className="text-xs font-semibold text-slate-100 leading-snug">
-                  Successfully assigned <span className="text-[#F66B17] font-bold">{assignSuccess.shiftName}</span> to <span className="text-emerald-300 font-bold">{assignSuccess.workerName}</span>
-                </p>
-
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-medium text-slate-300 border border-white/5">
-                    <IconCalendar className="w-3 h-3 text-[#F66B17]" />
-                    {assignSuccess.workDate}
-                  </span>
-                  {assignSuccess.shiftHours && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-medium text-slate-300 border border-white/5">
-                      <IconClock className="w-3 h-3 text-blue-400" />
-                      {assignSuccess.shiftHours}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Micro progress line */}
-            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 overflow-hidden">
-              <div className="h-full bg-emerald-400 animate-[pulse_2s_ease-in-out_infinite]" />
-            </div>
-          </div>
-        )}
-
         {shiftSuccess && (
           <div
             role="status"
@@ -745,7 +711,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.4)] shrink-0">
                   <IconCheck className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-xs font-semibold text-slate-100">{assignContractorSuccess}</span>
+                <span className="text-xs font-semibold text-slate-100">
+                  {assignContractorSuccess}
+                </span>
               </div>
               <button
                 type="button"
@@ -819,26 +787,32 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
       {/* 3. Navigation Tabs Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-[#E2E8F0] shadow-xs">
-        <Tabs
-          items={tabItems}
-          activeTab={activeTab}
-          onChange={(tab) => setActiveTab(tab)}
-        />
+        <Tabs items={tabItems} activeTab={activeTab} onChange={(tab) => setActiveTab(tab)} />
 
         {/* Tab Action Buttons */}
         <div className="flex items-center gap-2">
+          {activeTab === 'shifts' && (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={showArchivedShifts}
+                onChange={(event) => setShowArchivedShifts(event.target.checked)}
+              />
+              Show archived
+            </label>
+          )}
           {activeTab === 'shifts' && canManageShiftsAndVersions && (
             <>
               <Button
                 variant="outline"
                 size="md"
                 onClick={() => {
-                  setAssignContractorShiftId(shifts[0]?.id || '');
+                  setAssignContractorShiftId(availableShifts[0]?.id || '');
                   setAssignContractorId(contractors[0]?.id || '');
                   setAssignContractorError(null);
                   setShowAssignContractorModal(true);
                 }}
-                disabled={shifts.length === 0 || contractors.length === 0}
+                disabled={availableShifts.length === 0 || contractors.length === 0}
                 leftIcon={<IconBuilding2 className="w-3.5 h-3.5 text-slate-600" />}
               >
                 Assign Contractor
@@ -883,11 +857,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
               <span>Loading shift schedules...</span>
             </div>
-          ) : shifts.length === 0 ? (
+          ) : filteredShifts.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs">
               <EmptyState
                 icon={<IconClock className="w-6 h-6 text-[#F66B17]" />}
-                title="No Shifts Configured"
+                title="No Available Shifts"
                 description={
                   canManageShiftsAndVersions
                     ? 'Define operational shifts with specific hours and timezones for this site.'
@@ -916,25 +890,41 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-[#F66B17]" />
                           <h3 className="text-sm font-bold text-slate-900">{shift.name}</h3>
+                          {shift.archivedAt && <Badge variant="neutral">Archived</Badge>}
                         </div>
                         <div className="flex items-center gap-1.5 font-mono text-[11.5px] font-medium text-slate-700 bg-slate-50 border border-[#E2E8F0] px-2.5 py-1 rounded-lg w-fit">
                           <IconClock className="w-3 h-3 text-slate-400" />
                           <span>
-                            {formatShiftRange(shift.startsAt, shift.endsAt)}
+                            {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)}
+                            {shift.breakStartsAt && shift.breakEndsAt && (
+                              <span className="block text-xs text-slate-500">
+                                Unpaid break:{' '}
+                                {formatShiftRange(
+                                  shift.breakStartsAt,
+                                  shift.breakEndsAt,
+                                  shift.timezone,
+                                )}
+                              </span>
+                            )}
                           </span>
-                          <span className="text-[9px] text-slate-400 font-medium opacity-70 ml-0.5">{shift.timezone || 'UTC'}</span>
                         </div>
                       </div>
 
                       {canManageShiftsAndVersions && (
-                        <button
-                          type="button"
-                          onClick={() => setShiftToDelete({ id: shift.id, name: shift.name })}
-                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
-                          title="Delete Shift"
-                        >
-                          <IconTrash className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {!shift.archivedAt && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setShiftError(null);
+                                setShiftToArchive({ id: shift.id, name: shift.name });
+                              }}
+                            >
+                              Archive
+                            </Button>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -944,7 +934,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                           Assigned Contractors ({assignedContractorList.length})
                         </span>
-                        {canManageShiftsAndVersions && (
+                        {canManageShiftsAndVersions && !shift.archivedAt && (
                           <button
                             type="button"
                             onClick={() => openAssignContractorForShift(shift.id)}
@@ -957,7 +947,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
                       <div className="flex flex-wrap gap-1.5">
                         {assignedContractorList.length === 0 ? (
-                          <span className="text-[11px] text-slate-400 italic">No contractor assigned</span>
+                          <span className="text-[11px] text-slate-400 italic">
+                            No contractor assigned
+                          </span>
                         ) : (
                           assignedContractorList.map((c) => (
                             <Badge key={c.id} variant="neutral">
@@ -1041,365 +1033,363 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       {/* ── TAB 3: WORKER ASSIGNMENT (CONTRACTOR REPRESENTATIVE ONLY) ─────── */}
       {activeTab === 'assignment' && canAssignWorker && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Assignment Form Card (4 cols) - Double-Bezel Architecture */}
+          <div className="lg:col-span-4 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
+            <div className="bg-white rounded-[22px] p-5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
+              <ScheduleAssignmentForm
+                key={activeSiteId}
+                apiUrl={apiUrl}
+                token={accessToken!}
+                siteId={activeSiteId!}
+                shifts={availableShifts}
+                versions={versions}
+                onScopeChange={setAssignmentScope}
+              />
+            </div>
+          </div>
 
-          {/* Assignment Form Card (4 cols) */}
-          <div className="lg:col-span-4 bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs space-y-4">
-            <CardHeader
-              title="Assign Worker Schedule"
-              subtitle="Schedule worker to a shift"
-              icon={<IconUsers className="w-4 h-4 text-[#F66B17]" />}
-            />
+          {/* Existing Schedules Table (8 cols) - Double-Bezel Architecture */}
+          <div className="lg:col-span-8 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
+            <div className="bg-white rounded-[22px] border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="p-4 border-b border-slate-100/80 bg-slate-50/40 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Assigned Schedules
+                    </h3>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
+                      {schedulesTotal}
+                    </span>
+                  </div>
+                  {schedulesQuery.isFetching && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                      <IconLoader className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                      <span>Syncing…</span>
+                    </div>
+                  )}
+                </div>
 
-            <form onSubmit={handleAssignWorkerSchedule} className="space-y-3.5">
-              {assignSuccess && (
-                <Alert variant="success" className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <IconCheck className="w-5 h-5" />
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <AlertTitle className="text-emerald-950 font-bold flex items-center gap-1.5 text-xs">
-                        <span>Assignment Confirmed</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      </AlertTitle>
+                {/* Range pills - Modern Segmented Control */}
+                <div className="inline-flex items-center p-1 bg-slate-100/80 rounded-xl gap-1 border border-slate-200/50">
+                  {(
+                    [
+                      ['TODAY', 'Today'],
+                      ['WEEK', 'This week'],
+                      ['MONTH', 'This month'],
+                      ['CUSTOM', 'Custom range'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setAssignmentRange(value);
+                        resetAssignmentPage();
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer ${
+                        assignmentRange === value
+                          ? 'bg-white text-[#071A2B] shadow-xs ring-1 ring-slate-900/5'
+                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {assignmentRange === 'CUSTOM' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200/70">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      From
+                      <input
+                        type="date"
+                        value={assignmentFromDate}
+                        onChange={(event) => {
+                          setAssignmentFromDate(event.target.value);
+                          resetAssignmentPage();
+                        }}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)] outline-none focus:border-[#071A2B] focus:ring-2 focus:ring-slate-900/10 transition-all"
+                      />
+                    </label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      To
+                      <input
+                        type="date"
+                        value={assignmentToDate}
+                        onChange={(event) => {
+                          setAssignmentToDate(event.target.value);
+                          resetAssignmentPage();
+                        }}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)] outline-none focus:border-[#071A2B] focus:ring-2 focus:ring-slate-900/10 transition-all"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div>
+                    <SmartSelect
+                      label="Team"
+                      size="sm"
+                      value={assignmentTeamFilter}
+                      onChange={(val) => {
+                        setAssignmentTeamFilter(val);
+                        if (val && assignmentWorkerFilter) {
+                          const isStillValid = contractorTeamWorkers.some(
+                            (tw) => tw.teamId === val && tw.workerId === assignmentWorkerFilter,
+                          );
+                          if (!isStillValid) setAssignmentWorkerFilter('');
+                        }
+                        resetAssignmentPage();
+                      }}
+                      options={[
+                        { value: '', label: 'All teams' },
+                        ...contractorTeams.map((team) => ({
+                          value: team.id,
+                          label: team.name,
+                          badge: `${team.memberCount} member${team.memberCount === 1 ? '' : 's'}`,
+                        })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <SmartSelect
+                      label="Worker"
+                      size="sm"
+                      searchable
+                      searchPlaceholder="Filter worker..."
+                      value={assignmentWorkerFilter}
+                      onChange={(val) => {
+                        setAssignmentWorkerFilter(val);
+                        resetAssignmentPage();
+                      }}
+                      options={[
+                        { value: '', label: 'All workers' },
+                        ...visibleWorkers.map((worker) => ({
+                          value: worker.id,
+                          label: worker.displayName,
+                          badge: worker.externalId || worker.id.slice(0, 6),
+                        })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <SmartSelect
+                      label="Shift"
+                      size="sm"
+                      value={assignmentShiftFilter}
+                      onChange={(val) => {
+                        setAssignmentShiftFilter(val);
+                        resetAssignmentPage();
+                      }}
+                      options={[
+                        { value: '', label: 'All shifts' },
+                        ...shifts.map((shift) => ({
+                          value: shift.id,
+                          label: shift.name,
+                          description: formatShiftRange(
+                            shift.startsAt,
+                            shift.endsAt,
+                            shift.timezone,
+                          ),
+                        })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <SmartInput
+                      id="search-name-input"
+                      label="Search Name"
+                      placeholder="Worker name or ID..."
+                      value={assignmentSearchName}
+                      onChange={(e) => {
+                        setAssignmentSearchName(e.target.value);
+                        resetAssignmentPage();
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {schedulesQuery.isLoading ? (
+                <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
+                  <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
+                  <span>Loading worker schedules...</span>
+                </div>
+              ) : schedules.length === 0 ? (
+                <div className="py-12 px-4 text-center space-y-2">
+                  <p className="text-xs text-slate-500">No worker schedules assigned yet.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-[480px]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-100 z-10">
+                      <tr className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4">Worker</th>
+                        <th className="py-3 px-4">Shift</th>
+                        <th className="py-3 px-4">Work Date</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {groupedAssignmentSchedules.map(([date, dateSchedules]) => {
+                        const collapsed = collapsedAssignmentDates.has(date);
+                        return (
+                          <React.Fragment key={date}>
+                            <tr className="bg-slate-50/70 border-y border-slate-100/80">
+                              <td colSpan={5} className="px-4 py-2">
+                                <button
+                                  type="button"
+                                  aria-expanded={!collapsed}
+                                  onClick={() => {
+                                    setCollapsedAssignmentDates((current) => {
+                                      const next = new Set(current);
+                                      if (next.has(date)) next.delete(date);
+                                      else next.add(date);
+                                      return next;
+                                    });
+                                  }}
+                                  className="flex w-full items-center justify-between text-left group cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5 text-slate-800">
+                                      <IconCalendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                      <span className="font-mono text-[11px] font-bold">
+                                        {formatWorkDate(date)}
+                                      </span>
+                                    </div>
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 shadow-2xs">
+                                      {dateSchedules.length} schedule(s)
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-bold text-slate-400 group-hover:text-slate-600">
+                                    {collapsed ? '+' : '−'}
+                                  </span>
+                                </button>
+                              </td>
+                            </tr>
+                            {!collapsed &&
+                              dateSchedules.map((sched) => {
+                                const workerObj = workers.find((w) => w.id === sched.workerId);
+                                const shiftObj = shifts.find((s) => s.id === sched.shiftId);
+                                const workerTeam = contractorTeamWorkers.find(
+                                  (tw) => tw.workerId === sched.workerId,
+                                );
+                                return (
+                                  <tr
+                                    key={sched.id}
+                                    className="hover:bg-slate-50/70 transition-colors"
+                                  >
+                                    <td className="py-3 px-4">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center text-[10px] font-bold text-slate-700 shrink-0">
+                                          {(workerObj?.displayName || 'W').charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                          <span className="font-bold text-slate-900 block leading-tight">
+                                            {workerObj?.displayName ||
+                                              `Worker (${sched.workerId.slice(0, 6)})`}
+                                          </span>
+                                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                            {workerObj?.externalId && (
+                                              <span className="text-[10px] font-mono text-slate-400">
+                                                #{workerObj.externalId}
+                                              </span>
+                                            )}
+                                            {workerTeam?.teamName && (
+                                              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70">
+                                                {workerTeam.teamName}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border border-blue-200/90 shadow-2xs hover:shadow-xs transition-shadow">
+                                        <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                                          <IconClock className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                          <span className="font-bold text-slate-900 block text-xs leading-tight tracking-tight">
+                                            {shiftObj?.name || 'Shift'}
+                                          </span>
+                                          {shiftObj && (
+                                            <span className="text-[10px] font-mono font-bold text-blue-700 block mt-0.5 leading-none">
+                                              {formatShiftRange(
+                                                shiftObj.startsAt,
+                                                shiftObj.endsAt,
+                                                shiftObj.timezone,
+                                              )}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-4 font-mono font-semibold text-slate-800">
+                                      {formatWorkDate(sched.workDate)}
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${
+                                          sched.isActive
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                        }`}
+                                      >
+                                        <span
+                                          className={`w-1.5 h-1.5 rounded-full ${
+                                            sched.isActive
+                                              ? 'bg-emerald-500 ring-2 ring-emerald-300/40'
+                                              : 'bg-slate-400'
+                                          }`}
+                                        />
+                                        {sched.isActive ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-400 text-[11px] font-mono">
+                                      {new Date(sched.createdAt).toLocaleDateString('vi-VN')}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="flex items-center justify-between border-t border-slate-100/90 bg-slate-50/50 px-4 py-3 text-[11px] text-slate-500">
+                    <span className="font-medium">
+                      Page <strong className="text-slate-800">{assignmentPage + 1}</strong> of{' '}
+                      <strong className="text-slate-800">{assignmentPageCount}</strong> · 25 per
+                      page
+                    </span>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setAssignSuccess(null)}
-                        className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
-                        aria-label="Dismiss banner"
+                        disabled={assignmentPage === 0}
+                        onClick={() => setAssignmentPage((page) => Math.max(0, page - 1))}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all cursor-pointer shadow-2xs"
                       >
-                        <IconX className="w-3.5 h-3.5" />
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        disabled={assignmentPage + 1 >= assignmentPageCount}
+                        onClick={() =>
+                          setAssignmentPage((page) => Math.min(assignmentPageCount - 1, page + 1))
+                        }
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all cursor-pointer shadow-2xs"
+                      >
+                        Next
                       </button>
                     </div>
-                    <AlertDescription className="text-emerald-900/90 font-medium text-xs">
-                      Assigned <span className="font-semibold text-slate-950">{assignSuccess.shiftName}</span> to{' '}
-                      <span className="font-semibold text-slate-950">{assignSuccess.workerName}</span>
-                    </AlertDescription>
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] font-mono text-slate-600">
-                      <span className="inline-flex items-center gap-1 bg-white/90 border border-emerald-200/80 px-1.5 py-0.5 rounded shadow-2xs">
-                        <IconCalendar className="w-2.5 h-2.5 text-[#F66B17]" />
-                        {assignSuccess.workDate}
-                      </span>
-                      {assignSuccess.shiftHours && (
-                        <span className="inline-flex items-center gap-1 bg-white/90 border border-emerald-200/80 px-1.5 py-0.5 rounded shadow-2xs">
-                          <IconClock className="w-2.5 h-2.5 text-blue-600" />
-                          {assignSuccess.shiftHours}
-                        </span>
-                      )}
-                    </div>
                   </div>
-                </Alert>
-              )}
-
-              {assignError && (
-                <Alert variant="destructive" className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <IconAlertCircle className="w-5 h-5" />
-                  <div>
-                    <AlertTitle className="text-rose-950 font-bold text-xs">Assignment Failed</AlertTitle>
-                    <AlertDescription className="text-rose-900/90 text-xs">{assignError}</AlertDescription>
-                  </div>
-                </Alert>
-              )}
-
-
-              {/* Version selector */}
-              <div className="space-y-1">
-                <SmartSelect
-                  label="Schedule Version"
-                  fieldRequired
-                  value={selectedVersionId}
-                  onChange={setAssignVersionId}
-                  placeholder="Select Version"
-                  options={versions.map((v) => ({
-                    value: v.id,
-                    label: `Version ${v.version}`,
-                    badge: v.effectiveUntil ? 'Fixed' : 'Ongoing',
-                    description: `From ${new Date(v.effectiveFrom).toLocaleDateString('vi-VN')}${
-                      v.effectiveUntil ? ` to ${new Date(v.effectiveUntil).toLocaleDateString('vi-VN')}` : ''
-                    }`,
-                  }))}
-                />
-              </div>
-
-              {/* Worker selector */}
-              <div className="space-y-1">
-                <SmartSelect
-                  label="Worker"
-                  fieldRequired
-                  searchable
-                  searchPlaceholder="Search worker name or ID..."
-                  value={assignWorkerId}
-                  onChange={setAssignWorkerId}
-                  placeholder="-- Select Worker --"
-                  options={workers.map((w) => ({
-                    value: w.id,
-                    label: w.displayName,
-                    badge: w.externalId || w.id.slice(0, 8),
-                  }))}
-                />
-              </div>
-
-              {/* Shift selector */}
-              <div className="space-y-1">
-                <SmartSelect
-                  label="Shift"
-                  fieldRequired
-                  value={assignShiftId}
-                  onChange={setAssignShiftId}
-                  placeholder="-- Select Shift --"
-                  options={shifts.map((s) => ({
-                    value: s.id,
-                    label: s.name,
-                    description: `${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)} (${s.timezone || 'UTC'})`,
-                  }))}
-                />
-              </div>
-
-              {/* Work Date */}
-              <div className="space-y-1">
-                <SmartDatePicker
-                  label="Work Date"
-                  fieldRequired
-                  value={assignWorkDate}
-                  onChange={setAssignWorkDate}
-                />
-              </div>
-
-              <div className="pt-2">
-                <Button
-                  type="submit"
-                  variant="default"
-                  size="md"
-                  className="w-full"
-                  isLoading={assignWorkerScheduleMutation.isPending}
-                  leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
-                >
-                  Assign Schedule
-                </Button>
-              </div>
-            </form>
-          </div>
-
-          {/* Existing Schedules Table (8 cols) */}
-          <div className="lg:col-span-8 bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-100 space-y-4">
-              <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                Assigned Schedules ({schedulesTotal})
-              </h3>
-              {schedulesQuery.isFetching && <IconLoader className="w-3.5 h-3.5 text-slate-400 animate-spin" />}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {([
-                  ['TODAY', 'Today'],
-                  ['WEEK', 'This week'],
-                  ['MONTH', 'This month'],
-                  ['CUSTOM', 'Custom range'],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => {
-                      setAssignmentRange(value);
-                      resetAssignmentPage();
-                    }}
-                    className={`rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors cursor-pointer ${
-                      assignmentRange === value
-                        ? 'border-[#071A2B] bg-[#071A2B] text-white shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {assignmentRange === 'CUSTOM' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    From
-                    <input
-                      type="date"
-                      value={assignmentFromDate}
-                      onChange={(event) => {
-                        setAssignmentFromDate(event.target.value);
-                        resetAssignmentPage();
-                      }}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-[#F66B17]"
-                    />
-                  </label>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    To
-                    <input
-                      type="date"
-                      value={assignmentToDate}
-                      onChange={(event) => {
-                        setAssignmentToDate(event.target.value);
-                        resetAssignmentPage();
-                      }}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-[#F66B17]"
-                    />
-                  </label>
                 </div>
               )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div>
-                  <SmartSelect
-                    label="Worker"
-                    size="sm"
-                    searchable
-                    searchPlaceholder="Filter worker..."
-                    value={assignmentWorkerFilter}
-                    onChange={(val) => {
-                      setAssignmentWorkerFilter(val);
-                      resetAssignmentPage();
-                    }}
-                    options={[
-                      { value: '', label: 'All workers' },
-                      ...workers.map((worker) => ({
-                        value: worker.id,
-                        label: worker.displayName,
-                        badge: worker.externalId || worker.id.slice(0, 6),
-                      })),
-                    ]}
-                  />
-                </div>
-                <div>
-                  <SmartSelect
-                    label="Shift"
-                    size="sm"
-                    value={assignmentShiftFilter}
-                    onChange={(val) => {
-                      setAssignmentShiftFilter(val);
-                      resetAssignmentPage();
-                    }}
-                    options={[
-                      { value: '', label: 'All shifts' },
-                      ...shifts.map((shift) => ({
-                        value: shift.id,
-                        label: shift.name,
-                        description: `${formatShiftTime(shift.startsAt)} - ${formatShiftTime(shift.endsAt)}`,
-                      })),
-                    ]}
-                  />
-                </div>
-                <div>
-                  <SmartInput
-                    id="search-name-input"
-                    label="Search Name"
-                    placeholder="Worker name or email..."
-                    value={assignmentSearchName}
-                    onChange={(e) => {
-                      setAssignmentSearchName(e.target.value);
-                      resetAssignmentPage();
-                    }}
-                  />
-                </div>
-              </div>
             </div>
-
-            {schedulesQuery.isLoading ? (
-              <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
-                <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-                <span>Loading worker schedules...</span>
-              </div>
-            ) : schedules.length === 0 ? (
-              <div className="py-12 px-4 text-center space-y-2">
-                <p className="text-xs text-slate-500">No worker schedules assigned yet.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto max-h-[480px]">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-slate-50/90 backdrop-blur-xs">
-                    <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-4">Worker</th>
-                      <th className="py-3 px-4">Shift</th>
-                      <th className="py-3 px-4">Work Date</th>
-                      <th className="py-3 px-4">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {groupedAssignmentSchedules.map(([date, dateSchedules]) => {
-                      const collapsed = collapsedAssignmentDates.has(date);
-                      return (
-                        <React.Fragment key={date}>
-                          <tr className="bg-slate-50/80">
-                            <td colSpan={4} className="px-4 py-2">
-                              <button
-                                type="button"
-                                aria-expanded={!collapsed}
-                                onClick={() => {
-                                  setCollapsedAssignmentDates((current) => {
-                                    const next = new Set(current);
-                                    if (next.has(date)) next.delete(date);
-                                    else next.add(date);
-                                    return next;
-                                  });
-                                }}
-                                className="flex w-full items-center justify-between text-left text-[11px] font-bold text-slate-700"
-                              >
-                                <span>{date} · {dateSchedules.length} schedule(s)</span>
-                                <span>{collapsed ? '+' : '−'}</span>
-                              </button>
-                            </td>
-                          </tr>
-                          {!collapsed && dateSchedules.map((sched) => {
-                            const workerObj = workers.find((w) => w.id === sched.workerId);
-                            const shiftObj = shifts.find((s) => s.id === sched.shiftId);
-                            return (
-                              <tr key={sched.id} className="hover:bg-slate-50/70 transition-colors">
-                                <td className="py-3 px-4 font-bold text-slate-900">
-                                  {workerObj?.displayName || `Worker (${sched.workerId.slice(0, 6)})`}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <span className="font-semibold text-slate-800">
-                                    {shiftObj?.name || 'Shift'}
-                                  </span>
-                                  {shiftObj && (
-                                    <span className="block text-[10px] font-mono text-slate-500">
-                                      {formatShiftRange(shiftObj.startsAt, shiftObj.endsAt)}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-3 px-4 font-mono font-medium text-slate-700">
-                                  {sched.workDate}
-                                </td>
-                                <td className="py-3 px-4 text-slate-400 text-[11px]">
-                                  {new Date(sched.createdAt).toLocaleDateString('vi-VN')}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-[11px] text-slate-500">
-                  <span>Page {assignmentPage + 1} of {assignmentPageCount} · 25 per page</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={assignmentPage === 0}
-                      onClick={() => setAssignmentPage((page) => Math.max(0, page - 1))}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      disabled={assignmentPage + 1 >= assignmentPageCount}
-                      onClick={() => setAssignmentPage((page) => Math.min(assignmentPageCount - 1, page + 1))}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-
         </div>
       )}
 
@@ -1454,16 +1444,38 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <SmartInput
-              id="shift-timezone-input"
-              label="Timezone"
-              type="text"
-              value={shiftTimezone}
-              onChange={(e) => setShiftTimezone(e.target.value)}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={hasShiftBreak}
+              onChange={(e) => setHasShiftBreak(e.target.checked)}
             />
-          </div>
-
+            Include an unpaid lunch break
+          </label>
+          {hasShiftBreak && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3.5">
+                <SmartTimePicker
+                  id="shift-break-start-input"
+                  label="Break Starts At"
+                  fieldRequired
+                  value={shiftBreakStartsAt}
+                  onChange={setShiftBreakStartsAt}
+                />
+                <SmartTimePicker
+                  id="shift-break-end-input"
+                  label="Break Ends At"
+                  fieldRequired
+                  value={shiftBreakEndsAt}
+                  onChange={setShiftBreakEndsAt}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                Only break time overlapping actual presence is deducted. Times use Asia/Ho_Chi_Minh;
+                after midnight belongs to the next day for overnight shifts.
+              </p>
+            </div>
+          )}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="outline" size="md" onClick={() => setShowCreateShiftModal(false)}>
               Cancel
@@ -1504,9 +1516,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               fieldRequired
               value={assignContractorShiftId}
               onChange={setAssignContractorShiftId}
-              options={shifts.map((s) => ({
+              options={availableShifts.map((s) => ({
                 value: s.id,
-                label: `${s.name} (${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)})`
+                label: `${s.name} (${formatShiftRange(s.startsAt, s.endsAt, s.timezone)})`,
               }))}
             />
           </div>
@@ -1520,7 +1532,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               onChange={setAssignContractorId}
               options={contractors.map((c) => ({
                 value: c.id,
-                label: `${c.name} (${c.code})`
+                label: `${c.name} (${c.code})`,
               }))}
             />
           </div>
@@ -1594,35 +1606,36 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         </form>
       </Dialog>
 
-      {/* ── MODAL 4: Delete Shift Confirmation Dialog ──────────────────────── */}
       <Dialog
-        open={Boolean(shiftToDelete)}
-        onClose={() => setShiftToDelete(null)}
-        title="Delete Shift"
-        description="Are you sure you want to delete this shift schedule?"
-        icon={<IconTrash className="w-4 h-4 text-rose-500" />}
+        open={Boolean(shiftToArchive)}
+        onClose={() => setShiftToArchive(null)}
+        title="Archive Shift"
+        description="Stop using this shift for new assignments."
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600">
-            Deleting <span className="font-bold text-slate-900">&quot;{shiftToDelete?.name}&quot;</span> will permanently remove this shift definition and its contractor links.
+          <p className="text-sm text-slate-600">
+            Archive &quot;{shiftToArchive?.name}&quot;? Existing schedules, attendance and request
+            history will be kept.
           </p>
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="outline" size="md" onClick={() => setShiftToDelete(null)}>
+          {shiftError && (
+            <p role="alert" className="text-sm text-rose-600">
+              {shiftError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="md" onClick={() => setShiftToArchive(null)}>
               Cancel
             </Button>
             <Button
-              variant="destructive"
               size="md"
-              isLoading={deleteShiftMutation.isPending}
-              onClick={() => shiftToDelete && deleteShiftMutation.mutate(shiftToDelete.id)}
+              isLoading={archiveShiftMutation.isPending}
+              onClick={() => shiftToArchive && archiveShiftMutation.mutate(shiftToArchive.id)}
             >
-              Delete Shift
+              Archive Shift
             </Button>
           </div>
         </div>
       </Dialog>
-
     </div>
   );
 }

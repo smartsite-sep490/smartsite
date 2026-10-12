@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -19,6 +19,13 @@ beforeEach(() => {
       total: 0,
     });
   }
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockResolvedValue({
+    workerId: 'worker-a',
+    displayName: 'Worker A',
+    membershipId: 'mem-1',
+    teamId: 'team-paint',
+    teamName: 'Painting Squad',
+  });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listShiftRequests').mockResolvedValue({
     items: [],
     total: 0,
@@ -156,4 +163,180 @@ it('does not label a shift with metadata for a different Site', async () => {
   mount();
   expect(await screen.findAllByText('Site name unavailable')).toHaveLength(2);
   expect(screen.queryByText('Wrong Site')).toBeNull();
+});
+
+it.each(['timetable', 'list'])(
+  'locks ended shifts in %s view while allowing an ongoing shift',
+  async (mode) => {
+    vi.setSystemTime(new Date('2030-01-01T10:00:00Z'));
+    vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+      items: ['morning', 'evening'].map((id) => ({
+        id,
+        siteId: 'site-1',
+        name: id,
+        startsAt: id === 'morning' ? '2026-01-01T08:00:00Z' : '2026-01-01T09:00:00Z',
+        endsAt: id === 'morning' ? '2026-01-01T10:00:00Z' : '2026-01-01T17:00:00Z',
+        timezone: 'UTC',
+        createdAt: '2026-01-01T00:00:00Z',
+      })),
+      total: 2,
+    });
+    mount();
+    if (mode === 'list') fireEvent.click(await screen.findByRole('button', { name: 'List' }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Request change' })).toHaveLength(1),
+    );
+    expect(screen.getAllByRole('button', { name: 'Swap shift' })).toHaveLength(1);
+    expect(screen.getByText(/Shift ended/)).toBeTruthy();
+  },
+);
+
+it.each(['Request change', 'Swap shift'])(
+  'locks the open %s form when the shift ends',
+  async (action) => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date('2030-01-01T09:59:59Z'));
+    vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+      items: ['morning', 'evening'].map((id) => ({
+        id,
+        siteId: 'site-1',
+        name: id,
+        startsAt: '2026-01-01T08:00:00Z',
+        endsAt: '2026-01-01T10:00:00Z',
+        timezone: 'UTC',
+        createdAt: '2026-01-01T00:00:00Z',
+      })),
+      total: 2,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listEligibleShifts').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSwapCandidates').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+    mount();
+    fireEvent.click((await screen.findAllByRole('button', { name: action }))[0]!);
+    expect(screen.queryByText('This shift has ended. Changes are no longer allowed.')).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(screen.getByRole('alert').textContent).toBe(
+      'This shift has ended. Changes are no longer allowed.',
+    );
+    const name = action === 'Request change' ? 'Submit Change Request' : 'Submit Swap Request';
+    expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(true);
+  },
+);
+
+it('displays worker assigned team and enables eligible swap workflow', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockResolvedValue({
+    workerId: 'worker-a',
+    displayName: 'Worker A',
+    membershipId: 'mem-1',
+    teamId: 'team-paint',
+    teamName: 'Painting Squad',
+  });
+  mount();
+  expect(await screen.findByText(/Team: Painting Squad/i)).not.toBeNull();
+  expect(screen.queryByText(/Member of Painting Squad/i)).toBeNull();
+});
+
+it('displays unassigned status and disables swap submission when worker is not in a team', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockResolvedValue({
+    workerId: 'worker-a',
+    displayName: 'Worker A',
+    membershipId: null,
+    teamId: null,
+    teamName: null,
+  });
+  vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+    items: ['morning'].map((id) => ({
+      id,
+      siteId: 'site-1',
+      name: id,
+      startsAt: '2030-01-01T08:00:00Z',
+      endsAt: '2030-01-01T17:00:00Z',
+      timezone: 'UTC',
+      createdAt: '2026-01-01T00:00:00Z',
+    })),
+    total: 1,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listSwapCandidates').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  mount();
+  expect(await screen.findByText(/Unassigned/i)).not.toBeNull();
+
+  // Open swap dialog
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Swap shift' }))[0]!);
+
+  expect(screen.getAllByText(/Unassigned/i).length).toBeGreaterThan(0);
+  const submitBtn = screen.getByRole('button', { name: 'Submit Swap Request' });
+  expect(submitBtn.hasAttribute('disabled')).toBe(true);
+});
+
+it('displays loading indicator while fetching worker team status', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockImplementation(
+    () => new Promise(() => {}),
+  );
+  mount();
+  expect(await screen.findByLabelText('Loading worker team status')).not.toBeNull();
+  expect(screen.getByText('Loading worker team status...')).not.toBeNull();
+});
+
+it('displays error and allows retry when myContractorTeam query fails', async () => {
+  const myTeamSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam');
+  myTeamSpy.mockRejectedValueOnce(new Error('Network error loading team'));
+  mount();
+
+  expect(await screen.findByText(/Failed to load/i)).not.toBeNull();
+  expect(screen.getByText('Network error loading team')).not.toBeNull();
+
+  // Retry loading team status
+  myTeamSpy.mockResolvedValueOnce({
+    workerId: 'worker-a',
+    displayName: 'Worker A',
+    membershipId: 'mem-2',
+    teamId: 'team-carpentry',
+    teamName: 'Carpentry Crew',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Retry loading team status' }));
+
+  expect(await screen.findByText(/Carpentry Crew/i)).not.toBeNull();
+});
+
+it('gates swap submission when worker team query fails', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockRejectedValueOnce(
+    new Error('Out of scope'),
+  );
+  vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+    items: ['morning'].map((id) => ({
+      id,
+      siteId: 'site-1',
+      name: id,
+      startsAt: '2030-01-01T08:00:00Z',
+      endsAt: '2030-01-01T17:00:00Z',
+      timezone: 'UTC',
+      createdAt: '2026-01-01T00:00:00Z',
+    })),
+    total: 1,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listSwapCandidates').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  mount();
+
+  expect(await screen.findByText(/Failed to load/i)).not.toBeNull();
+
+  // Open swap modal
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Swap shift' }))[0]!);
+
+  expect(await screen.findByText(/Cannot verify team for shift swap/i)).not.toBeNull();
+  const submitBtn = screen.getByRole('button', { name: 'Submit Swap Request' });
+  expect(submitBtn.hasAttribute('disabled')).toBe(true);
 });

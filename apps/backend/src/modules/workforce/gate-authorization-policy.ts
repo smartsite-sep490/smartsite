@@ -37,6 +37,7 @@ export interface GateAuthorizationDecision {
     | 'GATE_MISMATCH'
     | 'ASSIGNMENT_EXPIRED'
     | 'VALID_ASSIGNMENT'
+    | 'NO_SCHEDULE'
     | 'EXIT_RECORD_ONLY';
 }
 

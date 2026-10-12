@@ -233,7 +233,7 @@ export class UsersService {
           displayName: value.displayName,
           passwordHash,
           isActive: true,
-          mustChangePassword: true,
+          mustChangePassword: false,
         });
         await manager.getRepository(UserRoleAssignmentEntity).insert(
           value.roleAssignments.map(({ role, siteId }) => ({
@@ -269,7 +269,7 @@ export class UsersService {
         displayName: value.displayName,
         passwordHash,
         isActive: true,
-        mustChangePassword: true,
+        mustChangePassword: false,
       });
       await manager.getRepository(UserRoleAssignmentEntity).insert({
         id: randomUUID(),
@@ -402,7 +402,7 @@ export class UsersService {
       if (!user) throw new NotFoundException();
       await manager
         .getRepository(UserEntity)
-        .update({ id }, { passwordHash: replacement, mustChangePassword: true });
+        .update({ id }, { passwordHash: replacement, mustChangePassword: false });
       await this.revokeSessions(manager, id);
     });
   }

@@ -1,11 +1,35 @@
 import React from 'react';
 import { IconHardHat, IconShield, IconClock } from '../icons';
+import { useCurrentUser } from '../../features/auth/auth-session';
+import { ContractorDashboardView } from '../contractor/ContractorDashboardView';
 
-interface DashboardViewProps {
-  onNavigate: (tab: 'ppe' | 'zones') => void;
+import type { ActiveTab } from '../layout/AppLayout';
+import type { SafetyAlertStatus, SafetyAlertType } from '@smartsite/api-client';
+
+export interface DashboardNavigateContext {
+  alertType?: SafetyAlertType;
+  siteId?: string;
+  alertId?: string;
+  status?: SafetyAlertStatus;
 }
 
-export function DashboardView({ onNavigate }: DashboardViewProps) {
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+interface DashboardViewProps {
+  onNavigate: (tab: ActiveTab, context?: DashboardNavigateContext) => void;
+  apiUrl?: string;
+}
+
+export function DashboardView({ onNavigate, apiUrl: apiUrlProp }: DashboardViewProps) {
+  const resolvedApiUrl = apiUrlProp || DEFAULT_API_URL;
+  const { data: currentUser } = useCurrentUser(resolvedApiUrl);
+  const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
+  const isAdmin = roles.includes('ADMIN');
+  const isContractorRep = !isAdmin && roles.includes('CONTRACTOR_REPRESENTATIVE');
+
+  if (isContractorRep) {
+    return <ContractorDashboardView apiUrl={resolvedApiUrl} onNavigate={onNavigate} />;
+  }
   const stats = [
     {
       label: 'Workers On Site',

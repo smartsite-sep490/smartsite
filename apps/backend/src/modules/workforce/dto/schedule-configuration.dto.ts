@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsTimeZone,
   Matches,
   MaxLength,
 } from 'class-validator';
@@ -29,11 +30,20 @@ export class CreateShiftDto {
   @IsISO8601({ strict: true })
   endsAt!: string;
 
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  breakStartsAt?: string | null;
+
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  breakEndsAt?: string | null;
+
   @Transform(trim)
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
   @Matches(/^(?:UTC|[A-Za-z_]+(?:\/[A-Za-z_+-]+)+)$/)
+  @IsTimeZone()
   timezone!: string;
 }
 
@@ -69,6 +79,10 @@ export class AssignShiftToContractorDto {
 
 export class ListWorkerSchedulesQueryDto {
   @IsOptional()
+  @IsUUID()
+  contractorId?: string;
+
+  @IsOptional()
   @Matches(/^\d+$/)
   offset?: string;
 
@@ -89,6 +103,10 @@ export class ListWorkerSchedulesQueryDto {
   @IsOptional()
   @IsUUID()
   workerId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  teamId?: string;
 
   @IsOptional()
   @IsUUID()

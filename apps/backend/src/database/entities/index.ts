@@ -8,6 +8,12 @@ import {
   SafetyWorkflowAuditEntity,
 } from './safety-workflow.entity.js';
 import { SiteEntity } from './site.entity.js';
+import { ScheduleAssignmentBatchEntity } from './schedule-assignment-batch.entity.js';
+export * from './schedule-assignment-batch.entity.js';
+import { ContractorTeamEntity, ContractorTeamMembershipEntity } from './contractor-team.entity.js';
+export * from './contractor-team.entity.js';
+import { AttendanceDayEntity, OvertimeRequestEntity } from './attendance-day.entity.js';
+export * from './attendance-day.entity.js';
 import { AccessAttemptEntity, GateEventEntity } from './access-flow.entity.js';
 import { AccessAuditEntity } from './access-audit.entity.js';
 import {
@@ -112,6 +118,11 @@ export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
 export const ENTITIES = [
+  ScheduleAssignmentBatchEntity,
+  ContractorTeamEntity,
+  ContractorTeamMembershipEntity,
+  AttendanceDayEntity,
+  OvertimeRequestEntity,
   AttendanceEventEntity,
   AttendanceSessionEntity,
   AttendanceCorrectionEntity,

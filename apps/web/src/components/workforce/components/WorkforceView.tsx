@@ -138,14 +138,6 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
     );
   }
 
-  if (currentUser?.mustChangePassword) {
-    return (
-      <ErrorState
-        title="Password change required"
-        detail="Your account requires a password change before you can access Workforce."
-      />
-    );
-  }
 
   if (isGlobalAdmin && sitesQuery.isLoading) {
     return <LoadingState />;

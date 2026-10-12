@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { AttendanceOverviewQueryDto } from './dto/attendance.dto.js';
 import {
   AttendanceService,
   RecordAttendanceCommand,
@@ -14,8 +15,12 @@ import {
 @Controller('sites/:siteId')
 export class AttendanceController {
   constructor(private readonly attendance: AttendanceService) {}
-  @Get('attendance') overview(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string) {
-    return this.attendance.overview(req.user!, siteId);
+  @Get('attendance') overview(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query() query: AttendanceOverviewQueryDto,
+  ) {
+    return this.attendance.overview(req.user!, siteId, query);
   }
   @Post('gate-events/:id/attendance') record(
     @Req() req: AuthenticatedRequest,

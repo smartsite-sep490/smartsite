@@ -31,9 +31,16 @@ import {
   ZoneEntity,
   AccessAttemptEntity,
   GateEventEntity,
+  AttendanceEventEntity,
+  AttendanceSessionEntity,
+  AttendanceDayEntity,
+  OvertimeRequestEntity,
 } from '../../database/entities/index.js';
 import { evaluateWorkerAccess } from './worker-access-evaluation.js';
 import { auditAccess } from './access-audit.js';
+import { AttendanceReconciliationService } from './attendance-reconciliation.service.js';
+import { isRepeatedGatePassage } from './gate-repeat-policy.js';
+import { SchedulingNotificationService } from './scheduling-notification.service.js';
 import {
   RegisterVisitCommand,
   VisitDecisionCommand,
@@ -106,7 +113,16 @@ export function visitResponse(v: VisitorVisitEntity, zoneIds: string[] = []): Vi
 }
 @Injectable()
 export class QrAccessService {
-  constructor(private readonly source: DataSource) {}
+  constructor(
+    private readonly source: DataSource,
+    private readonly reconciliation: AttendanceReconciliationService = new AttendanceReconciliationService(
+      source,
+      new SchedulingNotificationService(source),
+    ),
+    private readonly notifications: SchedulingNotificationService = new SchedulingNotificationService(
+      source,
+    ),
+  ) {}
   async recordAttempt(
     manager: EntityManager,
     input: {
@@ -163,6 +179,17 @@ export class QrAccessService {
       reviewedAt: null,
       reviewNote: null,
     });
+    if (
+      input.direction === 'IN' &&
+      input.authorization === 'DENIED' &&
+      input.reasonCode === 'NO_SCHEDULE' &&
+      input.workerId
+    ) {
+      const worker = await manager
+        .getRepository(WorkerEntity)
+        .findOneByOrFail({ id: input.workerId, siteId: input.siteId });
+      await this.notifications.recordNoScheduleDenial(manager, worker);
+    }
     return {
       id: attempt.id,
       status: attempt.status,
@@ -170,6 +197,41 @@ export class QrAccessService {
       expiresAt: attempt.expiresAt.toISOString(),
     };
   }
+  private async repeatedPassage(
+    manager: EntityManager,
+    worker: WorkerEntity,
+    direction: 'IN' | 'OUT',
+    at: Date,
+  ) {
+    const previous = await manager.getRepository(GateEventEntity).findOne({
+      where: { siteId: worker.siteId, workerId: worker.id },
+      order: { occurredAt: 'DESC', createdAt: 'DESC', id: 'DESC' },
+    });
+    if (!previous || previous.direction !== direction) return false;
+    const event = await manager
+      .getRepository(AttendanceEventEntity)
+      .findOneBy({ gateEventId: previous.id });
+    const session = event
+      ? await manager.getRepository(AttendanceSessionEntity).findOne({
+          where: [{ checkInEventId: event.id }, { checkOutEventId: event.id }],
+        })
+      : null;
+    const day = session?.dayId
+      ? await manager.getRepository(AttendanceDayEntity).findOneByOrFail({ id: session.dayId })
+      : null;
+    if (day?.scheduleId) {
+      const overtime = await manager
+        .getRepository(OvertimeRequestEntity)
+        .findBy({ scheduleId: day.scheduleId, status: 'APPROVED' });
+      const end = Math.max(
+        day.endsAt ? +day.endsAt : 0,
+        ...overtime.map((request) => +request.endsAt),
+      );
+      if (end) day.endsAt = new Date(end);
+    }
+    return isRepeatedGatePassage(direction, at, previous, day);
+  }
+
   async confirmPassage(
     actor: WorkforceActor,
     siteId: string,
@@ -179,7 +241,7 @@ export class QrAccessService {
     requireSiteRole(actor, siteId, operators);
     uuid(attemptId);
     const value = command(ConfirmPassageCommand, input);
-    return this.source.transaction(async (manager) => {
+    const result = await this.source.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `gate-confirmation:${value.idempotencyKey}`,
       ]);
@@ -207,6 +269,8 @@ export class QrAccessService {
           conflict('Passage has already been confirmed');
         return existing;
       }
+      if (attempt.status === 'DENIED' && attempt.reasonCode === 'NO_SCHEDULE')
+        return { deniedNoSchedule: true as const };
       if (
         attempt.expiresAt <= new Date() ||
         !['PENDING', 'READY'].includes(attempt.status) ||
@@ -227,8 +291,45 @@ export class QrAccessService {
         new Date(),
         true,
       );
+      if (evaluation.decision.reasonCode === 'NO_SCHEDULE') {
+        attempt.status = 'DENIED';
+        attempt.authorizationStatus = 'DENIED';
+        attempt.reasonCode = 'NO_SCHEDULE';
+        attempt.scheduleStatus = 'NO_SCHEDULE';
+        await manager.getRepository(AccessAttemptEntity).save(attempt);
+        await this.notifications.recordNoScheduleDenial(manager, worker);
+        await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          'GATE_ENTRY_DENIED_NO_SCHEDULE',
+          'access_attempt',
+          attempt.id,
+          null,
+          { workerId: worker.id },
+        );
+        // Commit the denial and warning before mapping it to an HTTP error.
+        return { deniedNoSchedule: true as const };
+      }
       if (evaluation.decision.authorization !== 'ALLOWED')
         conflict('Worker permission changed. Verify again');
+      if (await this.repeatedPassage(manager, worker, attempt.direction, new Date())) {
+        if (!value.separatePassage) {
+          throw new PublicHttpException(HttpStatus.CONFLICT, {
+            code: 'GATE_PASSAGE_ALREADY_RECORDED',
+            message:
+              attempt.direction === 'IN'
+                ? 'Already checked in. No new attendance was recorded.'
+                : 'Already checked out. No new attendance was recorded.',
+          });
+        }
+        requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+        if (!value.reviewNote || value.reviewNote.trim().length < 5)
+          invalid('Record a reason of at least 5 characters for a separate physical passage');
+        attempt.reviewedBy = actor.id;
+        attempt.reviewedAt = new Date();
+        attempt.reviewNote = value.reviewNote;
+      }
       if (attempt.direction === 'IN' && evaluation.scheduleStatus !== 'SCHEDULED') {
         requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
         if (!value.reviewNote && !attempt.reviewNote)
@@ -272,6 +373,7 @@ export class QrAccessService {
       const confirmedSite = await manager.getRepository(SiteEntity).findOneByOrFail({ id: siteId });
       attempt.sitePolicyVersion = confirmedSite.accessPolicyVersion;
       await manager.getRepository(AccessAttemptEntity).save(attempt);
+      await this.reconciliation.recordPassage(manager, event, attempt, worker);
       await auditAccess(
         manager,
         actor.id,
@@ -289,6 +391,12 @@ export class QrAccessService {
       );
       return event;
     });
+    if ('deniedNoSchedule' in result)
+      throw new PublicHttpException(HttpStatus.CONFLICT, {
+        code: 'WORKER_NO_SCHEDULE',
+        message: 'Worker has no assigned shift for this workday. Entry is denied.',
+      });
+    return result;
   }
   async manualWorker(
     actor: WorkforceActor,

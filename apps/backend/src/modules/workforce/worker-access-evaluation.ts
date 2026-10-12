@@ -10,7 +10,9 @@ import {
   WorkerGatePermissionEntity,
   WorkerScheduleEntity,
   ShiftEntity,
+  OvertimeRequestEntity,
 } from '../../database/entities/index.js';
+import { scheduledShiftWindow, workDateAt } from './attendance-calculation.js';
 
 /** QR and Face establish identity; both use the same persisted Site authorization. */
 export async function evaluateWorkerAccess(
@@ -35,19 +37,62 @@ export async function evaluateWorkerAccess(
         a.validUntil &&
         a.validUntil > at,
     ) ?? null;
-  const schedules = await manager
-    .getRepository(WorkerScheduleEntity)
-    .findBy({ workerId: worker.id, siteId, isActive: true });
+  const schedules = await manager.getRepository(WorkerScheduleEntity).find({
+    where: { workerId: worker.id, siteId, isActive: true },
+    ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
+  });
   const shifts = await Promise.all(
-    schedules.map((s) => manager.getRepository(ShiftEntity).findOneBy({ id: s.shiftId, siteId })),
+    schedules.map((s) =>
+      manager.getRepository(ShiftEntity).findOne({
+        where: { id: s.shiftId, siteId },
+        ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
+      }),
+    ),
   );
-  const scheduled = shifts.some((s) => s && s.startsAt <= at && s.endsAt > at);
+  let scheduleDataUnavailable = false;
+  const assignedToday = shifts.some((shift, index) => {
+    if (!shift || !schedules[index]) {
+      scheduleDataUnavailable = true;
+      return false;
+    }
+    try {
+      scheduledShiftWindow(shift, schedules[index].workDate);
+      return schedules[index].workDate === workDateAt(at, shift.timezone);
+    } catch {
+      scheduleDataUnavailable = true;
+      return false;
+    }
+  });
+  const scheduled =
+    shifts.some((shift, index) => {
+      if (!shift || !schedules[index]) return false;
+      try {
+        const window = scheduledShiftWindow(shift, schedules[index].workDate);
+        return window.startsAt <= at && window.endsAt > at;
+      } catch {
+        return false;
+      }
+    }) ||
+    (direction === 'IN' &&
+      (await manager
+        .getRepository(OvertimeRequestEntity)
+        .createQueryBuilder('r')
+        .innerJoin(
+          WorkerScheduleEntity,
+          's',
+          's.id=r.schedule_id AND s.is_active=true AND s.shift_id=r.expected_shift_id',
+        )
+        .where(
+          "r.site_id=:siteId AND r.worker_id=:workerId AND r.status='APPROVED' AND r.starts_at<=:at AND r.ends_at>:at",
+          { siteId, workerId: worker.id, at },
+        )
+        .getExists()));
   const scheduleStatus =
     direction === 'OUT'
       ? ('NOT_APPLICABLE' as const)
       : scheduled
         ? ('SCHEDULED' as const)
-        : schedules.length
+        : assignedToday
           ? ('OUTSIDE_SHIFT' as const)
           : ('NO_SCHEDULE' as const);
   // A trusted identity may always record departure, including after revocation or expiry.
@@ -102,11 +147,18 @@ export async function evaluateWorkerAccess(
         reason = 'GATE_MISMATCH';
     }
   }
+  if (!reason && scheduleStatus === 'NO_SCHEDULE')
+    reason = scheduleDataUnavailable ? 'AUTHORIZATION_DATA_UNAVAILABLE' : 'NO_SCHEDULE';
   return {
     assignment,
     scheduleStatus,
     decision: {
-      authorization: reason ? 'DENIED' : 'ALLOWED',
+      authorization:
+        reason === 'AUTHORIZATION_DATA_UNAVAILABLE'
+          ? 'MANUAL_REVIEW'
+          : reason
+            ? 'DENIED'
+            : 'ALLOWED',
       reasonCode: reason ?? 'VALID_ASSIGNMENT',
     } as GateAuthorizationDecision,
   };

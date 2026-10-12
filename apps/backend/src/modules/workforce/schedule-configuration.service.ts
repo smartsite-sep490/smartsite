@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { teamSwapEligibility } from './team-swap-eligibility.js';
+import { isShiftEnded } from '@smartsite/contracts';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import {
@@ -231,6 +233,15 @@ export class ScheduleConfigurationService {
     const startsAt = new Date(value.startsAt);
     const endsAt = new Date(value.endsAt);
     if (endsAt <= startsAt) invalid('Shift end must be after its start');
+    const breakStartsAt = value.breakStartsAt == null ? null : new Date(value.breakStartsAt);
+    const breakEndsAt = value.breakEndsAt == null ? null : new Date(value.breakEndsAt);
+    if (
+      Boolean(breakStartsAt) !== Boolean(breakEndsAt) ||
+      (breakStartsAt &&
+        breakEndsAt &&
+        (breakStartsAt < startsAt || breakEndsAt > endsAt || breakEndsAt <= breakStartsAt))
+    )
+      invalid('Shift break requires both timestamps and must be within the shift');
     const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
     if (!site) missing();
     return this.dataSource.getRepository(ShiftEntity).save({
@@ -240,6 +251,29 @@ export class ScheduleConfigurationService {
       startsAt,
       endsAt,
       timezone: value.timezone,
+      breakStartsAt,
+      breakEndsAt,
+    });
+  }
+
+  async archiveShift(
+    user: AuthenticatedUser,
+    siteId: string,
+    shiftId: string,
+  ): Promise<ShiftEntity> {
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    this.assertScheduleWriter(user, scopedSiteId);
+    const scopedShiftId = uuid(shiftId);
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(ShiftEntity);
+      const shift = await repository.findOne({
+        where: { id: scopedShiftId, siteId: scopedSiteId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!shift) missing();
+      if (shift.archivedAt) return shift;
+      shift.archivedAt = new Date();
+      return repository.save(shift);
     });
   }
 
@@ -330,14 +364,31 @@ export class ScheduleConfigurationService {
           siteId: scopedSiteId,
           isActive: true,
         }),
-        manager.getRepository(ShiftEntity).findOneBy({ id: value.shiftId, siteId: scopedSiteId }),
+        manager.getRepository(ShiftEntity).findOne({
+          where: { id: value.shiftId, siteId: scopedSiteId },
+          lock: { mode: 'pessimistic_read' },
+        }),
       ]);
       if (!version || !worker || !shift) missing();
       await this.assertWorkerScheduleWriter(manager, user, scopedSiteId, worker, shift.id);
+      if (shift.archivedAt) conflict('Archived shifts cannot receive new worker schedules');
       const fromDate = version.effectiveFrom.toISOString().slice(0, 10);
       const untilDate = version.effectiveUntil?.toISOString().slice(0, 10) ?? null;
       if (value.workDate < fromDate || (untilDate && value.workDate >= untilDate))
         conflict('Work date is outside the schedule version effective period');
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${scopedSiteId}${worker.id}${value.workDate}`,
+      ]);
+      if (
+        (value.isActive ?? true) &&
+        (await manager.getRepository(WorkerScheduleEntity).existsBy({
+          siteId: scopedSiteId,
+          workerId: worker.id,
+          workDate: value.workDate,
+          isActive: true,
+        }))
+      )
+        conflict('Worker already has an active shift on this date');
       try {
         return await manager.getRepository(WorkerScheduleEntity).save({
           id: randomUUID(),
@@ -352,6 +403,7 @@ export class ScheduleConfigurationService {
         knownUnique(error, [
           'uq_worker_schedule_version_worker_shift_date',
           'uq_worker_schedule_active_worker_shift_date',
+          'uq_worker_schedule_one_day',
         ]);
       }
     });
@@ -397,7 +449,10 @@ export class ScheduleConfigurationService {
 
     return this.dataSource.transaction(async (manager) => {
       const [shift, contractor, participations] = await Promise.all([
-        manager.getRepository(ShiftEntity).findOneBy({ id: scopedShiftId, siteId: scopedSiteId }),
+        manager.getRepository(ShiftEntity).findOne({
+          where: { id: scopedShiftId, siteId: scopedSiteId },
+          lock: { mode: 'pessimistic_read' },
+        }),
         manager.getRepository(ContractorEntity).findOneBy({
           id: scopedContractorId,
           isActive: true,
@@ -418,6 +473,7 @@ export class ScheduleConfigurationService {
         )
       )
         missing();
+      if (shift.archivedAt) conflict('Archived shifts cannot receive new contractor assignments');
       try {
         return await manager.getRepository(ContractorShiftAssignmentEntity).save({
           id: randomUUID(),
@@ -474,6 +530,9 @@ export class ScheduleConfigurationService {
   ): Promise<{ items: WorkerScheduleEntity[]; total: number }> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const pagination = page(Number(input.offset ?? '0'), Number(input.limit ?? '20'));
+    const requestedContractorId = input.contractorId
+      ? uuid(input.contractorId).toLowerCase()
+      : undefined;
     if (input.fromDate && input.toDate && input.fromDate > input.toDate) {
       invalid('fromDate must be before or equal to toDate');
     }
@@ -490,9 +549,11 @@ export class ScheduleConfigurationService {
     ) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER
       const rep = this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)
-        ? await this.dataSource
-            .getRepository(ContractorRepresentativeAssignmentEntity)
-            .findOneBy({ siteId: scopedSiteId, userId: user.id })
+        ? await this.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).findOneBy({
+            siteId: scopedSiteId,
+            userId: user.id,
+            ...(requestedContractorId ? { contractorId: requestedContractorId } : {}),
+          })
         : null;
       if (rep) {
         if (
@@ -529,6 +590,8 @@ export class ScheduleConfigurationService {
       }
     }
 
+    if (requestedContractorId && !contractorIdScope) contractorIdScope = requestedContractorId;
+
     const query = this.dataSource
       .getRepository(WorkerScheduleEntity)
       .createQueryBuilder('schedule')
@@ -545,6 +608,14 @@ export class ScheduleConfigurationService {
       query.andWhere('schedule.worker_id = :requestedWorkerId', {
         requestedWorkerId: uuid(input.workerId),
       });
+    if (input.teamId) {
+      query.innerJoin(
+        'contractor_team_membership',
+        'ctm',
+        'ctm.worker_id = schedule.worker_id AND ctm.site_id = schedule.site_id AND ctm.team_id = :teamId AND ctm.left_at IS NULL',
+        { teamId: uuid(input.teamId) },
+      );
+    }
     if (input.shiftId)
       query.andWhere('schedule.shift_id = :shiftId', { shiftId: uuid(input.shiftId) });
     if (input.fromDate)
@@ -594,7 +665,7 @@ export class ScheduleConfigurationService {
       .addOrderBy('shift.id', 'ASC')
       .getMany();
     const items = shifts
-      .filter((shift) => shift.id !== schedule.shiftId)
+      .filter((shift) => shift.id !== schedule.shiftId && !shift.archivedAt)
       .map((shift) => this.shiftView(shift));
     return { items, total: items.length };
   }
@@ -658,7 +729,36 @@ export class ScheduleConfigurationService {
       .addOrderBy('candidateSchedule.id', 'ASC')
       .getRawMany<SwapCandidateRow>();
 
-    const items = rows.map((row) => ({
+    const eligible: SwapCandidateRow[] = [];
+    const sourceShift = await this.dataSource
+      .getRepository(ShiftEntity)
+      .findOneBy({ id: schedule.shiftId, siteId: scopedSiteId });
+    if (!sourceShift) return { items: [], total: 0 };
+    try {
+      if (isShiftEnded(schedule.workDate, sourceShift)) return { items: [], total: 0 };
+    } catch {
+      return { items: [], total: 0 };
+    }
+    for (const row of rows) {
+      try {
+        if (
+          isShiftEnded(row.workDate, {
+            startsAt: row.currentShiftStartsAt,
+            endsAt: row.currentShiftEndsAt,
+            timezone: row.currentShiftTimezone,
+          })
+        )
+          continue;
+      } catch {
+        continue;
+      }
+      const candidate = await this.dataSource
+        .getRepository(WorkerScheduleEntity)
+        .findOneBy({ id: row.candidateWorkerScheduleId, siteId: scopedSiteId });
+      if (candidate && (await teamSwapEligibility(this.dataSource.manager, schedule, candidate)))
+        eligible.push(row);
+    }
+    const items = eligible.map((row) => ({
       candidateWorkerId: row.candidateWorkerId,
       candidateWorkerDisplayName: row.candidateWorkerDisplayName,
       candidateWorkerScheduleId: row.candidateWorkerScheduleId,

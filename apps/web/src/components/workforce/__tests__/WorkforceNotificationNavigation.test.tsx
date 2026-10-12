@@ -95,6 +95,44 @@ afterEach(() => {
 });
 
 describe('notification request navigation', () => {
+  it('shows each worker team and scheduled date in contractor review for a notification outside the first page', async () => {
+    user = {
+      id: 'rep-1',
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-2' }],
+    };
+    mount('review', 'pending', {
+      ...request,
+      status: 'PENDING_MANAGER',
+      requesterTeamName: 'Painting Team',
+      coworkerTeamName: 'Concrete Team',
+      requesterWorkDate: '2030-02-12',
+      coworkerWorkDate: '2030-02-13',
+    });
+    await screen.findByRole('button', { name: 'Approve Swap' });
+    const requester = screen.getByText('Team: Painting Team').closest('.space-y-1')!;
+    const coworker = screen.getByText('Team: Concrete Team').closest('.space-y-1')!;
+    expect(requester.textContent).toContain('Worker (worker)');
+    expect(requester.textContent).toContain('12/02/2030');
+    expect(requester.textContent).toContain('Shift (mornin)');
+    expect(coworker.textContent).toContain('Synthetic Worker B');
+    expect(coworker.textContent).toContain('13/02/2030');
+    expect(coworker.textContent).toContain('Shift (evenin)');
+  });
+
+  it('distinguishes an unassigned worker from unavailable team and date data', async () => {
+    user = {
+      id: 'rep-1',
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-2' }],
+    };
+    mount('review', 'pending', { ...request, status: 'PENDING_MANAGER', requesterTeamName: null });
+    await screen.findByRole('button', { name: 'Approve Swap' });
+    expect(screen.getByText('Team: Unassigned')).toBeTruthy();
+    expect(screen.getByText('Team: Unavailable')).toBeTruthy();
+    expect(screen.getAllByText('Date unavailable')).toHaveLength(2);
+  });
+
   it('does not announce approval when the Backend reports a conflicted swap', async () => {
     user = {
       id: 'rep-1',

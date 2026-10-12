@@ -15,6 +15,8 @@ import {
   ArrayUnique,
   ArrayMaxSize,
   Equals,
+  IsBoolean,
+  ValidateIf,
 } from 'class-validator';
 import type { CreateVisitCommand, VerifyQrCommand, VisitorGateCommand } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts';
@@ -22,6 +24,9 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 export class ConfirmPassageCommand {
   @IsUUID() idempotencyKey!: string;
   @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(1000) reviewNote?: string;
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsBoolean()
+  separatePassage?: boolean;
 }
 export class ManualWorkerVerificationCommand {
   @IsUUID() requestId!: string;

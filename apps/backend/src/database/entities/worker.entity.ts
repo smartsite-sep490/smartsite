@@ -1,9 +1,18 @@
-import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn, Unique } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  Unique,
+} from 'typeorm';
 import { ContractorEntity } from './contractor.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 
 @Entity({ name: 'worker' })
+@Unique('uq_worker_id_site', ['id', 'siteId'])
 @Unique('uq_worker_site_external_id', ['siteId', 'externalId'])
 @Index('uq_worker_site_user', ['siteId', 'userId'], {
   unique: true,

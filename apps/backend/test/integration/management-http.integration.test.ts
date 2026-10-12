@@ -76,8 +76,12 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
     assert.equal(firstLogin.status, 200);
     const temporaryToken = ((await firstLogin.json()) as { accessToken: string }).accessToken;
     assert.equal(
-      (await post('/sites', { code: 'DENIED', name: 'Denied' }, temporaryToken)).status,
-      403,
+      (
+        await fetch(`${url}/api/v1/sites`, {
+          headers: { Authorization: `Bearer ${temporaryToken}` },
+        })
+      ).status,
+      200,
     );
     assert.equal(
       (

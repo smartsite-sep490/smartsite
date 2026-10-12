@@ -67,7 +67,12 @@ export class ScheduleConfigurationController {
     @Body() input: CreateShiftDto,
   ) {
     const shift = await this.schedules.createShift(request.user!, siteId, input);
-    this.logger.log({ actorId: request.user!.id, action: 'shift.create', siteId, resourceId: shift.id });
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'shift.create',
+      siteId,
+      resourceId: shift.id,
+    });
     return shift;
   }
 
@@ -94,6 +99,24 @@ export class ScheduleConfigurationController {
     return assignment;
   }
 
+  @Post('shifts/:shiftId/archive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse()
+  async archiveShift(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('shiftId') shiftId: string,
+  ) {
+    const shift = await this.schedules.archiveShift(request.user!, siteId, shiftId);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'shift.archive',
+      siteId,
+      resourceId: shift.id,
+    });
+    return shift;
+  }
+
   @Delete('shifts/:shiftId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
@@ -103,7 +126,12 @@ export class ScheduleConfigurationController {
     @Param('shiftId') shiftId: string,
   ): Promise<void> {
     await this.schedules.deleteShift(request.user!, siteId, shiftId);
-    this.logger.log({ actorId: request.user!.id, action: 'shift.delete', siteId, resourceId: shiftId });
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'shift.delete',
+      siteId,
+      resourceId: shiftId,
+    });
   }
 
   @Post('schedule-versions')
@@ -148,10 +176,7 @@ export class ScheduleConfigurationController {
 
   @Get('shifts')
   @ApiOkResponse()
-  async listShifts(
-    @Req() request: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-  ) {
+  async listShifts(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string) {
     const result = await this.schedules.listShifts(request.user!, siteId);
     return { items: result.items, total: result.total };
   }

@@ -69,13 +69,30 @@ export class ShiftRequestReaderService {
       WITH requests AS (
         SELECT c.id, c.site_id, c.status::text AS status, c.created_at, 'CHANGE' AS request_type,
           c.worker_id AS worker_id, NULL::uuid AS coworker_worker_id,
-          ARRAY[c.worker_schedule_id] AS schedule_ids, c.reason, to_jsonb(c) AS payload
-        FROM shift_change_request c WHERE c.site_id = $1
+          ARRAY[c.worker_schedule_id] AS schedule_ids, c.reason, to_jsonb(c) || jsonb_build_object('work_date', ws.work_date) AS payload
+        FROM shift_change_request c
+        LEFT JOIN worker_schedule ws ON ws.id = c.worker_schedule_id AND ws.site_id = c.site_id
+        WHERE c.site_id = $1
         UNION ALL
         SELECT s.id, s.site_id, s.status::text, s.created_at, 'SWAP',
           s.requester_worker_id, s.coworker_worker_id,
-          ARRAY[s.requester_worker_schedule_id, s.coworker_worker_schedule_id], s.reason, to_jsonb(s)
-        FROM shift_swap_request s WHERE s.site_id = $1
+          ARRAY[s.requester_worker_schedule_id, s.coworker_worker_schedule_id], s.reason, to_jsonb(s) || jsonb_build_object(
+            'requester_work_date', rs.work_date, 'coworker_work_date', cs.work_date,
+            'requester_team_name', rt.name, 'coworker_team_name', ct.name)
+        FROM shift_swap_request s
+        LEFT JOIN worker_schedule rs ON rs.id = s.requester_worker_schedule_id AND rs.site_id = s.site_id
+        LEFT JOIN worker_schedule cs ON cs.id = s.coworker_worker_schedule_id AND cs.site_id = s.site_id
+        LEFT JOIN worker rw ON rw.id = s.requester_worker_id AND rw.site_id = s.site_id
+        LEFT JOIN worker sw ON sw.id = s.coworker_worker_id AND sw.site_id = s.site_id
+        LEFT JOIN contractor_team_membership rm ON rm.worker_id = rw.id AND rm.site_id = s.site_id
+          AND rm.contractor_id = rw.contractor_id AND rm.left_at IS NULL
+        LEFT JOIN contractor_team rt ON rt.id = rm.team_id AND rt.site_id = s.site_id
+          AND rt.contractor_id = rw.contractor_id AND rt.is_active
+        LEFT JOIN contractor_team_membership cm ON cm.worker_id = sw.id AND cm.site_id = s.site_id
+          AND cm.contractor_id = sw.contractor_id AND cm.left_at IS NULL
+        LEFT JOIN contractor_team ct ON ct.id = cm.team_id AND ct.site_id = s.site_id
+          AND ct.contractor_id = sw.contractor_id AND ct.is_active
+        WHERE s.site_id = $1
       ), scoped AS (
         SELECT r.*, w.display_name, cw.display_name AS coworker_name
         FROM requests r JOIN worker w ON w.id = r.worker_id AND w.site_id = r.site_id AND w.is_active
@@ -145,12 +162,16 @@ export class ShiftRequestReaderService {
       items: result!.items.map(({ payload, requestType }) => {
         const fields =
           requestType === 'CHANGE'
-            ? ['worker_id', 'worker_schedule_id', 'from_shift_id', 'to_shift_id']
+            ? ['worker_id', 'worker_schedule_id', 'work_date', 'from_shift_id', 'to_shift_id']
             : [
                 'requester_worker_id',
                 'requester_worker_schedule_id',
                 'coworker_worker_id',
                 'coworker_worker_schedule_id',
+                'requester_team_name',
+                'coworker_team_name',
+                'requester_work_date',
+                'coworker_work_date',
                 'requester_shift_id',
                 'coworker_shift_id',
                 'coworker_confirmed_at',

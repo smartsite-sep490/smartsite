@@ -17,7 +17,7 @@ export type ProvisionableUserRole =
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export * from './observation-identity-management.js';
-export { isPastWorkDate } from './scheduling-date.js';
+export { isPastWorkDate, isShiftEnded } from './scheduling-date.js';
 
 export interface ProvisionableRoleAssignment {
   role: ProvisionableUserRole;
@@ -299,7 +299,11 @@ export interface ShiftResponse {
   startsAt: string;
   endsAt: string;
   timezone: string;
+  breakStartsAt?: string | null;
+  breakEndsAt?: string | null;
   createdAt: string;
+  /** Absent on older servers; null means available for new assignments. */
+  archivedAt?: string | null;
 }
 
 export interface ContractorShiftAssignmentResponse {
@@ -400,7 +404,10 @@ export interface SafetyNotificationTarget {
 }
 export interface UserNotificationResponse {
   id: string;
-  event: SchedulingNotificationEvent | 'SAFETY_HANDOVER';
+  event:
+    | SchedulingNotificationEvent
+    | 'SAFETY_HANDOVER'
+    | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
   siteName: string;
   title: string;
@@ -410,7 +417,11 @@ export interface UserNotificationResponse {
   toShiftName?: string;
   createdAt: string;
   readAt: string | null;
-  target: SchedulingNotificationTarget | SafetyNotificationTarget;
+  target:
+    | SchedulingNotificationTarget
+    | SafetyNotificationTarget
+    | { siteId: string; workDate: string; tab: 'schedule' }
+    | { siteId: string; dayId: string; tab: 'attendance' };
 }
 
 export interface UserNotificationListResponse {
@@ -433,6 +444,8 @@ export interface NotificationDeleteResponse {
 }
 
 export interface ShiftChangeRequestResponse {
+  /** Scheduled work date (YYYY-MM-DD), separate from request creation time. */
+  workDate?: string | null;
   id: string;
   siteId: string;
   workerId: string;
@@ -451,6 +464,12 @@ export interface ShiftChangeRequestResponse {
 }
 
 export interface ShiftSwapRequestResponse {
+  /** Current active team names; null means no active team in this scope. */
+  requesterTeamName?: string | null;
+  coworkerTeamName?: string | null;
+  /** Scheduled dates (YYYY-MM-DD); additive for older clients. */
+  requesterWorkDate?: string | null;
+  coworkerWorkDate?: string | null;
   id: string;
   siteId: string;
   requesterWorkerId: string;

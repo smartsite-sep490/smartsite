@@ -12,6 +12,7 @@ import {
   Matches,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { DataSource, In, IsNull, type EntityManager } from 'typeorm';
 import type { AttendanceOverviewResponse, AttendanceSessionResponse } from '@smartsite/contracts';
@@ -21,16 +22,20 @@ import {
   AttendanceEventEntity,
   AttendanceSessionEntity,
   AttendanceCorrectionEntity,
+  AttendanceDayEntity,
   GateEventEntity,
   WorkerEntity,
   WorkerScheduleEntity,
   ShiftEntity,
-  ContractorRepresentativeGrantEntity,
   UserRole,
 } from '../../database/entities/index.js';
 import type { WorkforceActor } from './contractor-operations.service.js';
 import { requireSiteRole } from './qr-access.service.js';
 import { auditAccess } from './access-audit.js';
+import { AttendanceReconciliationService } from './attendance-reconciliation.service.js';
+import { SchedulingNotificationService } from './scheduling-notification.service.js';
+import { attendanceAccess } from './attendance-access.js';
+import { AttendanceOverviewQueryDto } from './dto/attendance.dto.js';
 
 export class RecordAttendanceCommand {
   @IsUUID() requestId!: string;
@@ -53,11 +58,15 @@ export class RequestAttendanceCorrectionCommand {
 }
 export class ReviewAttendanceCorrectionCommand {
   @IsBoolean() approve!: boolean;
+  @ValidateIf(
+    (input: ReviewAttendanceCorrectionCommand, value: unknown) =>
+      !input.approve || value !== undefined,
+  )
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(1000)
-  reviewNote!: string;
+  reviewNote?: string;
 }
 function response(
   session: AttendanceSessionEntity,
@@ -71,6 +80,10 @@ function response(
     effectiveOutAt: session.effectiveOutAt?.toISOString() ?? null,
     status: session.status,
     version: session.version,
+    dayId: session.dayId,
+    ignoredBy: session.ignoredBy,
+    ignoredAt: session.ignoredAt?.toISOString() ?? null,
+    ignoreReason: session.ignoreReason,
     workedMinutes:
       session.effectiveInAt && session.effectiveOutAt
         ? Math.floor((+session.effectiveOutAt - +session.effectiveInAt) / 60_000)
@@ -79,7 +92,13 @@ function response(
 }
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly source: DataSource) {}
+  constructor(
+    private readonly source: DataSource,
+    private readonly reconciliation: AttendanceReconciliationService = new AttendanceReconciliationService(
+      source,
+      new SchedulingNotificationService(source),
+    ),
+  ) {}
   private async requireSelf(
     manager: EntityManager,
     actor: WorkforceActor,
@@ -87,6 +106,9 @@ export class AttendanceService {
     workerId: string,
   ) {
     requireSiteRole(actor, siteId, [UserRole.WORKER], false);
+    const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
+    if (!worker || (await attendanceAccess(manager, actor, worker)) !== 'SELF')
+      conflict('Worker can request corrections only for their own attendance');
     if (
       !(await manager
         .getRepository(WorkerEntity)
@@ -133,9 +155,8 @@ export class AttendanceService {
         .findOneBy({ gateEventId: passage.id });
       if (oldEvent) {
         if (
-          oldEvent.id !== value.requestId ||
           oldEvent.kind !== value.kind ||
-          oldEvent.recordedBy !== actor.id
+          (oldEvent.recordedBy !== actor.id && worker.userId !== actor.id)
         )
           conflict('This passage already has an attendance action');
         const oldSession = await manager
@@ -230,7 +251,12 @@ export class AttendanceService {
       return response(session, worker);
     });
   }
-  async overview(actor: WorkforceActor, siteId: string): Promise<AttendanceOverviewResponse> {
+  async overview(
+    actor: WorkforceActor,
+    siteId: string,
+    input: AttendanceOverviewQueryDto = {},
+  ): Promise<AttendanceOverviewResponse> {
+    const filter = command(AttendanceOverviewQueryDto, input);
     requireSiteRole(actor, siteId, [
       UserRole.WORKER,
       UserRole.CONTRACTOR_REPRESENTATIVE,
@@ -248,34 +274,59 @@ export class AttendanceService {
     const isRepresentative = actor.roleAssignments.some(
       (r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE,
     );
-    const grants = isRepresentative
-      ? await this.source
-          .getRepository(ContractorRepresentativeGrantEntity)
-          .findBy({ userId: actor.id })
-      : [];
-    const workers = (await this.source.getRepository(WorkerEntity).findBy({ siteId })).filter(
-      (w) =>
-        siteStaff || w.userId === actor.id || grants.some((g) => g.contractorId === w.contractorId),
-    );
+    const workers: WorkerEntity[] = [];
+    for (const worker of await this.source
+      .getRepository(WorkerEntity)
+      .findBy({ siteId, isActive: true })) {
+      try {
+        await attendanceAccess(this.source.manager, actor, worker);
+        workers.push(worker);
+      } catch (error) {
+        if (!(error instanceof Error && 'getStatus' in error)) throw error;
+      }
+    }
     const sessions = workers.length
       ? await this.source.getRepository(AttendanceSessionEntity).find({
-          where: { siteId, workerId: In(workers.map((w) => w.id)) },
+          where: {
+            siteId,
+            workerId: In(workers.map((w) => w.id)),
+            ...(filter.dayId ? { dayId: filter.dayId } : {}),
+          },
           order: { createdAt: 'DESC', id: 'DESC' },
-          take: 100,
+          ...(filter.dayId ? {} : { take: 100 }),
         })
       : [];
     const corrections = sessions.length
       ? await this.source.getRepository(AttendanceCorrectionEntity).find({
           where: { attendanceSessionId: In(sessions.map((s) => s.id)) },
           order: { createdAt: 'DESC', id: 'DESC' },
-          take: 100,
+          ...(filter.dayId ? {} : { take: 100 }),
         })
       : [];
     return {
+      hasPendingCorrection:
+        workers.length > 0 &&
+        (await this.source
+          .getRepository(AttendanceCorrectionEntity)
+          .createQueryBuilder('correction')
+          .innerJoin(
+            AttendanceSessionEntity,
+            'session',
+            'session.id = correction.attendance_session_id',
+          )
+          .where(
+            'session.site_id = :siteId AND session.worker_id IN (:...workerIds) AND correction.status = :status',
+            {
+              siteId,
+              workerIds: workers.map((worker) => worker.id),
+              status: 'PENDING',
+            },
+          )
+          .getExists()),
       canRequestCorrection: actor.roleAssignments.some(
         (r) => r.role === UserRole.WORKER && r.siteId === siteId,
       ),
-      canReviewCorrection: admin || isRepresentative,
+      canReviewCorrection: isRepresentative && !siteStaff,
       sessions: sessions.map((s) =>
         response(
           s,
@@ -306,14 +357,27 @@ export class AttendanceService {
     const value = command(RequestAttendanceCorrectionCommand, input);
     uuid(sessionId);
     return this.source.transaction(async (manager) => {
+      const seed = await manager
+        .getRepository(AttendanceSessionEntity)
+        .findOneBy({ id: sessionId, siteId });
+      if (!seed) missing();
+      await manager
+        .getRepository(WorkerEntity)
+        .findOne({ where: { id: seed.workerId, siteId }, lock: { mode: 'pessimistic_write' } });
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `mf03:${siteId}:${seed.workerId}`,
+      ]);
       const session = await manager
         .getRepository(AttendanceSessionEntity)
         .findOne({ where: { id: sessionId, siteId }, lock: { mode: 'pessimistic_write' } });
       if (!session) missing();
       await this.requireSelf(manager, actor, siteId, session.workerId);
+      if (session.status === 'IGNORED')
+        conflict('An ignored duplicate cannot be changed into a work interval');
       const proposedInAt = new Date(value.proposedInAt),
         proposedOutAt = new Date(value.proposedOutAt);
       if (proposedOutAt < proposedInAt) conflict('Correction checkout cannot precede check-in');
+      if (proposedOutAt <= proposedInAt) conflict('Correction requires a positive interval');
       const existing = await manager
         .getRepository(AttendanceCorrectionEntity)
         .findOneBy({ id: value.requestId });
@@ -331,6 +395,27 @@ export class AttendanceService {
       }
       if (session.version !== value.expectedSessionVersion)
         conflict('Attendance changed. Reload before requesting a correction');
+      const pending = await manager
+        .getRepository(AttendanceCorrectionEntity)
+        .createQueryBuilder('correction')
+        .innerJoin(
+          AttendanceSessionEntity,
+          'session',
+          'session.id = correction.attendance_session_id',
+        )
+        .where(
+          'session.site_id = :siteId AND session.worker_id = :workerId AND correction.status = :status',
+          {
+            siteId,
+            workerId: session.workerId,
+            status: 'PENDING',
+          },
+        )
+        .getExists();
+      if (pending)
+        conflict(
+          'You already have an attendance correction awaiting contractor review. Wait for approval or rejection before submitting another request.',
+        );
       const correction = await manager.getRepository(AttendanceCorrectionEntity).save({
         id: value.requestId,
         attendanceSessionId: session.id,
@@ -354,6 +439,20 @@ export class AttendanceService {
         value.reason,
         { sessionId: session.id, expectedVersion: session.version },
       );
+      if (session.dayId) {
+        const day = await this.reconciliation.refresh(manager, session.dayId);
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOneByOrFail({ id: session.workerId, siteId });
+        await this.reconciliation.notificationsForRequest(
+          manager,
+          worker,
+          correction.id,
+          'TIME_REQUESTED',
+          `Attendance correction requested: ${value.reason}`,
+          day,
+        );
+      }
       return { id: correction.id };
     });
   }
@@ -366,7 +465,23 @@ export class AttendanceService {
     requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     uuid(correctionId);
     const value = command(ReviewAttendanceCorrectionCommand, input);
+    const reviewNote = value.reviewNote ?? null;
     return this.source.transaction(async (manager) => {
+      const seedCorrection = await manager
+        .getRepository(AttendanceCorrectionEntity)
+        .findOneBy({ id: correctionId });
+      if (!seedCorrection) missing();
+      const seedSession = await manager
+        .getRepository(AttendanceSessionEntity)
+        .findOneBy({ id: seedCorrection.attendanceSessionId, siteId });
+      if (!seedSession) missing();
+      await manager.getRepository(WorkerEntity).findOne({
+        where: { id: seedSession.workerId, siteId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `mf03:${siteId}:${seedSession.workerId}`,
+      ]);
       const correction = await manager
         .getRepository(AttendanceCorrectionEntity)
         .findOne({ where: { id: correctionId }, lock: { mode: 'pessimistic_write' } });
@@ -379,30 +494,44 @@ export class AttendanceService {
         ? await manager.getRepository(WorkerEntity).findOneBy({ id: session.workerId, siteId })
         : null;
       if (!session || !worker) missing();
+      await attendanceAccess(manager, actor, worker, true);
       if (correction.requestedBy === actor.id)
         conflict('A requester cannot review their own correction');
-      if (
-        !actor.roleAssignments.some((r) => r.role === UserRole.ADMIN && r.siteId === null) &&
-        (!worker.contractorId ||
-          !(await manager
-            .getRepository(ContractorRepresentativeGrantEntity)
-            .existsBy({ userId: actor.id, contractorId: worker.contractorId })))
-      )
-        conflict('Representative does not manage this Worker');
       const status = value.approve ? 'APPROVED' : 'REJECTED';
       if (
         correction.status === status &&
         correction.reviewedBy === actor.id &&
-        correction.reviewNote === value.reviewNote
+        correction.reviewNote === reviewNote
       )
         return { id: correction.id };
       if (correction.status !== 'PENDING') conflict('Correction has already been reviewed');
       if (value.approve && session.version !== correction.expectedSessionVersion)
         conflict('Attendance changed. A new correction request is required');
+      if (value.approve) {
+        if (session.status === 'IGNORED')
+          conflict('An ignored duplicate cannot be changed into a work interval');
+        const overlaps = await manager
+          .getRepository(AttendanceSessionEntity)
+          .createQueryBuilder('s')
+          .leftJoin(AttendanceDayEntity, 'other_day', 'other_day.id = s.day_id')
+          .where(
+            "s.site_id=:siteId AND s.worker_id=:workerId AND s.id<>:id AND s.effective_in_at<:end AND COALESCE(s.effective_out_at, CASE WHEN s.day_id<>:dayId THEN GREATEST(other_day.ends_at,(SELECT MAX(r.ends_at) FROM overtime_request r WHERE r.schedule_id=other_day.schedule_id AND r.status='APPROVED')) END,'infinity'::timestamptz)>:start",
+            {
+              siteId,
+              workerId: worker.id,
+              id: session.id,
+              dayId: session.dayId,
+              start: correction.proposedInAt,
+              end: correction.proposedOutAt,
+            },
+          )
+          .getOne();
+        if (overlaps) conflict('Correction overlaps another work interval');
+      }
       correction.status = status;
       correction.reviewedBy = actor.id;
       correction.reviewedAt = new Date();
-      correction.reviewNote = value.reviewNote;
+      correction.reviewNote = reviewNote;
       await manager.getRepository(AttendanceCorrectionEntity).save(correction);
       if (value.approve) {
         session.effectiveInAt = correction.proposedInAt;
@@ -419,9 +548,20 @@ export class AttendanceService {
         'ATTENDANCE_CORRECTION_REVIEWED',
         'attendance_correction',
         correction.id,
-        value.reviewNote,
+        reviewNote,
         { status, sessionId: session.id, sessionVersion: session.version },
       );
+      if (session.dayId) {
+        const day = await this.reconciliation.refresh(manager, session.dayId);
+        await this.reconciliation.notificationsForRequest(
+          manager,
+          worker,
+          correction.id,
+          value.approve ? 'TIME_APPROVED' : 'TIME_REJECTED',
+          `Attendance correction ${status.toLowerCase()}${reviewNote ? `: ${reviewNote}` : ''}`,
+          day,
+        );
+      }
       return { id: correction.id };
     });
   }

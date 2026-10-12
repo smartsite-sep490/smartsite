@@ -1,8 +1,15 @@
 import { Module } from '@nestjs/common';
+import { ScheduleAssignmentController } from './schedule-assignment.controller.js';
+import { ScheduleAssignmentService } from './schedule-assignment.service.js';
+import { ContractorTeamsController } from './contractor-teams.controller.js';
+import { ContractorTeamsService } from './contractor-teams.service.js';
 import { QrAccessService } from './qr-access.service.js';
 import { SiteAccessSetupService } from './site-access-setup.service.js';
 import { SiteAccessSetupController } from './site-access-setup.controller.js';
 import { AttendanceService } from './attendance.service.js';
+import { AttendanceReconciliationService } from './attendance-reconciliation.service.js';
+import { AttendanceDaysService } from './attendance-days.service.js';
+import { AttendanceDaysController } from './attendance-days.controller.js';
 import { AttendanceController } from './attendance.controller.js';
 import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
 import { NotificationsController } from './notifications.controller.js';
@@ -37,6 +44,9 @@ import {
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [
+    ScheduleAssignmentController,
+    ContractorTeamsController,
+    AttendanceDaysController,
     AttendanceController,
     SiteAccessSetupController,
     QrAccessController,
@@ -54,6 +64,10 @@ import {
     WorkerGatePermissionsController,
   ],
   providers: [
+    ScheduleAssignmentService,
+    ContractorTeamsService,
+    AttendanceReconciliationService,
+    AttendanceDaysService,
     AttendanceService,
     SiteAccessSetupService,
     QrAccessService,

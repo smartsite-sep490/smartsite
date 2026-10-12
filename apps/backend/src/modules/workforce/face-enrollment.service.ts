@@ -2,7 +2,7 @@ import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { IsNotEmpty, IsString, MaxLength, Matches, Equals } from 'class-validator';
-import { DataSource, In, IsNull, LessThan, MoreThan, Not, type EntityManager } from 'typeorm';
+import { DataSource, In, IsNull, MoreThan, Not, type EntityManager } from 'typeorm';
 import { command, conflict, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { UserEntity, UserRole } from '../../database/entities/user.entity.js';
@@ -98,17 +98,9 @@ export class FaceEnrollmentService {
         {
           workerId: worker.id,
           status: In([FaceEnrollmentSessionStatus.PENDING, FaceEnrollmentSessionStatus.COLLECTING]),
-          expiresAt: LessThan(new Date()),
         },
         { status: FaceEnrollmentSessionStatus.CANCELLED, completedAt: new Date() },
       );
-      const active = await manager.getRepository(FaceEnrollmentSessionEntity).findOne({
-        where: {
-          workerId: worker.id,
-          status: In([FaceEnrollmentSessionStatus.PENDING, FaceEnrollmentSessionStatus.COLLECTING]),
-        },
-      });
-      if (active) conflict('An active face enrollment already exists');
       const now = new Date();
       const consentToken = randomBytes(32).toString('hex');
       const session = await manager.getRepository(FaceEnrollmentSessionEntity).save({

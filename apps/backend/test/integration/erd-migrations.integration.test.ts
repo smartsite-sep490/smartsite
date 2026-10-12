@@ -23,7 +23,12 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
         Number((a.name ?? a.constructor.name).slice(-13)) -
         Number((b.name ?? b.constructor.name).slice(-13)),
     );
-    const baseline = migrations.filter((m) => !(m.name ?? m.constructor.name).startsWith('Erd'));
+    const baseline = migrations.filter(
+      (m) =>
+        !(m.name ?? m.constructor.name).startsWith('Erd') &&
+        m.name !== 'ShiftBreak1791763200001' &&
+        !(m.name ?? m.constructor.name).startsWith('Mf03'),
+    );
     const access = migrations.filter((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
     for (const migration of baseline) await migration.up(runner);
     for (const migration of access) await migration.up(runner);

@@ -14,6 +14,7 @@ import { UserEntity } from './user.entity.js';
 import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.entity.js';
 import { WorkerScheduleEntity } from './worker-schedule.entity.js';
 import { GateEventEntity } from './access-flow.entity.js';
+import { AttendanceDayEntity } from './attendance-day.entity.js';
 
 @Entity({ name: 'attendance_event' })
 @Index('uq_attendance_event_gate', ['gateEventId'], { unique: true })
@@ -55,12 +56,17 @@ export class AttendanceEventEntity {
 }
 
 @Entity({ name: 'attendance_session' })
+@Index('idx_attendance_session_day', ['dayId'])
 @Index('uq_attendance_session_in', ['checkInEventId'], { unique: true })
 @Index('uq_attendance_session_out', ['checkOutEventId'], { unique: true })
 @Index('uq_attendance_session_correction', ['appliedCorrectionId'], { unique: true })
-@Index('uq_attendance_session_open', ['siteId', 'workerId'], {
+@Index('uq_attendance_session_open', ['siteId', 'workerId', 'dayId'], {
   unique: true,
-  where: 'check_out_event_id IS NULL AND effective_out_at IS NULL',
+  where: 'check_out_event_id IS NULL AND effective_out_at IS NULL AND day_id IS NOT NULL',
+})
+@Index('uq_attendance_session_legacy_open', ['siteId', 'workerId'], {
+  unique: true,
+  where: 'check_out_event_id IS NULL AND effective_out_at IS NULL AND day_id IS NULL',
 })
 @Check(
   'ck_attendance_session_events',
@@ -76,9 +82,19 @@ export class AttendanceEventEntity {
 )
 @Check(
   'ck_attendance_session_status',
-  "status IN ('MATCHED','MISSING_IN','MISSING_OUT','NEEDS_REVIEW','CORRECTED')",
+  "status IN ('MATCHED','MISSING_IN','MISSING_OUT','NEEDS_REVIEW','CORRECTED','IGNORED')",
+)
+@Check(
+  'ck_attendance_session_ignore',
+  "(status = 'IGNORED' AND ignored_by IS NOT NULL AND ignored_at IS NOT NULL AND ignore_reason IS NOT NULL AND length(trim(ignore_reason)) >= 5 AND effective_in_at IS NULL AND check_out_event_id IS NULL AND check_in_event_id IS NOT NULL) OR (status <> 'IGNORED' AND ignored_by IS NULL AND ignored_at IS NULL AND ignore_reason IS NULL)",
 )
 export class AttendanceSessionEntity {
+  @Column({ name: 'day_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => AttendanceDayEntity, {
+    name: 'attendance_session_day_id_fkey',
+    onDelete: 'RESTRICT',
+  })
+  dayId!: string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_attendance_session_id' })
   id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
@@ -110,7 +126,12 @@ export class AttendanceSessionEntity {
   @Column({ name: 'effective_out_at', type: 'timestamptz', nullable: true })
   effectiveOutAt!: Date | null;
   @Column({ type: 'varchar', length: 16 }) status!:
-    'MATCHED' | 'MISSING_IN' | 'MISSING_OUT' | 'NEEDS_REVIEW' | 'CORRECTED';
+    'MATCHED' | 'MISSING_IN' | 'MISSING_OUT' | 'NEEDS_REVIEW' | 'CORRECTED' | 'IGNORED';
+  @Column({ name: 'ignored_by', type: 'uuid', nullable: true })
+  @ForeignKey(() => UserEntity, { name: 'fk_attendance_session_ignored_by', onDelete: 'RESTRICT' })
+  ignoredBy!: string | null;
+  @Column({ name: 'ignored_at', type: 'timestamptz', nullable: true }) ignoredAt!: Date | null;
+  @Column({ name: 'ignore_reason', type: 'text', nullable: true }) ignoreReason!: string | null;
   @Column({ name: 'applied_correction_id', type: 'uuid', nullable: true })
   @ForeignKey(() => AttendanceCorrectionEntity, {
     name: 'fk_attendance_session_correction',

@@ -76,6 +76,9 @@ The current foundation contains shared infrastructure and the existing MF05/MF06
 
 ## Getting Started
 
+Shift template archival, data retention and manual checks are documented in [Shift archival (MF03/MF07)](docs/operations/shift-archival.md).
+Team/worker assignment previews, finite weekly repetition and protected schedule changes are documented in [Team schedule assignments](docs/operations/team-schedule-assignments.md).
+
 ### Prerequisites
 
 - Node.js **24.x**
@@ -167,12 +170,9 @@ denial. QR decisions persist as `method: QR`; manual clearance remains unimpleme
 
 Before registering visitors, an Admin opens **Site Setup**, selects the site and uses **Assign Site
 Manager → Create New Site Manager**, or assigns an existing manager. Assigned accounts show whether
-they are disabled, require a password change, or are ready to approve. Only an active manager with
-a permanent password makes the site ready for visitor registration. Site Setup loads every page of
+they are disabled or ready to approve. An active assigned manager makes the site ready for visitor registration. Site Setup loads every page of
 sites, accounts, contractors and representative assignments, and reports unavailable data.
-New accounts sign in with their temporary password and must complete the password-change screen
-before any internal workflow opens. Saving revokes existing sessions and returns to sign-in; a Site
-Manager then opens **Site Access → Visitor Passes** for their assigned site.
+New accounts and password resets use the supplied password immediately, without a mandatory password-change screen. The optional password-change API still verifies the current password and revokes existing sessions; resets also revoke old sessions. Migration `OptionalPasswordChange1791676800002` clears legacy requirements without changing passwords, account activation or roles. Rolling it back restores the old column default but does not add requirements to existing accounts. A Site Manager opens **Site Access → Visitor Passes** for their assigned site.
 
 Visitor registration is available at `/visits/register`, without a login. One representative registers
 the site, group size, contact, host, requested area, gate and schedule. The request appears in

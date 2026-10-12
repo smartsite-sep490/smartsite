@@ -7,6 +7,8 @@ export interface AccessAttemptResponse {
 export interface ConfirmPassageCommand {
   idempotencyKey: string;
   reviewNote?: string;
+  /** Explicitly confirm a distinct physical passage despite the same last direction. */
+  separatePassage?: boolean;
 }
 export interface ManualWorkerVerificationCommand {
   requestId: string;

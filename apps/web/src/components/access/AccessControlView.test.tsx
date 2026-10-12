@@ -164,6 +164,16 @@ describe('Site Access ERD integration', () => {
       sessions: [],
       corrections: [],
     });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'attendanceDays').mockResolvedValue({
+      items: [],
+      total: 0,
+      requests: [],
+      canReview: false,
+      canRequest: false,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'attendanceTimesheets').mockResolvedValue({
+      items: [],
+    });
     vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers').mockResolvedValue(mockWorkersList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listZoneEntryDecisions').mockResolvedValue(
       mockDecisionsList,
@@ -240,7 +250,7 @@ describe('Site Access ERD integration', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    await user.click(screen.getByRole('button', { name: /MF04 QR Visitor Passes/i }));
+    await user.click(screen.getByRole('button', { name: 'Visitor Passes' }));
     await screen.findByText('No visitor pass requests at this site.');
     expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
@@ -274,13 +284,14 @@ describe('Site Access ERD integration', () => {
     };
     const user = userEvent.setup();
     mount();
-    await screen.findByRole('button', { name: /MF04 QR Visitor Passes/i });
-    await user.click(screen.getByRole('button', { name: /MF04 QR Visitor Passes/i }));
+    await screen.findByRole('button', { name: 'Visitor Passes' });
+    await user.click(screen.getByRole('button', { name: 'Visitor Passes' }));
     await screen.findByText('No visitor pass requests at this site.');
-    expect(screen.getByRole('button', { name: /MF06 Zone Permissions/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Zone Permissions' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
   });
   it('Worker sees personal QR and attendance without gate operations', async () => {
+    const user = userEvent.setup();
     authSessionMock.user = {
       ...mockAdminLoginResponse.user,
       roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
@@ -289,6 +300,10 @@ describe('Site Access ERD integration', () => {
     await screen.findByRole('button', { name: 'Get My QR' });
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
-    await screen.findByText(/Attendance/i);
+    expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Attendance' }));
+    await screen.findByRole('heading', { name: 'My Work Hours' });
+    expect(screen.queryByText('+ Enrol Worker')).toBeNull();
+    expect(screen.queryByText('Active Workers')).toBeNull();
   });
 });

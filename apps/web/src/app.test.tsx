@@ -105,7 +105,7 @@ describe('App Navigation and Context Lifecycle', () => {
   });
 
   it.each(['/access', '/site-setup', '/schedule-setup', '/dashboard'])(
-    'requires password change before mounting protected route %s',
+    'opens protected route %s without a forced password-change screen',
     async (path) => {
       accountState.mustChangePassword = true;
       render(
@@ -115,10 +115,8 @@ describe('App Navigation and Context Lifecycle', () => {
           </QueryClientProvider>
         </MemoryRouter>,
       );
-      expect(
-        screen.getByRole('heading', { name: 'Change your temporary password' }),
-      ).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Sidebar Incidents' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Change your temporary password' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Sidebar Incidents' })).not.toBeNull();
     },
   );
 

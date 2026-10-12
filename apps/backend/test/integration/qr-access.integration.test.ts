@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { QrAccessService } from '../../src/modules/workforce/qr-access.service.js';
+import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
   SiteEntity,
   UserEntity,
@@ -25,9 +26,14 @@ import {
   VisitorGateEventEntity,
   QrFallbackSessionEntity,
   GateAccessLogEntity,
+  AttendanceEventEntity,
+  AttendanceSessionEntity,
+  WorkerScheduleEntity,
+  UserNotificationEntity,
 } from '../../src/database/entities/index.js';
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { assignTestShift } from '../support/assigned-shift.js';
 test('real PostgreSQL visitor approval, group counts, expiring QR, replay and worker fallback authorization', async () => {
   await dataSource.initialize();
   const sites: [string, string, string] = [randomUUID(), randomUUID(), randomUUID()];
@@ -379,6 +385,81 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       validUntil: null,
       createdByUserId: managerId,
     });
+    const noShiftFallback = await service.cameraFallback(security, siteId, gateId, {
+      direction: 'IN',
+      reason: 'CAMERA_UNAVAILABLE',
+    });
+    const noShiftPass = await service.workerPass(workerActor, siteId, {
+      fallbackSessionId: noShiftFallback.id,
+    });
+    const noShiftScan = {
+      token: noShiftPass.token,
+      direction: 'IN' as const,
+      requestId: randomUUID(),
+    };
+    const deniedResults = await Promise.all([
+      service.workerGate(security, siteId, gateId, noShiftScan),
+      service.workerGate(security, siteId, gateId, noShiftScan),
+    ]);
+    assert.equal(deniedResults[0].reasonCode, 'NO_SCHEDULE');
+    assert.equal(deniedResults[0].authorization, 'DENIED');
+    assert.equal(deniedResults[0].attempt?.status, 'DENIED');
+    assert.equal(deniedResults[0].attempt?.id, deniedResults[1].attempt?.id);
+    await assert.rejects(
+      service.confirmPassage(security, siteId, deniedResults[0].attempt!.id, {
+        idempotencyKey: randomUUID(),
+        reviewNote: 'Security cannot bypass a missing shift',
+      }),
+      (e: unknown) =>
+        e instanceof PublicHttpException && e.publicPayload.code === 'WORKER_NO_SCHEDULE',
+    );
+    assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 0);
+    assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ workerId }), 0);
+    assert.equal(
+      await dataSource
+        .getRepository(UserNotificationEntity)
+        .countBy({ recipientUserId: accountId, event: 'ENTRY_DENIED_NO_SCHEDULE' }),
+      1,
+    );
+    const assigned = await assignTestShift(dataSource, siteId, workerId);
+    const staleAttempt = await service.manualWorker(security, siteId, gateId, {
+      requestId: randomUUID(),
+      workerId,
+      direction: 'IN',
+      identityConfirmed: true,
+      reviewNote: 'Synthetic verification before schedule change',
+    });
+    await dataSource.getRepository(WorkerScheduleEntity).update(assigned.id, { isActive: false });
+    await assert.rejects(
+      service.confirmPassage(security, siteId, staleAttempt.id, {
+        idempotencyKey: randomUUID(),
+        reviewNote: 'Cannot override a removed schedule',
+      }),
+      (e: unknown) =>
+        e instanceof PublicHttpException && e.publicPayload.code === 'WORKER_NO_SCHEDULE',
+    );
+    assert.equal(
+      await dataSource
+        .getRepository(UserNotificationEntity)
+        .countBy({ recipientUserId: accountId, event: 'ENTRY_DENIED_NO_SCHEDULE' }),
+      1,
+    );
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    await dataSource
+      .getRepository(WorkerScheduleEntity)
+      .update(assigned.id, { isActive: true, workDate: yesterday });
+    const historical = await service.manualWorker(security, siteId, gateId, {
+      requestId: randomUUID(),
+      workerId,
+      direction: 'IN',
+      identityConfirmed: true,
+      reviewNote: 'Old assigned shift does not count today',
+    });
+    assert.equal(historical.status, 'DENIED');
+    assert.equal(historical.scheduleStatus, 'NO_SCHEDULE');
+    await dataSource
+      .getRepository(WorkerScheduleEntity)
+      .update(assigned.id, { workDate: assigned.workDate });
     const fallback = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
@@ -406,16 +487,13 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     assert.equal(workerResults[0].authorization, 'ALLOWED');
     assert.equal(workerResults[0].log.method, 'QR');
     assert.equal(workerResults[0].log.id, workerResults[1].log.id);
-    assert.equal(await dataSource.getRepository(GateAccessLogEntity).countBy({ workerId }), 1);
+    assert.equal(await dataSource.getRepository(GateAccessLogEntity).countBy({ workerId }), 2);
     const attempt = workerResults[0].attempt!;
-    assert.equal(attempt.status, 'PENDING');
+    assert.equal(attempt.status, 'READY');
     assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 0);
-    await assert.rejects(
-      service.confirmPassage(security, siteId, attempt.id, { idempotencyKey: randomUUID() }),
-    );
     const confirm = {
       idempotencyKey: randomUUID(),
-      reviewNote: 'Security verified unscheduled entry',
+      reviewNote: 'Security verified scheduled entry',
     };
     const passages = await Promise.all([
       service.confirmPassage(security, siteId, attempt.id, confirm),
@@ -423,6 +501,111 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     ]);
     assert.equal(passages[0].id, passages[1].id);
     assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 1);
+    const newAttempt = (
+      direction: 'IN' | 'OUT',
+      method: 'FACE' | 'QR' = 'FACE',
+      operator = security,
+    ) =>
+      dataSource.transaction((manager) =>
+        service.recordAttempt(manager, {
+          actor: operator,
+          siteId,
+          gateId,
+          direction,
+          method,
+          workerId,
+          identityStatus: 'MATCHED',
+          authorization: 'ALLOWED',
+          reasonCode: 'SYNTHETIC_VERIFIED',
+          scheduleStatus: 'SCHEDULED',
+        }),
+      );
+    const repeated = await Promise.all(Array.from({ length: 5 }, () => newAttempt('IN')));
+    const rawCount = await dataSource.getRepository(AttendanceEventEntity).countBy({ workerId });
+    const sessionCount = await dataSource
+      .getRepository(AttendanceSessionEntity)
+      .countBy({ workerId });
+    for (const attempt of repeated) {
+      await assert.rejects(
+        service.confirmPassage(security, siteId, attempt.id, {
+          idempotencyKey: randomUUID(),
+          reviewNote: 'Repeated camera scan',
+        }),
+        /Already checked in/,
+      );
+    }
+    assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 1);
+    assert.equal(
+      await dataSource.getRepository(AttendanceEventEntity).countBy({ workerId }),
+      rawCount,
+    );
+    assert.equal(
+      await dataSource.getRepository(AttendanceSessionEntity).countBy({ workerId }),
+      sessionCount,
+    );
+    const managerRepeat = await newAttempt('IN', 'FACE', siteManager);
+    await assert.rejects(
+      service.confirmPassage(siteManager, siteId, managerRepeat.id, {
+        idempotencyKey: randomUUID(),
+        separatePassage: true,
+        reviewNote: 'Manager cannot override repeated passage',
+      }),
+      (error: unknown) =>
+        error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+    );
+    for (const denied of [
+      workerActor,
+      actor(securityId, UserRole.SECURITY_OFFICER, otherSiteId),
+      { ...security, roleAssignments: [] },
+    ]) {
+      await assert.rejects(
+        service.confirmPassage(denied, siteId, repeated[0]!.id, {
+          idempotencyKey: randomUUID(),
+          separatePassage: true,
+          reviewNote: 'Cannot bypass scope',
+        }),
+        (error: unknown) =>
+          error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+      );
+    }
+    await assert.rejects(
+      service.confirmPassage(security, siteId, repeated[0]!.id, {
+        idempotencyKey: randomUUID(),
+        separatePassage: true,
+      }),
+      /reason/,
+    );
+    const distinct = await service.confirmPassage(security, siteId, repeated[0]!.id, {
+      idempotencyKey: randomUUID(),
+      separatePassage: true,
+      reviewNote: 'Security confirmed a real second entry with missing exit',
+    });
+    assert.equal(distinct.direction, 'IN');
+    assert.equal(
+      await dataSource
+        .getRepository(AttendanceSessionEntity)
+        .countBy({ workerId, status: 'NEEDS_REVIEW' }),
+      1,
+    );
+    const simultaneousExits = await Promise.all([newAttempt('OUT'), newAttempt('OUT', 'QR')]);
+    const exitResults = await Promise.allSettled(
+      simultaneousExits.map((candidate) =>
+        service.confirmPassage(security, siteId, candidate.id, { idempotencyKey: randomUUID() }),
+      ),
+    );
+    assert.equal(exitResults.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(exitResults.filter((result) => result.status === 'rejected').length, 1);
+    const repeatedOut = await newAttempt('OUT', 'QR');
+    await assert.rejects(
+      service.confirmPassage(security, siteId, repeatedOut.id, { idempotencyKey: randomUUID() }),
+      /Already checked out/,
+    );
+    const returned = await newAttempt('IN');
+    await service.confirmPassage(security, siteId, returned.id, {
+      idempotencyKey: randomUUID(),
+      reviewNote: 'Worker returned after the recorded exit',
+    });
+    assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 4);
     await assert.rejects(
       service.workerGate(security, siteId, gateId, { ...scan, requestId: randomUUID() }),
       /already been used/,
@@ -487,6 +670,9 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     );
   } finally {
     await cleanupSiteAccess(dataSource, sites);
+    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
+    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
+    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
     await dataSource.query(
       'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1)) OR fallback_session_id IN (SELECT id FROM qr_fallback_session WHERE site_id = ANY($1))',
       [sites],
