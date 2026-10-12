@@ -63,8 +63,8 @@ Khi gặp conflict, tải lại dữ liệu rồi thao tác theo version/members
 - Unique index ngăn hai membership active/Worker tại site; FK và trigger chặn gán sai Site/Contractor. Khi Worker bị disable hoặc đổi phạm vi, membership cũ không cấp quyền swap.
 - Archive có thể kết thúc các membership không còn Worker active trong đúng phạm vi; việc này và lý do được ghi audit. Worker được bật lại phải được phân đội mới.
 - Downgrade từ chối khi đã có đội để giữ lịch sử. Không drop bảng/column chứa lịch sử để quay lại backend cũ.
-- Ngày 2026-10-08 đã build lại Dockerfile chuẩn, backup database local, chạy migration và cập nhật Backend/Web local. Container healthy, schema không drift và không pending migration. Xem [kiểm tra lại MF03/MF07](../reviews/mf03-mf07-docker-recheck-2026-10-08.md); chưa nghiệm thu thiết bị/trình duyệt thật.
+- Ngày 2026-10-08 đã build lại Dockerfile chuẩn, backup database local, chạy migration và cập nhật Backend/Web local. Container healthy, schema không drift và không pending migration. Xem [kế hoạch đội và swap](../planning/contractor-dashboard-teams-shift-swap-plan.md); chưa nghiệm thu thiết bị/trình duyệt thật.
 
 ## Kiểm chứng
 
-Đối chiếu kế hoạch và kết quả kiểm tra: [báo cáo backend/UI](../reviews/contractor-teams-backend-ui-review-2026-10-08.md).
+Đối chiếu kế hoạch và kết quả kiểm tra: [kế hoạch đội và swap](../planning/contractor-dashboard-teams-shift-swap-plan.md).

@@ -6,7 +6,7 @@ Trạng thái ngày 2026-10-08: đã triển khai backend, migration, contract/c
 
 Hướng dẫn sử dụng, API và triển khai: [MF03 vận hành](../operations/mf03-attendance.md). Bản code được kiểm tra riêng tại `D:\SmartSite\smartsite-mf03` để không ghi đè các thay đổi khác trong checkout gốc.
 
-Rà soát mới nhất: [báo cáo nghiệm thu MF03 ngày 2026-10-08](../reviews/mf03-acceptance-review-2026-10-08.md). Hàng đợi yêu cầu đã bổ sung phân trang riêng; lịch thay đổi có UI đối chiếu và hướng dẫn khôi phục theo snapshot cũ. Quyền thay snapshot/tính theo ca mới chưa được chốt. Chưa xác nhận hoàn thành nghiệm thu toàn bộ Phase 6 bằng trình duyệt và thiết bị thật.
+Rà soát mới nhất: [hướng dẫn MF03](../operations/mf03-attendance.md). Hàng đợi yêu cầu đã bổ sung phân trang riêng; lịch thay đổi có UI đối chiếu và hướng dẫn khôi phục theo snapshot cũ. Quyền thay snapshot/tính theo ca mới chưa được chốt. Chưa xác nhận hoàn thành nghiệm thu toàn bộ Phase 6 bằng trình duyệt và thiết bị thật.
 
 Kế hoạch dựa trên code trong checkout `D:\SmartSite\smartsite` tại thời điểm khảo sát; chưa đối chiếu với commit mới trên remote. Các quyết định nghiệp vụ dưới đây đã được người dùng xác nhận và thay thế các quy tắc MF03 xung đột trong tài liệu kế hoạch cũ.
 
@@ -23,25 +23,25 @@ Xác nhận qua cổng → Ghép ca → Tính các khoảng làm việc → Phá
     → Tính lại và xác nhận giờ → Bảng công
 ```
 
-| Tình huống                            | Cách xử lý                                                              |
-| ------------------------------------- | ----------------------------------------------------------------------- |
-| Có ca trong ngày                      | Ghép lượt vào/ra với ca đó                                              |
-| Vào trước giờ bắt đầu ca              | Chỉ bắt đầu tính từ giờ bắt đầu ca                                      |
-| Vào muộn                              | Tính từ giờ vào thực tế                                                 |
-| Ra giữa ca                            | Đóng khoảng đang làm, dừng tính và nhắc công nhân                       |
-| Vào lại trong ca                      | Mở khoảng mới; không cộng thời gian ở ngoài                             |
-| Checkout khi hết ca                   | Cộng các khoảng hợp lệ để xác nhận tổng giờ                             |
-| Checkout sau hết ca, không có tăng ca | Giờ làm thường chỉ tính đến cuối ca                                     |
-| Hết ca nhưng thiếu checkout           | Giữ giờ tạm tính, chưa chốt; sau 5 phút thông báo công nhân và đại diện |
-| Không có ca                           | Lưu ra/vào, thông báo hai bên và chờ xử lý; chưa cộng giờ               |
-| Tăng ca                               | Phải được đại diện duyệt trước khi khoảng tăng ca bắt đầu               |
-| Xin nghỉ                              | Hỗ trợ cả ca và một phần ca; đại diện duyệt; không cộng giờ nghỉ        |
+| Tình huống                            | Cách xử lý                                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Có ca trong ngày                      | Ghép lượt vào/ra với ca đó                                                                             |
+| Vào trước giờ bắt đầu ca              | Chỉ bắt đầu tính từ giờ bắt đầu ca                                                                     |
+| Vào muộn                              | Tính từ giờ vào thực tế                                                                                |
+| Ra giữa ca                            | Đóng khoảng đang làm, dừng tính và nhắc công nhân                                                      |
+| Vào lại trong ca                      | Mở khoảng mới; không cộng thời gian ở ngoài                                                            |
+| Checkout khi hết ca                   | Cộng các khoảng hợp lệ để xác nhận tổng giờ                                                            |
+| Checkout sau hết ca, không có tăng ca | Giờ làm thường chỉ tính đến cuối ca                                                                    |
+| Hết ca nhưng thiếu checkout           | Giữ giờ tạm tính, chưa chốt; sau 5 phút thông báo công nhân và đại diện                                |
+| Không có ca                           | Theo policy cổng hiện hành: chặn IN và báo Worker; OUT vẫn lưu rời cổng, tạo ngoại lệ và chưa cộng giờ |
+| Tăng ca                               | Phải được đại diện duyệt trước khi khoảng tăng ca bắt đầu                                              |
+| Xin nghỉ                              | Hỗ trợ cả ca và một phần ca; đại diện duyệt; không cộng giờ nghỉ                                       |
 
 **Ví dụ nghiệm thu:** ca 08:00–17:00, IN 08:00 → OUT 11:00 → IN 13:00 → OUT 17:00 = **7 giờ làm**. Lượt ra 11:00 gửi nhắc nhưng không bắt duyệt khi công nhân đã quay lại và kết thúc ca đầy đủ.
 
 Một công nhân chỉ có **một ca chính mỗi ngày**. Tăng ca là khoảng bổ sung; ca qua đêm thuộc ngày bắt đầu ca theo múi giờ của ca.
 
-Không trừ nghỉ trưa cố định. Nếu công nhân ở lại công trường và không có khoảng nghỉ được duyệt thì thời gian trong ca vẫn được tính.
+Không trừ nghỉ trưa ngầm định. Nếu ca có cấu hình nghỉ không tính công thì snapshot khoảng đó và chỉ trừ phần giao với hiện diện thực tế; Leave chồng cùng khoảng không bị trừ lần hai. Nếu ca không cấu hình nghỉ và không có Leave được duyệt thì thời gian hiện diện trong ca vẫn được tính.
 
 ## 2. Hướng triển khai từ code hiện tại
 
@@ -80,7 +80,7 @@ Các điểm tích hợp chính là `AttendanceService`, điểm xác nhận pas
 - Tích hợp tại điểm xác nhận passage dùng chung cho Face và QR.
 - IN hợp lệ mở khoảng hiện diện; OUT đóng khoảng; IN tiếp theo mở khoảng mới.
 - Ghép ca bằng công nhân, công trường, ngày làm và múi giờ; hỗ trợ vào trước ca và checkout sau ca.
-- Không có ca vẫn lưu dấu vết, tạo ngoại lệ và thông báo; chỉ tính lại sau khi được bổ sung ca hợp lệ.
+- Policy cổng được cập nhật sau kế hoạch ban đầu: IN thiếu lịch hợp lệ bị chặn và báo Worker; OUT vẫn lưu dấu vết rời cổng, tạo ngoại lệ và chưa cộng giờ. Không suy luận lịch hoặc giờ vào cho dữ liệu thiếu.
 - Chống xử lý lặp bằng ID sự kiện; khóa theo công nhân để tránh hai phiên mở đồng thời.
 - IN lặp, OUT thiếu IN hoặc dữ liệu sai thứ tự không tạo giờ giả; giữ sự kiện và đưa vào xử lý.
 - Bỏ thao tác “Record work check-in/out” riêng trên Web. Endpoint cũ được giữ để trả lại kết quả đã có khi gọi lại, tránh cộng công hai lần.

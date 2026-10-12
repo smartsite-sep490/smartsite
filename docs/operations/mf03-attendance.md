@@ -119,7 +119,7 @@ Lần bổ sung phân trang/đối chiếu ca ngày 2026-10-08 đã đạt `pnpm
 
 ## Kết quả kiểm tra ngày 2026-10-08
 
-Rà soát yêu cầu, sửa lỗi và giới hạn còn lại: [báo cáo nghiệm thu MF03](../reviews/mf03-acceptance-review-2026-10-08.md). Chưa nghiệm thu toàn bộ các ngoại lệ và phần cứng/UI trình duyệt thật.
+Rà soát yêu cầu, sửa lỗi và giới hạn còn lại: [kế hoạch đối soát MF03](../planning/mf03-attendance-reconciliation-plan.md). Chưa nghiệm thu toàn bộ các ngoại lệ và phần cứng/UI trình duyệt thật.
 
 Bản MF03 được kiểm tra riêng tại `D:\SmartSite\smartsite-mf03`, nhánh `feat/mf03-verified-20261008`, trên nền commit `480c04c`. Checkout gốc vẫn giữ các thay đổi khác của người dùng.
 
@@ -149,4 +149,4 @@ Database local đã chạy các migration MF03 và `OptionalPasswordChange179167
 
 ## Cập nhật Docker và kiểm tra lại MF03/MF07
 
-Ngày 2026-10-08 đã build Backend/migrate/Web bằng Dockerfile chuẩn và cập nhật runtime local. Migration quản lý đội đã chạy; schema runtime không drift, không pending migration. PostgreSQL integration chạy lại đạt **122/122** và Web tests **344/344**. Hai Worker demo đăng nhập và đọc API MF03/MF07 thành công. Xem [báo cáo hiện tại](../reviews/mf03-mf07-docker-recheck-2026-10-08.md) cho phạm vi, backup và các phần chưa nghiệm thu. Những số liệu ở các mục kiểm tra trước đó là lịch sử từng lần kiểm tra.
+Ngày 2026-10-08 đã build Backend/migrate/Web bằng Dockerfile chuẩn và cập nhật runtime local. Migration quản lý đội đã chạy; schema runtime không drift, không pending migration. PostgreSQL integration chạy lại đạt **122/122** và Web tests **344/344**. Hai Worker demo đăng nhập và đọc API MF03/MF07 thành công. Xem [kế hoạch đối soát MF03](../planning/mf03-attendance-reconciliation-plan.md) cho phạm vi, backup và các phần chưa nghiệm thu. Những số liệu ở các mục kiểm tra trước đó là lịch sử từng lần kiểm tra.
