@@ -71,14 +71,18 @@ function assertZone(zone, expected, label) {
   }
 }
 
-async function ensureZone(client, token, siteId, expected, label) {
+async function ensureZone(client, token, siteId, expected, label, zoneToken) {
   const page = await client.listZones(token, siteId);
   const zone = exactlyOne(page.items, (item) => item.code === expected.code, label);
   if (zone) {
     assertZone(zone, expected, label);
     return zone;
   }
-  return client.createZone(token, siteId, expected);
+  if (!zoneToken)
+    throw new Error(
+      'Missing demo Zone: create it as the assigned Site Manager, or supply SMARTSITE_DEMO_MANAGER_USERNAME and SMARTSITE_DEMO_MANAGER_PASSWORD.',
+    );
+  return client.createZone(zoneToken, siteId, expected);
 }
 
 async function ensureRegion(client, token, siteId, cameraId, zoneId, polygon, label) {
@@ -107,7 +111,7 @@ async function ensureRegion(client, token, siteId, cameraId, zoneId, polygon, la
   ).region;
 }
 
-export async function ensureDemoConfiguration(client, token) {
+export async function ensureDemoConfiguration(client, token, zoneToken = token) {
   const sites = await client.listSites(token);
   let site = exactlyOne(
     sites.items,
@@ -151,6 +155,7 @@ export async function ensureDemoConfiguration(client, token) {
     site.id,
     demoConfiguration.ppeZone,
     'PPE demo Zone',
+    zoneToken,
   );
   const restrictedZone = await ensureZone(
     client,
@@ -158,6 +163,7 @@ export async function ensureDemoConfiguration(client, token) {
     site.id,
     demoConfiguration.restrictedZone,
     'restricted demo Zone',
+    zoneToken,
   );
   const ppeRegion = await ensureRegion(
     client,
@@ -339,6 +345,7 @@ async function main() {
   );
   let accessToken;
   let refreshToken;
+  let managerRefreshToken;
   try {
     let session = await client.login(username, password);
     accessToken = session.accessToken;
@@ -362,9 +369,22 @@ async function main() {
     if (!hasGlobalAdminRole(session.user)) {
       throw new Error('The demo setup requires an Admin account.');
     }
-    const result = await ensureDemoConfiguration(client, accessToken);
+    let zoneToken = null;
+    if (
+      process.env.SMARTSITE_DEMO_MANAGER_USERNAME &&
+      process.env.SMARTSITE_DEMO_MANAGER_PASSWORD
+    ) {
+      const managerSession = await client.login(
+        process.env.SMARTSITE_DEMO_MANAGER_USERNAME,
+        process.env.SMARTSITE_DEMO_MANAGER_PASSWORD,
+      );
+      zoneToken = managerSession.accessToken;
+      managerRefreshToken = managerSession.refreshToken;
+    }
+    const result = await ensureDemoConfiguration(client, accessToken, zoneToken);
     console.log(JSON.stringify(result, null, 2));
   } finally {
+    if (managerRefreshToken) await client.logout(managerRefreshToken).catch(() => undefined);
     if (refreshToken) await client.logout(refreshToken).catch(() => undefined);
   }
 }

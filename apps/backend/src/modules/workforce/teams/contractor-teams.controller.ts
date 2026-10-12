@@ -21,12 +21,49 @@ import {
   ContractorTeamWorkersQueryDto,
   CreateContractorTeamDto,
   UpdateContractorTeamDto,
+  GrantTeamZoneDto,
 } from './dto/contractor-team.dto.js';
 @ApiTags('contractor-teams')
 @ApiBearerAuth('user-token')
 @UseGuards(UserAuthGuard)
 @Controller()
 export class ContractorTeamsController {
+  @Patch('sites/:siteId/contractors/:contractorId/teams/:id/zones/:permissionId') updateZone(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Param('id') id: string,
+    @Param('permissionId') permissionId: string,
+    @Body() input: GrantTeamZoneDto,
+  ) {
+    return this.teams.grantZone(req.user!, siteId, contractorId, id, input, permissionId);
+  }
+  @Get('sites/:siteId/contractors/:contractorId/teams/:id/zones') zones(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Param('id') id: string,
+  ) {
+    return this.teams.zoneSetup(req.user!, siteId, contractorId, id);
+  }
+  @Post('sites/:siteId/contractors/:contractorId/teams/:id/zones') grantZone(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Param('id') id: string,
+    @Body() input: GrantTeamZoneDto,
+  ) {
+    return this.teams.grantZone(req.user!, siteId, contractorId, id, input);
+  }
+  @Post('sites/:siteId/contractors/:contractorId/teams/:id/zones/:permissionId/revoke') revokeZone(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Param('id') id: string,
+    @Param('permissionId') permissionId: string,
+  ) {
+    return this.teams.revokeZone(req.user!, siteId, contractorId, id, permissionId);
+  }
   constructor(private readonly teams: ContractorTeamsService) {}
   @Get('sites/:siteId/my-team') myTeam(
     @Req() req: AuthenticatedRequest,

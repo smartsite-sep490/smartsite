@@ -17,6 +17,9 @@ const api = vi.hoisted(() => ({
   archiveContractorTeam: vi.fn(),
   listContractorTeamWorkers: vi.fn(),
   assignContractorTeam: vi.fn(),
+  teamZoneSetup: vi.fn(),
+  grantTeamZone: vi.fn(),
+  revokeTeamZone: vi.fn(),
 }));
 
 vi.mock('@smartsite/api-client', () => ({
@@ -135,6 +138,34 @@ const syntheticWorkers = [
 ];
 
 let queryClient: QueryClient;
+
+it('opens Assign Zone for the selected team and binds the dialog to the active Contractor scope', async () => {
+  api.teamZoneSetup.mockResolvedValue({ availableZones: [], permissions: [] });
+  renderView();
+  const user = userEvent.setup();
+  const buttons = await screen.findAllByRole('button', { name: 'Assign Zone' });
+  await user.click(buttons[0]!);
+  await screen.findByRole('dialog');
+  expect(api.teamZoneSetup).toHaveBeenCalledWith(
+    expect.any(String),
+    'site-alpha',
+    'contractor-paint',
+    'team-1',
+  );
+  await screen.findByText(/Ask your Site Manager/);
+});
+it('shows the assigned Zone and Edit Zone instead of Assign Zone for that team', async () => {
+  api.listContractorTeams.mockResolvedValue({
+    items: [
+      { ...syntheticTeams[0], zoneAssignments: [{ id: 'tp', name: 'Gạch', effective: true }] },
+    ],
+    total: 1,
+  });
+  renderView();
+  expect(await screen.findByText('Gạch')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Edit Zone' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Assign Zone' })).toBeNull();
+});
 
 function renderView(props = {}) {
   queryClient = new QueryClient({

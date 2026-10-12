@@ -59,6 +59,7 @@ function createManager(workers: WorkerEntity[], grants: ZoneAccessGrantEntity[])
   const grantQueries: Record<string, unknown>[] = [];
   const manager = {
     async query(_sql: string, params: unknown[]) {
+      if (_sql.includes('team_zone_permission')) return [];
       const [scopeWorker, scopeSite, scopeZone] = params;
       grantQueries.push({ siteId: scopeSite, zoneId: scopeZone, workerId: scopeWorker });
       return grants

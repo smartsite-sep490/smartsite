@@ -6,6 +6,7 @@ export interface ContractorDashboardScope {
   contractorName: string;
 }
 export interface ContractorTeamResponse {
+  zoneAssignments?: TeamZoneAssignmentResponse[];
   id: string;
   siteId: string;
   contractorId: string;
@@ -22,6 +23,7 @@ export interface ContractorDashboardResponse {
   unassignedWorkerCount: number;
 }
 export interface ContractorTeamWorkerResponse {
+  zones?: TeamZoneAssignmentResponse[];
   workerId: string;
   displayName: string;
   membershipId: string | null;
@@ -61,4 +63,31 @@ export interface AssignContractorTeamCommand {
   teamId: string | null;
   /** Required when transferring or removing an existing membership. */
   reason?: string;
+}
+export interface GrantTeamZoneCommand {
+  requestId: string;
+  contractorZonePermissionId: string;
+  startDate: string;
+  endDate: string;
+  timezone: string;
+}
+export interface TeamZoneSetupResponse {
+  availableZones: {
+    permissionId: string;
+    zoneId: string;
+    name: string;
+    validFrom: string;
+    validUntil: string;
+  }[];
+  permissions: TeamZoneAssignmentResponse[];
+}
+export interface TeamZoneAssignmentResponse {
+  id: string;
+  contractorZonePermissionId: string;
+  zoneId: string;
+  name: string;
+  validFrom: string;
+  validUntil: string;
+  revokedAt: string | null;
+  effective: boolean;
 }

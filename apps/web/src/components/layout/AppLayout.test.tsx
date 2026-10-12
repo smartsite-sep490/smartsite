@@ -24,7 +24,11 @@ afterEach(cleanup);
 
 function navigationFor(userRoles: string[]) {
   roles = userRoles;
-  render(<MemoryRouter><AppLayout>Content</AppLayout></MemoryRouter>);
+  render(
+    <MemoryRouter>
+      <AppLayout>Content</AppLayout>
+    </MemoryRouter>,
+  );
   return within(screen.getByRole('navigation', { name: 'Main navigation' }));
 }
 
@@ -32,12 +36,15 @@ it.each([
   ['CONTRACTOR_REPRESENTATIVE'],
   ['CONTRACTOR_REPRESENTATIVE', 'WORKER'],
   ['CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'],
-])('hides Site Access for contractor roles %j while retaining scheduling navigation', (...userRoles) => {
-  const navigation = navigationFor(userRoles);
-  expect(navigation.queryByRole('button', { name: 'Site Access' })).toBeNull();
-  expect(navigation.getByRole('button', { name: 'Contractor Review' })).toBeTruthy();
-  expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
-});
+])(
+  'hides Site Access for contractor roles %j while retaining scheduling navigation',
+  (...userRoles) => {
+    const navigation = navigationFor(userRoles);
+    expect(navigation.queryByRole('button', { name: 'Site Access' })).toBeNull();
+    expect(navigation.getByRole('button', { name: 'Contractor Review' })).toBeTruthy();
+    expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
+  },
+);
 
 it.each([['ADMIN'], ['ADMIN', 'CONTRACTOR_REPRESENTATIVE']])(
   'retains Site Access for Admin roles %j',
@@ -45,3 +52,19 @@ it.each([['ADMIN'], ['ADMIN', 'CONTRACTOR_REPRESENTATIVE']])(
     expect(navigationFor(userRoles).getByRole('button', { name: 'Site Access' })).toBeTruthy();
   },
 );
+
+it('Site Manager sees contractor and Zone setup without Site Access or attendance navigation', () => {
+  const navigation = navigationFor(['SITE_MANAGER']);
+  expect(navigation.getByRole('button', { name: 'Contractors & Zones' })).toBeTruthy();
+  expect(navigation.queryByRole('button', { name: 'Site Access' })).toBeNull();
+  expect(navigation.queryByRole('button', { name: 'Attendance & Access' })).toBeNull();
+  expect(navigation.queryByRole('button', { name: 'Workforce' })).toBeNull();
+});
+
+it('Contractor Representative retains Attendance & Access', () => {
+  expect(
+    navigationFor(['CONTRACTOR_REPRESENTATIVE']).getByRole('button', {
+      name: 'Attendance & Access',
+    }),
+  ).toBeTruthy();
+});

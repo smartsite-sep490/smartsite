@@ -5,6 +5,7 @@ import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import {
   SiteAccessSetupService,
   GrantContractorZoneCommand,
+  GrantContractorZoneDatesCommand,
   GrantWorkerZoneCommand,
 } from './site-access-setup.service.js';
 
@@ -14,6 +15,13 @@ import {
 @Controller('sites/:siteId/access-setup')
 export class SiteAccessSetupController {
   constructor(private readonly setup: SiteAccessSetupService) {}
+  @Post('contractor-zone-permissions/dates') contractorDates(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Body() input: GrantContractorZoneDatesCommand,
+  ) {
+    return this.setup.grantContractor(req.user!, siteId, input);
+  }
   @Get() options(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string) {
     return this.setup.options(req.user!, siteId);
   }

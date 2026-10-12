@@ -6,7 +6,10 @@ import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.en
 
 @Entity({ name: 'contractor_zone_permission' })
 @Check('ck_contractor_zone_interval', 'valid_until > valid_from')
-@Index('uq_contractor_zone_interval', ['siteContractorId', 'zoneId', 'validFrom'], { unique: true })
+@Index('uq_contractor_zone_interval', ['siteContractorId', 'zoneId', 'validFrom'], {
+  unique: true,
+  where: 'revoked_at IS NULL',
+})
 export class ContractorZonePermissionEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_contractor_zone_permission_id' })
   id!: string;

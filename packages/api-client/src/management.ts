@@ -1,4 +1,8 @@
 import type {
+  GrantTeamZoneCommand,
+  TeamZoneSetupResponse,
+  ManagerOverviewResponse,
+  ManagerContractorDetailResponse,
   ScheduleAssignmentInput,
   ScheduleAssignmentPreview,
   ScheduleAssignmentBatchResponse,
@@ -71,6 +75,7 @@ import type {
   GateEventResponse,
   AccessSetupResponse,
   GrantContractorZoneCommand,
+  GrantContractorZoneDatesCommand,
   GrantWorkerZoneCommand,
   ManualWorkerVerificationCommand,
   AccessAttemptResponse,
@@ -163,6 +168,72 @@ const validTimeout = (timeoutMs: number) =>
   Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
 
 export class SmartSiteManagementClient {
+  updateTeamZone(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    id: string,
+    input: GrantTeamZoneCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones/${pathId(id)}`,
+      token,
+      input,
+    );
+  }
+  teamZoneSetup(token: string, siteId: string, contractorId: string, teamId: string) {
+    return this.request<TeamZoneSetupResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones`,
+      token,
+    );
+  }
+  grantTeamZone(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    input: GrantTeamZoneCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones`,
+      token,
+      input,
+    );
+  }
+  revokeTeamZone(token: string, siteId: string, contractorId: string, teamId: string, id: string) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones/${pathId(id)}/revoke`,
+      token,
+    );
+  }
+  managerOverview(token: string, siteId: string, options?: PageOptions) {
+    return this.request<ManagerOverviewResponse>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/management/overview`, options),
+      token,
+    );
+  }
+
+  managerContractorDetail(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    query: { date: string; timezone: string },
+  ) {
+    return this.request<ManagerContractorDetailResponse>(
+      'GET',
+      this.listPath(
+        `/sites/${pathId(siteId)}/management/contractors/${pathId(contractorId)}`,
+        query,
+      ),
+      token,
+    );
+  }
   myContractorTeam(token: string, siteId: string) {
     return this.request<ContractorTeamWorkerResponse>(
       'GET',
@@ -422,6 +493,14 @@ export class SmartSiteManagementClient {
     return this.request<{ id: string }>(
       'POST',
       `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions`,
+      token,
+      input,
+    );
+  }
+  grantContractorZoneDates(token: string, siteId: string, input: GrantContractorZoneDatesCommand) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions/dates`,
       token,
       input,
     );
@@ -1125,6 +1204,26 @@ export class SmartSiteManagementClient {
       { roleAssignments },
     );
   }
+  createSiteRepresentative(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    input: { username: string; displayName: string; temporaryPassword: string },
+  ) {
+    return this.request<AccountResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/representative-accounts`,
+      token,
+      input,
+    );
+  }
+  listSiteRepresentatives(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<AccountResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/representative-accounts`, options),
+      token,
+    );
+  }
   listUsers(token: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>('GET', this.listPath('/users', options), token);
   }
@@ -1260,12 +1359,12 @@ export class SmartSiteManagementClient {
   createContractor(
     token: string,
     siteId: string,
-    input: { code: string; name: string },
+    input: { code?: string; name: string },
   ): Promise<ContractorResponse>;
   createContractor(
     token: string,
-    siteIdOrInput: string | { code: string; name: string },
-    siteInput?: { code: string; name: string },
+    siteIdOrInput: string | { code?: string; name: string },
+    siteInput?: { code?: string; name: string },
   ) {
     const siteScoped = typeof siteIdOrInput === 'string';
     const input = siteScoped ? siteInput! : siteIdOrInput;
@@ -1600,7 +1699,7 @@ export class SmartSiteManagementClient {
     token: string,
     siteId: string,
     input: {
-      code: string;
+      code?: string;
       name: string;
       type: ZoneResponse['type'];
       restrictionPolicy: ZoneResponse['restrictionPolicy'];

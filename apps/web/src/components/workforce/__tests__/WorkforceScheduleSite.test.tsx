@@ -25,6 +25,18 @@ beforeEach(() => {
     membershipId: 'mem-1',
     teamId: 'team-paint',
     teamName: 'Painting Squad',
+    zones: [
+      {
+        id: 'grant',
+        contractorZonePermissionId: 'parent',
+        zoneId: 'zone',
+        name: 'Painting Zone',
+        validFrom: '2026-01-01T00:00:00Z',
+        validUntil: '2030-01-01T00:00:00Z',
+        revokedAt: null,
+        effective: true,
+      },
+    ],
   });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listShiftRequests').mockResolvedValue({
     items: [],
@@ -237,9 +249,22 @@ it('displays worker assigned team and enables eligible swap workflow', async () 
     membershipId: 'mem-1',
     teamId: 'team-paint',
     teamName: 'Painting Squad',
+    zones: [
+      {
+        id: 'grant',
+        contractorZonePermissionId: 'parent',
+        zoneId: 'zone',
+        name: 'Painting Zone',
+        validFrom: '2026-01-01T00:00:00Z',
+        validUntil: '2030-01-01T00:00:00Z',
+        revokedAt: null,
+        effective: true,
+      },
+    ],
   });
   mount();
   expect(await screen.findByText(/Team: Painting Squad/i)).not.toBeNull();
+  expect(await screen.findByText('Zone: Painting Zone')).not.toBeNull();
   expect(screen.queryByText(/Member of Painting Squad/i)).toBeNull();
 });
 

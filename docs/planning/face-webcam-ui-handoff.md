@@ -11,19 +11,19 @@ This is a UI implementation brief. The Backend remains authoritative for every a
 
 ## Required state mapping
 
-| Backend result | UI behavior |
-| --- | --- |
-| `MATCHED` + `ALLOWED` | Green result; enable the Security Officer to record IN/OUT. |
-| `MATCHED` + `DENIED` | Red result with safe reason; no QR fallback. |
-| `MATCHED` + `MANUAL_REVIEW` | Neutral/manual-review state; no automatic access. |
+| Backend result                                                  | UI behavior                                                                                  |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `MATCHED` + `ALLOWED`                                           | Green result; enable the Security Officer to record IN/OUT.                                  |
+| `MATCHED` + `DENIED`                                            | Red result with safe reason; no QR fallback.                                                 |
+| `MATCHED` + `MANUAL_REVIEW`                                     | Neutral/manual-review state; no automatic access.                                            |
 | `UNKNOWN`, `LOW_CONFIDENCE`, `QUALITY_FAILED`, `AI_UNAVAILABLE` | Neutral failure state; expose “Use QR fallback”, then require Security Officer confirmation. |
-| Network/upload error | Retry state; do not show any cached successful result. |
+| Network/upload error                                            | Retry state; do not show any cached successful result.                                       |
 
 ## Backend endpoints now available for workforce setup
 
-- `POST /contractors` — Admin creates a Contractor.
-- `POST /contractors/:contractorId/participations` — Admin enables that Contractor at a Site for a time interval.
-- `POST /contractors/:contractorId/representative-grants` — Admin grants a Contractor Representative account access to that Contractor.
+- `POST /sites/:siteId/contractors` — the assigned Site Manager creates or links a Contractor and its active participation. Legacy unscoped provisioning routes are denied.
+- `POST /sites/:siteId/contractors/:contractorId/representative-accounts` — the assigned Site Manager creates a representative account and links it atomically.
+- `POST /sites/:siteId/contractors/:contractorId/representatives` — the assigned Site Manager links an existing active representative in this Site.
 - `POST /contractors/:contractorId/workers` — Contractor Representative creates a Worker at an active Contractor/Site participation.
 - `POST /workers/:workerId/site-zone-assignment-requests` — Contractor Representative requests assignment.
 - `POST /site-zone-assignment-requests/:requestId/safety-review` — Safety Officer reviews it.

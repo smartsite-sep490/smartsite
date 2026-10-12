@@ -765,6 +765,7 @@ export function WorkforceScheduleTab({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-[#071A2B]">
+                  <span className="block text-slate-500 text-[10px]">Worker profile</span>
                   {myTeam?.displayName || 'Worker'}
                 </span>
                 {myTeam?.teamName ? (
@@ -777,6 +778,14 @@ export function WorkforceScheduleTab({
                   </span>
                 )}
               </div>
+              <p className="mt-2 text-xs text-slate-600">
+                Zone:{' '}
+                {myTeam?.zones?.length
+                  ? myTeam.zones
+                      .map((z) => `${z.name}${z.effective ? '' : ' (inactive)'}`)
+                      .join(', ')
+                  : 'Not assigned'}
+              </p>
             </div>
           </div>
         </div>

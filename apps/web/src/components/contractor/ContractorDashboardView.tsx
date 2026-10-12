@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { TeamZoneDialog } from './TeamZoneDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
@@ -108,6 +109,12 @@ export function ContractorDashboardView({
 
   // ── 2. Active Tab / Sub-view ──────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'overview' | 'teams' | 'workers'>('overview');
+  const [zoneTeam, setZoneTeam] = useState<{
+    siteId: string;
+    contractorId: string;
+    teamId: string;
+    name: string;
+  } | null>(null);
 
   // ── 3. Filters & Pagination States ────────────────────────────────────────────
   // Teams filters
@@ -125,6 +132,7 @@ export function ContractorDashboardView({
   const assignRequestIdRef = useRef<{ fingerprint: string; id: string } | null>(null);
 
   const handleScopeSelect = (scopeKey: string) => {
+    setZoneTeam(null);
     // 1. Close and clean all modals so old drafts/targets cannot be submitted into new scope
     createRequestIdRef.current = null;
     assignRequestIdRef.current = null;
@@ -577,6 +585,21 @@ export function ContractorDashboardView({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {zoneTeam &&
+        activeScope?.siteId === zoneTeam.siteId &&
+        activeScope?.contractorId === zoneTeam.contractorId && (
+          <TeamZoneDialog
+            key={`${zoneTeam.siteId}-${zoneTeam.teamId}`}
+            apiUrl={resolvedApiUrl}
+            token={accessToken!}
+            userId={sessionScope}
+            siteId={zoneTeam.siteId}
+            contractorId={zoneTeam.contractorId}
+            teamId={zoneTeam.teamId}
+            teamName={zoneTeam.name}
+            onClose={() => setZoneTeam(null)}
+          />
+        )}
       {scheduleLink && (
         <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
           Team updated. Existing schedules remain unchanged.{' '}
@@ -957,6 +980,13 @@ export function ContractorDashboardView({
                           <tr key={team.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="py-3.5 px-4 font-bold text-[#071A2B]">
                               <span>{team.name}</span>
+                              <p className="mt-1 text-xs font-medium text-slate-500">
+                                {team.zoneAssignments?.length
+                                  ? team.zoneAssignments
+                                      .map((z) => `${z.name}${z.effective ? '' : ' (inactive)'}`)
+                                      .join(', ')
+                                  : 'Zone: Unassigned'}
+                              </p>
                             </td>
                             <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
                               {team.description || (
@@ -994,6 +1024,20 @@ export function ContractorDashboardView({
                                 </button>
                                 {team.isActive && (
                                   <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setZoneTeam({
+                                          siteId: activeScope!.siteId,
+                                          contractorId: activeScope!.contractorId,
+                                          teamId: team.id,
+                                          name: team.name,
+                                        })
+                                      }
+                                      className="px-2.5 py-1 rounded-lg border border-orange-200 text-[11px] font-bold text-orange-700"
+                                    >
+                                      {team.zoneAssignments?.length ? 'Edit Zone' : 'Assign Zone'}
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => openEditTeam(team)}

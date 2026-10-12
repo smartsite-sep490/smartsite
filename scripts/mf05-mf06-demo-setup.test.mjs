@@ -136,6 +136,22 @@ test('creates the two-region MF05/MF06 demo configuration with current revisions
   assert.equal(client.zones[1].restrictionPolicy, 'PROHIBITED_FOR_ALL');
 });
 
+test('demo provisioning uses the Manager session for Zone creation and refuses missing Manager credentials', async () => {
+  const client = new FakeClient();
+  const create = client.createZone.bind(client);
+  client.createZone = async (token, siteId, input) => {
+    assert.equal(token, 'manager-token');
+    return create(token, siteId, input);
+  };
+  await ensureDemoConfiguration(client, 'admin-token', 'manager-token');
+  await assert.rejects(
+    ensureDemoConfiguration(new FakeClient(), 'admin-token', null),
+    /assigned Site Manager/,
+  );
+  // Read-only/idempotent retries do not need a manager session once Zones exist.
+  await ensureDemoConfiguration(client, 'admin-token', null);
+});
+
 test('is idempotent when the exact configuration already exists', async () => {
   const client = new FakeClient();
   const first = await ensureDemoConfiguration(client, 'token');

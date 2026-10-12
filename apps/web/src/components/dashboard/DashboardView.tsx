@@ -2,6 +2,7 @@ import React from 'react';
 import { IconHardHat, IconShield, IconClock } from '../icons';
 import { useCurrentUser } from '../../features/auth/auth-session';
 import { ContractorDashboardView } from '../contractor/ContractorDashboardView';
+import { ManagerDashboardView } from './ManagerDashboardView';
 
 import type { ActiveTab } from '../layout/AppLayout';
 import type { SafetyAlertStatus, SafetyAlertType } from '@smartsite/api-client';
@@ -29,6 +30,9 @@ export function DashboardView({ onNavigate, apiUrl: apiUrlProp }: DashboardViewP
 
   if (isContractorRep) {
     return <ContractorDashboardView apiUrl={resolvedApiUrl} onNavigate={onNavigate} />;
+  }
+  if (!isAdmin && roles.includes('SITE_MANAGER')) {
+    return <ManagerDashboardView apiUrl={resolvedApiUrl} onNavigate={onNavigate} />;
   }
   const stats = [
     {

@@ -65,7 +65,23 @@ export class ZoneEntryAuthorizationService {
         AND (wp.revoked_at IS NULL OR wp.revoked_at>$5) AND (cp.revoked_at IS NULL OR cp.revoked_at>$5)`,
       [worker.id, input.siteId, input.zoneId, worker.contractorId, input.evaluatedAt],
     );
-    const grants = permissions.map((p) => ({
+    const teamPermissions = await manager.query<{ validFrom: Date; validUntil: Date }[]>(
+      `SELECT tp.valid_from AS "validFrom",tp.valid_until AS "validUntil" FROM team_zone_permission tp
+      JOIN contractor_team t ON t.id=tp.team_id AND t.site_id=$2 AND t.contractor_id=$4 AND t.is_active
+      JOIN contractor_team_membership tm ON tm.team_id=t.id AND tm.site_id=t.site_id AND tm.contractor_id=t.contractor_id AND tm.worker_id=$1 AND tm.joined_at<=$5 AND (tm.left_at IS NULL OR tm.left_at>$5)
+      JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id AND cp.zone_id=$3
+      JOIN contractor_site_participation p ON p.id=cp.site_contractor_id AND p.site_id=t.site_id AND p.contractor_id=t.contractor_id AND p.is_active
+      JOIN contractor c ON c.id=p.contractor_id AND c.is_active
+      JOIN worker_site_zone_assignment a ON a.worker_id=$1 AND a.site_id=$2 AND a.site_contractor_id=p.id AND a.status='APPROVED' AND $3=ANY(a.zone_ids)
+      WHERE tp.valid_from<=$5 AND tp.valid_until>$5 AND (tp.revoked_at IS NULL OR tp.revoked_at>$5)
+      AND cp.valid_from<=$5 AND cp.valid_until>$5 AND (cp.revoked_at IS NULL OR cp.revoked_at>$5)
+      AND p.valid_from<=$5 AND (p.valid_until IS NULL OR p.valid_until>$5)
+      AND a.valid_from<=$5 AND a.valid_until>$5
+      AND tp.valid_from>=cp.valid_from AND tp.valid_until<=cp.valid_until
+      AND tp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR tp.valid_until<=p.valid_until)`,
+      [worker.id, input.siteId, input.zoneId, worker.contractorId, input.evaluatedAt],
+    );
+    const grants = [...permissions, ...teamPermissions].map((p) => ({
       effect: 'ALLOW' as const,
       validFrom: p.validFrom,
       validUntil: p.validUntil,

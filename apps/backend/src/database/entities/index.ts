@@ -8,6 +8,8 @@ import {
   SafetyWorkflowAuditEntity,
 } from './safety-workflow.entity.js';
 import { SiteEntity } from './site.entity.js';
+import { TeamZonePermissionEntity } from './team-zone-permission.entity.js';
+export * from './team-zone-permission.entity.js';
 import { ScheduleAssignmentBatchEntity } from './schedule-assignment-batch.entity.js';
 export * from './schedule-assignment-batch.entity.js';
 import { ContractorTeamEntity, ContractorTeamMembershipEntity } from './contractor-team.entity.js';
@@ -182,4 +184,5 @@ export const ENTITIES = [
   GateAccessLogEntity,
   WorkerGatePermissionEntity,
   UserNotificationEntity,
+  TeamZonePermissionEntity,
 ] as const;

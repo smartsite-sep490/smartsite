@@ -29,12 +29,13 @@ export class CreateWorkerDto {
 }
 
 export class CreateContractorDto {
+  @IsOptional()
   @Transform(trim)
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
   @Matches(safeText)
-  code!: string;
+  code?: string;
 
   @Transform(trim)
   @IsString()

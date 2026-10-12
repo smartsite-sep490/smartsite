@@ -346,18 +346,17 @@ export class WorkforceConfigurationService {
   async createContractor(siteId: string, input: CreateContractorDto): Promise<ContractorEntity> {
     const scopedSiteId = uuid(siteId);
     const value = command(CreateContractorDto, input);
+    const code = value.code ?? `CTR-${randomUUID().toUpperCase()}`;
     try {
       return await this.dataSource.transaction(async (manager) => {
         const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
         if (!site) missing();
-        let contractor = await manager
-          .getRepository(ContractorEntity)
-          .findOneBy({ code: value.code });
+        let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code });
         if (contractor && (contractor.name !== value.name || !contractor.isActive))
           conflict('Contractor code belongs to another name or an inactive contractor');
         contractor ??= await manager.getRepository(ContractorEntity).save({
           id: randomUUID(),
-          code: value.code,
+          code,
           name: value.name,
           isActive: true,
         });
@@ -397,67 +396,74 @@ export class WorkforceConfigurationService {
     contractorId: string,
     input: AssignContractorRepresentativeDto,
   ): Promise<ContractorRepresentativeAssignmentEntity> {
-    const scopedSiteId = uuid(siteId);
-    const scopedContractorId = uuid(contractorId);
-    const value = command(AssignContractorRepresentativeDto, input);
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        const [contractor, user, assignment, participations] = await Promise.all([
-          manager
-            .getRepository(ContractorEntity)
-            .findOneBy({ id: scopedContractorId, isActive: true }),
-          manager.getRepository(UserEntity).findOneBy({ id: value.userId, isActive: true }),
-          manager.getRepository(UserRoleAssignmentEntity).findOneBy({
-            userId: value.userId,
-            role: UserRole.CONTRACTOR_REPRESENTATIVE,
-            siteId: scopedSiteId,
-          }),
-          manager.getRepository(ContractorSiteParticipationEntity).findBy({
-            contractorId: scopedContractorId,
-            siteId: scopedSiteId,
-            isActive: true,
-          }),
-        ]);
-        const now = Date.now();
-        if (
-          !contractor ||
-          !user ||
-          !assignment ||
-          !participations.some(
-            ({ validFrom, validUntil }) =>
-              validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now),
-          )
-        )
-          missing();
-        const grants = manager.getRepository(ContractorRepresentativeGrantEntity);
-        if (!(await grants.existsBy({ userId: value.userId, contractorId: scopedContractorId })))
-          await grants.save({
-            id: randomUUID(),
-            userId: value.userId,
-            contractorId: scopedContractorId,
-          });
-        const assignments = manager.getRepository(ContractorRepresentativeAssignmentEntity);
-        const existing = await assignments.findOneBy({
-          siteId: scopedSiteId,
-          contractorId: scopedContractorId,
-          userId: value.userId,
-        });
-        return (
-          existing ??
-          assignments.save({
-            id: randomUUID(),
-            siteId: scopedSiteId,
-            contractorId: scopedContractorId,
-            userId: value.userId,
-          })
-        );
-      });
+      return await this.dataSource.transaction((manager) =>
+        this.assignRepresentativeInTransaction(manager, siteId, contractorId, input),
+      );
     } catch (error) {
       knownUnique(error, [
         'uq_contractor_representative_assignment',
         'uq_contractor_representative_grant',
       ]);
     }
+  }
+
+  async assignRepresentativeInTransaction(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    input: AssignContractorRepresentativeDto,
+  ): Promise<ContractorRepresentativeAssignmentEntity> {
+    const scopedSiteId = uuid(siteId);
+    const scopedContractorId = uuid(contractorId);
+    const value = command(AssignContractorRepresentativeDto, input);
+    const [contractor, user, assignment, participations] = await Promise.all([
+      manager.getRepository(ContractorEntity).findOneBy({ id: scopedContractorId, isActive: true }),
+      manager.getRepository(UserEntity).findOneBy({ id: value.userId, isActive: true }),
+      manager.getRepository(UserRoleAssignmentEntity).findOneBy({
+        userId: value.userId,
+        role: UserRole.CONTRACTOR_REPRESENTATIVE,
+        siteId: scopedSiteId,
+      }),
+      manager.getRepository(ContractorSiteParticipationEntity).findBy({
+        contractorId: scopedContractorId,
+        siteId: scopedSiteId,
+        isActive: true,
+      }),
+    ]);
+    const now = Date.now();
+    if (
+      !contractor ||
+      !user ||
+      !assignment ||
+      !participations.some(
+        ({ validFrom, validUntil }) =>
+          validFrom.getTime() <= now && (validUntil === null || validUntil.getTime() > now),
+      )
+    )
+      missing();
+    const grants = manager.getRepository(ContractorRepresentativeGrantEntity);
+    if (!(await grants.existsBy({ userId: value.userId, contractorId: scopedContractorId })))
+      await grants.save({
+        id: randomUUID(),
+        userId: value.userId,
+        contractorId: scopedContractorId,
+      });
+    const assignments = manager.getRepository(ContractorRepresentativeAssignmentEntity);
+    const existing = await assignments.findOneBy({
+      siteId: scopedSiteId,
+      contractorId: scopedContractorId,
+      userId: value.userId,
+    });
+    return (
+      existing ??
+      assignments.save({
+        id: randomUUID(),
+        siteId: scopedSiteId,
+        contractorId: scopedContractorId,
+        userId: value.userId,
+      })
+    );
   }
 
   async listRepresentativeAssignments(

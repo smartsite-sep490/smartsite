@@ -15,7 +15,8 @@ import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { ContractorEntity } from '../../../database/entities/contractor.entity.js';
 import type { ContractorRepresentativeAssignmentEntity } from '../../../database/entities/contractor-representative-assignment.entity.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
-import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { SiteManagerGuard } from '../../auth/site-manager.guard.js';
+import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { pagination } from '../../../common/http/pagination.js';
 import { AssignContractorRepresentativeDto, CreateContractorDto } from './dto/workforce.dto.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
@@ -57,7 +58,7 @@ export class ContractorsController {
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
   @Post('contractors')
-  @UseGuards(AdminGuard)
+  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse()
   async create(
     @Req() request: AuthenticatedRequest,
@@ -75,7 +76,7 @@ export class ContractorsController {
   }
 
   @Post('contractors/:contractorId/representatives')
-  @UseGuards(AdminGuard)
+  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse()
   async assignRepresentative(
     @Req() request: AuthenticatedRequest,
@@ -104,7 +105,7 @@ export class ContractorsController {
   }
 
   @Get('contractor-representative-assignments')
-  @UseGuards(AdminGuard)
+  @UseGuards(SiteManagerGuard)
   @ApiOkResponse()
   async listRepresentativeAssignments(
     @Param('siteId') siteId: string,

@@ -6,6 +6,7 @@ import { WorkforceAttendanceModule } from './attendance/attendance.module.js';
 import { WorkforceSchedulingModule } from './scheduling/scheduling.module.js';
 import { WorkforceIdentityModule } from './identity/identity.module.js';
 import { WorkforceAccessModule } from './access/access.module.js';
+import { WorkforceManagementModule } from './management/management.module.js';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { WorkforceAccessModule } from './access/access.module.js';
     WorkforceSchedulingModule,
     WorkforceIdentityModule,
     WorkforceAccessModule,
+    WorkforceManagementModule,
   ],
   exports: [WorkforceDirectoryModule, WorkforceNotificationsModule, WorkforceIdentityModule],
 })

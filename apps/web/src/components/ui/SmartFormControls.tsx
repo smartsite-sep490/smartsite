@@ -474,6 +474,8 @@ export interface SmartDatePickerProps {
   id?: string;
   disablePast?: boolean;
   disabledWeekdays?: number[];
+  min?: string;
+  max?: string;
 }
 
 export function SmartDatePicker({
@@ -486,6 +488,8 @@ export function SmartDatePicker({
   id: propId,
   disablePast = true,
   disabledWeekdays = [],
+  min,
+  max,
 }: SmartDatePickerProps) {
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -495,10 +499,16 @@ export function SmartDatePicker({
 
   const parsed = value ? parse(value, 'yyyy-MM-dd', new Date()) : undefined;
   const validDate = parsed && isValid(parsed) ? parsed : undefined;
-  const displayValue = validDate ? format(validDate, 'dd MMM yyyy') : '';
+  const displayValue = validDate ? format(validDate, 'dd/MM/yyyy') : '';
 
   const handleSelect = (day: Date | undefined) => {
-    if (day && (!disablePast || day >= today) && !disabledWeekdays.includes(day.getDay())) {
+    if (
+      day &&
+      (!disablePast || day >= today) &&
+      !disabledWeekdays.includes(day.getDay()) &&
+      (!min || format(day, 'yyyy-MM-dd') >= min) &&
+      (!max || format(day, 'yyyy-MM-dd') <= max)
+    ) {
       onChange(format(day, 'yyyy-MM-dd'));
       setOpen(false);
     }
@@ -520,6 +530,7 @@ export function SmartDatePicker({
           <button
             id={id}
             type="button"
+            aria-label={label}
             className={`${FIELD_BASE} flex items-center justify-between text-left cursor-pointer ${
               error ? 'border-red-300' : ''
             } ${!displayValue ? 'text-[#94A3B8] font-normal' : ''}`}
@@ -547,6 +558,8 @@ export function SmartDatePicker({
                 defaultMonth={validDate}
                 onSelect={handleSelect}
                 disabled={[
+                  ...(min ? [{ before: parse(min, 'yyyy-MM-dd', new Date()) }] : []),
+                  ...(max ? [{ after: parse(max, 'yyyy-MM-dd', new Date()) }] : []),
                   ...(disablePast ? [{ before: today }] : []),
                   { dayOfWeek: disabledWeekdays },
                 ]}

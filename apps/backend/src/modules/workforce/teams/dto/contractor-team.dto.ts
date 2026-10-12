@@ -1,5 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
+  IsISO8601,
+  Matches,
   IsBoolean,
   IsIn,
   IsInt,
@@ -12,6 +14,13 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+export class GrantTeamZoneDto {
+  @IsUUID() requestId!: string;
+  @IsUUID() contractorZonePermissionId!: string;
+  @IsISO8601({ strict: true }) @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/) startDate!: string;
+  @IsISO8601({ strict: true }) @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/) endDate!: string;
+  @IsString() @MaxLength(64) timezone!: string;
+}
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 export class ContractorTeamQueryDto {
   @IsOptional()

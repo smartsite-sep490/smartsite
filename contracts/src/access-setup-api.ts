@@ -46,6 +46,15 @@ export interface GrantContractorZoneCommand {
   validFrom: string;
   validUntil: string;
 }
+/** Inclusive local calendar dates; Backend converts and bounds the permission to participation. */
+export interface GrantContractorZoneDatesCommand {
+  requestId: string;
+  siteContractorId: string;
+  zoneId: string;
+  startDate: string;
+  endDate: string;
+  timezone: string;
+}
 export interface GrantWorkerZoneCommand {
   requestId: string;
   workerAssignmentId: string;

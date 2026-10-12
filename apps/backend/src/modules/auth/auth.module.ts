@@ -1,3 +1,4 @@
+import { SiteManagerGuard, SiteSetupReadGuard } from './site-manager.guard.js';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ServiceAuthGuard } from './service-auth.guard.js';
@@ -16,8 +17,17 @@ import { AuthTokenService } from './auth-token.service.js';
     AuthTokenService,
     UserAuthGuard,
     AdminGuard,
+    SiteManagerGuard,
+    SiteSetupReadGuard,
     ChangePasswordThrottleGuard,
   ],
-  exports: [ServiceAuthGuard, AuthService, UserAuthGuard, AdminGuard],
+  exports: [
+    ServiceAuthGuard,
+    AuthService,
+    UserAuthGuard,
+    AdminGuard,
+    SiteManagerGuard,
+    SiteSetupReadGuard,
+  ],
 })
 export class AuthModule {}

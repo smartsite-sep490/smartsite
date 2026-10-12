@@ -41,6 +41,10 @@ import {
   GateEventEntity,
   AttendanceEventEntity,
   AttendanceDayEntity,
+  ZoneEntity,
+  ZoneType,
+  ZoneRestrictionPolicy,
+  ContractorZonePermissionEntity,
 } from '../../src/database/entities/index.js';
 
 test('contractor teams: scoped dashboard, HTTP contracts, membership history, concurrency and swap lifecycle', async (t) => {
@@ -589,6 +593,77 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
         const team = await created.json();
         assert.equal(team.memberCount, 0);
         assert.equal(team.version, 1);
+        const zoneId = randomUUID();
+        await dataSource.getRepository(ZoneEntity).save({
+          id: zoneId,
+          siteId,
+          code: zoneId,
+          name: 'HTTP team Zone',
+          type: ZoneType.STANDARD,
+          restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+          requiredPpe: [],
+        });
+        const participation = await dataSource
+          .getRepository(ContractorSiteParticipationEntity)
+          .findOneByOrFail({ siteId, contractorId });
+        const parent = await dataSource.getRepository(ContractorZonePermissionEntity).save({
+          id: randomUUID(),
+          siteContractorId: participation.id,
+          zoneId,
+          validFrom: new Date('2020-01-01'),
+          validUntil: new Date('2035-01-01'),
+          grantedBy: repId,
+          revokedAt: null,
+        });
+        const zonePath = `${prefix}/teams/${team.id}/zones`;
+        assert.equal((await fetch(zonePath)).status, 401);
+        const options = await fetch(zonePath, { headers });
+        assert.equal(options.status, 200);
+        assert.equal((await options.json()).availableZones[0].permissionId, parent.id);
+        const date = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10);
+        const zoneInput = {
+          requestId: randomUUID(),
+          contractorZonePermissionId: parent.id,
+          startDate: date,
+          endDate: date,
+          timezone: 'UTC',
+        };
+        assert.equal(
+          (
+            await fetch(zonePath, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ ...zoneInput, zoneId }),
+            })
+          ).status,
+          400,
+        );
+        const granted = await fetch(zonePath, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(zoneInput),
+        });
+        assert.equal(granted.status, 201);
+        const permission = await granted.json();
+        assert.equal(
+          (await fetch(`${prefix}/teams/${randomUUID()}/zones`, { headers })).status,
+          404,
+        );
+        const list = await fetch(zonePath, { headers });
+        assert.equal((await list.json()).permissions.length, 1);
+        const edited = await fetch(`${zonePath}/${permission.id}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ ...zoneInput, requestId: randomUUID() }),
+        });
+        assert.equal(edited.status, 200);
+        const replacement = await edited.json();
+        const updatedTeam = await (await fetch(`${prefix}/teams/${team.id}`, { headers })).json();
+        assert.equal(updatedTeam.zoneAssignments[0].id, replacement.id);
+        assert.equal(
+          (await fetch(`${zonePath}/${replacement.id}/revoke`, { method: 'POST', headers })).status,
+          201,
+        );
         const changed = await fetch(`${prefix}/teams/${team.id}`, {
           method: 'PATCH',
           headers,
@@ -661,6 +736,7 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
     if (app) await app.close();
     if (!dataSource.isInitialized) await dataSource.initialize();
     await cleanupSiteAccess(dataSource, [siteId, otherSite]);
+    await dataSource.getRepository(ZoneEntity).delete({ siteId });
     await dataSource.query('DELETE FROM shift_swap_request WHERE site_id=ANY($1)', [
       [siteId, otherSite],
     ]);

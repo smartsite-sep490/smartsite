@@ -1,3 +1,7 @@
+import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
+import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
+import { ContractorZoneRegrant1791940000001 } from './migrations/1791940000001-ContractorZoneRegrant.js';
+import { SingleTeamZone1791940000002 } from './migrations/1791940000002-SingleTeamZone.js';
 import { ShiftArchival1791763200000 } from './migrations/1791763200000-ShiftArchival.js';
 import { ShiftBreak1791763200001 } from './migrations/1791763200001-ShiftBreak.js';
 import { GateScheduleDenial1791849600000 } from './migrations/1791849600000-GateScheduleDenial.js';
@@ -61,6 +65,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      SingleSiteManager1791936000000,
+      TeamZonePermissions1791940000000,
+      ContractorZoneRegrant1791940000001,
+      SingleTeamZone1791940000002,
       Mf05Mf06Foundation1789689600000,
       CameraRegionConfiguration1790035200000,
       UserAuthentication1790121600000,

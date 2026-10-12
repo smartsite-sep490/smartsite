@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsIn,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -27,12 +28,13 @@ import { SiteConfigurationService } from '../sites/site-configuration.service.js
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export class CreateZoneCommand {
+  @IsOptional()
   @Transform(trim)
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
   @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
-  code!: string;
+  code?: string;
   @Transform(trim)
   @IsString()
   @IsNotEmpty()
@@ -84,6 +86,7 @@ export class ZoneConfigurationService {
         id: randomUUID(),
         siteId,
         ...value,
+        code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
         requiredPpe: [...value.requiredPpe].sort(),
         configurationLocked: false,
       });

@@ -59,7 +59,7 @@ export class UsersController {
   @Post()
   @ApiCreatedResponse({ type: AccountResponseDto })
   async create(@Req() request: AuthenticatedRequest, @Body() input: CreateUserDto) {
-    const user = await this.users.create(input);
+    const user = await this.users.createAdministrative(input);
     this.logger.log({ actorId: request.user!.id, action: 'user.create', resourceId: user.id });
     return user;
   }

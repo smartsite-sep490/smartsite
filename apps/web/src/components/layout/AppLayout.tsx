@@ -81,6 +81,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const isContractorRep = !isAdmin && roles.includes('CONTRACTOR_REPRESENTATIVE');
   const isWorker = roles.includes('WORKER');
   const isWorkerOnly = isWorker && !isAdmin && !isManager && !isContractorRep;
+  const isManagerOnly = isManager && !isAdmin && !isContractorRep;
   const canAccessWorkforce = (isWorker || isContractorRep) && !isAdmin;
   const canAccessScheduleSetup = (isManager || isContractorRep) && !isAdmin;
 
@@ -111,12 +112,24 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             ...(canAccessScheduleSetup
               ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }]
               : []),
-            ...(isAdmin ? [{ id: 'site-setup', label: 'Site Setup', icon: IconBuilding }] : []),
-            {
-              id: 'access',
-              label: isContractorRep ? 'Attendance & Access' : 'Site Access',
-              icon: IconKey,
-            },
+            ...(isAdmin || isManager
+              ? [
+                  {
+                    id: 'site-setup',
+                    label: isAdmin ? 'Site Setup' : 'Contractors & Zones',
+                    icon: IconBuilding,
+                  },
+                ]
+              : []),
+            ...(!isManagerOnly
+              ? [
+                  {
+                    id: 'access',
+                    label: isContractorRep ? 'Attendance & Access' : 'Site Access',
+                    icon: IconKey,
+                  },
+                ]
+              : []),
           ],
         },
         {

@@ -1,8 +1,16 @@
+import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { Injectable } from '@nestjs/common';
-import { IsISO8601, IsUUID, Matches } from 'class-validator';
+import { IsISO8601, IsUUID, IsString, MaxLength, Matches } from 'class-validator';
 import { DataSource, In, type EntityManager } from 'typeorm';
 import type { AccessSetupResponse } from '@smartsite/contracts';
-import { command, conflict, missing, uuid } from '../../../common/configuration/commands.js';
+import {
+  command,
+  conflict,
+  invalid,
+  knownUnique,
+  missing,
+  uuid,
+} from '../../../common/configuration/commands.js';
 import {
   ContractorZonePermissionEntity,
   WorkerZonePermissionEntity,
@@ -30,6 +38,14 @@ class PermissionIntervalCommand {
 export class GrantContractorZoneCommand extends PermissionIntervalCommand {
   @IsUUID() siteContractorId!: string;
   @IsUUID() zoneId!: string;
+}
+export class GrantContractorZoneDatesCommand {
+  @IsUUID() requestId!: string;
+  @IsUUID() siteContractorId!: string;
+  @IsUUID() zoneId!: string;
+  @IsISO8601({ strict: true }) @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/) startDate!: string;
+  @IsISO8601({ strict: true }) @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/) endDate!: string;
+  @IsString() @MaxLength(64) timezone!: string;
 }
 export class GrantWorkerZoneCommand extends PermissionIntervalCommand {
   @IsUUID() workerAssignmentId!: string;
@@ -107,7 +123,9 @@ export class SiteAccessSetupService {
       : [];
     return {
       canReviewAssignments: siteManager,
-      canGrantContractorZones: siteManager,
+      canGrantContractorZones: actor.roleAssignments.some(
+        (r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId,
+      ),
       canGrantWorkerZones:
         this.isAdmin(actor) ||
         actor.roleAssignments.some(
@@ -158,60 +176,106 @@ export class SiteAccessSetupService {
       })),
     };
   }
-  async grantContractor(actor: WorkforceActor, siteId: string, input: GrantContractorZoneCommand) {
-    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
-    const value = command(GrantContractorZoneCommand, input);
-    return this.source.transaction(async (manager) => {
-      const participation = await manager.getRepository(ContractorSiteParticipationEntity).findOne({
-        where: { id: value.siteContractorId, siteId, isActive: true },
-        lock: { mode: 'pessimistic_write' },
-      });
-      const zone = await manager.getRepository(ZoneEntity).findOneBy({ id: value.zoneId, siteId });
-      if (!participation || !zone) missing();
-      const from = new Date(value.validFrom),
-        until = new Date(value.validUntil);
-      if (!containedInterval(from, until, participation.validFrom, participation.validUntil))
-        conflict('Zone permission must fit the contractor participation interval');
-      const existing = await manager
-        .getRepository(ContractorZonePermissionEntity)
-        .findOneBy({ id: value.requestId });
-      if (existing) {
-        if (
-          existing.siteContractorId !== participation.id ||
-          existing.zoneId !== zone.id ||
-          +existing.validFrom !== +from ||
-          +existing.validUntil !== +until ||
-          existing.grantedBy !== actor.id
-        )
-          conflict('Request was used for another permission');
-        return existing;
+  async grantContractor(
+    actor: WorkforceActor,
+    siteId: string,
+    input: GrantContractorZoneCommand | GrantContractorZoneDatesCommand,
+  ) {
+    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
+    const value =
+      'startDate' in input
+        ? command(GrantContractorZoneDatesCommand, input)
+        : command(GrantContractorZoneCommand, input);
+    if ('startDate' in value) {
+      if (value.endDate < value.startDate) invalid('End date must be on or after start date');
+      try {
+        const timezone = new Intl.DateTimeFormat('en', {
+          timeZone: value.timezone,
+        }).resolvedOptions().timeZone;
+        if (/^[+-]/.test(timezone)) invalid('An IANA timezone is required');
+      } catch {
+        invalid('Invalid IANA timezone');
       }
-      const permission = await manager.getRepository(ContractorZonePermissionEntity).save({
-        id: value.requestId,
-        siteContractorId: participation.id,
-        zoneId: zone.id,
-        validFrom: from,
-        validUntil: until,
-        grantedBy: actor.id,
-        revokedAt: null,
-      });
-      await auditAccess(
-        manager,
-        actor.id,
-        siteId,
-        'CONTRACTOR_ZONE_GRANTED',
-        'contractor_zone_permission',
-        permission.id,
-        null,
-        {
+    }
+    return this.source
+      .transaction(async (manager) => {
+        const participation = await manager
+          .getRepository(ContractorSiteParticipationEntity)
+          .findOne({
+            where: { id: value.siteContractorId, siteId, isActive: true },
+            lock: { mode: 'pessimistic_write' },
+          });
+        const zone = await manager
+          .getRepository(ZoneEntity)
+          .findOneBy({ id: value.zoneId, siteId });
+        if (!participation || !zone) missing();
+        let from: Date, until: Date;
+        if ('startDate' in value) {
+          const [interval] = (await manager.query(
+            `SELECT ($1::date::timestamp AT TIME ZONE $3) AS "from", (($2::date + 1)::timestamp AT TIME ZONE $3) AS "until"`,
+            [value.startDate, value.endDate, value.timezone],
+          )) as { from: Date; until: Date }[];
+          // Calendar-day grants never extend the parent participation, including a Site joined mid-day.
+          from = new Date(Math.max(+interval!.from, +participation.validFrom));
+          until = new Date(
+            Math.min(
+              +interval!.until,
+              participation.validUntil ? +participation.validUntil : Infinity,
+            ),
+          );
+        } else {
+          from = new Date(value.validFrom);
+          until = new Date(value.validUntil);
+        }
+        if (!containedInterval(from, until, participation.validFrom, participation.validUntil))
+          conflict('Zone permission must fit the contractor participation interval');
+        const existing = await manager
+          .getRepository(ContractorZonePermissionEntity)
+          .findOneBy({ id: value.requestId });
+        if (existing) {
+          if (
+            existing.siteContractorId !== participation.id ||
+            existing.zoneId !== zone.id ||
+            +existing.validFrom !== +from ||
+            +existing.validUntil !== +until ||
+            existing.grantedBy !== actor.id
+          )
+            conflict('Request was used for another permission');
+          return existing;
+        }
+        const permission = await manager.getRepository(ContractorZonePermissionEntity).save({
+          id: value.requestId,
           siteContractorId: participation.id,
           zoneId: zone.id,
-          validFrom: from.toISOString(),
-          validUntil: until.toISOString(),
-        },
+          validFrom: from,
+          validUntil: until,
+          grantedBy: actor.id,
+          revokedAt: null,
+        });
+        await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          'CONTRACTOR_ZONE_GRANTED',
+          'contractor_zone_permission',
+          permission.id,
+          null,
+          {
+            siteContractorId: participation.id,
+            zoneId: zone.id,
+            validFrom: from.toISOString(),
+            validUntil: until.toISOString(),
+            ...('startDate' in value
+              ? { startDate: value.startDate, endDate: value.endDate, timezone: value.timezone }
+              : {}),
+          },
+        );
+        return permission;
+      })
+      .catch((error) =>
+        knownUnique(error, ['uq_contractor_zone_interval', 'pk_contractor_zone_permission_id']),
       );
-      return permission;
-    });
   }
   async grantWorker(actor: WorkforceActor, siteId: string, input: GrantWorkerZoneCommand) {
     requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
@@ -309,6 +373,14 @@ export class SiteAccessSetupService {
       siteId,
       kind === 'contractor' ? [UserRole.SITE_MANAGER] : [UserRole.CONTRACTOR_REPRESENTATIVE],
     );
+    if (
+      kind === 'contractor' &&
+      !actor.roleAssignments.some((r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId)
+    )
+      throw new PublicHttpException(403, {
+        code: 'FORBIDDEN',
+        message: 'Site Manager access is required',
+      });
     uuid(permissionId);
     return this.source.transaction(async (manager) => {
       if (kind === 'contractor') {

@@ -1,3 +1,4 @@
+import { SiteManagerGuard } from '../../auth/site-manager.guard.js';
 import { Body, Controller, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -39,6 +40,7 @@ export class ContractorOperationsController {
   constructor(private readonly contractors: ContractorOperationsService) {}
 
   @Post()
+  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse()
   async create(@Req() request: AuthenticatedRequest, @Body() input: CreateContractorCommand) {
     const contractor = await this.contractors.createContractor(request.user!, input);
@@ -51,6 +53,7 @@ export class ContractorOperationsController {
   }
 
   @Post(':contractorId/participations')
+  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse()
   async createParticipation(
     @Req() request: AuthenticatedRequest,
@@ -73,6 +76,7 @@ export class ContractorOperationsController {
   }
 
   @Post(':contractorId/representative-grants')
+  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse()
   async grantRepresentative(
     @Req() request: AuthenticatedRequest,

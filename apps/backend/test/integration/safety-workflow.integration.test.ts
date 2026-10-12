@@ -98,11 +98,7 @@ async function fixture() {
     ['legacy', [UserRole.SECURITY_OFFICER], site],
     ['manager', [UserRole.SITE_MANAGER], site],
     ['outsider', [UserRole.CONTRACTOR_REPRESENTATIVE], other],
-    [
-      'multi',
-      [UserRole.SAFETY_OFFICER, UserRole.CONTRACTOR_REPRESENTATIVE, UserRole.SITE_MANAGER],
-      site,
-    ],
+    ['multi', [UserRole.SAFETY_OFFICER, UserRole.CONTRACTOR_REPRESENTATIVE], site],
     ['admin', [UserRole.ADMIN], null],
     ['none', [], site],
   ] as const) {
@@ -494,6 +490,20 @@ test('MF08 SafetyTask remains separate, retains returned results and prevents se
       resultDescription: 'Done',
     })
   ).resource;
+  // Transfer the sole manager role before testing a manager's forbidden self-verification.
+  await dataSource.transaction(async (manager) => {
+    await manager.getRepository(UserRoleAssignmentEntity).delete({
+      userId: ids.manager!,
+      siteId: site,
+      role: UserRole.SITE_MANAGER,
+    });
+    await manager.getRepository(UserRoleAssignmentEntity).save({
+      id: randomUUID(),
+      userId: ids.multi!,
+      siteId: site,
+      role: UserRole.SITE_MANAGER,
+    });
+  });
   await assert.rejects(
     service.taskCommand(site, self.id, ids.multi!, 'verify', {
       commandId: randomUUID(),

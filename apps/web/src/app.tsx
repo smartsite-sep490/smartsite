@@ -74,6 +74,14 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     );
   }
 
+  const roles = currentUser.data?.roleAssignments.map((r) => r.role) ?? [];
+  const isManagerOnly =
+    roles.includes('SITE_MANAGER') &&
+    !roles.includes('ADMIN') &&
+    !roles.includes('CONTRACTOR_REPRESENTATIVE');
+  if (isManagerOnly && ['/access', '/workforce'].includes(location.pathname.replace(/\/$/, '')))
+    return <Navigate to="/site-setup" replace />;
+
   return (
     <AppLayout onSelectTab={onNavigate}>
       <Routes>

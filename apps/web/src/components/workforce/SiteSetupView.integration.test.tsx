@@ -86,7 +86,9 @@ it.each([
     const { cache, user } = setup();
     await screen.findByText(`unavailable-manager (${status})`);
     await user.click(screen.getByRole('button', { name: 'Manage Site Managers' }));
-    expect(screen.getByRole('button', { name: '+ Create New Site Manager' })).not.toBeNull();
+    expect(
+      screen.getByRole('button', { name: '+ Create New Site Manager' }).hasAttribute('disabled'),
+    ).toBe(true);
     expect(screen.queryByText('unavailable-manager (Ready to approve)')).toBeNull();
     cache.clear();
   },
@@ -107,14 +109,14 @@ it('reports unavailable account data instead of claiming no manager is assigned'
   cache.clear();
 });
 
-it('creates a manager scoped to the selected site and explains the required password change', async () => {
+it('creates a manager scoped to the selected site and confirms the account is ready to sign in', async () => {
   const users = vi
     .spyOn(SmartSiteManagementClient.prototype, 'listUsers')
     .mockResolvedValue({ items: [], total: 0 });
   const create = vi
     .spyOn(SmartSiteManagementClient.prototype, 'createUser')
     .mockImplementation(async () => {
-      const account = manager('new-manager', true, true);
+      const account = manager('new-manager');
       users.mockResolvedValue({ items: [account], total: 1 });
       return account;
     });
@@ -134,7 +136,7 @@ it('creates a manager scoped to the selected site and explains the required pass
       roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-a' }],
     }),
   );
-  await screen.findByText('new-manager (Password change required)');
-  expect(screen.getByText(/They must sign in and change their temporary password/)).not.toBeNull();
+  await screen.findByText('new-manager (Ready to approve)');
+  expect(screen.getByText(/The account is ready to sign in/)).not.toBeNull();
   cache.clear();
 });

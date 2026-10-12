@@ -5,6 +5,8 @@ import type {
   ContractorDashboardResponse,
   ContractorTeamResponse,
   ContractorTeamWorkerResponse,
+  TeamZoneSetupResponse,
+  TeamZoneAssignmentResponse,
 } from '@smartsite/contracts';
 import {
   ContractorTeamEntity,
@@ -16,6 +18,11 @@ import {
   UserRole,
   SiteEntity,
   ContractorEntity,
+  TeamZonePermissionEntity,
+  ContractorZonePermissionEntity,
+  ContractorSiteParticipationEntity,
+  ZoneEntity,
+  AccessAuditEntity,
 } from '../../../database/entities/index.js';
 import {
   command,
@@ -37,10 +44,254 @@ import {
   UpdateContractorTeamDto,
   ArchiveContractorTeamDto,
   AssignContractorTeamDto,
+  GrantTeamZoneDto,
 } from './dto/contractor-team.dto.js';
 
 @Injectable()
 export class ContractorTeamsService {
+  private async assignedZones(
+    m: EntityManager,
+    team: ContractorTeamEntity,
+  ): Promise<TeamZoneAssignmentResponse[]> {
+    const rows = (await m.query(
+      `SELECT tp.id,cp.id AS "contractorZonePermissionId",z.id AS "zoneId",z.name,tp.valid_from AS "validFrom",tp.valid_until AS "validUntil",tp.revoked_at AS "revokedAt",
+      (t.is_active AND p.is_active AND cp.revoked_at IS NULL AND tp.valid_from<=CURRENT_TIMESTAMP AND tp.valid_until>CURRENT_TIMESTAMP AND cp.valid_from<=CURRENT_TIMESTAMP AND cp.valid_until>CURRENT_TIMESTAMP AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP) AND tp.valid_from>=cp.valid_from AND tp.valid_until<=cp.valid_until AND tp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR tp.valid_until<=p.valid_until)) AS effective
+      FROM team_zone_permission tp JOIN contractor_team t ON t.id=tp.team_id JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id JOIN contractor_site_participation p ON p.id=cp.site_contractor_id AND p.site_id=t.site_id AND p.contractor_id=t.contractor_id JOIN zone z ON z.id=cp.zone_id AND z.site_id=t.site_id
+      WHERE t.id=$1 AND t.site_id=$2 AND t.contractor_id=$3 AND tp.revoked_at IS NULL ORDER BY tp.created_at,tp.id`,
+      [team.id, team.siteId, team.contractorId],
+    )) as Array<
+      Omit<TeamZoneAssignmentResponse, 'validFrom' | 'validUntil'> & {
+        validFrom: Date;
+        validUntil: Date;
+      }
+    >;
+    return rows.map((r) => ({
+      ...r,
+      validFrom: r.validFrom.toISOString(),
+      validUntil: r.validUntil.toISOString(),
+    }));
+  }
+  async zoneSetup(
+    actor: AuthenticatedUser,
+    siteValue: string,
+    contractorValue: string,
+    teamValue: string,
+  ): Promise<TeamZoneSetupResponse> {
+    const siteId = uuid(siteValue),
+      contractorId = uuid(contractorValue),
+      teamId = uuid(teamValue);
+    return this.source.transaction('REPEATABLE READ', async (m) => {
+      await this.scope(m, actor, siteId, contractorId);
+      if (
+        !(await m
+          .getRepository(ContractorTeamEntity)
+          .existsBy({ id: teamId, siteId, contractorId }))
+      )
+        missing();
+      const available = (await m.query(
+        `SELECT cp.id AS "permissionId",z.id AS "zoneId",z.name,cp.valid_from AS "validFrom",cp.valid_until AS "validUntil" FROM contractor_zone_permission cp JOIN contractor_site_participation p ON p.id=cp.site_contractor_id JOIN zone z ON z.id=cp.zone_id AND z.site_id=p.site_id WHERE p.site_id=$1 AND p.contractor_id=$2 AND p.is_active AND cp.revoked_at IS NULL AND cp.valid_until>CURRENT_TIMESTAMP AND cp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR cp.valid_until<=p.valid_until) ORDER BY z.name,cp.valid_from,cp.id`,
+        [siteId, contractorId],
+      )) as {
+        permissionId: string;
+        zoneId: string;
+        name: string;
+        validFrom: Date;
+        validUntil: Date;
+      }[];
+      const permissions = (await m.query(
+        `SELECT tp.id,tp.contractor_zone_permission_id AS "contractorZonePermissionId",z.id AS "zoneId",z.name,tp.valid_from AS "validFrom",tp.valid_until AS "validUntil",tp.revoked_at AS "revokedAt",(tp.revoked_at IS NULL AND cp.revoked_at IS NULL AND t.is_active AND p.is_active AND tp.valid_from<=CURRENT_TIMESTAMP AND tp.valid_until>CURRENT_TIMESTAMP AND cp.valid_from<=CURRENT_TIMESTAMP AND cp.valid_until>CURRENT_TIMESTAMP AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP) AND tp.valid_from>=cp.valid_from AND tp.valid_until<=cp.valid_until AND tp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR tp.valid_until<=p.valid_until)) AS effective FROM team_zone_permission tp JOIN contractor_team t ON t.id=tp.team_id JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id JOIN contractor_site_participation p ON p.id=cp.site_contractor_id AND p.site_id=t.site_id AND p.contractor_id=t.contractor_id JOIN zone z ON z.id=cp.zone_id AND z.site_id=t.site_id WHERE t.id=$3 AND t.site_id=$1 AND t.contractor_id=$2 ORDER BY z.name,tp.valid_from,tp.id`,
+        [siteId, contractorId, teamId],
+      )) as {
+        id: string;
+        contractorZonePermissionId: string;
+        zoneId: string;
+        name: string;
+        validFrom: Date;
+        validUntil: Date;
+        revokedAt: Date | null;
+        effective: boolean;
+      }[];
+      return {
+        availableZones: available.map((p) => ({
+          ...p,
+          validFrom: p.validFrom.toISOString(),
+          validUntil: p.validUntil.toISOString(),
+        })),
+        permissions: permissions.map((p) => ({
+          ...p,
+          validFrom: p.validFrom.toISOString(),
+          validUntil: p.validUntil.toISOString(),
+          revokedAt: p.revokedAt?.toISOString() ?? null,
+        })),
+      };
+    });
+  }
+  async grantZone(
+    actor: AuthenticatedUser,
+    siteValue: string,
+    contractorValue: string,
+    teamValue: string,
+    input: GrantTeamZoneDto,
+    replacePermissionValue?: string,
+  ) {
+    const siteId = uuid(siteValue),
+      contractorId = uuid(contractorValue),
+      teamId = uuid(teamValue),
+      value = command(GrantTeamZoneDto, input);
+    const replaceId = replacePermissionValue ? uuid(replacePermissionValue) : null;
+    if (value.endDate < value.startDate) invalid('End date must be on or after start date');
+    try {
+      const zone = new Intl.DateTimeFormat('en', { timeZone: value.timezone }).resolvedOptions()
+        .timeZone;
+      if (/^[+-]/.test(zone)) invalid();
+      value.timezone = zone;
+    } catch {
+      invalid('Invalid IANA timezone');
+    }
+    return this.source
+      .transaction(async (m) => {
+        await this.scope(m, actor, siteId, contractorId);
+        const team = await m.getRepository(ContractorTeamEntity).findOne({
+          where: { id: teamId, siteId, contractorId, isActive: true },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!team) missing();
+        const cp = await m.getRepository(ContractorZonePermissionEntity).findOne({
+          where: { id: value.contractorZonePermissionId },
+          lock: { mode: 'pessimistic_read' },
+        });
+        const p = cp
+          ? await m.getRepository(ContractorSiteParticipationEntity).findOne({
+              where: { id: cp.siteContractorId, siteId, contractorId, isActive: true },
+              lock: { mode: 'pessimistic_read' },
+            })
+          : null;
+        if (!cp || !p || !(await m.getRepository(ZoneEntity).existsBy({ id: cp.zoneId, siteId })))
+          missing();
+        if (cp.revokedAt || +cp.validUntil <= Date.now())
+          conflict('Contractor Zone permission is no longer available');
+        const [bounds] = (await m.query(
+          `SELECT ($1::date::timestamp AT TIME ZONE $3) AS "from",(($2::date+1)::timestamp AT TIME ZONE $3) AS "until"`,
+          [value.startDate, value.endDate, value.timezone],
+        )) as { from: Date; until: Date }[];
+        const from = new Date(Math.max(+bounds!.from, +cp.validFrom, +p.validFrom)),
+          until = new Date(
+            Math.min(+bounds!.until, +cp.validUntil, p.validUntil ? +p.validUntil : Infinity),
+          );
+        if (!Number.isFinite(+from) || !Number.isFinite(+until) || until <= from)
+          conflict('Team dates must overlap the granted Contractor Zone period');
+        const existing = await m
+          .getRepository(TeamZonePermissionEntity)
+          .findOneBy({ id: value.requestId });
+        if (existing) {
+          const creation = await m.getRepository(AccessAuditEntity).findOneBy({
+            entityId: existing.id,
+            entityType: 'team_zone_permission',
+            action: 'TEAM_ZONE_GRANTED',
+            siteId,
+          });
+          if (
+            existing.teamId !== teamId ||
+            existing.contractorZonePermissionId !== cp.id ||
+            existing.grantedBy !== actor.id ||
+            +existing.validFrom !== +from ||
+            +existing.validUntil !== +until ||
+            (creation?.changes?.replacesPermissionId ?? null) !== replaceId
+          )
+            conflict('Request was used for another team Zone');
+          return { id: existing.id };
+        }
+        const current = await m
+          .getRepository(TeamZonePermissionEntity)
+          .findOne({ where: { teamId, revokedAt: IsNull() }, lock: { mode: 'pessimistic_write' } });
+        if (replaceId) {
+          if (!current || current.id !== replaceId)
+            conflict('Team Zone changed. Reload before editing');
+          current.revokedAt = new Date();
+          await m.getRepository(TeamZonePermissionEntity).save(current);
+          await auditAccess(
+            m,
+            actor.id,
+            siteId,
+            'TEAM_ZONE_REPLACED',
+            'team_zone_permission',
+            current.id,
+            null,
+            { teamId, replacementId: value.requestId },
+          );
+        } else if (current) conflict('Team already has a Zone. Edit the existing assignment');
+        const permission = await m.getRepository(TeamZonePermissionEntity).save({
+          id: value.requestId,
+          teamId,
+          contractorZonePermissionId: cp.id,
+          validFrom: from,
+          validUntil: until,
+          grantedBy: actor.id,
+          revokedAt: null,
+        });
+        await auditAccess(
+          m,
+          actor.id,
+          siteId,
+          'TEAM_ZONE_GRANTED',
+          'team_zone_permission',
+          permission.id,
+          null,
+          {
+            teamId,
+            contractorZonePermissionId: cp.id,
+            replacesPermissionId: replaceId,
+            validFrom: from.toISOString(),
+            validUntil: until.toISOString(),
+            startDate: value.startDate,
+            endDate: value.endDate,
+            timezone: value.timezone,
+          },
+        );
+        return { id: permission.id };
+      })
+      .catch((error) => knownUnique(error, ['pk_team_zone_permission', 'uq_team_single_zone']));
+  }
+  async revokeZone(
+    actor: AuthenticatedUser,
+    siteValue: string,
+    contractorValue: string,
+    teamValue: string,
+    permissionValue: string,
+  ) {
+    const siteId = uuid(siteValue),
+      contractorId = uuid(contractorValue),
+      teamId = uuid(teamValue),
+      id = uuid(permissionValue);
+    return this.source.transaction(async (m) => {
+      await this.scope(m, actor, siteId, contractorId);
+      if (
+        !(await m
+          .getRepository(ContractorTeamEntity)
+          .existsBy({ id: teamId, siteId, contractorId }))
+      )
+        missing();
+      const permission = await m
+        .getRepository(TeamZonePermissionEntity)
+        .findOne({ where: { id, teamId }, lock: { mode: 'pessimistic_write' } });
+      if (!permission) missing();
+      if (!permission.revokedAt) {
+        permission.revokedAt = new Date();
+        await m.getRepository(TeamZonePermissionEntity).save(permission);
+        await auditAccess(
+          m,
+          actor.id,
+          siteId,
+          'TEAM_ZONE_REVOKED',
+          'team_zone_permission',
+          id,
+          null,
+          { teamId },
+        );
+      }
+      return { id };
+    });
+  }
   constructor(private readonly source: DataSource) {}
   private forbidden(): never {
     throw new PublicHttpException(403, {
@@ -56,6 +307,8 @@ export class ContractorTeamsService {
   ): Promise<ContractorDashboardScope> {
     const user = await m.getRepository(UserEntity).findOneBy({ id: actor.id, isActive: true });
     if (
+      actor.mustChangePassword ||
+      user?.mustChangePassword ||
       !user ||
       !(await m
         .getRepository(UserRoleAssignmentEntity)
@@ -135,6 +388,7 @@ export class ContractorTeamsService {
       membershipId: team ? member!.id : null,
       teamId: team?.id ?? null,
       teamName: team?.name ?? null,
+      zones: team ? await this.assignedZones(this.source.manager, team) : [],
     };
   }
   async dashboard(
@@ -181,6 +435,7 @@ export class ContractorTeamsService {
       isActive: team.isActive,
       version: team.version,
       memberCount: Number(counts!.count),
+      zoneAssignments: await this.assignedZones(m, team),
     };
   }
   async list(
