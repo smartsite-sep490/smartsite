@@ -10,6 +10,11 @@ export type {
 } from '@smartsite/contracts/management';
 export type {
   AccountResponse,
+  CreateContractorWorkerAccountCommand,
+  ContractorWorkerAccountResponse,
+  ContractorWorkerAccountOptionsResponse,
+  WorkerProfileSnapshot,
+  UpdateContractorWorkerCommand,
   LoginResponse,
   Page,
   SafetyAlertDetailResponse,

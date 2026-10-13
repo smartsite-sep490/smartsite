@@ -28,6 +28,7 @@ import { RegisterScreen } from './features/auth/RegisterScreen';
 import { WorkforceView } from './components/workforce/components/WorkforceView';
 import { SiteSetupView } from './components/workforce/components/SiteSetupView';
 import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
+import { WorkerOnboardingView } from './components/workforce/components/WorkerOnboardingView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -100,6 +101,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           }
         />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+        <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
