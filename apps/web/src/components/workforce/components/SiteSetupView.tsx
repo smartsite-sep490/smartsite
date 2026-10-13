@@ -1,6 +1,7 @@
 import { SiteZoneSetup } from './SiteZoneSetup';
 import { ContractorZoneSetup } from './ContractorZoneSetup';
 import { ManagerContractorDetails } from '../../dashboard/ManagerContractorDetails';
+import { ContractorParticipationDirectory } from './ContractorParticipationDirectory';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
@@ -665,6 +666,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       </div>
 
       {/* Success Notification Banners */}
+      {isAdmin && <ContractorParticipationDirectory apiUrl={apiUrl} />}
       {(sitesQuery.isError ||
         usersQuery.isError ||
         contractorsQuery.isError ||

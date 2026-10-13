@@ -5,6 +5,7 @@ import type {
   ManagerOverviewResponse,
   ManagerContractorDetailResponse,
   ManagerContractorSummary,
+  ManagerTeamZoneAssignment,
 } from '@smartsite/contracts';
 import { command, invalid, missing, page, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
@@ -91,6 +92,35 @@ export class ManagerOverviewService {
         `SELECT t.id,t.name,count(DISTINCT w.id)::int AS "workerCount" FROM contractor_team t LEFT JOIN contractor_team_membership tm ON tm.team_id=t.id AND tm.site_id=t.site_id AND tm.contractor_id=t.contractor_id AND tm.left_at IS NULL LEFT JOIN worker w ON w.id=tm.worker_id AND w.site_id=t.site_id AND w.contractor_id=t.contractor_id AND w.is_active WHERE t.site_id=$1 AND t.contractor_id=$2 AND t.is_active GROUP BY t.id ORDER BY t.name,t.id`,
         [siteId, contractorId],
       )) as ManagerContractorDetailResponse['teams'];
+      const teamZones = (await m.query(
+        `SELECT t.id AS "teamId",tp.id,z.id AS "zoneId",z.name,z.code,tp.valid_from AS "validFrom",tp.valid_until AS "validUntil"
+        FROM team_zone_permission tp JOIN contractor_team t ON t.id=tp.team_id
+        JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id
+        JOIN contractor_site_participation p ON p.id=cp.site_contractor_id AND p.site_id=t.site_id AND p.contractor_id=t.contractor_id
+        JOIN zone z ON z.id=cp.zone_id AND z.site_id=t.site_id
+        WHERE t.site_id=$1 AND t.contractor_id=$2 AND t.is_active AND p.is_active
+        AND tp.revoked_at IS NULL AND cp.revoked_at IS NULL
+        AND tp.valid_from>=cp.valid_from AND tp.valid_until<=cp.valid_until
+        AND tp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR tp.valid_until<=p.valid_until)
+        AND tp.valid_from< (($3::date+1)::timestamp AT TIME ZONE $4)
+        AND tp.valid_until>($3::date::timestamp AT TIME ZONE $4)
+        ORDER BY t.id,z.name,tp.valid_from,tp.id`,
+        [siteId, contractorId, query.date, query.timezone],
+      )) as (Omit<ManagerTeamZoneAssignment, 'validFrom' | 'validUntil'> & {
+        teamId: string;
+        validFrom: Date;
+        validUntil: Date;
+      })[];
+      const zonesByTeam = new Map<string, ManagerTeamZoneAssignment[]>();
+      for (const { teamId, ...zone } of teamZones) {
+        const assigned = zonesByTeam.get(teamId) ?? [];
+        assigned.push({
+          ...zone,
+          validFrom: zone.validFrom.toISOString(),
+          validUntil: zone.validUntil.toISOString(),
+        });
+        zonesByTeam.set(teamId, assigned);
+      }
       const zoneRows = (await m.query(
         `SELECT z.id,z.code,z.name,cp.valid_from AS "validFrom",cp.valid_until AS "validUntil" FROM contractor_zone_permission cp JOIN contractor_site_participation p ON p.id=cp.site_contractor_id AND p.site_id=$1 AND p.contractor_id=$2 AND p.is_active JOIN zone z ON z.id=cp.zone_id AND z.site_id=$1 WHERE cp.revoked_at IS NULL AND cp.valid_from< (($3::date+1)::timestamp AT TIME ZONE $4) AND cp.valid_until>($3::date::timestamp AT TIME ZONE $4) AND p.valid_from< (($3::date+1)::timestamp AT TIME ZONE $4) AND (p.valid_until IS NULL OR p.valid_until>($3::date::timestamp AT TIME ZONE $4)) ORDER BY z.name,z.id,cp.id`,
         [siteId, contractorId, query.date, query.timezone],
@@ -146,7 +176,7 @@ export class ManagerOverviewService {
         ...contractor!,
         date: query.date,
         timezone: query.timezone,
-        teams,
+        teams: teams.map((team) => ({ ...team, zoneAssignments: zonesByTeam.get(team.id) ?? [] })),
         zones: zoneRows.map((z) => ({
           ...z,
           validFrom: z.validFrom.toISOString(),

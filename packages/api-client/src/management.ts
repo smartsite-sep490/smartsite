@@ -3,6 +3,8 @@ import type {
   TeamZoneSetupResponse,
   ManagerOverviewResponse,
   ManagerContractorDetailResponse,
+  GlobalContractorSummary,
+  ContractorParticipationListResponse,
   ScheduleAssignmentInput,
   ScheduleAssignmentPreview,
   ScheduleAssignmentBatchResponse,
@@ -215,6 +217,20 @@ export class SmartSiteManagementClient {
     return this.request<ManagerOverviewResponse>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/management/overview`, options),
+      token,
+    );
+  }
+  listGlobalContractors(token: string, options?: PageOptions) {
+    return this.request<Page<GlobalContractorSummary>>(
+      'GET',
+      this.listPath('/contractors', options),
+      token,
+    );
+  }
+  listContractorParticipations(token: string, contractorId: string, options?: PageOptions) {
+    return this.request<ContractorParticipationListResponse>(
+      'GET',
+      this.listPath(`/contractors/${pathId(contractorId)}/participations`, options),
       token,
     );
   }

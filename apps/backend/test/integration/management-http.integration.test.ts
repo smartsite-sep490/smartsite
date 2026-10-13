@@ -161,6 +161,37 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const overviewResponse = await fetch(overviewPath, {
       headers: { Authorization: `Bearer ${managerToken}` },
     });
+    const participationPath = `${url}/api/v1/contractors/${contractor.id}/participations`;
+    assert.equal((await fetch(participationPath)).status, 401);
+    assert.equal(
+      (await fetch(participationPath, { headers: { Authorization: `Bearer ${managerToken}` } }))
+        .status,
+      403,
+    );
+    const participationResponse = await fetch(`${participationPath}?offset=0&limit=1`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(participationResponse.status, 200);
+    const participationBody = await participationResponse.json();
+    assert.equal(participationBody.items[0].site.id, site.id);
+    assert.equal(participationBody.items[0].status, 'ACTIVE');
+    assert.equal(
+      (
+        await fetch(`${participationPath}?limit=101`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        })
+      ).status,
+      400,
+    );
+    const directoryPath = `${url}/api/v1/contractors?limit=1`;
+    assert.equal(
+      (await fetch(directoryPath, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(directoryPath, { headers: { Authorization: `Bearer ${managerToken}` } })).status,
+      403,
+    );
     assert.equal(overviewResponse.status, 200);
     assert.equal(
       ((await overviewResponse.json()) as { contractorCount: number }).contractorCount,

@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
 import { SiteSetupView } from './components/SiteSetupView';
 
@@ -12,6 +12,13 @@ vi.mock('../../features/auth/auth-session', () => ({
     data: { id: 'admin', roleAssignments: [{ role: 'ADMIN', siteId: null }] },
   }),
 }));
+
+beforeEach(() => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGlobalContractors').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+});
 
 afterEach(() => {
   cleanup();

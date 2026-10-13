@@ -84,9 +84,37 @@ export function ManagerContractorDetails({
                 {data.teams.length ? (
                   <ul className="space-y-2">
                     {data.teams.map((team) => (
-                      <li key={team.id} className="flex justify-between rounded-xl bg-slate-50 p-3">
-                        <span>{team.name}</span>
-                        <span>{team.workerCount} workers</span>
+                      <li key={team.id} className="rounded-xl bg-slate-50 p-3">
+                        <div className="flex justify-between gap-3">
+                          <span className="font-semibold">{team.name}</span>
+                          <span>{team.workerCount} workers</span>
+                        </div>
+                        <p className="mt-2 text-xs font-semibold">Team Zones on {data.date}</p>
+                        {team.zoneAssignments === undefined ? (
+                          <p role="status" className="text-sm">
+                            Team Zone data unavailable. Refresh after the Backend update.
+                          </p>
+                        ) : team.zoneAssignments.length ? (
+                          <ul className="mt-1 space-y-2 text-sm">
+                            {team.zoneAssignments.map((zone) => (
+                              <li key={zone.id}>
+                                <p>
+                                  {zone.name}{' '}
+                                  <span className="break-all text-xs text-slate-500">
+                                    ({zone.code})
+                                  </span>
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {time(zone.validFrom)} – {time(zone.validUntil)}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-slate-500">
+                            No team Zone assignments on this date.
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -96,7 +124,7 @@ export function ManagerContractorDetails({
               </section>
               <section className="space-y-2">
                 <h3 className="font-bold">
-                  Assigned Zones on {data.date} ({new Set(data.zones.map((z) => z.id)).size})
+                  Contractor Zones on {data.date} ({new Set(data.zones.map((z) => z.id)).size})
                 </h3>
                 {data.zones.length ? (
                   <ul className="space-y-2">

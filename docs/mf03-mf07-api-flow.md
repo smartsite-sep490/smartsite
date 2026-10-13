@@ -21,6 +21,7 @@ Tài liệu này mô tả các API **đang thực sự tồn tại trong mã ngu
 
 - [4.9. Phê duyệt Site/Zone của công nhân và quyền trực tiếp](#49-phê-duyệt-sitezone-của-công-nhân-và-quyền-trực-tiếp)
 - [4.10. API quản lý dành riêng Site Manager](#410-api-quản-lý-dành-riêng-site-manager)
+- [4.11. Tra cứu Nhà thầu và Site tham gia toàn cục dành cho Admin](#411-tra-cứu-nhà-thầu-và-site-tham-gia-toàn-cục-dành-cho-admin)
 
 5. [MF03 — Chấm công & Giờ làm](#5-mf03--chấm-công--giờ-làm)
    - [5.1. Nhận diện tại Cổng, Xác nhận Qua Cổng & Ghi nhận Chấm công](#51-nhận-diện-tại-cổng-xác-nhận-qua-cổng--ghi-nhận-chấm-công)
@@ -77,6 +78,8 @@ Hệ thống phân định rõ ràng quyền hạn giữa các vai trò người
 | Nhóm API                    | Endpoint                                                                         |    Admin    |    Site Manager    | Contractor Representative |         Worker          |  Security Officer  |
 | :-------------------------- | :------------------------------------------------------------------------------- | :---------: | :----------------: | :-----------------------: | :---------------------: | :----------------: |
 | **Site & Contractor**       | `GET /api/v1/sites`                                                              | ✅ (Tất cả) | ✅ (Site được gán) |    ✅ (Site được gán)     |   ✅ (Site được gán)    | ✅ (Site được gán) |
+|                             | `GET /api/v1/contractors`                                                        | ✅ (Global) |         ❌         |            ❌             |           ❌            |         ❌         |
+|                             | `GET /api/v1/contractors/:id/participations`                                     | ✅ (Global) |         ❌         |            ❌             |           ❌            |         ❌         |
 |                             | `POST /api/v1/sites/:siteId/contractors`                                         |     ❌      |         ✅         |            ❌             |           ❌            |         ❌         |
 |                             | `GET /api/v1/sites/:siteId/contractors`                                          |     ✅      |         ✅         |   ✅ (Chỉ NT của mình)    |  ✅ (Chỉ NT của mình)   |         ❌         |
 |                             | `POST /api/v1/sites/:siteId/contractors/:id/representatives`                     |     ❌      |         ✅         |            ❌             |           ❌            |         ❌         |
@@ -1002,11 +1005,54 @@ Nguồn: [controller](../apps/backend/src/modules/workforce/directory/worker-ass
 
 `GET /api/v1/sites/:siteId/management/overview?offset=0&limit=50` trả 200 với `site`, `contractorCount`, `zoneCount`, `teamCount`, `workerCount`, `contractors: { items, total }`. Mỗi contractor item có `id`, `code`, `name`, `teamCount`, `workerCount`. Phân trang chỉ áp dụng danh sách contractor; KPI là tổng của Site theo các điều kiện active trong service.
 
-`GET /api/v1/sites/:siteId/management/contractors/:contractorId?date=2026-10-12&timezone=Asia/Ho_Chi_Minh` trả 200 với contractor summary, `date`, `timezone`, `teams`, `zones`, `scheduledTeams`, `scheduledWorkerCount`, `scheduledWorkersWithoutTeam`. `scheduledTeams` dùng `id`/`name`, không dùng `teamId`/`teamName`. `zones` là grant contractor giao với ngày chọn, không phải phân công Zone của từng team. Các timestamp ca trong response đã được tính cho workDate thật, giữ ca qua đêm.
+`GET /api/v1/sites/:siteId/management/contractors/:contractorId?date=2026-10-12&timezone=Asia/Ho_Chi_Minh` trả 200 với contractor summary, `date`, `timezone`, `teams`, `zones`, `scheduledTeams`, `scheduledWorkerCount`, `scheduledWorkersWithoutTeam`. `scheduledTeams` dùng `id`/`name`, không dùng `teamId`/`teamName`. `zones` là grant contractor giao với ngày chọn. Mỗi phần tử `teams` bổ sung `zoneAssignments`: Zone được phân cho chính đội đó, gồm `id` (team grant), `zoneId`, `name`, `code`, `validFrom`, `validUntil`. Các timestamp ca trong response đã được tính cho workDate thật, giữ ca qua đêm.
+
+`teams[].zoneAssignments` chỉ chứa grant đội chưa thu hồi, thuộc đội active, đúng Site/Contractor/Zone, parent contractor grant chưa thu hồi và participation active. Interval đội phải nằm trong interval parent/participation và giao với ngày IANA được chọn; `validUntil` là mốc kết thúc loại trừ. Mảng rỗng nghĩa là không có phân công đáp ứng điều kiện trong ngày; không suy ra quyền vào Zone thực tế của Worker. Web hiển thị **Team Zones on {date}** dưới từng đội và **Contractor Zones on {date}** cho danh sách cấp nhà thầu. Nếu Backend cũ chưa trả field này, UI báo dữ liệu đội–Zone unavailable, không giả mảng rỗng. Backend mới tương thích client cũ vì chỉ bổ sung field.
 
 Hai endpoint chỉ cho Site Manager đang active, được gán đúng Site trong DB và authentication context. Global Admin/Representative không bypass. Query date và IANA timezone của detail bắt buộc; sai ngày/timezone trả 400, thiếu/sai role-scope trả 403, contractor không ở participation active trong Site trả 404. Totals/roster là hiện tại, không phải snapshot số công nhân trong quá khứ. Không có danh sách Worker bên trong từng scheduled shift; ghép worker-schedules theo mục 6.5. Không có request body hoặc idempotency key cho các GET.
 
 Nguồn: [controller](../apps/backend/src/modules/workforce/management/manager-overview.controller.ts), [service](../apps/backend/src/modules/workforce/management/manager-overview.service.ts), [response contract](../contracts/src/manager-overview-api.ts), [client](../packages/api-client/src/management.ts), [integration test](../apps/backend/test/integration/manager-overview.integration.test.ts).
+
+### 4.11. Tra cứu Nhà thầu và Site tham gia toàn cục dành cho Admin
+
+- `GET /api/v1/contractors?offset=0&limit=20`: trả `items` gồm `id`, `code`, `name`, `isActive` và `total`. Danh bạ bao gồm nhà thầu inactive để Admin vẫn tra cứu được participation; không có `siteId` giả cho nhà thầu toàn cục.
+- `GET /api/v1/contractors/:contractorId/participations?offset=0&limit=20`: trả `contractor`, `items` và `total`. Mỗi item là một interval tham gia Site, gồm `id`, `site: { id, code, name }`, `validFrom`, `validUntil` (có thể null), `isActive`, `status`.
+- Cả hai GET yêu cầu **global Admin** active, không bị chặn đổi mật khẩu, và role global còn tồn tại trong DB. Site Manager, Representative, Worker không được đọc toàn cục. Backend recheck quyền trong transaction `REPEATABLE READ`; thiếu hoặc unavailable dữ liệu quyền không trở thành allowed.
+- Phân trang: offset mặc định 0; limit mặc định 20, tối đa 100. `total` của participations đếm **interval**, không phải số Site khác nhau. Một Site có thể xuất hiện nhiều lần nếu nhà thầu có nhiều đợt tham gia. Danh bạ sắp theo name/id; participation theo tên Site, Site ID, validFrom, participation ID.
+- Trạng thái tại thời điểm query, theo thứ tự ưu tiên: `INACTIVE` khi nhà thầu hoặc participation inactive; `EXPIRED` khi `validUntil <= now`; `FUTURE` khi `validFrom > now`; còn lại `ACTIVE`. `validUntil: null` nghĩa là không có ngày kết thúc, không bỏ qua kiểm tra active hoặc validFrom.
+- HTTP: thiếu phiên 401, sai quyền 403, UUID/phân trang sai 400, nhà thầu không tồn tại 404. Nhà thầu tồn tại nhưng chưa có participation trả 200 với `items: []`, `total: 0`. Không có body hoặc idempotency key.
+
+Ví dụ response synthetic của participation (không phải dữ liệu runtime):
+
+```json
+{
+  "contractor": {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "code": "CTR-DEMO",
+    "name": "Nhà thầu mẫu",
+    "isActive": true
+  },
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "site": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "code": "SITE-DEMO",
+        "name": "Site mẫu"
+      },
+      "validFrom": "2020-01-01T00:00:00.000Z",
+      "validUntil": null,
+      "isActive": true,
+      "status": "ACTIVE"
+    }
+  ],
+  "total": 1
+}
+```
+
+Admin mở **Site Setup → Contractor Site directory**, chọn nhà thầu rồi xem các Site, thời hạn và trạng thái. Có phân trang riêng cho nhà thầu và participation; đổi trang nhà thầu xóa selection cũ. Loading, empty, denied, unavailable, retry và refresh được hiển thị rõ. API này chỉ đọc; không mở quyền tạo nhà thầu/Zone cho Admin.
+
+Nguồn: [controller](../apps/backend/src/modules/workforce/directory/contractor-participation-query.controller.ts), [service](../apps/backend/src/modules/workforce/directory/contractor-participation-query.service.ts), [contract](../contracts/src/manager-overview-api.ts), [UI](../apps/web/src/components/workforce/components/ContractorParticipationDirectory.tsx), [integration test](../apps/backend/test/integration/contractor-participation-query.integration.test.ts).
 
 ## 5. MF03 — Chấm công & Giờ làm
 
@@ -1436,9 +1482,9 @@ Một lần verify hoặc retry cùng passage không tự tạo DUPLICATE_IN. Kh
 
 - **Phân biệt Phạm vi Tài khoản vs Toàn bộ Site của Nhà thầu**:
   - **Đối với tài khoản Đại diện**: Bị giới hạn hoàn toàn trong các Site mà tài khoản đó được gán làm đại diện (qua `GET /api/v1/contractor-dashboard/scopes`). Đại diện không thể xem các Site khác mà nhà thầu tham gia nhưng không phân công họ quản lý.
-  - **Đối với toàn bộ Site của Nhà thầu**: **Hiện chưa có endpoint chuyên biệt toàn cục** dạng `GET /api/v1/contractors/:contractorId/sites` hay `GET /api/v1/contractors/:contractorId/participations`.
+  - **Đối với toàn bộ Site của Nhà thầu**: Global Admin dùng `GET /api/v1/contractors/:contractorId/participations` và đọc hết phân trang. Danh bạ `GET /api/v1/contractors` giúp chọn nhà thầu mà không cần duyệt các Site.
   - **Cách tra cứu hiện tại**:
-    - Global Admin có thể duyệt hết phân trang `GET /api/v1/sites` và kiểm tra nhà thầu trong từng Site. Tuy nhiên `/sites/:siteId/contractors` hiện chỉ trả mặc định tối đa 50 bản ghi: controller không nhận offset/limit dù service hỗ trợ. Không xuất hiện trong trang này chưa chứng minh nhà thầu không tham gia Site; cách ghép chưa đảm bảo tìm đủ mọi Site.
+    - Global Admin mở **Site Setup → Contractor Site directory**. Mỗi participation có tên/mã Site, interval và status tại thời điểm query. Để trả lời "đang tham gia", lấy các item `status: ACTIVE` và khử trùng theo `site.id`; `total` đếm interval, không phải Site. Xem mục 4.11 về phân trang và trạng thái. Không dùng cách quét contractor từng Site để suy ra danh sách đầy đủ.
     - Site Manager chỉ xem được nhà thầu trong phạm vi Site của mình qua `GET /api/v1/sites/:siteId/management/overview`.
 
 ### 6.3. Nhà thầu được cấp những Zone nào tại Site, thời hạn & trạng thái thu hồi/hết hạn?
@@ -1481,7 +1527,7 @@ Một lần verify hoặc retry cùng passage không tự tạo DUPLICATE_IN. Kh
 1. Gọi `GET /api/v1/sites/:siteId/management/contractors/:contractorId?date=YYYY-MM-DD&timezone=Asia/Ho_Chi_Minh`.
 2. Đọc `scheduledTeams`: mỗi phần tử có `id`, `name`, `workerCount`, `shifts`. `zones` cấp contractor là các quyền chưa thu hồi giao với ngày chọn, không phải Zone của từng team.
 3. Lấy công nhân được phân lịch bằng `GET /api/v1/sites/:siteId/worker-schedules?contractorId={contractorId}&fromDate={date}&toDate={date}&teamId={teamId}`; đọc hết phân trang. Ghép tên từ API danh sách Worker trong Site khi cần; WorkerSchedule không có sẵn workerName.
-4. **Chưa có API cho Site Manager trả Zone phân cho từng team**: endpoint `/contractors/:id/teams` và `/teams/:id/zones` yêu cầu assignment đại diện, nên manager-only gọi sẽ bị 403. Không hướng dẫn frontend vượt quyền. Đây là khoảng trống API cần triển khai riêng nếu màn hình manager cần quan hệ team–Zone.
+4. Đọc `teams[].zoneAssignments` trong chính response management detail để xem Zone của từng đội theo ngày chọn; UI hiển thị dưới từng đội. Mảng rỗng nghĩa là không có grant đội phù hợp trong ngày. Endpoint `/contractors/:id/teams` và `/teams/:id/zones` vẫn yêu cầu assignment đại diện; manager-only không gọi các API dành riêng representative. Xem mục 4.10 về điều kiện parent, participation và tương thích Backend cũ.
 
 **Đại diện nhà thầu**:
 
@@ -1548,21 +1594,29 @@ Nguồn: [ZoneEntryAuthorizationService](../apps/backend/src/modules/zones/zone-
 
 Chấm công có thể có correction/ignore-duplicate; INSIDE/OUTSIDE trong AttendanceDay phản ánh phiên chấm công, không phải vị trí camera hay khẳng định Worker đang đứng tại một Zone.
 
+### 7.4. Global Admin tra cứu Site của nhà thầu
+
+1. `GET /api/v1/auth/me`: xác nhận role `ADMIN` với `siteId: null`.
+2. Mở **Site Setup → Contractor Site directory**; gọi `GET /api/v1/contractors?offset=0&limit=20`, dùng phân trang để tìm nhà thầu.
+3. Chọn nhà thầu → `GET /api/v1/contractors/:contractorId/participations?offset=0&limit=20`; hiển thị tên/mã Site, interval và `status`. Đọc hết phân trang trước khi kết luận đã có toàn bộ danh sách.
+4. Refresh lấy lại trạng thái theo thời điểm Backend. Không gọi `/management/*` bằng Admin-only để xem đội–Zone; đó là luồng Site Manager đúng scope.
+
 ---
 
 ## 8. Khoảng trống Triển khai & Khuyến nghị Kỹ thuật
 
 Khi đối chiếu giữa code, contracts và test suites, một số điểm cần lưu ý đặc biệt cho đội ngũ phát triển:
 
-1. **Chưa có API truy vấn toàn bộ Site của một Nhà thầu**:
-   - Hiện tại không có endpoint `GET /api/v1/contractors/:id/participations` hay `GET /api/v1/contractors/:id/sites`.
-   - Nếu Frontend của Admin muốn hiển thị danh sách tất cả các Site mà một Nhà thầu đang hoạt động, có thể duyệt các Site và kiểm tra danh sách nhà thầu, nhưng bị giới hạn 50 contractor/Site của controller hiện tại; cần API/phân trang bổ sung để đảm bảo kết quả đầy đủ.
+1. **Hai khoảng trống truy vấn đã được bổ sung trong source**:
+   - Global Admin đọc danh bạ nhà thầu và participation toàn cục bằng hai GET ở mục 4.11; Web có **Contractor Site directory**, không cần quét contractor từng Site.
+   - Site Manager đọc `teams[].zoneAssignments` từ management detail trong Site được giao; Web phân biệt Zone đội và Zone nhà thầu. Không cấp quyền dùng API representative cho manager.
+   - Hai thay đổi chỉ bổ sung read API/response/UI, không có migration mới và không sửa AI contract. Triển khai Backend trước Web; không coi source đã sửa là runtime đã cập nhật.
 2. **Hạn chế Lọc Đội Lịch sử (Historical Team Roster Filtering)**:
    - Trong `GET /api/v1/sites/:siteId/worker-schedules`, bộ lọc `teamId` sử dụng điều kiện `contractor_team_membership.left_at IS NULL` (thành viên hiện tại).
    - Nếu công nhân đã chuyển sang đội khác hoặc rời đội, truy vấn lịch trong quá khứ kèm theo `teamId` cũ của họ sẽ không trả về kết quả cho công nhân đó. Để xem chính xác lịch sử của công nhân, Frontend nên lọc theo `workerId` hoặc không truyền `teamId`.
 3. **Chưa có Endpoint Gộp (Composite Endpoint) trả về cả Team Schedule kèm Worker Names trong một lần gọi**:
    - `GET /api/v1/sites/:siteId/management/contractors/:contractorId` trả về `scheduledTeams` gồm `id`, `name`, `workerCount` và danh sách ca `shifts`, nhưng **không trả về mảng danh sách công nhân chi tiết** bên trong từng ca.
-   - Frontend có quyền phù hợp ghép tiếp worker-schedules với roster/tên Worker; không gọi API team dành riêng representative từ tài khoản manager-only. Manager chưa có API team–Zone chi tiết như mục 6.5.
+   - Frontend có quyền phù hợp ghép tiếp worker-schedules với roster/tên Worker; không gọi API team dành riêng representative từ tài khoản manager-only. Zone theo đội đã có qua `teams[].zoneAssignments` như mục 6.5, nhưng danh sách Worker chi tiết trong từng ca vẫn cần ghép riêng.
 4. **Quy tắc Duyệt Chấm công Độc quyền (Exclusive Review Policy)**:
    - Trong [attendance-access.ts](../apps/backend/src/modules/workforce/attendance/attendance-access.ts), chỉ vai trò `CONTRACTOR_REPRESENTATIVE` mới được phép duyệt chỉnh sửa giờ công, bỏ qua lần quét trùng, duyệt OT/Leave và xác nhận ngày chấm công (`review = true`).
    - Admin và Site Manager (`STAFF`) có quyền xem (`read`) nhưng KHÔNG có quyền duyệt các hành động này (sẽ bị trả về `403 FORBIDDEN`). Điều này phản ánh đúng nghiệp vụ: nhà thầu tự quản lý và chịu trách nhiệm pháp lý về giờ làm việc của công nhân mình.
@@ -1572,9 +1626,11 @@ Khi đối chiếu giữa code, contracts và test suites, một số điểm c�
 
 ## 9. Bằng chứng đối chiếu và phạm vi kiểm tra
 
-Đối chiếu implementation ở commit `22b7efb` ngày 12/10/2026 (Asia/Saigon). Lần kiểm tra code trước cập nhật tài liệu: frozen install, peers check, pnpm check (Web 424 tests, Backend 288 tests), PostgreSQL integration 131 tests và readiness Backend/Web đã qua. Mobile check:dependencies còn bốn advisory bản vá Expo. Đây là kết quả lần chạy được ghi nhận, không bảo đảm mọi môi trường triển khai mới đã pass.
+Lịch sử đối chiếu implementation ở commit `22b7efb` ngày 12/10/2026 (Asia/Saigon): frozen install, peers check, pnpm check (Web 424 tests, Backend 288 tests), PostgreSQL integration 131 tests và readiness Backend/Web đã qua. Mobile check:dependencies còn bốn advisory bản vá Expo. Đây là kết quả lần chạy được ghi nhận, không bảo đảm mọi môi trường triển khai mới đã pass.
 
-Bản cập nhật này chỉ sửa tài liệu: đã kiểm tra 50 JSON ví dụ, UUID/fingerprint, 124 link nguồn, định dạng Markdown và 8 request mẫu qua command/DTO Backend. Các kiểm tra DTO không gọi database hoặc dịch vụ ngoài; không thay thế HTTP/scope integration tests. Các ví dụ là synthetic snapshot, không phải dữ liệu runtime hay lệnh seed. Khi gọi thật phải thay các ID/fingerprint bằng kết quả API và chọn interval còn hợp lệ; ví dụ OT phải được gửi/duyệt trước startsAt.
+Lần cập nhật tài liệu trước đã kiểm tra 50 JSON ví dụ, UUID/fingerprint, 124 link nguồn, định dạng Markdown và 8 request mẫu qua command/DTO Backend. Các kiểm tra DTO không gọi database hoặc dịch vụ ngoài; không thay thế HTTP/scope integration tests. Các ví dụ là synthetic snapshot, không phải dữ liệu runtime hay lệnh seed. Khi gọi thật phải thay các ID/fingerprint bằng kết quả API và chọn interval còn hợp lệ; ví dụ OT phải được gửi/duyệt trước startsAt.
+
+Cập nhật ngày 13/10/2026 (Asia/Saigon), trên nhánh `feat/contractor-teams-20261008` từ checkout `3e54bf7` đã chứa các thay đổi MF03/MF07 và các commit trên main: bổ sung GET danh bạ/participation toàn cục cho Admin, `teams[].zoneAssignments` cho Site Manager, shared client và hai luồng Web. Frozen install và peers check đã qua; `pnpm check` đạt Backend 289, Web 428, API client 51, contracts 80 và root scripts 24 tests, cùng lint/typecheck/build. PostgreSQL 18 integration chạy lại đạt 132/132, bao gồm HTTP 401/403/400/200 và query participation/Zone theo đội. Docker Compose build Backend/Web và cập nhật hai container local đã qua health checks; không thêm migration. Mobile dependency gate vẫn fail vì bốn advisory Expo (`expo`, `expo-dev-client`, `expo-router`, `expo-splash-screen`); dependencies không đổi trong lần bổ sung này. Chưa nghiệm thu UI bằng phiên đăng nhập trên trình duyệt thật. Kết quả không thay cho review của thành viên khác hoặc nghiệm thu production.
 
 Nguồn kiểm thử: [manager overview](../apps/backend/test/integration/manager-overview.integration.test.ts), [team API/HTTP](../apps/backend/test/integration/contractor-teams.integration.test.ts), [team Zone constraints/authorization](../apps/backend/test/integration/team-zones.integration.test.ts), [contractor calendar dates](../apps/backend/test/integration/contractor-zone-dates.integration.test.ts), [MF03 reconciliation](../apps/backend/test/integration/mf03-attendance.integration.test.ts). Nếu đường dẫn test thay đổi, dùng test inventory hiện tại; không suy ra đã chạy từ chỉ tồn tại tên test.
 

@@ -7,6 +7,8 @@ import { WorkforceController } from './workforce.controller.js';
 import { ContractorOperationsService } from './contractor-operations.service.js';
 import { ContractorOperationsController } from './contractor-operations.controller.js';
 import { WorkerAssignmentController } from './worker-assignment.controller.js';
+import { ContractorParticipationQueryController } from './contractor-participation-query.controller.js';
+import { ContractorParticipationQueryService } from './contractor-participation-query.service.js';
 
 @Module({
   imports: [DatabaseModule, AuthModule],
@@ -15,8 +17,13 @@ import { WorkerAssignmentController } from './worker-assignment.controller.js';
     ContractorsController,
     ContractorOperationsController,
     WorkerAssignmentController,
+    ContractorParticipationQueryController,
   ],
-  providers: [WorkforceConfigurationService, ContractorOperationsService],
+  providers: [
+    WorkforceConfigurationService,
+    ContractorOperationsService,
+    ContractorParticipationQueryService,
+  ],
   exports: [WorkforceConfigurationService, ContractorOperationsService],
 })
 export class WorkforceDirectoryModule {}

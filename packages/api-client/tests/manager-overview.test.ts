@@ -39,3 +39,23 @@ it('sends scoped management reads with pagination/date/timezone and creates with
   for (const [, init] of calls)
     expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
 });
+
+it('encodes global contractor participation reads and preserves pagination and authentication', async () => {
+  const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  const client = new SmartSiteManagementClient('https://synthetic.test');
+  await client.listGlobalContractors('admin-token', { offset: 20, limit: 20 });
+  await client.listContractorParticipations('admin-token', 'contractor/1', {
+    offset: 40,
+    limit: 20,
+  });
+  const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>;
+  expect(new URL(calls[0]![0]).pathname).toBe('/api/v1/contractors');
+  expect(new URL(calls[1]![0]).pathname).toBe('/api/v1/contractors/contractor%2F1/participations');
+  expect(new URL(calls[1]![0]).searchParams.get('offset')).toBe('40');
+  expect(new URL(calls[1]![0]).searchParams.get('limit')).toBe('20');
+  for (const [, init] of calls) {
+    expect(init.method).toBe('GET');
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer admin-token' });
+  }
+});

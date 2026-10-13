@@ -180,6 +180,8 @@ New accounts and password resets use the supplied password immediately, without 
 
 Site Manager forms generate Contractor and Zone codes on the Backend. The Dashboard shows real Site-scoped Contractor/Zone totals and opens Contractor details with active teams, Workers, dated Zone grants and scheduled teams. See [management API semantics and compatibility](docs/site-manager-overview.md); team grouping uses the current roster and schedule data, with a visible date/timezone selector.
 
+Contractor details now show dated Zone assignments under each team, separately from Contractor Zone grants. Global Admin **Site Setup → Contractor Site directory** lists a Contractor's participation intervals across Sites with status and pagination. These reads retain role/data scope checks; manager-only accounts cannot query the global directory. Deploy Backend before Web; no schema migration is added. See [MF03/MF07 API flows](docs/mf03-mf07-api-flow.md) for fields and remaining historical limitations.
+
 Visitor registration is available at `/visits/register`, without a login. One representative registers
 the site, group size, contact, host, requested area, gate and schedule. The request appears in
 **Visitor Passes** for the Site Manager assigned to that site; only that scoped role may approve or

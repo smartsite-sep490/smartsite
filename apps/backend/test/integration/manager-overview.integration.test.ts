@@ -17,6 +17,7 @@ import {
   ContractorTeamMembershipEntity,
   ContractorSiteParticipationEntity,
   ContractorZonePermissionEntity,
+  TeamZonePermissionEntity,
   ShiftEntity,
   ScheduleVersionEntity,
   WorkerScheduleEntity,
@@ -129,7 +130,7 @@ test('manager overview: generated codes, Site isolation, current roster and date
   await source
     .getRepository(ContractorSiteParticipationEntity)
     .update(participation.id, { validFrom: new Date('2020-01-01') });
-  await source.getRepository(ContractorZonePermissionEntity).save(
+  const grants = await source.getRepository(ContractorZonePermissionEntity).save(
     [
       {
         zoneId: zone.id,
@@ -162,6 +163,15 @@ test('manager overview: generated codes, Site isolation, current roster and date
       grantedBy: userId,
     })),
   );
+  const teamGrant = await source.getRepository(TeamZonePermissionEntity).save({
+    id: randomUUID(),
+    teamId: team.id,
+    contractorZonePermissionId: grants[0]!.id,
+    validFrom: new Date('2026-10-11T18:00:00Z'),
+    validUntil: new Date('2026-10-12T16:00:00Z'),
+    grantedBy: userId,
+    revokedAt: null,
+  });
   const shifts = await source.getRepository(ShiftEntity).save(
     [
       {
@@ -205,6 +215,16 @@ test('manager overview: generated codes, Site isolation, current roster and date
   assert.equal(detail.teamCount, 1);
   assert.equal(detail.workerCount, 2);
   assert.equal(detail.teams[0]!.workerCount, 1);
+  assert.deepEqual(detail.teams[0]!.zoneAssignments, [
+    {
+      id: teamGrant.id,
+      zoneId: zone.id,
+      name: zone.name,
+      code: zone.code,
+      validFrom: '2026-10-11T18:00:00.000Z',
+      validUntil: '2026-10-12T16:00:00.000Z',
+    },
+  ]);
   assert.deepEqual(
     detail.zones.map((z) => z.id),
     [zone.id],
@@ -223,6 +243,7 @@ test('manager overview: generated codes, Site isolation, current roster and date
     date: '2026-10-13',
   });
   assert.equal(empty.zones.length, 0);
+  assert.deepEqual(empty.teams[0]!.zoneAssignments, []);
   assert.equal(empty.scheduledTeams.length, 0);
   await assert.rejects(service.detail(actor, site.id, contractors[2]!.id, input), { status: 404 });
   for (const denied of [
@@ -240,6 +261,23 @@ test('manager overview: generated codes, Site isolation, current roster and date
   await assert.rejects(
     service.detail(actor, site.id, contractor.id, { ...input, timezone: 'invalid-zone' }),
     { status: 400 },
+  );
+  await source
+    .getRepository(ContractorZonePermissionEntity)
+    .update(grants[0]!.id, { revokedAt: new Date() });
+  assert.deepEqual(
+    (await service.detail(actor, site.id, contractor.id, input)).teams[0]!.zoneAssignments,
+    [],
+  );
+  await source
+    .getRepository(ContractorZonePermissionEntity)
+    .update(grants[0]!.id, { revokedAt: null });
+  await source
+    .getRepository(TeamZonePermissionEntity)
+    .update(teamGrant.id, { revokedAt: new Date() });
+  assert.deepEqual(
+    (await service.detail(actor, site.id, contractor.id, input)).teams[0]!.zoneAssignments,
+    [],
   );
   await source.getRepository(UserEntity).update(userId, { isActive: false });
   await assert.rejects(service.overview(actor, site.id), { status: 403 });

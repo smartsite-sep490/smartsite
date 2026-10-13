@@ -60,7 +60,24 @@ it('manager Dashboard displays API counts, scopes Sites and opens dated contract
       ...query,
       teamCount: 2,
       workerCount: 8,
-      teams: [{ id: 'team-a', name: 'Crew A', workerCount: 4 }],
+      teams: [
+        {
+          id: 'team-a',
+          name: 'Crew A',
+          workerCount: 4,
+          zoneAssignments: [
+            {
+              id: 'team-zone-a',
+              zoneId: 'zone-b',
+              name: 'Team work area',
+              code: 'ZONE-B',
+              validFrom: '2026-01-01T00:00:00Z',
+              validUntil: '2027-01-01T00:00:00Z',
+            },
+          ],
+        },
+        { id: 'team-b', name: 'Crew B', workerCount: 4, zoneAssignments: [] },
+      ],
       zones: [
         {
           id: 'zone-a',
@@ -103,6 +120,9 @@ it('manager Dashboard displays API counts, scopes Sites and opens dated contract
   await user.click(screen.getByRole('button', { name: 'View details for Alpha' }));
   const dialog = within(await screen.findByRole('dialog'));
   await dialog.findByText('Tower A');
+  expect(dialog.getByText('Team work area')).toBeTruthy();
+  expect(dialog.getByText('No team Zone assignments on this date.')).toBeTruthy();
+  expect(dialog.queryByText(/Team Zone data unavailable/)).toBeNull();
   expect(dialog.getByText(/3 scheduled workers/)).toBeTruthy();
   expect(dialog.getByText(/1 scheduled workers have no active team/)).toBeTruthy();
   await user.click(dialog.getByLabelText('Work date'));
