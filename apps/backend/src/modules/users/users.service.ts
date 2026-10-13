@@ -221,33 +221,44 @@ export class UsersService {
       .getCount();
   }
 
+  async createAdministrative(input: CreateUserDto) {
+    const value = command(CreateUserDto, input);
+    if (value.roleAssignments.some((r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE))
+      throw new ForbiddenException('Representatives must be created by their Site Manager');
+    return this.create(value);
+  }
+
   async create(input: CreateUserDto) {
     const value = command(CreateUserDto, input);
     await this.validateAssignments(value.roleAssignments);
     const passwordHash = await hashPassword(value.temporaryPassword);
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const user = await manager.getRepository(UserEntity).save({
-          id: randomUUID(),
-          username: value.username,
-          displayName: value.displayName,
-          passwordHash,
-          isActive: true,
-          mustChangePassword: true,
-        });
-        await manager.getRepository(UserRoleAssignmentEntity).insert(
-          value.roleAssignments.map(({ role, siteId }) => ({
-            id: randomUUID(),
-            userId: user.id,
-            role,
-            siteId,
-          })),
-        );
-        return this.response(manager, user);
+        return this.createInTransaction(manager, value, passwordHash);
       });
     } catch (error) {
-      knownUnique(error, ['uq_app_user_username']);
+      knownUnique(error, ['uq_app_user_username', 'uq_site_single_manager']);
     }
+  }
+
+  async createInTransaction(manager: EntityManager, value: CreateUserDto, passwordHash: string) {
+    const user = await manager.getRepository(UserEntity).save({
+      id: randomUUID(),
+      username: value.username,
+      displayName: value.displayName,
+      passwordHash,
+      isActive: true,
+      mustChangePassword: false,
+    });
+    await manager.getRepository(UserRoleAssignmentEntity).insert(
+      value.roleAssignments.map(({ role, siteId }) => ({
+        id: randomUUID(),
+        userId: user.id,
+        role,
+        siteId,
+      })),
+    );
+    return this.response(manager, user);
   }
 
   async bootstrap(usernameValue: string, displayNameValue: string, password: string) {
@@ -269,7 +280,7 @@ export class UsersService {
         displayName: value.displayName,
         passwordHash,
         isActive: true,
-        mustChangePassword: true,
+        mustChangePassword: false,
       });
       await manager.getRepository(UserRoleAssignmentEntity).insert({
         id: randomUUID(),
@@ -297,6 +308,38 @@ export class UsersService {
     const user = await this.dataSource.getRepository(UserEntity).findOneBy({ id: uuid(id) });
     if (!user) throw new NotFoundException();
     return this.response(this.dataSource.manager, user);
+  }
+
+  async listSiteRepresentatives(siteId: string, offset = 0, limit = 20) {
+    const paging = page(offset, limit);
+    const [users, total] = await this.dataSource
+      .getRepository(UserEntity)
+      .createQueryBuilder('u')
+      .where(
+        'EXISTS (SELECT 1 FROM user_role_assignment r WHERE r.user_id=u.id AND r.site_id=:siteId AND r.role=:role)',
+        { siteId: uuid(siteId), role: UserRole.CONTRACTOR_REPRESENTATIVE },
+      )
+      .orderBy('u.username', 'ASC')
+      .addOrderBy('u.id', 'ASC')
+      .skip(paging.offset)
+      .take(paging.limit)
+      .getManyAndCount();
+    const assignments = users.length
+      ? await this.dataSource.getRepository(UserRoleAssignmentEntity).findBy({
+          userId: In(users.map((u) => u.id)),
+          siteId,
+          role: UserRole.CONTRACTOR_REPRESENTATIVE,
+        })
+      : [];
+    return {
+      items: users.map((u) =>
+        publicUser(
+          u,
+          assignments.filter((r) => r.userId === u.id),
+        ),
+      ),
+      total,
+    };
   }
 
   async list(offset = 0, limit = 20) {
@@ -357,35 +400,49 @@ export class UsersService {
     const value = command(ReplaceRoleAssignmentsDto, input);
     await this.validateAssignments(value.roleAssignments);
     const id = uuid(userId);
-    return this.dataSource.transaction(async (manager) => {
-      await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
-      const user = await manager
-        .getRepository(UserEntity)
-        .createQueryBuilder('user')
-        .setLock('pessimistic_write')
-        .where('user.id = :id', { id })
-        .getOne();
-      if (!user) throw new NotFoundException();
-      const current = await manager.getRepository(UserRoleAssignmentEntity).findBy({ userId: id });
-      const removesAdmin =
-        current.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
-        !value.roleAssignments.some(
-          ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
+        const user = await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder('user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id })
+          .getOne();
+        if (!user) throw new NotFoundException();
+        const current = await manager
+          .getRepository(UserRoleAssignmentEntity)
+          .findBy({ userId: id });
+        if (
+          value.roleAssignments.some(
+            (r) =>
+              r.role === UserRole.CONTRACTOR_REPRESENTATIVE &&
+              !current.some((c) => c.role === r.role && c.siteId === r.siteId),
+          )
+        )
+          throw new ForbiddenException('Representatives must be assigned by their Site Manager');
+        const removesAdmin =
+          current.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
+          !value.roleAssignments.some(
+            ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
+          );
+        if (user.isActive && removesAdmin && (await this.activeAdminCount(manager)) <= 1)
+          throw new ConflictException('At least one active Admin is required');
+        await manager.getRepository(UserRoleAssignmentEntity).delete({ userId: id });
+        await manager.getRepository(UserRoleAssignmentEntity).insert(
+          value.roleAssignments.map(({ role, siteId }) => ({
+            id: randomUUID(),
+            userId: id,
+            role,
+            siteId,
+          })),
         );
-      if (user.isActive && removesAdmin && (await this.activeAdminCount(manager)) <= 1)
-        throw new ConflictException('At least one active Admin is required');
-      await manager.getRepository(UserRoleAssignmentEntity).delete({ userId: id });
-      await manager.getRepository(UserRoleAssignmentEntity).insert(
-        value.roleAssignments.map(({ role, siteId }) => ({
-          id: randomUUID(),
-          userId: id,
-          role,
-          siteId,
-        })),
-      );
-      await this.revokeSessions(manager, id);
-      return this.response(manager, user);
-    });
+        await this.revokeSessions(manager, id);
+        return this.response(manager, user);
+      });
+    } catch (error) {
+      knownUnique(error, ['uq_site_single_manager']);
+    }
   }
 
   async resetPassword(userId: string, input: ResetPasswordDto) {
@@ -402,7 +459,7 @@ export class UsersService {
       if (!user) throw new NotFoundException();
       await manager
         .getRepository(UserEntity)
-        .update({ id }, { passwordHash: replacement, mustChangePassword: true });
+        .update({ id }, { passwordHash: replacement, mustChangePassword: false });
       await this.revokeSessions(manager, id);
     });
   }

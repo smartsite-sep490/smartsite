@@ -1,5 +1,19 @@
 export const CONTRACTS_VERSION = '1.0.0';
 export type {
+  AttendanceDayStatus,
+  AttendanceNotificationEvent,
+  AttendanceDayResponse,
+  AttendanceTimeRequestCommand,
+  AttendanceTimeRequestResponse,
+  AttendanceDaysResponse,
+  AttendanceDaysQuery,
+  AttendanceOverviewQuery,
+  IgnoreDuplicateAttendanceCommand,
+  ReviewAttendanceDayCommand,
+  AttendanceDayDetailResponse,
+  AttendanceTimesheetResponse,
+} from './attendance-api.js';
+export type {
   CreateVisitCommand,
   VisitResponse,
   QrPassResponse,
@@ -25,7 +39,7 @@ export { validateCameraRegionConfiguration } from './validation/schema-validator
 
 export type { ValidationResult } from './validation/schema-validator.js';
 export { SITE_GATES } from './gate-permissions-api.js';
-export { isPastWorkDate } from './scheduling-date.js';
+export { isPastWorkDate, isShiftEnded } from './scheduling-date.js';
 
 export type {
   WorkerGatePermissionResponse,
@@ -107,6 +121,7 @@ export type {
   SwapCandidateListResponse,
   SchedulingRequestStatus,
   SchedulingNotificationEvent,
+  ScheduleAssignmentNotificationEvent,
   SchedulingNotificationTarget,
   UserNotificationResponse,
   UserNotificationListResponse,
@@ -124,3 +139,6 @@ export * from './safety-workflow-api.js';
 export * from './access-flow-api.js';
 export * from './access-setup-api.js';
 export * from './attendance-api.js';
+export * from './contractor-team-api.js';
+export * from './schedule-assignment-api.js';
+export * from './manager-overview-api.js';

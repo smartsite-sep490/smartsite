@@ -31,6 +31,7 @@ export type FaceGateReasonCode =
   | 'SITE_MISMATCH'
   | 'GATE_MISMATCH'
   | 'VALID_ASSIGNMENT'
+  | 'NO_SCHEDULE'
   | 'EXIT_RECORD_ONLY';
 
 export interface FaceGateDecisionResponse {

@@ -7,13 +7,13 @@ import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
-import { QrAccessService } from '../../src/modules/workforce/qr-access.service.js';
+import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AuthClientType, UserRole } from '../../src/database/entities/index.js';
 import { createTestConfig } from '../support/config.js';
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 
-test('new Site Manager must change their temporary password before visitor registration, approval and QR entry', async () => {
+test('new Site Manager can use the supplied password for visitor workflows and voluntarily change it', async () => {
   await dataSource.initialize();
   const siteId = randomUUID();
   const userIds: string[] = [];
@@ -52,13 +52,16 @@ test('new Site Manager must change their temporary password before visitor regis
     });
     userIds.push(account.id);
     const temporary = await auth.login(account.username, 'InitialDemo2026!', AuthClientType.MOBILE);
-    assert.equal(temporary.user.mustChangePassword, true);
-    await assert.rejects(access.register(siteId, registration), /no active Site Manager/);
-    await assert.rejects(
-      access.listVisits((await auth.authenticate(temporary.accessToken)).user, siteId),
+    assert.equal(temporary.user.mustChangePassword, false);
+    const initialVisit = await access.register(siteId, registration);
+    assert.equal(initialVisit.status, 'PENDING');
+    assert.equal(
+      (await access.listVisits((await auth.authenticate(temporary.accessToken)).user, siteId))
+        .items[0]?.id,
+      initialVisit.id,
     );
     await assert.rejects(auth.changePassword(account.id, 'WrongDemo2026!', 'NewDemo2026!'));
-    await assert.rejects(access.register(siteId, registration), /no active Site Manager/);
+    assert.equal((await access.register(siteId, registration)).id, initialVisit.id);
     await auth.changePassword(account.id, 'InitialDemo2026!', 'NewDemo2026!');
     await assert.rejects(auth.authenticate(temporary.accessToken));
     await assert.rejects(auth.refresh(temporary.refreshToken, AuthClientType.MOBILE));

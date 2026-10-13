@@ -5,6 +5,7 @@ import dataSource from '../support/test-data-source.js';
 import { ScopedJwtAuthentication1790553600000 } from '../../src/database/migrations/1790553600000-ScopedJwtAuthentication.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
+import { SingleSiteManager1791936000000 } from '../../src/database/migrations/1791936000000-SingleSiteManager.js';
 
 after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
@@ -33,6 +34,8 @@ test('scoped auth migration backfills Admin, deactivates Worker, and invalidates
       ['a'.repeat(64), adminId],
     );
     await migration.up(runner);
+    // The legacy migration recreates user_role_assignment; restore later schema additions.
+    await new SingleSiteManager1791936000000().up(runner);
 
     const accounts = (await runner.query(
       'SELECT id, is_active FROM app_user ORDER BY username',

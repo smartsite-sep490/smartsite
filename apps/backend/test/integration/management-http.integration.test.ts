@@ -22,7 +22,7 @@ after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
 });
 
-test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observation', async () => {
+test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snapshot and versioned observation', async () => {
   await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
   const temporaryPassword = 'TempAdmin123!';
@@ -76,8 +76,12 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
     assert.equal(firstLogin.status, 200);
     const temporaryToken = ((await firstLogin.json()) as { accessToken: string }).accessToken;
     assert.equal(
-      (await post('/sites', { code: 'DENIED', name: 'Denied' }, temporaryToken)).status,
-      403,
+      (
+        await fetch(`${url}/api/v1/sites`, {
+          headers: { Authorization: `Bearer ${temporaryToken}` },
+        })
+      ).status,
+      200,
     );
     assert.equal(
       (
@@ -110,6 +114,146 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
     const siteResponse = await post('/sites', { code: `SITE-${suffix}`, name: 'Site' }, adminToken);
     assert.equal(siteResponse.status, 201);
     const site = (await siteResponse.json()) as { id: string };
+    const managerResponse = await post(
+      '/users',
+      {
+        username: `http-manager-${suffix}`,
+        displayName: 'Site Manager',
+        temporaryPassword,
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+      },
+      adminToken,
+    );
+    assert.equal(managerResponse.status, 201);
+    const managerLogin = await post('/auth/login', {
+      username: `http-manager-${suffix}`,
+      password: temporaryPassword,
+      clientType: 'MOBILE',
+    });
+    assert.equal(managerLogin.status, 200);
+    const managerToken = ((await managerLogin.json()) as { accessToken: string }).accessToken;
+    const contractorPath = `/sites/${site.id}/contractors`;
+    const contractorInput = { code: `CTR-${suffix}`, name: 'HTTP contractor' };
+    assert.equal((await post(contractorPath, contractorInput, adminToken)).status, 403);
+    assert.equal(
+      (await post(`/sites/${randomUUID()}/contractors`, contractorInput, managerToken)).status,
+      403,
+    );
+    const contractorResponse = await post(contractorPath, contractorInput, managerToken);
+    assert.equal(contractorResponse.status, 201);
+    const contractor = (await contractorResponse.json()) as { id: string };
+    const generatedContractor = await post(
+      contractorPath,
+      { name: 'Automatic code contractor' },
+      managerToken,
+    );
+    assert.equal(generatedContractor.status, 201);
+    assert.match(
+      ((await generatedContractor.json()) as { code: string }).code,
+      /^CTR-[0-9A-F-]{36}$/,
+    );
+    const overviewPath = `${url}/api/v1/sites/${site.id}/management/overview`;
+    assert.equal((await fetch(overviewPath)).status, 401);
+    assert.equal(
+      (await fetch(overviewPath, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
+      403,
+    );
+    const overviewResponse = await fetch(overviewPath, {
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+    const participationPath = `${url}/api/v1/contractors/${contractor.id}/participations`;
+    assert.equal((await fetch(participationPath)).status, 401);
+    assert.equal(
+      (await fetch(participationPath, { headers: { Authorization: `Bearer ${managerToken}` } }))
+        .status,
+      403,
+    );
+    const participationResponse = await fetch(`${participationPath}?offset=0&limit=1`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(participationResponse.status, 200);
+    const participationBody = await participationResponse.json();
+    assert.equal(participationBody.items[0].site.id, site.id);
+    assert.equal(participationBody.items[0].status, 'ACTIVE');
+    assert.equal(
+      (
+        await fetch(`${participationPath}?limit=101`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        })
+      ).status,
+      400,
+    );
+    const directoryPath = `${url}/api/v1/contractors?limit=1`;
+    assert.equal(
+      (await fetch(directoryPath, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(directoryPath, { headers: { Authorization: `Bearer ${managerToken}` } })).status,
+      403,
+    );
+    assert.equal(overviewResponse.status, 200);
+    assert.equal(
+      ((await overviewResponse.json()) as { contractorCount: number }).contractorCount,
+      2,
+    );
+    const detailPath = `${url}/api/v1/sites/${site.id}/management/contractors/${contractor.id}`;
+    assert.equal(
+      (
+        await fetch(`${detailPath}?date=2026-10-12&timezone=Asia%2FHo_Chi_Minh`, {
+          headers: { Authorization: `Bearer ${managerToken}` },
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(detailPath, { headers: { Authorization: `Bearer ${managerToken}` } })).status,
+      400,
+    );
+    const repPath = `/sites/${site.id}/contractors/${contractor.id}/representative-accounts`;
+    const repInput = {
+      username: `http-rep-${suffix}`,
+      displayName: 'Representative',
+      temporaryPassword,
+    };
+    assert.equal((await post(repPath, repInput, adminToken)).status, 403);
+    assert.equal(
+      (
+        await post(
+          repPath,
+          { ...repInput, roleAssignments: [{ role: 'ADMIN', siteId: null }] },
+          managerToken,
+        )
+      ).status,
+      400,
+    );
+    assert.equal((await post(repPath, repInput, managerToken)).status, 201);
+    assert.equal(
+      (await fetch(`${url}/api/v1/users`, { headers: { Authorization: `Bearer ${managerToken}` } }))
+        .status,
+      403,
+    );
+    const scopedAccounts = await fetch(`${url}/api/v1/sites/${site.id}/representative-accounts`, {
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+    assert.equal(scopedAccounts.status, 200);
+    assert.equal(((await scopedAccounts.json()) as { total: number }).total, 1);
+    assert.equal(
+      (
+        await post(
+          `/sites/${site.id}/zones`,
+          {
+            code: 'DENIED',
+            name: 'Denied',
+            type: 'STANDARD',
+            restrictionPolicy: 'NONE',
+            requiredPpe: [],
+          },
+          adminToken,
+        )
+      ).status,
+      403,
+    );
     const cameraResponse = await post(
       `/sites/${site.id}/cameras`,
       {
@@ -131,10 +275,61 @@ test('Admin HTTP setup feeds an allowlisted AI snapshot and versioned observatio
         restrictionPolicy: 'AUTHORIZATION_REQUIRED',
         requiredPpe: [],
       },
-      adminToken,
+      managerToken,
     );
     assert.equal(zoneResponse.status, 201);
     const zone = (await zoneResponse.json()) as { id: string };
+    const setupOptions = await fetch(`${url}/api/v1/sites/${site.id}/access-setup`, {
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+    assert.equal(setupOptions.status, 200);
+    const participation = (
+      (await setupOptions.json()) as { participations: { id: string; contractorId: string }[] }
+    ).participations.find((p) => p.contractorId === contractor.id)!;
+    const workDate = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10);
+    const dateGrant = {
+      requestId: randomUUID(),
+      siteContractorId: participation.id,
+      zoneId: zone.id,
+      startDate: workDate,
+      endDate: workDate,
+      timezone: 'Asia/Ho_Chi_Minh',
+    };
+    const datesPath = `/sites/${site.id}/access-setup/contractor-zone-permissions/dates`;
+    assert.equal((await post(datesPath, dateGrant, adminToken)).status, 403);
+    assert.equal(
+      (
+        await post(
+          `/sites/${randomUUID()}/access-setup/contractor-zone-permissions/dates`,
+          dateGrant,
+          managerToken,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (await post(datesPath, { ...dateGrant, startDate: `${workDate}T10:00:00Z` }, managerToken))
+        .status,
+      400,
+    );
+    assert.equal(
+      (await post(datesPath, { ...dateGrant, validUntil: `${workDate}T10:00:00Z` }, managerToken))
+        .status,
+      400,
+    );
+    const dateResponse = await post(datesPath, dateGrant, managerToken);
+    assert.equal(dateResponse.status, 201);
+    const datePermission = (await dateResponse.json()) as {
+      id: string;
+      validFrom: string;
+      validUntil: string;
+    };
+    const expectedStart = new Date(`${workDate}T00:00:00+07:00`);
+    assert.equal(datePermission.validFrom, expectedStart.toISOString());
+    assert.equal(datePermission.validUntil, new Date(+expectedStart + 86400_000).toISOString());
+    const dateRetry = await post(datesPath, dateGrant, managerToken);
+    assert.equal(dateRetry.status, 201);
+    assert.equal(((await dateRetry.json()) as { id: string }).id, datePermission.id);
     const workerResponse = await post(
       `/sites/${site.id}/workers`,
       { externalId: `WORKER-${suffix}`, displayName: 'Authorized Worker' },

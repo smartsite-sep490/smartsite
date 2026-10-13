@@ -66,6 +66,13 @@ beforeEach(() => {
       items: [],
       total: 0,
     });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockResolvedValue({
+    workerId: 'worker-a',
+    displayName: 'Worker A',
+    membershipId: 'mem-1',
+    teamId: 'team-paint',
+    teamName: 'Painting Squad',
+  });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listShiftRequests').mockResolvedValue(empty);
 });
 afterEach(() => {
@@ -245,6 +252,8 @@ it('shows coworker confirmation failure without removing the pending request', a
     coworkerWorkerId: 'worker-a',
     requesterWorkerScheduleId: 'schedule-b',
     coworkerWorkerScheduleId: 'schedule-a',
+    requesterWorkDate: '2030-02-12',
+    coworkerWorkDate: '2030-02-13',
     requesterShiftId: 'evening',
     coworkerShiftId: 'morning',
     expectedScheduleVersionId: 'version-1',
@@ -269,7 +278,13 @@ it('shows coworker confirmation failure without removing the pending request', a
     new ApiError('http', 'Synthetic private detail', 403),
   );
   mount('coworker');
-  fireEvent.click(await screen.findByRole('button', { name: 'Accept Swap' }));
+  await screen.findByRole('button', { name: 'Accept Swap' });
+  expect(screen.getByText(/12\/02\/2030 ·/)).toBeTruthy();
+  expect(screen.getByText(/13\/02\/2030 ·/)).toBeTruthy();
+  expect(screen.getByText(/wants to swap with your shift on/).textContent).toContain('13/02/2030');
+  expect(screen.queryByText(/Member of Painting Squad/)).toBeNull();
+  expect(screen.getByText('Team: Painting Squad')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Accept Swap' }));
   expect(
     await screen.findByText('You no longer have permission to perform this action.'),
   ).toBeTruthy();
@@ -299,5 +314,5 @@ it('maps the stable past-date code to English and never renders arbitrary server
         path: '/test',
       }),
     ),
-  ).toBe("This shift's work date has passed. Changes are no longer allowed.");
+  ).toBe('This shift has ended. Changes are no longer allowed.');
 });

@@ -1,4 +1,18 @@
+import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
+import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
+import { ContractorZoneRegrant1791940000001 } from './migrations/1791940000001-ContractorZoneRegrant.js';
+import { SingleTeamZone1791940000002 } from './migrations/1791940000002-SingleTeamZone.js';
+import { ShiftArchival1791763200000 } from './migrations/1791763200000-ShiftArchival.js';
+import { ShiftBreak1791763200001 } from './migrations/1791763200001-ShiftBreak.js';
+import { GateScheduleDenial1791849600000 } from './migrations/1791849600000-GateScheduleDenial.js';
+import { ScheduleAssignmentBatches1791849600001 } from './migrations/1791849600001-ScheduleAssignmentBatches.js';
+import { ScheduleChangeNotifications1791849600002 } from './migrations/1791849600002-ScheduleChangeNotifications.js';
 import { SafetyHandoverNotifications1791590400000 } from './migrations/1791590400000-SafetyHandoverNotifications.js';
+import { ContractorTeams1791676800004 } from './migrations/1791676800004-ContractorTeams.js';
+import { Mf03AttendanceReconciliation1791676800000 } from './migrations/1791676800000-Mf03AttendanceReconciliation.js';
+import { Mf03DailyOpenSessions1791676800001 } from './migrations/1791676800001-Mf03DailyOpenSessions.js';
+import { OptionalPasswordChange1791676800002 } from './migrations/1791676800002-OptionalPasswordChange.js';
+import { Mf03AttendanceDuplicateReview1791676800003 } from './migrations/1791676800003-AttendanceDuplicateReview.js';
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
 import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
@@ -51,6 +65,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      SingleSiteManager1791936000000,
+      TeamZonePermissions1791940000000,
+      ContractorZoneRegrant1791940000001,
+      SingleTeamZone1791940000002,
       Mf05Mf06Foundation1789689600000,
       CameraRegionConfiguration1790035200000,
       UserAuthentication1790121600000,
@@ -86,6 +104,16 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       IncidentContractorResponsibility1791504000000,
       Mf07NotificationDeletion1791504000000,
       SafetyHandoverNotifications1791590400000,
+      Mf03AttendanceReconciliation1791676800000,
+      Mf03DailyOpenSessions1791676800001,
+      OptionalPasswordChange1791676800002,
+      Mf03AttendanceDuplicateReview1791676800003,
+      ContractorTeams1791676800004,
+      ShiftArchival1791763200000,
+      ShiftBreak1791763200001,
+      GateScheduleDenial1791849600000,
+      ScheduleAssignmentBatches1791849600001,
+      ScheduleChangeNotifications1791849600002,
     ],
     logging: false,
     extra: {

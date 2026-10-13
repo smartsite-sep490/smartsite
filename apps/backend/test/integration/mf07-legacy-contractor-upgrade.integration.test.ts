@@ -44,25 +44,33 @@ test('main Identity migration preserves MF07-only Contractor, Site, Worker and R
       "INSERT INTO contractor (id, site_id, code, name) VALUES ($1, $2, 'OLD', 'Legacy contractor')",
       [contractorId, siteId],
     );
-    await queryRunner.query('INSERT INTO worker (id, site_id, contractor_id) VALUES ($1, $2, $3)',
-      [workerId, siteId, contractorId]);
-    await queryRunner.query(`
+    await queryRunner.query('INSERT INTO worker (id, site_id, contractor_id) VALUES ($1, $2, $3)', [
+      workerId,
+      siteId,
+      contractorId,
+    ]);
+    await queryRunner.query(
+      `
       INSERT INTO contractor_representative_assignment (id, site_id, contractor_id, user_id)
       VALUES (gen_random_uuid(), $1, $2, $3)
-    `, [siteId, contractorId, userId]);
+    `,
+      [siteId, contractorId, userId],
+    );
     await new IdentityAccessScope1790726400000().up(queryRunner);
     assert.equal(await queryRunner.hasColumn('contractor', 'site_id'), false);
-    const participations = await queryRunner.query(
+    const participations = (await queryRunner.query(
       'SELECT contractor_id, site_id FROM contractor_site_participation WHERE contractor_id = $1',
       [contractorId],
-    ) as Array<{ contractor_id: string; site_id: string }>;
+    )) as Array<{ contractor_id: string; site_id: string }>;
     assert.deepEqual(participations, [{ contractor_id: contractorId, site_id: siteId }]);
-    const grants = await queryRunner.query(
+    const grants = (await queryRunner.query(
       'SELECT user_id, contractor_id FROM contractor_representative_grant WHERE user_id = $1',
       [userId],
-    ) as Array<{ user_id: string; contractor_id: string }>;
+    )) as Array<{ user_id: string; contractor_id: string }>;
     assert.deepEqual(grants, [{ user_id: userId, contractor_id: contractorId }]);
-    const workers = await queryRunner.query('SELECT contractor_id FROM worker WHERE id = $1', [workerId]) as Array<{ contractor_id: string }>;
+    const workers = (await queryRunner.query('SELECT contractor_id FROM worker WHERE id = $1', [
+      workerId,
+    ])) as Array<{ contractor_id: string }>;
     assert.equal(workers[0]?.contractor_id, contractorId);
   } finally {
     await queryRunner.rollbackTransaction();

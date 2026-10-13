@@ -20,7 +20,7 @@ import {
   IconRefreshCw,
   IconTrash,
 } from '../../components/icons';
-import { notificationHref } from './notification-utils';
+import { notificationHref, formatNotificationDisplayMessage } from './notification-utils';
 
 export const NOTIFICATION_POLL_MS = 15_000;
 
@@ -498,7 +498,7 @@ export function NotificationBell({
                                     <span className="w-2 h-2 rounded-full bg-[#F66B17] shrink-0" aria-label="Unread" />
                                   )}
                                   <span
-                                    className={`text-xs font-bold leading-tight line-clamp-1 ${
+                                    className={`text-xs font-bold leading-tight break-words ${
                                       isUnread ? 'text-[#071A2B]' : 'text-slate-800'
                                     }`}
                                   >
@@ -513,8 +513,11 @@ export function NotificationBell({
                                 </time>
                               </div>
 
-                              <p className="text-xs leading-relaxed text-slate-600 line-clamp-2">
-                                {item.message}
+                              <p
+                                className="text-xs leading-relaxed text-slate-600 break-words whitespace-pre-line"
+                                title={formatNotificationDisplayMessage(item)}
+                              >
+                                {formatNotificationDisplayMessage(item)}
                               </p>
 
                               {/* Shift details badge strip */}

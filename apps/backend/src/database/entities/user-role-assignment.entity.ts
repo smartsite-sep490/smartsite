@@ -19,6 +19,7 @@ import { UserEntity, UserRole } from './user.entity.js';
   unique: true,
   where: 'site_id IS NULL',
 })
+@Index('uq_site_single_manager', ['siteId'], { unique: true, where: "role = 'SITE_MANAGER'" })
 @Index('idx_user_role_assignment_user', ['userId'])
 @Index('idx_user_role_assignment_site', ['siteId'], { where: 'site_id IS NOT NULL' })
 export class UserRoleAssignmentEntity {

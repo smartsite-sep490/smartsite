@@ -8,13 +8,36 @@ import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
 import type {
   CreateShiftDto,
   CreateWorkerScheduleDto,
-} from '../src/modules/workforce/dto/schedule-configuration.dto.js';
-import { ScheduleConfigurationService } from '../src/modules/workforce/schedule-configuration.service.js';
+} from '../src/modules/workforce/scheduling/dto/schedule-configuration.dto.js';
+import { ScheduleConfigurationService } from '../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
 function publicCode(code: string) {
   return (error: unknown) =>
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
+
+test('shift break rejects incomplete, malformed, reversed and outside intervals', async () => {
+  const siteId = randomUUID();
+  const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const input = {
+    name: 'Day',
+    startsAt: '2026-10-01T08:00:00Z',
+    endsAt: '2026-10-01T17:00:00Z',
+    timezone: 'UTC',
+  };
+  for (const breaks of [
+    { breakStartsAt: '2026-10-01T12:00:00Z' },
+    { breakEndsAt: '2026-10-01T13:00:00Z' },
+    { breakStartsAt: 'bad', breakEndsAt: '2026-10-01T13:00:00Z' },
+    { breakStartsAt: '2026-10-01T13:00:00Z', breakEndsAt: '2026-10-01T12:00:00Z' },
+    { breakStartsAt: '2026-10-01T07:00:00Z', breakEndsAt: '2026-10-01T09:00:00Z' },
+    { breakStartsAt: '2026-10-01T16:00:00Z', breakEndsAt: '2026-10-01T18:00:00Z' },
+  ])
+    await assert.rejects(
+      service.createShift(siteManagerActor(siteId), siteId, { ...input, ...breaks }),
+      publicCode('VALIDATION_FAILED'),
+    );
+});
 
 function siteManagerActor(siteId: string): AuthenticatedUser {
   return {
@@ -27,6 +50,35 @@ function siteManagerActor(siteId: string): AuthenticatedUser {
   };
 }
 
+test('configured shift breaks retain role and site scope checks and fail when persistence is unavailable', async () => {
+  const siteId = randomUUID();
+  const input = {
+    name: 'Day',
+    startsAt: '2026-10-01T08:00:00Z',
+    endsAt: '2026-10-01T17:00:00Z',
+    timezone: 'UTC',
+    breakStartsAt: '2026-10-01T12:00:00Z',
+    breakEndsAt: '2026-10-01T13:00:00Z',
+  };
+  const service = new ScheduleConfigurationService({
+    getRepository: () => {
+      throw new Error('Synthetic persistence unavailable');
+    },
+  } as unknown as DataSource);
+  for (const actor of [
+    adminActor(),
+    contractorRepresentativeActor(siteId),
+    siteManagerActor(randomUUID()),
+    { ...siteManagerActor(siteId), roleAssignments: [] },
+  ]) {
+    await assert.rejects(service.createShift(actor, siteId, input), publicCode('FORBIDDEN'));
+  }
+  await assert.rejects(
+    service.createShift(siteManagerActor(siteId), siteId, input),
+    /Synthetic persistence unavailable/,
+  );
+});
+
 function adminActor(): AuthenticatedUser {
   return {
     id: randomUUID(),
@@ -37,6 +89,39 @@ function adminActor(): AuthenticatedUser {
     roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
   };
 }
+
+test('shift archival denies wrong role, missing scope and cross-site scope before database access', async () => {
+  const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
+  const siteId = randomUUID();
+  for (const actor of [
+    adminActor(),
+    contractorRepresentativeActor(siteId),
+    siteManagerActor(randomUUID()),
+    { ...siteManagerActor(siteId), roleAssignments: [] },
+  ]) {
+    await assert.rejects(
+      service.archiveShift(actor, siteId, randomUUID()),
+      publicCode('FORBIDDEN'),
+    );
+  }
+});
+
+test('shift archival validates identifiers and never succeeds when persistence is unavailable', async () => {
+  const siteId = randomUUID();
+  const service = new ScheduleConfigurationService({
+    transaction: async () => {
+      throw new Error('Synthetic database unavailable');
+    },
+  } as unknown as DataSource);
+  await assert.rejects(
+    service.archiveShift(siteManagerActor(siteId), siteId, 'invalid'),
+    publicCode('VALIDATION_FAILED'),
+  );
+  await assert.rejects(
+    service.archiveShift(siteManagerActor(siteId), siteId, randomUUID()),
+    /Synthetic database unavailable/,
+  );
+});
 
 function contractorRepresentativeActor(siteId: string): AuthenticatedUser {
   return {

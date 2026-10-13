@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { authorizeGateEntry } from '../src/modules/workforce/gate-authorization-policy.js';
+import { authorizeGateEntry } from '../src/modules/workforce/access/gate-authorization-policy.js';
 
 const evaluatedAt = new Date('2026-09-29T08:00:00.000Z');
 

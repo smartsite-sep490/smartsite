@@ -19,16 +19,19 @@ import {
   GateEventEntity,
   AttendanceEventEntity,
   AttendanceSessionEntity,
+  UserRoleAssignmentEntity,
+  ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/contractor-operations.service.js';
-import { SiteAccessSetupService } from '../../src/modules/workforce/site-access-setup.service.js';
-import { WorkerGatePermissionsService } from '../../src/modules/workforce/worker-gate-permissions.service.js';
-import { QrAccessService } from '../../src/modules/workforce/qr-access.service.js';
-import { AttendanceService } from '../../src/modules/workforce/attendance.service.js';
+import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
+import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
+import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
+import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { assignTestShift } from '../support/assigned-shift.js';
 
 test('ERD: bounded permissions, gate confirmation, temporary passage and attendance corrections', async () => {
   await dataSource.initialize();
@@ -72,6 +75,16 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
         isActive: true,
         mustChangePassword: false,
       });
+    for (const [userId, role] of [
+      [managerId, UserRole.SITE_MANAGER],
+      [representativeId, UserRole.CONTRACTOR_REPRESENTATIVE],
+      [securityId, UserRole.SECURITY_OFFICER],
+      [workerAccountId, UserRole.WORKER],
+      [outsiderId, UserRole.WORKER],
+    ] as const)
+      await dataSource
+        .getRepository(UserRoleAssignmentEntity)
+        .save({ id: randomUUID(), userId, role, siteId });
     await dataSource
       .getRepository(ContractorEntity)
       .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });
@@ -86,6 +99,9 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await dataSource
       .getRepository(ContractorRepresentativeGrantEntity)
       .save({ id: randomUUID(), userId: representativeId, contractorId });
+    await dataSource
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .save({ id: randomUUID(), siteId, contractorId, userId: representativeId });
     await dataSource.getRepository(WorkerEntity).save({
       id: workerId,
       siteId,
@@ -223,7 +239,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       access.confirmPassage(security, siteId, unknown.id, { idempotencyKey: randomUUID() }),
     );
     assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ siteId }), 0);
-    const passage = async (direction: 'IN' | 'OUT') => {
+    const passage = async (direction: 'IN' | 'OUT', separatePassage = false) => {
       const attempt = await access.manualWorker(security, siteId, gateId, {
         requestId: randomUUID(),
         workerId,
@@ -232,21 +248,27 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
         reviewNote: 'Security checked Worker identity',
       });
       assert.equal(attempt.status, 'READY');
-      return access.confirmPassage(security, siteId, attempt.id, { idempotencyKey: randomUUID() });
+      return access.confirmPassage(security, siteId, attempt.id, {
+        idempotencyKey: randomUUID(),
+        separatePassage,
+        reviewNote: separatePassage
+          ? 'Security confirmed a separate physical departure'
+          : undefined,
+      });
     };
+    await assignTestShift(dataSource, siteId, workerId);
     const entry = await passage('IN');
-    assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ siteId }), 0);
+    assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ siteId }), 1);
     const checkIn = { requestId: randomUUID(), kind: 'CHECK_IN' as const };
     const opened = await attendance.record(security, siteId, entry.id, checkIn);
     assert.equal((await attendance.record(security, siteId, entry.id, checkIn)).id, opened.id);
     await passage('OUT');
     await passage('IN');
-    assert.equal(
+    assert.ok(
       (await dataSource.getRepository(AttendanceSessionEntity).findOneByOrFail({ id: opened.id }))
         .effectiveOutAt,
-      null,
     );
-    assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ siteId }), 1);
+    assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ siteId }), 3);
     const departure = await passage('OUT');
     await assert.rejects(
       attendance.record(security, siteId, departure.id, {
@@ -264,7 +286,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     const correctionInput = {
       requestId: randomUUID(),
       expectedSessionVersion: closed.version,
-      proposedInAt: from,
+      proposedInAt: closed.effectiveInAt!,
       proposedOutAt: new Date().toISOString(),
       reason: 'Synthetic missed time',
     };
@@ -282,10 +304,23 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       closed.id,
       correctionInput,
     );
-    const stale = await attendance.requestCorrection(worker, siteId, closed.id, {
-      ...correctionInput,
-      requestId: randomUUID(),
-    });
+    assert.deepEqual(
+      await attendance.requestCorrection(worker, siteId, closed.id, correctionInput),
+      correction,
+    );
+    const duplicates = await Promise.allSettled(
+      [1, 2].map(() =>
+        attendance.requestCorrection(worker, siteId, closed.id, {
+          ...correctionInput,
+          requestId: randomUUID(),
+        }),
+      ),
+    );
+    assert.equal(duplicates.filter((result) => result.status === 'rejected').length, 2);
+    assert.equal(
+      (await attendance.overview(worker, siteId, { dayId: randomUUID() })).hasPendingCorrection,
+      true,
+    );
     await assert.rejects(
       attendance.reviewCorrection(
         actor(workerAccountId, UserRole.CONTRACTOR_REPRESENTATIVE),
@@ -296,8 +331,18 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     );
     await attendance.reviewCorrection(rep, siteId, correction.id, {
       approve: true,
-      reviewNote: 'Verified supplied times',
     });
+    const updatedSession = await dataSource
+      .getRepository(AttendanceSessionEntity)
+      .findOneByOrFail({ id: closed.id });
+    const stale = await attendance.requestCorrection(worker, siteId, closed.id, {
+      ...correctionInput,
+      requestId: randomUUID(),
+      expectedSessionVersion: updatedSession.version,
+    });
+    await dataSource
+      .getRepository(AttendanceSessionEntity)
+      .update(closed.id, { version: updatedSession.version + 1 });
     await assert.rejects(
       attendance.reviewCorrection(rep, siteId, stale.id, {
         approve: true,
@@ -305,6 +350,21 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       }),
       /changed/,
     );
+    await assert.rejects(attendance.reviewCorrection(rep, siteId, stale.id, { approve: false }));
+    await attendance.reviewCorrection(rep, siteId, stale.id, {
+      approve: false,
+      reviewNote: 'Recorded times changed',
+    });
+    assert.equal((await attendance.overview(worker, siteId)).hasPendingCorrection, false);
+    const resubmission = await attendance.requestCorrection(worker, siteId, closed.id, {
+      ...correctionInput,
+      requestId: randomUUID(),
+      expectedSessionVersion: updatedSession.version + 1,
+    });
+    await attendance.reviewCorrection(rep, siteId, resubmission.id, {
+      approve: false,
+      reviewNote: 'No further change needed',
+    });
     assert.equal(
       (await dataSource.getRepository(AttendanceSessionEntity).findOneByOrFail({ id: closed.id }))
         .status,
@@ -369,17 +429,24 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       ).status,
       'REVOKED',
     );
-    await passage('OUT');
+    await passage('OUT', true);
     assert.ok((await dataSource.getRepository(AccessAuditEntity).findBy({ siteId })).length > 10);
   } finally {
     await cleanupSiteAccess(dataSource, [siteId, otherSiteId]);
+    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
+    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
+    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
     await dataSource.getRepository(WorkerGatePermissionEntity).delete({ siteId });
     await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
     await dataSource.getRepository(WorkerEntity).delete({ siteId });
     await dataSource.getRepository(ContractorSiteParticipationEntity).delete({ siteId });
     await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });
+    await dataSource
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .delete({ contractorId });
     await dataSource.getRepository(ContractorEntity).delete(contractorId);
     await dataSource.getRepository(ZoneEntity).delete(zoneId);
+    await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId });
     await dataSource.getRepository(UserEntity).delete(users);
     await dataSource.getRepository(SiteEntity).delete([siteId, otherSiteId]);
     await dataSource.destroy();

@@ -52,13 +52,10 @@ test('user creation and reset DTOs enforce the shared password policy', () => {
     displayName: 'Admin',
     roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
   };
-  assert.doesNotThrow(() =>
-    command(CreateUserDto, { ...account, temporaryPassword: 'Abcd123!' }),
-  );
-  assert.throws(
-    () => command(CreateUserDto, { ...account, temporaryPassword: 'abcdefg1!' }),
-    { status: 400 },
-  );
+  assert.doesNotThrow(() => command(CreateUserDto, { ...account, temporaryPassword: 'Abcd123!' }));
+  assert.throws(() => command(CreateUserDto, { ...account, temporaryPassword: 'abcdefg1!' }), {
+    status: 400,
+  });
   assert.throws(() => command(ResetPasswordDto, { temporaryPassword: 'ABCDEFG!' }), {
     status: 400,
   });
@@ -278,11 +275,10 @@ test('auth controller separates Web cookies from Mobile refresh-token JSON', asy
     { clientType: AuthClientType.WEB },
   );
   assert.equal('refreshToken' in webRefresh, false);
-  const mobileRefresh = await controller.refresh(
-    { headers: {} } as never,
-    response as never,
-    { clientType: AuthClientType.MOBILE, refreshToken: result.refreshToken },
-  );
+  const mobileRefresh = await controller.refresh({ headers: {} } as never, response as never, {
+    clientType: AuthClientType.MOBILE,
+    refreshToken: result.refreshToken,
+  });
   assert.equal(mobileRefresh.refreshToken, result.refreshToken);
 });
 
@@ -345,10 +341,9 @@ test('auth request bodies reject invalid security-sensitive fields and unknown f
     },
   ];
   for (const { method, body } of cases)
-    await assert.rejects(
-      pipe.transform(body, { type: 'body', metatype: bodyType(method) }),
-      { status: 400 },
-    );
+    await assert.rejects(pipe.transform(body, { type: 'body', metatype: bodyType(method) }), {
+      status: 400,
+    });
 });
 
 test('logout rejects a client-type mismatch and remains idempotent after revocation', async () => {
@@ -381,7 +376,10 @@ test('logout rejects a client-type mismatch and remains idempotent after revocat
   };
   const auth = new AuthService(dataSource as never, tokens);
 
-  await assert.rejects(auth.logout(refresh.refreshToken, AuthClientType.WEB), UnauthorizedException);
+  await assert.rejects(
+    auth.logout(refresh.refreshToken, AuthClientType.WEB),
+    UnauthorizedException,
+  );
   assert.equal(session.revokedAt, null);
 
   await auth.logout(refresh.refreshToken, AuthClientType.MOBILE);

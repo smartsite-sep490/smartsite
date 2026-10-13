@@ -28,7 +28,8 @@ import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { pagination } from '../../common/http/pagination.js';
 import type { ZoneEntity } from '../../database/entities/zone.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
-import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { SiteManagerGuard, SiteSetupReadGuard } from '../auth/site-manager.guard.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   CreateZoneCommand,
   RenameZoneCommand,
@@ -59,13 +60,14 @@ function zoneResponse(zone: ZoneEntity) {
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard, SiteSetupReadGuard)
 @Controller('sites/:siteId/zones')
 export class ZonesController {
   private readonly logger = new Logger(ZonesController.name);
   constructor(private readonly zones: ZoneConfigurationService) {}
 
   @Post()
+  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse({ type: ZoneResponseDto })
   async create(
     @Req() request: AuthenticatedRequest,
@@ -101,6 +103,7 @@ export class ZonesController {
   }
 
   @Patch(':zoneId')
+  @UseGuards(SiteManagerGuard)
   @ApiOkResponse({ type: ZoneResponseDto })
   async rename(
     @Req() request: AuthenticatedRequest,
@@ -119,6 +122,7 @@ export class ZonesController {
   }
 
   @Patch(':zoneId/policy')
+  @UseGuards(SiteManagerGuard)
   @ApiOkResponse({ type: ZoneResponseDto })
   async updatePolicy(
     @Req() request: AuthenticatedRequest,

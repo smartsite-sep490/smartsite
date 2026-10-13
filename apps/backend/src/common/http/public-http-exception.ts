@@ -20,6 +20,8 @@ export const BACKEND_ERROR_CODES = [
   'DATABASE_UNAVAILABLE',
   'SHIFT_WORK_DATE_PASSED',
   'SHIFT_DATE_UNAVAILABLE',
+  'GATE_PASSAGE_ALREADY_RECORDED',
+  'WORKER_NO_SCHEDULE',
 ] as const;
 
 export type BackendErrorCode = (typeof BACKEND_ERROR_CODES)[number];

@@ -18,6 +18,8 @@ API: `http://localhost:3000/api/v1`; Swagger chỉ trong development tại `http
 
 ## Ranh giới module
 
+Workforce được chia thành các module nghiệp vụ `directory`, `teams`, `scheduling`, `attendance`, `identity`, `access` và `notifications`; `workforce.module.ts` chỉ ghép các module và giữ các export đang được Safety sử dụng. Controller/service/DTO được đặt cạnh nhau theo luồng. Xem [bản đồ Workforce](src/modules/workforce/README.md) để tìm điểm bắt đầu của MF03/MF07, Face/QR và quan hệ giữa các module.
+
 ```text
 AppModule
   ├── ConfigModule       → cấu hình Zod đã kiểm tra
@@ -149,7 +151,7 @@ Contractor là thực thể toàn cục, có thể tham gia nhiều Site qua `co
 
 Khi nâng cấp database đã chạy migration MF07 cũ trước `IdentityAccessScope`, migration chuyển `contractor.site_id` sang participation và backfill grant mà không đổi ID Contractor/Worker. Các `code` Contractor trùng giữa nhiều Site sẽ chặn migration vì `code` giờ duy nhất toàn cục; cần đối chiếu và xử lý dữ liệu sau khi sao lưu, không tự đổi mã. Chạy migration trên bản sao trước khi áp dụng cho database thật; không rollback migration này khi MF07 cũ vẫn sở hữu dữ liệu.
 
-API quản trị Site/Camera/Zone/Region hiện vẫn yêu cầu tài khoản Admin global active đã đổi mật khẩu tạm. Camera có `configurationVersion`; mỗi thao tác sửa Region hoặc trạng thái Camera phải gửi revision hiện tại và được thực hiện trong transaction. Sau khi Zone đã gắn Region, `type`, `restrictionPolicy` và `requiredPpe` bị khóa vĩnh viễn; tên vẫn sửa được. Snapshot chỉ gồm các Region active và được kiểm tra bằng contract Backend–AI trước khi trả. `siteId` trong service chỉ giới hạn dữ liệu, không tự chứng minh quyền người dùng.
+Admin quản lý Site/Camera/Region; Site Manager được gán cho Site quản lý Contractor, tài khoản đại diện và cấu hình Zone. Tài khoản mới dùng được mật khẩu ngay. Mỗi Site chỉ có tối đa một assignment SITE_MANAGER, kể cả tài khoản disabled; migration SingleSiteManager1791936000000 chặn dữ liệu cũ trùng quản lý để nhóm xác định người phụ trách. POST /sites/:siteId/contractors/:contractorId/representative-accounts tạo tài khoản và liên kết nhà thầu atomically, chỉ chấp nhận username/displayName/temporaryPassword. GET /sites/:siteId/representative-accounts chỉ trả đại diện của Site. Admin vẫn có thể đọc Zone, nhưng không tạo hoặc sửa Zone. Camera có `configurationVersion`; mỗi thao tác sửa Region hoặc trạng thái Camera phải gửi revision hiện tại và được thực hiện trong transaction. Sau khi Zone đã gắn Region, `type`, `restrictionPolicy` và `requiredPpe` bị khóa vĩnh viễn; tên vẫn sửa được. Snapshot chỉ gồm các Region active và được kiểm tra bằng contract Backend–AI trước khi trả. `siteId` trong service chỉ giới hạn dữ liệu, không tự chứng minh quyền người dùng.
 
 ### Tài khoản và API cấu hình
 

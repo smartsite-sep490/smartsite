@@ -45,6 +45,9 @@ vi.mock('./components/dashboard/DashboardView', () => ({
 vi.mock('./components/workforce/components/WorkforceView', () => ({
   WorkforceView: () => <div>Worker schedule</div>,
 }));
+vi.mock('./components/workforce/components/SiteSetupView', () => ({
+  SiteSetupView: () => <div>Site Manager setup</div>,
+}));
 vi.mock('./components/landing/LandingPage', () => ({
   LandingPage: () => <div>Public landing page</div>,
 }));
@@ -161,6 +164,18 @@ it('redirects unauthenticated visitors to login', async () => {
   await screen.findByText('Sign in form');
   expect(state.dashboardRender).not.toHaveBeenCalled();
 });
+
+it.each(['/access', '/workforce'])(
+  'redirects Site Manager opening %s to their setup page',
+  async (path) => {
+    state.accessToken = 'synthetic-token';
+    profile(['SITE_MANAGER']);
+    mount(path);
+    await screen.findByText('Site Manager setup');
+    expect(screen.getByTestId('location').textContent).toBe('/site-setup');
+    expect(screen.queryByText('Worker schedule')).toBeNull();
+  },
+);
 
 it('keeps an existing Worker schedule URL when the restored profile loads', async () => {
   state.accessToken = 'synthetic-token';

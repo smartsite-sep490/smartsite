@@ -76,6 +76,9 @@ The current foundation contains shared infrastructure and the existing MF05/MF06
 
 ## Getting Started
 
+Shift template archival, data retention and manual checks are documented in [Shift archival (MF03/MF07)](docs/operations/shift-archival.md).
+Team/worker assignment previews, finite weekly repetition and protected schedule changes are documented in [Team schedule assignments](docs/operations/team-schedule-assignments.md).
+
 ### Prerequisites
 
 - Node.js **24.x**
@@ -165,14 +168,19 @@ The opening operator scans/confirms at the same gate and direction. Backend chec
 worker, face profile, contractor participation and current gate permissions; QR does not bypass a
 denial. QR decisions persist as `method: QR`; manual clearance remains unimplemented.
 
+Admin **Site Setup** creates Sites and assigns their Site Manager. Each Site may have only one manager assignment; a newly created Site can await assignment. Disabled managers retain ownership until their assignment is explicitly removed or moved. **Contractors & Zones** is available to the assigned Site Manager, who can create multiple contractors, create or assign their representatives, create Zones and grant contractor Zone permissions within that Site. The manager page has Contractors, Representatives, Zones and Contractor Zone Assignments tabs, with New Zone and Assign Zone shortcuts. It does not mount Worker Zone permissions, attendance or timesheet views. Manager-only accounts have no Site Access navigation; direct /access and /workforce URLs redirect to /site-setup. Contractor Representatives retain Attendance & Access. Representative account creation and contractor linkage are atomic; managers cannot create other account roles or list accounts in other Sites. Admin cannot provision contractors, representatives or Zones through these setup APIs. Legacy unscoped contractor provisioning routes are denied; use the scoped Site routes.
+
+Apply migration `SingleSiteManager1791936000000` before deploying this Backend/Web change. It creates a unique index on Site Manager assignments, including disabled accounts. If historical Sites have multiple managers, migration fails without removing assignments: the team must explicitly resolve ownership before retrying. Rollback removes the index without altering assignments. Existing contractors, representatives and Zones are preserved. For first-time MF05/MF06 demo setup, preconfigure the demo Zones through the assigned Site Manager, or provide SMARTSITE_DEMO_MANAGER_USERNAME and SMARTSITE_DEMO_MANAGER_PASSWORD alongside the existing Admin variables; the script uses the manager session only for Zone creation.
+
 Before registering visitors, an Admin opens **Site Setup**, selects the site and uses **Assign Site
 Manager → Create New Site Manager**, or assigns an existing manager. Assigned accounts show whether
-they are disabled, require a password change, or are ready to approve. Only an active manager with
-a permanent password makes the site ready for visitor registration. Site Setup loads every page of
+they are disabled or ready to approve. An active assigned manager makes the site ready for visitor registration. Site Setup loads every page of
 sites, accounts, contractors and representative assignments, and reports unavailable data.
-New accounts sign in with their temporary password and must complete the password-change screen
-before any internal workflow opens. Saving revokes existing sessions and returns to sign-in; a Site
-Manager then opens **Site Access → Visitor Passes** for their assigned site.
+New accounts and password resets use the supplied password immediately, without a mandatory password-change screen. The optional password-change API still verifies the current password and revokes existing sessions; resets also revoke old sessions. Migration `OptionalPasswordChange1791676800002` clears legacy requirements without changing passwords, account activation or roles. Rolling it back restores the old column default but does not add requirements to existing accounts. The manager setup UI does not expose Site Access or Visitor Passes. The existing visitor approval APIs still require the assigned Site Manager; this UI change does not alter their Backend authorization.
+
+Site Manager forms generate Contractor and Zone codes on the Backend. The Dashboard shows real Site-scoped Contractor/Zone totals and opens Contractor details with active teams, Workers, dated Zone grants and scheduled teams. See [management API semantics and compatibility](docs/site-manager-overview.md); team grouping uses the current roster and schedule data, with a visible date/timezone selector.
+
+Contractor details now show dated Zone assignments under each team, separately from Contractor Zone grants. Global Admin **Site Setup → Contractor Site directory** lists a Contractor's participation intervals across Sites with status and pagination. These reads retain role/data scope checks; manager-only accounts cannot query the global directory. Deploy Backend before Web; no schema migration is added. See [MF03/MF07 API flows](docs/mf03-mf07-api-flow.md) for fields and remaining historical limitations.
 
 Visitor registration is available at `/visits/register`, without a login. One representative registers
 the site, group size, contact, host, requested area, gate and schedule. The request appears in

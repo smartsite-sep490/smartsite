@@ -1,17 +1,30 @@
 import 'reflect-metadata';
-import type { WorkforceActor } from '../src/modules/workforce/contractor-operations.service.js';
+import type { WorkforceActor } from '../src/modules/workforce/directory/contractor-operations.service.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { command } from '../src/common/configuration/commands.js';
-import { requireSiteRole, requireGate } from '../src/modules/workforce/qr-access.service.js';
+import { requireSiteRole, requireGate } from '../src/modules/workforce/access/qr-access.service.js';
 import {
   RegisterVisitCommand,
   VerifyVisitorQrCommand,
   VerifyWorkerQrCommand,
   CameraFallbackCommand,
-} from '../src/modules/workforce/qr-access.commands.js';
+  ConfirmPassageCommand,
+} from '../src/modules/workforce/access/qr-access.commands.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
+
+test('separate-passage confirmation does not coerce booleans or accept forged authority fields', () => {
+  const input = {
+    idempotencyKey: randomUUID(),
+    separatePassage: true,
+    reviewNote: 'A distinct physical entry',
+  };
+  command(ConfirmPassageCommand, input);
+  assert.throws(() => command(ConfirmPassageCommand, { ...input, separatePassage: 'true' }));
+  assert.throws(() => command(ConfirmPassageCommand, { ...input, separatePassage: null }));
+  assert.throws(() => command(ConfirmPassageCommand, { ...input, workerId: randomUUID() }));
+});
 test('visitor approval requires a Site Manager assignment for the exact registered site', () => {
   const siteId = randomUUID();
   const actor: WorkforceActor = {

@@ -1,4 +1,36 @@
 import type {
+  GrantTeamZoneCommand,
+  TeamZoneSetupResponse,
+  ManagerOverviewResponse,
+  ManagerContractorDetailResponse,
+  GlobalContractorSummary,
+  ContractorParticipationListResponse,
+  ScheduleAssignmentInput,
+  ScheduleAssignmentPreview,
+  ScheduleAssignmentBatchResponse,
+  CreateScheduleAssignmentCommand,
+  ChangeScheduleAssignmentCommand,
+  ScheduleAssignmentChangeResponse,
+  ContractorDashboardScope,
+  ContractorDashboardResponse,
+  ContractorTeamResponse,
+  ContractorTeamWorkerResponse,
+  ContractorTeamQuery,
+  ContractorTeamWorkersQuery,
+  CreateContractorTeamCommand,
+  UpdateContractorTeamCommand,
+  ArchiveContractorTeamCommand,
+  AssignContractorTeamCommand,
+  AttendanceDaysResponse,
+  AttendanceTimeRequestsQuery,
+  AttendanceTimeRequestsResponse,
+  AttendanceDayDetailResponse,
+  AttendanceTimesheetResponse,
+  AttendanceDaysQuery,
+  AttendanceOverviewQuery,
+  IgnoreDuplicateAttendanceCommand,
+  AttendanceTimeRequestCommand,
+  ReviewAttendanceDayCommand,
   ConfirmIncidentResponsibilityCommand,
   CorrectIncidentResponsibilityCommand,
   TransferCorrectiveActionCommand,
@@ -45,6 +77,7 @@ import type {
   GateEventResponse,
   AccessSetupResponse,
   GrantContractorZoneCommand,
+  GrantContractorZoneDatesCommand,
   GrantWorkerZoneCommand,
   ManualWorkerVerificationCommand,
   AccessAttemptResponse,
@@ -53,6 +86,7 @@ import type {
   RecordAttendanceCommand,
   RequestAttendanceCorrectionCommand,
   ReviewAttendanceCorrectionCommand,
+  ReviewAttendanceTimeCommand,
   AccountResponse,
   AuthClientType,
   CameraResponse,
@@ -111,9 +145,11 @@ import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './inde
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
+  contractorId?: string;
   fromDate?: string;
   toDate?: string;
   workerId?: string;
+  teamId?: string;
   shiftId?: string;
   status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
   searchName?: string;
@@ -134,11 +170,289 @@ const validTimeout = (timeoutMs: number) =>
   Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
 
 export class SmartSiteManagementClient {
-  attendanceOverview(token: string, siteId: string) {
+  updateTeamZone(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    id: string,
+    input: GrantTeamZoneCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones/${pathId(id)}`,
+      token,
+      input,
+    );
+  }
+  teamZoneSetup(token: string, siteId: string, contractorId: string, teamId: string) {
+    return this.request<TeamZoneSetupResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones`,
+      token,
+    );
+  }
+  grantTeamZone(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    input: GrantTeamZoneCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones`,
+      token,
+      input,
+    );
+  }
+  revokeTeamZone(token: string, siteId: string, contractorId: string, teamId: string, id: string) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/zones/${pathId(id)}/revoke`,
+      token,
+    );
+  }
+  managerOverview(token: string, siteId: string, options?: PageOptions) {
+    return this.request<ManagerOverviewResponse>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/management/overview`, options),
+      token,
+    );
+  }
+  listGlobalContractors(token: string, options?: PageOptions) {
+    return this.request<Page<GlobalContractorSummary>>(
+      'GET',
+      this.listPath('/contractors', options),
+      token,
+    );
+  }
+  listContractorParticipations(token: string, contractorId: string, options?: PageOptions) {
+    return this.request<ContractorParticipationListResponse>(
+      'GET',
+      this.listPath(`/contractors/${pathId(contractorId)}/participations`, options),
+      token,
+    );
+  }
+
+  managerContractorDetail(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    query: { date: string; timezone: string },
+  ) {
+    return this.request<ManagerContractorDetailResponse>(
+      'GET',
+      this.listPath(
+        `/sites/${pathId(siteId)}/management/contractors/${pathId(contractorId)}`,
+        query,
+      ),
+      token,
+    );
+  }
+  myContractorTeam(token: string, siteId: string) {
+    return this.request<ContractorTeamWorkerResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/my-team`,
+      token,
+    );
+  }
+  contractorDashboardScopes(token: string) {
+    return this.request<{ items: ContractorDashboardScope[] }>(
+      'GET',
+      '/contractor-dashboard/scopes',
+      token,
+    );
+  }
+  contractorDashboard(token: string, siteId: string, contractorId: string) {
+    return this.request<ContractorDashboardResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/dashboard`,
+      token,
+    );
+  }
+  listContractorTeams(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    options: ContractorTeamQuery = {},
+  ) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<Page<ContractorTeamResponse>>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams?${query}`,
+      token,
+    );
+  }
+  contractorTeamDetail(token: string, siteId: string, contractorId: string, teamId: string) {
+    return this.request<ContractorTeamResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}`,
+      token,
+    );
+  }
+  createContractorTeam(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    input: CreateContractorTeamCommand,
+  ) {
+    return this.request<ContractorTeamResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams`,
+      token,
+      input,
+    );
+  }
+  updateContractorTeam(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    input: UpdateContractorTeamCommand,
+  ) {
+    return this.request<ContractorTeamResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}`,
+      token,
+      input,
+    );
+  }
+  archiveContractorTeam(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    input: ArchiveContractorTeamCommand,
+  ) {
+    return this.request<ContractorTeamResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/archive`,
+      token,
+      input,
+    );
+  }
+  listContractorTeamWorkers(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    options: ContractorTeamWorkersQuery = {},
+  ) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<Page<ContractorTeamWorkerResponse>>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/team-workers?${query}`,
+      token,
+    );
+  }
+  assignContractorTeam(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    workerId: string,
+    input: AssignContractorTeamCommand,
+  ) {
+    return this.request<ContractorTeamWorkerResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/team-workers/${pathId(workerId)}/team`,
+      token,
+      input,
+    );
+  }
+  attendanceTimeRequests(token: string, siteId: string, options: AttendanceTimeRequestsQuery) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<AttendanceTimeRequestsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-time-requests?${query}`,
+      token,
+    );
+  }
+  ignoreDuplicateAttendance(
+    token: string,
+    siteId: string,
+    sessionId: string,
+    input: IgnoreDuplicateAttendanceCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-sessions/${pathId(sessionId)}/ignore-duplicate`,
+      token,
+      input,
+    );
+  }
+  attendanceOverview(token: string, siteId: string, options: AttendanceOverviewQuery = {}) {
     return this.request<AttendanceOverviewResponse>(
       'GET',
-      `/sites/${pathId(siteId)}/attendance`,
+      `/sites/${pathId(siteId)}/attendance${options.dayId ? `?dayId=${encodeURIComponent(options.dayId)}` : ''}`,
       token,
+    );
+  }
+  attendanceDays(token: string, siteId: string, options: AttendanceDaysQuery = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<AttendanceDaysResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-days?${query}`,
+      token,
+    );
+  }
+  requestAttendanceTime(token: string, siteId: string, input: AttendanceTimeRequestCommand) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-time-requests`,
+      token,
+      input,
+    );
+  }
+  attendanceDayDetail(token: string, siteId: string, id: string) {
+    return this.request<AttendanceDayDetailResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-days/${pathId(id)}`,
+      token,
+    );
+  }
+  attendanceTimesheets(token: string, siteId: string, options: AttendanceDaysQuery = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<AttendanceTimesheetResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-timesheets?${query}`,
+      token,
+    );
+  }
+  reviewAttendanceTime(
+    token: string,
+    siteId: string,
+    id: string,
+    kind: 'OVERTIME' | 'LEAVE',
+    input: ReviewAttendanceTimeCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-time-requests/${kind}/${pathId(id)}/review`,
+      token,
+      input,
+    );
+  }
+  confirmAttendanceDay(
+    token: string,
+    siteId: string,
+    id: string,
+    input: ReviewAttendanceDayCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-days/${pathId(id)}/confirm`,
+      token,
+      input,
     );
   }
   recordAttendance(token: string, siteId: string, eventId: string, input: RecordAttendanceCommand) {
@@ -195,6 +509,14 @@ export class SmartSiteManagementClient {
     return this.request<{ id: string }>(
       'POST',
       `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions`,
+      token,
+      input,
+    );
+  }
+  grantContractorZoneDates(token: string, siteId: string, input: GrantContractorZoneDatesCommand) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions/dates`,
       token,
       input,
     );
@@ -898,6 +1220,26 @@ export class SmartSiteManagementClient {
       { roleAssignments },
     );
   }
+  createSiteRepresentative(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    input: { username: string; displayName: string; temporaryPassword: string },
+  ) {
+    return this.request<AccountResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/representative-accounts`,
+      token,
+      input,
+    );
+  }
+  listSiteRepresentatives(token: string, siteId: string, options?: PageOptions) {
+    return this.request<Page<AccountResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/representative-accounts`, options),
+      token,
+    );
+  }
   listUsers(token: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>('GET', this.listPath('/users', options), token);
   }
@@ -1033,12 +1375,12 @@ export class SmartSiteManagementClient {
   createContractor(
     token: string,
     siteId: string,
-    input: { code: string; name: string },
+    input: { code?: string; name: string },
   ): Promise<ContractorResponse>;
   createContractor(
     token: string,
-    siteIdOrInput: string | { code: string; name: string },
-    siteInput?: { code: string; name: string },
+    siteIdOrInput: string | { code?: string; name: string },
+    siteInput?: { code?: string; name: string },
   ) {
     const siteScoped = typeof siteIdOrInput === 'string';
     const input = siteScoped ? siteInput! : siteIdOrInput;
@@ -1373,7 +1715,7 @@ export class SmartSiteManagementClient {
     token: string,
     siteId: string,
     input: {
-      code: string;
+      code?: string;
       name: string;
       type: ZoneResponse['type'];
       restrictionPolicy: ZoneResponse['restrictionPolicy'];
@@ -1522,7 +1864,10 @@ export class SmartSiteManagementClient {
   createShift(
     token: string,
     siteId: string,
-    input: { name: string; startsAt: string; endsAt: string; timezone: string },
+    input: Pick<
+      ShiftResponse,
+      'name' | 'startsAt' | 'endsAt' | 'timezone' | 'breakStartsAt' | 'breakEndsAt'
+    >,
   ) {
     return this.request<ShiftResponse>('POST', `/sites/${pathId(siteId)}/shifts`, token, input);
   }
@@ -1550,6 +1895,13 @@ export class SmartSiteManagementClient {
     return this.request<Page<ShiftResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/shifts`, options),
+      token,
+    );
+  }
+  archiveShift(token: string, siteId: string, shiftId: string) {
+    return this.request<ShiftResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/shifts/${pathId(shiftId)}/archive`,
       token,
     );
   }
@@ -1588,6 +1940,47 @@ export class SmartSiteManagementClient {
     return this.request<WorkerScheduleResponse>(
       'POST',
       `/sites/${pathId(siteId)}/schedule-versions/${pathId(scheduleVersionId)}/worker-schedules`,
+      token,
+      input,
+    );
+  }
+  previewScheduleAssignment(token: string, siteId: string, input: ScheduleAssignmentInput) {
+    return this.request<ScheduleAssignmentPreview>(
+      'POST',
+      `/sites/${pathId(siteId)}/schedule-assignments/preview`,
+      token,
+      input,
+    );
+  }
+  createScheduleAssignment(token: string, siteId: string, input: CreateScheduleAssignmentCommand) {
+    return this.request<ScheduleAssignmentBatchResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/schedule-assignments`,
+      token,
+      input,
+    );
+  }
+  listScheduleAssignments(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    options: PageOptions = {},
+  ) {
+    return this.request<Page<ScheduleAssignmentBatchResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/schedule-assignments`, { ...options, contractorId }),
+      token,
+    );
+  }
+  changeScheduleAssignment(
+    token: string,
+    siteId: string,
+    id: string,
+    input: ChangeScheduleAssignmentCommand,
+  ) {
+    return this.request<ScheduleAssignmentChangeResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/schedule-assignments/${pathId(id)}/change`,
       token,
       input,
     );

@@ -55,18 +55,33 @@ Revoked or expired participation denies commands, discovery and request reads. A
 permission database fails closed. Worker and Representative roles do not substitute for linkage
 and Site/Contractor scope. Denied or failed commands do not update schedules or emit outcomes.
 
-Only a **past calendar work date**, calculated in each affected shift's timezone, blocks changes.
-Today remains editable even after the shift has started. Backend returns HTTP 409 with
-`SHIFT_WORK_DATE_PASSED` and `This shift's work date has passed. Changes are no longer allowed.`
-when creating/confirming/approving a past shift. Invalid timezone data fails closed with HTTP 503
+Change/swap commands are locked at the **scheduled end**, calculated from each affected shift's
+work date and timezone. An ongoing shift remains eligible; today is not eligible after its shift
+has ended. Backend returns HTTP 409 with `SHIFT_WORK_DATE_PASSED` and
+`This shift has ended. Changes are no longer allowed.` when creating/confirming/approving an ended shift. Invalid timezone data fails closed with HTTP 503
 `SHIFT_DATE_UNAVAILABLE`. Requests that age while pending remain pending and may be rejected;
 automatic expiry is not implemented. The Web uses the same date policy, reloads server pages,
 offers Retry for failed reads/discovery, and displays allowlisted English error messages.
 Outcome notifications are Backend-owned; the old localStorage outcome banner is not used.
-Absence/replacement/understaffing, direct schedule edit/delete, Mobile and push are out of scope.
+Absence/leave has its own workflow; replacement/understaffing does not yet have a complete Web flow.
+Mobile and push are outside this Web notification implementation. Direct batch editing is described below.
 
 No new database schema or migration is needed for this hardening. Deploy Backend (including the
 new read endpoint/error codes) before the updated Web; existing clients remain compatible.
+
+## Contractor direct batch changes
+
+`SCHEDULE_CHANGED` and `SCHEDULE_CANCELLED` are Worker notices for successful direct batch changes,
+separate from change/swap request review. One notice per affected eligible Worker lists the actual
+dates, old/new shift names and reason. Its target is `{ siteId, workDate, tab: "schedule" }` and opens
+My Schedule on the first changed date. Protected/skipped dates and unchanged replacement shifts are
+not reported as changed. Notifications and schedule updates share one transaction; identical request
+ID retries do not duplicate delivery. Earlier direct corrections are not backfilled.
+
+Apply `ScheduleChangeNotifications1791849600002` before Backend/Web. The same current scope policy
+gates delivery and list/read. Use **Edit or cancel schedules** and select DAY/FROM_DATE/UNSTARTED
+inside the form; direct edits protect already-started schedules and worker-days with attendance.
+This differs from Worker request change/swap, which remains available until the shift ends.
 
 ## Delete read notifications
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { decideFaceGate } from '../src/modules/workforce/face-gate-policy.js';
+import { decideFaceGate } from '../src/modules/workforce/access/face-gate-policy.js';
 
 test('face gate policy permits QR fallback only for inconclusive technical outcomes', () => {
   const result = decideFaceGate({ technicalOutcome: 'LOW_CONFIDENCE' });

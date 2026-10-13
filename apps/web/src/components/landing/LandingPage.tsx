@@ -30,188 +30,227 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
   // 1. Hero Section Animation
   useGSAP(
     () => {
-      const tl = gsap.timeline();
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: no-preference)', (context) => {
+        const cleanupHover: (() => void)[] = [];
+        const tl = gsap.timeline();
 
-      // Animate the main headline
-      tl.from('.hero-badge', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out', delay: 0.2 })
-        .from('.hero-headline', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.4')
-        .from('.hero-desc', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.6')
-        .from('.hero-btns', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.4')
-        .from('.hero-card', { x: -30, opacity: 0, duration: 0.8, ease: 'back.out(1.5)' }, '-=0.4');
+        // Animate the main headline
+        tl.from('.hero-badge', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out', delay: 0.2 })
+          .from('.hero-headline', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.4')
+          .from('.hero-desc', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.6')
+          .from('.hero-btns', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.4')
+          .from(
+            '.hero-card',
+            { x: -30, opacity: 0, duration: 0.8, ease: 'back.out(1.5)' },
+            '-=0.4',
+          );
 
-      // Parallax on scroll for the hero background
-      gsap.to('.hero-bg', {
-        y: '20%',
-        ease: 'none',
-        scrollTrigger: {
-          trigger: '.hero-section',
-          start: 'top top',
-          end: 'bottom top',
-          scrub: true,
-        },
-      });
+        // Parallax on scroll for the hero background
+        gsap.to('.hero-bg', {
+          y: '20%',
+          ease: 'none',
+          scrollTrigger: {
+            trigger: '.hero-section',
+            start: 'top top',
+            end: 'bottom top',
+            scrub: true,
+          },
+        });
 
-      // 2. The Challenge Section
-      gsap.from('.challenge-header', {
-        scrollTrigger: { trigger: '.challenge-section', start: 'top 80%' },
-        y: 30,
-        opacity: 0,
-        duration: 0.6,
-        ease: 'power2.out',
-      });
-      gsap.fromTo(
-        '.challenge-card',
-        { y: 40, opacity: 0 },
-        {
-          scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
-          y: 0,
-          opacity: 1,
-          duration: 0.6,
-          stagger: 0.15,
-          ease: 'power2.out',
-        },
-      );
-
-      // 3. One Platform
-      const platformTl = gsap.timeline({
-        scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
-      });
-      platformTl.from('.platform-text > *', {
-        x: -50,
-        opacity: 0,
-        duration: 0.8,
-        stagger: 0.2,
-        ease: 'back.out(1.2)',
-      });
-      platformTl.from(
-        '.platform-diagram',
-        {
-          scale: 0.5,
-          rotation: -45,
+        // 2. The Challenge Section
+        gsap.from('.challenge-header', {
+          scrollTrigger: { trigger: '.challenge-section', start: 'top 80%' },
+          y: 30,
           opacity: 0,
-          duration: 1.2,
-          ease: 'elastic.out(1, 0.5)',
-        },
-        '-=0.6',
-      );
-      // Add subtle floating to the orbiting nodes
-      gsap.to('.orbit-node', {
-        y: -10,
-        duration: 1.5,
-        yoyo: true,
-        repeat: -1,
-        ease: 'sine.inOut',
-        stagger: 0.3,
-      });
-
-      // 4. Solutions Grid Entrance
-      gsap.fromTo(
-        '.solution-card',
-        { y: 100, opacity: 0, scale: 0.95 },
-        {
-          scrollTrigger: { trigger: '.solutions-section', start: 'top 80%' },
-          y: 0,
-          opacity: 1,
-          scale: 1,
-          duration: 0.8,
-          stagger: 0.15,
-          ease: 'back.out(1.5)',
-        },
-      );
-
-      // 4b. Solutions Grid Hover
-      const solutionCards = Array.from(
-        document.querySelectorAll('.solution-card'),
-      ) as HTMLElement[];
-      solutionCards.forEach((card) => {
-        const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
-
-        card.addEventListener('mouseenter', () => {
-          gsap.to(card, {
-            y: -10,
-            scale: 1.02,
-            duration: 0.3,
+          duration: 0.6,
+          ease: 'power2.out',
+        });
+        gsap.fromTo(
+          '.challenge-card',
+          { y: 40, opacity: 0 },
+          {
+            scrollTrigger: { trigger: '.challenge-cards-container', start: 'top 80%' },
+            y: 0,
+            opacity: 1,
+            duration: 0.6,
+            stagger: 0.15,
             ease: 'power2.out',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          },
+        );
+
+        // 3. One Platform
+        const platformTl = gsap.timeline({
+          scrollTrigger: { trigger: '.platform-section', start: 'top 70%' },
+        });
+        platformTl.from('.platform-text > *', {
+          x: -50,
+          opacity: 0,
+          duration: 0.8,
+          stagger: 0.2,
+          ease: 'back.out(1.2)',
+        });
+        platformTl.from(
+          '.platform-diagram',
+          {
+            scale: 0.5,
+            rotation: -45,
+            opacity: 0,
+            duration: 1.2,
+            ease: 'elastic.out(1, 0.5)',
+          },
+          '-=0.6',
+        );
+        // Add subtle floating to the orbiting nodes
+        const floatingNodes = gsap.to('.orbit-node', {
+          y: -10,
+          duration: 1.5,
+          yoyo: true,
+          repeat: -1,
+          ease: 'sine.inOut',
+          stagger: 0.3,
+          paused: true,
+        });
+        ScrollTrigger.create({
+          trigger: '.platform-section',
+          start: 'top bottom',
+          end: 'bottom top',
+          onToggle: (self) => {
+            if (self.isActive) floatingNodes.play();
+            else floatingNodes.pause();
+          },
+        });
+
+        // 4. Solutions Grid Entrance
+        gsap.fromTo(
+          '.solution-card',
+          { y: 100, opacity: 0, scale: 0.95 },
+          {
+            scrollTrigger: { trigger: '.solutions-section', start: 'top 80%' },
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            duration: 0.8,
+            stagger: 0.15,
+            ease: 'back.out(1.5)',
+          },
+        );
+
+        // 4b. Solutions Grid Hover
+        const solutionCards = Array.from(
+          containerRef.current?.querySelectorAll('.solution-card') ?? [],
+        ) as HTMLElement[];
+        solutionCards.forEach((card) => {
+          const icon = card.querySelector('.group-hover\\:scale-110'); // the icon container
+
+          const onEnter = () => {
+            context.add(() => {
+              gsap.to(card, {
+                y: -10,
+                scale: 1.02,
+                duration: 0.3,
+                ease: 'power2.out',
+                overwrite: 'auto',
+              });
+              if (icon)
+                gsap.to(icon, { rotation: 15, scale: 1.2, duration: 0.4, ease: 'back.out(2)' });
+            });
+          };
+
+          const onLeave = () => {
+            context.add(() => {
+              gsap.to(card, {
+                y: 0,
+                scale: 1,
+                duration: 0.3,
+                ease: 'power2.out',
+                overwrite: 'auto',
+              });
+              if (icon) gsap.to(icon, { rotation: 0, scale: 1, duration: 0.4, ease: 'power2.out' });
+            });
+          };
+          card.addEventListener('mouseenter', onEnter);
+          card.addEventListener('mouseleave', onLeave);
+          cleanupHover.push(() => {
+            card.removeEventListener('mouseenter', onEnter);
+            card.removeEventListener('mouseleave', onLeave);
           });
-          if (icon) gsap.to(icon, { rotation: 15, scale: 1.2, duration: 0.4, ease: 'back.out(2)' });
         });
 
-        card.addEventListener('mouseleave', () => {
-          gsap.to(card, { y: 0, scale: 1, duration: 0.3, ease: 'power2.out', boxShadow: 'none' });
-          if (icon) gsap.to(icon, { rotation: 0, scale: 1, duration: 0.4, ease: 'power2.out' });
+        // 5. Safety AI Showcase
+        gsap.to('.ai-laser', {
+          scrollTrigger: {
+            trigger: '.safety-ai-section',
+            start: 'top center',
+            end: 'bottom center',
+            scrub: 1,
+          },
+          y: () =>
+            (containerRef.current?.querySelector('.ai-laser')?.parentElement?.clientHeight ?? 0) *
+            0.9,
+          ease: 'none',
         });
-      });
+        gsap.from('.ai-checklist-item', {
+          scrollTrigger: { trigger: '.safety-ai-section', start: 'top 60%' },
+          x: 30,
+          opacity: 0,
+          duration: 0.5,
+          stagger: 0.2,
+          ease: 'power2.out',
+        });
 
-      // 5. Safety AI Showcase
-      gsap.to('.ai-laser', {
-        scrollTrigger: {
-          trigger: '.safety-ai-section',
-          start: 'top center',
-          end: 'bottom center',
-          scrub: 1,
-        },
-        top: '90%',
-        ease: 'none',
-      });
-      gsap.from('.ai-checklist-item', {
-        scrollTrigger: { trigger: '.safety-ai-section', start: 'top 60%' },
-        x: 30,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.2,
-        ease: 'power2.out',
-      });
+        // 6. Timeline
+        gsap.from('.timeline-step', {
+          scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
+          y: 30,
+          opacity: 0,
+          duration: 0.5,
+          stagger: 0.2,
+          ease: 'power2.out',
+        });
+        gsap.from('.timeline-line', {
+          scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
+          scaleX: 0,
+          duration: 1.5,
+          ease: 'power2.out',
+        });
 
-      // 6. Timeline
-      gsap.from('.timeline-step', {
-        scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
-        y: 30,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.2,
-        ease: 'power2.out',
-      });
-      gsap.from('.timeline-line', {
-        scrollTrigger: { trigger: '.timeline-section', start: 'top 75%' },
-        width: 0,
-        duration: 1.5,
-        ease: 'power2.out',
-      });
+        // 7. Dashboard
+        gsap.from('.dashboard-mockup', {
+          scrollTrigger: { trigger: '.dashboard-section', start: 'top 80%' },
+          y: 100,
+          opacity: 0,
+          duration: 0.8,
+          ease: 'power3.out',
+        });
+        gsap.from('.dashboard-stat', {
+          scrollTrigger: { trigger: '.dashboard-section', start: 'top 60%' },
+          scale: 0.8,
+          opacity: 0,
+          duration: 0.5,
+          stagger: 0.1,
+          ease: 'back.out(1.5)',
+        });
 
-      // 7. Dashboard
-      gsap.from('.dashboard-mockup', {
-        scrollTrigger: { trigger: '.dashboard-section', start: 'top 80%' },
-        y: 100,
-        opacity: 0,
-        duration: 0.8,
-        ease: 'power3.out',
+        // 8. Lifecycle
+        gsap.from('.lifecycle-text', {
+          scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
+          x: -40,
+          opacity: 0,
+          duration: 0.7,
+          ease: 'power2.out',
+        });
+        gsap.from('.lifecycle-step', {
+          scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
+          x: 40,
+          opacity: 0,
+          duration: 0.5,
+          stagger: 0.1,
+          ease: 'power2.out',
+        });
+        return () => cleanupHover.forEach((cleanup) => cleanup());
       });
-      gsap.from('.dashboard-stat', {
-        scrollTrigger: { trigger: '.dashboard-section', start: 'top 60%' },
-        scale: 0.8,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.1,
-        ease: 'back.out(1.5)',
-      });
-
-      // 8. Lifecycle
-      gsap.from('.lifecycle-text', {
-        scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
-        x: -40,
-        opacity: 0,
-        duration: 0.7,
-        ease: 'power2.out',
-      });
-      gsap.from('.lifecycle-step', {
-        scrollTrigger: { trigger: '.lifecycle-section', start: 'top 75%' },
-        x: 40,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.1,
-        ease: 'power2.out',
-      });
+      return () => media.revert();
     },
     { scope: containerRef },
   );

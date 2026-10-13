@@ -15,7 +15,7 @@ import { SafetyAlertAccessGuard } from './alerts/safety-alert-access.guard.js';
 import { SafetyAlertReviewService } from './alerts/safety-alert-review.service.js';
 import { SafetyAlertEvidenceService } from './alerts/safety-alert-evidence.service.js';
 import { WorkforceModule } from '../workforce/workforce.module.js';
-import { WorkforceConfigurationService } from '../workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../workforce/directory/workforce-configuration.service.js';
 import { ObservationIdentityController } from './identity/observation-identity.controller.js';
 import { ObservationIdentityAccessGuard } from './identity/observation-identity-access.guard.js';
 import { ObservationIdentityResolutionService } from './identity/observation-identity-resolution.service.js';

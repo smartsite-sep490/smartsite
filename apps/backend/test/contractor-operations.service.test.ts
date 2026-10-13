@@ -10,7 +10,7 @@ import { WorkerEntity } from '../src/database/entities/worker.entity.js';
 import {
   ContractorOperationsService,
   type WorkforceActor,
-} from '../src/modules/workforce/contractor-operations.service.js';
+} from '../src/modules/workforce/directory/contractor-operations.service.js';
 
 const IDs = {
   actor: '00000000-0000-4000-8000-000000000001',

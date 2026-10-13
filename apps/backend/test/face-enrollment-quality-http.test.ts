@@ -5,8 +5,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
-import { FaceEnrollmentController } from '../src/modules/workforce/face-enrollment.controller.js';
-import { FaceEnrollmentService } from '../src/modules/workforce/face-enrollment.service.js';
+import { FaceEnrollmentController } from '../src/modules/workforce/identity/face-enrollment.controller.js';
+import { FaceEnrollmentService } from '../src/modules/workforce/identity/face-enrollment.service.js';
 
 test('multipart quality requests preserve left/right and never default a missing target to front', async () => {
   const checked: string[] = [];

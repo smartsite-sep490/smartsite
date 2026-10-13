@@ -1,3 +1,7 @@
+import { SiteZoneSetup } from './SiteZoneSetup';
+import { ContractorZoneSetup } from './ContractorZoneSetup';
+import { ManagerContractorDetails } from '../../dashboard/ManagerContractorDetails';
+import { ContractorParticipationDirectory } from './ContractorParticipationDirectory';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
@@ -42,9 +46,21 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const isAdmin =
     currentUser?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null) ?? false;
 
+  const isManager =
+    !isAdmin &&
+    (currentUser?.roleAssignments.some((r) => r.role === 'SITE_MANAGER' && r.siteId !== null) ??
+      false);
+  const canSetup = isAdmin || isManager;
+
   // Navigation & Selection state
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'contractors' | 'representatives'>('contractors');
+  const [detailContractor, setDetailContractor] = useState<{
+    siteId: string;
+    contractorId: string;
+  } | null>(null);
+  const [activeTab, setActiveTab] = useState<
+    'contractors' | 'representatives' | 'zones' | 'zone-assignments'
+  >('contractors');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [contractorSearchQuery, setContractorSearchQuery] = useState('');
 
@@ -65,7 +81,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const [siteError, setSiteError] = useState<string | null>(null);
 
   // Contractor Form State
-  const [contractorCode, setContractorCode] = useState('');
   const [contractorName, setContractorName] = useState('');
   const [contractorError, setContractorError] = useState<string | null>(null);
   const [contractorSuccessMsg, setContractorSuccessMsg] = useState<string | null>(null);
@@ -93,10 +108,20 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     queryKey: ['site-setup', apiUrl, currentUser?.id, 'sites'],
     queryFn: ({ signal }) =>
       loadAllPages((options) => client.listSites(accessToken!, options), signal),
-    enabled: Boolean(accessToken && isAdmin),
+    enabled: Boolean(accessToken && canSetup),
   });
 
-  const sites = useMemo(() => sitesQuery.data?.items ?? [], [sitesQuery.data]);
+  const sites = useMemo(
+    () =>
+      (sitesQuery.data?.items ?? []).filter(
+        (site) =>
+          isAdmin ||
+          currentUser?.roleAssignments.some(
+            (r) => r.role === 'SITE_MANAGER' && r.siteId === site.id,
+          ),
+      ),
+    [sitesQuery.data, isAdmin, currentUser],
+  );
   const setupKey = ['site-setup', apiUrl, currentUser?.id];
 
   // Auto-select first site if none selected
@@ -117,16 +142,22 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         (options) => client.listContractors(accessToken!, activeSiteId!, options),
         signal,
       ),
-    enabled: Boolean(accessToken && activeSiteId),
+    enabled: Boolean(accessToken && isManager && activeSiteId),
   });
 
   const contractors = useMemo(() => contractorsQuery.data?.items ?? [], [contractorsQuery.data]);
 
   const usersQuery = useQuery({
-    queryKey: [...setupKey, 'users'],
+    queryKey: [...setupKey, 'users', isAdmin ? null : activeSiteId],
     queryFn: ({ signal }) =>
-      loadAllPages((options) => client.listUsers(accessToken!, options), signal),
-    enabled: Boolean(accessToken && isAdmin),
+      loadAllPages(
+        (options) =>
+          isAdmin
+            ? client.listUsers(accessToken!, options)
+            : client.listSiteRepresentatives(accessToken!, activeSiteId!, options),
+        signal,
+      ),
+    enabled: Boolean(accessToken && (isAdmin || (isManager && activeSiteId))),
   });
 
   const representativeAssignmentsQuery = useQuery({
@@ -137,7 +168,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           client.listContractorRepresentativeAssignments(accessToken!, activeSiteId!, options),
         signal,
       ),
-    enabled: Boolean(accessToken && isAdmin && activeSiteId),
+    enabled: Boolean(accessToken && isManager && activeSiteId),
   });
 
   const allUsers = useMemo(() => usersQuery.data?.items ?? [], [usersQuery.data]);
@@ -157,11 +188,16 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   }, [allUsers, activeSiteId]);
 
   const siteManagers = useMemo(
-    () => (activeSiteId ? getSiteManagers(allUsers, activeSiteId) : []),
-    [allUsers, activeSiteId],
+    () =>
+      activeSiteId
+        ? getSiteManagers(isAdmin ? allUsers : currentUser ? [currentUser] : [], activeSiteId)
+        : [],
+    [allUsers, activeSiteId, isAdmin, currentUser],
   );
 
-  const readySiteManagers = activeSiteId ? getReadySiteManagers(allUsers, activeSiteId) : [];
+  const readySiteManagers = activeSiteId
+    ? getReadySiteManagers(isAdmin ? allUsers : currentUser ? [currentUser] : [], activeSiteId)
+    : [];
   const managersLoaded = usersQuery.isSuccess;
 
   const assignableSiteManagers = useMemo(
@@ -218,17 +254,19 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   });
 
   const createContractorMutation = useMutation({
-    mutationFn: (input: { code: string; name: string }) =>
+    mutationFn: (input: { name: string }) =>
       client.createContractor(accessToken!, activeSiteId!, input),
     onSuccess: (newContractor) => {
       setContractorError(null);
       setContractorSuccessMsg(
         `Contractor "${newContractor.name}" (${newContractor.code}) created successfully.`,
       );
-      setContractorCode('');
       setContractorName('');
       setShowCreateContractorModal(false);
       queryClient.invalidateQueries({ queryKey: [...setupKey, 'contractors', activeSiteId] });
+      queryClient.invalidateQueries({
+        queryKey: ['access-control', apiUrl, currentUser?.id, activeSiteId, 'access-setup'],
+      });
       setTimeout(() => setContractorSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -247,16 +285,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       temporaryPassword: string;
       contractorId: string;
     }) => {
-      const user = await client.createUser(accessToken!, {
+      return client.createSiteRepresentative(accessToken!, activeSiteId!, input.contractorId, {
         username: input.username,
         displayName: input.displayName,
         temporaryPassword: input.temporaryPassword,
-        roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: activeSiteId! }],
       });
-      await client.assignContractorRepresentative(accessToken!, activeSiteId!, input.contractorId, {
-        userId: user.id,
-      });
-      return user;
     },
     onSuccess: (user) => {
       setRepError(null);
@@ -369,7 +402,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     onSuccess: (user) => {
       setCreateManagerError(null);
       setManagerSuccessMsg(
-        `Site Manager account "${user.username}" created for this site. They must sign in and change their temporary password before visitor registration and approval are available.`,
+        `Site Manager account "${user.username}" created for this site. The account is ready to sign in and manage this site.`,
       );
       setManagerUsername('');
       setManagerDisplayName('');
@@ -391,7 +424,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   });
 
   // ── Access Guard ────────────────────────────────────────────────────────────
-  if (!isAdmin) {
+  if (!canSetup) {
     return (
       <div className="max-w-md mx-auto mt-20 p-8 rounded-2xl bg-white border border-rose-200 text-center space-y-4 shadow-sm">
         <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
@@ -399,7 +432,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         </div>
         <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Site &amp; Contractor Setup is reserved for System Administrators. Your current role does
+          Site Setup requires an Administrator or an assigned Site Manager. Your current role does
           not grant permission to configure site infrastructure.
         </p>
       </div>
@@ -433,17 +466,12 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setContractorError('Please select an active site first.');
       return;
     }
-    if (!contractorCode.trim()) {
-      setContractorError('Contractor code is required.');
-      return;
-    }
     if (!contractorName.trim()) {
       setContractorError('Contractor name is required.');
       return;
     }
 
     createContractorMutation.mutate({
-      code: contractorCode.trim().toUpperCase(),
       name: contractorName.trim(),
     });
   };
@@ -569,6 +597,15 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
+      {isManager && detailContractor && detailContractor.siteId === activeSiteId && (
+        <ManagerContractorDetails
+          key={`${detailContractor.siteId}-${detailContractor.contractorId}`}
+          apiUrl={apiUrl}
+          siteId={detailContractor.siteId}
+          contractorId={detailContractor.contractorId}
+          onClose={() => setDetailContractor(null)}
+        />
+      )}
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-3">
@@ -586,7 +623,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </span>
             </div>
             <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              Site &amp; Contractor Setup
+              {isAdmin ? 'Site Setup' : 'Contractor & Zone Setup'}
             </h1>
           </div>
         </div>
@@ -596,9 +633,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             type="button"
             onClick={() => {
               sitesQuery.refetch();
-              if (activeSiteId) contractorsQuery.refetch();
+              if (isManager && activeSiteId) contractorsQuery.refetch();
               usersQuery.refetch();
-              representativeAssignmentsQuery.refetch();
+              if (isManager && activeSiteId) representativeAssignmentsQuery.refetch();
             }}
             disabled={sitesQuery.isFetching || contractorsQuery.isFetching}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
@@ -610,23 +647,26 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             <span>Refresh</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSiteError(null);
-              setSiteName('');
-              setSiteCode('');
-              setShowCreateSiteModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-          >
-            <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-            <span>New Site</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setSiteError(null);
+                setSiteName('');
+                setSiteCode('');
+                setShowCreateSiteModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+            >
+              <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
+              <span>New Site</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Success Notification Banners */}
+      {isAdmin && <ContractorParticipationDirectory apiUrl={apiUrl} />}
       {(sitesQuery.isError ||
         usersQuery.isError ||
         contractorsQuery.isError ||
@@ -701,9 +741,17 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
         <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">Contractors on Site</span>
+            <span className="text-xs font-medium text-slate-500">
+              {isAdmin ? 'Site Managers' : 'Contractors on Site'}
+            </span>
             <p className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {contractorsQuery.isLoading ? '...' : contractors.length}
+              {isAdmin
+                ? usersQuery.isPending
+                  ? '...'
+                  : siteManagers.length
+                : contractorsQuery.isPending
+                  ? '...'
+                  : contractors.length}
             </p>
           </div>
           <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -713,9 +761,19 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
         <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">Representatives</span>
+            <span className="text-xs font-medium text-slate-500">
+              {isAdmin ? 'Manager Status' : 'Representatives'}
+            </span>
             <p className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {usersQuery.isLoading ? '...' : siteRepresentatives.length}
+              {usersQuery.isPending
+                ? '...'
+                : isAdmin
+                  ? usersQuery.isError
+                    ? 'Unavailable'
+                    : readySiteManagers.length
+                      ? 'Ready'
+                      : 'Not ready'
+                  : siteRepresentatives.length}
             </p>
           </div>
           <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -920,97 +978,161 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
                   {/* Actions Bar */}
                   <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2">
-                    <button
-                      type="button"
-                      disabled={!managersLoaded}
-                      onClick={openAssignSiteManagerModal}
-                      className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
-                    >
-                      <IconShield className="w-3.5 h-3.5" />
-                      <span>
-                        {siteManagers.length === 0 ? 'Assign Site Manager' : 'Manage Site Managers'}
-                      </span>
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        disabled={!managersLoaded}
+                        onClick={openAssignSiteManagerModal}
+                        className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
+                      >
+                        <IconShield className="w-3.5 h-3.5" />
+                        <span>
+                          {siteManagers.length === 0
+                            ? 'Assign Site Manager'
+                            : 'Manage Site Managers'}
+                        </span>
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setContractorError(null);
-                        setContractorCode('');
-                        setContractorName('');
-                        setShowCreateContractorModal(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-                    >
-                      <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-                      <span>Add Contractor</span>
-                    </button>
+                    {isManager && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContractorError(null);
+                          setContractorName('');
+                          setShowCreateContractorModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                      >
+                        <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
+                        <span>Add Contractor</span>
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => openRepModalForContractor('')}
-                      disabled={contractors.length === 0}
-                      className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={
-                        contractors.length === 0
-                          ? 'Create a contractor first'
-                          : 'Create contractor representative login'
-                      }
-                    >
-                      <IconUser className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Create Representative</span>
-                    </button>
+                    {isManager && (
+                      <button
+                        type="button"
+                        onClick={() => openRepModalForContractor('')}
+                        disabled={contractors.length === 0}
+                        className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={
+                          contractors.length === 0
+                            ? 'Create a contractor first'
+                            : 'Create contractor representative login'
+                        }
+                      >
+                        <IconUser className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Create Representative</span>
+                      </button>
+                    )}
+                    {isManager && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('zones')}
+                          className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E]"
+                        >
+                          <IconPlus className="w-3.5 h-3.5" />
+                          New Zone
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('zone-assignments')}
+                          className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800"
+                        >
+                          <IconShield className="w-3.5 h-3.5" />
+                          Assign Zone
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 {/* Sub-Tabs: Contractors vs Representatives */}
-                <div className="flex items-center justify-between pt-0.5">
-                  <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100/80 border border-slate-200/60">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('contractors')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeTab === 'contractors'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <IconBuilding2 className="w-3.5 h-3.5 text-[#F66B17]" />
-                      <span>Contractors ({contractors.length})</span>
-                    </button>
+                {isManager && (
+                  <div className="flex items-center justify-between pt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-100/80 border border-slate-200/60">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('contractors')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          activeTab === 'contractors'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <IconBuilding2 className="w-3.5 h-3.5 text-[#F66B17]" />
+                        <span>Contractors ({contractors.length})</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('representatives')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeTab === 'representatives'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <IconUsers className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Representatives ({siteRepresentatives.length})</span>
-                    </button>
-                  </div>
-
-                  {/* Filter / Search within tab */}
-                  {activeTab === 'contractors' && contractors.length > 3 && (
-                    <div className="w-48 relative hidden sm:block">
-                      <IconSearch className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={contractorSearchQuery}
-                        onChange={(e) => setContractorSearchQuery(e.target.value)}
-                        placeholder="Filter contractors..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:bg-white transition-colors"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('representatives')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          activeTab === 'representatives'
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <IconUsers className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Representatives ({siteRepresentatives.length})</span>
+                      </button>
+                      {(['zones', 'zone-assignments'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          aria-pressed={activeTab === tab}
+                          onClick={() => setActiveTab(tab)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                        >
+                          <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
+                          {tab === 'zones' ? 'Zones' : 'Contractor Zone Assignments'}
+                        </button>
+                      ))}
                     </div>
-                  )}
-                </div>
+
+                    {/* Filter / Search within tab */}
+                    {activeTab === 'contractors' && contractors.length > 3 && (
+                      <div className="w-48 relative hidden sm:block">
+                        <IconSearch className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={contractorSearchQuery}
+                          onChange={(e) => setContractorSearchQuery(e.target.value)}
+                          placeholder="Filter contractors..."
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:bg-white transition-colors"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
+              {isManager && activeSiteId && accessToken && currentUser && activeTab === 'zones' && (
+                <SiteZoneSetup
+                  key={activeSiteId}
+                  apiUrl={apiUrl}
+                  token={accessToken}
+                  siteId={activeSiteId}
+                  userId={currentUser.id}
+                />
+              )}
+              {isManager &&
+                activeSiteId &&
+                accessToken &&
+                currentUser &&
+                activeTab === 'zone-assignments' && (
+                  <ContractorZoneSetup
+                    key={activeSiteId}
+                    apiUrl={apiUrl}
+                    token={accessToken}
+                    siteId={activeSiteId}
+                    userId={currentUser.id}
+                  />
+                )}
+
               {/* TAB 1: Contractors List Table */}
-              {activeTab === 'contractors' && (
+              {isManager && activeTab === 'contractors' && (
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
                   {contractorsQuery.isLoading ? (
                     <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
@@ -1111,6 +1233,20 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                                   {new Date(contractor.createdAt).toLocaleDateString('vi-VN')}
                                 </td>
                                 <td className="py-3.5 px-4 text-right">
+                                  {isManager && (
+                                    <button
+                                      type="button"
+                                      className="mb-2 block ml-auto text-xs font-bold text-[#071A2B] underline"
+                                      onClick={() =>
+                                        setDetailContractor({
+                                          siteId: activeSiteId!,
+                                          contractorId: contractor.id,
+                                        })
+                                      }
+                                    >
+                                      View Details
+                                    </button>
+                                  )}
                                   {representativeAssignmentsQuery.isLoading ? null : linkedRepresentativeIds.length >
                                     0 ? (
                                     <span className="text-[11px] font-semibold text-emerald-700">
@@ -1137,7 +1273,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               )}
 
               {/* TAB 2: Representatives Directory */}
-              {activeTab === 'representatives' && (
+              {isManager && activeTab === 'representatives' && (
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
                   {usersQuery.isLoading ? (
                     <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
@@ -1331,6 +1467,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               <button
                 type="button"
                 onClick={openCreateSiteManagerModal}
+                disabled={siteManagers.length > 0}
                 className="w-full px-3 py-2.5 rounded-xl border border-dashed border-[#F66B17]/50 bg-orange-50/50 text-xs font-bold text-[#C6530E] hover:bg-orange-50 transition-colors cursor-pointer"
               >
                 + Create New Site Manager
@@ -1353,6 +1490,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 <button
                   type="submit"
                   disabled={
+                    siteManagers.length > 0 ||
                     assignSiteManagerMutation.isPending ||
                     assignableSiteManagers.length === 0 ||
                     !selectedManagerId
@@ -1628,23 +1766,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label
-                  htmlFor="contractor-code-input"
-                  className="block text-xs font-bold text-slate-700"
-                >
-                  Contractor Code <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="contractor-code-input"
-                  type="text"
-                  required
-                  placeholder="e.g. CTR-PAINT or VINACONEX-CIVIL"
-                  value={contractorCode}
-                  onChange={(e) => setContractorCode(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono uppercase text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                />
-              </div>
+              <p className="text-xs text-slate-500">
+                Contractor code is generated automatically when saved.
+              </p>
 
               <div className="space-y-1">
                 <label

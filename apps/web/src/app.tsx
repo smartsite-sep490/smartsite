@@ -14,7 +14,7 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
-import { VisitorRegistrationView } from './components/access/VisitorRegistrationView';
+import { VisitorRegistrationView } from './components/access/visitor/VisitorRegistrationView';
 import { IconRadio, IconTrendingUp } from './components/icons';
 import {
   useAuth,
@@ -25,7 +25,6 @@ import {
 } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
-import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
 import { WorkforceView } from './components/workforce/components/WorkforceView';
 import { SiteSetupView } from './components/workforce/components/SiteSetupView';
 import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
@@ -43,15 +42,9 @@ interface ProtectedRoutesProps {
   defaultAuthTab: string;
   alertsContext?: AlertsNavigationContext;
   onNavigate: (tab: ActiveTab, context?: AlertsNavigationContext) => void;
-  onPasswordChanged: () => void;
 }
 
-function ProtectedRoutes({
-  defaultAuthTab,
-  alertsContext,
-  onNavigate,
-  onPasswordChanged,
-}: ProtectedRoutesProps) {
+function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
   const { accessToken } = useAuth();
   const currentUser = useCurrentUser(apiUrl);
   const profile = currentUser;
@@ -80,9 +73,14 @@ function ProtectedRoutes({
       </main>
     );
   }
-  if (currentUser.data?.mustChangePassword) {
-    return <ChangePasswordScreen apiUrl={apiUrl} onComplete={onPasswordChanged} />;
-  }
+
+  const roles = currentUser.data?.roleAssignments.map((r) => r.role) ?? [];
+  const isManagerOnly =
+    roles.includes('SITE_MANAGER') &&
+    !roles.includes('ADMIN') &&
+    !roles.includes('CONTRACTOR_REPRESENTATIVE');
+  if (isManagerOnly && ['/access', '/workforce'].includes(location.pathname.replace(/\/$/, '')))
+    return <Navigate to="/site-setup" replace />;
 
   return (
     <AppLayout onSelectTab={onNavigate}>
@@ -94,7 +92,10 @@ function ProtectedRoutes({
             defaultAuthTab === 'workforce' ? (
               <Navigate to="/workforce" replace />
             ) : (
-              <DashboardView onNavigate={(tab) => onNavigate(tab)} />
+              <DashboardView
+                apiUrl={apiUrl}
+                onNavigate={(tab, context) => onNavigate(tab, context)}
+              />
             )
           }
         />
@@ -204,7 +205,6 @@ export function App() {
   const isWorkerOnly =
     roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
   const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
-  const [passwordChanged, setPasswordChanged] = useState(false);
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check
@@ -279,11 +279,6 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
-                notice={
-                  passwordChanged
-                    ? 'Password changed successfully. Sign in with your new password.'
-                    : undefined
-                }
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />
@@ -314,10 +309,6 @@ export function App() {
               defaultAuthTab={defaultAuthTab}
               alertsContext={alertsContext}
               onNavigate={handleNavigate}
-              onPasswordChanged={() => {
-                setPasswordChanged(true);
-                navigate('/login', { replace: true });
-              }}
             />
           }
         />

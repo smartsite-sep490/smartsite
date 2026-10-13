@@ -19,14 +19,16 @@ import {
   UserNotificationEntity,
   ShiftRequestStatus,
   ShiftChangeRequestEntity,
+  ContractorTeamEntity,
+  ContractorTeamMembershipEntity,
 } from '../../src/database/entities/index.js';
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
-import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling-workflow.service.js';
-import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
+import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling/scheduling-workflow.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
-import { ShiftRequestReaderService } from '../../src/modules/workforce/shift-request-reader.service.js';
+import { ShiftRequestReaderService } from '../../src/modules/workforce/scheduling/shift-request-reader.service.js';
 import { ShiftSwapRequestEntity } from '../../src/database/entities/shift-swap-request.entity.js';
-import { ScheduleConfigurationService } from '../../src/modules/workforce/schedule-configuration.service.js';
+import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
 test('MF07 durable notifications: delivery, scope, transactions, history and reads', async (t) => {
   await dataSource.initialize();
@@ -129,6 +131,27 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
   const morning = randomUUID(),
     evening = randomUUID(),
     version = randomUUID();
+  const teamId = randomUUID();
+  await dataSource.getRepository(ContractorTeamEntity).save({
+    id: teamId,
+    siteId,
+    contractorId,
+    name: 'Synthetic notification team',
+    normalizedName: 'synthetic notification team',
+    createdBy: repA.id,
+  });
+  await dataSource.getRepository(ContractorTeamMembershipEntity).save(
+    [aId, bId].map((workerId) => ({
+      id: randomUUID(),
+      siteId,
+      contractorId,
+      teamId,
+      workerId,
+      joinedAt: new Date(),
+      assignedBy: repA.id,
+      reason: 'Synthetic member assignment',
+    })),
+  );
   await dataSource.getRepository(ShiftEntity).save([
     {
       id: morning,
@@ -601,9 +624,9 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
   );
 
   await t.test(
-    'past dates cannot create, confirm or apply, while today remains editable after start time',
+    'ended shifts cannot create, confirm or apply, while ongoing shifts remain editable',
     async (dateTest) => {
-      dateTest.mock.timers.enable({ apis: ['Date'], now: new Date('2090-01-01T23:30:00Z') });
+      dateTest.mock.timers.enable({ apis: ['Date'], now: new Date('2090-01-01T15:30:00Z') });
       const [a, b] = await schedules();
       await dataSource
         .getRepository(WorkerScheduleEntity)
@@ -632,7 +655,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         coworkerWorkerScheduleId: b!.id,
         reason: 'Today even after start time',
       });
-      dateTest.mock.timers.setTime(new Date('2090-01-02T00:00:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-01T16:00:00Z').getTime());
       await assert.rejects(
         workflow.confirmShiftSwap(workerB, siteId, swap.id),
         code('SHIFT_WORK_DATE_PASSED'),
@@ -642,9 +665,9 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
           .status,
         ShiftRequestStatus.PENDING_COWORKER,
       );
-      dateTest.mock.timers.setTime(new Date('2090-01-01T23:30:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-01T15:30:00Z').getTime());
       await workflow.confirmShiftSwap(workerB, siteId, swap.id);
-      dateTest.mock.timers.setTime(new Date('2090-01-02T00:00:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-01T16:00:00Z').getTime());
       await assert.rejects(
         workflow.approveShiftSwap(repA, siteId, swap.id),
         code('SHIFT_WORK_DATE_PASSED'),
@@ -664,18 +687,18 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       await dataSource
         .getRepository(WorkerScheduleEntity)
         .update(c!.id, { workDate: '2090-01-03' });
-      dateTest.mock.timers.setTime(new Date('2090-01-03T23:30:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-03T15:30:00Z').getTime());
       const change = await workflow.createShiftChange(workerA, siteId, {
         workerScheduleId: c!.id,
         toShiftId: evening,
         reason: 'Today direct synthetic change',
       });
-      dateTest.mock.timers.setTime(new Date('2090-01-04T00:00:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-03T16:00:00Z').getTime());
       await assert.rejects(
         workflow.approveShiftChange(repA, siteId, change.id),
         code('SHIFT_WORK_DATE_PASSED'),
       );
-      dateTest.mock.timers.setTime(new Date('2090-01-03T23:30:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-03T15:30:00Z').getTime());
       assert.equal(
         (await workflow.approveShiftChange(repA, siteId, change.id)).status,
         ShiftRequestStatus.APPLIED,

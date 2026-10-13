@@ -16,6 +16,7 @@ import {
 } from '@smartsite/api-client';
 import { AuthContext } from '../auth/auth-session';
 import { NotificationBell } from './NotificationBell';
+import { formatNotificationDisplayMessage } from './notification-utils';
 
 const notification: UserNotificationResponse = {
   id: 'notification-1',
@@ -242,7 +243,7 @@ describe('durable Web notification bell', () => {
       ).toBe(false),
     );
   });
-  it.each(['schedule', 'safety'] as const)(
+  it.each(['schedule', 'safety', 'assignment'] as const)(
     'reads and opens the exact scoped %s target',
     async (kind) => {
       const notice: UserNotificationResponse =
@@ -257,7 +258,13 @@ describe('durable Web notification bell', () => {
                 tab: 'incidents',
               },
             }
-          : notification;
+          : kind === 'assignment'
+            ? {
+                ...notification,
+                event: 'SCHEDULE_CHANGED',
+                target: { siteId: 'site-2', workDate: '2030-01-01', tab: 'schedule' },
+              }
+            : notification;
       vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
         ...page,
         items: [notice],
@@ -271,7 +278,9 @@ describe('durable Web notification bell', () => {
         expect(screen.getByTestId('location').textContent).toContain(
           kind === 'safety'
             ? '/incidents?siteId=site-2&incidentId=case-1&actionId=action-1'
-            : '/workforce?siteId=site-2&requestType=SWAP&requestId=older-request',
+            : kind === 'assignment'
+              ? '/workforce?siteId=site-2&workDate=2030-01-01&tab=schedule'
+              : '/workforce?siteId=site-2&requestType=SWAP&requestId=older-request',
         ),
       );
       expect(screen.getByTestId('location').textContent).toContain('siteId=site-2');
@@ -391,5 +400,44 @@ describe('durable Web notification bell', () => {
     ).toBe(1);
     mounted.unmount();
     expect(queryClient.getQueriesData({ queryKey: ['notifications'] }).length).toBe(0);
+  });
+
+  it('translates legacy Vietnamese ENTRY_DENIED_NO_SCHEDULE message to English', () => {
+    const legacy = {
+      event: 'ENTRY_DENIED_NO_SCHEDULE' as const,
+      message:
+        'Bạn chưa được phân công ca làm cho ngày 2026-10-11 tại công trường này nên không được phép vào. Vui lòng liên hệ đại diện nhà thầu.',
+      workDate: '2026-10-11',
+    };
+    expect(formatNotificationDisplayMessage(legacy)).toBe(
+      'You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted. Please contact your contractor representative.',
+    );
+  });
+
+  it('renders legacy Vietnamese ENTRY_DENIED_NO_SCHEDULE notification in English in the list', async () => {
+    const legacyNotice: UserNotificationResponse = {
+      ...notification,
+      id: 'legacy-denial-notice',
+      event: 'ENTRY_DENIED_NO_SCHEDULE',
+      title: 'ENTRY DENIED NO SCHEDULE',
+      message:
+        'Bạn chưa được phân công ca làm cho ngày 2026-10-11 tại công trường này nên không được phép vào. Vui lòng liên hệ đại diện nhà thầu.',
+      workDate: '2026-10-11',
+      target: { siteId: 'site-2', workDate: '2026-10-11', tab: 'schedule' },
+    };
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      items: [legacyNotice],
+      total: 1,
+      unreadCount: 1,
+    });
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    expect(await screen.findByText('ENTRY DENIED NO SCHEDULE')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted. Please contact your contractor representative.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Bạn chưa được phân công/)).toBeNull();
   });
 });

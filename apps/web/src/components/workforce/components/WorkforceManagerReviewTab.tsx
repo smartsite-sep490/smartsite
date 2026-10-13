@@ -17,7 +17,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
 } from '../../icons';
-import { formatShiftTime, formatDateTime } from '../utils/workforce-format';
+import { formatShiftTime, formatDateTime, formatWorkDate } from '../utils/workforce-format';
 import { useShiftRequests } from '../hooks/useShiftRequests';
 import { RequestPagination } from './RequestPagination';
 import { schedulingError } from '../utils/scheduling-error';
@@ -313,7 +313,6 @@ export function WorkforceManagerReviewTab({
         </div>
       )}
 
-
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-3">
@@ -355,18 +354,32 @@ export function WorkforceManagerReviewTab({
             <IconUsers className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Workers</p>
+            <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+              Workers
+            </p>
             <p className="text-sm font-bold text-[#071A2B]">{activeWorkerCount}</p>
           </div>
         </div>
 
-        <div className={`bg-white border rounded-2xl px-4 py-2.5 shadow-xs flex items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-[#E2E8F0]'}`}>
-          <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${totalPending > 0 ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+        <div
+          className={`bg-white border rounded-2xl px-4 py-2.5 shadow-xs flex items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-[#E2E8F0]'}`}
+        >
+          <div
+            className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${totalPending > 0 ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+          >
             <IconAlertCircle className="w-4 h-4" />
           </div>
           <div>
-            <p className={`text-[11px] font-medium uppercase tracking-wider ${totalPending > 0 ? 'text-amber-800 font-semibold' : 'text-slate-500'}`}>Pending Action</p>
-            <p className={`text-sm font-bold ${totalPending > 0 ? 'text-amber-600' : 'text-slate-700'}`}>{totalPending}</p>
+            <p
+              className={`text-[11px] font-medium uppercase tracking-wider ${totalPending > 0 ? 'text-amber-800 font-semibold' : 'text-slate-500'}`}
+            >
+              Pending Action
+            </p>
+            <p
+              className={`text-sm font-bold ${totalPending > 0 ? 'text-amber-600' : 'text-slate-700'}`}
+            >
+              {totalPending}
+            </p>
           </div>
         </div>
       </div>
@@ -566,6 +579,10 @@ export function WorkforceManagerReviewTab({
 
                     {/* Transition details */}
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                      <div className="text-xs text-slate-700">
+                        Shift date:{' '}
+                        <span className="font-semibold">{formatWorkDate(change.workDate)}</span>
+                      </div>
                       <div className="flex items-center gap-2 text-xs">
                         <span className="font-semibold text-slate-600">
                           {getShiftName(change.fromShiftId)}
@@ -638,17 +655,45 @@ export function WorkforceManagerReviewTab({
                     {/* Swap details */}
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                       <div className="text-xs text-slate-700 space-y-1">
-                        <div>
-                          <span className="font-semibold">
-                            {getWorkerName(swap.requesterWorkerId)}:
-                          </span>{' '}
-                          Shift ({getShiftName(swap.requesterShiftId)})
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold">
+                              {getWorkerName(swap.requesterWorkerId)}
+                            </span>
+                            <Badge variant="neutral">
+                              Team:{' '}
+                              {swap.requesterTeamName === undefined
+                                ? 'Unavailable'
+                                : (swap.requesterTeamName ?? 'Unassigned')}
+                            </Badge>
+                          </div>
+                          <div>
+                            Date:{' '}
+                            <span className="font-semibold">
+                              {formatWorkDate(swap.requesterWorkDate)}
+                            </span>{' '}
+                            · Shift: {getShiftName(swap.requesterShiftId)}
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-semibold">
-                            {getWorkerName(swap.coworkerWorkerId)}:
-                          </span>{' '}
-                          Shift ({getShiftName(swap.coworkerShiftId)})
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold">
+                              {getWorkerName(swap.coworkerWorkerId)}
+                            </span>
+                            <Badge variant="neutral">
+                              Team:{' '}
+                              {swap.coworkerTeamName === undefined
+                                ? 'Unavailable'
+                                : (swap.coworkerTeamName ?? 'Unassigned')}
+                            </Badge>
+                          </div>
+                          <div>
+                            Date:{' '}
+                            <span className="font-semibold">
+                              {formatWorkDate(swap.coworkerWorkDate)}
+                            </span>{' '}
+                            · Shift: {getShiftName(swap.coworkerShiftId)}
+                          </div>
                         </div>
                       </div>
                       {swap.reason && (
@@ -748,6 +793,7 @@ export function WorkforceManagerReviewTab({
                         <td className="py-3.5 px-4 text-slate-600">
                           {item.requestType === 'CHANGE' ? (
                             <>
+                              <div>Shift date: {formatWorkDate(item.workDate)}</div>
                               <div>To: {getShiftName(item.toShiftId)}</div>
                               {item.reason && (
                                 <div className="text-[11px] text-slate-400 italic">

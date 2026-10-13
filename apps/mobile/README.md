@@ -61,4 +61,6 @@ pnpm --filter @smartsite/mobile build
 
 `build` runs `expo export --platform all`. The app config enables only Android and iOS, so this writes both platforms' production JavaScript bundles and assets to `apps/mobile/dist`. This verifies bundling; it does not produce an APK, AAB, or IPA or prove device networking works. Native compilation and emulator/device smoke tests require the platform tools above. The web application lives in `apps/web`.
 
-Expo SDK 57.0.23, Expo Router 57.0.21, React Native 0.86.3, and React 19.2.3 follow the stable Expo template matrix. Keep native package versions aligned with `expo install --check` when upgrading.
+The pinned SDK 57 compatibility set uses Expo 57.0.28, Expo Router 57.0.26, Expo Dev Client 57.0.20, Expo Splash Screen 57.0.10, React Native 0.86.3 and React 19.2.3. Keep native package versions aligned with `expo install --check` when upgrading.
+
+The 2026-10-13 CI fix updates these four Expo patches and the lockfile. Exact-version release-age exceptions were approved for the 16 affected Expo packages while they are inside the one-day window; `pnpm-workspace.yaml` lists them individually and retains `minimumReleaseAge: 1440` for other packages. CI continues running the online Expo compatibility check. Rebuild an installed development client before validating the updated native packages on a device; JavaScript export alone does not verify a native build.

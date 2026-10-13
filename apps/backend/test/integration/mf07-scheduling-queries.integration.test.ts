@@ -28,10 +28,15 @@ import { ScheduleVersionEntity } from '../../src/database/entities/schedule-vers
 import { ShiftChangeRequestEntity } from '../../src/database/entities/shift-change-request.entity.js';
 import { ShiftSwapRequestEntity } from '../../src/database/entities/shift-swap-request.entity.js';
 import { AbsenceRequestEntity } from '../../src/database/entities/absence-request.entity.js';
+import { ShiftArchival1791763200000 } from '../../src/database/migrations/1791763200000-ShiftArchival.js';
 import { AbsenceRequestStatus, ShiftRequestStatus } from '../../src/database/entities/enums.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
+import {
+  ContractorTeamEntity,
+  ContractorTeamMembershipEntity,
+} from '../../src/database/entities/contractor-team.entity.js';
 
-test('MF07 scheduling queries enforce role and scope boundaries', async () => {
+test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   if (dataSource.isInitialized) await dataSource.destroy();
   await dataSource.initialize();
   const environment = validateEnvironment({
@@ -56,6 +61,10 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   });
   await configureApplication(app);
   await app.listen(0, '127.0.0.1');
+  t.after(async () => {
+    await app.close();
+    if (dataSource.isInitialized) await dataSource.destroy();
+  });
   const url = await app.getUrl();
   const baseUrl = url.replace('127.0.0.1', 'localhost');
 
@@ -186,6 +195,27 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   });
 
   const shiftId = randomUUID();
+  const teamId = randomUUID();
+  await dataSource.getRepository(ContractorTeamEntity).save({
+    id: teamId,
+    siteId: siteA,
+    contractorId: contractorA,
+    name: 'Synthetic query team',
+    normalizedName: 'synthetic query team',
+    createdBy: repA.id,
+  });
+  await dataSource.getRepository(ContractorTeamMembershipEntity).save(
+    [workerAEntityId, workerBEntityId].map((workerId) => ({
+      id: randomUUID(),
+      siteId: siteA,
+      contractorId: contractorA,
+      teamId,
+      workerId,
+      joinedAt: new Date(),
+      assignedBy: repA.id,
+      reason: 'Synthetic member assignment',
+    })),
+  );
   const secondShiftId = randomUUID();
   await dataSource.getRepository(ShiftEntity).save({
     id: shiftId,
@@ -359,6 +389,92 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   });
   assert.equal(duplicateSwapRequest.status, 409);
 
+  // Requests filed earlier must also be blocked when their actual shift has ended.
+  const shiftRepository = dataSource.getRepository(ShiftEntity);
+  const scheduleRepository = dataSource.getRepository(WorkerScheduleEntity);
+  const originalShift = await shiftRepository.findOneByOrFail({ id: shiftId });
+  const endedAt = new Date(Date.now() - 60_000);
+  const startedAt = new Date(+endedAt - 8 * 3600000);
+  const endedWorkDate = startedAt.toISOString().slice(0, 10);
+  const changeRequest = await dataSource.getRepository(ShiftChangeRequestEntity).findOneByOrFail({
+    workerScheduleId: workerASchedule.id,
+  });
+  const swapRequest = await dataSource.getRepository(ShiftSwapRequestEntity).findOneByOrFail({
+    requesterWorkerScheduleId: workerASchedule.id,
+  });
+  const patchJson = async (path: string, token: string) => {
+    const response = await fetch(`${baseUrl}/api/v1${path}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return { status: response.status, json: await response.json() };
+  };
+  try {
+    await shiftRepository.update(shiftId, { startsAt: startedAt, endsAt: endedAt });
+    await scheduleRepository.update(workerASchedule.id, { workDate: endedWorkDate });
+    await scheduleRepository.update(workerBSchedule.id, { workDate: endedWorkDate });
+    await dataSource.getRepository(ShiftSwapRequestEntity).update(swapRequest.id, {
+      status: ShiftRequestStatus.PENDING_MANAGER,
+      coworkerConfirmedAt: new Date(),
+    });
+    const results = [
+      await postJson(`/sites/${siteA}/shift-change-requests`, workerTokenA, {
+        workerScheduleId: workerASchedule.id,
+        toShiftId: secondShiftId,
+        reason: 'Shift already ended',
+      }),
+      await postJson(`/sites/${siteA}/shift-swap-requests`, workerTokenA, {
+        requesterWorkerScheduleId: workerASchedule.id,
+        coworkerWorkerScheduleId: workerBSchedule.id,
+        reason: 'Shift already ended',
+      }),
+      await patchJson(
+        `/sites/${siteA}/shift-change-requests/${changeRequest.id}/approve`,
+        repTokenA,
+      ),
+      await patchJson(`/sites/${siteA}/shift-swap-requests/${swapRequest.id}/approve`, repTokenA),
+    ];
+    for (const result of results) {
+      assert.equal(result.status, 409);
+      assert.equal(result.json.code, 'SHIFT_WORK_DATE_PASSED');
+    }
+    assert.equal(
+      (await scheduleRepository.findOneByOrFail({ id: workerASchedule.id })).shiftId,
+      shiftId,
+    );
+    assert.equal(
+      (await scheduleRepository.findOneByOrFail({ id: workerBSchedule.id })).shiftId,
+      secondShiftId,
+    );
+    assert.equal(
+      (
+        await dataSource
+          .getRepository(ShiftChangeRequestEntity)
+          .findOneByOrFail({ id: changeRequest.id })
+      ).status,
+      ShiftRequestStatus.PENDING_MANAGER,
+    );
+    assert.equal(
+      (
+        await dataSource
+          .getRepository(ShiftSwapRequestEntity)
+          .findOneByOrFail({ id: swapRequest.id })
+      ).status,
+      ShiftRequestStatus.PENDING_MANAGER,
+    );
+  } finally {
+    await shiftRepository.update(shiftId, {
+      startsAt: originalShift.startsAt,
+      endsAt: originalShift.endsAt,
+    });
+    await scheduleRepository.update(workerASchedule.id, { workDate: workerASchedule.workDate });
+    await scheduleRepository.update(workerBSchedule.id, { workDate: workerBSchedule.workDate });
+    await dataSource.getRepository(ShiftSwapRequestEntity).update(swapRequest.id, {
+      status: swapRequest.status,
+      coworkerConfirmedAt: swapRequest.coworkerConfirmedAt,
+    });
+  }
+
   // 1. allowed Site Manager access
   const res1 = await fetchJson(`/sites/${siteA}/worker-schedules`, mgrTokenA);
   assert.equal(res1.status, 200);
@@ -456,8 +572,14 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
       isActive: true,
     },
   );
-  assert.equal(secondShiftSameDay.status, 201);
-  const secondShiftSameDayId = (secondShiftSameDay.json as { id: string }).id;
+  assert.equal(secondShiftSameDay.status, 409);
+  const nextDaySchedule = await postJson(
+    `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
+    repTokenA,
+    { workerId: workerAEntityId, shiftId: secondShiftId, workDate: '2030-01-02', isActive: true },
+  );
+  assert.equal(nextDaySchedule.status, 201);
+  const secondShiftSameDayId = (nextDaySchedule.json as { id: string }).id;
 
   const duplicateShiftSameDay = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
@@ -524,7 +646,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     repTokenA,
   );
   assert.equal(filteredSchedules.status, 200);
-  assert.equal(filteredSchedules.json.total, 2);
+  assert.equal(filteredSchedules.json.total, 1);
   assert.equal(filteredSchedules.json.items.length, 1);
   assert.equal(filteredSchedules.json.items[0].workerId, workerAEntityId);
 
@@ -794,6 +916,66 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
   assert.ok(['CHANGE', 'SWAP'].includes(mixed.json.items[0].requestType));
   assert.equal(mixed.json.items[0].siteId, siteA);
   assert.equal('site_id' in mixed.json.items[0], false);
+  const datedChanges = await fetchJson(
+    `/sites/${siteA}/shift-requests?view=REVIEW&requestType=CHANGE`,
+    repTokenA,
+  );
+  assert.equal(datedChanges.status, 200);
+  const datedChange = datedChanges.json.items.find(
+    (item: { workerScheduleId: string }) => item.workerScheduleId === workerASchedule.id,
+  );
+  assert.ok(datedChange);
+  assert.equal(datedChange.workDate, workerASchedule.workDate);
+  const changeDetail = await fetchJson(
+    `/sites/${siteA}/shift-change-requests/${datedChange.id}`,
+    repTokenA,
+  );
+  assert.equal(changeDetail.status, 200);
+  assert.equal(changeDetail.json.workDate, workerASchedule.workDate);
+  const datedSwaps = await fetchJson(
+    `/sites/${siteA}/shift-requests?view=WORKER&requestType=SWAP`,
+    workerTokenA,
+  );
+  assert.equal(datedSwaps.status, 200);
+  const datedSwap = datedSwaps.json.items.find(
+    (item: { requesterWorkerScheduleId: string }) =>
+      item.requesterWorkerScheduleId === workerASchedule.id,
+  );
+  assert.ok(datedSwap);
+  assert.equal(datedSwap.requesterWorkDate, workerASchedule.workDate);
+  assert.equal(datedSwap.coworkerWorkDate, workerBSchedule.workDate);
+  assert.equal(datedSwap.requesterTeamName, 'Synthetic query team');
+  assert.equal(datedSwap.coworkerTeamName, 'Synthetic query team');
+  const swapDetail = await fetchJson(
+    `/sites/${siteA}/shift-swap-requests/${datedSwap.id}`,
+    workerTokenA,
+  );
+  assert.equal(swapDetail.status, 200);
+  assert.equal(swapDetail.json.requesterWorkDate, workerASchedule.workDate);
+  assert.equal(swapDetail.json.coworkerWorkDate, workerBSchedule.workDate);
+  assert.equal(swapDetail.json.requesterTeamName, 'Synthetic query team');
+  assert.equal(swapDetail.json.coworkerTeamName, 'Synthetic query team');
+  await dataSource
+    .getRepository(ShiftSwapRequestEntity)
+    .update(datedSwap.id, { status: ShiftRequestStatus.PENDING_MANAGER });
+  const review = await fetchJson(
+    `/sites/${siteA}/shift-requests?view=REVIEW&requestType=SWAP`,
+    repTokenA,
+  );
+  assert.equal(review.status, 200);
+  assert.equal(review.json.items[0].requesterTeamName, 'Synthetic query team');
+  assert.equal(review.json.items[0].coworkerTeamName, 'Synthetic query team');
+  assert.equal(review.json.items[0].requesterWorkDate, workerASchedule.workDate);
+  assert.equal(review.json.items[0].coworkerWorkDate, workerBSchedule.workDate);
+  await dataSource
+    .getRepository(ContractorTeamMembershipEntity)
+    .update({ siteId: siteA, workerId: workerBEntityId }, { leftAt: new Date() });
+  const changedTeam = await fetchJson(
+    `/sites/${siteA}/shift-requests?view=REVIEW&requestType=SWAP`,
+    repTokenA,
+  );
+  assert.equal(changedTeam.json.items[0].requesterTeamName, 'Synthetic query team');
+  assert.equal(changedTeam.json.items[0].coworkerTeamName, null);
   for (const query of [
     'view=UNKNOWN',
     'view=WORKER&limit=101',
@@ -817,6 +999,153 @@ test('MF07 scheduling queries enforce role and scope boundaries', async () => {
     (await fetchJson(`/sites/${siteB}/shift-requests?view=WORKER`, workerTokenA)).status,
     403,
   );
+
+  // Archival keeps existing assignments and request history and blocks all new use.
+  const originalSchedules = await dataSource
+    .getRepository(WorkerScheduleEntity)
+    .findBy({ siteId: siteA });
+  const originalLinks = await dataSource
+    .getRepository(ContractorShiftAssignmentEntity)
+    .findBy({ siteId: siteA });
+  const originalRequests = await dataSource
+    .getRepository(ShiftChangeRequestEntity)
+    .findBy({ siteId: siteA });
+  const archivePath = `/sites/${siteA}/shifts/${secondShiftId}/archive`;
+  for (const token of [workerTokenA, repTokenA, adminToken, mgrTokenB, unaffiliatedToken]) {
+    assert.equal((await postJson(archivePath, token, {})).status, 403);
+  }
+  assert.equal(
+    (await postJson(`/sites/${siteA}/shifts/${randomUUID()}/archive`, mgrTokenA, {})).status,
+    404,
+  );
+  const archived = await postJson(archivePath, mgrTokenA, {});
+  assert.equal(archived.status, 200);
+  assert.ok(archived.json.archivedAt);
+  const repeated = await postJson(archivePath, mgrTokenA, {});
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.json.archivedAt, archived.json.archivedAt);
+  const historyShifts = await fetchJson(`/sites/${siteA}/shifts`, repTokenA);
+  assert.equal(
+    historyShifts.json.items.find((item: { id: string }) => item.id === secondShiftId).archivedAt,
+    archived.json.archivedAt,
+  );
+  const eligibleAfterArchive = await fetchJson(
+    `/sites/${siteA}/worker-schedules/${workerASchedule.id}/eligible-shifts`,
+    workerTokenA,
+  );
+  assert.ok(
+    !eligibleAfterArchive.json.items.some((item: { id: string }) => item.id === secondShiftId),
+  );
+  assert.equal(
+    (
+      await postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, repTokenA, {
+        workerId: workerAEntityId,
+        shiftId: secondShiftId,
+        workDate: '2030-01-10',
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await postJson(`/sites/${siteA}/shifts/${secondShiftId}/contractors`, mgrTokenA, {
+        contractorId: contractorB,
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await deleteJson(`/sites/${siteA}/shifts/${secondShiftId}`, mgrTokenA)).status,
+    409,
+  );
+  assert.deepEqual(
+    await dataSource.getRepository(WorkerScheduleEntity).findBy({ siteId: siteA }),
+    originalSchedules,
+  );
+  assert.deepEqual(
+    await dataSource.getRepository(ContractorShiftAssignmentEntity).findBy({ siteId: siteA }),
+    originalLinks,
+  );
+  assert.deepEqual(
+    await dataSource.getRepository(ShiftChangeRequestEntity).findBy({ siteId: siteA }),
+    originalRequests,
+  );
+  // Pending changes cannot apply a target archived after submission.
+  await dataSource
+    .getRepository(ShiftChangeRequestEntity)
+    .update(datedChange.id, { toShiftId: secondShiftId });
+  assert.equal(
+    (await patchJson(`/sites/${siteA}/shift-change-requests/${datedChange.id}/approve`, repTokenA))
+      .status,
+    409,
+  );
+  assert.equal(
+    (
+      await dataSource
+        .getRepository(WorkerScheduleEntity)
+        .findOneByOrFail({ id: workerASchedule.id })
+    ).shiftId,
+    shiftId,
+  );
+
+  const freshSource = await postJson(
+    `/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`,
+    repTokenA,
+    {
+      workerId: workerAEntityId,
+      shiftId,
+      workDate: '2030-01-20',
+    },
+  );
+  assert.equal(freshSource.status, 201);
+  const newChange = await postJson(`/sites/${siteA}/shift-change-requests`, workerTokenA, {
+    workerScheduleId: freshSource.json.id,
+    toShiftId: secondShiftId,
+    reason: 'Synthetic archive boundary check',
+  });
+  assert.equal(newChange.status, 409);
+  assert.match(newChange.json.message, /Archived shifts/);
+
+  // A concurrent assignment either commits before archival or observes the archived flag.
+  const [raceArchive, raceAssignment] = await Promise.all([
+    postJson(`/sites/${siteA}/shifts/${shiftId}/archive`, mgrTokenA, {}),
+    postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, repTokenA, {
+      workerId: workerAEntityId,
+      shiftId,
+      workDate: '2030-02-02',
+    }),
+  ]);
+  assert.equal(raceArchive.status, 200);
+  assert.ok([201, 409].includes(raceAssignment.status));
+  assert.equal(
+    await dataSource
+      .getRepository(WorkerScheduleEntity)
+      .countBy({ siteId: siteA, workerId: workerAEntityId, workDate: '2030-02-02' }),
+    raceAssignment.status === 201 ? 1 : 0,
+  );
+  assert.equal(
+    (
+      await postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, repTokenA, {
+        workerId: workerAEntityId,
+        shiftId,
+        workDate: '2030-02-03',
+      })
+    ).status,
+    409,
+  );
+
+  const rollback = dataSource.createQueryRunner();
+  await rollback.connect();
+  await rollback.startTransaction();
+  try {
+    await assert.rejects(
+      new ShiftArchival1791763200000().down(rollback),
+      /Cannot roll back while archived shifts exist/,
+    );
+  } finally {
+    await rollback.rollbackTransaction();
+    await rollback.release();
+  }
 
   await app.close();
   if (dataSource.isInitialized) await dataSource.destroy();

@@ -6,6 +6,7 @@ import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 import { WorkerScheduleEntity } from './worker-schedule.entity.js';
+import { ContractorTeamEntity, ContractorTeamMembershipEntity } from './contractor-team.entity.js';
 
 @Entity({ name: 'shift_swap_request' })
 @Index('idx_shift_swap_site_status', ['siteId', 'status', 'createdAt'])
@@ -16,6 +17,21 @@ import { WorkerScheduleEntity } from './worker-schedule.entity.js';
 @Check('chk_shift_swap_distinct_workers', 'requester_worker_id <> coworker_worker_id')
 @Check('chk_shift_swap_reason_length', 'char_length(reason) BETWEEN 5 AND 1000')
 export class ShiftSwapRequestEntity {
+  @Column({ name: 'expected_team_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorTeamEntity, { name: 'fk_swap_team', onDelete: 'RESTRICT' })
+  expectedTeamId!: string | null;
+  @Column({ name: 'expected_requester_membership_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorTeamMembershipEntity, {
+    name: 'fk_swap_requester_membership',
+    onDelete: 'RESTRICT',
+  })
+  expectedRequesterMembershipId!: string | null;
+  @Column({ name: 'expected_coworker_membership_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => ContractorTeamMembershipEntity, {
+    name: 'fk_swap_coworker_membership',
+    onDelete: 'RESTRICT',
+  })
+  expectedCoworkerMembershipId!: string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_shift_swap_request_id' })
   id!: string;
 

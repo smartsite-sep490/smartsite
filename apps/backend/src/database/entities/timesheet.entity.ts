@@ -3,16 +3,20 @@ import { SiteEntity } from './site.entity.js';
 import { TimesheetStatus } from './enums.js';
 import { UserEntity } from './user.entity.js';
 import { WorkerEntity } from './worker.entity.js';
+import { AttendanceDayEntity } from './attendance-day.entity.js';
 
 @Entity({ name: 'timesheet' })
 @Index('idx_timesheet_site_period', ['siteId', 'periodStart', 'periodEnd', 'workerId'])
 @Check('chk_timesheet_period', 'period_end >= period_start')
-@Check(
-  'chk_timesheet_status',
-  "status IN ('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED')",
-)
+@Check('chk_timesheet_status', "status IN ('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED')")
 @Check('chk_timesheet_minutes', 'total_minutes >= 0')
 export class TimesheetEntity {
+  @Column({ name: 'attendance_day_id', type: 'uuid', nullable: true, unique: true })
+  @ForeignKey(() => AttendanceDayEntity, {
+    name: 'timesheet_attendance_day_id_fkey',
+    onDelete: 'RESTRICT',
+  })
+  attendanceDayId!: string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_timesheet_id' })
   id!: string;
 

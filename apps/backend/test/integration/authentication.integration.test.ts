@@ -68,26 +68,18 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   const admin = await users.bootstrap(`admin-${suffix}`, 'Initial Admin', adminPassword);
   await assert.rejects(users.bootstrap('another-admin', 'Other Admin', adminPassword));
   const firstLogin = await auth.login(admin.username, adminPassword, AuthClientType.MOBILE);
-  assert.equal(firstLogin.user.mustChangePassword, true);
+  assert.equal(firstLogin.user.mustChangePassword, false);
   assert.equal((await auth.authenticate(firstLogin.accessToken)).user.id, admin.id);
   await auth.changePassword(admin.id, adminPassword, 'NewAdmin123!');
   await assert.rejects(auth.authenticate(firstLogin.accessToken));
-  const secondLogin = await auth.login(
-    admin.username,
-    'NewAdmin123!',
-    AuthClientType.MOBILE,
-  );
+  const secondLogin = await auth.login(admin.username, 'NewAdmin123!', AuthClientType.MOBILE);
   assert.equal(secondLogin.user.mustChangePassword, false);
   const secondSession = await auth.authenticate(secondLogin.accessToken);
   await dataSource
     .getRepository(AuthSessionEntity)
     .update({ id: secondSession.sessionId }, { expiresAt: new Date(Date.now() - 1000) });
   await assert.rejects(auth.authenticate(secondLogin.accessToken));
-  const activeLogin = await auth.login(
-    admin.username,
-    'NewAdmin123!',
-    AuthClientType.MOBILE,
-  );
+  const activeLogin = await auth.login(admin.username, 'NewAdmin123!', AuthClientType.MOBILE);
   const site = await sites.create({ code: `AUTH-${suffix}`, name: 'Auth Site' });
   const secondSite = await sites.create({ code: `AUTH2-${suffix}`, name: 'Second Auth Site' });
   const worker = await users.create({
@@ -99,11 +91,8 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     ],
     temporaryPassword: 'WorkerTemp123!',
   });
-  const workerLogin = await auth.login(
-    worker.username,
-    'WorkerTemp123!',
-    AuthClientType.MOBILE,
-  );
+  const workerLogin = await auth.login(worker.username, 'WorkerTemp123!', AuthClientType.MOBILE);
+  assert.equal(workerLogin.user.mustChangePassword, false);
   assert.deepEqual(worker.roleAssignments, [
     { role: UserRole.SAFETY_OFFICER, siteId: secondSite.id },
     { role: UserRole.SITE_MANAGER, siteId: site.id },
@@ -154,12 +143,8 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   await assert.rejects(auth.authenticate(workerLogin.accessToken));
   await users.resetPassword(worker.id, { temporaryPassword: 'WorkerReset123!' });
   await assert.rejects(auth.login(worker.username, 'WorkerTemp123!'));
-  const resetLogin = await auth.login(
-    worker.username,
-    'WorkerReset123!',
-    AuthClientType.MOBILE,
-  );
-  assert.equal(resetLogin.user.mustChangePassword, true);
+  const resetLogin = await auth.login(worker.username, 'WorkerReset123!', AuthClientType.MOBILE);
+  assert.equal(resetLogin.user.mustChangePassword, false);
   await assert.rejects(users.setStatus(admin.id, admin.id, { isActive: false }));
   await assert.rejects(
     users.replaceRoleAssignments(admin.id, {

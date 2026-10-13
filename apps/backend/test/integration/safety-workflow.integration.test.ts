@@ -1,4 +1,4 @@
-import { SchedulingNotificationService } from '../../src/modules/workforce/scheduling-notification.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { observationIdentityFixture } from '../support/observation-identity-fixture.js';
 import { buildGroupingKey } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { IncidentContractorResponsibility1791504000000 } from '../../src/database/migrations/1791504000000-IncidentContractorResponsibility.js';
@@ -47,7 +47,7 @@ import {
 } from '../../src/database/entities/index.js';
 import { SafetyWorkflowService } from '../../src/modules/safety/safety-workflow.service.js';
 import { SafetyUploadService } from '../../src/modules/safety/safety-upload.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
+import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
@@ -98,11 +98,7 @@ async function fixture() {
     ['legacy', [UserRole.SECURITY_OFFICER], site],
     ['manager', [UserRole.SITE_MANAGER], site],
     ['outsider', [UserRole.CONTRACTOR_REPRESENTATIVE], other],
-    [
-      'multi',
-      [UserRole.SAFETY_OFFICER, UserRole.CONTRACTOR_REPRESENTATIVE, UserRole.SITE_MANAGER],
-      site,
-    ],
+    ['multi', [UserRole.SAFETY_OFFICER, UserRole.CONTRACTOR_REPRESENTATIVE], site],
     ['admin', [UserRole.ADMIN], null],
     ['none', [], site],
   ] as const) {
@@ -494,6 +490,20 @@ test('MF08 SafetyTask remains separate, retains returned results and prevents se
       resultDescription: 'Done',
     })
   ).resource;
+  // Transfer the sole manager role before testing a manager's forbidden self-verification.
+  await dataSource.transaction(async (manager) => {
+    await manager.getRepository(UserRoleAssignmentEntity).delete({
+      userId: ids.manager!,
+      siteId: site,
+      role: UserRole.SITE_MANAGER,
+    });
+    await manager.getRepository(UserRoleAssignmentEntity).save({
+      id: randomUUID(),
+      userId: ids.multi!,
+      siteId: site,
+      role: UserRole.SITE_MANAGER,
+    });
+  });
   await assert.rejects(
     service.taskCommand(site, self.id, ids.multi!, 'verify', {
       commandId: randomUUID(),

@@ -3,6 +3,13 @@ import type { DataSource } from 'typeorm';
 /** Remove only the synthetic sites owned by the calling integration test. */
 export async function cleanupSiteAccess(source: DataSource, siteIds: string[]) {
   await source.query(
+    'DELETE FROM team_zone_permission WHERE team_id IN (SELECT id FROM contractor_team WHERE site_id=ANY($1))',
+    [siteIds],
+  );
+  await source.query('DELETE FROM user_notification WHERE site_id = ANY($1)', [siteIds]);
+  await source.query('DELETE FROM timesheet WHERE site_id = ANY($1)', [siteIds]);
+  await source.query('DELETE FROM overtime_request WHERE site_id = ANY($1)', [siteIds]);
+  await source.query(
     'UPDATE attendance_session SET applied_correction_id = NULL WHERE site_id = ANY($1)',
     [siteIds],
   );
@@ -12,6 +19,7 @@ export async function cleanupSiteAccess(source: DataSource, siteIds: string[]) {
   );
   await source.query('DELETE FROM attendance_session WHERE site_id = ANY($1)', [siteIds]);
   await source.query('DELETE FROM attendance_event WHERE site_id = ANY($1)', [siteIds]);
+  await source.query('DELETE FROM attendance_day WHERE site_id = ANY($1)', [siteIds]);
   await source.query('DELETE FROM gate_event WHERE site_id = ANY($1)', [siteIds]);
   await source.query('DELETE FROM access_attempt WHERE site_id = ANY($1)', [siteIds]);
   await source.query(
