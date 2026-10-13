@@ -27,6 +27,7 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 export type ActiveTab =
   | 'dashboard'
   | 'workforce'
+  | 'worker-onboarding'
   | 'site-setup'
   | 'schedule-setup'
   | 'access'
@@ -112,6 +113,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             ...(canAccessScheduleSetup
               ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }]
               : []),
+            ...(isContractorRep
+              ? [{ id: 'worker-onboarding', label: 'Worker Onboarding', icon: IconUsers }]
+              : []),
             ...(isAdmin || isManager
               ? [
                   {
@@ -125,7 +129,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               ? [
                   {
                     id: 'access',
-                    label: isContractorRep ? 'Attendance & Access' : 'Site Access',
+                    label: isContractorRep && !isAdmin ? 'Attendance & Access' : 'Site Access',
                     icon: IconKey,
                   },
                 ]

@@ -13,6 +13,7 @@ import { Mf03AttendanceReconciliation1791676800000 } from './migrations/17916768
 import { Mf03DailyOpenSessions1791676800001 } from './migrations/1791676800001-Mf03DailyOpenSessions.js';
 import { OptionalPasswordChange1791676800002 } from './migrations/1791676800002-OptionalPasswordChange.js';
 import { Mf03AttendanceDuplicateReview1791676800003 } from './migrations/1791676800003-AttendanceDuplicateReview.js';
+import { WorkerCodeSequence1791676800000 } from './migrations/1791676800000-WorkerCodeSequence.js';
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
 import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
@@ -114,6 +115,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       GateScheduleDenial1791849600000,
       ScheduleAssignmentBatches1791849600001,
       ScheduleChangeNotifications1791849600002,
+      WorkerCodeSequence1791676800000,
     ],
     logging: false,
     extra: {
