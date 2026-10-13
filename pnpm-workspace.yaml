@@ -9,17 +9,28 @@ allowBuilds:
   esbuild: true
   sharp: true
 minimumReleaseAge: 1440
-# Expo SDK 57 compatibility patches are pinned and reviewed while the
-# registry releases are still inside the one-day age window.
+# Exact-version Expo SDK 57 compatibility exceptions approved on 2026-10-13.
+# The one-day release-age requirement remains in effect for other packages.
 minimumReleaseAgeExclude:
-  - '@expo/cli@57.0.28'
+  - '@expo/cli@57.0.29'
+  - '@expo/fingerprint@0.20.14'
+  - '@expo/inline-modules@0.1.8'
+  - '@expo/local-build-cache-provider@57.0.9'
   - '@expo/metro-runtime@57.0.16'
-  - '@expo/ui@57.0.22'
-  - expo@57.0.27
+  - '@expo/prebuild-config@57.0.18'
+  - '@expo/ui@57.0.23'
+  - babel-preset-expo@57.0.15
+  - expo@57.0.28
   - expo-asset@57.0.19
   - expo-constants@57.0.21
+  - expo-dev-client@57.0.20
+  - expo-dev-launcher@57.0.21
+  - expo-dev-menu@57.0.20
   - expo-linking@57.0.12
-  - expo-modules-core@57.0.21
-  - expo-router@57.0.25
+  - expo-modules-autolinking@57.0.15
+  - expo-modules-core@57.0.22
+  - expo-modules-jsi@57.1.2
+  - expo-router@57.0.26
+  - expo-splash-screen@57.0.10
 saveExact: true
 engineStrict: true
