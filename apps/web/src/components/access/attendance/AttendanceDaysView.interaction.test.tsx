@@ -604,7 +604,7 @@ describe('MF03 interactive UI', () => {
     const first = Array.from({ length: 100 }, (_, i) => ({
       id: `schedule-${i}`,
       shiftId: 'shift-1',
-      workDate: '2030-10-01',
+      workDate: '2000-10-01',
       isActive: true,
     }));
     api.listWorkerSchedules.mockImplementation(async (_token, _site, options) => ({
