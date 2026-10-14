@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ChecklistEvidenceResponse } from '@smartsite/api-client';
 import type { WorkflowProps } from './safety-workflow';
-import { BlobImage, RequestError } from './SafetyWorkflowUi';
+import { BlobImage, RequestError, Dialog } from './SafetyWorkflowUi';
 export function ChecklistEvidence(
   p: WorkflowProps & { assignmentId: string; evidence: ChecklistEvidenceResponse },
 ) {
+  const [zoom, setZoom] = useState(false);
   const query = useQuery({
     queryKey: [
       'safety-workflow',
@@ -39,7 +40,18 @@ export function ChecklistEvidence(
       <RequestError error={query.error} retry={() => void query.refetch()} />
       {query.data && (
         <>
-          {ext !== 'pdf' && <BlobImage blob={query.data} alt="Checklist evidence" />}
+          {ext !== 'pdf' && (
+            <div>
+              <BlobImage blob={query.data} alt="Checklist evidence" />
+              <button
+                type="button"
+                className="mt-2 text-sm font-semibold underline"
+                onClick={() => setZoom(true)}
+              >
+                Enlarge image
+              </button>
+            </div>
+          )}
           <a
             className="inline-block text-sm font-semibold text-[var(--accent)] underline"
             ref={link}
@@ -48,6 +60,11 @@ export function ChecklistEvidence(
             Download {ext.toUpperCase()} · {(p.evidence.size / 1024).toFixed(1)} KiB
           </a>
         </>
+      )}
+      {zoom && query.data && (
+        <Dialog title="Checklist evidence" onClose={() => setZoom(false)}>
+          <BlobImage blob={query.data} alt="Checklist evidence enlarged" />
+        </Dialog>
       )}
     </div>
   );

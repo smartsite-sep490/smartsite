@@ -163,7 +163,7 @@ export function SafetyChecklistsView(
             {representative && !safety ? 'My checklists' : 'Safety checklists'}
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Prepare evidence for the work, report each criterion and keep the feedback history.
+            Pre-work reports and follow-up.
           </p>
         </div>
         {safety && (
@@ -186,7 +186,8 @@ export function SafetyChecklistsView(
       )}
       <div
         className={
-          (mobileDetail ? 'hidden lg:flex ' : 'flex ') + cardClass + ' flex-wrap items-end gap-3'
+          (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
+          'min-w-0 flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-white p-3'
         }
       >
         <label className="text-sm font-semibold">
@@ -221,8 +222,8 @@ export function SafetyChecklistsView(
             }}
           />
         )}
-        <button className={buttonClass} onClick={reload}>
-          Refresh checklists
+        <button className={buttonClass} aria-label="Refresh checklists" onClick={reload}>
+          Refresh
         </button>
       </div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
@@ -293,7 +294,6 @@ export function SafetyChecklistsView(
                     ['Team', current.teamName],
                     ['Zone', current.zoneName],
                     ['Assigned to', current.assignedToName],
-                    ['Assigned by', current.assignedByName],
                   ].map(([name, value]) => (
                     <div key={name}>
                       <dt className="text-xs font-semibold text-[var(--text-secondary)]">{name}</dt>
@@ -304,15 +304,27 @@ export function SafetyChecklistsView(
                 <p className="text-sm">
                   Work window: {date(current.startsAt)} – {date(current.endsAt)}
                 </p>
+                <p className="text-sm">
+                  First report:{' '}
+                  {current.firstSubmittedAt
+                    ? (new Date(current.firstSubmittedAt) <= new Date(current.startsAt)
+                        ? 'Submitted before planned start'
+                        : 'Submitted after planned start') +
+                      ' · ' +
+                      date(current.firstSubmittedAt)
+                    : 'Not submitted'}
+                </p>
+                {current.status === 'SUBMITTED' && (
+                  <p className="text-sm">Awaiting Safety review.</p>
+                )}
                 {new Date(current.endsAt) < new Date() &&
                   !['ACCEPTED', 'CANCELLED'].includes(current.status) && (
                     <p className="text-sm text-[var(--semantic-red-text)]">
-                      Work window has ended; this report still needs attention.
+                      Work window ended; report pending.
                     </p>
                   )}
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Recording a report preserves its findings. It does not grant work or access
-                  permission.
+                  Recorded reports do not grant work permission.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {representative &&
@@ -375,12 +387,15 @@ export function SafetyChecklistsView(
                   )}
                 </div>
                 <TechnicalDetails>
+                  <p>Assigned by {current.assignedByName ?? 'Unavailable'}</p>
                   <p>Checklist {current.id}</p>
                   <p>Version {current.version}</p>
                 </TechnicalDetails>
               </article>
-              <section className={cardClass}>
-                <h3 className="font-bold">Assigned criteria</h3>
+              <details key={current.id} open={!current.submissions.length} className={cardClass}>
+                <summary className="cursor-pointer font-semibold">
+                  Assigned criteria ({current.items.length})
+                </summary>
                 <ol className="list-decimal space-y-2 pl-5">
                   {current.items.map((i) => (
                     <li key={i.id} className="text-sm">
@@ -393,7 +408,7 @@ export function SafetyChecklistsView(
                     </li>
                   ))}
                 </ol>
-              </section>
+              </details>
               {!current.submissions.length && (
                 <p className={cardClass}>No report has been submitted yet.</p>
               )}
@@ -405,6 +420,7 @@ export function SafetyChecklistsView(
                     current={current}
                     submission={submission}
                     safety={safety}
+                    onOpenIncident={p.onIncident}
                     onIncident={(result) =>
                       open({ op: 'incident', version: current.version, result, submission })
                     }
@@ -420,6 +436,7 @@ export function SafetyChecklistsView(
                       current={current}
                       submission={submission}
                       safety={safety}
+                      onOpenIncident={p.onIncident}
                       onIncident={(result) =>
                         open({ op: 'incident', version: current.version, result, submission })
                       }
@@ -585,12 +602,14 @@ function ChecklistReport({
   submission,
   safety,
   onIncident,
+  onOpenIncident,
 }: {
   p: WorkflowProps;
   current: ChecklistDetailResponse;
   submission: ChecklistSubmissionResponse;
   safety: boolean;
   onIncident: (result: ChecklistResultResponse) => void;
+  onOpenIncident: (id: string) => void;
 }) {
   return (
     <section
@@ -627,17 +646,33 @@ function ChecklistReport({
                 <ChecklistEvidence key={e.id} {...p} assignmentId={current.id} evidence={e} />
               ))}
             </div>
-            {safety &&
-              submission.status === 'ACCEPTED' &&
+            {submission.status === 'ACCEPTED' &&
               result.answer === 'FAIL' &&
               (result.incidentId ? (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  An Incident is already linked to this finding.
-                </p>
-              ) : (
+                <div className="text-sm">
+                  <p>
+                    {!result.linkedIncident
+                      ? 'Incident follow-up unavailable with your current access.'
+                      : result.linkedIncident.status === 'CLOSED'
+                        ? 'Follow-up closed; original Fail is retained.'
+                        : 'Incident follow-up still needs attention.'}
+                  </p>
+                  {result.linkedIncident && (
+                    <button
+                      className={buttonClass}
+                      onClick={() => onOpenIncident(result.linkedIncident!.id)}
+                    >
+                      View incident ·{' '}
+                      {result.linkedIncident.status.toLowerCase().replaceAll('_', ' ')}
+                    </button>
+                  )}
+                </div>
+              ) : safety ? (
                 <button className={buttonClass} onClick={() => onIncident(result)}>
                   Create incident
                 </button>
+              ) : (
+                <p className="text-sm">No incident available for this finding.</p>
               ))}
           </article>
         ) : null;

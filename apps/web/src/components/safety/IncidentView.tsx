@@ -49,6 +49,8 @@ import {
   TechnicalDetails,
 } from './SafetyWorkflowUi';
 export interface IncidentViewProps extends WorkflowProps {
+  onBack?: () => void;
+  backLabel?: string;
   initialAlertId?: string;
   initialIncidentId?: string;
   onOpenChecklist?: (id: string) => void;
@@ -223,6 +225,11 @@ export function IncidentView(p: IncidentViewProps) {
         }
       >
         <div>
+          {p.onBack && (
+            <button className={buttonClass} onClick={p.onBack}>
+              {p.backLabel}
+            </button>
+          )}
           <h2 className="text-xl font-bold">
             {representative && !safety ? 'My assigned cases' : 'Incidents'}
           </h2>
@@ -320,8 +327,12 @@ export function IncidentView(p: IncidentViewProps) {
             >
               <strong className="block break-words text-base">{item.title}</strong>
               <div className="flex flex-wrap gap-2">
-                <StatusBadge value={item.status} />
-                <StatusBadge value={item.severity} />
+                <span className="text-xs">
+                  Status: <StatusBadge value={item.status} />
+                </span>
+                <span className="text-xs">
+                  Severity: <StatusBadge value={item.severity} />
+                </span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
                 Occurred {date(item.occurredAt)}
@@ -353,8 +364,12 @@ export function IncidentView(p: IncidentViewProps) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="min-w-0 break-words text-xl font-bold">{current.title}</h3>
                   <div className="flex gap-2">
-                    <StatusBadge value={current.status} />
-                    <StatusBadge value={current.severity} />
+                    <span className="text-xs">
+                      Status: <StatusBadge value={current.status} />
+                    </span>
+                    <span className="text-xs">
+                      Severity: <StatusBadge value={current.severity} />
+                    </span>
                   </div>
                 </div>
                 <p className="whitespace-pre-wrap break-words text-sm leading-6">
@@ -393,7 +408,7 @@ export function IncidentView(p: IncidentViewProps) {
                   )}
                   {safety && (current.status !== 'CLOSED' || !current.contractorId) && (
                     <button
-                      className={buttonClass}
+                      className={current.contractorId ? buttonClass : primaryClass}
                       disabled={mutation.isPending}
                       onClick={() => open({ op: 'responsibility' })}
                     >
@@ -432,7 +447,7 @@ export function IncidentView(p: IncidentViewProps) {
                     ) : (
                       <>
                         <button
-                          className={primaryClass}
+                          className={currentActions.length ? buttonClass : primaryClass}
                           disabled={mutation.isPending || !current.contractorId}
                           onClick={() => open({ op: 'assign' })}
                         >
@@ -446,7 +461,7 @@ export function IncidentView(p: IncidentViewProps) {
                           Link alerts
                         </button>
                         <button
-                          className={buttonClass}
+                          className={ready ? primaryClass : buttonClass}
                           disabled={!ready || mutation.isPending}
                           title={closeHint}
                           onClick={() => open({ op: 'close' })}

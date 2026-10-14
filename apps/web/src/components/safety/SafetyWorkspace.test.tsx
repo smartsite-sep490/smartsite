@@ -1,10 +1,11 @@
 import { SafetyOverviewView } from './SafetyOverviewView';
-import { ReportChecklistForm } from './ChecklistForms';
+import { CreateChecklistForm, ReportChecklistForm } from './ChecklistForms';
 // @vitest-environment jsdom
 import { afterEach, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent, within } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { SafetyZoneContext } from './SafetyZoneContext';
 import { SafetyAlertsView } from '../alerts/SafetyAlertsView';
 afterEach(() => {
   cleanup();
@@ -35,6 +36,7 @@ function mount(initialType?: 'PPE_VIOLATION') {
     teams: { items: [], total: 0 },
     unassignedWorkers: { items: [], total: 0 },
   });
+  vi.spyOn(prototype, 'getSafetyTeamOptions').mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(prototype, 'listSafetyChecklists').mockResolvedValue({ items: [], total: 0 });
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -158,6 +160,9 @@ it('Overview exposes independent unassigned pagination and opens the counted tea
         ],
       },
     }));
+  vi.spyOn(client, 'getSafetyTeamOptions').mockResolvedValue({ items: [team], total: 1 });
+  vi.spyOn(client, 'listSafetyChecklists').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'listSafetyZoneTeams').mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(client, 'getSafetyTeam').mockResolvedValue({
     ...team,
     date: '2026-10-14',
@@ -199,6 +204,36 @@ it('Overview exposes independent unassigned pagination and opens the counted tea
   );
   fireEvent.click(screen.getByRole('button', { name: 'View checklists for this date' }));
   expect(checklists).toHaveBeenCalledWith('team-a', expect.any(String), 'Height team');
+  const weekly = vi
+    .spyOn(client, 'getSafetyWeek')
+    .mockResolvedValue({
+      site: { id: siteId, name: 'Site A', code: 'A' },
+      weekStart: '2026-10-12',
+      weekEnd: '2026-10-18',
+      timezone: 'Asia/Ho_Chi_Minh',
+      updatedAt: '2026-10-14T01:00:00Z',
+      teams: {
+        items: [
+          {
+            ...team,
+            days: Array.from({ length: 7 }, (_, i) => ({
+              date: '2026-10-' + (12 + i),
+              scheduledWorkerCount: i === 3 ? 3 : 0,
+              workWindows: [],
+            })),
+          },
+        ],
+        total: 1,
+      },
+    });
+  fireEvent.click(screen.getByRole('button', { name: /^Week$/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Height team on 2026-10-15' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'View checklists for this date' }));
+  expect(checklists).toHaveBeenLastCalledWith('team-a', '2026-10-15', 'Height team');
+  expect(
+    screen.getByRole('button', { name: /^Week$/ }).getAttribute('aria-pressed'),
+  ).toBe('true');
+  expect(weekly.mock.calls.length).toBeLessThanOrEqual(2);
 });
 
 it('a checklist notification clears the previous Overview team/date filter', async () => {
@@ -236,4 +271,124 @@ it('a checklist notification clears the previous Overview team/date filter', asy
   openLink('linked-other');
   expect(await screen.findByText('Unavailable synthetic checklist')).not.toBeNull();
   expect(screen.queryByText(/Checklists: Context team/)).toBeNull();
+});
+
+it('Manager sees camera context but never requests Alert evidence', async () => {
+  const client = new SmartSiteManagementClient('http://local');
+  vi.spyOn(client, 'listSafetyZoneTeams').mockResolvedValue({ items: [], total: 0 });
+  const image = vi.spyOn(client, 'getSafetyAlertEvidence');
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <SafetyZoneContext
+        client={client}
+        apiUrl="http://local"
+        scope="manager"
+        siteId={siteId}
+        token="token"
+        user={user}
+        active
+        canAlerts={false}
+        day="2026-10-14"
+        timezone="Asia/Ho_Chi_Minh"
+        onAlerts={vi.fn()}
+        detail={{
+          id: 'team',
+          name: 'Team',
+          description: '',
+          contractorId: 'contractor',
+          contractorName: 'Contractor',
+          isActive: true,
+          workerCount: 1,
+          scheduledWorkerCount: 1,
+          date: '2026-10-14',
+          timezone: 'Asia/Ho_Chi_Minh',
+          workers: { items: [], total: 0 },
+          zones: [
+            {
+              id: 'zone',
+              name: 'Zone A',
+              code: 'A',
+              validFrom: '2026-10-01T00:00:00Z',
+              validUntil: '2026-11-01T00:00:00Z',
+            },
+          ],
+          cameras: [
+            {
+              id: 'camera',
+              externalId: 'CAM-A',
+              name: 'Camera A',
+              code: 'A',
+              status: 'ACTIVE',
+              zoneId: 'zone',
+              latestEvidence: {
+                alertId: 'alert',
+                eventId: 'event',
+                capturedAt: '2026-10-14T01:00:00Z',
+                evidenceIndex: 0,
+              },
+            },
+          ],
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('Alert evidence requires Safety or Admin access.')).not.toBeNull();
+  expect(image).not.toHaveBeenCalled();
+  expect(screen.queryByText(/live feed/)).not.toBeNull();
+});
+it('a checklist draft uses the single planned shift', async () => {
+  const client = new SmartSiteManagementClient('http://local'),
+    team = {
+      id: 'team',
+      name: 'Team',
+      description: '',
+      contractorId: 'contractor',
+      contractorName: 'Contractor',
+      isActive: true,
+    };
+  vi.spyOn(client, 'listSafetyContractors').mockResolvedValue({
+    items: [{ id: 'contractor', name: 'Contractor' }],
+    total: 1,
+  });
+  vi.spyOn(client, 'getSafetyTeamOptions').mockResolvedValue({ items: [team], total: 1 });
+  vi.spyOn(client, 'listSafetyAssignees').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'getSafetyTeam').mockResolvedValue({
+    ...team,
+    workerCount: 1,
+    scheduledWorkerCount: 1,
+    date: '2026-10-14',
+    timezone: 'Asia/Ho_Chi_Minh',
+    workers: { items: [], total: 0 },
+    zones: [],
+    cameras: [],
+    workWindows: [
+      { startsAt: '2026-10-14T02:30:00Z', endsAt: '2026-10-14T04:30:00Z', shiftName: 'Morning' },
+    ],
+  });
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <CreateChecklistForm
+        client={client}
+        apiUrl="http://local"
+        scope="safety"
+        siteId={siteId}
+        token="token"
+        user={user}
+        pending={false}
+        draft={{ teamId: 'team', day: '2026-10-14' }}
+        onSubmit={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByText(/The team's Zone grant/);
+  const expected = new Date('2026-10-14T02:30:00Z');
+  await waitFor(() =>
+    expect((screen.getByLabelText('Work starts') as HTMLInputElement).value).toContain(
+      String(expected.getHours()).padStart(2, '0') + ':30',
+    ),
+  );
 });

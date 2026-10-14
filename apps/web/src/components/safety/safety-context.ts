@@ -1,5 +1,5 @@
 import type { WorkflowProps } from './safety-workflow';
-import type { SafetyContractorResponse, SafetyOverviewTeam } from '@smartsite/api-client';
+import type { SafetyContractorResponse, SafetyTeamOption } from '@smartsite/api-client';
 export const localDay = (d = new Date()) =>
   [
     d.getFullYear(),
@@ -46,10 +46,10 @@ export async function safetyTeams(
   contractorId: string,
   signal: AbortSignal,
 ) {
-  const items: SafetyOverviewTeam[] = [];
+  const items: SafetyTeamOption[] = [];
   let total = 1;
   while (items.length < total) {
-    const page = await p.client.getSafetyOverview(
+    const page = await p.client.getSafetyTeamOptions(
       p.token,
       p.siteId,
       {
@@ -61,9 +61,9 @@ export async function safetyTeams(
       },
       { signal },
     );
-    total = page.teams.total;
-    if (!page.teams.items.length && items.length < total) throw Error('Team lookup unavailable');
-    items.push(...page.teams.items);
+    total = page.total;
+    if (!page.items.length && items.length < total) throw Error('Team lookup unavailable');
+    items.push(...page.items);
   }
   return items;
 }

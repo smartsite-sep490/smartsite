@@ -8,17 +8,35 @@ import type {
 } from '@smartsite/api-client';
 import { type WorkflowProps, fieldClass, buttonClass, cardClass } from './safety-workflow';
 import { Assignee, BlobImage, CommandForm, Field, RequestError } from './SafetyWorkflowUi';
-import { browserTimezone, localDay, safetyContractors, safetyTeams } from './safety-context';
+import {
+  browserTimezone,
+  localDay,
+  localInput,
+  safetyContractors,
+  safetyTeams,
+} from './safety-context';
 const presets = {
   HEIGHT: [
-    { text: 'Work-specific safety briefing completed', evidenceRequired: false },
-    { text: 'Required fall-protection equipment prepared', evidenceRequired: true },
+    {
+      text: 'Team briefed on the hazards and precautions of this specific task',
+      evidenceRequired: false,
+    },
+    {
+      text: 'Fall-protection equipment prepared for this team/task; provide dated photos',
+      evidenceRequired: true,
+    },
     { text: 'Work area and access arrangements checked', evidenceRequired: false },
-    { text: 'Required inspection or training documents available', evidenceRequired: true },
+    {
+      text: 'Attach the inspection or training documents requested for this task',
+      evidenceRequired: true,
+    },
   ],
   ELECTRICAL: [
     { text: 'Work-specific safety briefing completed', evidenceRequired: false },
-    { text: 'Required protective equipment prepared', evidenceRequired: true },
+    {
+      text: 'Protective equipment prepared for this electrical task; provide dated photos',
+      evidenceRequired: true,
+    },
     { text: 'Work area and equipment condition checked', evidenceRequired: true },
     { text: 'Required inspection or training documents available', evidenceRequired: true },
   ],
@@ -34,6 +52,7 @@ export function CreateChecklistForm(
     [contractor, setContractor] = useState(''),
     [teamId, setTeam] = useState(p.draft?.teamId ?? ''),
     [zoneId, setZone] = useState(''),
+    [windowChoice, setWindowChoice] = useState(''),
     [preset, setPreset] = useState<'HEIGHT' | 'ELECTRICAL'>('HEIGHT'),
     [items, setItems] = useState(() => presets.HEIGHT.map((i) => ({ ...i })));
   const timezone = browserTimezone(),
@@ -63,6 +82,13 @@ export function CreateChecklistForm(
     enabled: !!teamId && !!day,
     retry: false,
   });
+  const windows = detail.data?.workWindows ?? [];
+  const planned =
+    windows.length === 1
+      ? windows[0]
+      : windowChoice
+        ? windows[Number(windowChoice) - 1]
+        : undefined;
   return (
     <CommandForm
       pending={p.pending}
@@ -92,6 +118,7 @@ export function CreateChecklistForm(
             value={day}
             onChange={(e) => {
               setDay(e.target.value);
+              setWindowChoice('');
               setZone('');
             }}
           />
@@ -123,6 +150,7 @@ export function CreateChecklistForm(
             value={teamId}
             onChange={(e) => {
               setTeam(e.target.value);
+              setWindowChoice('');
               setZone('');
             }}
           >
@@ -152,24 +180,52 @@ export function CreateChecklistForm(
             ))}
           </select>
         </label>
-        <div key={day}>
+        {windows.length > 1 && (
+          <label className="text-sm font-semibold">
+            Planned work window
+            <select
+              className={fieldClass}
+              value={windowChoice}
+              onChange={(e) => setWindowChoice(e.target.value)}
+            >
+              <option value="">Choose a shift or enter custom times</option>
+              {windows.map((w, i) => (
+                <option key={i} value={String(i + 1)}>
+                  {w.shiftName} · {localInput(w.startsAt)} – {localInput(w.endsAt)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!windows.length && !detail.isPending && (
+          <p className="text-xs">
+            No planned shift for this team/date. Enter the work window explicitly.
+          </p>
+        )}
+        <fieldset
+          disabled={detail.isPending && !!teamId}
+          key={day + teamId + (planned?.startsAt ?? 'custom')}
+        >
           <Field
             name="startsAt"
             label="Work starts"
             type="datetime-local"
             required
-            defaultValue={day + 'T08:00'}
+            defaultValue={planned ? localInput(planned.startsAt) : ''}
           />
-        </div>
-        <div key={day + 'end'}>
+        </fieldset>
+        <fieldset
+          disabled={detail.isPending && !!teamId}
+          key={day + teamId + 'end' + (planned?.endsAt ?? 'custom')}
+        >
           <Field
             name="endsAt"
             label="Work ends"
             type="datetime-local"
             required
-            defaultValue={day + 'T17:00'}
+            defaultValue={planned ? localInput(planned.endsAt) : ''}
           />
-        </div>
+        </fieldset>
       </div>
       <p className="text-xs text-[var(--text-secondary)]">
         Times use {timezone}. The team's Zone grant must cover the whole work window.

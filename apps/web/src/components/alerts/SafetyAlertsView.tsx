@@ -161,6 +161,7 @@ export function SafetyAlertsView({
   const [requestedChecklistId, setRequestedChecklistId] = useState(initialChecklistId ?? '');
   const [createdIncidentId, setCreatedIncidentId] = useState('');
   const [checklistDraft, setChecklistDraft] = useState<{ teamId: string; day: string }>();
+  const [incidentReturn, setIncidentReturn] = useState<'Overview' | 'Checklists'>();
   const [previousChecklistLink, setPreviousChecklistLink] = useState(initialChecklistId);
   if (previousChecklistLink !== initialChecklistId) {
     setPreviousChecklistLink(initialChecklistId);
@@ -177,6 +178,9 @@ export function SafetyAlertsView({
     setPreviousIncidentLink(incidentLink);
     if (initialIncidentId) {
       setCreatedIncidentId('');
+      setRelatedAlertFilter(undefined);
+      setRelatedChecklistFilter(undefined);
+      setIncidentReturn(undefined);
       setWorkspaceTab('Incidents');
     }
   }
@@ -216,6 +220,7 @@ export function SafetyAlertsView({
   const [prevInitialSiteId, setPrevInitialSiteId] = useState(initialSiteId);
   if (prevInitialSiteId !== initialSiteId) {
     setPrevInitialSiteId(initialSiteId);
+    setIncidentReturn(undefined);
     setRelatedAlertFilter(undefined);
     setChecklistDraft(undefined);
     setRelatedChecklistFilter(undefined);
@@ -451,6 +456,10 @@ export function SafetyAlertsView({
   };
 
   const handleLogout = () => {
+    setIncidentReturn(undefined);
+    setRelatedAlertFilter(undefined);
+    setRelatedChecklistFilter(undefined);
+    setChecklistDraft(undefined);
     if (externalSession) {
       removeSessionQueries(sessionScope);
       onSignOut?.();
@@ -521,26 +530,22 @@ export function SafetyAlertsView({
   }
 
   return (
-    <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-6 pb-10 text-[#2F3437]">
-      <header className="flex flex-wrap items-start justify-between gap-4 min-w-0">
+    <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-3 pb-10 text-[#2F3437]">
+      <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#6B6B6B]">
-            Site safety workspace
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#111111]">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#111111]">
             Safety operations
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6B6B6B]">
-            Review alerts, manage corrective work and verify safety tasks for your Site.
-          </p>
         </div>
-        <div className="flex min-w-0 flex-wrap items-end gap-3">
-          <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+        <div className="flex min-w-0 flex-wrap items-end gap-3 lg:max-w-[55%]">
+          <label className="min-w-0 w-full sm:w-72 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
             Site
             <select
               value={selectedSiteId}
               onChange={(event) => {
                 setRelatedAlertFilter(undefined);
+                setRelatedChecklistFilter(undefined);
+                setIncidentReturn(undefined);
                 setChecklistDraft(undefined);
                 setRequestedChecklistId('');
                 setCreatedIncidentId('');
@@ -723,6 +728,7 @@ export function SafetyAlertsView({
             draft={checklistDraft}
             onDraftConsumed={() => setChecklistDraft(undefined)}
             onIncident={(id) => {
+              setIncidentReturn('Checklists');
               setCreatedIncidentId(id);
               setIncidentSourceAlert('');
               setWorkspaceTab('Incidents');
@@ -755,6 +761,8 @@ export function SafetyAlertsView({
 
       {selectedSiteId && workspaceTab === 'Incidents' && (
         <IncidentView
+          onBack={incidentReturn ? () => setWorkspaceTab(incidentReturn) : undefined}
+          backLabel={incidentReturn === 'Overview' ? 'Back to overview' : 'Back to checklists'}
           onOpenChecklist={(id) => {
             setRelatedChecklistFilter(undefined);
             setChecklistDraft(undefined);
@@ -1077,6 +1085,7 @@ export function SafetyAlertsView({
                       type="button"
                       className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
                       onClick={() => {
+                        setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
                         setIncidentSourceAlert(detail.data!.id);
                         setWorkspaceTab('Incidents');
                       }}
