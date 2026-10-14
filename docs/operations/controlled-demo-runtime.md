@@ -93,3 +93,14 @@ opening or replaying the diagnostic preview must not create additional business 
   deliberately unavailable for those profiles until a shared frame fan-out service is implemented.
 - The local Web image embeds its local-only WebSocket credential at build time. Never deploy that
   image or reuse this mechanism for production authentication.
+
+## Safety overview/checklists
+
+Luồng Safety dùng stack hiện có và root .env khi chạy Compose trực tiếp. Apply migration `SafetyChecklists1792195200000` trước khi triển khai Backend, sau đó Web; không bật synchronize. Migration bổ sung 5 bảng checklist và mở rộng evidence, audit, notification. Rollback bị chặn khi còn dữ liệu checklist, để tránh mất lịch sử.
+
+- Safety mở **Safety Operations → Overview**, chọn Site/ngày/nhà thầu/đội và xem lịch dự kiến, Zone/camera đang liên kết, cảnh báo và tình trạng checklist. **View related alerts** / **View checklists for this date** giữ đúng ngữ cảnh đội/ngày.
+- Safety dùng **Assign checklist** hoặc **New checklist** để chọn nhóm, Zone, công việc, khoảng giờ, đại diện và tiêu chí. Tiêu chí đã giao không sửa; cần đổi thì hủy hồ sơ chưa hoàn tất và giao lại.
+- Đại diện được phân công theo Site/nhà thầu dùng **Start checklist → Submit checklist**. Safety dùng **Record checklist** hoặc **Request update**; mỗi lần nộp giữ kết quả và minh chứng riêng. Checklist đã ghi nhận vẫn giữ các mục Fail và không tự cấp phép/chặn lịch, chấm công hoặc vào cửa.
+- Từ mục Fail đã ghi nhận, Safety dùng **Create incident**, xác minh trách nhiệm rồi bàn giao bằng luồng Incident hiện có. Notification dùng chung inbox; account đại diện cần contractor_representative_assignment theo đúng Site/nhà thầu, grant toàn cục không đủ.
+
+Giới hạn file ở [Object storage](object-storage.md#checklist-evidence). Checklist không yêu cầu AI/video; Alerts từ video vẫn cần checkpoint/spec thật. Không dùng script seed local để ghi Neon.
