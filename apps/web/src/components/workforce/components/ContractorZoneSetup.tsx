@@ -1,3 +1,7 @@
+import { localizedError } from '../../../i18n/messages';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -19,6 +23,8 @@ export function ContractorZoneSetup({
   siteId: string;
   userId: string;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, userId, siteId, 'access-setup'];
@@ -32,7 +38,7 @@ export function ContractorZoneSetup({
   const grant = useMutation({
     mutationFn: () => {
       if (!validFrom || !validUntil || validUntil < validFrom)
-        throw new Error('End date must be on or after start date.');
+        throw new Error(tr('contractor_zone_setup.end_date_must_be_on_or_after_start_date'));
       const fingerprint = JSON.stringify([
         participationId,
         zoneId,
@@ -60,41 +66,52 @@ export function ContractorZoneSetup({
     mutationFn: (id: string) => client.revokeZonePermission(token, siteId, id, 'contractor'),
     onSuccess: () => cache.invalidateQueries({ queryKey: key }),
   });
-  if (setup.isPending) return <p role="status">Loading contractor Zone assignments…</p>;
+  if (setup.isPending)
+    return <p role="status">{tr('contractor_zone_setup.loading_contractor_zone_assignments')}</p>;
   if (setup.isError)
     return (
       <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-        {setup.error.message}{' '}
+        {localizedError(setup.error.message)}{' '}
         <button type="button" onClick={() => void setup.refetch()}>
-          Retry
+          {tr('common.retry')}
         </button>
       </div>
     );
   const data = setup.data;
   if (!data.canGrantContractorZones)
-    return <p role="alert">You do not have permission to assign Zones for this Site.</p>;
+    return (
+      <p role="alert">
+        {tr('contractor_zone_setup.you_do_not_have_permission_to_assign_zones_for_this_site')}
+      </p>
+    );
   const inputClass =
     'w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100';
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-5">
       <div>
-        <h2 className="text-lg font-bold text-[#071A2B]">Assign Zone to Contractor</h2>
+        <h2 className="text-lg font-bold text-[#071A2B]">
+          {tr('contractor_zone_setup.assign_zone_to_contractor')}
+        </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Select a contractor and Zone, then choose the start and end dates (both included).
+          {tr(
+            'contractor_zone_setup.select_a_contractor_and_zone_then_choose_the_start_and_end_dates_both_included',
+          )}
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Timezone: {timezone}. Permission is limited to the contractor's participation period in
-          this Site.
+          {tr(
+            'contractor_zone_setup.timezone_value_permission_is_limited_to_the_contractor_s_participation_period_in_t',
+            { value1: timezone },
+          )}
         </p>
       </div>
       {!data.zones.length && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-          Create a Zone in the Zones tab first.
+          {tr('contractor_zone_setup.create_a_zone_in_the_zones_tab_first')}
         </p>
       )}
       {!data.participations.length && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-          Add a contractor to this Site first.
+          {tr('contractor_zone_setup.add_a_contractor_to_this_site_first')}
         </p>
       )}
       <form
@@ -105,14 +122,14 @@ export function ContractorZoneSetup({
         }}
       >
         <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
-          Contractor
+          {tr('common.contractor')}
           <select
             className={inputClass}
             required
             value={participationId}
             onChange={(e) => setParticipationId(e.target.value)}
           >
-            <option value="">Select Contractor</option>
+            <option value="">{tr('common.select_contractor')}</option>
             {data.participations.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -121,14 +138,14 @@ export function ContractorZoneSetup({
           </select>
         </label>
         <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
-          Zone
+          {tr('common.zone')}
           <select
             className={inputClass}
             required
             value={zoneId}
             onChange={(e) => setZoneId(e.target.value)}
           >
-            <option value="">Select Zone</option>
+            <option value="">{tr('common.select_zone')}</option>
             {data.zones.map((z) => (
               <option key={z.id} value={z.id}>
                 {z.name}
@@ -137,14 +154,14 @@ export function ContractorZoneSetup({
           </select>
         </label>
         <SmartDatePicker
-          label="Start date"
+          label={tr('common.start_date')}
           value={validFrom}
           onChange={setValidFrom}
           disablePast={false}
           fieldRequired
         />
         <SmartDatePicker
-          label="End date"
+          label={tr('common.end_date')}
           value={validUntil}
           onChange={setValidUntil}
           disablePast={false}
@@ -164,24 +181,26 @@ export function ContractorZoneSetup({
               validUntil < validFrom
             }
           >
-            {grant.isPending ? 'Assigning…' : 'Assign Contractor Zone'}
+            {grant.isPending ? tr('common.assigning') : tr('common.assign_contractor_zone')}
           </button>
         </div>
       </form>
       {grant.isError && (
         <p role="alert" className="text-sm text-red-700">
-          {grant.error.message}
+          {localizedError(grant.error.message)}
         </p>
       )}
       {grant.isSuccess && (
         <p role="status" className="text-sm text-green-700">
-          Contractor Zone assigned.
+          {tr('common.contractor_zone_assigned')}
         </p>
       )}
       <div className="border-t border-slate-100 pt-4 space-y-3">
-        <h3 className="font-bold text-[#071A2B]">Assigned Contractor Zones</h3>
+        <h3 className="font-bold text-[#071A2B]">{tr('common.assigned_contractor_zones')}</h3>
         {!data.contractorPermissions.length && (
-          <p className="text-sm text-slate-500">No Contractor Zone permissions.</p>
+          <p className="text-sm text-slate-500">
+            {tr('site_access_setup_view.no_contractor_zone_permissions')}
+          </p>
         )}
         {data.contractorPermissions.map((p) => (
           <div
@@ -191,15 +210,15 @@ export function ContractorZoneSetup({
             <div>
               <p className="font-semibold">
                 {data.participations.find((c) => c.id === p.siteContractorId)?.name ??
-                  'Unavailable contractor'}{' '}
-                · {data.zones.find((z) => z.id === p.zoneId)?.name ?? 'Unavailable Zone'}
+                  tr('common.unavailable_contractor')}{' '}
+                · {data.zones.find((z) => z.id === p.zoneId)?.name ?? tr('common.unavailable_zone')}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                {new Date(p.validFrom).toLocaleDateString('en-GB', { timeZone: timezone })} →{' '}
-                {new Date(+new Date(p.validUntil) - 1).toLocaleDateString('en-GB', {
+                {new Date(p.validFrom).toLocaleDateString(uiLocale(), { timeZone: timezone })} →{' '}
+                {new Date(+new Date(p.validUntil) - 1).toLocaleDateString(uiLocale(), {
                   timeZone: timezone,
                 })}{' '}
-                · {p.revokedAt ? 'Revoked' : 'Assigned'}
+                · {p.revokedAt ? tr('common.revoked') : tr('common.assigned')}
               </p>
             </div>
             {!p.revokedAt && (
@@ -209,14 +228,14 @@ export function ContractorZoneSetup({
                 onClick={() => revoke.mutate(p.id)}
                 className="min-h-10 rounded-lg border border-slate-200 px-3"
               >
-                Revoke Contractor Zone
+                {tr('common.revoke_contractor_zone')}
               </button>
             )}
           </div>
         ))}
         {revoke.isError && (
           <p role="alert" className="text-sm text-red-700">
-            {revoke.error.message}
+            {localizedError(revoke.error.message)}
           </p>
         )}
       </div>

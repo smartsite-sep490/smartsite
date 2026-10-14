@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --maxWorkers=2",
+    "test:i18n:browser": "playwright test",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -19,14 +20,18 @@
     "@tanstack/react-query": "5.103.1",
     "date-fns": "4.4.0",
     "gsap": "3.15.0",
+    "i18next": "26.4.4",
+    "i18next-browser-languagedetector": "8.2.1",
     "qr-scanner": "1.4.2",
     "qrcode.react": "4.2.0",
     "react": "19.3.0",
     "react-day-picker": "10.0.1",
     "react-dom": "19.3.0",
+    "react-i18next": "17.0.16",
     "react-router-dom": "7.18.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",

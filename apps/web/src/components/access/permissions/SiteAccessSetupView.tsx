@@ -1,3 +1,8 @@
+import { localizedError } from '../../../i18n/messages';
+import { localizedLabel } from '../../../i18n/labels';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -18,6 +23,8 @@ export function SiteAccessSetupView({
   siteId: string;
   sessionScope: string;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, sessionScope, siteId, 'access-setup'];
@@ -38,7 +45,7 @@ export function SiteAccessSetupView({
         validUntil: new Date(validUntil).toISOString(),
       };
       if (Date.parse(interval.validUntil) <= Date.parse(interval.validFrom))
-        throw new Error('End must be later than start.');
+        throw new Error(tr('site_access_setup_view.end_must_be_later_than_start'));
       const fingerprint = JSON.stringify([
         action,
         participationId,
@@ -94,32 +101,37 @@ export function SiteAccessSetupView({
     onSuccess: () => cache.invalidateQueries({ queryKey: key }),
   });
   const data = setup.data;
-  if (setup.isPending) return <p role="status">Loading Site access setup…</p>;
+  if (setup.isPending)
+    return <p role="status">{tr('site_access_setup_view.loading_site_access_setup')}</p>;
   if (setup.error)
     return (
       <div role="alert">
-        {setup.error.message} <button onClick={() => void setup.refetch()}>Retry</button>
+        {localizedError(setup.error.message)}{' '}
+        <button onClick={() => void setup.refetch()}>{tr('common.retry')}</button>
       </div>
     );
   if (!data) return null;
   const permissionLabel = (id: string) => {
     const permission = data.contractorPermissions.find((p) => p.id === id);
     return permission
-      ? `${data.participations.find((p) => p.id === permission.siteContractorId)?.name ?? 'Contractor'} / ${data.zones.find((z) => z.id === permission.zoneId)?.name ?? 'Zone'}`
-      : 'Unavailable permission';
+      ? `${data.participations.find((p) => p.id === permission.siteContractorId)?.name ?? tr('common.contractor')} / ${data.zones.find((z) => z.id === permission.zoneId)?.name ?? tr('common.zone')}`
+      : tr('common.unavailable_permission');
   };
   const inputClass = 'mt-1 block w-full rounded-lg border border-slate-300 p-2 text-sm';
   return (
     <div className="space-y-6">
       <section className="space-y-4 rounded-2xl border bg-white p-6">
-        <h2 className="text-lg font-bold">Worker assignments and Zone permissions</h2>
+        <h2 className="text-lg font-bold">
+          {tr('site_access_setup_view.worker_assignments_and_zone_permissions')}
+        </h2>
         <p className="text-sm text-slate-600">
-          Site Manager approves Worker assignments and grants Contractor zones. The Contractor
-          Representative assigns Worker zones within both approved intervals.
+          {tr(
+            'site_access_setup_view.site_manager_approves_worker_assignments_and_grants_contractor_zones_the_contracto',
+          )}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-semibold">
-            Start{' '}
+            {tr('common.start')}{' '}
             <input
               className={inputClass}
               type="datetime-local"
@@ -128,7 +140,7 @@ export function SiteAccessSetupView({
             />
           </label>
           <label className="text-xs font-semibold">
-            End{' '}
+            {tr('common.end')}{' '}
             <input
               className={inputClass}
               type="datetime-local"
@@ -137,13 +149,13 @@ export function SiteAccessSetupView({
             />
           </label>
           <label className="text-xs font-semibold">
-            Zone{' '}
+            {tr('common.zone')}{' '}
             <select
               className={inputClass}
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}
             >
-              <option value="">Select Zone</option>
+              <option value="">{tr('common.select_zone')}</option>
               {data.zones.map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
@@ -155,13 +167,13 @@ export function SiteAccessSetupView({
         {data.canGrantContractorZones && (
           <div className="space-y-3 rounded-xl bg-slate-50 p-4">
             <label className="text-xs font-semibold">
-              Contractor at this Site{' '}
+              {tr('site_access_setup_view.contractor_at_this_site')}{' '}
               <select
                 className={inputClass}
                 value={participationId}
                 onChange={(e) => setParticipationId(e.target.value)}
               >
-                <option value="">Select Contractor</option>
+                <option value="">{tr('common.select_contractor')}</option>
                 {data.participations.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -176,20 +188,20 @@ export function SiteAccessSetupView({
               }
               onClick={() => mutation.mutate('contractor')}
             >
-              Grant Contractor Zone
+              {tr('common.grant_contractor_zone')}
             </button>
           </div>
         )}
         {data.canGrantWorkerZones && (
           <div className="space-y-3 rounded-xl bg-slate-50 p-4">
             <label className="text-xs font-semibold">
-              Worker{' '}
+              {tr('common.worker')}{' '}
               <select
                 className={inputClass}
                 value={workerId}
                 onChange={(e) => setWorkerId(e.target.value)}
               >
-                <option value="">Select Worker</option>
+                <option value="">{tr('common.select_worker')}</option>
                 {data.workers.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
@@ -202,33 +214,33 @@ export function SiteAccessSetupView({
               disabled={mutation.isPending || !workerId || !zoneId || !validFrom || !validUntil}
               onClick={() => mutation.mutate('assignment')}
             >
-              Request Site assignment
+              {tr('common.request_site_assignment')}
             </button>
             <label className="block text-xs font-semibold">
-              Approved Worker assignment{' '}
+              {tr('common.approved_worker_assignment')}{' '}
               <select
                 className={inputClass}
                 value={assignmentId}
                 onChange={(e) => setAssignmentId(e.target.value)}
               >
-                <option value="">Select assignment</option>
+                <option value="">{tr('common.select_assignment')}</option>
                 {data.assignments
                   .filter((a) => a.status === 'APPROVED' && a.validUntil)
                   .map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.workerName} · {new Date(a.validUntil!).toLocaleString()}
+                      {a.workerName} · {new Date(a.validUntil!).toLocaleString(uiLocale())}
                     </option>
                   ))}
               </select>
             </label>
             <label className="block text-xs font-semibold">
-              Contractor Zone permission{' '}
+              {tr('common.contractor_zone_permission')}{' '}
               <select
                 className={inputClass}
                 value={permissionId}
                 onChange={(e) => setPermissionId(e.target.value)}
               >
-                <option value="">Select Contractor permission</option>
+                <option value="">{tr('common.select_contractor_permission')}</option>
                 {data.contractorPermissions
                   .filter(
                     (p) =>
@@ -250,26 +262,26 @@ export function SiteAccessSetupView({
               }
               onClick={() => mutation.mutate('worker')}
             >
-              Grant Worker Zone
+              {tr('common.grant_worker_zone')}
             </button>
           </div>
         )}
         {mutation.error && (
           <p role="alert" className="text-sm text-red-700">
-            {mutation.error.message}
+            {localizedError(mutation.error.message)}
           </p>
         )}
         {mutation.isSuccess && (
           <p role="status" className="text-sm text-green-700">
-            Access setup saved.
+            {tr('common.access_setup_saved')}
           </p>
         )}
       </section>
       <section className="space-y-3 rounded-2xl border bg-white p-6">
-        <h3 className="font-bold">Site assignments</h3>
+        <h3 className="font-bold">{tr('common.site_assignments')}</h3>
         {data.canReviewAssignments && (
           <label className="block text-xs">
-            Review reason{' '}
+            {tr('common.review_reason')}{' '}
             <input
               className={inputClass}
               value={reviewNote}
@@ -279,7 +291,9 @@ export function SiteAccessSetupView({
           </label>
         )}
         {!data.assignments.length && (
-          <p className="text-sm text-slate-500">No Site assignment requests.</p>
+          <p className="text-sm text-slate-500">
+            {tr('site_access_setup_view.no_site_assignment_requests')}
+          </p>
         )}
         {data.assignments.map((a) => (
           <div
@@ -287,8 +301,10 @@ export function SiteAccessSetupView({
             className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm"
           >
             <span>
-              {a.workerName} · {a.status} ·{' '}
-              {a.validUntil ? new Date(a.validUntil).toLocaleString() : 'Expiry required'}
+              {a.workerName} · {localizedLabel(a.status)} ·{' '}
+              {a.validUntil
+                ? new Date(a.validUntil).toLocaleString(uiLocale())
+                : tr('common.expiry_required')}
             </span>
             {a.reviewNote && <span>{a.reviewNote}</span>}
             {data.canReviewAssignments && a.status === 'APPROVED' && (
@@ -297,7 +313,7 @@ export function SiteAccessSetupView({
                 onClick={() => revokeAssignment.mutate(a)}
                 className="rounded border px-3 py-1"
               >
-                Revoke assignment
+                {tr('common.revoke_assignment')}
               </button>
             )}
             {data.canReviewAssignments && ['PENDING', 'SAFETY_REVIEWED'].includes(a.status) && (
@@ -307,32 +323,38 @@ export function SiteAccessSetupView({
                   onClick={() => review.mutate({ id: a.id, approve: true, version: a.version })}
                   className="rounded bg-green-700 px-3 py-1 text-white"
                 >
-                  Approve
+                  {tr('common.approve')}
                 </button>
                 <button
                   disabled={review.isPending}
                   onClick={() => review.mutate({ id: a.id, approve: false, version: a.version })}
                   className="rounded border px-3 py-1"
                 >
-                  Reject
+                  {tr('common.reject')}
                 </button>
               </>
             )}
           </div>
         ))}
-        {review.error && <p role="alert">{review.error.message}</p>}
-        {revokeAssignment.error && <p role="alert">{revokeAssignment.error.message}</p>}
+        {review.error && <p role="alert">{localizedError(review.error.message)}</p>}
+        {revokeAssignment.error && (
+          <p role="alert">{localizedError(revokeAssignment.error.message)}</p>
+        )}
       </section>
       <section className="space-y-3 rounded-2xl border bg-white p-6">
-        <h3 className="font-bold">Contractor Zone permissions</h3>
+        <h3 className="font-bold">{tr('common.contractor_zone_permissions')}</h3>
         {!data.contractorPermissions.length && (
-          <p className="text-sm text-slate-500">No Contractor Zone permissions.</p>
+          <p className="text-sm text-slate-500">
+            {tr('site_access_setup_view.no_contractor_zone_permissions')}
+          </p>
         )}
         {data.contractorPermissions.map((p) => (
           <div key={p.id} className="flex flex-wrap gap-3 rounded-lg border p-3 text-sm">
             <span>
               {permissionLabel(p.id)} ·{' '}
-              {p.revokedAt ? 'REVOKED' : new Date(p.validUntil).toLocaleString()}
+              {p.revokedAt
+                ? localizedLabel('REVOKED')
+                : new Date(p.validUntil).toLocaleString(uiLocale())}
             </span>
             {data.canGrantContractorZones && !p.revokedAt && (
               <button
@@ -340,21 +362,25 @@ export function SiteAccessSetupView({
                 onClick={() => revoke.mutate({ id: p.id, kind: 'contractor' })}
                 className="rounded border px-3 py-1"
               >
-                Revoke Contractor Zone
+                {tr('common.revoke_contractor_zone')}
               </button>
             )}
           </div>
         ))}
-        <h3 className="pt-3 font-bold">Worker Zone permissions</h3>
+        <h3 className="pt-3 font-bold">{tr('common.worker_zone_permissions')}</h3>
         {!data.workerPermissions.length && (
-          <p className="text-sm text-slate-500">No Worker Zone permissions.</p>
+          <p className="text-sm text-slate-500">
+            {tr('site_access_setup_view.no_worker_zone_permissions')}
+          </p>
         )}
         {data.workerPermissions.map((p) => (
           <div key={p.id} className="flex flex-wrap gap-3 rounded-lg border p-3 text-sm">
             <span>
               {data.assignments.find((a) => a.id === p.workerAssignmentId)?.workerName} ·{' '}
               {permissionLabel(p.contractorZonePermissionId)} ·{' '}
-              {p.revokedAt ? 'REVOKED' : new Date(p.validUntil).toLocaleString()}
+              {p.revokedAt
+                ? localizedLabel('REVOKED')
+                : new Date(p.validUntil).toLocaleString(uiLocale())}
             </span>
             {data.canGrantWorkerZones && !p.revokedAt && (
               <button
@@ -362,12 +388,12 @@ export function SiteAccessSetupView({
                 onClick={() => revoke.mutate({ id: p.id, kind: 'worker' })}
                 className="rounded border px-3 py-1"
               >
-                Revoke Worker Zone
+                {tr('common.revoke_worker_zone')}
               </button>
             )}
           </div>
         ))}
-        {revoke.error && <p role="alert">{revoke.error.message}</p>}
+        {revoke.error && <p role="alert">{localizedError(revoke.error.message)}</p>}
       </section>
       <AttendanceView apiUrl={apiUrl} token={token} siteId={siteId} sessionScope={sessionScope} />
     </div>

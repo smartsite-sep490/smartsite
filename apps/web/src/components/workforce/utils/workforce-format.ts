@@ -1,3 +1,5 @@
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
 export function formatShiftTime(timeStr?: string, timezone = 'Asia/Ho_Chi_Minh'): string {
   if (!timeStr) return '--:--';
   if (/^\d{2}:\d{2}/.test(timeStr)) {
@@ -6,7 +8,7 @@ export function formatShiftTime(timeStr?: string, timezone = 'Asia/Ho_Chi_Minh')
   try {
     const d = new Date(timeStr);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString('en-GB', {
+      return d.toLocaleTimeString(uiLocale(), {
         timeZone: timezone,
         hour: '2-digit',
         minute: '2-digit',
@@ -43,7 +45,7 @@ export function formatShiftRange(
         return Date.UTC(part('year'), part('month') - 1, part('day')) / 86400000;
       };
       const days = ordinal(last) - ordinal(first);
-      if (days > 0) suffix = days === 1 ? ' (next day)' : ` (+${days} days)`;
+      if (days > 0) suffix = tr('time.nextDays', { count: days });
     }
   }
   return `${start} - ${end}${suffix}`;
@@ -54,7 +56,7 @@ export function formatDateTime(dateStr?: string): string {
   try {
     const d = new Date(dateStr);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleString('en-GB', {
+      return d.toLocaleString(uiLocale(), {
         timeZone: 'Asia/Ho_Chi_Minh',
         day: '2-digit',
         month: '2-digit',
@@ -70,7 +72,7 @@ export function formatDateTime(dateStr?: string): string {
 }
 
 export function formatWorkDate(value?: string | null): string {
-  if (!value) return 'Date unavailable';
+  if (!value) return tr('common.date_unavailable');
   const [year, month, day] = value.split('-');
   return `${day}/${month}/${year}`;
 }

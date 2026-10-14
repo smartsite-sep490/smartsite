@@ -1,3 +1,8 @@
+import { localizedError } from '../../../i18n/messages';
+import { localizedLabel } from '../../../i18n/labels';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -22,6 +27,8 @@ function CorrectionTimeField({
   defaultDate: string;
   onChange: (value: string) => void;
 }) {
+  useTranslation();
+
   const [date, setDate] = useState(initialValue.slice(0, 10) || defaultDate);
   const [hour, setHour] = useState(initialValue.slice(11, 13));
   const [minute, setMinute] = useState(initialValue.slice(14, 16) || '00');
@@ -38,16 +45,16 @@ function CorrectionTimeField({
     <fieldset className="min-w-0 rounded-2xl bg-white/80 p-4 ring-1 ring-slate-200/70 space-y-3">
       <legend className="px-1 text-xs font-bold text-[#071A2B]">{label}</legend>
       <SmartDatePicker
-        label={`${label} date`}
+        label={tr('common.value_date', { value1: label })}
         value={date}
         disablePast={false}
         onChange={(value) => update(value, hour, minute)}
       />
       <SmartTimePicker
-        label={`${label} time`}
+        label={tr('common.value_time', { value1: label })}
         value={timeValue}
         minuteStep={1}
-        placeholder="Select time"
+        placeholder={tr('common.select_time')}
         onChange={(val) => {
           if (!val) {
             update(date, '', '');
@@ -60,13 +67,13 @@ function CorrectionTimeField({
       {/* Accessible fallback controls for testing & screen readers */}
       <div className="sr-only">
         <label>
-          <span>{label} hour</span>
+          <span>{tr('common.value_hour', { value1: label })}</span>
           <select
-            aria-label={`${label} hour`}
+            aria-label={tr('common.value_hour', { value1: label })}
             value={hour}
             onChange={(e) => update(date, e.target.value, minute)}
           >
-            <option value="">Hour</option>
+            <option value="">{tr('common.hour')}</option>
             {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map((value) => (
               <option key={value} value={value}>
                 {value}
@@ -75,9 +82,9 @@ function CorrectionTimeField({
           </select>
         </label>
         <label>
-          <span>{label} minute</span>
+          <span>{tr('common.value_minute', { value1: label })}</span>
           <select
-            aria-label={`${label} minute`}
+            aria-label={tr('common.value_minute', { value1: label })}
             value={minute}
             onChange={(e) => update(date, hour, e.target.value)}
           >
@@ -105,6 +112,8 @@ export function AttendanceView({
   sessionScope: string;
   isWorker?: boolean;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['attendance', apiUrl, sessionScope, siteId];
@@ -143,12 +152,16 @@ export function AttendanceView({
   const correction = useMutation({
     mutationFn: () => {
       const session = overview.data?.sessions.find((s) => s.id === sessionId);
-      if (!session) throw new Error('Select a current attendance session.');
+      if (!session) throw new Error(tr('attendance_view.select_a_current_attendance_session'));
       if (
         overview.data?.hasPendingCorrection ||
         overview.data?.corrections.some((c) => c.status === 'PENDING')
       )
-        throw new Error('Wait for the contractor to review your pending attendance correction.');
+        throw new Error(
+          tr(
+            'attendance_view.wait_for_the_contractor_to_review_your_pending_attendance_correction',
+          ),
+        );
       const input = {
         expectedSessionVersion: session.version,
         proposedInAt: new Date(proposedIn).toISOString(),
@@ -180,11 +193,13 @@ export function AttendanceView({
       return invalidate();
     },
   });
-  if (!isWorker && overview.isPending) return <p role="status">Loading attendance…</p>;
+  if (!isWorker && overview.isPending)
+    return <p role="status">{tr('common.loading_attendance')}</p>;
   if (!isWorker && overview.error)
     return (
       <div role="alert">
-        {overview.error.message} <button onClick={() => void overview.refetch()}>Retry</button>
+        {localizedError(overview.error.message)}{' '}
+        <button onClick={() => void overview.refetch()}>{tr('common.retry')}</button>
       </div>
     );
   const data = overview.data;
@@ -228,15 +243,15 @@ export function AttendanceView({
     >
       <div className="flex items-center justify-between pb-3 border-b border-slate-100">
         <div>
-          <h2 className="text-sm font-bold text-[#071A2B]">Recent attendance</h2>
+          <h2 className="text-sm font-bold text-[#071A2B]">{tr('common.recent_attendance')}</h2>
           {selectedDayId && (
             <p className="text-xs text-slate-500 mt-0.5">
-              Showing session intervals for selected day.{' '}
+              {tr('attendance_view.showing_session_intervals_for_selected_day')}{' '}
               <button
                 onClick={() => setSelectedDayId('')}
                 className="font-bold text-[#F66B17] hover:underline"
               >
-                Show recent sessions
+                {tr('common.show_recent_sessions')}
               </button>
             </p>
           )}
@@ -244,7 +259,9 @@ export function AttendanceView({
       </div>
 
       {!data.sessions.length && (
-        <p className="text-xs text-slate-400 py-4 text-center">No attendance sessions recorded.</p>
+        <p className="text-xs text-slate-400 py-4 text-center">
+          {tr('attendance_view.no_attendance_sessions_recorded')}
+        </p>
       )}
 
       {!!data.sessions.length && (
@@ -253,19 +270,19 @@ export function AttendanceView({
             <thead>
               <tr className="bg-slate-50/70 border-b border-slate-100">
                 <th className="p-3 font-bold uppercase tracking-wider text-slate-400 text-[10px]">
-                  Worker
+                  {tr('common.worker')}
                 </th>
                 <th className="p-3 font-bold uppercase tracking-wider text-slate-400 text-[10px]">
-                  In
+                  {tr('common.in')}
                 </th>
                 <th className="p-3 font-bold uppercase tracking-wider text-slate-400 text-[10px]">
-                  Out
+                  {tr('common.out')}
                 </th>
                 <th className="p-3 font-bold uppercase tracking-wider text-slate-400 text-[10px]">
-                  Status
+                  {tr('common.status')}
                 </th>
                 <th className="p-3 font-bold uppercase tracking-wider text-slate-400 text-[10px]">
-                  Minutes
+                  {tr('common.minutes')}
                 </th>
               </tr>
             </thead>
@@ -275,17 +292,17 @@ export function AttendanceView({
                   <td className="p-3 font-bold text-[#071A2B]">{s.workerName}</td>
                   <td className="p-3 text-slate-600">
                     {s.effectiveInAt
-                      ? new Date(s.effectiveInAt).toLocaleString()
+                      ? new Date(s.effectiveInAt).toLocaleString(uiLocale())
                       : s.status === 'NEEDS_REVIEW' || s.status === 'IGNORED'
-                        ? 'Duplicate IN · see day detail'
-                        : 'Missing'}
+                        ? tr('attendance_view.duplicate_in_see_day_detail')
+                        : tr('common.missing')}
                   </td>
                   <td className="p-3 text-slate-600">
                     {s.status === 'NEEDS_REVIEW' || s.status === 'IGNORED'
                       ? '—'
                       : s.effectiveOutAt
-                        ? new Date(s.effectiveOutAt).toLocaleString()
-                        : 'Open / missing'}
+                        ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
+                        : tr('common.open_missing')}
                   </td>
                   <td className="p-3 font-semibold text-slate-700">{attendanceLabel(s.status)}</td>
                   <td className="p-3 font-mono text-slate-700">{s.workedMinutes ?? '—'}</td>
@@ -299,18 +316,19 @@ export function AttendanceView({
       {data.canRequestCorrection && (
         <div className="space-y-3.5 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
           <h3 className="text-xs font-bold text-[#071A2B] uppercase tracking-wider">
-            Request an attendance correction
+            {tr('attendance_view.request_an_attendance_correction')}
           </h3>
           {hasPendingCorrection && (
             <p role="status" className="text-xs text-amber-700">
-              Your attendance correction is awaiting contractor review. You can submit another
-              request after it is approved or rejected.
+              {tr(
+                'attendance_view.your_attendance_correction_is_awaiting_contractor_review_you_can_submit_another_re',
+              )}
             </p>
           )}
           <fieldset disabled={hasPendingCorrection || correction.isPending} className="space-y-3.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96] sm:col-span-2">
-                Session
+                {tr('common.session')}
                 <select
                   value={sessionId}
                   onChange={(e) => {
@@ -321,7 +339,7 @@ export function AttendanceView({
                   }}
                   className="mt-1.5 block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm outline-none transition-all duration-300"
                 >
-                  <option value="">Select session</option>
+                  <option value="">{tr('common.select_session')}</option>
                   {data.sessions.map(
                     (s) =>
                       s.status !== 'IGNORED' &&
@@ -329,11 +347,14 @@ export function AttendanceView({
                         <option key={s.id} value={s.id}>
                           {s.workerName} ·{' '}
                           {s.status === 'MISSING_IN' && s.effectiveOutAt
-                            ? `Exit ${new Date(s.effectiveOutAt).toLocaleString()} (${attendanceLabel(s.status)})`
+                            ? tr('common.exit_value_value', {
+                                value1: new Date(s.effectiveOutAt).toLocaleString(uiLocale()),
+                                value2: attendanceLabel(s.status),
+                              })
                             : s.effectiveInAt
-                              ? `${new Date(s.effectiveInAt).toLocaleString()}${!s.effectiveOutAt ? ` (${attendanceLabel('MISSING_OUT')})` : ''}`
+                              ? `${new Date(s.effectiveInAt).toLocaleString(uiLocale())}${!s.effectiveOutAt ? ` (${attendanceLabel('MISSING_OUT')})` : ''}`
                               : s.effectiveOutAt
-                                ? new Date(s.effectiveOutAt).toLocaleString()
+                                ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
                                 : s.status}
                         </option>
                       ),
@@ -342,35 +363,38 @@ export function AttendanceView({
               </label>
               <CorrectionTimeField
                 key={`${sessionId}-in`}
-                label="Proposed in"
+                label={tr('common.proposed_in')}
                 initialValue={proposedIn}
                 defaultDate={correctionDate}
                 onChange={setProposedIn}
               />
               <CorrectionTimeField
                 key={`${sessionId}-out`}
-                label="Proposed out"
+                label={tr('common.proposed_out')}
                 initialValue={proposedOut}
                 defaultDate={correctionDate}
                 onChange={setProposedOut}
               />
             </div>
             <p className="text-xs text-slate-500">
-              Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}.
+              {tr('common.timezone_value', {
+                value1: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              })}
             </p>
             {data.sessions.find((s) => s.id === sessionId)?.status === 'MISSING_IN' && (
               <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
-                Enter the actual entry time. The recorded exit is prefilled and stays unchanged
-                unless you explicitly edit it.
+                {tr(
+                  'attendance_view.enter_the_actual_entry_time_the_recorded_exit_is_prefilled_and_stays_unchanged_unl',
+                )}
               </p>
             )}
             <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
-              Reason
+              {tr('common.reason')}
               <input
                 className="mt-1.5 block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm outline-none transition-all duration-300"
                 value={reason}
                 maxLength={1000}
-                placeholder="Reason for attendance correction request..."
+                placeholder={tr('attendance_view.reason_for_attendance_correction_request')}
                 onChange={(e) => setReason(e.target.value)}
               />
             </label>
@@ -386,17 +410,17 @@ export function AttendanceView({
               }
               onClick={() => correction.mutate()}
             >
-              Send to Contractor Representative
+              {tr('attendance_view.send_to_contractor_representative')}
             </button>
           </fieldset>
           {correction.error && (
             <p role="alert" className="text-xs text-red-600 font-semibold">
-              {correction.error.message}
+              {localizedError(correction.error.message)}
             </p>
           )}
           {correction.isSuccess && (
             <p role="status" className="text-xs text-emerald-700 font-semibold">
-              Correction requested.
+              {tr('common.correction_requested')}
             </p>
           )}
         </div>
@@ -405,7 +429,7 @@ export function AttendanceView({
       {!!data.corrections.length && (
         <div className="space-y-3 pt-2">
           <h3 className="text-xs font-bold text-[#071A2B] uppercase tracking-wider">
-            Correction requests
+            {tr('common.correction_requests')}
           </h3>
           {data.corrections.map((c) => (
             <div
@@ -415,26 +439,29 @@ export function AttendanceView({
               <div className="flex items-center justify-between">
                 <span className="font-bold text-[#071A2B]">{c.workerName}</span>
                 <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-600 uppercase">
-                  {c.status}
+                  {localizedLabel(c.status)}
                 </span>
               </div>
               <p className="text-slate-600">{c.reason}</p>
               {data.canReviewCorrection && (
                 <p className="text-slate-600">
-                  Recorded interval:{' '}
-                  {(() => {
-                    const session = data.sessions.find((s) => s.id === c.attendanceSessionId);
-                    return `${session?.effectiveInAt ? new Date(session.effectiveInAt).toLocaleString() : 'Missing check-in'} – ${session?.effectiveOutAt ? new Date(session.effectiveOutAt).toLocaleString() : 'Missing checkout'}`;
-                  })()}
+                  {tr('common.recorded_interval_value', {
+                    value1: (() => {
+                      const session = data.sessions.find((s) => s.id === c.attendanceSessionId);
+                      return `${session?.effectiveInAt ? new Date(session.effectiveInAt).toLocaleString(uiLocale()) : tr('common.missing_check_in')} – ${session?.effectiveOutAt ? new Date(session.effectiveOutAt).toLocaleString(uiLocale()) : tr('common.missing_checkout')}`;
+                    })(),
+                  })}
                 </p>
               )}
               <p className="text-[11px] text-slate-400">
-                Proposed interval: {new Date(c.proposedInAt).toLocaleString()} –{' '}
-                {new Date(c.proposedOutAt).toLocaleString()}
+                {tr('attendance_view.proposed_interval_value_value', {
+                  value1: new Date(c.proposedInAt).toLocaleString(uiLocale()),
+                  value2: new Date(c.proposedOutAt).toLocaleString(uiLocale()),
+                })}
               </p>
               {c.reviewNote && (
                 <p className="text-[11px] text-emerald-700 font-medium">
-                  Review note: {c.reviewNote}
+                  {tr('common.review_note_value', { value1: c.reviewNote })}
                 </p>
               )}
               {data.canReviewCorrection && c.status === 'PENDING' && (
@@ -444,7 +471,7 @@ export function AttendanceView({
                     onClick={() => review.mutate({ id: c.id, approve: true })}
                     className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
                   >
-                    Approve correction
+                    {tr('common.approve_correction')}
                   </button>
                   <button
                     disabled={review.isPending}
@@ -454,14 +481,14 @@ export function AttendanceView({
                     }}
                     className="rounded-lg border border-red-200 text-red-600 px-3 py-1.5 text-xs font-bold disabled:opacity-50 hover:bg-red-50 transition-colors"
                   >
-                    Reject correction
+                    {tr('common.reject_correction')}
                   </button>
                 </div>
               )}
               {data.canReviewCorrection && c.status === 'PENDING' && rejectingId === c.id && (
                 <div className="space-y-2 pt-2">
                   <label className="block">
-                    Rejection reason
+                    {tr('common.rejection_reason')}
                     <textarea
                       className="mt-1 block w-full rounded-lg border border-slate-200 p-2"
                       value={reviewNote}
@@ -473,7 +500,7 @@ export function AttendanceView({
                     disabled={review.isPending || !reviewNote.trim()}
                     onClick={() => review.mutate({ id: c.id, approve: false })}
                   >
-                    Confirm rejection
+                    {tr('common.confirm_rejection')}
                   </button>
                   <button
                     disabled={review.isPending}
@@ -482,7 +509,7 @@ export function AttendanceView({
                       setReviewNote('');
                     }}
                   >
-                    Cancel rejection
+                    {tr('common.cancel_rejection')}
                   </button>
                 </div>
               )}
@@ -490,7 +517,7 @@ export function AttendanceView({
           ))}
           {review.error && (
             <p role="alert" className="text-xs text-red-600 font-semibold">
-              {review.error.message}
+              {localizedError(review.error.message)}
             </p>
           )}
         </div>
@@ -502,7 +529,9 @@ export function AttendanceView({
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-[#071A2B]">My Work Hours</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-[#071A2B]">
+            {tr('common.my_work_hours')}
+          </h2>
         </div>
         {daysView}
         {correctionSection}

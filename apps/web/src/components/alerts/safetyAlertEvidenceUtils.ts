@@ -1,3 +1,5 @@
+import { uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
 import { ApiError } from '@smartsite/api-client';
 
 export function buildEvidenceQueryKey(
@@ -22,11 +24,11 @@ export function buildEvidenceQueryKey(
 export function formatEvidenceKind(kind: string): string {
   switch (kind.toUpperCase()) {
     case 'FRAME':
-      return 'Frame';
+      return tr('common.frame');
     case 'CROP':
-      return 'Crop';
+      return tr('common.crop');
     case 'SNAPSHOT':
-      return 'Snapshot';
+      return tr('common.snapshot');
     default:
       return kind
         .toLowerCase()
@@ -42,17 +44,29 @@ export function formatEvidenceAltText(
   capturedAt: string,
 ): string {
   const date = new Date(capturedAt);
-  const formattedDate = Number.isNaN(date.getTime()) ? capturedAt : date.toLocaleString();
-  return `Evidence ${kind.toLowerCase()} from camera ${cameraExternalId} captured at ${formattedDate}`;
+  const formattedDate = Number.isNaN(date.getTime()) ? capturedAt : date.toLocaleString(uiLocale());
+  return tr('safety_alert_evidence_utils.evidence_value_from_camera_value_captured_at_value', {
+    value1: kind.toLowerCase(),
+    value2: cameraExternalId,
+    value3: formattedDate,
+  });
 }
 
 export function evidenceErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 401) return 'Your session is no longer valid. Sign in again.';
-    if (error.status === 403) return 'This account cannot view evidence for the selected Site.';
-    if (error.status === 404) return 'The requested evidence image is no longer available.';
-    if (error.status === 503) return 'Evidence is temporarily unavailable.';
+    if (error.status === 401)
+      return tr('safety_alert_evidence_utils.your_session_is_no_longer_valid_sign_in_again');
+    if (error.status === 403)
+      return tr(
+        'safety_alert_evidence_utils.this_account_cannot_view_evidence_for_the_selected_site',
+      );
+    if (error.status === 404)
+      return tr('safety_alert_evidence_utils.the_requested_evidence_image_is_no_longer_available');
+    if (error.status === 503)
+      return tr('safety_alert_evidence_utils.evidence_is_temporarily_unavailable');
     return error.message;
   }
-  return error instanceof Error ? error.message : 'Failed to load evidence image.';
+  return error instanceof Error
+    ? error.message
+    : tr('safety_alert_evidence_utils.failed_to_load_evidence_image');
 }

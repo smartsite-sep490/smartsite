@@ -1,3 +1,6 @@
+import { localizedLabel } from '../../i18n/labels';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useRealtimePreview } from '../cameras/useRealtimePreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -55,6 +58,8 @@ export interface PpeMonitoringViewProps {
 }
 
 export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
+  useTranslation();
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const pausedViolationRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -143,7 +148,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
         testDetection?.cameraExternalId ||
         aiTimeline?.cameraExternalId,
       testDetection?.regionId,
-      'Chưa có mã camera',
+      tr('monitoring_utils.chua_co_ma_camera'),
     );
   }, [
     preview?.frame.cameraExternalId,
@@ -229,7 +234,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             const context = resolveCameraAndWorkArea(
               entry.event.cameraExternalId,
               observation.regionId,
-              'Chưa có mã camera',
+              tr('monitoring_utils.chua_co_ma_camera'),
             );
             return {
               id: entry.event.eventId,
@@ -245,12 +250,17 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
                 .toString()
                 .padStart(2, '0')}`,
-              worker: `Track #${observation.trackId}`,
+              worker: tr('messages.2c6bb8488230', { value1: observation.trackId }),
               camera: context.camera,
               workArea: context.workArea,
-              issue: `Missing ${observation.ppeItem === 'HARD_HAT' ? 'Hard Hat' : 'Safety Vest'}`,
+              issue: tr('messages.6bbb6eca45dd', {
+                value1:
+                  observation.ppeItem === 'HARD_HAT'
+                    ? tr('common.hard_hat_b1ff71')
+                    : tr('common.safety_vest'),
+              }),
               confidence: person?.confidence ? `${Math.round(person.confidence * 100)}%` : '—',
-              status: 'Technical observation',
+              status: tr('common.technical_observation'),
             };
           }),
       )
@@ -271,13 +281,16 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
     const context = resolveCameraAndWorkArea(
       testDetection.cameraExternalId || aiTimeline?.cameraExternalId,
       testDetection.regionId,
-      'Chưa có mã camera',
+      tr('monitoring_utils.chua_co_ma_camera'),
     );
     setSelectedReview({
       id: testDetection.eventId,
       rowKey: `${testDetection.eventId}-${testDetection.trackId ?? 0}`,
       trackId: testDetection.trackId ?? 0,
-      worker: testDetection.trackId !== null ? `Track #${testDetection.trackId}` : 'Unknown Worker',
+      worker:
+        testDetection.trackId !== null
+          ? tr('messages.2c6bb8488230', { value1: testDetection.trackId })
+          : tr('common.unknown_worker_c1ef7f'),
       camera: context.camera,
       workArea: context.workArea,
       issue: testDetection.label,
@@ -291,7 +304,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Main Interactive Viewport: Camera Video Feed (829px) + Right Card (355px) */}
-      <div className="grid grid-cols-1 xl:grid-cols-[829px_355px] gap-4 items-start mt-4">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,355px)] gap-4 items-start mt-4">
         {/* Left: Camera Feed */}
         <div className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none">
           {/* Local MF04 test fixture driven by the video timeline. */}
@@ -308,7 +321,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               onPause={() => setIsPlaying(false)}
               onLoadedMetadata={(event) => updateVideoTimeline(event.currentTarget)}
               onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
-              aria-label="PPE test video"
+              aria-label={tr('common.ppe_test_video')}
               className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
             />
 
@@ -325,20 +338,20 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               }`}
             >
               {isLive
-                ? 'MF04 AI REALTIME'
+                ? tr('common.mf04_ai_realtime')
                 : aiTimeline
-                  ? 'MF04 AI PIPELINE'
-                  : 'MF04 AI OUTPUT REQUIRED'}{' '}
+                  ? tr('common.mf04_ai_pipeline')
+                  : tr('ppe_monitoring_view.mf04_ai_output_required')}{' '}
               ·{' '}
               {ppeResultState === 'CONFIRMED_MISSING'
-                ? 'MISSING PPE'
+                ? tr('common.missing_ppe')
                 : ppeResultState === 'PENDING_CONFIRMATION'
-                  ? 'VERIFYING PPE'
+                  ? tr('common.verifying_ppe')
                   : ppeResultState === 'COMPLIANT'
-                    ? 'PPE COMPLIANT'
+                    ? tr('common.ppe_compliant')
                     : ppeResultState === 'UNKNOWN'
-                      ? 'PPE UNKNOWN'
-                      : 'NO TARGETS'}{' '}
+                      ? tr('common.ppe_unknown')
+                      : tr('common.no_targets')}{' '}
               · {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
             </div>
 
@@ -367,7 +380,10 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                         isConfirmedPpeDetection(detection) ? 'bg-[#F66B17]' : 'bg-emerald-600'
                       }`}
                     >
-                      {detection.label} · TRACK #{detection.trackId}
+                      {tr('ppe_monitoring_view.value_track_value', {
+                        value1: detection.label,
+                        value2: detection.trackId,
+                      })}
                     </div>
                   </div>
                 ) : null,
@@ -377,7 +393,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             {isLive && ppeDetections.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold">
-                  Live Feed Connected · No Workers Detected In Frame
+                  {tr('ppe_monitoring_view.live_feed_connected_no_workers_detected_in_frame')}
                 </div>
               </div>
             )}
@@ -405,10 +421,10 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               />
               <span className="font-mono text-[10px] font-bold text-white tracking-wider">
                 {isLive && socketConnected
-                  ? `LIVE - ${clockTime}`
+                  ? tr('common.live_value', { value1: clockTime })
                   : socketError
-                    ? 'OFFLINE (SOCKET ERROR)'
-                    : `TIMELINE - ${testDetection?.timecode ?? '00:00'}`}
+                    ? tr('common.offline_socket_error')
+                    : tr('common.timeline_value', { value1: testDetection?.timecode ?? '00:00' })}
               </span>
             </div>
           </div>
@@ -417,7 +433,9 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
           {socketError && (
             <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center gap-2 backdrop-blur-sm">
               <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
-              <span className="truncate">AI WebSocket: {socketError}</span>
+              <span className="truncate">
+                {tr('common.ai_websocket_value', { value1: socketError })}
+              </span>
             </div>
           )}
 
@@ -429,13 +447,13 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 onClick={togglePlayback}
                 disabled={isLive}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
+                aria-label={isPlaying ? tr('common.pause_playback') : tr('common.resume_playback')}
                 title={
                   isLive
-                    ? 'Playback controls apply to timeline replay only'
+                    ? tr('ppe_monitoring_view.playback_controls_apply_to_timeline_replay_only')
                     : isPlaying
-                      ? 'Pause'
-                      : 'Play'
+                      ? tr('common.pause')
+                      : tr('common.play')
                 }
               >
                 {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
@@ -445,8 +463,12 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 onClick={toggleMuted}
                 disabled={isLive}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-                title={isLive ? 'Realtime preview has no audio' : 'Sound'}
+                aria-label={isMuted ? tr('common.unmute_audio') : tr('common.mute_audio')}
+                title={
+                  isLive
+                    ? tr('ppe_monitoring_view.realtime_preview_has_no_audio')
+                    : tr('common.sound')
+                }
               >
                 <IconVolume className="w-4 h-4" />
               </button>
@@ -457,8 +479,8 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 type="button"
                 disabled
                 className="p-1.5 rounded text-white/40 cursor-not-allowed"
-                title="Multi-camera grid view is currently unavailable"
-                aria-label="Grid view unavailable"
+                title={tr('ppe_monitoring_view.multi_camera_grid_view_is_currently_unavailable')}
+                aria-label={tr('common.grid_view_unavailable')}
               >
                 <IconGrid className="w-4 h-4" />
               </button>
@@ -466,8 +488,8 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 type="button"
                 onClick={() => void videoRef.current?.requestFullscreen()}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
-                title="Fullscreen"
-                aria-label="Enter fullscreen"
+                title={tr('common.fullscreen')}
+                aria-label={tr('common.enter_fullscreen')}
               >
                 <IconMaximize className="w-4 h-4" />
               </button>
@@ -476,15 +498,15 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
         </div>
 
         {/* Right: AI Detection & PPE Check Card (355px) */}
-        <div className="bg-white rounded-lg border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto">
+        <div className="bg-white rounded-lg border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto min-w-0">
           <div className="p-6 space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 min-w-0">
               <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
-                AI DETECTION
+                {tr('common.ai_detection')}
               </span>
-              <span className="font-mono text-[11px] font-semibold text-[#6B6B6B]">
-                {testDetection?.eventId ?? 'NO-DETECTION'}
+              <span className="max-w-full break-all font-mono text-[11px] font-semibold text-[#6B6B6B]">
+                {testDetection?.eventId ?? tr('common.no_detection')}
               </span>
             </div>
 
@@ -492,26 +514,27 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                  Identity
+                  {tr('common.identity')}
                 </p>
                 <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                    ? 'Unknown — not identified'
-                    : 'No person detected'}
+                    ? tr('ppe_monitoring_view.unknown_not_identified')
+                    : tr('common.no_person_detected')}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                  Track ID
+                  {tr('common.track_id')}
                 </p>
                 <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
-                  {ppeDetections.map((detection) => `Track #${detection.trackId}`).join(', ') ||
-                    '—'}
+                  {ppeDetections
+                    .map((detection) => tr('messages.2c6bb8488230', { value1: detection.trackId }))
+                    .join(', ') || '—'}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                  Camera
+                  {tr('common.camera')}
                 </p>
                 <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {activeCameraContext.camera}
@@ -519,7 +542,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                  Work Area
+                  {tr('common.work_area')}
                 </p>
                 <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {activeCameraContext.workArea}
@@ -527,7 +550,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                  Detected
+                  {tr('common.detected')}
                 </p>
                 <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
@@ -535,7 +558,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                  Detection Confidence
+                  {tr('common.detection_confidence')}
                 </p>
                 <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
                   {testDetection?.confidence === null || testDetection?.confidence === undefined
@@ -550,12 +573,12 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             {/* PPE Check List */}
             <div>
               <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
-                PPE CHECK
+                {tr('common.ppe_check')}
               </p>
               <div className="space-y-2">
                 {ppeDetections.length === 0 ? (
                   <p className="text-xs text-[#6B6B6B] italic">
-                    No tracked individuals in current frame
+                    {tr('ppe_monitoring_view.no_tracked_individuals_in_current_frame')}
                   </p>
                 ) : (
                   ppeDetections.map((detection) => {
@@ -567,18 +590,20 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                         className="rounded-lg bg-[#FBFBFA] p-3"
                       >
                         <p className="mb-2 text-[11px] font-bold text-[#2F3437]">
-                          Track #{detection.trackId}
+                          {tr('common.track_value_2c6bb8', { value1: detection.trackId })}
                         </p>
                         <div className="flex items-center justify-between text-xs">
                           <span>
-                            Helmet ·{' '}
-                            {helmet === 'CONFIRMED_MISSING'
-                              ? 'Missing · confirmed'
-                              : helmet === 'PENDING_MISSING'
-                                ? 'Missing · checking'
-                                : helmet === 'PRESENT'
-                                  ? 'Detected'
-                                  : 'Not assessed'}
+                            {tr('common.helmet_value', {
+                              value1:
+                                helmet === 'CONFIRMED_MISSING'
+                                  ? tr('common.missing_confirmed')
+                                  : helmet === 'PENDING_MISSING'
+                                    ? tr('common.missing_checking')
+                                    : helmet === 'PRESENT'
+                                      ? tr('common.detected')
+                                      : tr('common.not_assessed'),
+                            })}
                           </span>
                           {helmet === 'CONFIRMED_MISSING' ? (
                             <IconX className="w-4 h-4 text-red-500" />
@@ -592,14 +617,16 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                         </div>
                         <div className="mt-1 flex items-center justify-between text-xs">
                           <span>
-                            Safety Vest ·{' '}
-                            {vest === 'CONFIRMED_MISSING'
-                              ? 'Missing · confirmed'
-                              : vest === 'PENDING_MISSING'
-                                ? 'Missing · checking'
-                                : vest === 'PRESENT'
-                                  ? 'Detected'
-                                  : 'Not assessed'}
+                            {tr('ppe_monitoring_view.safety_vest_value', {
+                              value1:
+                                vest === 'CONFIRMED_MISSING'
+                                  ? tr('common.missing_confirmed')
+                                  : vest === 'PENDING_MISSING'
+                                    ? tr('common.missing_checking')
+                                    : vest === 'PRESENT'
+                                      ? tr('common.detected')
+                                      : tr('common.not_assessed'),
+                            })}
                           </span>
                           {vest === 'CONFIRMED_MISSING' ? (
                             <IconX className="w-4 h-4 text-red-500" />
@@ -632,7 +659,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 }`}
               >
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">
-                  RESULT
+                  {tr('common.result')}
                 </p>
                 <div
                   className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
@@ -650,28 +677,34 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     ppeResultState === 'UNKNOWN') && <IconAlertTriangle className="w-3.5 h-3.5" />}
                   <span>
                     {ppeResultState === 'CONFIRMED_MISSING'
-                      ? 'MISSING PPE OBSERVATION'
+                      ? tr('common.missing_ppe_observation')
                       : ppeResultState === 'PENDING_CONFIRMATION'
-                        ? 'PPE CHECK PENDING'
+                        ? tr('common.ppe_check_pending')
                         : ppeResultState === 'COMPLIANT'
-                          ? 'ALL REQUIRED PPE PRESENT'
+                          ? tr('ppe_monitoring_view.all_required_ppe_present')
                           : ppeResultState === 'UNKNOWN'
-                            ? 'PPE STATUS UNKNOWN'
+                            ? tr('common.ppe_status_unknown')
                             : ppeDetections.length === 0
-                              ? 'CLEAR - NO TARGETS'
-                              : 'PPE STATUS UNKNOWN'}
+                              ? tr('ppe_monitoring_view.clear_no_targets')
+                              : tr('common.ppe_status_unknown')}
                   </span>
                 </div>
                 <p className="text-xs text-[#6B6B6B]">
                   {ppeResultState === 'CONFIRMED_MISSING'
-                    ? 'Technical observation from the YOLO + MF04 pipeline.'
+                    ? tr('ppe_monitoring_view.technical_observation_from_the_yolo_mf04_pipeline')
                     : ppeResultState === 'PENDING_CONFIRMATION'
-                      ? 'Missing evidence is waiting for multi-frame confirmation.'
+                      ? tr(
+                          'ppe_monitoring_view.missing_evidence_is_waiting_for_multi_frame_confirmation',
+                        )
                       : ppeResultState === 'UNKNOWN'
-                        ? 'The current frame does not contain enough evidence to decide PPE compliance.'
+                        ? tr(
+                            'ppe_monitoring_view.the_current_frame_does_not_contain_enough_evidence_to_decide_ppe_compliance',
+                          )
                         : isLive
-                          ? 'Streaming live inference from AI WebSocket.'
-                          : 'Generate ppe-ai.timeline.json, then play the matching video.'}
+                          ? tr('ppe_monitoring_view.streaming_live_inference_from_ai_websocket')
+                          : tr(
+                              'ppe_monitoring_view.generate_ppe_ai_timeline_json_then_play_the_matching_video',
+                            )}
                 </p>
               </div>
             </div>
@@ -682,11 +715,15 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 data-testid="mf04-evidence-capture"
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest text-red-700">
-                  Evidence captured · {violationSnapshot.timecode}
+                  {tr('ppe_monitoring_view.evidence_captured_value', {
+                    value1: violationSnapshot.timecode,
+                  })}
                 </p>
                 <img
                   src={violationSnapshot.imageUrl}
-                  alt={`Captured frame for ${violationSnapshot.eventId}`}
+                  alt={tr('ppe_monitoring_view.captured_frame_for_value', {
+                    value1: violationSnapshot.eventId,
+                  })}
                   className="mt-2 w-full rounded border border-red-200"
                 />
               </div>
@@ -704,7 +741,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                   : 'bg-[#F7F6F3] text-[#A3A09C] cursor-not-allowed'
               }`}
             >
-              Review Alert
+              {tr('common.review_alert')}
             </button>
             <button
               onClick={() => {
@@ -717,10 +754,14 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               className="w-full py-2.5 px-4 rounded-lg bg-white border border-[#EAEAEA] text-[#2F3437] font-semibold text-sm hover:bg-[#FBFBFA] transition-colors cursor-pointer"
             >
               {activeFilterWorker !== null
-                ? `Clear Worker Filter (#${activeFilterWorker})`
+                ? tr('ppe_monitoring_view.clear_worker_filter_value', {
+                    value1: activeFilterWorker,
+                  })
                 : testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                  ? `Filter By Worker Track #${testDetection.trackId}`
-                  : 'View Worker (No Target)'}
+                  ? tr('ppe_monitoring_view.filter_by_worker_track_value', {
+                      value1: testDetection.trackId,
+                    })
+                  : tr('ppe_monitoring_view.view_worker_no_target')}
             </button>
           </div>
         </div>
@@ -734,13 +775,13 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
                 <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
-                  Live AI Observations Active
+                  {tr('ppe_monitoring_view.live_ai_observations_active')}
                 </h3>
               </div>
               <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-                Technical PPE detections are rendered directly on the live camera feed above. Sample
-                replay timeline rows are hidden during live monitoring. Durable safety alerts
-                require Backend worker ingestion; review persisted records in Safety Alerts.
+                {tr(
+                  'ppe_monitoring_view.technical_ppe_detections_are_rendered_directly_on_the_live_camera_feed_above_sampl',
+                )}
               </p>
             </div>
             {onNavigate && (
@@ -749,7 +790,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 onClick={() => onNavigate('incidents', { alertType: 'PPE_VIOLATION' })}
                 className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-[#F66B17]/40 bg-orange-50 text-[#F66B17] hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
               >
-                View in Safety Alerts →
+                {tr('ppe_monitoring_view.view_in_safety_alerts')}
               </button>
             )}
           </div>
@@ -758,11 +799,18 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
         <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-bold text-[#2F3437]">PPE Replay Observations</h3>
+              <h3 className="text-lg font-bold text-[#2F3437]">
+                {tr('common.ppe_replay_observations')}
+              </h3>
               <p className="text-xs text-[#6B6B6B] mt-1">
-                Observations from the sample video timeline. Live safety alerts are available in
-                Safety Alerts.
-                {activeFilterWorker !== null && ` (Filtered by Track #${activeFilterWorker})`}
+                {tr(
+                  'ppe_monitoring_view.observations_from_the_sample_video_timeline_live_safety_alerts_are_available_in_sa',
+                  {
+                    value1:
+                      activeFilterWorker !== null &&
+                      tr('messages.becfe40eedac', { value1: activeFilterWorker }),
+                  },
+                )}
               </p>
             </div>
             {/* Functional event filter controls and Safety Alerts navigation */}
@@ -773,7 +821,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                   onClick={() => onNavigate('incidents', { alertType: 'PPE_VIOLATION' })}
                   className="px-2.5 py-1.5 rounded-lg border border-[#F66B17]/40 bg-orange-50 text-[#F66B17] hover:bg-orange-100 text-xs font-semibold transition-colors cursor-pointer"
                 >
-                  View in Safety Alerts →
+                  {tr('ppe_monitoring_view.view_in_safety_alerts')}
                 </button>
               )}
               <button
@@ -784,7 +832,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
                 }`}
               >
-                All Events ({ppeEvents.length})
+                {tr('common.all_events_value', { value1: ppeEvents.length })}
               </button>
               <button
                 onClick={() => setPpeFilter('HARD_HAT')}
@@ -794,7 +842,9 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
                 }`}
               >
-                Missing Helmet ({ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length})
+                {tr('common.missing_helmet_value', {
+                  value1: ppeEvents.filter((e) => e.ppeItem === 'HARD_HAT').length,
+                })}
               </button>
               <button
                 onClick={() => setPpeFilter('SAFETY_VEST')}
@@ -804,7 +854,9 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
                 }`}
               >
-                Missing Vest ({ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length})
+                {tr('common.missing_vest_value', {
+                  value1: ppeEvents.filter((e) => e.ppeItem === 'SAFETY_VEST').length,
+                })}
               </button>
             </div>
           </div>
@@ -813,14 +865,14 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-3">Time</th>
-                  <th className="py-3 px-3">Worker</th>
-                  <th className="py-3 px-3">Camera</th>
-                  <th className="py-3 px-3">Work Area</th>
-                  <th className="py-3 px-3">Issue</th>
-                  <th className="py-3 px-3">Confidence</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3 text-right">Action</th>
+                  <th className="py-3 px-3">{tr('common.time')}</th>
+                  <th className="py-3 px-3">{tr('common.worker')}</th>
+                  <th className="py-3 px-3">{tr('common.camera')}</th>
+                  <th className="py-3 px-3">{tr('common.work_area')}</th>
+                  <th className="py-3 px-3">{tr('common.issue')}</th>
+                  <th className="py-3 px-3">{tr('common.confidence')}</th>
+                  <th className="py-3 px-3">{tr('common.status')}</th>
+                  <th className="py-3 px-3 text-right">{tr('common.action')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAEAEA]">
@@ -832,7 +884,9 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                       {evt.camera}
                     </td>
                     <td className="py-3 px-3 text-[#6B6B6B]">{evt.workArea}</td>
-                    <td className="py-3 px-3 font-medium text-[#2F3437]">{evt.issue}</td>
+                    <td className="py-3 px-3 font-medium text-[#2F3437]">
+                      {localizedLabel(evt.issue)}
+                    </td>
                     <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.confidence}</td>
                     <td className="py-3 px-3">
                       <span
@@ -844,7 +898,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                               : 'bg-amber-50 text-amber-600'
                         }`}
                       >
-                        {evt.status}
+                        {localizedLabel(evt.status)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
@@ -852,7 +906,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                         onClick={() => setSelectedReview(evt)}
                         className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-[#EAEAEA] cursor-pointer"
                       >
-                        Review
+                        {tr('common.review')}
                       </button>
                     </td>
                   </tr>
@@ -860,7 +914,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 {displayedEvents.length === 0 && (
                   <tr>
                     <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
-                      No PPE events match the selected criteria.
+                      {tr('ppe_monitoring_view.no_ppe_events_match_the_selected_criteria')}
                     </td>
                   </tr>
                 )}
@@ -879,12 +933,12 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold font-mono uppercase tracking-wider">
                   {selectedReview.id}
                 </span>
-                <h3 className="font-bold text-[#2F3437]">Violation Review</h3>
+                <h3 className="font-bold text-[#2F3437]">{tr('common.violation_review')}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedReview(null)}
-                aria-label="Close review dialog"
+                aria-label={tr('common.close_review_dialog')}
                 className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
               >
                 <IconX className="w-5 h-5" />
@@ -893,21 +947,23 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
 
             <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
-                AI detected an observation for{' '}
-                <strong className="text-[#2F3437]">{selectedReview.worker}</strong> in{' '}
+                {tr('ppe_monitoring_view.ai_detected_an_observation_for')}{' '}
+                <strong className="text-[#2F3437]">{selectedReview.worker}</strong>{' '}
+                {tr('common.in_582967')}{' '}
                 <strong className="text-[#2F3437]">{selectedReview.workArea}</strong> (
-                {selectedReview.camera}). Observation:{' '}
-                <strong className="text-[#2F3437]">{selectedReview.issue}</strong> (Confidence:{' '}
-                {selectedReview.confidence}).
+                {selectedReview.camera}
+                {tr('common.observation_b1add8')}{' '}
+                <strong className="text-[#2F3437]">{localizedLabel(selectedReview.issue)}</strong>{' '}
+                {tr('common.confidence_793412')} {selectedReview.confidence}).
               </p>
               <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
                 <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
-                  Technical Evidence Preview
+                  {tr('common.technical_evidence_preview')}
                 </p>
                 <p className="text-[#6B6B6B] text-xs leading-relaxed">
-                  AI detections are preliminary observations. To review durable records, inspect
-                  session-scoped evidence images, or record an auditable safety decision (Confirm,
-                  Dismiss, or Request Evidence), open the Safety Alerts queue.
+                  {tr(
+                    'ppe_monitoring_view.ai_detections_are_preliminary_observations_to_review_durable_records_inspect_sessi',
+                  )}
                 </p>
               </div>
             </div>
@@ -922,15 +978,15 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                   }}
                   className="py-2 px-4 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
                 >
-                  Review in Safety Alerts
+                  {tr('ppe_monitoring_view.review_in_safety_alerts')}
                 </button>
               ) : (
                 <button
                   disabled
-                  title="Safety alerts navigation not configured"
+                  title={tr('ppe_monitoring_view.safety_alerts_navigation_not_configured')}
                   className="py-2 px-4 rounded-lg bg-[#F66B17]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
                 >
-                  Review in Alerts
+                  {tr('common.review_in_alerts')}
                 </button>
               )}
               <button
@@ -938,7 +994,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 onClick={() => setSelectedReview(null)}
                 className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-[#EAEAEA] text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
               >
-                Dismiss Preview
+                {tr('common.dismiss_preview')}
               </button>
             </div>
           </div>

@@ -108,7 +108,7 @@ const mockWorkersList: { items: ObservationIdentityWorkerResponse[]; total: numb
       id: '00000000-0000-4000-8000-000000000777',
       siteId: 'site-alpha',
       externalId: 'EMP-001',
-      displayName: 'Nguyễn Văn A',
+      displayName: 'Nguyen Van A',
       isActive: true,
     },
   ],
@@ -165,11 +165,11 @@ describe('SafetyAlertEvidencePanel Integration (Plan §15 A4 Production Mount)',
     );
 
     // Bảng kiểm tra danh tính đối tượng được mount
-    const title = await screen.findByText('Xác minh người trong ảnh');
+    const title = await screen.findByText('Verify the person in the image');
     expect(title).not.toBeNull();
 
     const prompt = screen.getByText(
-      'Vui lòng chọn một đối tượng PERSON bên trên để xem xét danh tính hoặc nhập quyết định.',
+      'Select a person subject above to review identity or record a decision.',
     );
     expect(prompt).not.toBeNull();
 
@@ -206,11 +206,9 @@ describe('SafetyAlertEvidencePanel Integration (Plan §15 A4 Production Mount)',
     );
 
     // Không render bảng xác minh nhận diện
-    expect(screen.queryByText('Xác minh người trong ảnh')).toBeNull();
+    expect(screen.queryByText('Verify the person in the image')).toBeNull();
     expect(
-      screen.queryByText(
-        'Vui lòng chọn một đối tượng PERSON bên trên để xem xét danh tính hoặc nhập quyết định.',
-      ),
+      screen.queryByText('Select a person subject above to review identity or record a decision.'),
     ).toBeNull();
 
     // Tuyệt đối không gọi bất kỳ API identity nào
@@ -314,7 +312,7 @@ describe('SafetyAlertEvidencePanel Integration (Plan §15 A4 Production Mount)',
     expect(emptyNotice).not.toBeNull();
 
     // ObservationIdentityReviewPanel vẫn được mount độc lập
-    const headerTitle = await screen.findByText('Xác minh người trong ảnh');
+    const headerTitle = await screen.findByText('Verify the person in the image');
     expect(headerTitle).not.toBeNull();
 
     // Chọn đối tượng Person #0
@@ -322,18 +320,18 @@ describe('SafetyAlertEvidencePanel Integration (Plan §15 A4 Production Mount)',
     await user.click(personTab);
 
     // Radio CLEAR khả dụng, radio RESOLVE bị khóa do không có ảnh
-    const clearRadio = await screen.findByLabelText('Thu hồi xác minh (CLEAR)');
+    const clearRadio = await screen.findByLabelText('Clear identity review (CLEAR)');
     expect((clearRadio as HTMLInputElement).disabled).toBe(false);
     await user.click(clearRadio);
 
     // Nhập lý do thu hồi hợp lệ (>= 5 ký tự)
     const reasonInput = screen.getByRole('textbox', {
-      name: /Lý do đánh giá/i,
+      name: new RegExp('Review reason \\(required, 5–1000 characters\\)', 'i'),
     });
     await user.type(reasonInput, 'Thu hồi quyết định do ảnh hết hạn trên hệ thống lưu trữ');
 
     // Nút CLEAR khả dụng và submit
-    const submitButton = screen.getByRole('button', { name: 'Thu hồi xác minh' });
+    const submitButton = screen.getByRole('button', { name: 'Clear identity review' });
     expect((submitButton as HTMLButtonElement).disabled).toBe(false);
     await user.click(submitButton);
 

@@ -1,3 +1,6 @@
+import { localizeMessage } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import {
   type WorkflowProps,
   fieldClass,
@@ -27,6 +30,8 @@ export function Field({
   defaultValue?: string;
   maxLength?: number;
 }) {
+  useTranslation();
+
   return (
     <label className="block text-sm font-semibold">
       {caption}
@@ -53,14 +58,21 @@ export function Field({
   );
 }
 export function ResultFields() {
+  useTranslation();
+
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File>(),
     [error, setError] = useState<unknown>();
   return (
     <>
-      <Field name="resultDescription" label="Result description" type="textarea" required />
+      <Field
+        name="resultDescription"
+        label={tr('common.result_description')}
+        type="textarea"
+        required
+      />
       <label className="block text-sm font-semibold">
-        Photo (optional JPEG, max 1 MiB)
+        {tr('safety_workflow_ui.photo_optional_jpeg_max_1_mib')}
         <input
           ref={input}
           className={fieldClass}
@@ -86,9 +98,12 @@ export function ResultFields() {
       {file && (
         <div className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-3">
           <p className="break-words text-sm">
-            {file.name} · {(file.size / 1024).toFixed(1)} KiB
+            {tr('safety_workflow_ui.value_value_kib', {
+              value1: file.name,
+              value2: (file.size / 1024).toFixed(1),
+            })}
           </p>
-          <BlobImage blob={file} alt="Selected result photo" />
+          <BlobImage blob={file} alt={tr('common.selected_result_photo')} />
           <button
             type="button"
             className={buttonClass}
@@ -98,7 +113,7 @@ export function ResultFields() {
               setError(undefined);
             }}
           >
-            Remove photo
+            {tr('common.remove_photo')}
           </button>
         </div>
       )}
@@ -106,32 +121,38 @@ export function ResultFields() {
   );
 }
 export function RequestError({ error, retry }: { error: unknown; retry?: () => void }) {
+  useTranslation();
+
   if (!error) return null;
   const conflict = error instanceof ApiError && error.status === 409;
   const message =
     error instanceof ApiError
       ? conflict
-        ? 'Data changed. Reload and review the current version before submitting again.'
+        ? tr(
+            'safety_workflow_ui.data_changed_reload_and_review_the_current_version_before_submitting_again',
+          )
         : error.status === 403
-          ? 'This account does not have access.'
+          ? tr('safety_workflow_ui.this_account_does_not_have_access')
           : error.status === 503 || error.status === 404
-            ? 'Evidence or service unavailable.'
+            ? tr('safety_workflow_ui.evidence_or_service_unavailable')
             : error.message
       : error instanceof Error
         ? error.message
-        : 'Request failed';
+        : tr('common.request_failed');
   return (
     <div className="space-y-3 rounded-lg border border-red-200 bg-[var(--semantic-red-bg)] p-3 text-sm text-[var(--semantic-red-text)]">
-      <p role="alert">{message}</p>
+      <p role="alert">{localizeMessage(message)}</p>
       {retry && (
         <button className={buttonClass} type="button" onClick={retry}>
-          {conflict ? 'Reload data' : 'Retry'}
+          {conflict ? tr('common.reload_data') : tr('common.retry')}
         </button>
       )}
     </div>
   );
 }
 export function StatusBadge({ value, text: caption }: { value: string; text?: string }) {
+  useTranslation();
+
   const tone = ['VERIFIED', 'APPROVED'].includes(value)
     ? 'bg-[var(--semantic-green-bg)] text-[var(--semantic-green-text)]'
     : ['REJECTED', 'CONFIRMED', 'CRITICAL', 'HIGH'].includes(value)
@@ -148,9 +169,13 @@ export function StatusBadge({ value, text: caption }: { value: string; text?: st
   );
 }
 export function TechnicalDetails({ children }: { children: ReactNode }) {
+  useTranslation();
+
   return (
     <details className="text-xs text-[var(--text-secondary)]">
-      <summary className="cursor-pointer py-2 font-semibold">Technical details</summary>
+      <summary className="cursor-pointer py-2 font-semibold">
+        {tr('common.technical_details')}
+      </summary>
       <div className="space-y-2 break-all pt-2">{children}</div>
     </details>
   );
@@ -170,6 +195,8 @@ export function Dialog({
   error?: unknown;
   reload?: () => void;
 }) {
+  useTranslation();
+
   const ref = useRef<HTMLDialogElement>(null),
     id = useId();
   useLayoutEffect(() => {
@@ -226,7 +253,7 @@ export function Dialog({
           {title}
         </h2>
         <button type="button" className={buttonClass} disabled={pending} onClick={onClose}>
-          Cancel
+          {tr('common.cancel')}
         </button>
       </div>
       <div className="space-y-4 p-5">
@@ -249,6 +276,8 @@ export function Assignee({
   onChange?: (value: string) => void;
   contractorId?: string;
 }) {
+  useTranslation();
+
   const [offset, setOffset] = useState(0);
   const [choice, setChoice] = useState({ id: '', name: '' });
   const selected = onChange ? (value ?? '') : choice.id;
@@ -276,7 +305,7 @@ export function Assignee({
   return (
     <div>
       <label className="block text-sm font-semibold">
-        {onChange ? 'Assigned to' : 'Assignee'}
+        {onChange ? tr('common.assigned_to') : tr('common.assignee')}
         <select
           className={fieldClass}
           name={onChange ? undefined : 'assignedTo'}
@@ -284,20 +313,23 @@ export function Assignee({
           value={selected}
           onChange={(e) => {
             const id = e.target.value;
-            setChoice({ id, name: e.target.selectedOptions[0]?.textContent ?? 'Selected officer' });
+            setChoice({
+              id,
+              name: e.target.selectedOptions[0]?.textContent ?? tr('common.selected_officer'),
+            });
             onChange?.(id);
           }}
         >
           <option value="">
             {onChange
-              ? 'All assignees'
+              ? tr('common.all_assignees')
               : role === 'CONTRACTOR_REPRESENTATIVE'
-                ? 'Choose a contractor representative'
-                : 'Choose an active officer'}
+                ? tr('safety_workflow_ui.choose_a_contractor_representative')
+                : tr('safety_workflow_ui.choose_an_active_officer')}
           </option>
           {selected && !query.data?.items.some((u) => u.id === selected) && (
             <option value={selected}>
-              {choice.id === selected ? choice.name : 'Selected officer'}
+              {choice.id === selected ? choice.name : tr('common.selected_officer')}
             </option>
           )}
           {query.data?.items.map((user) => (
@@ -308,7 +340,9 @@ export function Assignee({
         </select>
       </label>
       {query.isPending && (
-        <p className="mt-2 text-xs text-[var(--text-secondary)]">Loading assignees…</p>
+        <p className="mt-2 text-xs text-[var(--text-secondary)]">
+          {tr('common.loading_assignees')}
+        </p>
       )}
       <RequestError error={query.error} retry={() => void query.refetch()} />
       {query.data && query.data.total > 20 && (
@@ -319,7 +353,7 @@ export function Assignee({
             disabled={!offset}
             onClick={() => setOffset(Math.max(0, offset - 20))}
           >
-            Previous assignees
+            {tr('common.previous_assignees')}
           </button>
           <button
             className={buttonClass}
@@ -327,7 +361,7 @@ export function Assignee({
             disabled={offset + 20 >= query.data.total}
             onClick={() => setOffset(offset + 20)}
           >
-            More assignees
+            {tr('common.more_assignees')}
           </button>
         </div>
       )}
@@ -345,6 +379,8 @@ export function OfficerName({
   id: string;
   contractorId?: string;
 }) {
+  useTranslation();
+
   const allowed = p.user.roleAssignments.some(
     (r) =>
       (r.role === 'ADMIN' && r.siteId === null) ||
@@ -376,17 +412,21 @@ export function OfficerName({
   return (
     <>
       {id === p.user.id
-        ? 'You'
+        ? tr('common.you')
         : (query.data?.items.find((u) => u.id === id)?.displayName ??
-          'Assigned account (historical or unavailable)')}
+          tr('safety_workflow_ui.assigned_account_historical_or_unavailable'))}
     </>
   );
 }
 export function Audit({ items }: { items: SafetyAuditResponse[] }) {
+  useTranslation();
+
   return (
     <section className={cardClass}>
-      <h3 className="font-bold">Activity history</h3>
-      {!items.length && <p className="text-sm text-[var(--text-secondary)]">No activity yet.</p>}
+      <h3 className="font-bold">{tr('common.activity_history')}</h3>
+      {!items.length && (
+        <p className="text-sm text-[var(--text-secondary)]">{tr('common.no_activity_yet')}</p>
+      )}
       <ol className="space-y-4">
         {items.map((item) => (
           <li key={item.id} className="border-l-2 border-[var(--accent)] pl-4 text-sm">
@@ -395,26 +435,30 @@ export function Audit({ items }: { items: SafetyAuditResponse[] }) {
                 {item.resourceType === 'INCIDENT'
                   ? ((
                       {
-                        assign: 'Case handed over',
-                        start: 'Handling started',
-                        submit: 'Handling outcome reported',
+                        assign: tr('common.case_handed_over'),
+                        start: tr('common.handling_started'),
+                        submit: tr('common.handling_outcome_reported'),
                         review:
                           item.changes.decision === 'REJECTED'
-                            ? 'Result returned (legacy)'
-                            : 'Handling outcome recorded',
-                        'correct-responsibility': 'Responsibility corrected',
+                            ? tr('common.result_returned_legacy')
+                            : tr('common.handling_outcome_recorded'),
+                        'correct-responsibility': tr('common.responsibility_corrected'),
                       } as Record<string, string>
                     )[item.action] ?? label(item.action))
                   : label(item.action)}
               </strong>
               <time className="text-xs text-[var(--text-secondary)]">{date(item.occurredAt)}</time>
             </div>
-            <p className="mt-1">By {item.actorName ?? 'Account unavailable'}</p>
+            <p className="mt-1">
+              {tr('common.by_value', {
+                value1: item.actorName ?? tr('common.account_unavailable'),
+              })}
+            </p>
             {typeof item.changes.assignedToName === 'string' && (
-              <p>Recipient: {item.changes.assignedToName}</p>
+              <p>{tr('common.recipient_value', { value1: item.changes.assignedToName })}</p>
             )}
             {typeof item.changes.contractorName === 'string' && (
-              <p>Contractor: {item.changes.contractorName}</p>
+              <p>{tr('common.contractor_value', { value1: item.changes.contractorName })}</p>
             )}
             {item.reason && <p className="mt-2 whitespace-pre-wrap break-words">{item.reason}</p>}
             {typeof item.changes.resultDescription === 'string' && (
@@ -423,7 +467,9 @@ export function Audit({ items }: { items: SafetyAuditResponse[] }) {
             {typeof item.changes.resultSummary === 'string' && (
               <p className="mt-2 break-words">{item.changes.resultSummary}</p>
             )}
-            <TechnicalDetails>Actor {item.actorId}</TechnicalDetails>
+            <TechnicalDetails>
+              {tr('common.actor_value', { value1: item.actorId })}
+            </TechnicalDetails>
           </li>
         ))}
       </ol>
@@ -439,6 +485,8 @@ export function Pager({
   total: number;
   onChange: (offset: number) => void;
 }) {
+  useTranslation();
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs text-[var(--text-secondary)]">
       <button
@@ -447,10 +495,14 @@ export function Pager({
         disabled={!offset}
         onClick={() => onChange(Math.max(0, offset - 20))}
       >
-        Previous
+        {tr('common.previous')}
       </button>
       <span>
-        {total ? offset + 1 : 0}–{Math.min(offset + 20, total)} of {total}
+        {tr('common.value_value_of_value', {
+          value1: total ? offset + 1 : 0,
+          value2: Math.min(offset + 20, total),
+          value3: total,
+        })}
       </span>
       <button
         className={buttonClass}
@@ -458,7 +510,7 @@ export function Pager({
         disabled={offset + 20 >= total}
         onClick={() => onChange(offset + 20)}
       >
-        Next
+        {tr('common.next')}
       </button>
     </div>
   );
@@ -474,6 +526,8 @@ export function Evidence({
   id: string;
   evidenceId: string;
 }) {
+  useTranslation();
+
   const query = useQuery({
     queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, type, id, 'evidence', evidenceId],
     queryFn: ({ signal }) =>
@@ -483,12 +537,18 @@ export function Evidence({
   return (
     <>
       <RequestError error={query.error} retry={() => void query.refetch()} />
-      {query.isPending && <p className="text-sm text-[var(--text-secondary)]">Loading photo…</p>}
-      {query.data && <BlobImage blob={query.data} alt="Submitted corrective evidence" />}
+      {query.isPending && (
+        <p className="text-sm text-[var(--text-secondary)]">{tr('common.loading_photo')}</p>
+      )}
+      {query.data && (
+        <BlobImage blob={query.data} alt={tr('common.submitted_corrective_evidence')} />
+      )}
     </>
   );
 }
 export function BlobImage({ blob, alt }: { blob: Blob; alt: string }) {
+  useTranslation();
+
   const ref = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
     const image = ref.current;
@@ -519,6 +579,8 @@ export function CommandForm({
   pending: boolean;
   label: string;
 }) {
+  useTranslation();
+
   const [error, setError] = useState<unknown>();
   return (
     <form
@@ -536,7 +598,7 @@ export function CommandForm({
         {children}
         <div className="border-t border-[var(--border)] pt-4">
           <button className={primaryClass} type="submit">
-            {pending ? 'Saving…' : caption}
+            {pending ? tr('common.saving') : caption}
           </button>
         </div>
       </fieldset>
@@ -551,6 +613,8 @@ export function ConfirmedAlerts({
   p: WorkflowProps;
   initialAlertId?: string;
 }) {
+  useTranslation();
+
   const [offset, setOffset] = useState(0),
     [selected, setSelected] = useState<string[]>(initialAlertId ? [initialAlertId] : []);
   const query = useQuery({
@@ -570,7 +634,9 @@ export function ConfirmedAlerts({
     setSelected(selected.filter((id) => !linkedIds.includes(id)));
   return (
     <fieldset className="space-y-2">
-      <legend className="mb-2 text-sm font-semibold">Confirmed alerts (optional)</legend>
+      <legend className="mb-2 text-sm font-semibold">
+        {tr('common.confirmed_alerts_optional')}
+      </legend>
       {selected.map((id) => (
         <input key={id} type="hidden" name="alertIds" value={id} />
       ))}
@@ -581,10 +647,10 @@ export function ConfirmedAlerts({
           type="button"
           onClick={() => setSelected(selected.filter((value) => value !== id))}
         >
-          Remove selected alert {id.slice(0, 8)}
+          {tr('safety_workflow_ui.remove_selected_alert_value', { value1: id.slice(0, 8) })}
         </button>
       ))}
-      {query.isPending && <p>Loading confirmed alerts…</p>}
+      {query.isPending && <p>{tr('common.loading_confirmed_alerts')}</p>}
       <RequestError error={query.error} retry={() => void query.refetch()} />
       {query.data?.items
         .filter((a) => !a.incidentId)
@@ -612,7 +678,9 @@ export function ConfirmedAlerts({
         ))}
       {query.data && !query.data.items.some((a) => !a.incidentId) && (
         <p className="text-sm text-[var(--text-secondary)]">
-          No unlinked confirmed alert on this page. You can create a manual incident.
+          {tr(
+            'safety_workflow_ui.no_unlinked_confirmed_alert_on_this_page_you_can_create_a_manual_incident',
+          )}
         </p>
       )}
       {query.data && query.data.total > 20 && (

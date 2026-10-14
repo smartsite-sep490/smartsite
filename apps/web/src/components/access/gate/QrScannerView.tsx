@@ -1,3 +1,6 @@
+import { localizeMessage } from '../../../i18n/messages';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import QrScanner from 'qr-scanner';
 import { IconAlertTriangle, IconCamera, IconX } from '../../icons';
@@ -9,6 +12,8 @@ export function QrScannerView({
   onScan: (token: string) => void;
   disabled?: boolean;
 }) {
+  useTranslation();
+
   const video = useRef<HTMLVideoElement>(null);
   const callback = useRef(onScan);
   const [active, setActive] = useState(false);
@@ -35,7 +40,9 @@ export function QrScannerView({
     void scanner.start().catch(() => {
       if (!cancelled) {
         setError(
-          'Unable to access camera. Try uploading a QR image or entering the token manually.',
+          tr(
+            'qr_scanner_view.unable_to_access_camera_try_uploading_a_qr_image_or_entering_the_token_manually',
+          ),
         );
         setActive(false);
       }
@@ -66,12 +73,12 @@ export function QrScannerView({
           {active ? (
             <>
               <IconX className="h-4 w-4" />
-              <span>Stop Scanner</span>
+              <span>{tr('common.stop_scanner')}</span>
             </>
           ) : (
             <>
               <IconCamera className="h-4 w-4" />
-              <span>Scan with Camera</span>
+              <span>{tr('common.scan_with_camera')}</span>
             </>
           )}
         </button>
@@ -94,9 +101,9 @@ export function QrScannerView({
               d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
             />
           </svg>
-          <span>Upload QR Image</span>
+          <span>{tr('common.upload_qr_image')}</span>
           <input
-            aria-label="Upload QR image to scan"
+            aria-label={tr('qr_scanner_view.upload_qr_image_to_scan')}
             type="file"
             accept="image/*"
             disabled={disabled}
@@ -108,7 +115,7 @@ export function QrScannerView({
               setError('');
               void QrScanner.scanImage(file, { returnDetailedScanResult: true })
                 .then((r) => callback.current(r.data))
-                .catch(() => setError('No valid QR code found in the image.'));
+                .catch(() => setError(tr('qr_scanner_view.no_valid_qr_code_found_in_the_image')));
             }}
           />
         </label>
@@ -132,7 +139,7 @@ export function QrScannerView({
               <div className="absolute inset-x-2 top-1/2 h-0.5 bg-gradient-to-r from-transparent via-[#FF7A1A] to-transparent animate-pulse shadow-[0_0_8px_#FF7A1A]" />
             </div>
             <p className="mt-3 text-[11px] font-medium tracking-wide text-white/90 drop-shadow">
-              Align QR code inside the viewfinder
+              {tr('qr_scanner_view.align_qr_code_inside_the_viewfinder')}
             </p>
           </div>
         </div>
@@ -145,7 +152,7 @@ export function QrScannerView({
           className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
         >
           <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-          <span>{error}</span>
+          <span>{localizeMessage(error)}</span>
         </div>
       )}
     </div>

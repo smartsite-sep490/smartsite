@@ -1,3 +1,6 @@
+import { localizedLabel } from '../../../i18n/labels';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo } from 'react';
 import { useNotificationRequest } from '../hooks/useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -42,6 +45,8 @@ export function WorkforceManagerReviewTab({
   siteId: string;
   token: string;
 }) {
+  useTranslation();
+
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const target = useNotificationRequest(apiUrl, siteId, token);
@@ -94,7 +99,7 @@ export function WorkforceManagerReviewTab({
 
   const getWorkerName = React.useCallback(
     (id?: string) => {
-      if (!id) return 'Worker';
+      if (!id) return tr('common.worker');
       const w =
         workers?.items.find(
           (item) => item.id === id || (item as unknown as { userId?: string }).userId === id,
@@ -102,7 +107,7 @@ export function WorkforceManagerReviewTab({
         coworkers?.items.find(
           (item) => item.id === id || (item as unknown as { userId?: string }).userId === id,
         );
-      return w?.displayName || `Worker (${id.slice(0, 6)})`;
+      return w?.displayName || tr('common.worker_value', { value1: id.slice(0, 6) });
     },
     [workers, coworkers],
   );
@@ -112,11 +117,17 @@ export function WorkforceManagerReviewTab({
     const s = getShiftObj(id);
     return s
       ? `${s.name} (${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)})`
-      : `Shift (${id.slice(0, 6)})`;
+      : tr('common.shift_value', { value1: id.slice(0, 6) });
   };
 
   const actionError = (error: unknown) =>
-    setActionFeedback({ type: 'error', title: 'Action Failed', message: schedulingError(error) });
+    setActionFeedback({
+      type: 'error',
+      get title() {
+        return tr('common.action_failed');
+      },
+      message: schedulingError(error),
+    });
 
   // Mutations
   const approveChange = useMutation({
@@ -131,15 +142,25 @@ export function WorkforceManagerReviewTab({
         result.status === 'APPLIED'
           ? {
               type: 'success',
-              title: 'Shift Change Approved',
-              message:
-                'Shift change request has been approved. The worker schedule is now updated.',
+              get title() {
+                return tr('common.shift_change_approved');
+              },
+              get message() {
+                return tr(
+                  'workforce_manager_review_tab.shift_change_request_has_been_approved_the_worker_schedule_is_now_updated',
+                );
+              },
             }
           : {
               type: 'error',
-              title: 'Shift Change Could Not Be Applied',
-              message:
-                'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
+              get title() {
+                return tr('workforce_manager_review_tab.shift_change_could_not_be_applied');
+              },
+              get message() {
+                return tr(
+                  'workforce_manager_review_tab.the_schedule_changed_before_approval_review_the_current_schedule_and_submit_a_new',
+                );
+              },
             },
       );
       setTimeout(() => setActionFeedback(null), 5000);
@@ -158,8 +179,12 @@ export function WorkforceManagerReviewTab({
       setRejectReason('');
       setActionFeedback({
         type: 'success',
-        title: 'Shift Change Rejected',
-        message: 'The shift change request has been declined.',
+        get title() {
+          return tr('common.shift_change_rejected');
+        },
+        get message() {
+          return tr('workforce_manager_review_tab.the_shift_change_request_has_been_declined');
+        },
       });
       setTimeout(() => setActionFeedback(null), 5000);
     },
@@ -177,14 +202,25 @@ export function WorkforceManagerReviewTab({
         result.status === 'APPLIED'
           ? {
               type: 'success',
-              title: 'Shift Swap Approved',
-              message: 'Shift swap request approved. Schedules for both workers have been updated.',
+              get title() {
+                return tr('common.shift_swap_approved');
+              },
+              get message() {
+                return tr(
+                  'workforce_manager_review_tab.shift_swap_request_approved_schedules_for_both_workers_have_been_updated',
+                );
+              },
             }
           : {
               type: 'error',
-              title: 'Shift Swap Could Not Be Applied',
-              message:
-                'The schedule changed before approval. Review the current schedule and submit a new request if needed.',
+              get title() {
+                return tr('workforce_manager_review_tab.shift_swap_could_not_be_applied');
+              },
+              get message() {
+                return tr(
+                  'workforce_manager_review_tab.the_schedule_changed_before_approval_review_the_current_schedule_and_submit_a_new',
+                );
+              },
             },
       );
       setTimeout(() => setActionFeedback(null), 5000);
@@ -203,8 +239,12 @@ export function WorkforceManagerReviewTab({
       setRejectReason('');
       setActionFeedback({
         type: 'success',
-        title: 'Shift Swap Rejected',
-        message: 'The shift swap request has been declined.',
+        get title() {
+          return tr('common.shift_swap_rejected');
+        },
+        get message() {
+          return tr('workforce_manager_review_tab.the_shift_swap_request_has_been_declined');
+        },
       });
       setTimeout(() => setActionFeedback(null), 5000);
     },
@@ -264,10 +304,11 @@ export function WorkforceManagerReviewTab({
         <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
           <IconShield className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">Access Denied</h2>
+        <h2 className="text-lg font-bold text-slate-900">{tr('common.access_denied')}</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Contractor Review is reserved for Contractor Representatives assigned to this Site and
-          Contractor.
+          {tr(
+            'workforce_manager_review_tab.contractor_review_is_reserved_for_contractor_representatives_assigned_to_this_site',
+          )}
         </p>
       </div>
     );
@@ -280,9 +321,13 @@ export function WorkforceManagerReviewTab({
         <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
           <IconAlertCircle className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">Failed to Load Requests</h2>
+        <h2 className="text-lg font-bold text-slate-900">
+          {tr('workforce_manager_review_tab.failed_to_load_requests')}
+        </h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          An error occurred while loading shift change and swap requests.
+          {tr(
+            'workforce_manager_review_tab.an_error_occurred_while_loading_shift_change_and_swap_requests',
+          )}
         </p>
         <Button
           variant="default"
@@ -292,7 +337,7 @@ export function WorkforceManagerReviewTab({
             void refetchSwaps();
           }}
         >
-          Retry
+          {tr('common.retry')}
         </Button>
       </div>
     );
@@ -300,36 +345,40 @@ export function WorkforceManagerReviewTab({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      {target.isLoading && <p role="status">Loading selected request…</p>}
+      {target.isLoading && <p role="status">{tr('common.loading_selected_request')}</p>}
       {target.isError && (
         <div
           role="alert"
           className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
         >
-          This request is unavailable or you no longer have access.{' '}
+          {tr(
+            'workforce_manager_review_tab.this_request_is_unavailable_or_you_no_longer_have_access',
+          )}{' '}
           <button type="button" onClick={() => void target.refetch()} className="underline">
-            Retry
+            {tr('common.retry')}
           </button>
         </div>
       )}
 
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 max-w-full">
           <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
             <IconShield className="w-5 h-5 text-[#F66B17]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                Workforce Operations
+                {tr('common.workforce_operations')}
               </span>
               <span className="text-slate-300">•</span>
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                Shift Approvals
+                {tr('common.shift_approvals')}
               </span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">Contractor Review</h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
+              {tr('common.contractor_review')}
+            </h1>
           </div>
         </div>
 
@@ -343,37 +392,37 @@ export function WorkforceManagerReviewTab({
           isLoading={isLoading}
           leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
         >
-          Refresh
+          {tr('common.refresh')}
         </Button>
       </div>
 
       {/* 2. Top Summary Metrics */}
-      <div className="flex items-center gap-3">
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl px-4 py-2.5 shadow-xs flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 max-w-full">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl px-4 py-2.5 shadow-xs flex min-w-0 max-w-full items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500">
             <IconUsers className="w-4 h-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Workers
+              {tr('common.workers')}
             </p>
             <p className="text-sm font-bold text-[#071A2B]">{activeWorkerCount}</p>
           </div>
         </div>
 
         <div
-          className={`bg-white border rounded-2xl px-4 py-2.5 shadow-xs flex items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-[#E2E8F0]'}`}
+          className={`bg-white border rounded-2xl px-4 py-2.5 shadow-xs flex min-w-0 max-w-full items-center gap-3 ${totalPending > 0 ? 'border-amber-300 bg-amber-50/30' : 'border-[#E2E8F0]'}`}
         >
           <div
             className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${totalPending > 0 ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
           >
             <IconAlertCircle className="w-4 h-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p
               className={`text-[11px] font-medium uppercase tracking-wider ${totalPending > 0 ? 'text-amber-800 font-semibold' : 'text-slate-500'}`}
             >
-              Pending Action
+              {tr('common.pending_action')}
             </p>
             <p
               className={`text-sm font-bold ${totalPending > 0 ? 'text-amber-600' : 'text-slate-700'}`}
@@ -411,7 +460,7 @@ export function WorkforceManagerReviewTab({
                     type="button"
                     onClick={() => setActionFeedback(null)}
                     className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
-                    aria-label="Dismiss notification"
+                    aria-label={tr('common.dismiss_notification')}
                   >
                     <IconX className="w-3.5 h-3.5" />
                   </button>
@@ -434,13 +483,15 @@ export function WorkforceManagerReviewTab({
           <IconAlertCircle className="w-5 h-5" />
           <div className="space-y-1">
             <AlertTitle className="text-amber-950 font-bold flex items-center gap-2 text-xs">
-              <span>Pending Contractor Review</span>
+              <span>{tr('common.pending_contractor_review')}</span>
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
             </AlertTitle>
             <AlertDescription className="text-amber-900/90 font-medium text-xs">
-              You have{' '}
-              <span className="font-semibold text-slate-950">{totalPending} shift request(s)</span>{' '}
-              awaiting your review and approval.
+              {tr('common.you_have')}{' '}
+              <span className="font-semibold text-slate-950">
+                {tr('common.value_shift_request_s', { value1: totalPending })}
+              </span>{' '}
+              {tr('workforce_manager_review_tab.awaiting_your_review_and_approval')}
             </AlertDescription>
           </div>
         </Alert>
@@ -452,13 +503,17 @@ export function WorkforceManagerReviewTab({
           items={[
             {
               id: 'pending' as const,
-              label: 'Pending Review',
+              get label() {
+                return tr('common.pending_review');
+              },
               count: totalPending,
               icon: <IconAlertCircle className="w-3.5 h-3.5 text-amber-500" />,
             },
             {
               id: 'history' as const,
-              label: 'Request History',
+              get label() {
+                return tr('common.request_history');
+              },
               icon: <IconClock className="w-3.5 h-3.5 text-slate-500" />,
             },
           ]}
@@ -484,7 +539,7 @@ export function WorkforceManagerReviewTab({
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              All
+              {tr('common.all')}
             </button>
             <button
               type="button"
@@ -498,7 +553,7 @@ export function WorkforceManagerReviewTab({
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Changes
+              {tr('common.changes')}
             </button>
             <button
               type="button"
@@ -512,7 +567,7 @@ export function WorkforceManagerReviewTab({
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Swaps
+              {tr('common.swaps')}
             </button>
           </div>
 
@@ -526,7 +581,7 @@ export function WorkforceManagerReviewTab({
                 setSearchQuery(e.target.value);
                 setHistoryPage(0);
               }}
-              placeholder="Search worker / reason..."
+              placeholder={tr('workforce_manager_review_tab.search_worker_reason')}
               className="bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:bg-white transition-colors w-44"
             />
           </div>
@@ -539,14 +594,16 @@ export function WorkforceManagerReviewTab({
           {isLoading ? (
             <div className="bg-white rounded-2xl border border-[#E2E8F0] p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 shadow-xs">
               <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-              <span>Loading review requests...</span>
+              <span>{tr('common.loading_review_requests')}</span>
             </div>
           ) : filteredPending.total === 0 ? (
             <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs">
               <EmptyState
                 icon={<IconCheckCircle2 className="w-6 h-6 text-emerald-500" />}
-                title="All Caught Up!"
-                description="No pending shift change or swap requests requiring your review."
+                title={tr('common.all_caught_up')}
+                description={tr(
+                  'workforce_manager_review_tab.no_pending_shift_change_or_swap_requests_requiring_your_review',
+                )}
               />
             </div>
           ) : (
@@ -574,13 +631,13 @@ export function WorkforceManagerReviewTab({
                         </div>
                       </div>
 
-                      <Badge variant="info">SHIFT CHANGE</Badge>
+                      <Badge variant="info">{tr('common.shift_change')}</Badge>
                     </div>
 
                     {/* Transition details */}
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                       <div className="text-xs text-slate-700">
-                        Shift date:{' '}
+                        {tr('common.shift_date')}{' '}
                         <span className="font-semibold">{formatWorkDate(change.workDate)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
@@ -594,7 +651,7 @@ export function WorkforceManagerReviewTab({
                       </div>
                       {change.reason && (
                         <p className="text-[11px] text-slate-600 italic">
-                          &quot;{change.reason}&quot;
+                          {tr('common.quot_value_quot', { value1: change.reason })}
                         </p>
                       )}
                     </div>
@@ -608,7 +665,7 @@ export function WorkforceManagerReviewTab({
                         onClick={() => openRejectModal('CHANGE', change.id)}
                         className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
                       >
-                        Reject
+                        {tr('common.reject')}
                       </Button>
                       <Button
                         variant="default"
@@ -618,7 +675,7 @@ export function WorkforceManagerReviewTab({
                         onClick={() => approveChange.mutate(change.id)}
                         leftIcon={<IconCheck className="w-3 h-3 text-emerald-400" />}
                       >
-                        Approve Change
+                        {tr('common.approve_change')}
                       </Button>
                     </div>
                   </Card>
@@ -649,7 +706,7 @@ export function WorkforceManagerReviewTab({
                         </div>
                       </div>
 
-                      <Badge variant="success">SWAP CONFIRMED</Badge>
+                      <Badge variant="success">{tr('common.swap_confirmed')}</Badge>
                     </div>
 
                     {/* Swap details */}
@@ -661,18 +718,20 @@ export function WorkforceManagerReviewTab({
                               {getWorkerName(swap.requesterWorkerId)}
                             </span>
                             <Badge variant="neutral">
-                              Team:{' '}
-                              {swap.requesterTeamName === undefined
-                                ? 'Unavailable'
-                                : (swap.requesterTeamName ?? 'Unassigned')}
+                              {tr('common.team_value', {
+                                value1:
+                                  swap.requesterTeamName === undefined
+                                    ? tr('common.unavailable')
+                                    : (swap.requesterTeamName ?? tr('common.unassigned')),
+                              })}
                             </Badge>
                           </div>
                           <div>
-                            Date:{' '}
+                            {tr('common.date')}{' '}
                             <span className="font-semibold">
                               {formatWorkDate(swap.requesterWorkDate)}
                             </span>{' '}
-                            · Shift: {getShiftName(swap.requesterShiftId)}
+                            {tr('common.shift_2e9119')} {getShiftName(swap.requesterShiftId)}
                           </div>
                         </div>
                         <div className="space-y-1">
@@ -681,24 +740,26 @@ export function WorkforceManagerReviewTab({
                               {getWorkerName(swap.coworkerWorkerId)}
                             </span>
                             <Badge variant="neutral">
-                              Team:{' '}
-                              {swap.coworkerTeamName === undefined
-                                ? 'Unavailable'
-                                : (swap.coworkerTeamName ?? 'Unassigned')}
+                              {tr('common.team_value', {
+                                value1:
+                                  swap.coworkerTeamName === undefined
+                                    ? tr('common.unavailable')
+                                    : (swap.coworkerTeamName ?? tr('common.unassigned')),
+                              })}
                             </Badge>
                           </div>
                           <div>
-                            Date:{' '}
+                            {tr('common.date')}{' '}
                             <span className="font-semibold">
                               {formatWorkDate(swap.coworkerWorkDate)}
                             </span>{' '}
-                            · Shift: {getShiftName(swap.coworkerShiftId)}
+                            {tr('common.shift_2e9119')} {getShiftName(swap.coworkerShiftId)}
                           </div>
                         </div>
                       </div>
                       {swap.reason && (
                         <p className="text-[11px] text-slate-600 italic pt-1 border-t border-slate-200/60">
-                          &quot;{swap.reason}&quot;
+                          {tr('common.quot_value_quot', { value1: swap.reason })}
                         </p>
                       )}
                     </div>
@@ -712,7 +773,7 @@ export function WorkforceManagerReviewTab({
                         onClick={() => openRejectModal('SWAP', swap.id)}
                         className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
                       >
-                        Reject
+                        {tr('common.reject')}
                       </Button>
                       <Button
                         variant="default"
@@ -722,7 +783,7 @@ export function WorkforceManagerReviewTab({
                         onClick={() => approveSwap.mutate(swap.id)}
                         leftIcon={<IconCheck className="w-3 h-3 text-emerald-400" />}
                       >
-                        Approve Swap
+                        {tr('common.approve_swap')}
                       </Button>
                     </div>
                   </Card>
@@ -755,13 +816,15 @@ export function WorkforceManagerReviewTab({
         <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
           {isLoading ? (
             <p role="status" className="p-4">
-              Loading request history...
+              {tr('common.loading_request_history')}
             </p>
           ) : allHistory.length === 0 ? (
             <EmptyState
               icon={<IconClock className="w-6 h-6 text-slate-400" />}
-              title="No History Records"
-              description="Past approved and rejected workforce change requests will appear here."
+              title={tr('common.no_history_records')}
+              description={tr(
+                'workforce_manager_review_tab.past_approved_and_rejected_workforce_change_requests_will_appear_here',
+              )}
             />
           ) : (
             <>
@@ -769,11 +832,11 @@ export function WorkforceManagerReviewTab({
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-4">Type</th>
-                      <th className="py-3 px-4">Worker(s)</th>
-                      <th className="py-3 px-4">Details / Reason</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">{tr('common.type')}</th>
+                      <th className="py-3 px-4">{tr('common.worker_s')}</th>
+                      <th className="py-3 px-4">{tr('common.details_reason')}</th>
+                      <th className="py-3 px-4">{tr('common.status')}</th>
+                      <th className="py-3 px-4">{tr('common.date_99c40a')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -783,7 +846,7 @@ export function WorkforceManagerReviewTab({
                         className="hover:bg-slate-50/70 transition-colors"
                       >
                         <td className="py-3.5 px-4 font-bold text-slate-800">
-                          {item.requestType === 'CHANGE' ? 'Change' : 'Swap'}
+                          {item.requestType === 'CHANGE' ? tr('common.change') : tr('common.swap')}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-slate-900">
                           {item.requestType === 'CHANGE'
@@ -793,18 +856,24 @@ export function WorkforceManagerReviewTab({
                         <td className="py-3.5 px-4 text-slate-600">
                           {item.requestType === 'CHANGE' ? (
                             <>
-                              <div>Shift date: {formatWorkDate(item.workDate)}</div>
-                              <div>To: {getShiftName(item.toShiftId)}</div>
+                              <div>
+                                {tr('common.shift_date_value', {
+                                  value1: formatWorkDate(item.workDate),
+                                })}
+                              </div>
+                              <div>
+                                {tr('common.to_value', { value1: getShiftName(item.toShiftId) })}
+                              </div>
                               {item.reason && (
                                 <div className="text-[11px] text-slate-400 italic">
-                                  &quot;{item.reason}&quot;
+                                  {tr('common.quot_value_quot', { value1: item.reason })}
                                 </div>
                               )}
                             </>
                           ) : item.reason ? (
                             `"${item.reason}"`
                           ) : (
-                            'Swap agreed by coworker'
+                            tr('workforce_manager_review_tab.swap_agreed_by_coworker')
                           )}
                         </td>
                         <td className="py-3.5 px-4">
@@ -816,7 +885,7 @@ export function WorkforceManagerReviewTab({
                             }
                             dot
                           >
-                            {item.status}
+                            {localizedLabel(item.status)}
                           </Badge>
                         </td>
                         <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">
@@ -832,18 +901,20 @@ export function WorkforceManagerReviewTab({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500 font-medium">
                 <div className="flex items-center gap-2">
                   <span>
-                    Showing{' '}
+                    {tr('common.showing')}{' '}
                     <span className="font-bold text-slate-900">
                       {historyTotal === 0 ? 0 : historyPage * historyPageSize + 1}
                     </span>{' '}
-                    to{' '}
+                    {tr('common.to_663ea1')}{' '}
                     <span className="font-bold text-slate-900">
                       {Math.min((historyPage + 1) * historyPageSize, historyTotal)}
                     </span>{' '}
-                    of <span className="font-bold text-slate-900">{historyTotal}</span> records
+                    {tr('common.of')}{' '}
+                    <span className="font-bold text-slate-900">{historyTotal}</span>{' '}
+                    {tr('common.records')}
                   </span>
                   <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
-                    <span className="text-[11px] text-slate-400">Per page:</span>
+                    <span className="text-[11px] text-slate-400">{tr('common.per_page')}</span>
                     <select
                       value={historyPageSize}
                       onChange={(e) => {
@@ -869,7 +940,7 @@ export function WorkforceManagerReviewTab({
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
                     >
                       <IconChevronLeft className="w-3.5 h-3.5" />
-                      <span>Prev</span>
+                      <span>{tr('common.prev')}</span>
                     </button>
 
                     <div className="flex items-center gap-1">
@@ -895,7 +966,7 @@ export function WorkforceManagerReviewTab({
                       onClick={() => setHistoryPage((p) => Math.min(historyPageCount - 1, p + 1))}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
                     >
-                      <span>Next</span>
+                      <span>{tr('common.next')}</span>
                       <IconChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -910,20 +981,24 @@ export function WorkforceManagerReviewTab({
       <Dialog
         open={Boolean(rejectTarget)}
         onClose={closeRejectModal}
-        title="Reject Request"
-        description="Please provide a reason for declining this request"
+        title={tr('common.reject_request_e169f1')}
+        description={tr(
+          'workforce_manager_review_tab.please_provide_a_reason_for_declining_this_request',
+        )}
         icon={<IconX className="w-4 h-4 text-rose-500" />}
       >
         <div className="space-y-4">
           <div className="space-y-1">
             <label htmlFor="reject-reason-input" className="block text-xs font-bold text-slate-700">
-              Rejection Reason <span className="text-rose-500">*</span>
+              {tr('common.rejection_reason_628908')} <span className="text-rose-500">*</span>
             </label>
             <textarea
               id="reject-reason-input"
               rows={3}
               required
-              placeholder="e.g. Insufficient coverage for the requested shift"
+              placeholder={tr(
+                'workforce_manager_review_tab.e_g_insufficient_coverage_for_the_requested_shift',
+              )}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10"
@@ -932,7 +1007,7 @@ export function WorkforceManagerReviewTab({
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="outline" size="md" onClick={closeRejectModal}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -948,7 +1023,7 @@ export function WorkforceManagerReviewTab({
                 }
               }}
             >
-              Confirm Rejection
+              {tr('common.confirm_rejection_dce40d')}
             </Button>
           </div>
         </div>

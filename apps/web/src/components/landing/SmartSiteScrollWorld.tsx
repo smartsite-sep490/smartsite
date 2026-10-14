@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { PauseIcon, PlayIcon } from '@phosphor-icons/react';
 import gsap from 'gsap';
@@ -9,23 +11,45 @@ const VIDEO_SRC = '/smartsite-journey.mp4';
 const POSTER_SRC = '/smartsite-journey-poster.jpg';
 const CHAPTERS = [
   {
-    label: 'Workforce & access',
-    title: 'From the gate.',
-    description: 'People, assignments and arrivals — connected to the site.',
+    get label() {
+      return tr('common.workforce_access');
+    },
+    get title() {
+      return tr('common.from_the_gate');
+    },
+    get description() {
+      return tr('smart_site_scroll_world.people_assignments_and_arrivals_connected_to_the_site');
+    },
   },
   {
-    label: 'Safety & evidence',
-    title: 'Into the jobsite.',
-    description: 'Bring observations and evidence into a shared operational view.',
+    get label() {
+      return tr('common.safety_evidence');
+    },
+    get title() {
+      return tr('common.into_the_jobsite');
+    },
+    get description() {
+      return tr(
+        'smart_site_scroll_world.bring_observations_and_evidence_into_a_shared_operational_view',
+      );
+    },
   },
   {
-    label: 'Operations & review',
-    title: 'One connected operation.',
-    description: 'Give responsible teams the context to review and act.',
+    get label() {
+      return tr('common.operations_review');
+    },
+    get title() {
+      return tr('common.one_connected_operation');
+    },
+    get description() {
+      return tr('smart_site_scroll_world.give_responsible_teams_the_context_to_review_and_act');
+    },
   },
 ];
 
 export function SmartSiteScrollWorld() {
+  useTranslation();
+
   const sectionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -192,14 +216,16 @@ export function SmartSiteScrollWorld() {
       id="smartsite-scroll-world"
       ref={sectionRef}
       className="relative isolate h-[100svh] w-full overflow-hidden bg-[#041D2E]"
-      aria-label="SmartSite site journey"
+      aria-label={tr('common.smartsite_site_journey')}
     >
-      <h2 className="sr-only">From the gate to one connected operation</h2>
+      <h2 className="sr-only">
+        {tr('smart_site_scroll_world.from_the_gate_to_one_connected_operation')}
+      </h2>
       <div ref={stageRef} className="absolute inset-0 overflow-hidden rounded-3xl bg-[#041D2E]">
         <div ref={fallbackRef} className="absolute inset-0">
           <img
             src={POSTER_SRC}
-            alt="Construction site with workers and cranes"
+            alt={tr('smart_site_scroll_world.construction_site_with_workers_and_cranes')}
             className="h-full w-full object-cover"
             loading="lazy"
             decoding="async"
@@ -251,11 +277,15 @@ export function SmartSiteScrollWorld() {
               ) : (
                 <PauseIcon size={16} aria-hidden="true" />
               )}
-              {unavailable ? 'Retry film' : paused || blocked ? 'Play film' : 'Pause film'}
+              {unavailable
+                ? tr('common.retry_film')
+                : paused || blocked
+                  ? tr('common.play_film')
+                  : tr('common.pause_film')}
             </button>
             {unavailable && (
               <p role="status" className="mt-2 text-xs text-white">
-                Film unavailable. Showing the site image.
+                {tr('smart_site_scroll_world.film_unavailable_showing_the_site_image')}
               </p>
             )}
           </div>

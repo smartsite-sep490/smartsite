@@ -21,10 +21,7 @@ export function Tabs<T extends string>({
   className = '',
 }: TabsProps<T>) {
   return (
-    <div
-      className={`flex items-center gap-3 select-none flex-wrap ${className}`}
-      role="tablist"
-    >
+    <div className={`flex items-center gap-3 select-none flex-wrap ${className}`} role="tablist">
       {items.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
@@ -40,14 +37,14 @@ export function Tabs<T extends string>({
                 : 'bg-white text-slate-700 border-[#E2E8F0] hover:bg-slate-50'
             }`}
           >
-            {tab.icon && <span className={isActive ? 'text-blue-400' : 'text-slate-500'}>{tab.icon}</span>}
+            {tab.icon && (
+              <span className={isActive ? 'text-blue-400' : 'text-slate-500'}>{tab.icon}</span>
+            )}
             <span>{tab.label}</span>
             {tab.count !== undefined && (
               <span
                 className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                  isActive
-                    ? 'bg-white text-[#071A2B]'
-                    : 'bg-slate-100 text-slate-600'
+                  isActive ? 'bg-white text-[#071A2B]' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {tab.count}

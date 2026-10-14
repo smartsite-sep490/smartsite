@@ -1,3 +1,6 @@
+import { localizedLabel } from '../../i18n/labels';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React from 'react';
 import { CameraFeed } from '../shared/CameraFeed';
 import { EventsTable, TableColumn, StatusBadge } from '../shared/EventsTable';
@@ -19,6 +22,8 @@ interface CombinedEvent {
 }
 
 export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
+  useTranslation();
+
   const events: CombinedEvent[] = [
     {
       id: 'EVT-2049',
@@ -64,36 +69,50 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
 
   const columns: TableColumn<CombinedEvent>[] = [
     {
-      header: 'Time',
+      get header() {
+        return tr('common.time');
+      },
       key: 'time',
       render: (item) => <span className="font-mono text-[#6B6B6B] text-xs">{item.time}</span>,
     },
     {
-      header: 'Type',
+      get header() {
+        return tr('common.type');
+      },
       key: 'type',
       render: (item) => (
         <span className="font-bold text-[11px] text-[#6B6B6B] uppercase tracking-widest">
-          {item.type}
+          {localizedLabel(item.type)}
         </span>
       ),
     },
     {
-      header: 'Person',
+      get header() {
+        return tr('common.person');
+      },
       key: 'person',
       render: (item) => <span className="font-semibold text-[#2F3437]">{item.person}</span>,
     },
     {
-      header: 'Camera',
+      get header() {
+        return tr('common.camera');
+      },
       key: 'camera',
       render: (item) => <span className="font-mono text-[#6B6B6B] text-xs">{item.camera}</span>,
     },
     {
-      header: 'Detection',
+      get header() {
+        return tr('common.detection');
+      },
       key: 'issue',
-      render: (item) => <span className="font-medium text-[#2F3437]">{item.issue}</span>,
+      render: (item) => (
+        <span className="font-medium text-[#2F3437]">{localizedLabel(item.issue)}</span>
+      ),
     },
     {
-      header: 'Result',
+      get header() {
+        return tr('common.result_6e7d50');
+      },
       key: 'status',
       render: (item) => {
         let type: 'error' | 'warning' | 'success' | 'info' = 'info';
@@ -104,7 +123,9 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
       },
     },
     {
-      header: 'Action',
+      get header() {
+        return tr('common.action');
+      },
       key: 'action',
       align: 'right',
       render: (item) => (
@@ -112,7 +133,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
           onClick={() => onNavigate(item.targetTab)}
           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200 transition-all active:scale-[0.98]"
         >
-          View Details
+          {tr('common.view_details_90789c')}
         </button>
       ),
     },
@@ -122,10 +143,13 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-[#2F3437] tracking-tight">Live Monitoring</h1>
+        <h1 className="text-3xl font-bold text-[#2F3437] tracking-tight">
+          {tr('common.live_monitoring')}
+        </h1>
         <p className="text-sm text-[#6B6B6B] mt-2 max-w-2xl leading-relaxed">
-          Operational workspace displaying real-time safety detections across all cameras. Multiple
-          AI models run concurrently to detect PPE compliance and Restricted Zone access.
+          {tr(
+            'live_monitoring_view.operational_workspace_displaying_real_time_safety_detections_across_all_cameras_mu',
+          )}
         </p>
       </div>
 
@@ -142,7 +166,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
             style={{ left: '21.0%', top: '40.0%', width: '57.0%', height: '46.0%' }}
           >
             <div className="absolute top-4 left-4 px-2 py-0.5 bg-[#DF2225]/90 backdrop-blur-md text-white text-[10px] font-extrabold uppercase tracking-widest shadow-sm">
-              RESTRICTED ZONE
+              {tr('common.restricted_zone_cbd630')}
             </div>
           </div>
 
@@ -154,10 +178,10 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
             {/* Multi-alert Badge */}
             <div className="absolute -top-[38px] left-[-2px] flex flex-col gap-0.5 pointer-events-auto">
               <div className="px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-widest shadow-sm whitespace-nowrap">
-                W-1024 ZONE VIOLATION
+                {tr('common.w_1024_zone_violation')}
               </div>
               <div className="px-1.5 py-0.5 bg-[#F66B17] text-white text-[9px] font-extrabold uppercase tracking-widest shadow-sm whitespace-nowrap">
-                W-1024 MISSING GLOVES
+                {tr('common.w_1024_missing_gloves')}
               </div>
             </div>
           </div>
@@ -166,7 +190,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
 
       {/* Combined Active Events Table */}
       <EventsTable
-        title="Active Safety Detections"
+        title={tr('common.active_safety_detections')}
         subtitle="Combined feed of PPE and Zone events across the site."
         data={events}
         columns={columns}

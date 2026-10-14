@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { IconBuilding2, IconChevronDown, IconCamera } from '../icons';
 
@@ -24,6 +26,8 @@ export function CameraSelectorBar({
   activeCameraId,
   onSelectCamera,
 }: CameraSelectorBarProps) {
+  useTranslation();
+
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -55,7 +59,7 @@ export function CameraSelectorBar({
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
-            aria-label="Select camera"
+            aria-label={tr('common.select_camera')}
             aria-expanded={isOpen}
             aria-controls={menuId}
             className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-[#F7F6F3] transition-colors cursor-pointer"
@@ -75,7 +79,7 @@ export function CameraSelectorBar({
             >
               <div className="p-2 border-b border-[#EAEAEA] bg-[#FBFBFA]">
                 <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest px-2">
-                  Available Cameras
+                  {tr('common.available_cameras')}
                 </p>
               </div>
               <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
@@ -135,7 +139,7 @@ export function CameraSelectorBar({
             className={`w-1.5 h-1.5 rounded-full ${activeCamera?.status === 'online' ? 'bg-[#346538]' : 'bg-[#A3A09C]'}`}
           />
           <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest">
-            {activeCamera?.status === 'online' ? 'Live Stream' : 'Offline'}
+            {activeCamera?.status === 'online' ? tr('common.live_stream') : tr('common.offline')}
           </span>
         </div>
       </div>

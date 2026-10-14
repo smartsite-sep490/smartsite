@@ -1,3 +1,6 @@
+import { localizedError } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -13,6 +16,8 @@ export function ManagerDashboardView({
   apiUrl: string;
   onNavigate: (tab: ActiveTab) => void;
 }) {
+  useTranslation();
+
   const { accessToken } = useAuth();
   const { data: user } = useCurrentUser(apiUrl);
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
@@ -41,31 +46,33 @@ export function ManagerDashboardView({
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#071A2B]">Site Management Overview</h1>
+          <h1 className="text-2xl font-bold text-[#071A2B]">
+            {tr('common.site_management_overview')}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Contractors, Zones and workforce in your managed Site.
+            {tr('manager_dashboard_view.contractors_zones_and_workforce_in_your_managed_site')}
           </p>
         </div>
         <button type="button" className={button} onClick={() => onNavigate('site-setup')}>
-          Manage Contractors & Zones
+          {tr('manager_dashboard_view.manage_contractors_zones')}
         </button>
       </div>
       {sites.isPending ? (
-        <p role="status">Loading managed Sites…</p>
+        <p role="status">{tr('common.loading_managed_sites')}</p>
       ) : sites.isError ? (
         <div role="alert">
-          Managed Sites unavailable.{' '}
+          {tr('common.managed_sites_unavailable')}{' '}
           <button type="button" onClick={() => void sites.refetch()}>
-            Retry
+            {tr('common.retry')}
           </button>
         </div>
       ) : !managed.length ? (
-        <p>No Site Manager assignment available.</p>
+        <p>{tr('manager_dashboard_view.no_site_manager_assignment_available')}</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-semibold">
-              Managed Site{' '}
+              {tr('common.managed_site')}{' '}
               <select
                 value={siteId}
                 onChange={(e) => {
@@ -87,16 +94,17 @@ export function ManagerDashboardView({
               disabled={overview.isFetching}
               onClick={() => void overview.refetch()}
             >
-              Refresh
+              {tr('common.refresh')}
             </button>
           </div>
           {overview.isPending ? (
-            <p role="status">Loading management overview…</p>
+            <p role="status">{tr('common.loading_management_overview')}</p>
           ) : overview.isError ? (
             <div role="alert">
-              Management overview unavailable. {overview.error.message}{' '}
+              {tr('common.management_overview_unavailable')}{' '}
+              {localizedError(overview.error.message)}{' '}
               <button type="button" onClick={() => void overview.refetch()}>
-                Retry
+                {tr('common.retry')}
               </button>
             </div>
           ) : (
@@ -104,10 +112,10 @@ export function ManagerDashboardView({
               <>
                 <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {[
-                    ['Managed contractors', data.contractorCount],
-                    ['Configured Zones', data.zoneCount],
-                    ['Active teams', data.teamCount],
-                    ['Active workers', data.workerCount],
+                    [tr('common.managed_contractors'), data.contractorCount],
+                    [tr('common.configured_zones'), data.zoneCount],
+                    [tr('common.active_teams_82c339'), data.teamCount],
+                    [tr('common.active_workers_3adad5'), data.workerCount],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5">
                       <dt className="text-sm text-slate-500">{label}</dt>
@@ -117,16 +125,23 @@ export function ManagerDashboardView({
                 </dl>
                 <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   <h2 className="border-b border-slate-100 p-5 text-lg font-bold">
-                    Contractors ({data.contractors.total})
+                    {tr('common.contractors_value', { value1: data.contractors.total })}
                   </h2>
                   {!data.contractors.items.length ? (
-                    <p className="p-5">No active contractors on this Site.</p>
+                    <p className="p-5">
+                      {tr('manager_dashboard_view.no_active_contractors_on_this_site')}
+                    </p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm">
                         <thead className="bg-slate-50 text-slate-500">
                           <tr>
-                            {['Contractor', 'Teams', 'Workers', 'Details'].map((label) => (
+                            {[
+                              tr('common.contractor'),
+                              tr('common.teams'),
+                              tr('common.workers'),
+                              tr('common.details'),
+                            ].map((label) => (
                               <th key={label} className="p-4">
                                 {label}
                               </th>
@@ -148,10 +163,12 @@ export function ManagerDashboardView({
                                 <button
                                   type="button"
                                   className={button}
-                                  aria-label={`View details for ${contractor.name}`}
+                                  aria-label={tr('manager_dashboard_view.view_details_for_value', {
+                                    value1: contractor.name,
+                                  })}
                                   onClick={() => setContractorId(contractor.id)}
                                 >
-                                  View Details
+                                  {tr('common.view_details_90789c')}
                                 </button>
                               </td>
                             </tr>
@@ -170,12 +187,14 @@ export function ManagerDashboardView({
                           setSelection({ siteId, offset: Math.max(0, selection.offset - 20) })
                         }
                       >
-                        Previous
+                        {tr('common.previous')}
                       </button>
                       <span>
-                        {selection.offset + 1}–
-                        {Math.min(selection.offset + 20, data.contractors.total)} of{' '}
-                        {data.contractors.total}
+                        {tr('common.value_value_of_value', {
+                          value1: selection.offset + 1,
+                          value2: Math.min(selection.offset + 20, data.contractors.total),
+                          value3: data.contractors.total,
+                        })}
                       </span>
                       <button
                         type="button"
@@ -183,7 +202,7 @@ export function ManagerDashboardView({
                         disabled={selection.offset + 20 >= data.contractors.total}
                         onClick={() => setSelection({ siteId, offset: selection.offset + 20 })}
                       >
-                        Next
+                        {tr('common.next')}
                       </button>
                     </div>
                   )}

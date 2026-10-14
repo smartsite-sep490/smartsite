@@ -1,3 +1,8 @@
+import i18n from '../../i18n';
+import { beforeEach as beforeLocaleTest } from 'vitest';
+beforeLocaleTest(async () => {
+  await i18n.changeLanguage('vi');
+});
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@smartsite/api-client';
 import {
@@ -150,6 +155,9 @@ describe('observationIdentityReviewUtils', () => {
   });
 
   describe('validateReason', () => {
+    beforeLocaleTest(async () => {
+      await i18n.changeLanguage('en');
+    });
     it('accepts valid reasons between 5 and 1000 characters', () => {
       const result = validateReason('Xác nhận đúng công nhân số 1');
       expect(result.valid).toBe(true);

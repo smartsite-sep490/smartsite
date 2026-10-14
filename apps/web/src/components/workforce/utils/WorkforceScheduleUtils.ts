@@ -18,19 +18,16 @@ export function splitWorkerSwapRequests<T extends WorkerSwapRequestReference>(
   }
 
   const relatedRequests = requests.filter(
-    (request) =>
-      request.requesterWorkerId === workerId || request.coworkerWorkerId === workerId,
+    (request) => request.requesterWorkerId === workerId || request.coworkerWorkerId === workerId,
   );
 
   return {
     myRequests: relatedRequests.filter((request) => request.requesterWorkerId === workerId),
     incomingRequests: relatedRequests.filter(
-      (request) =>
-        request.coworkerWorkerId === workerId && request.status === 'PENDING_COWORKER',
+      (request) => request.coworkerWorkerId === workerId && request.status === 'PENDING_COWORKER',
     ),
     relatedPendingRequests: relatedRequests.filter(
-      (request) =>
-        request.status === 'PENDING_COWORKER' || request.status === 'PENDING_MANAGER',
+      (request) => request.status === 'PENDING_COWORKER' || request.status === 'PENDING_MANAGER',
     ),
   };
 }

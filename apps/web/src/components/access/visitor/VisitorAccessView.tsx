@@ -1,3 +1,8 @@
+import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedLabel } from '../../../i18n/labels';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -22,7 +27,7 @@ export function VisitorAccessView({
   apiUrl,
   token,
   siteId,
-  siteName = 'Site',
+  siteName = tr('common.site_fa7955'),
   sessionScope,
   canApprove,
   canManualCheckout = false,
@@ -35,6 +40,8 @@ export function VisitorAccessView({
   canApprove: boolean;
   canManualCheckout?: boolean;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, sessionScope, 'visits', siteId];
@@ -98,7 +105,15 @@ export function VisitorAccessView({
     mutationFn: (input: VisitorGateCommand) => client.verifyVisitorQr(token, siteId, gateId, input),
     onSuccess: (r) => {
       setMessage(
-        `Recorded ${r.direction}: ${r.count} people · ${r.visit.visitorName}. Remaining on site: ${r.visit.enteredCount - r.visit.exitedCount} visitors.`,
+        tr(
+          'visitor_access_view.recorded_value_value_people_value_remaining_on_site_value_visitors',
+          {
+            value1: r.direction,
+            value2: r.count,
+            value3: r.visit.visitorName,
+            value4: r.visit.enteredCount - r.visit.exitedCount,
+          },
+        ),
       );
       setQrToken('');
       pending.current = null;
@@ -164,19 +179,25 @@ export function VisitorAccessView({
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#FF7A1A] border border-orange-100">
                 <IconKey className="h-3.5 w-3.5" />
-                MF04 QR
+                {tr('common.mf04_qr')}
               </span>
               <span className="text-xs font-semibold text-slate-500">
-                {canApprove ? 'Site Manager Approval Authority' : 'View-Only / Gate Scanner'}
+                {canApprove
+                  ? tr('visitor_access_view.site_manager_approval_authority')
+                  : tr('visitor_access_view.view_only_gate_scanner')}
               </span>
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-              Visitor Access Passes · {siteName}
+              {tr('visitor_access_view.visitor_access_passes_value', { value1: siteName })}
             </h2>
             <p className="text-xs text-slate-500 leading-relaxed">
               {canApprove
-                ? 'Pass requests routed to the Site Manager of this site for approval.'
-                : 'Site Manager clearance is required before visitors receive dynamic QR passes.'}
+                ? tr(
+                    'visitor_access_view.pass_requests_routed_to_the_site_manager_of_this_site_for_approval',
+                  )
+                : tr(
+                    'visitor_access_view.site_manager_clearance_is_required_before_visitors_receive_dynamic_qr_passes',
+                  )}
             </p>
           </div>
 
@@ -187,7 +208,7 @@ export function VisitorAccessView({
               rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-xl bg-[#FF7A1A] px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#E56A10] transition-all"
             >
-              <span>Open Visitor Registration Portal</span>
+              <span>{tr('visitor_access_view.open_visitor_registration_portal')}</span>
               <IconArrowRight className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -197,11 +218,11 @@ export function VisitorAccessView({
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Total Registrations
+              {tr('common.total_registrations')}
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-black text-slate-900">{metrics.total}</span>
-              <span className="text-xs text-slate-400">passes</span>
+              <span className="text-xs text-slate-400">{tr('common.passes')}</span>
             </div>
           </div>
 
@@ -213,7 +234,7 @@ export function VisitorAccessView({
             }`}
           >
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Pending Approval
+              {tr('common.pending_approval_6da02e')}
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span
@@ -223,7 +244,7 @@ export function VisitorAccessView({
               >
                 {metrics.pendingCount}
               </span>
-              <span className="text-xs text-slate-400">requests</span>
+              <span className="text-xs text-slate-400">{tr('common.requests')}</span>
             </div>
           </div>
 
@@ -235,7 +256,7 @@ export function VisitorAccessView({
             }`}
           >
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Currently On-Site
+              {tr('common.currently_on_site')}
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span
@@ -245,17 +266,17 @@ export function VisitorAccessView({
               >
                 {metrics.currentlyInside}
               </span>
-              <span className="text-xs text-slate-400">visitors</span>
+              <span className="text-xs text-slate-400">{tr('common.visitors')}</span>
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Approved Passes
+              {tr('common.approved_passes')}
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-black text-slate-900">{metrics.approved}</span>
-              <span className="text-xs text-slate-400">cleared</span>
+              <span className="text-xs text-slate-400">{tr('common.cleared')}</span>
             </div>
           </div>
         </div>
@@ -268,11 +289,37 @@ export function VisitorAccessView({
           <div className="flex flex-wrap items-center gap-1.5">
             {(
               [
-                { id: 'ALL' as const, label: 'All' },
-                { id: 'PENDING' as const, label: 'Pending', count: metrics.pendingCount },
-                { id: 'APPROVED' as const, label: 'Approved' },
-                { id: 'INSIDE' as const, label: 'On-Site' },
-                { id: 'REJECTED' as const, label: 'Rejected' },
+                {
+                  id: 'ALL' as const,
+                  get label() {
+                    return tr('common.all');
+                  },
+                },
+                {
+                  id: 'PENDING' as const,
+                  get label() {
+                    return tr('common.pending');
+                  },
+                  count: metrics.pendingCount,
+                },
+                {
+                  id: 'APPROVED' as const,
+                  get label() {
+                    return tr('common.approved');
+                  },
+                },
+                {
+                  id: 'INSIDE' as const,
+                  get label() {
+                    return tr('common.on_site');
+                  },
+                },
+                {
+                  id: 'REJECTED' as const,
+                  get label() {
+                    return tr('common.rejected');
+                  },
+                },
               ] as {
                 id: 'ALL' | 'PENDING' | 'APPROVED' | 'INSIDE' | 'REJECTED';
                 label: string;
@@ -303,7 +350,7 @@ export function VisitorAccessView({
             <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by visitor, company, host..."
+              placeholder={tr('visitor_access_view.search_by_visitor_company_host')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
@@ -315,7 +362,7 @@ export function VisitorAccessView({
         {visits.isPending && (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
             <IconLoader className="h-4 w-4" />
-            <p>Loading visitor passes…</p>
+            <p>{tr('common.loading_visitor_passes')}</p>
           </div>
         )}
 
@@ -324,13 +371,13 @@ export function VisitorAccessView({
             role="alert"
             className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
           >
-            <span>{visits.error.message}</span>
+            <span>{localizedError(visits.error.message)}</span>
             <button
               onClick={() => void visits.refetch()}
               className="inline-flex items-center gap-1 underline hover:text-rose-900"
             >
               <IconRefresh className="h-3 w-3" />
-              <span>Retry</span>
+              <span>{tr('common.retry')}</span>
             </button>
           </div>
         )}
@@ -341,7 +388,7 @@ export function VisitorAccessView({
             className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
           >
             <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-            <span>{decide.error.message}</span>
+            <span>{localizedError(decide.error.message)}</span>
           </div>
         )}
 
@@ -350,23 +397,25 @@ export function VisitorAccessView({
           <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
             <IconUsers className="mx-auto h-8 w-8 text-slate-300 mb-2" />
             <p className="text-sm font-semibold text-slate-600">
-              No visitor pass requests at this site.
+              {tr('visitor_access_view.no_visitor_pass_requests_at_this_site')}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              Share the registration portal with visitors or contractors to receive requests.
+              {tr(
+                'visitor_access_view.share_the_registration_portal_with_visitors_or_contractors_to_receive_requests',
+              )}
             </p>
           </div>
         )}
 
         {rawItems.length > 0 && filteredVisits.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-xs text-slate-500">
-            No visitor requests match the active filter criteria.
+            {tr('visitor_access_view.no_visitor_requests_match_the_active_filter_criteria')}
           </div>
         )}
 
         {(canApprove || canManualCheckout) && (
           <label className="block text-xs text-slate-700">
-            Review / cancellation reason
+            {tr('visitor_access_view.review_cancellation_reason')}
             <input
               value={reviewNote}
               maxLength={1000}
@@ -382,10 +431,10 @@ export function VisitorAccessView({
               checked={representativeConfirmed}
               onChange={(e) => setRepresentativeConfirmed(e.target.checked)}
             />
-            The representative confirmed the entire group has left.
+            {tr('visitor_access_view.the_representative_confirmed_the_entire_group_has_left')}
           </label>
         )}
-        {manualCheckout.error && <p role="alert">{manualCheckout.error.message}</p>}
+        {manualCheckout.error && <p role="alert">{localizedError(manualCheckout.error.message)}</p>}
         {/* Table View */}
         {filteredVisits.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -393,10 +442,10 @@ export function VisitorAccessView({
               <thead className="border-b border-slate-200 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500">
                 <tr>
                   {[
-                    'Representative / Contact',
-                    'Schedule / Gate / Target Area',
-                    'Headcount',
-                    'Status / Clearance',
+                    tr('common.representative_contact'),
+                    tr('visitor_access_view.schedule_gate_target_area'),
+                    tr('common.headcount'),
+                    tr('common.status_clearance'),
                   ].map((header) => (
                     <th key={header} className="px-4 py-3.5 font-semibold">
                       {header}
@@ -425,7 +474,8 @@ export function VisitorAccessView({
                             {v.company && <p className="text-slate-600 font-medium">{v.company}</p>}
                             <p className="font-mono text-[11px] text-slate-500">{v.contact}</p>
                             <p className="text-[11px] text-slate-600">
-                              <span className="text-slate-400">Host:</span> {v.hostName}
+                              <span className="text-slate-400">{tr('common.host')}</span>{' '}
+                              {v.hostName}
                             </p>
                           </div>
                         </div>
@@ -436,8 +486,8 @@ export function VisitorAccessView({
                         <div className="flex items-center gap-1.5 text-slate-700">
                           <IconClock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           <span className="font-mono text-[11px]">
-                            {new Date(v.validFrom).toLocaleString()} –{' '}
-                            {new Date(v.validUntil).toLocaleString()}
+                            {new Date(v.validFrom).toLocaleString(uiLocale())} –{' '}
+                            {new Date(v.validUntil).toLocaleString(uiLocale())}
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -458,11 +508,14 @@ export function VisitorAccessView({
                       <td className="px-4 py-3.5 space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold text-slate-900">
-                            Registered: {v.groupSize}
+                            {tr('common.registered_value', { value1: v.groupSize })}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 font-mono">
-                          In: {v.enteredCount} · Out: {v.exitedCount}
+                          {tr('visitor_access_view.in_value_out_value', {
+                            value1: v.enteredCount,
+                            value2: v.exitedCount,
+                          })}
                         </p>
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
@@ -476,7 +529,7 @@ export function VisitorAccessView({
                               inside > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
                             }`}
                           />
-                          On-site: {inside} visitors
+                          {tr('common.on_site_9b4c38')} {inside} {tr('common.visitors')}
                         </span>
                       </td>
 
@@ -486,19 +539,19 @@ export function VisitorAccessView({
                           {v.status === 'PENDING' && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800 border border-amber-200">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                              PENDING
+                              {tr('common.pending_332011')}
                             </span>
                           )}
                           {v.status === 'APPROVED' && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                               <IconCheck className="h-3 w-3 text-emerald-600" />
-                              APPROVED
+                              {tr('common.approved_f19952')}
                             </span>
                           )}
                           {v.status === 'REJECTED' && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 border border-rose-200">
                               <IconX className="h-3 w-3 text-rose-600" />
-                              REJECTED
+                              {tr('common.rejected_04cc0e')}
                             </span>
                           )}
                         </div>
@@ -513,7 +566,7 @@ export function VisitorAccessView({
                               }
                             >
                               <IconCheck className="h-3.5 w-3.5" />
-                              <span>Approve</span>
+                              <span>{tr('common.approve')}</span>
                             </button>
                             <button
                               disabled={decide.isPending}
@@ -523,17 +576,19 @@ export function VisitorAccessView({
                               }
                             >
                               <IconX className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Reject</span>
+                              <span>{tr('common.reject')}</span>
                             </button>
                           </div>
                         )}
                         {['CANCELLED', 'EXPIRED'].includes(v.status) && (
-                          <span className="text-xs font-bold">{v.status}</span>
+                          <span className="text-xs font-bold">{localizedLabel(v.status)}</span>
                         )}
                         {v.reviewNote && <p className="text-xs text-slate-600">{v.reviewNote}</p>}
                         {v.presence === 'NEEDS_REVIEW' && (
                           <p role="alert" className="text-xs text-amber-700">
-                            Legacy group count needs reconciliation at the gate.
+                            {tr(
+                              'visitor_access_view.legacy_group_count_needs_reconciliation_at_the_gate',
+                            )}
                           </p>
                         )}
                         {canManualCheckout && inside > 0 && (
@@ -546,7 +601,7 @@ export function VisitorAccessView({
                             onClick={() => manualCheckout.mutate(v.id)}
                             className="rounded border px-3 py-1"
                           >
-                            Manual group checkout
+                            {tr('common.manual_group_checkout')}
                           </button>
                         )}
                         {canApprove && ['PENDING', 'APPROVED'].includes(v.status) && (
@@ -557,7 +612,7 @@ export function VisitorAccessView({
                             }
                             className="mt-2 block rounded-lg border px-3 py-1 text-xs disabled:opacity-50"
                           >
-                            Cancel visit
+                            {tr('common.cancel_visit')}
                           </button>
                         )}
                       </td>
@@ -578,10 +633,12 @@ export function VisitorAccessView({
           </div>
           <div>
             <h2 className="text-lg font-bold tracking-tight text-slate-900">
-              Scan Visitor QR at Gate
+              {tr('visitor_access_view.scan_visitor_qr_at_gate')}
             </h2>
             <p className="text-xs text-slate-500">
-              The representative confirms entry or exit for the entire approved group.
+              {tr(
+                'visitor_access_view.the_representative_confirms_entry_or_exit_for_the_entire_approved_group',
+              )}
             </p>
           </div>
         </div>
@@ -591,7 +648,7 @@ export function VisitorAccessView({
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Designated Gate
+                {tr('common.designated_gate')}
                 <select
                   disabled={verify.isPending}
                   value={gateId}
@@ -609,7 +666,7 @@ export function VisitorAccessView({
 
             <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
               <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">
-                Camera / Upload QR
+                {tr('visitor_access_view.camera_upload_qr')}
               </span>
               <QrScannerView
                 disabled={verify.isPending}
@@ -625,20 +682,21 @@ export function VisitorAccessView({
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                QR Token
+                {tr('common.qr_token')}
                 <input
                   disabled={verify.isPending}
                   value={qrToken}
                   onChange={(e) => setQrToken(e.target.value)}
-                  placeholder="Enter or scan token (SSQ-...)"
+                  placeholder={tr('visitor_access_view.enter_or_scan_token_ssq')}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 font-mono text-xs text-slate-900 placeholder:font-sans placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                 />
               </label>
             </div>
 
             <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-              Headcount comes from the approved visit and includes the representative. Confirm only
-              when the entire group passes together.
+              {tr(
+                'visitor_access_view.headcount_comes_from_the_approved_visit_and_includes_the_representative_confirm_on',
+              )}
             </p>
 
             {/* Confirmation Buttons */}
@@ -675,7 +733,11 @@ export function VisitorAccessView({
                       />
                     </svg>
                   )}
-                  <span>Confirm Check-{d === 'IN' ? 'in (IN)' : 'out (OUT)'}</span>
+                  <span>
+                    {tr('common.confirm_check_value', {
+                      value1: d === 'IN' ? tr('common.in_in') : tr('common.out_out'),
+                    })}
+                  </span>
                 </button>
               ))}
             </div>
@@ -687,7 +749,7 @@ export function VisitorAccessView({
                 className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-                <span>{verify.error.message}</span>
+                <span>{localizedError(verify.error.message)}</span>
               </div>
             )}
 
@@ -697,7 +759,7 @@ export function VisitorAccessView({
                 className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800"
               >
                 <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-                <span>{message}</span>
+                <span>{localizeMessage(message)}</span>
               </div>
             )}
           </div>

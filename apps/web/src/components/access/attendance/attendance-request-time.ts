@@ -1,3 +1,4 @@
+import { translate as tr } from '../../../i18n';
 import type { ShiftResponse } from '@smartsite/contracts';
 import { attendanceDate } from './attendance-display';
 
@@ -14,11 +15,12 @@ function wallTime(date: Date, timezone: string) {
 
 /** Form values are local to the selected shift, never implicitly device-local. */
 export function requestTimeInstant(value: string, timezone: string) {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error('Select a date and time.');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
+    throw new Error(tr('attendance-request-time.select_a_date_and_time'));
   const wall = `${value}:00`;
   const target = Date.parse(`${wall}Z`);
   if (!Number.isFinite(target) || new Date(target).toISOString().slice(0, 19) !== wall)
-    throw new Error('Invalid request date or time.');
+    throw new Error(tr('attendance-request-time.invalid_request_date_or_time'));
   let candidate = target;
   for (let i = 0; i < 4; i++)
     candidate += target - Date.parse(`${wallTime(new Date(candidate), timezone)}Z`);
@@ -29,14 +31,15 @@ export function requestTimeInstant(value: string, timezone: string) {
     candidate - 7200000,
     candidate + 7200000,
   ].filter((v) => wallTime(new Date(v), timezone) === wall);
-  if (!matches.length) throw new Error('This time does not exist in the shift timezone.');
+  if (!matches.length)
+    throw new Error(tr('attendance-request-time.this_time_does_not_exist_in_the_shift_timezone'));
   return new Date(Math.min(...matches));
 }
 
 export function requestShiftTimes(workDate: string, shift: ShiftResponse) {
   const start = new Date(shift.startsAt),
     end = new Date(shift.endsAt);
-  if (!(end > start)) throw new Error('Shift hours unavailable.');
+  if (!(end > start)) throw new Error(tr('common.shift_hours_unavailable'));
   const offset =
     Date.parse(`${attendanceDate(end, shift.timezone)}T00:00:00Z`) -
     Date.parse(`${attendanceDate(start, shift.timezone)}T00:00:00Z`);
