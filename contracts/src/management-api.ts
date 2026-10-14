@@ -409,6 +409,7 @@ export interface UserNotificationResponse {
   event:
     | SchedulingNotificationEvent
     | ScheduleAssignmentNotificationEvent
+    | import('./safety-checklist-api.js').ChecklistNotificationEvent
     | 'SAFETY_HANDOVER'
     | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
@@ -422,6 +423,7 @@ export interface UserNotificationResponse {
   readAt: string | null;
   target:
     | SchedulingNotificationTarget
+    | { siteId: string; checklistId: string; tab: 'checklists' }
     | SafetyNotificationTarget
     | { siteId: string; workDate: string; tab: 'schedule' }
     | { siteId: string; dayId: string; tab: 'attendance' };
