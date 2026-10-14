@@ -40,3 +40,40 @@ export type ObservationSubjectSelection =
       trackId?: number;
       unavailableReason: ObservationSubjectUnavailableReason;
     };
+
+interface ZoneEntryObservationAnchor {
+  zoneEligible: true;
+  zoneObservationIndex: number;
+  trackId: number;
+  regionId: string;
+  geometryVersion: number;
+}
+
+/** Mechanical binding to raw observations; BOUND never means verified Worker or permission. */
+export type ZoneEntrySubjectSelection =
+  | {
+      zoneEligible: false;
+      zoneObservationIndex: number;
+      unavailableReason:
+        | 'INVALID_ZONE_INDEX'
+        | 'OBSERVATIONS_UNAVAILABLE'
+        | 'ZONE_ENTRY_NOT_FOUND'
+        | 'NOT_ZONE_ENTRY'
+        | 'ZONE_ENTRY_INVALID';
+    }
+  | (ZoneEntryObservationAnchor &
+      (
+        | {
+            subjectBindingStatus: 'BOUND';
+            personObservationIndex: number;
+            personBoundingBox: ObservationPersonBoundingBox;
+          }
+        | {
+            subjectBindingStatus: 'PERSON_BOX_UNAVAILABLE';
+            personObservationIndex: number;
+          }
+        | {
+            subjectBindingStatus: 'PERSON_NOT_FOUND' | 'AMBIGUOUS_PERSON_TRACK';
+            personObservationIndex: null;
+          }
+      ));

@@ -1,332 +1,79 @@
-import { localizeMessage } from '../../i18n/messages';
-import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
-import { translate as tr } from '../../i18n';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import React, { useRef, useState } from 'react';
-import gsap from 'gsap';
-import { useGSAP } from '@gsap/react';
-import { IconArrowRight, IconAlertTriangle, IconUser, IconKey } from '../../components/icons';
+import { IconArrowRight } from '../../components/icons';
+import { translate as tr, useLocale } from '../../i18n';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 
 interface RegisterScreenProps {
-  onRegisterSuccess: () => void;
   onBackToLogin: () => void;
   onBackToSite: () => void;
 }
 
-export function RegisterScreen({
-  onRegisterSuccess,
-  onBackToLogin,
-  onBackToSite,
-}: RegisterScreenProps) {
+// Preserve /register as account-access guidance. The current Backend
+// provisions users through the authenticated, Admin-only users API.
+export function RegisterScreen({ onBackToLogin, onBackToSite }: RegisterScreenProps) {
   useTranslation();
-
-  const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useGSAP(
-    () => {
-      // Start as a small square (solid, no opacity 0, to make morph seamless)
-      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 1, scale: 1 });
-      gsap.set('.register-form-content', { opacity: 0, scale: 0.95 });
-      gsap.set('.register-loading-content', { display: 'none' });
-
-      const tl = gsap.timeline({ delay: 0.01 });
-      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' }).to(
-        '.register-form-content',
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 0.3,
-        },
-        '-=0.1',
-      );
-    },
-    { scope: containerRef },
-  );
-
-  const handleNavigateLogin = () => {
-    const tl = gsap.timeline();
-    tl.to('.register-form-content', { opacity: 0, scale: 0.95, duration: 0.2 }).to(
-      panelRef.current,
-      {
-        width: 240,
-        height: 240,
-        duration: 0.4,
-        ease: 'back.in(1.2)',
-        onComplete: onBackToLogin,
-      },
-      '-=0.1',
-    );
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-
-    if (password !== confirmPassword) {
-      setErrorMessage(tr('register_screen.passwords_do_not_match'));
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    // Simulate API call and success animation
-    const tl = gsap.timeline();
-    tl.to('.register-form-content', {
-      opacity: 0,
-      scale: 0.95,
-      duration: 0.3,
-    })
-      .to(
-        panelRef.current,
-        {
-          width: 240,
-          height: 240,
-          duration: 0.7,
-          ease: 'back.inOut(1.2)',
-        },
-        'morph',
-      )
-      .to(
-        '.register-loading-content',
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 0.4,
-          onStart: () => gsap.set('.register-loading-content', { display: 'flex' }),
-        },
-        'morph+=0.4',
-      );
-
-    setTimeout(() => {
-      // Success transition
-      gsap.to('.orb-core', {
-        backgroundColor: '#10B981',
-        boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)',
-      });
-      gsap.to(panelRef.current, {
-        scale: 1.1,
-        opacity: 0,
-        duration: 0.5,
-        ease: 'power3.in',
-        delay: 0.5,
-        onComplete: onRegisterSuccess,
-      });
-    }, 1500);
-  };
+  const { t } = useLocale();
 
   return (
-    <div
-      ref={containerRef}
-      className="relative min-h-screen w-full flex items-center justify-center pt-24 pb-8 overflow-x-hidden bg-[#020810]"
-      style={{ perspective: 1200 }}
-    >
-      {/* Background with abstract dark glow */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-[#F66B17] opacity-[0.03] blur-[150px] rounded-full pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-[#041D2E] opacity-50 blur-[120px] rounded-full pointer-events-none" />
-      </div>
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] opacity-[0.02] pointer-events-none mix-blend-overlay" />
-
-      {/* Top Nav */}
-      <div className="absolute top-0 inset-x-0 h-24 flex items-center justify-between px-4 sm:px-8 z-20">
+    <div className="min-h-dvh w-full flex flex-col justify-between bg-[#F8FAFC] text-slate-800 font-sans antialiased">
+      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-slate-200/80 bg-white">
         <button
+          type="button"
           onClick={onBackToSite}
-          className="text-white/40 hover:text-white transition-colors text-xs font-bold tracking-widest flex items-center gap-2"
+          aria-label={t('auth.backToHomepageAria')}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer py-2 px-3 rounded-xl hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
         >
-          <IconArrowRight className="w-4 h-4 rotate-180" />
-          {tr('common.back_to_site')}
+          <IconArrowRight className="w-3.5 h-3.5 rotate-180" />
+          <span>{t('auth.backToSite')}</span>
         </button>
-        <LanguageSwitcher dark />
-      </div>
-
-      {/* Cyber-Chamfered Panel */}
-      <div
-        ref={panelRef}
-        data-auth-panel
-        className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4 mt-8 mb-8"
-        style={{ maxWidth: 'calc(100vw - 32px)', minHeight: 600 }}
-      >
-        {/* Outer Thin Border Layer */}
-        <div
-          className="absolute inset-0 bg-white/20 transition-all"
-          style={{
-            clipPath:
-              'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)',
-          }}
-        />
-
-        {/* Inner Dark Glass Layer */}
-        <div
-          className="absolute inset-[1px] bg-[#0A1118]/80 backdrop-blur-2xl transition-all"
-          style={{
-            clipPath:
-              'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)',
-          }}
+        <div className="flex items-center gap-3">
+          <LanguageSwitcher />
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl overflow-hidden shadow-xs shrink-0 bg-white p-0.5 border border-slate-200/80 flex items-center justify-center">
+              <img
+                src="/smartsite-app-icon-white.png"
+                alt="SmartSite"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <span className="font-bold text-xs tracking-tight text-slate-900">SmartSite</span>
+          </div>
+        </div>
+      </header>
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <section
+          aria-labelledby="account-access-title"
+          className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 sm:p-8"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent pointer-events-none" />
-        </div>
-
-        {/* Top Left Glass Accent */}
-        <div
-          className="absolute top-[1px] left-[1px] w-[39px] h-[39px] bg-white/5 border-b border-r border-white/10 backdrop-blur-3xl hidden sm:block"
-          style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }}
-        />
-        {/* Bottom Right Glass Accent */}
-        <div
-          className="absolute bottom-[1px] right-[1px] w-[39px] h-[39px] bg-white/5 border-t border-l border-white/10 backdrop-blur-3xl hidden sm:block"
-          style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
-        />
-
-        {/* --- FORM STATE --- */}
-        <div className="register-form-content absolute inset-0 flex flex-col p-10 justify-center">
-          <div className="mb-6 text-center">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
-                <img
-                  src="/smartsite-app-icon-white.png"
-                  alt="SmartSite"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <span className="text-2xl font-black tracking-tight text-white">
-                Smart<span className="text-[#F66B17]">Site</span>
-              </span>
-            </div>
-            <h1 className="text-3xl font-black text-white tracking-tight mb-2">
-              {tr('common.create')} <span className="text-[#F66B17]">{tr('common.account')}</span>
-            </h1>
-            <p className="text-white/40 text-xs font-medium tracking-wide">
-              {tr('register_screen.join_smartsite_to_access_operational_data')}
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4 flex-1 flex flex-col justify-center">
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
-                  {tr('common.full_name_8e00cd')}
-                </label>
-                <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
-                  <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder={tr('register_screen.enter_your_full_name')}
-                    className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
-                  {tr('common.username')}
-                </label>
-                <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
-                  <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
-                  <input
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder={tr('common.choose_a_username')}
-                    className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
-                  {tr('common.password')}
-                </label>
-                <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
-                  <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={tr('register_screen.create_a_strong_password')}
-                    className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
-                  {tr('common.confirm_password')}
-                </label>
-                <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
-                  <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder={tr('common.repeat_your_password')}
-                    className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {errorMessage && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                <IconAlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                <p className="text-red-400 text-xs font-medium">{localizeMessage(errorMessage)}</p>
-              </div>
-            )}
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="group relative w-full flex items-center justify-center gap-2 py-4 bg-[#F66B17] hover:bg-[#D94E07] transition-all rounded-xl overflow-hidden active:scale-[0.98] shadow-[0_0_20px_rgba(246,107,23,0.3)]"
-              >
-                <span className="font-bold text-white tracking-wide text-sm">
-                  {tr('common.create_account')}
-                </span>
-                <IconArrowRight className="w-4 h-4 text-white transition-transform group-hover:translate-x-1" />
-              </button>
-            </div>
-
-            <div className="text-center mt-2">
-              <span className="text-white/40 text-xs font-medium">
-                {tr('register_screen.already_have_an_account')}
-              </span>{' '}
-              <button
-                type="button"
-                onClick={handleNavigateLogin}
-                className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
-              >
-                {tr('common.sign_in_bcc0bc')}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* --- LOADING STATE --- */}
-        <div className="register-loading-content absolute inset-0 hidden flex-col items-center justify-center">
-          <div className="relative w-full h-full flex items-center justify-center">
-            <div className="absolute w-20 h-20 border border-white/10 rounded-2xl" />
-            <div className="absolute w-24 h-24 border border-[#F66B17]/20 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
-            <div
-              className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"
-              style={{ animationDelay: '1s' }}
-            />
-            <div className="orb-core relative w-8 h-8 bg-[#F66B17] rounded-full shadow-[0_0_40px_20px_rgba(246,107,23,0.4)] animate-pulse" />
-          </div>
-        </div>
-      </div>
+          <p className="text-xs font-semibold text-slate-500">
+            {t('auth.registerGuidance.eyebrow')}
+          </p>
+          <h1
+            id="account-access-title"
+            className="mt-2 text-2xl font-bold tracking-tight text-slate-900"
+          >
+            {t('auth.registerGuidance.title')}
+          </h1>
+          <p className="mt-4 text-sm leading-relaxed text-slate-600">
+            {t('auth.registerGuidance.adminInstruction')}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            {t('auth.registerGuidance.existingAccountPrompt')}
+          </p>
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 active:scale-[0.99] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          >
+            {tr('common.sign_in')}
+            <IconArrowRight className="w-4 h-4" />
+          </button>
+        </section>
+      </main>
+      <footer className="w-full px-6 py-4 text-center text-[11px] text-slate-500 border-t border-slate-200/80 bg-white">
+        {t('auth.footer')}
+      </footer>
     </div>
   );
 }

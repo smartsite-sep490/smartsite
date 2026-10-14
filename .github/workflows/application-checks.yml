@@ -34,6 +34,10 @@ jobs:
       - run: pnpm --filter @smartsite/mobile check:dependencies
         env:
           EXPO_OFFLINE: '0'
+      - name: Validate private evidence reader configuration
+        run: node infra/check-evidence-compose.mjs
+      - name: Validate Backend shutdown grace configuration
+        run: node --test infra/backend-shutdown-compose.test.mjs
       - name: Start PostgreSQL container
         run: docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60
       - name: Run TypeORM migrations
@@ -46,6 +50,10 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://smartsite_test:smartsite_test_only@127.0.0.1:5433/smartsite_test
         run: pnpm --filter @smartsite/backend test:integration
+      - name: Check Workforce transaction queries with strict deprecations
+        env:
+          TEST_DATABASE_URL: postgresql://smartsite_test:smartsite_test_only@127.0.0.1:5433/smartsite_test
+        run: pnpm --filter @smartsite/backend test:integration:workforce
       - name: Build and start local containers
         run: docker compose -f infra/compose.yaml up -d --build --wait --wait-timeout 120
       - name: Check real database readiness and Web

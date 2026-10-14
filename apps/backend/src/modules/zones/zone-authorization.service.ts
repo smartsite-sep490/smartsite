@@ -3,6 +3,7 @@ import { ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import type { ZoneEntity } from '../../database/entities/zone.entity.js';
 import type {
   IZoneAuthorizationService,
+  ZoneAccessEffect,
   ZoneAuthorizationResult,
   ZoneAuthorizationSubject,
 } from './zone-authorization.interface.js';
@@ -74,34 +75,41 @@ export class ZoneAuthorizationService implements IZoneAuthorizationService {
           if (grant.validFrom.getTime() > evaluatedMs) return false;
           return grant.validUntil === null || evaluatedMs < grant.validUntil.getTime();
         });
-        if (activeGrants.some((grant) => grant.effect === 'DENY')) {
-          return {
-            status: 'DENIED',
-            candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED',
-            reasonCode: 'EXPLICIT_DENY',
-            reason: 'Worker has an active deny grant for this Zone',
-            workerId: subject.workerId,
-          };
-        }
-        if (activeGrants.some((grant) => grant.effect === 'ALLOW')) {
-          return {
-            status: 'ALLOWED',
-            reasonCode: 'VALID_ALLOW',
-            workerId: subject.workerId,
-          };
-        }
-        return {
-          status: 'DENIED',
-          candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED',
-          reasonCode: 'NO_VALID_ALLOW',
-          reason: 'Worker has no active allow grant for this Zone',
-          workerId: subject.workerId,
-        };
+        return this.authorizeActivePermissions(
+          subject.workerId,
+          activeGrants.map((grant) => grant.effect),
+        );
       }
       default: {
         const exhaustiveCheck: never = zone.restrictionPolicy;
         throw new Error(`Unhandled restriction policy: ${String(exhaustiveCheck)}`);
       }
     }
+  }
+
+  /** Backend-only: caller has verified identity/scope and evaluated active intervals. */
+  authorizeActivePermissions(
+    workerId: string,
+    effects: readonly ZoneAccessEffect[],
+  ): ZoneAuthorizationResult {
+    if (effects.includes('DENY')) {
+      return {
+        status: 'DENIED',
+        candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED',
+        reasonCode: 'EXPLICIT_DENY',
+        reason: 'Worker has an active deny grant for this Zone',
+        workerId,
+      };
+    }
+    if (effects.includes('ALLOW')) {
+      return { status: 'ALLOWED', reasonCode: 'VALID_ALLOW', workerId };
+    }
+    return {
+      status: 'DENIED',
+      candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED',
+      reasonCode: 'NO_VALID_ALLOW',
+      reason: 'Worker has no active allow grant for this Zone',
+      workerId,
+    };
   }
 }

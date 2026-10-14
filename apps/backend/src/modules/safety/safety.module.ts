@@ -26,21 +26,45 @@ import {
 } from './identity/worker-reference.port.js';
 import { DataSource } from 'typeorm';
 import { ZoneAccessManagementService } from '../zones/zone-access-management.service.js';
+import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
+import { Mf06AssessmentQueryService } from './assessments/mf06-assessment-query.service.js';
+import { Mf06AssessmentsController } from './assessments/mf06-assessments.controller.js';
+import { Mf06RequestStatusQueryService } from './assessments/mf06-request-status-query.service.js';
+import { Mf06RequestStatusesController } from './assessments/mf06-request-statuses.controller.js';
 
 @Module({
-  imports: [StorageModule, DatabaseModule, AuthModule, ZonesModule, WorkforceModule, UsersModule],
-  controllers: [SafetyAlertsController, ObservationIdentityController, SafetyWorkflowController],
+  imports: [
+    StorageModule,
+    DatabaseModule,
+    AuthModule,
+    ZonesModule,
+    WorkforceModule,
+    UsersModule,
+  ],
+  controllers: [
+    SafetyAlertsController,
+    ObservationIdentityController,
+    Mf06AssessmentsController,
+    Mf06RequestStatusesController,
+    SafetyWorkflowController,
+  ],
   providers: [
     SafetyWorkflowService,
     SafetyUploadService,
     AlertCandidateEvaluator,
+    Mf06IngestionEnqueueService,
+    Mf06AssessmentQueryService,
+    Mf06RequestStatusQueryService,
     DurableGroupingService,
     SafetyAlertQueryService,
     SafetyAlertReviewService,
     SafetyAlertEvidenceService,
     SafetyAlertAccessGuard,
     ObservationIdentityAccessGuard,
-    { provide: WORKER_REFERENCE_READER, useExisting: WorkforceConfigurationService },
+    {
+      provide: WORKER_REFERENCE_READER,
+      useExisting: WorkforceConfigurationService,
+    },
     {
       provide: ObservationIdentityResolutionService,
       inject: [DataSource, SafetyAlertEvidenceService, WORKER_REFERENCE_READER],
@@ -48,7 +72,8 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
         dataSource: DataSource,
         evidence: SafetyAlertEvidenceService,
         workers: WorkerReferenceReader,
-      ) => new ObservationIdentityResolutionService(dataSource, evidence, workers),
+      ) =>
+        new ObservationIdentityResolutionService(dataSource, evidence, workers),
     },
     {
       provide: ObservationIdentityContextService,
@@ -63,9 +88,19 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
         evidence: SafetyAlertEvidenceService,
         zones: ZoneAccessManagementService,
         workers: WorkerReferenceReader,
-      ) => new ObservationIdentityContextService(resolutions, evidence, zones, workers),
+      ) =>
+        new ObservationIdentityContextService(
+          resolutions,
+          evidence,
+          zones,
+          workers,
+        ),
     },
   ],
-  exports: [AlertCandidateEvaluator, DurableGroupingService],
+  exports: [
+    AlertCandidateEvaluator,
+    DurableGroupingService,
+    Mf06IngestionEnqueueService,
+  ],
 })
 export class SafetyModule {}

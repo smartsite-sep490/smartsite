@@ -354,21 +354,19 @@ export class ScheduleConfigurationService {
     const scopedScheduleVersionId = uuid(scheduleVersionId);
     const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {
-      const [version, worker, shift] = await Promise.all([
-        manager.getRepository(ScheduleVersionEntity).findOneBy({
+      const version = await manager.getRepository(ScheduleVersionEntity).findOneBy({
           id: scopedScheduleVersionId,
           siteId: scopedSiteId,
-        }),
-        manager.getRepository(WorkerEntity).findOneBy({
+        });
+      const worker = await manager.getRepository(WorkerEntity).findOneBy({
           id: value.workerId,
           siteId: scopedSiteId,
           isActive: true,
-        }),
-        manager.getRepository(ShiftEntity).findOne({
-          where: { id: value.shiftId, siteId: scopedSiteId },
-          lock: { mode: 'pessimistic_read' },
-        }),
-      ]);
+        });
+      const shift = await manager.getRepository(ShiftEntity).findOne({
+        where: { id: value.shiftId, siteId: scopedSiteId },
+        lock: { mode: 'pessimistic_read' },
+      });
       if (!version || !worker || !shift) missing();
       await this.assertWorkerScheduleWriter(manager, user, scopedSiteId, worker, shift.id);
       if (shift.archivedAt) conflict('Archived shifts cannot receive new worker schedules');
@@ -448,21 +446,19 @@ export class ScheduleConfigurationService {
     const scopedContractorId = uuid(value.contractorId);
 
     return this.dataSource.transaction(async (manager) => {
-      const [shift, contractor, participations] = await Promise.all([
-        manager.getRepository(ShiftEntity).findOne({
-          where: { id: scopedShiftId, siteId: scopedSiteId },
-          lock: { mode: 'pessimistic_read' },
-        }),
-        manager.getRepository(ContractorEntity).findOneBy({
+      const shift = await manager.getRepository(ShiftEntity).findOne({
+        where: { id: scopedShiftId, siteId: scopedSiteId },
+        lock: { mode: 'pessimistic_read' },
+      });
+      const contractor = await manager.getRepository(ContractorEntity).findOneBy({
           id: scopedContractorId,
           isActive: true,
-        }),
-        manager.getRepository(ContractorSiteParticipationEntity).findBy({
+        });
+      const participations = await manager.getRepository(ContractorSiteParticipationEntity).findBy({
           contractorId: scopedContractorId,
           siteId: scopedSiteId,
           isActive: true,
-        }),
-      ]);
+        });
       const now = Date.now();
       if (
         !shift ||

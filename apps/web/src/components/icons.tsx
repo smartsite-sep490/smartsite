@@ -11,38 +11,36 @@
  *
  * Package: @phosphor-icons/react  v2.1.10  MIT
  */
-import {
-  ShieldCheck as PhShield,
-  HardHat as PhHardHat,
-  User as PhUser,
-  UsersThree as PhUsers,
-  Key as PhKey,
-  Warning as PhAlertTriangle,
-  Check as PhCheck,
-  X as PhX,
-  Bell as PhBell,
-  MagnifyingGlass as PhSearch,
-  CaretDown as PhChevronDown,
-  CaretLeft as PhChevronLeft,
-  CaretRight as PhChevronRight,
-  Funnel as PhFilter,
-  Eye as PhEye,
-  Buildings as PhBuilding,
-  Clock as PhClock,
-  SquaresFour as PhDashboard,
-  VideoCamera as PhCamera,
-  Cpu as PhCpu,
-  TrendUp as PhTrendingUp,
-  House as PhHome,
-  Broadcast as PhRadio,
-  SlidersHorizontal as PhSliders,
-  Building as PhBuilding2,
-  Play as PhPlay,
-  Pause as PhPause,
-  SpeakerHigh as PhVolume,
-  ArrowsOut as PhMaximize,
-  GridFour as PhGrid,
-} from '@phosphor-icons/react';
+import { ShieldCheck as PhShield } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { HardHat as PhHardHat } from '@phosphor-icons/react/dist/csr/HardHat';
+import { User as PhUser } from '@phosphor-icons/react/dist/csr/User';
+import { UsersThree as PhUsers } from '@phosphor-icons/react/dist/csr/UsersThree';
+import { Key as PhKey } from '@phosphor-icons/react/dist/csr/Key';
+import { Warning as PhAlertTriangle } from '@phosphor-icons/react/dist/csr/Warning';
+import { Check as PhCheck } from '@phosphor-icons/react/dist/csr/Check';
+import { X as PhX } from '@phosphor-icons/react/dist/csr/X';
+import { Bell as PhBell } from '@phosphor-icons/react/dist/csr/Bell';
+import { MagnifyingGlass as PhSearch } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
+import { CaretDown as PhChevronDown } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretLeft as PhChevronLeft } from '@phosphor-icons/react/dist/csr/CaretLeft';
+import { CaretRight as PhChevronRight } from '@phosphor-icons/react/dist/csr/CaretRight';
+import { Funnel as PhFilter } from '@phosphor-icons/react/dist/csr/Funnel';
+import { Eye as PhEye } from '@phosphor-icons/react/dist/csr/Eye';
+import { Buildings as PhBuilding } from '@phosphor-icons/react/dist/csr/Buildings';
+import { Clock as PhClock } from '@phosphor-icons/react/dist/csr/Clock';
+import { SquaresFour as PhDashboard } from '@phosphor-icons/react/dist/csr/SquaresFour';
+import { VideoCamera as PhCamera } from '@phosphor-icons/react/dist/csr/VideoCamera';
+import { Cpu as PhCpu } from '@phosphor-icons/react/dist/csr/Cpu';
+import { TrendUp as PhTrendingUp } from '@phosphor-icons/react/dist/csr/TrendUp';
+import { House as PhHome } from '@phosphor-icons/react/dist/csr/House';
+import { Broadcast as PhRadio } from '@phosphor-icons/react/dist/csr/Broadcast';
+import { SlidersHorizontal as PhSliders } from '@phosphor-icons/react/dist/csr/SlidersHorizontal';
+import { Building as PhBuilding2 } from '@phosphor-icons/react/dist/csr/Building';
+import { Play as PhPlay } from '@phosphor-icons/react/dist/csr/Play';
+import { Pause as PhPause } from '@phosphor-icons/react/dist/csr/Pause';
+import { SpeakerHigh as PhVolume } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
+import { ArrowsOut as PhMaximize } from '@phosphor-icons/react/dist/csr/ArrowsOut';
+import { GridFour as PhGrid } from '@phosphor-icons/react/dist/csr/GridFour';
 
 /* ── Shared prop type ──────────────────────────────────────────────── */
 type IconProps = { className?: string };

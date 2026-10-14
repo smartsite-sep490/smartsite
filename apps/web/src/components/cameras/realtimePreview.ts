@@ -1,5 +1,40 @@
 import { translate as tr } from '../../i18n';
+import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
+import {
+  EXPERIMENTAL_OBJECT_CLASSES,
+  type CameraPreviewFrame,
+} from '@smartsite/contracts/camera-preview';
 import type { VideoTestDetection } from './videoTestFixture';
+
+export { EXPERIMENTAL_OBJECT_CLASSES };
+export type ExperimentalObjectClass = (typeof EXPERIMENTAL_OBJECT_CLASSES)[number];
+
+export const POSITIVE_PPE_OBJECT_CLASSES = [
+  'Hardhat',
+  'Safety Vest',
+  'Gloves',
+  'Boots',
+  'Goggles',
+  'Mask',
+  'fullbody-Harness',
+  'Lanyard-Hook',
+] as const;
+
+export type PositivePpeObjectClass = (typeof POSITIVE_PPE_OBJECT_CLASSES)[number];
+
+export const NEGATIVE_PPE_OBJECT_CLASSES = [
+  'NO-Hardhat',
+  'NO-Safety Vest',
+  'NO-Gloves',
+  'NO-Boots',
+  'NO-Goggles',
+  'NO-Mask',
+] as const;
+
+export type NegativePpeObjectClass = (typeof NEGATIVE_PPE_OBJECT_CLASSES)[number];
+
+export type CameraPreviewModelObjects = NonNullable<CameraPreviewFrame['modelObjects']>;
+export type CameraPreviewModelObjectDetection = CameraPreviewModelObjects['detections'][number];
 
 export interface RealtimePreview {
   zonePolygons: { regionId: string; geometryVersion: number; coordinates: [number, number][] }[];
@@ -12,6 +47,7 @@ export interface RealtimePreview {
   imageDataUrl: string;
   detections: VideoTestDetection[];
   zoneDetections: VideoTestDetection[];
+  modelObjects?: CameraPreviewModelObjects;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -46,18 +82,30 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
     ) {
       throw new Error(tr('common.invalid_preview_box'));
     }
-    const status = {
+    const status: VideoTestDetection['ppeStatus'] = {
       HARD_HAT: 'UNKNOWN',
       SAFETY_VEST: 'UNKNOWN',
-    } as VideoTestDetection['ppeStatus'];
+    };
     if (mode === 'ppe') {
       if (!record(item.ppeStatus))
         throw new Error(tr('realtime_preview.invalid_preview_ppe_status'));
+      for (const k of Object.keys(item.ppeStatus)) {
+        if (!PPE_ITEMS.includes(k as PpeItem))
+          throw new Error(tr('realtime_preview.invalid_preview_ppe_status'));
+      }
       for (const key of ['HARD_HAT', 'SAFETY_VEST'] as const) {
         const state = item.ppeStatus[key];
         if (state !== 'UNKNOWN' && state !== 'MISSING' && state !== 'PRESENT')
           throw new Error(tr('realtime_preview.invalid_preview_ppe_status'));
         status[key] = state;
+      }
+      for (const key of ['GLOVES', 'BOOTS', 'GOGGLES'] as const) {
+        const state = item.ppeStatus[key];
+        if (state !== undefined) {
+          if (state !== 'UNKNOWN' && state !== 'MISSING' && state !== 'PRESENT')
+            throw new Error('Invalid preview PPE status');
+          status[key] = state;
+        }
       }
     }
     const alertState = item.alertState;
@@ -73,8 +121,9 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
     if (
       missing !== undefined &&
       (!Array.isArray(missing) ||
-        missing.length > 2 ||
-        !missing.every((v) => v === 'HARD_HAT' || v === 'SAFETY_VEST'))
+        missing.length > PPE_ITEMS.length ||
+        new Set(missing).size !== missing.length ||
+        !missing.every((v): v is PpeItem => PPE_ITEMS.includes(v as PpeItem)))
     )
       throw new Error(tr('realtime_preview.invalid_preview_ppe_items'));
     if (
@@ -103,6 +152,100 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
       trackId: item.trackId as number,
     };
   });
+}
+
+export function parseModelObjects(value: unknown): CameraPreviewModelObjects {
+  if (!record(value)) throw new Error('Invalid preview modelObjects');
+  const allowedKeys = [
+    'modelFamily',
+    'experimental',
+    'scope',
+    'artifactId',
+    'artifactSha256',
+    'detections',
+  ];
+  for (const k of Object.keys(value)) {
+    if (!allowedKeys.includes(k)) throw new Error(`Unexpected modelObjects key: ${k}`);
+  }
+  if (value.modelFamily !== 'yolo11s') throw new Error('Invalid modelFamily');
+  if (value.experimental !== true) throw new Error('Invalid experimental flag');
+  if (value.scope !== 'OBJECT_DETECTION_ONLY') throw new Error('Invalid scope');
+  if (
+    typeof value.artifactId !== 'string' ||
+    value.artifactId.length < 1 ||
+    value.artifactId.length > 128 ||
+    value.artifactId.includes('\0')
+  ) {
+    throw new Error('Invalid artifactId');
+  }
+  if (typeof value.artifactSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(value.artifactSha256)) {
+    throw new Error('Invalid artifactSha256');
+  }
+  if (!Array.isArray(value.detections) || value.detections.length > 1024) {
+    throw new Error('Invalid modelObjects detections length');
+  }
+  const detections: CameraPreviewModelObjectDetection[] = value.detections.map((item: unknown) => {
+    if (!record(item)) throw new Error('Invalid modelObjects detection');
+    const itemKeys = ['classId', 'className', 'confidence', 'boundingBox'];
+    for (const k of Object.keys(item)) {
+      if (!itemKeys.includes(k)) throw new Error(`Unexpected detection key: ${k}`);
+    }
+    if (
+      !Number.isInteger(item.classId) ||
+      (item.classId as number) < 0 ||
+      (item.classId as number) >= EXPERIMENTAL_OBJECT_CLASSES.length
+    ) {
+      throw new Error('Invalid classId');
+    }
+    const classId = item.classId as number;
+    const expectedName = EXPERIMENTAL_OBJECT_CLASSES[classId];
+    if (!expectedName || item.className !== expectedName) {
+      throw new Error(`className ${item.className} does not match classId ${classId}`);
+    }
+    if (
+      typeof item.confidence !== 'number' ||
+      !Number.isFinite(item.confidence) ||
+      item.confidence < 0 ||
+      item.confidence > 1
+    ) {
+      throw new Error('Invalid confidence');
+    }
+    if (!record(item.boundingBox)) throw new Error('Invalid boundingBox');
+    const box = item.boundingBox;
+    const boxKeys = ['x1', 'y1', 'x2', 'y2', 'coordinateSpace'];
+    for (const k of Object.keys(box)) {
+      if (!boxKeys.includes(k)) throw new Error(`Unexpected box key: ${k}`);
+    }
+    if (box.coordinateSpace !== 'NORMALIZED_0_1') throw new Error('Invalid coordinateSpace');
+    const coords = [box.x1, box.y1, box.x2, box.y2];
+    if (
+      !coords.every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1) ||
+      (box.x1 as number) >= (box.x2 as number) ||
+      (box.y1 as number) >= (box.y2 as number)
+    ) {
+      throw new Error('Invalid boundingBox coordinates');
+    }
+    return {
+      classId,
+      className: expectedName,
+      confidence: item.confidence,
+      boundingBox: {
+        x1: box.x1 as number,
+        y1: box.y1 as number,
+        x2: box.x2 as number,
+        y2: box.y2 as number,
+        coordinateSpace: 'NORMALIZED_0_1',
+      },
+    };
+  });
+  return {
+    modelFamily: 'yolo11s',
+    experimental: true,
+    scope: 'OBJECT_DETECTION_ONLY',
+    artifactId: value.artifactId,
+    artifactSha256: value.artifactSha256,
+    detections,
+  };
 }
 
 export function parseRealtimePreview(value: unknown): RealtimePreview {
@@ -163,6 +306,10 @@ export function parseRealtimePreview(value: unknown): RealtimePreview {
       coordinates: polygon.coordinates as [number, number][],
     };
   });
+  let modelObjects: CameraPreviewModelObjects | undefined;
+  if ('modelObjects' in value && value.modelObjects !== undefined && value.modelObjects !== null) {
+    modelObjects = parseModelObjects(value.modelObjects);
+  }
   return {
     zonePolygons,
     sessionId: value.sessionId,
@@ -174,6 +321,7 @@ export function parseRealtimePreview(value: unknown): RealtimePreview {
     imageDataUrl: value.imageDataUrl,
     detections: detections(value.detections, value.cameraExternalId, 'ppe'),
     zoneDetections: detections(value.zoneDetections, value.cameraExternalId, 'zone'),
+    ...(modelObjects ? { modelObjects } : {}),
   };
 }
 

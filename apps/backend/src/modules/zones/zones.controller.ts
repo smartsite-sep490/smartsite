@@ -28,6 +28,7 @@ import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { pagination } from '../../common/http/pagination.js';
 import type { ZoneEntity } from '../../database/entities/zone.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import { SiteManagerGuard, SiteSetupReadGuard } from '../auth/site-manager.guard.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
@@ -64,7 +65,10 @@ function zoneResponse(zone: ZoneEntity) {
 @Controller('sites/:siteId/zones')
 export class ZonesController {
   private readonly logger = new Logger(ZonesController.name);
-  constructor(private readonly zones: ZoneConfigurationService) {}
+  constructor(
+    private readonly zones: ZoneConfigurationService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post()
   @UseGuards(SiteManagerGuard)
@@ -74,7 +78,11 @@ export class ZonesController {
     @Param('siteId') siteId: string,
     @Body() input: CreateZoneCommand,
   ) {
-    const zone = await this.zones.create(siteId, input);
+    const zone = await this.zones.create(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.create',
@@ -111,7 +119,12 @@ export class ZonesController {
     @Param('zoneId') zoneId: string,
     @Body() input: RenameZoneCommand,
   ) {
-    const zone = await this.zones.rename(siteId, zoneId, input);
+    const zone = await this.zones.rename(
+      siteId,
+      zoneId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.rename',
@@ -130,7 +143,12 @@ export class ZonesController {
     @Param('zoneId') zoneId: string,
     @Body() input: UpdateZonePolicyCommand,
   ) {
-    const zone = await this.zones.updatePolicy(siteId, zoneId, input);
+    const zone = await this.zones.updatePolicy(
+      siteId,
+      zoneId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.policy',

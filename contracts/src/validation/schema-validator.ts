@@ -41,6 +41,10 @@ const cameraRegionConfigurationSchemaPath = new URL(
   '../../schemas/v1/camera-region-configuration.json',
   import.meta.url,
 );
+const expandedObservationEventSchemaPath = new URL(
+  '../../schemas/v1.1/technical-observation-event.json',
+  import.meta.url,
+);
 const observationEventSchema: unknown = JSON.parse(
   readFileSync(observationEventSchemaPath, 'utf8'),
 );
@@ -67,6 +71,9 @@ const ajv = new resolvedAjvConstructor({
 resolvedAddFormats(ajv);
 
 const validateObservationEventSchema: CompiledSchemaValidator = ajv.compile(observationEventSchema);
+const validateExpandedObservationEventSchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(readFileSync(expandedObservationEventSchemaPath, 'utf8')) as unknown,
+);
 const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
   cameraRegionConfigurationSchema,
 );
@@ -115,7 +122,15 @@ function schemaValidationIssues(
  * 2. Semantic cross-field bounding-box geometry (x1 < x2, y1 < y2) across observations and evidence.
  */
 export function validateObservationEvent(data: unknown): ValidationResult {
-  const issues = schemaValidationIssues(validateObservationEventSchema, data);
+  const expanded =
+    typeof data === 'object' &&
+    data !== null &&
+    'schemaVersion' in data &&
+    data.schemaVersion === '1.1.0';
+  const issues = schemaValidationIssues(
+    expanded ? validateExpandedObservationEventSchema : validateObservationEventSchema,
+    data,
+  );
 
   const geometryIssues = validateGeometries(data);
   issues.push(...geometryIssues);

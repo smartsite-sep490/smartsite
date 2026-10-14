@@ -566,10 +566,8 @@ export class SchedulingWorkflowService {
         coworkerSchedule.siteId !== scopedSiteId
       )
         missing();
-      const [requester, coworker] = await Promise.all([
-        this.workerForSchedule(manager, requesterSchedule),
-        this.workerForSchedule(manager, coworkerSchedule),
-      ]);
+      const requester = await this.workerForSchedule(manager, requesterSchedule);
+      const coworker = await this.workerForSchedule(manager, coworkerSchedule);
       await this.assertRequestAuthority(manager, actor, requester);
       if (
         requester.id === coworker.id ||
@@ -594,20 +592,18 @@ export class SchedulingWorkflowService {
         conflict(
           'Swap requires the same active team and different, non-overlapping shifts on the same work date',
         );
-      await Promise.all([
-        this.assertContractorShiftAssignment(
+      await this.assertContractorShiftAssignment(
           manager,
           scopedSiteId,
           requesterSchedule.shiftId,
           requester.contractorId,
-        ),
-        this.assertContractorShiftAssignment(
+        );
+      await this.assertContractorShiftAssignment(
           manager,
           scopedSiteId,
           coworkerSchedule.shiftId,
           coworker.contractorId,
-        ),
-      ]);
+        );
       await this.assertNoPendingRequests(manager, scopedSiteId, [
         requesterSchedule.id,
         coworkerSchedule.id,
@@ -874,20 +870,18 @@ export class SchedulingWorkflowService {
       }
       await this.assertWorkDateAvailable(manager, requesterSchedule);
       await this.assertWorkDateAvailable(manager, coworkerSchedule);
-      await Promise.all([
-        this.assertContractorShiftAssignment(
+      await this.assertContractorShiftAssignment(
           manager,
           scopedSiteId,
           request.coworkerShiftId,
           requester.contractorId,
-        ),
-        this.assertContractorShiftAssignment(
+        );
+      await this.assertContractorShiftAssignment(
           manager,
           scopedSiteId,
           request.requesterShiftId,
           coworker.contractorId,
-        ),
-      ]);
+        );
       await this.assertShiftAvailable(manager, requesterSchedule, request.coworkerShiftId);
       const binding = await teamSwapEligibility(manager, requesterSchedule, coworkerSchedule, true);
       if (

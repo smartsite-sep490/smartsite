@@ -5,6 +5,11 @@ import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 import { DataSource, In } from 'typeorm';
 import { SiteEntity } from '../../database/entities/site.entity.js';
 import { command, knownUnique, missing, page, uuid } from '../../common/configuration/commands.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -37,10 +42,19 @@ export class RenameSiteCommand {
 export class SiteConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async create(input: CreateSiteCommand): Promise<SiteEntity> {
+  async create(
+    input: CreateSiteCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<SiteEntity> {
     const value = command(CreateSiteCommand, input);
     try {
-      return await this.dataSource.getRepository(SiteEntity).save({ id: randomUUID(), ...value });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'SITE_CREATE',
+        value,
+        (manager) => manager.getRepository(SiteEntity).save({ id: randomUUID(), ...value }),
+      );
     } catch (error) {
       knownUnique(error, ['uq_site_code']);
     }
@@ -67,12 +81,23 @@ export class SiteConfigurationService {
     return { items, total };
   }
 
-  async rename(siteId: string, input: RenameSiteCommand): Promise<SiteEntity> {
+  async rename(
+    siteId: string,
+    input: RenameSiteCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<SiteEntity> {
     const value = command(RenameSiteCommand, input);
-    const site = await this.get(siteId);
-    if (site.name === value.name) return site;
-    await this.dataSource.getRepository(SiteEntity).update({ id: site.id }, { name: value.name });
-    site.name = value.name;
-    return site;
+    return executeMainMetadataMutation(this.dataSource, context, async (manager) => {
+      const repository = manager.getRepository(SiteEntity);
+      const site = await repository.findOne({
+        where: { id: uuid(siteId) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!site) return missing();
+      if (site.name === value.name) return site;
+      await repository.update({ id: site.id }, { name: value.name });
+      site.name = value.name;
+      return site;
+    });
   }
 }

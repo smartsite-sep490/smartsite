@@ -936,7 +936,9 @@ describe('observation identity client', () => {
       });
       const fetchMock = vi.fn(async () => {
         const response = new Response(
-          kind === 'blob' ? new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) : ' ',
+          kind === 'blob' ? new ReadableStream({
+            pull() { markStarted(); return new Promise(() => undefined); },
+          }) : ' ',
           {
             status: 200,
             headers: { 'Content-Type': kind === 'blob' ? 'image/jpeg' : 'application/json' },
@@ -946,8 +948,7 @@ describe('observation identity client', () => {
           markStarted();
           return new Promise(() => undefined);
         };
-        if (kind === 'blob') response.blob = hang as typeof response.blob;
-        else response.json = hang as typeof response.json;
+        if (kind === 'json') response.json = hang as typeof response.json;
         return response;
       });
       vi.stubGlobal('fetch', fetchMock);

@@ -1,3 +1,4 @@
+import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
 import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
@@ -142,10 +143,30 @@ import type {
   EnrollmentCaptureTarget,
   WorkerGatePermissionsResponse,
   SetWorkerGatePermissionsCommand,
+  Mf06AssessmentPage,
+  Mf06AssessmentResponse,
+  Mf06RequestStatusPage,
+  Mf06RequestStatusResponse,
 } from '@smartsite/contracts';
+import {
+  parseMf06AssessmentPage,
+  parseMf06AssessmentResponse,
+  parseMf06RequestStatusPage,
+  parseMf06RequestStatusResponse,
+} from '@smartsite/contracts/mf06-assessments';
+import {
+  parseCameraPreviewResponse,
+  type CameraPreviewResponse,
+} from '@smartsite/contracts/camera-preview';
 export type { SchedulingRequestStatus };
+import type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
+import {
+  processCameraMediaNdjsonStream,
+  type CameraVideoStreamOptions,
+} from './camera-media-stream';
 
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './index';
+import { parseMf05DemoStatus, type Mf05DemoStatus } from './mf05-demo';
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
@@ -166,9 +187,21 @@ export type ZoneEntryDecisionListOptions = PageOptions & {
   zoneId?: string;
   status?: ZoneEntryDecisionStatus;
 };
+
+export const MAX_RECORDED_VIDEO_BYTES = 2_000_000;
+// Match the Backend's existing local evidence bound; this is not a model/data limit.
+const MAX_EVIDENCE_JPEG_BYTES = 1_048_576;
+
+export interface RecordedCameraVideoOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  expectedCameraExternalId?: string;
+}
 type CameraMutation = { expectedConfigurationVersion: number };
 const pathId = (id: string) => encodeURIComponent(id);
 const MAX_TIMEOUT_MS = 2_147_483_647;
+const AUTH_REQUEST_TIMEOUT_MS = 10_000;
+const AUTH_SESSION_PATHS = new Set(['/auth/login', '/auth/refresh', '/auth/logout', '/auth/me']);
 // Node clamps NaN, Infinity, negatives, and delays above 2^31-1 to 1ms.
 const validTimeout = (timeoutMs: number) =>
   Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
@@ -506,38 +539,12 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  accessSetup(token: string, siteId: string) {
-    return this.request<AccessSetupResponse>('GET', `/sites/${pathId(siteId)}/access-setup`, token);
-  }
-  grantContractorZone(token: string, siteId: string, input: GrantContractorZoneCommand) {
-    return this.request<{ id: string }>(
-      'POST',
-      `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions`,
-      token,
-      input,
-    );
-  }
   grantContractorZoneDates(token: string, siteId: string, input: GrantContractorZoneDatesCommand) {
     return this.request<{ id: string }>(
       'POST',
       `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions/dates`,
       token,
       input,
-    );
-  }
-  grantWorkerZone(token: string, siteId: string, input: GrantWorkerZoneCommand) {
-    return this.request<{ id: string }>(
-      'POST',
-      `/sites/${pathId(siteId)}/access-setup/worker-zone-permissions`,
-      token,
-      input,
-    );
-  }
-  revokeZonePermission(token: string, siteId: string, id: string, kind: 'worker' | 'contractor') {
-    return this.request<{ id: string }>(
-      'POST',
-      `/sites/${pathId(siteId)}/access-setup/${kind}-zone-permissions/${pathId(id)}/revoke`,
-      token,
     );
   }
   confirmGatePassage(
@@ -555,10 +562,9 @@ export class SmartSiteManagementClient {
   }
   constructor(private readonly baseUrl: string) {}
   listVisitorSites() {
-    return this.request<{ items: Array<{ id: string; name: string; code: string }> }>(
-      'GET',
-      '/visitor-registration/sites',
-    );
+    return this.request<{
+      items: Array<{ id: string; name: string; code: string }>;
+    }>('GET', '/visitor-registration/sites');
   }
   registerVisit(siteId: string, input: CreateVisitCommand) {
     return this.request<VisitResponse>(
@@ -693,6 +699,53 @@ export class SmartSiteManagementClient {
     return this.request('GET', `/sites/${pathId(siteId)}/shift-swap-requests/${pathId(id)}`, token);
   }
 
+  getMf05DemoStatus(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<Mf05DemoStatus> {
+    return this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/mf05-demo`,
+      token,
+      undefined,
+      undefined,
+      options,
+    ).then((payload) => {
+      const parsed = parseMf05DemoStatus(payload, siteId, cameraId);
+      if (!parsed)
+        throw new ApiError('invalid-response', 'Backend returned invalid MF05 operator status.');
+      return parsed;
+    });
+  }
+
+  applyMf05DemoRegion(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: { regionId: string; expectedConfigurationVersion: number },
+    options?: RequestOptions,
+  ): Promise<Mf05DemoStatus> {
+    return this.request<unknown>(
+      'POST',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/mf05-demo/apply`,
+      token,
+      input,
+      undefined,
+      options,
+    ).then((payload) => {
+      const parsed = parseMf05DemoStatus(payload, siteId, cameraId);
+      if (
+        !parsed ||
+        parsed.selectedRegionId !== input.regionId ||
+        parsed.configurationVersion !== input.expectedConfigurationVersion
+      )
+        throw new ApiError('invalid-response', 'Backend returned invalid MF05 apply scope.');
+      return parsed;
+    });
+  }
+
   private async runRequest<T>(
     options: RequestOptions | undefined,
     operation: (signal: AbortSignal | undefined) => Promise<T>,
@@ -758,36 +811,58 @@ export class SmartSiteManagementClient {
     credentials?: RequestCredentials,
     options?: RequestOptions,
   ): Promise<T> {
-    return this.runRequest(options, async (signal) => {
-      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-        method,
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        ...(credentials ? { credentials } : {}),
-        ...(signal ? { signal } : {}),
-      });
+    const requestOptions = AUTH_SESSION_PATHS.has(path)
+      ? { ...options, timeoutMs: options?.timeoutMs ?? AUTH_REQUEST_TIMEOUT_MS }
+      : options;
+    const sessionScopes = captureSessionScopes(token);
+    return this.runRequest(requestOptions, async (signal) => {
+      // Race headers as well as the body; some fetch adapters ignore abort.
+      const response = await this.readBody(
+        () =>
+          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+            method,
+            headers: {
+              Accept: 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            ...(credentials ? { credentials } : {}),
+            ...(AUTH_SESSION_PATHS.has(path) ? { cache: 'no-store' as const } : {}),
+            ...(signal ? { signal } : {}),
+          }),
+        signal,
+      );
       if (response.status === 204) return undefined as T;
+      if (response.status === 401 && !AUTH_SESSION_PATHS.has(path) && sessionScopes.length > 0) {
+        dispatchSessionExpired(sessionScopes);
+      }
       let payload: unknown;
       try {
         payload = await this.readBody(() => response.json(), signal);
       } catch (error) {
         if (signal?.aborted) throw error;
-        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+        if (response.ok)
+          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
       if (!response.ok) {
-        if (response.status === 401 && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
-        }
+        // Auth hooks handle their own request ordering. Protected requests use
+        // captured scopes; an HTTP error does not require a valid JSON envelope.
         const error = parseBackendErrorEnvelope(payload, response.status);
+        const retryAfterHeader = response.headers.get('Retry-After');
+        let retryAfterSeconds: number | undefined;
+        if (retryAfterHeader) {
+          const parsed = parseInt(retryAfterHeader, 10);
+          if (Number.isFinite(parsed) && parsed >= 0) {
+            retryAfterSeconds = Math.min(parsed, 60);
+          }
+        }
         throw new ApiError(
           'http',
           error?.message ?? `Backend returned HTTP ${response.status}.`,
           response.status,
           error,
+          retryAfterSeconds,
         );
       }
       return payload as T;
@@ -801,25 +876,33 @@ export class SmartSiteManagementClient {
     body: FormData,
     options?: RequestOptions,
   ): Promise<T> {
+    const sessionScopes = captureSessionScopes(token);
     return this.runRequest(options, async (signal) => {
-      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-        method,
-        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-        body,
+      const response = await this.readBody(
+        () =>
+          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+            method,
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body,
+            signal,
+          }),
         signal,
-      });
+      );
       if (response.status === 204) return undefined as T;
+      if (response.status === 401 && sessionScopes.length > 0)
+        dispatchSessionExpired(sessionScopes);
       let payload: unknown;
       try {
         payload = await this.readBody(() => response.json(), signal);
       } catch (error) {
         if (signal?.aborted) throw error;
-        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+        if (response.ok)
+          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
       if (!response.ok) {
-        if (response.status === 401 && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
-        }
         const error = parseBackendErrorEnvelope(payload, response.status);
         throw new ApiError(
           'http',
@@ -833,40 +916,128 @@ export class SmartSiteManagementClient {
   }
 
   private async requestBlob(path: string, token: string, options?: RequestOptions): Promise<Blob> {
-    return this.runRequest(options, async (signal) => {
-      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-        headers: {
-          Accept: 'image/jpeg',
-          Authorization: `Bearer ${token}`,
-        },
-        ...(signal ? { signal } : {}),
-      });
-      if (!response.ok) {
-        let payload: unknown;
-        try {
-          payload = await this.readBody(() => response.json(), signal);
-        } catch (error) {
-          if (signal?.aborted) throw error;
-          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+    return this.runRequest(
+      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
+      async (signal) => {
+        const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+          headers: {
+            Accept: 'image/jpeg',
+            Authorization: `Bearer ${token}`,
+          },
+          cache: 'no-store',
+          redirect: 'error',
+          ...(signal ? { signal } : {}),
+        });
+        if (!response.ok) {
+          let payload: unknown;
+          try {
+            payload = await this.readBody(() => response.json(), signal);
+          } catch (error) {
+            if (signal?.aborted) throw error;
+            throw new ApiError(
+              'invalid-response',
+              'Backend returned invalid JSON.',
+              response.status,
+            );
+          }
+          const error = parseBackendErrorEnvelope(payload, response.status);
+          throw new ApiError(
+            'http',
+            error?.message ?? `Backend returned HTTP ${response.status}.`,
+            response.status,
+            error,
+          );
         }
-        const error = parseBackendErrorEnvelope(payload, response.status);
-        throw new ApiError(
-          'http',
-          error?.message ?? `Backend returned HTTP ${response.status}.`,
-          response.status,
-          error,
-        );
-      }
-      const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
-      if (contentType !== 'image/jpeg') {
-        throw new ApiError(
-          'invalid-response',
-          'Backend returned an invalid evidence type.',
-          response.status,
-        );
-      }
-      return this.readBody(() => response.blob(), signal);
-    });
+        const cancelUnreadBody = () => {
+          // Cancellation must not delay reporting a limit/type failure.
+          try {
+            void response.body?.cancel().catch(() => undefined);
+          } catch {
+            // The body may already be locked by an adapter.
+          }
+        };
+        const contentType = response.headers
+          .get('content-type')
+          ?.split(';', 1)[0]
+          ?.trim()
+          .toLowerCase();
+        if (contentType !== 'image/jpeg') {
+          cancelUnreadBody();
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid evidence type.',
+            response.status,
+          );
+        }
+        const length = response.headers.get('content-length');
+        if (
+          length !== null &&
+          (!/^\d+$/.test(length) || Number(length) > MAX_EVIDENCE_JPEG_BYTES)
+        ) {
+          cancelUnreadBody();
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid evidence size.',
+            response.status,
+          );
+        }
+
+        let blob: Blob;
+        if (response.body && typeof response.body.getReader === 'function') {
+          const reader = response.body.getReader();
+          const chunks: Uint8Array<ArrayBuffer>[] = [];
+          let size = 0;
+          try {
+            while (true) {
+              const row = await this.readBody(() => reader.read(), signal);
+              if (row.done) break;
+              size += row.value.byteLength;
+              if (size > MAX_EVIDENCE_JPEG_BYTES) {
+                throw new ApiError(
+                  'invalid-response',
+                  'Backend returned an invalid evidence size.',
+                  response.status,
+                );
+              }
+              chunks.push(new Uint8Array(row.value));
+            }
+            blob = new Blob(chunks, { type: 'image/jpeg' });
+          } finally {
+            try {
+              void reader.cancel().catch(() => undefined);
+            } catch {
+              // Preserve the original read or validation failure.
+            }
+            reader.releaseLock();
+          }
+        } else {
+          // Some native fetch adapters expose only blob(); their bound is checked
+          // after buffering, while browser streams are capped incrementally above.
+          blob = await this.readBody(() => response.blob(), signal);
+        }
+        if (blob.size < 4 || blob.size > MAX_EVIDENCE_JPEG_BYTES) {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid evidence size.',
+            response.status,
+          );
+        }
+        const bytes = new Uint8Array(await this.readBody(() => blob.arrayBuffer(), signal));
+        if (
+          bytes[0] !== 0xff ||
+          bytes[1] !== 0xd8 ||
+          bytes[bytes.length - 2] !== 0xff ||
+          bytes[bytes.length - 1] !== 0xd9
+        ) {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned invalid evidence image bytes.',
+            response.status,
+          );
+        }
+        return blob;
+      },
+    );
   }
 
   private listPath(path: string, options: Record<string, string | number | undefined> = {}) {
@@ -1344,24 +1515,56 @@ export class SmartSiteManagementClient {
     return this.request<SiteResponse>('PATCH', `/sites/${pathId(siteId)}`, token, { name });
   }
 
-  createWorker(token: string, siteId: string, input: { externalId: string; displayName: string }) {
-    return this.request<WorkerResponse>('POST', `/sites/${pathId(siteId)}/workers`, token, input);
+  createWorker(
+    token: string,
+    siteId: string,
+    input: {
+      externalId: string;
+      displayName: string;
+      contractorId?: string;
+      userId?: string;
+    },
+    options?: RequestOptions,
+  ): Promise<WorkerResponse> {
+    return this.request<WorkerResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers`,
+      token,
+      input,
+      undefined,
+      options,
+    );
   }
 
-  linkWorkerAccount(token: string, siteId: string, workerId: string, userId: string) {
+  linkWorkerAccount(
+    token: string,
+    siteId: string,
+    workerId: string,
+    userId: string,
+    options?: RequestOptions,
+  ): Promise<WorkerResponse> {
     return this.request<WorkerResponse>(
       'PUT',
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/account`,
       token,
       { userId },
+      undefined,
+      options,
     );
   }
-  prepareFaceAccount(token: string, siteId: string, userId: string) {
+  prepareFaceAccount(
+    token: string,
+    siteId: string,
+    userId: string,
+    options?: RequestOptions,
+  ): Promise<WorkerResponse> {
     return this.request<WorkerResponse>(
       'POST',
       `/sites/${pathId(siteId)}/workers/for-account`,
       token,
       { userId },
+      undefined,
+      options,
     );
   }
   listWorkers(token: string, siteId: string, options?: PageOptions) {
@@ -1390,52 +1593,86 @@ export class SmartSiteManagementClient {
   createContractor(
     token: string,
     input: { code: string; name: string },
+    options?: RequestOptions,
   ): Promise<ContractorResponse>;
   createContractor(
     token: string,
     siteId: string,
     input: { code?: string; name: string },
+    options?: RequestOptions,
   ): Promise<ContractorResponse>;
   createContractor(
     token: string,
-    siteIdOrInput: string | { code?: string; name: string },
-    siteInput?: { code?: string; name: string },
-  ) {
-    const siteScoped = typeof siteIdOrInput === 'string';
-    const input = siteScoped ? siteInput! : siteIdOrInput;
-    const path = siteScoped ? `/sites/${pathId(siteIdOrInput)}/contractors` : '/contractors';
-    return this.request<ContractorResponse>('POST', path, token, input);
+    siteIdOrInput: string | { code: string; name: string },
+    inputOrOptions?: { code?: string; name: string } | RequestOptions,
+    maybeOptions?: RequestOptions,
+  ): Promise<ContractorResponse> {
+    if (typeof siteIdOrInput === 'string') {
+      if (!inputOrOptions || !('name' in inputOrOptions)) {
+        throw new ApiError('invalid-response', 'Site-scoped contractor creation requires name.');
+      }
+      return this.request<ContractorResponse>(
+        'POST',
+        `/sites/${pathId(siteIdOrInput)}/contractors`,
+        token,
+        inputOrOptions,
+        undefined,
+        maybeOptions,
+      );
+    }
+    const options = inputOrOptions && !('name' in inputOrOptions) ? inputOrOptions : undefined;
+    return this.request<ContractorResponse>(
+      'POST',
+      '/contractors',
+      token,
+      siteIdOrInput,
+      undefined,
+      options,
+    );
   }
   createContractorParticipation(
     token: string,
     contractorId: string,
     input: { siteId: string; validFrom: string; validUntil: string | null },
+    options?: RequestOptions,
   ) {
     return this.request<ContractorParticipationResponse>(
       'POST',
       `/contractors/${pathId(contractorId)}/participations`,
       token,
       input,
+      undefined,
+      options,
     );
   }
-  grantContractorRepresentative(token: string, contractorId: string, userId: string) {
+  grantContractorRepresentative(
+    token: string,
+    contractorId: string,
+    userId: string,
+    options?: RequestOptions,
+  ): Promise<ContractorRepresentativeGrantResponse> {
     return this.request<ContractorRepresentativeGrantResponse>(
       'POST',
       `/contractors/${pathId(contractorId)}/representative-grants`,
       token,
       { userId },
+      undefined,
+      options,
     );
   }
   createContractorWorker(
     token: string,
     contractorId: string,
     input: { siteId: string; externalId: string; displayName: string },
-  ) {
+    options?: RequestOptions,
+  ): Promise<WorkerResponse> {
     return this.request<WorkerResponse>(
       'POST',
       `/contractors/${pathId(contractorId)}/workers`,
       token,
       input,
+      undefined,
+      options,
     );
   }
 
@@ -1462,20 +1699,31 @@ export class SmartSiteManagementClient {
   createWorkerSiteZoneAssignment(
     token: string,
     workerId: string,
-    input: { siteId: string; zoneIds: string[]; validFrom: string; validUntil: string | null },
+    input: {
+      siteId: string;
+      zoneIds: string[];
+      validFrom: string;
+      validUntil: string | null;
+    },
+    options?: RequestOptions,
   ) {
     return this.request<WorkerSiteZoneAssignmentResponse>(
       'POST',
       `/workers/${pathId(workerId)}/site-zone-assignment-requests`,
       token,
       input,
+      undefined,
+      options,
     );
   }
-  safetyReviewWorkerSiteZoneAssignment(token: string, requestId: string) {
+  safetyReviewWorkerSiteZoneAssignment(token: string, requestId: string, options?: RequestOptions) {
     return this.request<WorkerSiteZoneAssignmentResponse>(
       'POST',
       `/site-zone-assignment-requests/${pathId(requestId)}/safety-review`,
       token,
+      undefined,
+      undefined,
+      options,
     );
   }
   decideWorkerSiteZoneAssignment(
@@ -1483,12 +1731,40 @@ export class SmartSiteManagementClient {
     requestId: string,
     approve: boolean,
     review?: { expectedVersion?: number; reviewNote?: string },
+    options?: RequestOptions,
   ) {
+    const body: {
+      approve: boolean;
+      expectedVersion?: number;
+      reviewNote?: string;
+    } = {
+      approve,
+      ...(review?.expectedVersion !== undefined ? { expectedVersion: review.expectedVersion } : {}),
+      ...(review?.reviewNote !== undefined ? { reviewNote: review.reviewNote } : {}),
+    };
     return this.request<WorkerSiteZoneAssignmentResponse>(
       'POST',
       `/site-zone-assignment-requests/${pathId(requestId)}/site-manager-decision`,
       token,
-      { approve, ...review },
+      body,
+      undefined,
+      options,
+    );
+  }
+  revokeWorkerAssignment(
+    token: string,
+    assignmentId: string,
+    expectedVersion: number,
+    reviewNote: string,
+    options?: RequestOptions,
+  ): Promise<WorkerSiteZoneAssignmentResponse> {
+    return this.request<WorkerSiteZoneAssignmentResponse>(
+      'POST',
+      `/site-zone-assignment-requests/${pathId(assignmentId)}/revoke`,
+      token,
+      { expectedVersion, reviewNote },
+      undefined,
+      options,
     );
   }
   startFaceEnrollment(token: string, workerId: string, consentVersion: string) {
@@ -1497,20 +1773,6 @@ export class SmartSiteManagementClient {
       `/workers/${pathId(workerId)}/face-enrollments`,
       token,
       { consentVersion },
-    );
-  }
-
-  revokeWorkerAssignment(
-    token: string,
-    assignmentId: string,
-    expectedVersion: number,
-    reviewNote: string,
-  ) {
-    return this.request<WorkerSiteZoneAssignmentResponse>(
-      'POST',
-      `/site-zone-assignment-requests/${pathId(assignmentId)}/revoke`,
-      token,
-      { expectedVersion, reviewNote },
     );
   }
   confirmWorkerFaceConsent(sessionId: string, consentToken: string) {
@@ -1539,7 +1801,11 @@ export class SmartSiteManagementClient {
     token: string,
     siteId: string,
     visitId: string,
-    input: { requestId: string; representativeConfirmed: true; reviewNote: string },
+    input: {
+      requestId: string;
+      representativeConfirmed: true;
+      reviewNote: string;
+    },
   ) {
     return this.request<VisitResponse>(
       'POST',
@@ -1708,6 +1974,70 @@ export class SmartSiteManagementClient {
     );
   }
 
+  accessSetup(
+    token: string,
+    siteId: string,
+    options?: RequestOptions,
+  ): Promise<AccessSetupResponse> {
+    return this.request<AccessSetupResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/access-setup`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+
+  grantContractorZone(
+    token: string,
+    siteId: string,
+    input: GrantContractorZoneCommand,
+    options?: RequestOptions,
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/contractor-zone-permissions`,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+
+  grantWorkerZone(
+    token: string,
+    siteId: string,
+    input: GrantWorkerZoneCommand,
+    options?: RequestOptions,
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/worker-zone-permissions`,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+
+  revokeZonePermission(
+    token: string,
+    siteId: string,
+    id: string,
+    kind: 'worker' | 'contractor',
+    options?: RequestOptions,
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/access-setup/${kind}-zone-permissions/${pathId(id)}/revoke`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+
   createCamera(
     token: string,
     siteId: string,
@@ -1715,18 +2045,29 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<CameraResponse>('POST', `/sites/${pathId(siteId)}/cameras`, token, input);
   }
-  listCameras(token: string, siteId: string, options?: PageOptions) {
+  listCameras(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
     return this.request<Page<CameraResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/cameras`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
-  getCamera(token: string, siteId: string, cameraId: string) {
+  getCamera(token: string, siteId: string, cameraId: string, requestOptions?: RequestOptions) {
     return this.request<CameraResponse>(
       'GET',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}`,
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   renameCamera(token: string, siteId: string, cameraId: string, name: string) {
@@ -1751,6 +2092,297 @@ export class SmartSiteManagementClient {
     );
   }
 
+  listPreviewCameras(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
+    return this.request<Page<CameraResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/preview-cameras`, options),
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  async getCameraPreview(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraPreviewResponse> {
+    const timeoutMs = options?.timeoutMs !== undefined ? options.timeoutMs : 3000;
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/preview`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs },
+    );
+    try {
+      return parseCameraPreviewResponse(payload);
+    } catch (error) {
+      throw new ApiError(
+        'invalid-response',
+        error instanceof Error ? error.message : 'Invalid camera preview response from backend.',
+      );
+    }
+  }
+
+  /**
+   * Connects to the authenticated NDJSON raw video stream for a single selected LIVE camera.
+   * Transports credentials via Authorization header only (no query string leaks).
+   */
+  async streamCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    onFrame: (frame: CameraMediaFrame) => void,
+    options?: CameraVideoStreamOptions,
+  ): Promise<void> {
+    const sessionScopes = captureSessionScopes(token);
+    const url = `${this.baseUrl.replace(/\/+$/, '')}/api/v1/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/video-stream`;
+
+    // Initial connection timeout: only bounds the time to receive response headers,
+    // ensuring a timeout does not terminate a healthy long-running stream.
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const connectionController = new AbortController();
+    let isConnected = false;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        if (!isConnected) {
+          connectionController.abort();
+        }
+      }, timeoutMs);
+    }
+
+    const abortHandler = () => {
+      connectionController.abort();
+    };
+    if (options?.signal) {
+      if (options.signal.aborted) {
+        connectionController.abort();
+      } else {
+        options.signal.addEventListener('abort', abortHandler, { once: true });
+      }
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/x-ndjson',
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+        redirect: 'error',
+        signal: connectionController.signal,
+      });
+      isConnected = true;
+    } catch (error) {
+      if (options?.signal?.aborted) {
+        throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+      }
+      if (connectionController.signal.aborted && !options?.signal?.aborted) {
+        throw new ApiError(
+          'timeout',
+          `Initial connection to video stream timed out after ${timeoutMs}ms.`,
+        );
+      }
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        'network',
+        error instanceof Error ? error.message : 'Could not connect to backend video stream.',
+      );
+    } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
+      if (options?.signal) {
+        options.signal.removeEventListener('abort', abortHandler);
+      }
+    }
+
+    if (options?.signal?.aborted)
+      throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+    if (connectionController.signal.aborted)
+      throw new ApiError('timeout', `Initial connection to video stream timed out after ${timeoutMs}ms.`);
+    if (response.status === 401 && sessionScopes.length > 0)
+      dispatchSessionExpired(sessionScopes);
+    if (!response.ok) {
+      const retryAfterHeader = response.headers.get('Retry-After');
+      let retryAfterSeconds: number | undefined;
+      if (retryAfterHeader) {
+        const parsed = parseInt(retryAfterHeader, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          retryAfterSeconds = Math.min(parsed, 60);
+        }
+      }
+      let errorPayload: unknown;
+      try {
+        errorPayload = await response.json();
+      } catch {
+        errorPayload = undefined;
+      }
+      const backendError = parseBackendErrorEnvelope(errorPayload, response.status);
+      throw new ApiError(
+        'http',
+        backendError?.message ?? `Backend returned HTTP ${response.status} for video stream.`,
+        response.status,
+        backendError,
+        retryAfterSeconds,
+      );
+    }
+
+    // Verify response content-type is application/x-ndjson
+    const contentType =
+      response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (contentType !== 'application/x-ndjson') {
+      await response.body?.cancel().catch(() => undefined);
+      throw new ApiError(
+        'invalid-response',
+        `Expected application/x-ndjson stream response, received: '${contentType}'.`,
+      );
+    }
+
+    if (!response.body) {
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned an empty response body for video stream.',
+      );
+    }
+
+    await processCameraMediaNdjsonStream(response.body, onFrame, options);
+  }
+
+  /**
+   * Fetches an authenticated MP4 recorded video blob for the selected camera.
+   * Transports credentials via Authorization header only (no query string token leaks).
+   * Enforces 5s default timeout, cache: no-store, redirect: error, video/mp4 MIME check,
+   * maximum 2,000,000 bytes bound, and validates x-camera-external-id if expectedCameraExternalId is provided.
+   */
+  async readRecordedCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RecordedCameraVideoOptions,
+  ): Promise<Blob> {
+    const sessionScopes = captureSessionScopes(token);
+    const url = `${this.baseUrl.replace(/\/+$/, '')}/api/v1/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/recorded-video`;
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const controller = new AbortController();
+    const abortHandler = () => controller.abort();
+    const timer = timeoutMs > 0 ? setTimeout(abortHandler, timeoutMs) : null;
+    let response: Response | null = null;
+    if (options?.signal?.aborted) controller.abort();
+    else options?.signal?.addEventListener('abort', abortHandler, { once: true });
+    const readBounded = async (maximum: number): Promise<Uint8Array<ArrayBuffer>[]> => {
+      if (!response?.body)
+        throw new ApiError('invalid-response', 'Recorded video response body is missing.');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      let size = 0;
+      let onAbort = () => {};
+      const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error('Recorded read aborted'));
+        controller.signal.addEventListener('abort', onAbort, { once: true });
+      });
+      try {
+        if (controller.signal.aborted) throw new Error('Recorded read aborted');
+        while (true) {
+          const row = await Promise.race([reader.read(), aborted]);
+          if (row.done) break;
+          size += row.value.byteLength;
+          if (size > maximum)
+            throw new ApiError('invalid-response', 'Recorded video body exceeds maximum limit.');
+          chunks.push(new Uint8Array(row.value));
+        }
+        return chunks;
+      } finally {
+        controller.signal.removeEventListener('abort', onAbort);
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    };
+    try {
+      if (controller.signal.aborted) throw new Error('Recorded request aborted');
+      response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'video/mp4', Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+        redirect: 'error',
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) throw new Error('Recorded request aborted');
+      if (response.status === 401 && sessionScopes.length > 0)
+        dispatchSessionExpired(sessionScopes);
+      if (!response.ok) {
+        const retry = response.headers.get('Retry-After');
+        const retryAfterSeconds =
+          retry && /^\d+$/.test(retry) ? Math.min(Number(retry), 60) : undefined;
+        let payload: unknown;
+        try {
+          const chunks = await readBounded(16000);
+          payload = JSON.parse(await new Blob(chunks).text());
+        } catch {
+          payload = undefined;
+        }
+        const backendError = parseBackendErrorEnvelope(payload, response.status);
+        throw new ApiError(
+          'http',
+          backendError?.message ?? `Backend returned HTTP ${response.status} for recorded video.`,
+          response.status,
+          backendError,
+          retryAfterSeconds,
+        );
+      }
+      if (
+        response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'video/mp4'
+      )
+        throw new ApiError('invalid-response', 'Expected video/mp4 response.');
+      if (
+        options?.expectedCameraExternalId &&
+        response.headers.get('x-camera-external-id') !== options.expectedCameraExternalId
+      )
+        throw new ApiError(
+          'invalid-response',
+          'Recorded video camera external ID is missing or mismatched.',
+        );
+      const length = response.headers.get('content-length');
+      if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_RECORDED_VIDEO_BYTES))
+        throw new ApiError(
+          'invalid-response',
+          'Recorded video content length exceeds maximum limit.',
+        );
+      const chunks = await readBounded(MAX_RECORDED_VIDEO_BYTES);
+      if (controller.signal.aborted) throw new Error('Recorded read aborted');
+      return new Blob(chunks, { type: 'video/mp4' });
+    } catch (error) {
+      if (options?.signal?.aborted)
+        throw new ApiError('cancelled', 'Recorded camera video request cancelled.');
+      if (controller.signal.aborted)
+        throw new ApiError('timeout', `Recorded video request timed out after ${timeoutMs}ms.`);
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        'network',
+        error instanceof Error ? error.message : 'Could not fetch recorded video.',
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+      options?.signal?.removeEventListener('abort', abortHandler);
+      await response?.body?.cancel().catch(() => undefined);
+    }
+  }
+
   createZone(
     token: string,
     siteId: string,
@@ -1764,11 +2396,14 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<ZoneResponse>('POST', `/sites/${pathId(siteId)}/zones`, token, input);
   }
-  listZones(token: string, siteId: string, options?: PageOptions) {
+  listZones(token: string, siteId: string, options?: PageOptions, requestOptions?: RequestOptions) {
     return this.request<Page<ZoneResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/zones`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getZone(token: string, siteId: string, zoneId: string) {
@@ -1817,11 +2452,20 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  listRegions(token: string, siteId: string, cameraId: string, options?: PageOptions) {
+  listRegions(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
     return this.request<Page<RegionResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getRegion(token: string, siteId: string, cameraId: string, regionId: string) {
@@ -1868,11 +2512,19 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  listContractorRepresentativeAssignments(token: string, siteId: string, options?: PageOptions) {
+  listContractorRepresentativeAssignments(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ): Promise<Page<ContractorRepresentativeAssignmentResponse>> {
     return this.request<Page<ContractorRepresentativeAssignmentResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/contractor-representative-assignments`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   assignContractorRepresentative(
@@ -1880,18 +2532,15 @@ export class SmartSiteManagementClient {
     siteId: string,
     contractorId: string,
     input: { userId: string },
-  ) {
-    return this.request<{
-      id: string;
-      siteId: string;
-      contractorId: string;
-      userId: string;
-      createdAt: string;
-    }>(
+    options?: RequestOptions,
+  ): Promise<ContractorRepresentativeAssignmentResponse> {
+    return this.request<ContractorRepresentativeAssignmentResponse>(
       'POST',
       `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/representatives`,
       token,
       input,
+      undefined,
+      options,
     );
   }
   listCoworkers(token: string, siteId: string, options?: PageOptions) {
@@ -1975,7 +2624,12 @@ export class SmartSiteManagementClient {
     token: string,
     siteId: string,
     scheduleVersionId: string,
-    input: { workerId: string; shiftId: string; workDate: string; isActive?: boolean },
+    input: {
+      workerId: string;
+      shiftId: string;
+      workDate: string;
+      isActive?: boolean;
+    },
   ) {
     return this.request<WorkerScheduleResponse>(
       'POST',
@@ -2008,7 +2662,10 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<Page<ScheduleAssignmentBatchResponse>>(
       'GET',
-      this.listPath(`/sites/${pathId(siteId)}/schedule-assignments`, { ...options, contractorId }),
+      this.listPath(`/sites/${pathId(siteId)}/schedule-assignments`, {
+        ...options,
+        contractorId,
+      }),
       token,
     );
   }
@@ -2295,7 +2952,10 @@ export class SmartSiteManagementClient {
     offset: number,
     limit: number,
     options?: RequestOptions,
-  ): Promise<{ items: ObservationIdentityMutationResponse['recordedDecision'][]; total: number }> {
+  ): Promise<{
+    items: ObservationIdentityMutationResponse['recordedDecision'][];
+    total: number;
+  }> {
     return this.request<unknown>(
       'GET',
       this.listPath(
@@ -2354,4 +3014,155 @@ export class SmartSiteManagementClient {
       return mutation;
     });
   }
+
+  listMf06Assessments(
+    token: string,
+    siteId: string,
+    pageOptions?: PageOptions,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06AssessmentPage> {
+    const offset = pageOptions?.offset ?? 0;
+    const limit = pageOptions?.limit ?? 20;
+    const path = this.listPath(`/sites/${pathId(siteId)}/mf06-assessments`, {
+      offset,
+      limit,
+    });
+    return this.request<unknown>('GET', path, token, undefined, undefined, requestOptions).then(
+      (payload) => {
+        let page: Mf06AssessmentPage;
+        try {
+          page = parseMf06AssessmentPage(payload);
+        } catch {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 assessment page.',
+          );
+        }
+        if (
+          page.offset !== offset ||
+          page.limit !== limit ||
+          page.items.some((item) => !this.sameScopeId(item.siteId, siteId))
+        ) {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 assessment page.',
+          );
+        }
+        return page;
+      },
+    );
+  }
+
+  getMf06Assessment(
+    token: string,
+    siteId: string,
+    assessmentId: string,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06AssessmentResponse> {
+    const path = `/sites/${pathId(siteId)}/mf06-assessments/${pathId(assessmentId)}`;
+    return this.request<unknown>('GET', path, token, undefined, undefined, requestOptions).then(
+      (payload) => {
+        let assessment: Mf06AssessmentResponse;
+        try {
+          assessment = parseMf06AssessmentResponse(payload);
+        } catch {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 assessment response.',
+          );
+        }
+        if (
+          !this.sameScopeId(assessment.siteId, siteId) ||
+          !this.sameScopeId(assessment.assessmentId, assessmentId)
+        ) {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 assessment response.',
+          );
+        }
+        return assessment;
+      },
+    );
+  }
+
+  listMf06RequestStatuses(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06RequestStatusPage> {
+    const offset = typeof options?.offset === 'number' ? options.offset : 0;
+    const limit = typeof options?.limit === 'number' ? options.limit : 20;
+    const path = this.listPath(`/sites/${pathId(siteId)}/mf06-assessment-requests`, {
+      offset,
+      limit,
+    });
+    return this.request<unknown>('GET', path, token, undefined, undefined, requestOptions).then(
+      (payload) => {
+        let page: Mf06RequestStatusPage;
+        try {
+          page = parseMf06RequestStatusPage(payload);
+        } catch {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 request status page.',
+          );
+        }
+        if (
+          page.offset !== offset ||
+          page.limit !== limit ||
+          page.items.some((item) => !this.sameScopeId(item.siteId, siteId))
+        ) {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 request status page.',
+          );
+        }
+        return page;
+      },
+    );
+  }
+
+  getMf06RequestStatus(
+    token: string,
+    siteId: string,
+    requestId: string,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06RequestStatusResponse> {
+    const path = `/sites/${pathId(siteId)}/mf06-assessment-requests/${pathId(requestId)}`;
+    return this.request<unknown>('GET', path, token, undefined, undefined, requestOptions).then(
+      (payload) => {
+        let status: Mf06RequestStatusResponse;
+        try {
+          status = parseMf06RequestStatusResponse(payload);
+        } catch {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 request status response.',
+          );
+        }
+        if (
+          !this.sameScopeId(status.siteId, siteId) ||
+          !this.sameScopeId(status.requestId, requestId)
+        ) {
+          throw new ApiError(
+            'invalid-response',
+            'Backend returned an invalid MF06 request status response.',
+          );
+        }
+        return status;
+      },
+    );
+  }
+}
+
+export async function readRecordedCameraVideo(
+  token: string,
+  siteId: string,
+  cameraId: string,
+  options?: RecordedCameraVideoOptions,
+  client?: SmartSiteManagementClient,
+): Promise<Blob> {
+  const managementClient = client ?? new SmartSiteManagementClient('http://localhost:3000');
+  return managementClient.readRecordedCameraVideo(token, siteId, cameraId, options);
 }

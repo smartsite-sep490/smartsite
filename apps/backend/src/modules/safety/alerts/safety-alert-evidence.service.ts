@@ -144,6 +144,7 @@ export class SafetyAlertEvidenceService {
     const index = evidenceIndex(rawIndex);
 
     const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
+    if (await this.hasConflictingSiteMapping(siteId, event)) return missing();
     const item = parseEvidenceItem(evidenceItems(observationEvent.rawPayload)[index]);
     if (!item) return missing();
     const local = parseLocalEvidenceUri(item.uri, event);
@@ -175,14 +176,7 @@ export class SafetyAlertEvidenceService {
     )
       return this.reviewConflict();
     // Historical Site ownership comes from alert mappings, never today's Camera configuration.
-    const conflictingSiteMapping = await this.dataSource
-      .getRepository(AlertDetectionMappingEntity)
-      .createQueryBuilder('mapping')
-      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
-      .where('mapping.eventId = :eventId', { eventId: event })
-      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
-      .getExists();
-    if (conflictingSiteMapping) return this.reviewConflict();
+    if (await this.hasConflictingSiteMapping(siteId, event)) return this.reviewConflict();
     const item = parseEvidenceItem(evidenceItems(raw)[index]);
     if (!item || item.kind !== 'FRAME') return missing();
     const local = parseLocalEvidenceUri(item.uri, event);
@@ -190,6 +184,16 @@ export class SafetyAlertEvidenceService {
       return missing();
     const content = await this.readLocalJpeg(local);
     return { ...content, sha256: createHash('sha256').update(content.bytes).digest('hex') };
+  }
+
+  private hasConflictingSiteMapping(siteId: string, eventId: string): Promise<boolean> {
+    return this.dataSource
+      .getRepository(AlertDetectionMappingEntity)
+      .createQueryBuilder('mapping')
+      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
+      .where('mapping.eventId = :eventId', { eventId: uuid(eventId) })
+      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
+      .getExists();
   }
 
   private reviewConflict(): never {

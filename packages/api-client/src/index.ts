@@ -1,6 +1,15 @@
 export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
 export { SmartSiteManagementClient } from './management';
-export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
+export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
+export type { Mf05DemoStatus } from './mf05-demo';
+export { parseMf05DemoStatus } from './mf05-demo';
+export type {
+  PageOptions,
+  SafetyAlertListOptions,
+  ZoneEntryDecisionListOptions,
+  RecordedCameraVideoOptions,
+} from './management';
+export { MAX_RECORDED_VIDEO_BYTES, readRecordedCameraVideo } from './management';
 export type {
   ObservationIdentityContextResponse,
   ObservationIdentityDecisionCommand,
@@ -9,6 +18,9 @@ export type {
   ObservationIdentityWorkerResponse,
 } from '@smartsite/contracts/management';
 export type {
+  AccessSetupResponse,
+  GrantContractorZoneCommand,
+  GrantWorkerZoneCommand,
   AccountResponse,
   CreateContractorWorkerAccountCommand,
   ContractorWorkerAccountResponse,
@@ -64,7 +76,36 @@ export type {
   ShiftRequestListResponse,
   ShiftRequestResponse,
   AbsenceRequestResponse,
+  Mf06AssessmentResponse,
+  Mf06AssessmentPage,
+  Mf06RequestStatusResponse,
+  Mf06RequestStatusPage,
 } from '@smartsite/contracts';
+export {
+  parseMf06AssessmentResponse,
+  parseMf06AssessmentPage,
+  parseMf06RequestStatusResponse,
+  parseMf06RequestStatusPage,
+} from '@smartsite/contracts/mf06-assessments';
+export type {
+  CameraPreviewResponse,
+  CameraPreviewFrame,
+  CameraPreviewDetection,
+  CameraMediaFrame,
+} from '@smartsite/contracts/camera-preview';
+export {
+  parseCameraPreviewResponse,
+  parseCameraPreviewFrame,
+  parseCameraMediaFrame,
+} from '@smartsite/contracts/camera-preview';
+export {
+  MAX_CAMERA_STREAM_LINE_BYTES,
+  processCameraMediaNdjsonStream,
+  validateCameraMediaFrameEnvelope,
+  createCameraMediaStreamValidationState,
+  type CameraVideoStreamOptions,
+  type CameraMediaStreamValidationState,
+} from './camera-media-stream';
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 export type ApiErrorCode = 'http' | 'network' | 'invalid-response' | 'timeout' | 'cancelled';
 export const BACKEND_ERROR_CODES = [
@@ -189,6 +230,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status?: number,
     public readonly backendError?: BackendErrorEnvelope,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';

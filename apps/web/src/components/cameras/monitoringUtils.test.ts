@@ -151,20 +151,113 @@ describe('monitoringUtils', () => {
       expect(isConfirmedPpeDetection(detection(true, 'MISSING', 'PRESENT'))).toBe(true);
     });
 
-    it('keeps item-level confirmation separate from current frame evidence', () => {
+    it('keeps item-level confirmation separate from current frame evidence (CurrentStatus priority)', () => {
       const latched = {
         ...detection(true, 'PRESENT', 'MISSING'),
         alertState: 'CONFIRMED' as const,
         confirmedMissingItems: ['HARD_HAT'] as const,
       };
-      expect(getPpeItemDisplayState(latched, 'HARD_HAT')).toBe('CONFIRMED_MISSING');
+      expect(getPpeItemDisplayState(latched, 'HARD_HAT')).toBe('PRESENT');
       expect(getPpeItemDisplayState(latched, 'SAFETY_VEST')).toBe('PENDING_MISSING');
+
+      const latchedUnknown = {
+        ...detection(true, 'UNKNOWN', 'MISSING'),
+        alertState: 'CONFIRMED' as const,
+        confirmedMissingItems: ['HARD_HAT'] as const,
+      };
+      expect(getPpeItemDisplayState(latchedUnknown, 'HARD_HAT')).toBe('UNKNOWN');
+
       expect(
         getPpeItemDisplayState(
           { ...detection(false, 'MISSING', 'PRESENT'), alertState: 'CONFIRMED' },
           'HARD_HAT',
         ),
       ).toBe('CONFIRMED_MISSING');
+    });
+
+    it('returns PRESENT for all five items when current status is PRESENT even if historically confirmed', () => {
+      const allPresentWithHistory: VideoTestDetection = {
+        ...detection(true, 'PRESENT', 'PRESENT'),
+        alertState: 'CONFIRMED',
+        confirmedMissingItems: ['HARD_HAT', 'SAFETY_VEST', 'GLOVES', 'BOOTS', 'GOGGLES'],
+        ppeStatus: {
+          HARD_HAT: 'PRESENT',
+          SAFETY_VEST: 'PRESENT',
+          GLOVES: 'PRESENT',
+          BOOTS: 'PRESENT',
+          GOGGLES: 'PRESENT',
+        },
+      };
+      expect(getPpeItemDisplayState(allPresentWithHistory, 'HARD_HAT')).toBe('PRESENT');
+      expect(getPpeItemDisplayState(allPresentWithHistory, 'SAFETY_VEST')).toBe('PRESENT');
+      expect(getPpeItemDisplayState(allPresentWithHistory, 'GLOVES')).toBe('PRESENT');
+      expect(getPpeItemDisplayState(allPresentWithHistory, 'BOOTS')).toBe('PRESENT');
+      expect(getPpeItemDisplayState(allPresentWithHistory, 'GOGGLES')).toBe('PRESENT');
+    });
+
+    it('returns UNKNOWN for all five items when current status is UNKNOWN even if historically confirmed', () => {
+      const allUnknownWithHistory: VideoTestDetection = {
+        ...detection(true, 'UNKNOWN', 'UNKNOWN'),
+        alertState: 'CONFIRMED',
+        confirmedMissingItems: ['HARD_HAT', 'SAFETY_VEST', 'GLOVES', 'BOOTS', 'GOGGLES'],
+        ppeStatus: {
+          HARD_HAT: 'UNKNOWN',
+          SAFETY_VEST: 'UNKNOWN',
+          GLOVES: 'UNKNOWN',
+          BOOTS: 'UNKNOWN',
+          GOGGLES: 'UNKNOWN',
+        },
+      };
+      expect(getPpeItemDisplayState(allUnknownWithHistory, 'HARD_HAT')).toBe('UNKNOWN');
+      expect(getPpeItemDisplayState(allUnknownWithHistory, 'SAFETY_VEST')).toBe('UNKNOWN');
+      expect(getPpeItemDisplayState(allUnknownWithHistory, 'GLOVES')).toBe('UNKNOWN');
+      expect(getPpeItemDisplayState(allUnknownWithHistory, 'BOOTS')).toBe('UNKNOWN');
+      expect(getPpeItemDisplayState(allUnknownWithHistory, 'GOGGLES')).toBe('UNKNOWN');
+    });
+
+    it('ensures confirmed missing item A does not promote unconfirmed missing item B', () => {
+      const confirmedA: VideoTestDetection = {
+        ...detection(true, 'MISSING', 'MISSING'),
+        alertState: 'CONFIRMED',
+        confirmedMissingItems: ['HARD_HAT'],
+        ppeStatus: {
+          HARD_HAT: 'MISSING',
+          SAFETY_VEST: 'MISSING',
+          GLOVES: 'MISSING',
+        },
+      };
+      expect(getPpeItemDisplayState(confirmedA, 'HARD_HAT')).toBe('CONFIRMED_MISSING');
+      expect(getPpeItemDisplayState(confirmedA, 'SAFETY_VEST')).toBe('PENDING_MISSING');
+      expect(getPpeItemDisplayState(confirmedA, 'GLOVES')).toBe('PENDING_MISSING');
+    });
+
+    it('returns NOT_REPORTED when an optional item is absent from ppeStatus', () => {
+      const minimalDet = detection(false, 'PRESENT', 'PRESENT');
+      // minimalDet has no GLOVES, BOOTS, GOGGLES
+      expect(getPpeItemDisplayState(minimalDet, 'GLOVES')).toBe('NOT_REPORTED');
+      expect(getPpeItemDisplayState(minimalDet, 'BOOTS')).toBe('NOT_REPORTED');
+      expect(getPpeItemDisplayState(minimalDet, 'GOGGLES')).toBe('NOT_REPORTED');
+    });
+
+    it('handles expanded items GLOVES, BOOTS, GOGGLES correctly with confirmed and pending states', () => {
+      const expandedDet: VideoTestDetection = {
+        ...detection(true, 'PRESENT', 'PRESENT'),
+        alertState: 'CONFIRMED',
+        confirmedMissingItems: ['BOOTS'],
+        ppeStatus: {
+          HARD_HAT: 'PRESENT',
+          SAFETY_VEST: 'PRESENT',
+          GLOVES: 'MISSING',
+          BOOTS: 'MISSING',
+          GOGGLES: 'PRESENT',
+        },
+      };
+      // BOOTS is confirmed missing
+      expect(getPpeItemDisplayState(expandedDet, 'BOOTS')).toBe('CONFIRMED_MISSING');
+      // GLOVES is missing but not in confirmedMissingItems -> PENDING_MISSING
+      expect(getPpeItemDisplayState(expandedDet, 'GLOVES')).toBe('PENDING_MISSING');
+      // GOGGLES is present
+      expect(getPpeItemDisplayState(expandedDet, 'GOGGLES')).toBe('PRESENT');
     });
   });
 
@@ -373,6 +466,62 @@ describe('monitoringUtils', () => {
 
       const all = filterPpeEvents(mockPpeEvents, { itemType: 'ALL' });
       expect(all.length).toBe(3);
+    });
+
+    it('filters PPE events by expanded item types (GLOVES, BOOTS, GOGGLES)', () => {
+      const expandedEvents = [
+        ...mockPpeEvents,
+        {
+          id: '4',
+          rowKey: '4-3-GLOVES',
+          trackId: 3,
+          ppeItem: 'GLOVES' as const,
+          issue: 'Missing Gloves',
+        },
+        {
+          id: '5',
+          rowKey: '5-4-BOOTS',
+          trackId: 4,
+          ppeItem: 'BOOTS' as const,
+          issue: 'Missing Boots',
+        },
+        {
+          id: '6',
+          rowKey: '6-5-GOGGLES',
+          trackId: 5,
+          ppeItem: 'GOGGLES' as const,
+          issue: 'Missing Goggles',
+        },
+      ];
+
+      const gloves = filterPpeEvents(expandedEvents, { itemType: 'GLOVES' });
+      expect(gloves.length).toBe(1);
+      expect(gloves[0]?.ppeItem).toBe('GLOVES');
+
+      const boots = filterPpeEvents(expandedEvents, { itemType: 'BOOTS' });
+      expect(boots.length).toBe(1);
+      expect(boots[0]?.ppeItem).toBe('BOOTS');
+
+      const goggles = filterPpeEvents(expandedEvents, { itemType: 'GOGGLES' });
+      expect(goggles.length).toBe(1);
+      expect(goggles[0]?.ppeItem).toBe('GOGGLES');
+    });
+
+    it('treats typed ppeItem as authoritative and does not match fallback free-text when ppeItem is present', () => {
+      const misleadingEvent = {
+        id: '99',
+        rowKey: '99-1-HARD_HAT',
+        trackId: 1,
+        ppeItem: 'HARD_HAT' as const,
+        issue: 'Worker wearing hard hat near gloves station',
+      };
+      // When filtering by GLOVES, even though issue mentions "gloves", typed ppeItem is HARD_HAT -> must NOT match
+      const glovesFilter = filterPpeEvents([misleadingEvent], { itemType: 'GLOVES' });
+      expect(glovesFilter.length).toBe(0);
+
+      // When filtering by HARD_HAT -> matches
+      const hardHatFilter = filterPpeEvents([misleadingEvent], { itemType: 'HARD_HAT' });
+      expect(hardHatFilter.length).toBe(1);
     });
 
     it('filters PPE events by worker track ID', () => {

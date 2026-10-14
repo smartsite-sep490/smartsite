@@ -31,7 +31,9 @@ import {
 import { pagination } from '../../../common/http/pagination.js';
 import type { WorkerEntity } from '../../../database/entities/worker.entity.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { MainWorkerRosterService } from '../main-worker-roster.service.js';
 import { CreateWorkerDto } from './dto/workforce.dto.js';
 import {
   LinkWorkerAccountCommand,
@@ -65,7 +67,11 @@ function workerResponse(worker: WorkerEntity) {
 export class WorkforceController {
   private readonly logger = new Logger(WorkforceController.name);
 
-  constructor(private readonly workforce: WorkforceConfigurationService) {}
+  constructor(
+    private readonly workforce: WorkforceConfigurationService,
+    private readonly roster: MainWorkerRosterService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post('for-account')
   @UseGuards(AdminGuard)
@@ -75,7 +81,11 @@ export class WorkforceController {
     @Param('siteId') siteId: string,
     @Body() input: LinkWorkerAccountCommand,
   ) {
-    const worker = await this.workforce.forAccount(siteId, input);
+    const worker = await this.roster.forAccount(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.account.prepare',
@@ -94,7 +104,12 @@ export class WorkforceController {
     @Param('workerId') workerId: string,
     @Body() input: LinkWorkerAccountCommand,
   ) {
-    const worker = await this.workforce.linkAccount(siteId, workerId, input);
+    const worker = await this.roster.linkAccount(
+      siteId,
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.account.link',
@@ -112,7 +127,11 @@ export class WorkforceController {
     @Param('siteId') siteId: string,
     @Body() input: CreateWorkerDto,
   ) {
-    const worker = await this.workforce.create(siteId, input);
+    const worker = await this.roster.create(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.create',

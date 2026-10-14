@@ -16,6 +16,10 @@ for (const key of [
 }
 
 const integration = process.argv.includes('--integration');
+const strictWorkforce = process.argv.includes('--strict-workforce');
+if (strictWorkforce && !integration) {
+  throw new Error('--strict-workforce requires the isolated integration database.');
+}
 if (integration) {
   const { resolveTestDatabaseUrl } =
     await import('../.test-build/test/support/test-environment.js');
@@ -38,15 +42,34 @@ if (integration) {
 
 if (!process.exitCode) {
   const directory = integration ? '.test-build/test/integration' : '.test-build/test';
-  const files = readdirSync(new URL(`../${directory}/`, import.meta.url))
+  const allFiles = readdirSync(new URL(`../${directory}/`, import.meta.url))
     .filter((file) => file.endsWith('.test.js'))
-    .sort()
-    .map((file) => `${directory}/${file}`);
+    .sort();
+  // Application transaction gate; the full suite still checks TypeORM schema
+  // introspection separately and does not suppress its dependency warnings.
+  const workforceFiles = [
+    'mf07-scheduling-queries.integration.test.js',
+    'mf07-shared-contractor.integration.test.js',
+    'workforce-authority-writers.integration.test.js',
+    'workforce-review-reader.integration.test.js',
+    'workforce-zone-authority-history.integration.test.js',
+    'safety-business-http.integration.test.js',
+  ];
+  if (strictWorkforce && workforceFiles.some((file) => !allFiles.includes(file))) {
+    throw new Error(
+      'Strict Workforce integration files are missing; compile the complete test suite.',
+    );
+  }
+  const files = (strictWorkforce ? workforceFiles : allFiles).map((file) => `${directory}/${file}`);
   const result = spawnSync(
     process.execPath,
-    // Nest bootstrap fixtures spawn children; keep startup contention bounded
-    // when Turbo also runs the browser suite. Assertion/time limits stay intact.
-    ['--test', '--test-concurrency=1', ...files],
+    // Keep Nest child-process fixtures bounded on a shared desktop.
+    [
+      ...(strictWorkforce ? ['--throw-deprecation'] : []),
+      '--test',
+      '--test-concurrency=1',
+      ...files,
+    ],
     {
       cwd: backendDirectory,
       env: process.env,

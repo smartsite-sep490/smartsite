@@ -37,6 +37,14 @@ import {
 } from '../../src/database/entities/contractor-team.entity.js';
 
 test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
+  const resources: { app?: NestExpressApplication } = {};
+  t.after(async () => {
+    try {
+      if (resources.app) await resources.app.close();
+    } finally {
+      if (dataSource.isInitialized) await dataSource.destroy();
+    }
+  });
   if (dataSource.isInitialized) await dataSource.destroy();
   await dataSource.initialize();
   const environment = validateEnvironment({
@@ -59,6 +67,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     logger: false,
     bodyParser: false,
   });
+  resources.app = app;
   await configureApplication(app);
   await app.listen(0, '127.0.0.1');
   t.after(async () => {
@@ -1146,7 +1155,4 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     await rollback.rollbackTransaction();
     await rollback.release();
   }
-
-  await app.close();
-  if (dataSource.isInitialized) await dataSource.destroy();
 });

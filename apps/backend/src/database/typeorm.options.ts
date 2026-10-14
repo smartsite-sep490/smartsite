@@ -1,3 +1,7 @@
+import { Mf06AssessmentRequests1791590400001 } from './migrations/1791590400001-Mf06AssessmentRequests.js';
+import { Mf06MainAuthorityJournal1791590400002 } from './migrations/1791590400002-Mf06MainAuthorityJournal.js';
+import { SafetyFaceProvenance1791590400003 } from './migrations/1791590400003-SafetyFaceProvenance.js';
+import { Mf06ImmutableAssessments1791590400004 } from './migrations/1791590400004-Mf06ImmutableAssessments.js';
 import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
 import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
 import { ContractorZoneRegrant1791940000001 } from './migrations/1791940000001-ContractorZoneRegrant.js';
@@ -17,7 +21,22 @@ import { WorkerCodeSequence1791676800000 } from './migrations/1791676800000-Work
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
 import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
-import { ENTITIES } from './entities/index.js';
+import {
+  ENTITIES,
+  ContractorZoneAccessGrantEntity,
+  ZoneAuthorityCommandEntity,
+  ZoneAuthorityFactRevisionEntity,
+  ZoneAuthorityHistoryEpochEntity,
+} from './entities/index.js';
+
+// These belong to the retired branch-only ZoneAuthorityHistory schema, not retained main.
+// Keep source exports for archive tooling; never register absent tables in the release DataSource.
+const LEGACY_ONLY_ENTITIES: ReadonlySet<(typeof ENTITIES)[number]> = new Set([
+  ContractorZoneAccessGrantEntity,
+  ZoneAuthorityCommandEntity,
+  ZoneAuthorityFactRevisionEntity,
+  ZoneAuthorityHistoryEpochEntity,
+]);
 import { QrAccess1791417600000 } from './migrations/1791417600000-QrAccess.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
 import { CameraRegionConfiguration1790035200000 } from './migrations/1790035200000-CameraRegionConfiguration.js';
@@ -64,12 +83,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     synchronize: false,
     migrationsRun: false,
     connectTimeoutMS: timeoutMs,
-    entities: [...ENTITIES],
+    entities: ENTITIES.filter((entity) => !LEGACY_ONLY_ENTITIES.has(entity)),
     migrations: [
-      SingleSiteManager1791936000000,
-      TeamZonePermissions1791940000000,
-      ContractorZoneRegrant1791940000001,
-      SingleTeamZone1791940000002,
       Mf05Mf06Foundation1789689600000,
       CameraRegionConfiguration1790035200000,
       UserAuthentication1790121600000,
@@ -78,34 +93,39 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       Mf06ZoneAuthorization1790553600000,
       SafetyAlertReviews1790640000000,
       WorkforceTimeScheduling1790726400000,
-      Mf07WorkforceAccessScope1790812800000,
-      Mf07AbsenceScheduleVersion1790899200000,
-      ScheduleVersionUnique1790985600000,
-      AllowMultipleWorkerShiftsPerDay1791072000000,
-      ContractorShiftAssignments1791158400000,
-      SchedulingRequestReviewReasons1791244800000,
       IdentityAccessScope1790726400000,
+      Mf07WorkforceAccessScope1790812800000,
       FaceEnrollmentMetadata1790812800000,
       ZoneEntryTrackIdRange1790812800001,
+      Mf07AbsenceScheduleVersion1790899200000,
       AccountFaceTemplates1790899200000,
       ObservationIdentityReview1790899200000,
+      ScheduleVersionUnique1790985600000,
       GateAccessLogs1790985600000,
       WorkerGatePermissions1790992800000,
       Mf08SafetyWorkflow1791000000000,
+      AllowMultipleWorkerShiftsPerDay1791072000000,
+      ContractorShiftAssignments1791158400000,
+      SchedulingRequestReviewReasons1791244800000,
       Mf07SharedContractorCompatibility1791331200000,
       QrAccess1791417600000,
       Mf07Notifications1791417600000,
       ErdVisitorAccess1791504000000,
+      IncidentContractorResponsibility1791504000000,
+      Mf07NotificationDeletion1791504000000,
       ErdGateFlow1791504000001,
       ErdFaceConsent1791504000002,
       ErdZonePermissions1791504000003,
       ErdAccessAudit1791504000004,
       ErdAttendanceFlow1791504000005,
       ErdAccessPolicy1791504000006,
-      IncidentContractorResponsibility1791504000000,
-      Mf07NotificationDeletion1791504000000,
       SafetyHandoverNotifications1791590400000,
+      Mf06AssessmentRequests1791590400001,
+      Mf06MainAuthorityJournal1791590400002,
+      SafetyFaceProvenance1791590400003,
+      Mf06ImmutableAssessments1791590400004,
       Mf03AttendanceReconciliation1791676800000,
+      WorkerCodeSequence1791676800000,
       Mf03DailyOpenSessions1791676800001,
       OptionalPasswordChange1791676800002,
       Mf03AttendanceDuplicateReview1791676800003,
@@ -115,7 +135,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       GateScheduleDenial1791849600000,
       ScheduleAssignmentBatches1791849600001,
       ScheduleChangeNotifications1791849600002,
-      WorkerCodeSequence1791676800000,
+      SingleSiteManager1791936000000,
+      TeamZonePermissions1791940000000,
+      ContractorZoneRegrant1791940000001,
+      SingleTeamZone1791940000002,
     ],
     logging: false,
     extra: {

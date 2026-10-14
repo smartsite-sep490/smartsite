@@ -23,6 +23,7 @@ import {
   ZoneRestrictionPolicy,
   ZoneType,
 } from '../../src/database/entities/index.js';
+import type { MainConfigurationCommandContext } from '../../src/common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { ContractorWorkerAccountsService } from '../../src/modules/workforce/directory/contractor-worker-accounts.service.js';
@@ -36,21 +37,38 @@ import { WorkforceConfigurationService } from '../../src/modules/workforce/direc
 import { createTestConfig } from '../support/config.js';
 import { FaceEnrollmentService } from '../../src/modules/workforce/identity/face-enrollment.service.js';
 import { evaluateWorkerAccess } from '../../src/modules/workforce/access/worker-access-evaluation.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 
+const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolatedDatabase.dataSource;
+
 after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
+  await isolatedDatabase.dispose();
 });
 
 const publicError = (code: string) => (error: unknown) =>
   error instanceof PublicHttpException && error.publicPayload.code === code;
 
+const actorContext = (actor: { id: string }): MainConfigurationCommandContext => ({
+  actorUserId: actor.id,
+  reauthorize: async (manager) => {
+    const current = await manager
+      .getRepository(UserEntity)
+      .findOne({ where: { id: actor.id }, lock: { mode: 'pessimistic_read' } });
+    if (current?.mustChangePassword)
+      throw new PublicHttpException(403, {
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Password change required',
+      });
+  },
+});
+
 // Approval and certificates are outside this suite. Access tests seed an
 // already-approved assignment without invoking the Site Manager workflow.
 test('MF01: contractor onboarding, assignment requests, consent and current entry conditions', async (t) => {
-  await dataSource.initialize();
+  await isolatedDatabase.initialize();
   const siteId = randomUUID();
   const otherSiteId = randomUUID();
   const contractorId = randomUUID();
@@ -58,6 +76,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
   const participationId = randomUUID();
   const representativeId = randomUUID();
   const outsiderId = randomUUID();
+  const otherSiteRepresentativeId = randomUUID();
   const workerAccountId = randomUUID();
   const zoneId = randomUUID();
   const otherZoneId = randomUUID();
@@ -70,6 +89,16 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
   };
   const outsider = { ...representative, id: outsiderId };
+  const otherSiteRepresentative = {
+    id: otherSiteRepresentativeId,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: otherSiteId }],
+  };
+  const workerActor = {
+    id: workerAccountId,
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.WORKER, siteId }],
+  };
   const operations = new ContractorOperationsService(dataSource);
   const users = new UsersService(dataSource, new SiteConfigurationService(dataSource));
   const accounts = new ContractorWorkerAccountsService(dataSource, operations, users);
@@ -103,7 +132,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       await dataSource
         .getRepository(SiteEntity)
         .save({ id, code: id, name: 'Synthetic MF01 Site' });
-    for (const id of [representativeId, outsiderId, workerAccountId])
+    for (const id of [representativeId, outsiderId, otherSiteRepresentativeId, workerAccountId])
       await dataSource.getRepository(UserEntity).save({
         id,
         username: id,
@@ -112,7 +141,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         isActive: true,
         mustChangePassword: false,
       });
-    for (const actor of [representative, outsider])
+    for (const actor of [representative, outsider, otherSiteRepresentative])
       await dataSource.getRepository(UserRoleAssignmentEntity).save({
         id: randomUUID(),
         userId: actor.id,
@@ -139,11 +168,12 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       validUntil: parentUntil,
       isActive: true,
     });
-    await dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
-      id: randomUUID(),
-      userId: representativeId,
-      contractorId,
-    });
+    for (const userId of [representativeId, otherSiteRepresentativeId])
+      await dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
+        id: randomUUID(),
+        userId,
+        contractorId,
+      });
     for (const [id, scope] of [
       [zoneId, siteId],
       [otherZoneId, otherSiteId],
@@ -252,7 +282,12 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           displayName: 'Synthetic automatic Worker',
           username: `auto-${randomUUID().slice(0, 8)}`,
         };
-        const result = await accounts.create(representative, contractorId, input);
+        const result = await accounts.create(
+          representative,
+          contractorId,
+          input,
+          actorContext(representative),
+        );
         createdAccountIds.push(result.account.id);
         assert.match(result.worker.externalId, /^W[0-9]{6,}$/);
         const stored = await dataSource
@@ -287,11 +322,16 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         );
         for (const externalId of ['', ' ', null, 123])
           await assert.rejects(
-            accounts.create(representative, contractorId, { ...input, externalId } as never),
+            accounts.create(
+              representative,
+              contractorId,
+              { ...input, externalId } as never,
+              actorContext(representative),
+            ),
             publicError('VALIDATION_FAILED'),
           );
         await assert.rejects(
-          accounts.create(representative, contractorId, input),
+          accounts.create(representative, contractorId, input, actorContext(representative)),
           publicError('CONFLICT'),
         );
         assert.equal(
@@ -329,7 +369,9 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         temporaryPassword: accountInput.temporaryPassword,
       }));
       const outcomes = await Promise.allSettled(
-        inputs.map((input) => accounts.create(representative, contractorId, input)),
+        inputs.map((input) =>
+          accounts.create(representative, contractorId, input, actorContext(representative)),
+        ),
       );
       const codes: string[] = [];
       for (const outcome of outcomes) {
@@ -359,7 +401,12 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     await t.test(
       'representative creates a linked login account with only the Worker Site role and a hashed temporary password',
       async () => {
-        const result = await accounts.create(representative, contractorId, accountInput);
+        const result = await accounts.create(
+          representative,
+          contractorId,
+          accountInput,
+          actorContext(representative),
+        );
         createdAccountIds.push(result.account.id);
         assert.equal(result.worker.userId, result.account.id);
         assert.equal(result.worker.contractorId, contractorId);
@@ -418,32 +465,45 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     await t.test(
       'Worker, wrong-Site representative, missing Contractor grant and temporary-password representative cannot provision accounts',
       async () => {
-        for (const actor of [
-          outsider,
-          { ...representative, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
-          {
-            ...representative,
-            roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: otherSiteId }],
-          },
-        ])
+        for (const actor of [outsider, workerActor, otherSiteRepresentative])
           await assert.rejects(
-            accounts.create(actor, contractorId, accountInput),
+            accounts.create(actor, contractorId, accountInput, actorContext(actor)),
             publicError('FORBIDDEN'),
           );
+        await dataSource
+          .getRepository(UserEntity)
+          .update(representativeId, { mustChangePassword: true });
+        try {
+          await assert.rejects(
+            accounts.create(
+              { ...representative, mustChangePassword: true },
+              contractorId,
+              accountInput,
+              actorContext(representative),
+            ),
+            publicError('PASSWORD_CHANGE_REQUIRED'),
+          );
+        } finally {
+          await dataSource
+            .getRepository(UserEntity)
+            .update(representativeId, { mustChangePassword: false });
+        }
         await assert.rejects(
           accounts.create(
-            { ...representative, mustChangePassword: true },
-            contractorId,
+            representative,
+            otherContractorId,
             accountInput,
+            actorContext(representative),
           ),
-          publicError('PASSWORD_CHANGE_REQUIRED'),
-        );
-        await assert.rejects(
-          accounts.create(representative, otherContractorId, accountInput),
           publicError('FORBIDDEN'),
         );
         await assert.rejects(
-          accounts.create(representative, contractorId, { ...accountInput, siteId: otherSiteId }),
+          accounts.create(
+            representative,
+            contractorId,
+            { ...accountInput, siteId: otherSiteId },
+            actorContext(representative),
+          ),
           publicError('FORBIDDEN'),
         );
       },
@@ -457,7 +517,12 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           externalId: randomUUID(),
           temporaryPassword: '12345678',
         };
-        const result = await accounts.create(representative, contractorId, input);
+        const result = await accounts.create(
+          representative,
+          contractorId,
+          input,
+          actorContext(representative),
+        );
         createdAccountIds.push(result.account.id);
         const account = await dataSource
           .getRepository(UserEntity)
@@ -487,15 +552,21 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
             representative,
             contractorId,
             Object.assign({}, accountInput, { roleAssignments: [{ role: 'ADMIN', siteId: null }] }),
+            actorContext(representative),
           ),
           publicError('VALIDATION_FAILED'),
         );
         for (const temporaryPassword of ['weak', '87654321', '', null, 12345678])
           await assert.rejects(
-            accounts.create(representative, contractorId, {
-              ...accountInput,
-              temporaryPassword,
-            } as never),
+            accounts.create(
+              representative,
+              contractorId,
+              {
+                ...accountInput,
+                temporaryPassword,
+              } as never,
+              actorContext(representative),
+            ),
             publicError('VALIDATION_FAILED'),
           );
       },
@@ -505,10 +576,15 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       async () => {
         const duplicateUsername = `duplicate-${randomUUID().slice(0, 8)}`;
         await assert.rejects(
-          accounts.create(representative, contractorId, {
-            ...accountInput,
-            username: duplicateUsername,
-          }),
+          accounts.create(
+            representative,
+            contractorId,
+            {
+              ...accountInput,
+              username: duplicateUsername,
+            },
+            actorContext(representative),
+          ),
           publicError('CONFLICT'),
         );
         assert.equal(
@@ -516,10 +592,15 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           0,
         );
         await assert.rejects(
-          accounts.create(representative, contractorId, {
-            ...accountInput,
-            externalId: randomUUID(),
-          }),
+          accounts.create(
+            representative,
+            contractorId,
+            {
+              ...accountInput,
+              externalId: randomUUID(),
+            },
+            actorContext(representative),
+          ),
           publicError('CONFLICT'),
         );
         const stored = await dataSource
@@ -543,8 +624,8 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           externalId: randomUUID(),
         };
         const outcomes = await Promise.allSettled([
-          accounts.create(representative, contractorId, input),
-          accounts.create(representative, contractorId, input),
+          accounts.create(representative, contractorId, input, actorContext(representative)),
+          accounts.create(representative, contractorId, input, actorContext(representative)),
         ]);
         const success = outcomes.filter((o) => o.status === 'fulfilled');
         assert.equal(success.length, 1);
@@ -581,7 +662,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         await dataSource.getRepository(ContractorEntity).update(contractorId, { isActive: false });
         try {
           await assert.rejects(
-            accounts.create(representative, contractorId, input),
+            accounts.create(representative, contractorId, input, actorContext(representative)),
             publicError('FORBIDDEN'),
           );
           assert.deepEqual(await accounts.options(representative, siteId), { contractors: [] });
@@ -593,7 +674,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           .update(participationId, { validUntil: new Date(Date.now() - 60_000) });
         try {
           await assert.rejects(
-            accounts.create(representative, contractorId, input),
+            accounts.create(representative, contractorId, input, actorContext(representative)),
             publicError('FORBIDDEN'),
           );
           assert.deepEqual(await accounts.options(representative, siteId), { contractors: [] });
@@ -627,7 +708,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         };
         try {
           await assert.rejects(
-            accounts.create(representative, contractorId, input),
+            accounts.create(representative, contractorId, input, actorContext(representative)),
             publicError('FORBIDDEN'),
           );
           assert.equal(
@@ -860,11 +941,6 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       'the linked Worker can start their own enrollment and expired consent cannot be used',
       async () => {
         await dataSource.getRepository(WorkerEntity).update(worker.id, { userId: workerAccountId });
-        const workerActor = {
-          id: workerAccountId,
-          mustChangePassword: false,
-          roleAssignments: [{ role: UserRole.WORKER, siteId }],
-        };
         const ownSession = await enrollment.start(workerActor, worker.id, {
           consentVersion: 'synthetic-v3',
         });
@@ -929,11 +1005,18 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         displayName: worker.displayName,
         isActive: true,
       };
-      await accounts.update(representative, siteId, contractorId, worker.id, {
-        ...profile,
-        isActive: false,
-        expectedSnapshot: profile,
-      });
+      await accounts.update(
+        representative,
+        siteId,
+        contractorId,
+        worker.id,
+        {
+          ...profile,
+          isActive: false,
+          expectedSnapshot: profile,
+        },
+        actorContext(representative),
+      );
       try {
         assert.equal((await evaluate()).decision.reasonCode, 'WORKER_INACTIVE');
         assert.equal(
@@ -943,10 +1026,17 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           1,
         );
       } finally {
-        await accounts.update(representative, siteId, contractorId, worker.id, {
-          ...profile,
-          expectedSnapshot: { ...profile, isActive: false },
-        });
+        await accounts.update(
+          representative,
+          siteId,
+          contractorId,
+          worker.id,
+          {
+            ...profile,
+            expectedSnapshot: { ...profile, isActive: false },
+          },
+          actorContext(representative),
+        );
       }
       assert.equal((await evaluate()).decision.authorization, 'ALLOWED');
       await dataSource.getRepository(ContractorEntity).update(contractorId, { isActive: false });
@@ -1041,22 +1131,66 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       await mt.test(
         'denies wrong roles, missing grants, other Sites and other contractors',
         async () => {
-          for (const actor of [
-            outsider,
-            { ...representative, roleAssignments: [] },
-            { ...representative, mustChangePassword: true },
-            { ...representative, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
-            {
-              ...representative,
-              roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: otherSiteId }],
-            },
-          ])
+          for (const actor of [outsider, workerActor, otherSiteRepresentative])
             await assert.rejects(
-              accounts.update(actor, siteId, contractorId, managed.id, updateInput),
-              publicError(actor.mustChangePassword ? 'PASSWORD_CHANGE_REQUIRED' : 'FORBIDDEN'),
+              accounts.update(
+                actor,
+                siteId,
+                contractorId,
+                managed.id,
+                updateInput,
+                actorContext(actor),
+              ),
+              publicError('FORBIDDEN'),
             );
+          const representativeRole = await dataSource
+            .getRepository(UserRoleAssignmentEntity)
+            .findOneByOrFail({ userId: representativeId, siteId });
+          await dataSource.getRepository(UserRoleAssignmentEntity).delete(representativeRole.id);
+          try {
+            await assert.rejects(
+              accounts.update(
+                { ...representative, roleAssignments: [] },
+                siteId,
+                contractorId,
+                managed.id,
+                updateInput,
+                actorContext(representative),
+              ),
+              publicError('FORBIDDEN'),
+            );
+          } finally {
+            await dataSource.getRepository(UserRoleAssignmentEntity).save(representativeRole);
+          }
+          await dataSource
+            .getRepository(UserEntity)
+            .update(representativeId, { mustChangePassword: true });
+          try {
+            await assert.rejects(
+              accounts.update(
+                { ...representative, mustChangePassword: true },
+                siteId,
+                contractorId,
+                managed.id,
+                updateInput,
+                actorContext(representative),
+              ),
+              publicError('PASSWORD_CHANGE_REQUIRED'),
+            );
+          } finally {
+            await dataSource
+              .getRepository(UserEntity)
+              .update(representativeId, { mustChangePassword: false });
+          }
           await assert.rejects(
-            accounts.update(representative, otherSiteId, contractorId, managed.id, updateInput),
+            accounts.update(
+              representative,
+              otherSiteId,
+              contractorId,
+              managed.id,
+              updateInput,
+              actorContext(representative),
+            ),
             publicError('FORBIDDEN'),
           );
           await assert.rejects(
@@ -1066,11 +1200,19 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
               otherContractorId,
               foreignWorker.id,
               updateInput,
+              actorContext(representative),
             ),
             publicError('FORBIDDEN'),
           );
           await assert.rejects(
-            accounts.update(representative, siteId, contractorId, foreignWorker.id, updateInput),
+            accounts.update(
+              representative,
+              siteId,
+              contractorId,
+              foreignWorker.id,
+              updateInput,
+              actorContext(representative),
+            ),
             publicError('NOT_FOUND'),
           );
         },
@@ -1086,10 +1228,17 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           { expectedSnapshot: { ...snapshot, userId: workerAccountId } },
         ])
           await assert.rejects(
-            accounts.update(representative, siteId, contractorId, managed.id, {
-              ...updateInput,
-              ...extra,
-            } as never),
+            accounts.update(
+              representative,
+              siteId,
+              contractorId,
+              managed.id,
+              {
+                ...updateInput,
+                ...extra,
+              } as never,
+              actorContext(representative),
+            ),
             publicError('VALIDATION_FAILED'),
           );
       });
@@ -1111,6 +1260,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
               contractorId,
               managed.id,
               updateInput,
+              actorContext(outsider),
             );
             assert.equal(result.displayName, updateInput.displayName);
             assert.equal(result.contractorId, contractorId);
@@ -1129,7 +1279,14 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
               .getRepository(SiteEntity)
               .findOneByOrFail({ id: siteId });
             assert.equal(afterSite.accessPolicyVersion, beforeSite.accessPolicyVersion + 1);
-            await accounts.update(outsider, siteId, contractorId, managed.id, updateInput);
+            await accounts.update(
+              outsider,
+              siteId,
+              contractorId,
+              managed.id,
+              updateInput,
+              actorContext(outsider),
+            );
             assert.equal(
               await dataSource.getRepository(AccessAuditEntity).countBy({
                 entityId: managed.id,
@@ -1146,19 +1303,33 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         'rejects stale changes and duplicate codes without partial updates',
         async () => {
           await assert.rejects(
-            accounts.update(representative, siteId, contractorId, managed.id, {
-              ...updateInput,
-              isActive: false,
-            }),
+            accounts.update(
+              representative,
+              siteId,
+              contractorId,
+              managed.id,
+              {
+                ...updateInput,
+                isActive: false,
+              },
+              actorContext(representative),
+            ),
             publicError('CONFLICT'),
           );
           await assert.rejects(
-            accounts.update(representative, siteId, contractorId, managed.id, {
-              ...updateInput,
-              externalId: worker.externalId,
-              isActive: false,
-              expectedSnapshot: { ...snapshot, displayName: updateInput.displayName },
-            }),
+            accounts.update(
+              representative,
+              siteId,
+              contractorId,
+              managed.id,
+              {
+                ...updateInput,
+                externalId: worker.externalId,
+                isActive: false,
+                expectedSnapshot: { ...snapshot, displayName: updateInput.displayName },
+              },
+              actorContext(representative),
+            ),
             publicError('CONFLICT'),
           );
           const stored = await dataSource
@@ -1176,7 +1347,14 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
             .update(contractorId, { isActive: false });
           try {
             await assert.rejects(
-              accounts.update(representative, siteId, contractorId, managed.id, updateInput),
+              accounts.update(
+                representative,
+                siteId,
+                contractorId,
+                managed.id,
+                updateInput,
+                actorContext(representative),
+              ),
               publicError('FORBIDDEN'),
             );
           } finally {
@@ -1191,7 +1369,14 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
             });
           try {
             await assert.rejects(
-              accounts.update(representative, siteId, contractorId, managed.id, updateInput),
+              accounts.update(
+                representative,
+                siteId,
+                contractorId,
+                managed.id,
+                updateInput,
+                actorContext(representative),
+              ),
               publicError('FORBIDDEN'),
             );
           } finally {
@@ -1207,11 +1392,18 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         const expectedSnapshot = { ...snapshot, displayName: updateInput.displayName };
         const results = await Promise.allSettled(
           ['Synthetic concurrent A', 'Synthetic concurrent B'].map((displayName) =>
-            accounts.update(representative, siteId, contractorId, managed.id, {
-              ...expectedSnapshot,
-              displayName,
-              expectedSnapshot,
-            }),
+            accounts.update(
+              representative,
+              siteId,
+              contractorId,
+              managed.id,
+              {
+                ...expectedSnapshot,
+                displayName,
+                expectedSnapshot,
+              },
+              actorContext(representative),
+            ),
           ),
         );
         assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
@@ -1249,10 +1441,17 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     await dataSource.getRepository(ContractorEntity).delete(contractorId);
     await dataSource.getRepository(ContractorEntity).delete(otherContractorId);
     await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId });
+    await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId: otherSiteId });
     await dataSource.getRepository(SiteEntity).delete(siteId);
     await dataSource.getRepository(SiteEntity).delete(otherSiteId);
-    for (const id of [...createdAccountIds, representativeId, outsiderId, workerAccountId])
+    for (const id of [
+      ...createdAccountIds,
+      representativeId,
+      outsiderId,
+      otherSiteRepresentativeId,
+      workerAccountId,
+    ])
       await dataSource.getRepository(UserEntity).delete(id);
-    await dataSource.destroy();
+    await isolatedDatabase.dispose();
   }
 });

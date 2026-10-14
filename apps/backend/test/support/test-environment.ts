@@ -18,6 +18,7 @@ export function resolveTestDatabaseUrl(
     if (
       !['postgres:', 'postgresql:'].includes(url.protocol) ||
       !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+      url.port !== '5433' ||
       decodeURIComponent(url.username) !== 'smartsite_test' ||
       decodeURIComponent(url.pathname) !== '/smartsite_test' ||
       !url.password ||
@@ -27,7 +28,7 @@ export function resolveTestDatabaseUrl(
       throw new Error();
   } catch {
     throw new Error(
-      'TEST_DATABASE_URL must target a local PostgreSQL smartsite_test database with the smartsite_test user, a password, and no query or fragment',
+      'TEST_DATABASE_URL must target local PostgreSQL on dedicated port 5433 with the smartsite_test database and user, a password, and no query or fragment',
     );
   }
   return value;

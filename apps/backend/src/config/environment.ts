@@ -126,6 +126,42 @@ const cameraIdsSchema = z
     return [...new Set(ids)];
   });
 
+const previewSourcesSchema = z
+  .string()
+  .default('{}')
+  .transform((value, context) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      const valid = z
+        .record(
+          z.string().min(1).max(128),
+          z.string().refine((origin) => {
+            try {
+              const url = new URL(origin);
+              return (
+                ['http:', 'https:'].includes(url.protocol) &&
+                url.origin === origin &&
+                !url.username &&
+                !url.password
+              );
+            } catch {
+              return false;
+            }
+          }),
+        )
+        .safeParse(parsed);
+      if (valid.success && Object.keys(valid.data).length <= 128) return valid.data;
+    } catch {
+      /* Return only a static message; JSON can contain private configuration. */
+    }
+    context.addIssue({
+      code: 'custom',
+      message:
+        'must map camera external IDs to exact HTTP(S) origins without paths, credentials, queries or fragments',
+    });
+    return z.NEVER;
+  });
+
 export const backendEnvironmentSchema = z
   .object({
     ...databaseFields,
@@ -159,6 +195,7 @@ export const backendEnvironmentSchema = z
         'must not contain whitespace',
       )
       .optional(),
+    SMARTSITE_AI_PREVIEW_SOURCES: previewSourcesSchema,
     SMARTSITE_AI_IDENTITY_URL: z
       .string({ error: 'must be an absolute HTTP(S) URL without credentials' })
       .url('must be an absolute HTTP(S) URL without credentials')
@@ -176,6 +213,23 @@ export const backendEnvironmentSchema = z
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
+    MF06_ENQUEUE_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    MF06_ASSESSMENT_READ_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    MF06_ENQUEUE_MAX_OUTSTANDING: z
+      .string()
+      .regex(/^\d+$/, 'must be an integer between 1 and 10000')
+      .transform(Number)
+      .refine(
+        (value) => Number.isSafeInteger(value) && value >= 1 && value <= 10000,
+        'must be an integer between 1 and 10000',
+      )
+      .optional(),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'], {
         error: 'must be fatal, error, warn, info, debug, trace, or silent',
@@ -256,6 +310,13 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    if (config.MF06_ENQUEUE_ENABLED && config.MF06_ENQUEUE_MAX_OUTSTANDING === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MF06_ENQUEUE_MAX_OUTSTANDING'],
+        message: 'must be explicitly set when MF06 enqueue is enabled',
+      });
+    }
     if (config.LOG_FORMAT === 'pretty' && config.NODE_ENV !== 'development') {
       context.addIssue({
         code: 'custom',

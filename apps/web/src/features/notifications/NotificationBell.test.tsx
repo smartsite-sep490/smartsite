@@ -58,6 +58,7 @@ function mount(userId = 'worker-1') {
       <AuthContext.Provider
         value={{
           accessToken: 'synthetic-token',
+          sessionScope: 'synthetic-notification-session-scope',
           setAccessToken: vi.fn(),
           isSessionExpired: false,
           triggerSessionExpired: vi.fn(),

@@ -24,6 +24,7 @@ function setup() {
       <AuthContext.Provider
         value={{
           accessToken: 'temporary-token',
+          sessionScope: 'synthetic-password-session-scope',
           setAccessToken,
           isSessionExpired: false,
           triggerSessionExpired: vi.fn(),

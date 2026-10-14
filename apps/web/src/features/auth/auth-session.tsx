@@ -1,68 +1,192 @@
-import { translate as tr } from '../../i18n';
-import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type AccountResponse, ApiError } from '@smartsite/api-client';
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { translate as tr } from '../../i18n';
+import {
+  SmartSiteManagementClient,
+  type AccountResponse,
+  ApiError,
+  registerSessionCredential,
+  unregisterSessionCredential,
+} from '@smartsite/api-client';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+  useId,
+} from 'react';
 
 // Create a context for the auth state so we don't have to prop-drill the token
 type AuthState = {
   accessToken: string | null;
+  sessionScope: string;
   mustChangePassword?: boolean;
   setAccessToken: (token: string | null) => void;
   isSessionExpired: boolean;
-  triggerSessionExpired: () => void;
+  triggerSessionExpired: (expiredScope?: string) => void;
   dismissSessionExpired: () => void;
 };
 
 export const AuthContext = createContext<AuthState>({
   accessToken: null,
+  sessionScope: '',
   setAccessToken: () => {},
   isSessionExpired: false,
   triggerSessionExpired: () => {},
   dismissSessionExpired: () => {},
 });
 
+// Keep request ordering private to the auth feature, separate from the public
+// AuthContext used by feature tests and shared-session adapters.
+const AuthLifecycleContext = createContext<{
+  canRestoreSession: boolean;
+  beginChange: () => number;
+  beginLogin: () => number;
+  revision: () => number;
+  isCurrent: (revision: number) => boolean;
+}>({
+  canRestoreSession: true,
+  beginChange: () => 0,
+  beginLogin: () => 0,
+  revision: () => 0,
+  isCurrent: (revision: number) => revision === 0,
+});
+
+const logoutIntentKey = (apiUrl: string) => `smartsite:logout:${apiUrl.replace(/\/+$/, '')}`;
+function hasLogoutIntent(apiUrl: string): boolean {
+  try {
+    return sessionStorage.getItem(logoutIntentKey(apiUrl)) === '1';
+  } catch {
+    return false;
+  }
+}
+function rememberLogoutIntent(apiUrl: string, requested: boolean) {
+  try {
+    if (requested) sessionStorage.setItem(logoutIntentKey(apiUrl), '1');
+    else sessionStorage.removeItem(logoutIntentKey(apiUrl));
+  } catch {
+    // Storage can be unavailable; in-memory request ordering still applies.
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  useTranslation();
-
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [accessToken, setAccessTokenState] = useState<string | null>(null);
+  const [sessionScope, setSessionScope] = useState<string>('');
   const [isSessionExpired, setIsSessionExpired] = useState(false);
-
-  const triggerSessionExpired = useCallback(() => {
-    setAccessToken((prev) => {
-      if (prev !== null) {
-        setIsSessionExpired(true);
-      }
-      return null;
-    });
+  const sessionScopeRef = useRef<string>('');
+  const tokenRef = useRef<string | null>(null);
+  const revisionRef = useRef(0);
+  const [canRestoreSession, setCanRestoreSession] = useState(true);
+  const revision = useCallback(() => revisionRef.current, []);
+  const isCurrent = useCallback(
+    (capturedRevision: number) => capturedRevision === revisionRef.current,
+    [],
+  );
+  const beginChange = useCallback(() => {
+    setCanRestoreSession(false);
+    return ++revisionRef.current;
   }, []);
+  const clearPrivateQueries = useCallback(() => {
+    const filter = {
+      predicate: (query: { queryKey: readonly unknown[] }) =>
+        !(query.queryKey[0] === 'auth' && query.queryKey[1] === 'session'),
+    };
+    void queryClient.cancelQueries(filter);
+    queryClient.removeQueries(filter);
+  }, [queryClient]);
+
+  const setAccessToken = useCallback(
+    (token: string | null) => {
+      beginChange();
+      clearPrivateQueries();
+      if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
+      tokenRef.current = token;
+      setAccessTokenState(token);
+      const newScope = token ? crypto.randomUUID() : '';
+      setSessionScope(newScope);
+      sessionScopeRef.current = newScope;
+      if (token) registerSessionCredential(token, newScope);
+    },
+    [beginChange, clearPrivateQueries],
+  );
+
+  const beginLogin = useCallback(() => {
+    const nextRevision = beginChange();
+    clearPrivateQueries();
+    if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
+    tokenRef.current = null;
+    sessionScopeRef.current = '';
+    setAccessTokenState(null);
+    setSessionScope('');
+    return nextRevision;
+  }, [beginChange, clearPrivateQueries]);
+
+  const triggerSessionExpired = useCallback(
+    (expiredScope?: string) => {
+      // Guard late previous-session 401: if an expiredScope was provided and it doesn't match the current active scope, ignore it!
+      if (expiredScope !== undefined && expiredScope !== sessionScopeRef.current) {
+        return;
+      }
+      if (tokenRef.current === null) return;
+      beginChange();
+      clearPrivateQueries();
+      queryClient.removeQueries({ queryKey: ['auth', 'session'] });
+      queryClient.getMutationCache().clear();
+      if (tokenRef.current !== null) setIsSessionExpired(true);
+      if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
+      tokenRef.current = null;
+      setAccessTokenState(null);
+      setSessionScope('');
+      sessionScopeRef.current = '';
+    },
+    [beginChange, clearPrivateQueries, queryClient],
+  );
 
   const dismissSessionExpired = useCallback(() => {
     setIsSessionExpired(false);
   }, []);
 
-  useEffect(() => {
-    const handleExpiredEvent = () => {
+  useLayoutEffect(() => {
+    const handleExpiredEvent = (event: Event) => {
+      if (!sessionScopeRef.current) return;
+      if (event instanceof CustomEvent && event.detail != null) {
+        const detail: unknown = event.detail;
+        if (detail === null || typeof detail !== 'object' || !('sessionScopes' in detail)) return;
+        const scopes = detail.sessionScopes;
+        if (!Array.isArray(scopes) || !scopes.includes(sessionScopeRef.current)) return;
+      }
       triggerSessionExpired();
     };
+    // Restore the binding after React's development StrictMode effect replay.
+    if (tokenRef.current) registerSessionCredential(tokenRef.current, sessionScopeRef.current);
     window.addEventListener('smartsite:session-expired', handleExpiredEvent);
     return () => {
       window.removeEventListener('smartsite:session-expired', handleExpiredEvent);
+      if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
     };
   }, [triggerSessionExpired]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        accessToken,
-        setAccessToken,
-        isSessionExpired,
-        triggerSessionExpired,
-        dismissSessionExpired,
-      }}
+    <AuthLifecycleContext.Provider
+      value={{ canRestoreSession, beginChange, beginLogin, revision, isCurrent }}
     >
-      {children}
-    </AuthContext.Provider>
+      <AuthContext.Provider
+        value={{
+          accessToken,
+          sessionScope,
+          setAccessToken,
+          isSessionExpired,
+          triggerSessionExpired,
+          dismissSessionExpired,
+        }}
+      >
+        {children}
+      </AuthContext.Provider>
+    </AuthLifecycleContext.Provider>
   );
 }
 export function useAuth() {
@@ -72,12 +196,35 @@ export function useAuth() {
 // ── Session Expired Luxury Modal ──────────────────────────────────────────────
 export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLogin: () => void }) {
   useTranslation();
-
+  const titleId = useId();
+  const descriptionId = useId();
+  const actionRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement;
+    actionRef.current?.focus();
+    const keepFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      event.preventDefault();
+      actionRef.current?.focus();
+    };
+    document.addEventListener('keydown', keepFocus);
+    return () => {
+      document.removeEventListener('keydown', keepFocus);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, [open]);
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#041D2E]/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="w-full max-w-md bg-white rounded-3xl border border-[#DCE6EF] shadow-[0_24px_64px_rgba(7,26,43,0.3)] p-6 sm:p-8 text-center space-y-5 relative overflow-hidden">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="w-full max-w-md bg-white rounded-3xl border border-[#DCE6EF] shadow-[0_24px_64px_rgba(7,26,43,0.3)] p-6 sm:p-8 text-center space-y-5 relative overflow-hidden"
+      >
         {/* Top Decorative Amber Accent */}
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-24 bg-[#F66B17]/15 rounded-full blur-2xl pointer-events-none" />
 
@@ -100,10 +247,13 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
 
         {/* Title & Description */}
         <div className="space-y-2">
-          <h2 className="text-xl font-extrabold text-[#071A2B] tracking-tight">
+          <h2 id={titleId} className="text-xl font-extrabold text-[#071A2B] tracking-tight">
             {tr('auth-session.your_session_has_expired')}
           </h2>
-          <p className="text-xs font-medium text-[#607A96] leading-relaxed max-w-xs mx-auto">
+          <p
+            id={descriptionId}
+            className="text-xs font-medium text-[#607A96] leading-relaxed max-w-xs mx-auto"
+          >
             {tr(
               'auth-session.your_session_ended_automatically_for_security_please_sign_in_again_to_continue_wor',
             )}
@@ -112,6 +262,7 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
 
         {/* Action Button */}
         <button
+          ref={actionRef}
           type="button"
           onClick={onReLogin}
           className="w-full py-3 px-5 rounded-xl bg-[#071A2B] text-white text-xs font-bold shadow-[0_4px_16px_rgba(7,26,43,0.25)] hover:bg-[#F66B17] hover:shadow-[0_4px_16px_rgba(246,107,23,0.35)] transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 group"
@@ -136,43 +287,55 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
 
 export function useRestoreSession(apiUrl: string) {
   const { setAccessToken } = useAuth();
+  const lifecycle = useContext(AuthLifecycleContext);
 
   return useQuery({
-    queryKey: ['auth', 'session'],
-    queryFn: async () => {
-      if (sessionStorage.getItem('smartsite:signed-out')) return null;
+    queryKey: ['auth', 'session', apiUrl],
+    queryFn: async ({ signal }) => {
+      if (hasLogoutIntent(apiUrl)) {
+        setAccessToken(null);
+        return null;
+      }
+      const capturedRevision = lifecycle.revision();
       const client = new SmartSiteManagementClient(apiUrl);
       try {
         const response = await client.refresh('WEB');
+        if (signal.aborted || !lifecycle.isCurrent(capturedRevision)) return null;
         setAccessToken(response.accessToken);
-        return response;
+        return true;
       } catch (error) {
-        setAccessToken(null);
+        if (!signal.aborted && lifecycle.isCurrent(capturedRevision)) setAccessToken(null);
         throw error;
       }
     },
+    enabled: lifecycle.canRestoreSession,
     retry: false, // Don't retry if the refresh token is missing or invalid
     staleTime: Infinity, // Only run once on mount
     refetchOnWindowFocus: false, // Prevent refetching on window tab focus when unauthenticated
+    refetchOnReconnect: false,
   });
 }
 
 export function useLogin(apiUrl: string) {
   const { setAccessToken, dismissSessionExpired } = useAuth();
   const queryClient = useQueryClient();
+  const lifecycle = useContext(AuthLifecycleContext);
 
   return useMutation({
+    gcTime: 0,
     mutationFn: async ({ username, password }: { username: string; password: string }) => {
+      const capturedRevision = lifecycle.beginLogin();
+      await queryClient.cancelQueries({ queryKey: ['auth', 'session'] });
       const client = new SmartSiteManagementClient(apiUrl);
-      return client.login(username, password, 'WEB');
-    },
-    onSuccess: (data) => {
-      sessionStorage.removeItem('smartsite:signed-out');
-      queryClient.clear();
+      const data = await client.login(username, password, 'WEB');
+      if (!lifecycle.isCurrent(capturedRevision))
+        throw new ApiError('cancelled', 'Sign-in cancelled.');
+      rememberLogoutIntent(apiUrl, false);
       dismissSessionExpired();
       setAccessToken(data.accessToken);
-      // Invalidate the session query so it updates if needed, though we just set the token manually
-      queryClient.setQueryData(['auth', 'session'], data);
+      // The bootstrap query needs only a marker, never a profile or token.
+      queryClient.setQueryData(['auth', 'session', apiUrl], true);
+      return data.user;
     },
   });
 }
@@ -180,20 +343,21 @@ export function useLogin(apiUrl: string) {
 export function useLogout(apiUrl: string) {
   const { setAccessToken, dismissSessionExpired } = useAuth();
   const queryClient = useQueryClient();
+  const lifecycle = useContext(AuthLifecycleContext);
 
   return useMutation({
+    gcTime: 0,
+    onMutate: () => {
+      lifecycle.beginChange();
+      rememberLogoutIntent(apiUrl, true);
+      dismissSessionExpired();
+      setAccessToken(null);
+      queryClient.clear();
+      queryClient.setQueryData(['auth', 'session', apiUrl], null);
+    },
     mutationFn: async () => {
       const client = new SmartSiteManagementClient(apiUrl);
       return client.logout('WEB');
-    },
-    onSettled: async () => {
-      // A failed server revocation must still end the local session.
-      sessionStorage.setItem('smartsite:signed-out', 'true');
-      await queryClient.cancelQueries();
-      dismissSessionExpired();
-      setAccessToken(null);
-      queryClient.clear(); // Clear all cached data on logout
-      queryClient.setQueryData(['auth', 'session'], null);
     },
   });
 }
@@ -207,15 +371,26 @@ export function useLogout(apiUrl: string) {
  * to read user data.
  */
 export function useCurrentUser(apiUrl: string) {
-  const { accessToken, triggerSessionExpired } = useAuth();
+  const { accessToken, sessionScope, triggerSessionExpired } = useAuth();
+  const queryClient = useQueryClient();
+  const prevScopeRef = useRef(sessionScope);
+
+  useEffect(() => {
+    if (prevScopeRef.current && prevScopeRef.current !== sessionScope) {
+      queryClient.removeQueries({ queryKey: ['auth', 'me', apiUrl, prevScopeRef.current] });
+    }
+    prevScopeRef.current = sessionScope;
+  }, [apiUrl, sessionScope, queryClient]);
+
   return useQuery<AccountResponse>({
-    queryKey: ['auth', 'me', apiUrl],
+    queryKey: ['auth', 'me', apiUrl, sessionScope],
     queryFn: async () => {
+      const scopeAtCall = sessionScope;
       try {
         return await new SmartSiteManagementClient(apiUrl).me(accessToken!);
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) {
-          triggerSessionExpired();
+          triggerSessionExpired(scopeAtCall);
         } else if (
           typeof err === 'object' &&
           err !== null &&
@@ -225,13 +400,13 @@ export function useCurrentUser(apiUrl: string) {
             (err as { status?: number; statusCode?: number }).status ??
             (err as { statusCode?: number }).statusCode;
           if (status === 401) {
-            triggerSessionExpired();
+            triggerSessionExpired(scopeAtCall);
           }
         }
         throw err;
       }
     },
-    enabled: !!accessToken,
+    enabled: !!accessToken && !!sessionScope,
     staleTime: 5 * 60 * 1000, // 5 min — role assignments rarely change during a session
     retry: false,
   });

@@ -36,6 +36,7 @@ import type { CameraEntity } from '../../database/entities/camera.entity.js';
 import type { CameraObservationRegionEntity } from '../../database/entities/camera-observation-region.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import {
   CameraConfigurationService,
   CreateCameraCommand,
@@ -85,7 +86,10 @@ function regionResponse(region: CameraObservationRegionEntity) {
 @Controller('sites/:siteId/cameras')
 export class CamerasController {
   private readonly logger = new Logger(CamerasController.name);
-  constructor(private readonly cameras: CameraConfigurationService) {}
+  constructor(
+    private readonly cameras: CameraConfigurationService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post()
   @ApiCreatedResponse({ type: CameraResponseDto })
@@ -94,7 +98,11 @@ export class CamerasController {
     @Param('siteId') siteId: string,
     @Body() input: CreateCameraCommand,
   ) {
-    const camera = await this.cameras.create(siteId, input);
+    const camera = await this.cameras.create(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'camera.create',
@@ -130,7 +138,12 @@ export class CamerasController {
     @Param('cameraId') cameraId: string,
     @Body() input: RenameCameraCommand,
   ) {
-    const camera = await this.cameras.rename(siteId, cameraId, input);
+    const camera = await this.cameras.rename(
+      siteId,
+      cameraId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'camera.rename',
@@ -148,7 +161,12 @@ export class CamerasController {
     @Param('cameraId') cameraId: string,
     @Body() input: SetCameraStatusCommand,
   ) {
-    const camera = await this.cameras.setStatus(siteId, cameraId, input);
+    const camera = await this.cameras.setStatus(
+      siteId,
+      cameraId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'camera.status',
@@ -167,7 +185,12 @@ export class CamerasController {
     @Param('cameraId') cameraId: string,
     @Body() input: CreateRegionCommand,
   ) {
-    const region = await this.cameras.createRegion(siteId, cameraId, input);
+    const region = await this.cameras.createRegion(
+      siteId,
+      cameraId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.create',
@@ -210,7 +233,13 @@ export class CamerasController {
     @Param('regionId') regionId: string,
     @Body() input: UpdateRegionPolygonCommand,
   ) {
-    const region = await this.cameras.updatePolygon(siteId, cameraId, regionId, input);
+    const region = await this.cameras.updatePolygon(
+      siteId,
+      cameraId,
+      regionId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.polygon',
@@ -230,7 +259,13 @@ export class CamerasController {
     @Param('regionId') regionId: string,
     @Body() input: SetRegionActiveCommand,
   ) {
-    const region = await this.cameras.setRegionActive(siteId, cameraId, regionId, input);
+    const region = await this.cameras.setRegionActive(
+      siteId,
+      cameraId,
+      regionId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.status',

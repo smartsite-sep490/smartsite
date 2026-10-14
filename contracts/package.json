@@ -9,8 +9,11 @@
   ],
   "exports": {
     ".": "./dist/index.js",
+    "./ppe-items": "./dist/ppe-items.js",
     "./management": "./dist/management-api.js",
-    "./gate-permissions": "./dist/gate-permissions-api.js"
+    "./camera-preview": "./dist/camera-preview.js",
+    "./gate-permissions": "./dist/gate-permissions-api.js",
+    "./mf06-assessments": "./dist/mf06-assessment-api.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
