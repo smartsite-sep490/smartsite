@@ -49,6 +49,11 @@ export class CreateIncidentDto extends WorkflowCommand {
   @ValidateIf(optional)
   @Transform(lower)
   @IsUUID()
+  sourceChecklistResultId?: string | null;
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ValidateIf(optional)
+  @Transform(lower)
+  @IsUUID()
   contractorId?: string | null;
   @ApiPropertyOptional({ type: [String], maxItems: 100 })
   @ValidateIf(optional)

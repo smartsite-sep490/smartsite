@@ -41,13 +41,22 @@ export const schedulingScope = `
 const safetyScope = `
   EXISTS (SELECT 1 FROM app_user u WHERE u.id=n.recipient_user_id AND u.is_active=true)
   AND EXISTS (SELECT 1 FROM user_role_assignment r WHERE r.user_id=n.recipient_user_id AND r.site_id=n.site_id AND r.role='CONTRACTOR_REPRESENTATIVE')
-  AND EXISTS (SELECT 1 FROM contractor_representative_grant g WHERE g.user_id=n.recipient_user_id AND g.contractor_id=n.contractor_id)
+  AND EXISTS (SELECT 1 FROM contractor_representative_assignment g WHERE g.user_id=n.recipient_user_id AND g.contractor_id=n.contractor_id AND g.site_id=n.site_id)
   AND EXISTS (SELECT 1 FROM contractor c WHERE c.id=n.contractor_id AND c.is_active=true)
   AND EXISTS (SELECT 1 FROM contractor_site_participation p WHERE p.contractor_id=n.contractor_id AND p.site_id=n.site_id AND p.is_active=true AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP))
   AND EXISTS (SELECT 1 FROM incident i JOIN corrective_action a ON a.incident_id=i.id
     WHERE i.id=(n.content->>'incidentId')::uuid AND a.id=(n.content->>'actionId')::uuid
       AND i.site_id=n.site_id AND i.contractor_id=n.contractor_id AND a.assigned_to=n.recipient_user_id AND a.superseded_at IS NULL)`;
-const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role='WORKER')) OR (n.request_type='SAFETY' AND (${safetyScope})))`;
+const checklistScope = `
+ EXISTS (SELECT 1 FROM app_user u WHERE u.id=n.recipient_user_id AND u.is_active AND NOT u.must_change_password)
+ AND EXISTS (SELECT 1 FROM user_role_assignment r WHERE r.user_id=n.recipient_user_id AND r.site_id=n.site_id AND r.role=n.recipient_role)
+ AND EXISTS (SELECT 1 FROM safety_checklist_assignment a WHERE a.id=(n.content->>'checklistId')::uuid AND a.site_id=n.site_id AND a.contractor_id=n.contractor_id
+  AND (n.recipient_role='SAFETY_OFFICER' OR (n.recipient_role='CONTRACTOR_REPRESENTATIVE' AND a.assigned_to=n.recipient_user_id
+   AND EXISTS(SELECT 1 FROM contractor_representative_assignment g WHERE g.user_id=n.recipient_user_id AND g.contractor_id=n.contractor_id AND g.site_id=n.site_id)
+   AND EXISTS(SELECT 1 FROM contractor c WHERE c.id=n.contractor_id AND c.is_active)
+   AND EXISTS(SELECT 1 FROM contractor_site_participation p WHERE p.site_id=n.site_id AND p.contractor_id=n.contractor_id AND p.is_active AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP)))))`;
+
+const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role='WORKER')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
   UserNotificationEntity,
@@ -395,7 +404,70 @@ export class SchedulingNotificationService {
       ],
     );
   }
+  async recordChecklist(
+    manager: EntityManager,
+    input: {
+      commandId: string;
+      assignment: {
+        id: string;
+        siteId: string;
+        contractorId: string;
+        assignedTo: string;
+        description: string;
+      };
+      event: import('@smartsite/contracts').ChecklistNotificationEvent;
+    },
+  ): Promise<void> {
+    const a = input.assignment;
+    const recipients =
+      input.event === 'CHECKLIST_SUBMITTED'
+        ? ((await manager.query(
+            "SELECT DISTINCT u.id FROM app_user u JOIN user_role_assignment r ON r.user_id=u.id WHERE r.site_id=$1 AND r.role='SAFETY_OFFICER' AND u.is_active AND NOT u.must_change_password AND u.id<>$2 ORDER BY u.id",
+            [a.siteId, a.assignedTo],
+          )) as { id: string }[])
+        : [{ id: a.assignedTo }];
+    const site = await manager.getRepository(SiteEntity).findOneByOrFail({ id: a.siteId });
+    const titles = {
+      CHECKLIST_ASSIGNED: 'Safety checklist assigned',
+      CHECKLIST_SUBMITTED: 'Checklist ready to record',
+      CHECKLIST_RETURNED: 'Checklist update requested',
+      CHECKLIST_RECORDED: 'Checklist report recorded',
+    };
+    for (const recipient of recipients)
+      await manager.query(
+        `INSERT INTO user_notification(id,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,request_id,event,content)
+      VALUES($1,$2,$3,$4,NULL,$5,'CHECKLIST',$6,$7,$8::jsonb) ON CONFLICT ON CONSTRAINT uq_notification_event_recipient DO NOTHING`,
+        [
+          randomUUID(),
+          recipient.id,
+          a.siteId,
+          a.contractorId,
+          input.event === 'CHECKLIST_SUBMITTED' ? 'SAFETY_OFFICER' : 'CONTRACTOR_REPRESENTATIVE',
+          input.commandId,
+          input.event,
+          JSON.stringify({
+            siteName: site.name,
+            title: titles[input.event],
+            message: a.description,
+            checklistId: a.id,
+          }),
+        ],
+      );
+  }
+
   private response(n: UserNotificationEntity): UserNotificationResponse {
+    if (n.requestType === 'CHECKLIST')
+      return {
+        id: n.id,
+        event: n.event,
+        siteId: n.siteId,
+        siteName: n.content.siteName,
+        title: n.content.title,
+        message: n.content.message,
+        createdAt: n.createdAt.toISOString(),
+        readAt: n.readAt?.toISOString() ?? null,
+        target: { siteId: n.siteId, checklistId: n.content.checklistId!, tab: 'checklists' },
+      };
     if (n.requestType === 'SCHEDULE')
       return {
         id: n.id,

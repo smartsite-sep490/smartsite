@@ -1,3 +1,4 @@
+import { SafetyChecklists1792195200000 } from '../../src/database/migrations/1792195200000-SafetyChecklists.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { observationIdentityFixture } from '../support/observation-identity-fixture.js';
 import { buildGroupingKey } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
@@ -42,6 +43,7 @@ import {
   IncidentEntity,
   ContractorEntity,
   ContractorRepresentativeGrantEntity,
+  ContractorRepresentativeAssignmentEntity,
   ContractorSiteParticipationEntity,
   WorkerEntity,
 } from '../../src/database/entities/index.js';
@@ -69,6 +71,9 @@ after(async () => {
   await dataSource
     .getRepository(UserNotificationEntity)
     .delete({ recipientUserId: In(fixtureUsers) });
+  await dataSource
+    .getRepository(ContractorRepresentativeAssignmentEntity)
+    .delete({ userId: In(fixtureUsers) });
   await dataSource.getRepository(UserEntity).delete(fixtureUsers);
   await dataSource.getRepository(WorkerEntity).delete({ siteId: In(fixtureSites) });
   await dataSource
@@ -153,6 +158,15 @@ async function fixture() {
   await dataSource
     .getRepository(ContractorRepresentativeGrantEntity)
     .save({ id: randomUUID(), contractorId: otherContractor, userId: ids.outsider! });
+  await dataSource.getRepository(ContractorRepresentativeAssignmentEntity).save([
+    ...['security', 'multi'].map((name) => ({
+      id: randomUUID(),
+      siteId: site,
+      contractorId: contractor,
+      userId: ids[name]!,
+    })),
+    { id: randomUUID(), siteId: other, contractorId: otherContractor, userId: ids.outsider! },
+  ]);
   const zones = new ZoneConfigurationService(dataSource, new SiteConfigurationService(dataSource));
   const upload = new SafetyUploadService(new StorageService(new ConfigService({})));
   const service = new SafetyWorkflowService(
@@ -801,7 +815,12 @@ test('MF08 migration reverses and re-applies inside an isolated PostgreSQL trans
       'TRUNCATE incident_worker, safety_workflow_audit, safety_task, corrective_action_submission, corrective_action, safety_evidence, incident CASCADE',
     );
     const handovers = new SafetyHandoverNotifications1791590400000();
-    await runner.query("DELETE FROM user_notification WHERE request_type='SAFETY'");
+    await runner.query('TRUNCATE safety_checklist_assignment CASCADE');
+    await runner.query(
+      "DELETE FROM user_notification WHERE request_type IN ('SAFETY','CHECKLIST','SCHEDULE','ATTENDANCE')",
+    );
+    const checklists = new SafetyChecklists1792195200000();
+    await checklists.down(runner);
     await handovers.down(runner);
     const responsibility = new IncidentContractorResponsibility1791504000000();
     await responsibility.down(runner);
@@ -817,6 +836,7 @@ test('MF08 migration reverses and re-applies inside an isolated PostgreSQL trans
     await migration.up(runner);
     await responsibility.up(runner);
     await handovers.up(runner);
+    await checklists.up(runner);
     const coexist = await runner.query('SELECT name FROM migrations WHERE timestamp=1791504000000');
     assert.deepEqual(
       coexist.map((row: { name: string }) => row.name).sort(),
@@ -1044,8 +1064,8 @@ test('Responsibility scoping, unresolved Worker, legacy transfer, immutable hist
     failure('CONFLICT'),
   );
   await dataSource
-    .getRepository(ContractorRepresentativeGrantEntity)
-    .delete({ userId: ids.security!, contractorId: f.contractor });
+    .getRepository(ContractorRepresentativeAssignmentEntity)
+    .delete({ userId: ids.security!, contractorId: f.contractor, siteId: site });
   await assert.rejects(service.getIncident(site, detail.id, ids.security!), failure('FORBIDDEN'));
   await assert.rejects(
     service.incidentCommand(site, detail.id, ids.security!, 'start', start, legacy.id),
@@ -1215,6 +1235,30 @@ test('Incident source subjects use verified identity, reject mixed contractors a
     ).resource;
     assert.deepEqual(confirmed.workerIds, [f.workerIds[0]!]);
     assert.equal(confirmed.alerts[0]?.candidateWorkerId, 'unverified-candidate');
+    await f.decide(
+      {
+        commandId: randomUUID(),
+        expectedRevision: 1,
+        expectedEventHash: f.hash,
+        action: 'CLEAR',
+        reason: 'Synthetic source correction',
+      },
+      0,
+      actor,
+      f.alertIds[0]!,
+    );
+    await assert.rejects(
+      service.incidentCommand(f.siteId, incident.id, actor, 'assign', {
+        commandId: randomUUID(),
+        expectedVersion: confirmed.version,
+        assignedTo: actor,
+        description: 'Must re-confirm changed source',
+        dueAt: null,
+      }),
+      (e) =>
+        failure('CONFLICT')(e) &&
+        /Source identity changed/.test((e as PublicHttpException).publicPayload.message),
+    );
   } finally {
     // Owned synthetic fixtures in the dedicated ephemeral test DB only.
     await dataSource.query(
@@ -1284,6 +1328,12 @@ test('handover correction preserves reports, revokes old scope and deduplicates 
     validFrom: new Date('2026-01-01'),
     validUntil: null,
     isActive: true,
+  });
+  await dataSource.getRepository(ContractorRepresentativeAssignmentEntity).save({
+    id: randomUUID(),
+    siteId: site,
+    contractorId: f.otherContractor,
+    userId: ids.outsider!,
   });
   const correction = {
     commandId: randomUUID(),

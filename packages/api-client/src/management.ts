@@ -159,6 +159,12 @@ export type WorkerScheduleListOptions = PageOptions & {
   searchName?: string;
 };
 export type SafetyAlertListOptions = PageOptions & {
+  zoneId?: string;
+  cameraExternalId?: string;
+  capturedFrom?: string;
+  capturedUntil?: string;
+  contextTeamId?: string;
+  attentionOnly?: boolean;
   status?: SafetyAlertStatus;
   type?: SafetyAlertType;
 };
@@ -832,11 +838,16 @@ export class SmartSiteManagementClient {
     });
   }
 
-  private async requestBlob(path: string, token: string, options?: RequestOptions): Promise<Blob> {
+  private async requestBlob(
+    path: string,
+    token: string,
+    options?: RequestOptions,
+    mediaTypes: readonly string[] = ['image/jpeg'],
+  ): Promise<Blob> {
     return this.runRequest(options, async (signal) => {
       const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
         headers: {
-          Accept: 'image/jpeg',
+          Accept: mediaTypes.join(', '),
           Authorization: `Bearer ${token}`,
         },
         ...(signal ? { signal } : {}),
@@ -858,7 +869,7 @@ export class SmartSiteManagementClient {
         );
       }
       const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
-      if (contentType !== 'image/jpeg') {
+      if (!contentType || !mediaTypes.includes(contentType)) {
         throw new ApiError(
           'invalid-response',
           'Backend returned an invalid evidence type.',
@@ -939,6 +950,220 @@ export class SmartSiteManagementClient {
       options,
     );
   }
+  listSafetyOverviewContractors(
+    token: string,
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<Page<import('@smartsite/contracts').SafetyContractorResponse>>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/contractors?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyOverview(
+    token: string,
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    return this.request<import('@smartsite/contracts').SafetyOverviewResponse>(
+      'GET',
+      this.safetyOverviewPath(siteId, query),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyTeamOptions(
+    token: string,
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<Page<import('@smartsite/contracts').SafetyTeamOption>>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/team-options?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyWeek(
+    token: string,
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<import('@smartsite/contracts').SafetyWeekResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/week?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listSafetyZoneTeams(
+    token: string,
+    siteId: string,
+    zoneId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<Page<import('@smartsite/contracts').SafetyOverviewTeam>>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/zones/${pathId(zoneId)}/teams?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyTeam(
+    token: string,
+    siteId: string,
+    id: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    return this.request<import('@smartsite/contracts').SafetyTeamDetailResponse>(
+      'GET',
+      this.safetyOverviewPath(siteId, query, id),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getAlertWorkContext(token: string, siteId: string, id: string, options?: RequestOptions) {
+    return this.request<import('@smartsite/contracts').SafetyAlertWorkContextResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(id)}/work-context`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  private safetyOverviewPath(
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    id?: string,
+  ) {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(query))
+      if (v !== undefined && v !== '') params.set(k, String(v));
+    return `/sites/${pathId(siteId)}/safety-overview${id ? `/teams/${pathId(id)}` : ''}?${params}`;
+  }
+  listSafetyChecklists(
+    token: string,
+    siteId: string,
+    filters: import('@smartsite/contracts').ChecklistListQuery = {},
+    options?: RequestOptions,
+  ) {
+    return this.request<Page<import('@smartsite/contracts').ChecklistResponse>>(
+      'GET',
+      this.workflowListPath(`/sites/${pathId(siteId)}/safety-checklists`, filters),
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyChecklist(token: string, siteId: string, id: string, options?: RequestOptions) {
+    return this.request<import('@smartsite/contracts').ChecklistDetailResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-checklists/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  createSafetyChecklist(
+    token: string,
+    siteId: string,
+    input: import('@smartsite/contracts').CreateChecklistCommand,
+    options?: RequestOptions,
+  ) {
+    return this.request<
+      WorkflowMutationResponse<import('@smartsite/contracts').ChecklistDetailResponse>
+    >('POST', `/sites/${pathId(siteId)}/safety-checklists`, token, input, undefined, options);
+  }
+  checklistCommand(
+    token: string,
+    siteId: string,
+    id: string,
+    operation: 'start' | 'cancel' | 'review',
+    input: VersionCommand | ReasonCommand | import('@smartsite/contracts').ReviewChecklistCommand,
+    options?: RequestOptions,
+  ) {
+    return this.request<
+      WorkflowMutationResponse<import('@smartsite/contracts').ChecklistDetailResponse>
+    >(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-checklists/${pathId(id)}/${operation === 'review' ? 'reviews' : operation}`,
+      token,
+      input,
+      undefined,
+      options,
+    );
+  }
+  submitSafetyChecklist(
+    token: string,
+    siteId: string,
+    id: string,
+    input: import('@smartsite/contracts').SubmitChecklistCommand,
+    files: File[],
+    options?: RequestOptions,
+  ) {
+    const form = new FormData();
+    form.set('command', JSON.stringify(input));
+    for (const file of files) form.append('files', file);
+    return this.requestFormData<
+      WorkflowMutationResponse<import('@smartsite/contracts').ChecklistDetailResponse>
+    >(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-checklists/${pathId(id)}/submissions`,
+      token,
+      form,
+      options,
+    );
+  }
+  getChecklistEvidence(
+    token: string,
+    siteId: string,
+    id: string,
+    evidenceId: string,
+    options?: RequestOptions,
+  ) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/safety-checklists/${pathId(id)}/evidence/${pathId(evidenceId)}`,
+      token,
+      options,
+      ['image/jpeg', 'image/png', 'application/pdf'],
+    );
+  }
+
   listIncidents(
     token: string,
     siteId: string,
@@ -1288,6 +1513,16 @@ export class SmartSiteManagementClient {
     if (options.limit !== undefined) query.set('limit', String(options.limit));
     if (options.status !== undefined) query.set('status', options.status);
     if (options.type !== undefined) query.set('type', options.type);
+    for (const key of [
+      'zoneId',
+      'cameraExternalId',
+      'capturedFrom',
+      'capturedUntil',
+      'contextTeamId',
+    ] as const)
+      if (options[key]) query.set(key, options[key]);
+    if (options.attentionOnly !== undefined)
+      query.set('attentionOnly', String(options.attentionOnly));
     const path = `/sites/${pathId(siteId)}/safety-alerts`;
     return this.request<Page<SafetyAlertResponse>>(
       'GET',

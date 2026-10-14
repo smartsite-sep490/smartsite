@@ -127,6 +127,17 @@ export class CameraConfigurationService {
     return camera ?? missing();
   }
 
+  async safetyZoneCameras(
+    manager: EntityManager,
+    siteId: string,
+    zoneIds: string[],
+  ): Promise<import('@smartsite/contracts').SafetyOverviewCamera[]> {
+    if (!zoneIds.length) return [];
+    return manager.query(
+      `SELECT DISTINCT c.id,c.code,c.name,c.external_id AS "externalId",c.status,r.zone_id AS "zoneId" FROM camera c JOIN camera_observation_region r ON r.camera_id=c.id AND r.is_active JOIN zone z ON z.id=r.zone_id AND z.site_id=c.site_id WHERE c.site_id=$1 AND r.zone_id=ANY($2::uuid[]) ORDER BY c.name,c.id`,
+      [siteId, zoneIds],
+    );
+  }
   async list(
     siteId: string,
     offset = 0,

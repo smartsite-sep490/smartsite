@@ -21,6 +21,11 @@ import { WorkforceManagementModule } from './management/management.module.js';
     WorkforceAccessModule,
     WorkforceManagementModule,
   ],
-  exports: [WorkforceDirectoryModule, WorkforceNotificationsModule, WorkforceIdentityModule],
+  exports: [
+    WorkforceDirectoryModule,
+    WorkforceNotificationsModule,
+    WorkforceIdentityModule,
+    WorkforceManagementModule,
+  ],
 })
 export class WorkforceModule {}

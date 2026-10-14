@@ -94,7 +94,9 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route
           path="/dashboard"
           element={
-            defaultAuthTab === 'workforce' ? (
+            defaultAuthTab === 'incidents' ? (
+              <Navigate to="/incidents" replace />
+            ) : defaultAuthTab === 'workforce' ? (
               <Navigate to="/workforce" replace />
             ) : (
               <DashboardView
@@ -136,6 +138,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 onSignOut={() => logout.mutate()}
                 apiUrl={apiUrl}
                 initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
+                initialChecklistId={incidentLink.get('checklistId') ?? undefined}
                 initialIncidentId={incidentLink.get('incidentId') ?? undefined}
                 initialActionId={incidentLink.get('actionId') ?? undefined}
                 initialAlertId={alertsContext?.alertId}
@@ -220,7 +223,10 @@ export function App() {
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const isWorkerOnly =
     roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
-  const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
+  const safetyDefault =
+    roles.includes('SAFETY_OFFICER') &&
+    !roles.some((r) => ['ADMIN', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r));
+  const defaultAuthTab = safetyDefault ? 'incidents' : isWorkerOnly ? 'workforce' : 'dashboard';
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check

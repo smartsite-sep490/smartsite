@@ -1,3 +1,8 @@
+import { SafetyChecklistService } from './safety-checklist.service.js';
+import { SafetyChecklistController } from './safety-checklist.controller.js';
+import { SafetyOverviewService } from './safety-overview.service.js';
+import { SafetyOverviewController } from './safety-overview.controller.js';
+import { CamerasModule } from '../cameras/cameras.module.js';
 import { StorageModule } from '../../integrations/storage/storage.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
@@ -28,9 +33,25 @@ import { DataSource } from 'typeorm';
 import { ZoneAccessManagementService } from '../zones/zone-access-management.service.js';
 
 @Module({
-  imports: [StorageModule, DatabaseModule, AuthModule, ZonesModule, WorkforceModule, UsersModule],
-  controllers: [SafetyAlertsController, ObservationIdentityController, SafetyWorkflowController],
+  imports: [
+    CamerasModule,
+    StorageModule,
+    DatabaseModule,
+    AuthModule,
+    ZonesModule,
+    WorkforceModule,
+    UsersModule,
+  ],
+  controllers: [
+    SafetyChecklistController,
+    SafetyOverviewController,
+    SafetyAlertsController,
+    ObservationIdentityController,
+    SafetyWorkflowController,
+  ],
   providers: [
+    SafetyChecklistService,
+    SafetyOverviewService,
     SafetyWorkflowService,
     SafetyUploadService,
     AlertCandidateEvaluator,
