@@ -979,6 +979,61 @@ export class SmartSiteManagementClient {
       options,
     );
   }
+  getSafetyTeamOptions(
+    token: string,
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<Page<import('@smartsite/contracts').SafetyTeamOption>>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/team-options?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  getSafetyWeek(
+    token: string,
+    siteId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<import('@smartsite/contracts').SafetyWeekResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/week?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  listSafetyZoneTeams(
+    token: string,
+    siteId: string,
+    zoneId: string,
+    query: import('@smartsite/contracts').SafetyOverviewQuery,
+    options?: RequestOptions,
+  ) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined) params.set(key, String(value));
+    return this.request<Page<import('@smartsite/contracts').SafetyOverviewTeam>>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-overview/zones/${pathId(zoneId)}/teams?${params}`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
   getSafetyTeam(
     token: string,
     siteId: string,

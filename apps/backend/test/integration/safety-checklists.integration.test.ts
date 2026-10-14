@@ -31,6 +31,9 @@ import {
   AlertStatus,
   AlertType,
   EventProcessingStatus,
+  CameraEntity,
+  CameraObservationRegionEntity,
+  CameraStatus,
   SiteEntity,
   UserEntity,
   UserRoleAssignmentEntity,
@@ -97,9 +100,16 @@ before(async () => {
       new ConfigService(validateEnvironment({ NODE_ENV: 'test', STORAGE_LOCAL_ROOT: root })),
     ),
   );
-  checklists = new SafetyChecklistService(source, users, workforce, upload, notifications);
-  overview = new SafetyWorkContextService(source);
   workflow = new SafetyWorkflowService(source, users, zones, upload, workforce, notifications);
+  checklists = new SafetyChecklistService(
+    source,
+    users,
+    workforce,
+    upload,
+    notifications,
+    workflow,
+  );
+  overview = new SafetyWorkContextService(source);
   await source.getRepository(SiteEntity).save([
     { id: id.site, code: id.site, name: 'Checklist synthetic A' },
     { id: id.other, code: id.other, name: 'Checklist synthetic B' },
@@ -329,6 +339,90 @@ test('Safety overview resolves a past scheduled team, persists role checks and k
   );
   await source.getRepository(UserEntity).update(id.safety, { isActive: true });
 });
+test('weekly context normalizes Monday and paginates teams without losing scheduled work windows', async () => {
+  const read = Reflect.get(overview, 'week');
+  assert.equal(typeof read, 'function', 'weekly query is exported');
+  const value = (await Reflect.apply(read, overview, [
+    await actor(id.safety),
+    id.site,
+    { date, timezone: 'Asia/Ho_Chi_Minh', teamId: id.oldTeam, limit: 1 },
+  ])) as import('@smartsite/contracts').SafetyWeekResponse;
+  assert.equal(value.weekStart, '2026-10-12');
+  assert.equal(value.weekEnd, '2026-10-18');
+  assert.equal(value.teams.total, 1);
+  assert.equal(value.teams.items[0]!.days.length, 7);
+  const day = value.teams.items[0]!.days.find((d: { date: string }) => d.date === date);
+  assert.equal(day!.scheduledWorkerCount, 1);
+  assert.equal(day!.workWindows.length, 1);
+  await assert.rejects(
+    Reflect.apply(read, overview, [
+      await actor(id.foreignSafety),
+      id.site,
+      { date, timezone: 'Asia/Ho_Chi_Minh' },
+    ]),
+    failure('FORBIDDEN'),
+  );
+  const pastPage = (await Reflect.apply(read, overview, [
+    await actor(id.manager),
+    id.site,
+    { date, timezone: 'Asia/Ho_Chi_Minh', teamId: id.oldTeam, offset: 20 },
+  ])) as import('@smartsite/contracts').SafetyWeekResponse;
+  assert.equal(pastPage.teams.total, 1);
+  assert.equal(pastPage.teams.items.length, 0);
+  const daily = await overview.overview(await actor(id.safety), id.site, {
+    date,
+    timezone: 'Asia/Ho_Chi_Minh',
+    teamId: id.oldTeam,
+  });
+  assert.equal(daily.teams.items[0]!.workWindows!.length, 1);
+  const night = await source
+    .getRepository(ShiftEntity)
+    .save({
+      id: randomUUID(),
+      siteId: id.site,
+      name: 'Overnight',
+      timezone: 'Asia/Ho_Chi_Minh',
+      startsAt: new Date('2026-01-01T15:00:00Z'),
+      endsAt: new Date('2026-01-01T23:00:00Z'),
+      archivedAt: null,
+      breakStartsAt: null,
+      breakEndsAt: null,
+    });
+  const version = await source
+    .getRepository(ScheduleVersionEntity)
+    .findOneByOrFail({ siteId: id.site, version: 1 });
+  const schedule = await source
+    .getRepository(WorkerScheduleEntity)
+    .save({
+      id: randomUUID(),
+      siteId: id.site,
+      workerId: id.worker,
+      shiftId: night.id,
+      scheduleVersionId: version.id,
+      workDate: '2026-10-15',
+      isActive: true,
+    });
+  try {
+    const overnight = await overview.week(await actor(id.safety), id.site, {
+      date,
+      timezone: 'Asia/Ho_Chi_Minh',
+      teamId: id.team,
+    });
+    const window = overnight.teams.items[0]!.days.find((d) => d.date === '2026-10-15')!
+      .workWindows[0]!;
+    assert.equal(new Date(window.startsAt).toISOString(), '2026-10-15T15:00:00.000Z');
+    assert.equal(new Date(window.endsAt).toISOString(), '2026-10-15T23:00:00.000Z');
+    assert.equal(
+      overnight.teams.items[0]!.days.find((d) => d.date === '2026-10-16')!.scheduledWorkerCount,
+      0,
+      'overnight retains its source work date',
+    );
+  } finally {
+    await source.getRepository(WorkerScheduleEntity).delete(schedule.id);
+    await source.getRepository(ShiftEntity).delete(night.id);
+  }
+});
+
 test('checklist report/return/resubmit/record preserves evidence and deduplicates commands and notifications', async () => {
   const input = create(),
     created = await checklists.create(id.site, id.safety, input),
@@ -494,6 +588,23 @@ test('checklist report/return/resubmit/record preserves evidence and deduplicate
     }),
     failure('CONFLICT'),
   );
+  const safetyView = await checklists.get(id.site, assignmentId, id.safety);
+  assert.equal(safetyView.firstSubmittedAt, safetyView.submissions[0]!.submittedAt);
+  assert.equal(safetyView.submissions[1]!.results[0]!.linkedIncident!.status, 'OPEN');
+  assert.equal(safetyView.submissions[1]!.results[0]!.answer, 'FAIL');
+  const rolesForCheck = source.getRepository(UserRoleAssignmentEntity),
+    extraRole = await rolesForCheck.findOneByOrFail({
+      userId: id.rep,
+      siteId: id.site,
+      role: UserRole.SAFETY_OFFICER,
+    });
+  await rolesForCheck.delete(extraRole.id);
+  try {
+    const privateView = await checklists.get(id.site, assignmentId, id.rep);
+    assert.equal(privateView.submissions[1]!.results[0]!.linkedIncident, null);
+  } finally {
+    await rolesForCheck.save(extraRole);
+  }
   const managerView = await checklists.get(id.site, assignmentId, id.manager);
   assert.equal(managerView.submissions[0]!.submittedByName, 'rep');
   const runner = source.createQueryRunner();
@@ -691,7 +802,42 @@ test('Manager lookup and Overview summaries match drill-down for two contractors
   const sites = new SiteConfigurationService(source),
     zones = new ZoneConfigurationService(source, sites),
     cameras = new CameraConfigurationService(source, zones, sites);
+  const camera = await source.getRepository(CameraEntity).save({
+    id: randomUUID(),
+    siteId: id.site,
+    externalId: id.site + '-overview',
+    code: randomUUID(),
+    name: 'Synthetic camera',
+    status: CameraStatus.ACTIVE,
+    configurationVersion: 1,
+  });
+  await source.getRepository(CameraObservationRegionEntity).save({
+    id: randomUUID(),
+    cameraId: camera.id,
+    zoneId: id.zone,
+    polygon: [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ],
+    coordinateSpace: 'NORMALIZED_0_1',
+    version: 1,
+    isActive: true,
+  });
   const service = new SafetyOverviewService(overview, cameras, source, workflow);
+  const related = await service.zoneTeams(await actor(id.manager), id.site, id.zone, {
+    date: '2026-10-13',
+    timezone: 'Asia/Ho_Chi_Minh',
+  });
+  assert.ok(related.items.some((t: { id: string }) => t.id === teamId));
+  assert.ok(related.items.some((t: { id: string }) => t.id === id.team));
+  await assert.rejects(
+    service.zoneTeams(await actor(id.foreignSafety), id.site, id.zone, {
+      date,
+      timezone: 'Asia/Ho_Chi_Minh',
+    }),
+    failure('FORBIDDEN'),
+  );
   const lookup = await service.contractors(await actor(id.manager), id.site, {
     date: '2026-10-13',
     timezone: 'Asia/Ho_Chi_Minh',
@@ -760,7 +906,7 @@ test('Manager lookup and Overview summaries match drill-down for two contractors
     await source.getRepository(AiObservationEventEntity).save({
       eventId,
       payloadHash: 'a'.repeat(64),
-      cameraExternalId: 'synthetic-overview',
+      cameraExternalId: id.site + '-overview',
       streamSessionId: randomUUID(),
       capturedAt: at,
       rawPayload: { synthetic: true },
@@ -769,6 +915,26 @@ test('Manager lookup and Overview summaries match drill-down for two contractors
     await source.getRepository(AlertDetectionMappingEntity).save({ alertId, eventId });
   }
   const q = { date: '2026-10-13', timezone: 'Asia/Ho_Chi_Minh' };
+  const safetyCamera = (await service.team(await actor(id.safety), id.site, id.team, q))
+    .cameras[0]!;
+  assert.equal(safetyCamera.latestEvidence!.alertId, alertId);
+  assert.equal(safetyCamera.latestEvidence!.capturedAt, at.toISOString());
+  assert.equal(
+    safetyCamera.latestEvidence!.evidenceIndex,
+    null,
+    'missing evidence must not use a sample image',
+  );
+  assert.equal(
+    (await service.team(await actor(id.safety), id.site, id.team, { ...q, date: '2026-10-14' }))
+      .cameras[0]!.latestEvidence,
+    null,
+    'camera preview cannot leak another day',
+  );
+  assert.equal(
+    (await service.team(await actor(id.manager), id.site, id.team, q)).cameras[0]!.latestEvidence,
+    undefined,
+    'Manager gets camera metadata only',
+  );
   const result = await service.overview(await actor(id.safety), id.site, q);
   const other = result.teams.items.find((t) => t.id === teamId)!;
   assert.equal(other.attentionAlertCount, 1);
@@ -782,6 +948,12 @@ test('Manager lookup and Overview summaries match drill-down for two contractors
     recordedWithFindings: 1,
     recordedWithoutFailures: 1,
     pastPlannedStart: 3,
+    pastStartWithoutReport: 1,
+    lateFirstReports: 4,
+    reviewPendingPastStart: 1,
+    findingsWithoutIncident: 1,
+    openIncidentFindings: 0,
+    closedIncidentFindings: 0,
   });
   const oldDay = await service.overview(await actor(id.safety), id.site, {
     date,

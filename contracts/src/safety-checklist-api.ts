@@ -42,6 +42,11 @@ export interface ChecklistItemResponse extends ChecklistItemInput {
   position: number;
 }
 export interface ChecklistResultResponse {
+  linkedIncident?: {
+    id: string;
+    title: string;
+    status: import('./safety-workflow-api.js').IncidentStatus;
+  } | null;
   id: string;
   itemId: string;
   answer: ChecklistAnswer;
@@ -62,6 +67,7 @@ export interface ChecklistSubmissionResponse {
   results: ChecklistResultResponse[];
 }
 export interface ChecklistResponse {
+  firstSubmittedAt?: string | null;
   id: string;
   siteId: string;
   contractorId: string;

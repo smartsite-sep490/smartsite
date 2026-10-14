@@ -46,7 +46,7 @@ LEFT JOIN LATERAL (
 WHERE w.site_id=$1 AND w.created_at < (($2::date+1)::timestamp AT TIME ZONE $3)
 AND (w.is_active OR s.worker_id IS NOT NULL)
 AND ($4::uuid IS NULL OR w.contractor_id=$4)
-ORDER BY w.display_name,w.id`;
+AND (tm.team_id=ANY($5::uuid[]) OR ($6::boolean AND tm.team_id IS NULL))`;
 @Injectable()
 export class SafetyWorkContextService {
   constructor(private readonly source: DataSource) {}
@@ -78,39 +78,95 @@ export class SafetyWorkContextService {
     }
     return query;
   }
-  private async workers(
+  private async teamPage(
     m: EntityManager,
     siteId: string,
     q: SafetyOverviewFilters,
-  ): Promise<SafetyOverviewWorker[]> {
-    const rows = (await m.query(workerProjection, [
-      siteId,
-      q.date,
-      q.timezone,
-      q.contractorId ?? null,
-    ])) as (Omit<SafetyOverviewWorker, 'startsAt' | 'endsAt'> & {
+    offset: number,
+    limit: number,
+  ) {
+    const where =
+      't.site_id=$1 AND t.created_at<(($2::date+1)::timestamp AT TIME ZONE $3) AND ($4::uuid IS NULL OR t.contractor_id=$4) AND ($5::uuid IS NULL OR t.id=$5)';
+    const args = [siteId, q.date, q.timezone, q.contractorId ?? null, q.teamId ?? null];
+    const [count] = await m.query(
+      'SELECT count(*)::int AS total FROM contractor_team t WHERE ' + where,
+      args,
+    );
+    const items = (await m.query(
+      'SELECT t.id,t.name,t.description,t.contractor_id AS "contractorId",c.name AS "contractorName",t.is_active AS "isActive" FROM contractor_team t JOIN contractor c ON c.id=t.contractor_id WHERE ' +
+        where +
+        ' ORDER BY c.name,t.name,t.id LIMIT $6 OFFSET $7',
+      [...args, limit, offset],
+    )) as SafetyOverviewTeam[];
+    return { items, total: count.total as number };
+  }
+  private workerArgs(
+    siteId: string,
+    q: SafetyOverviewFilters,
+    teamIds: string[],
+    unassigned = false,
+  ) {
+    return [siteId, q.date, q.timezone, q.contractorId ?? null, teamIds, unassigned];
+  }
+  private async workerPage(
+    m: EntityManager,
+    siteId: string,
+    q: SafetyOverviewFilters,
+    teamIds: string[],
+    offset: number,
+    limit: number,
+    unassigned = false,
+  ) {
+    const args = this.workerArgs(siteId, q, teamIds, unassigned);
+    const [count] = await m.query(
+      'SELECT count(*)::int AS total FROM (' + workerProjection + ') w',
+      args,
+    );
+    const rows = (await m.query(
+      'SELECT * FROM (' +
+        workerProjection +
+        ') w ORDER BY "displayName",id,"startsAt" LIMIT $7 OFFSET $8',
+      [...args, limit, offset],
+    )) as (Omit<SafetyOverviewWorker, 'startsAt' | 'endsAt'> & {
       startsAt: Date | null;
       endsAt: Date | null;
     })[];
-    return rows.map((r) => ({
-      ...r,
-      startsAt: r.startsAt?.toISOString() ?? null,
-      endsAt: r.endsAt?.toISOString() ?? null,
-    }));
+    return {
+      total: count.total as number,
+      items: rows.map((r) => ({
+        ...r,
+        startsAt: r.startsAt?.toISOString() ?? null,
+        endsAt: r.endsAt?.toISOString() ?? null,
+      })),
+    };
   }
   async contractors(actor: AuthenticatedUser, siteId: string, input: SafetyOverviewQuery) {
     const q = this.filters(input),
       paging = page(input.offset, input.limit);
     return this.source.transaction(async (m) => {
       await this.scope(m, actor, siteId);
-      const rows = (await m.query(
-        `SELECT c.id,c.name FROM contractor c WHERE
-       EXISTS(SELECT 1 FROM contractor_team t WHERE t.contractor_id=c.id AND t.site_id=$1 AND t.created_at<(($2::date+1)::timestamp AT TIME ZONE $3))
-       OR EXISTS(SELECT 1 FROM worker w WHERE w.contractor_id=c.id AND w.site_id=$1 AND w.created_at<(($2::date+1)::timestamp AT TIME ZONE $3))
-       ORDER BY c.name,c.id`,
-        [siteId, q.date, q.timezone],
+      const where =
+        'EXISTS(SELECT 1 FROM contractor_team t WHERE t.contractor_id=c.id AND t.site_id=$1 AND t.created_at<(($2::date+1)::timestamp AT TIME ZONE $3)) OR EXISTS(SELECT 1 FROM worker w WHERE w.contractor_id=c.id AND w.site_id=$1 AND w.created_at<(($2::date+1)::timestamp AT TIME ZONE $3))';
+      const args = [siteId, q.date, q.timezone];
+      const [count] = await m.query(
+        'SELECT count(*)::int AS total FROM contractor c WHERE ' + where,
+        args,
+      );
+      const items = (await m.query(
+        'SELECT c.id,c.name FROM contractor c WHERE ' +
+          where +
+          ' ORDER BY c.name,c.id LIMIT $4 OFFSET $5',
+        [...args, paging.limit, paging.offset],
       )) as { id: string; name: string }[];
-      return { items: rows.slice(paging.offset, paging.offset + paging.limit), total: rows.length };
+      return { items, total: count.total as number };
+    });
+  }
+  async teamOptions(actor: AuthenticatedUser, siteId: string, input: SafetyOverviewQuery) {
+    const q = this.filters(input),
+      paging = page(input.offset, input.limit);
+    return this.source.transaction(async (m) => {
+      await this.scope(m, actor, siteId);
+      return this.teamPage(m, siteId, q, paging.offset, paging.limit);
     });
   }
   async overview(
@@ -120,39 +176,133 @@ export class SafetyWorkContextService {
   ): Promise<SafetyOverviewResponse> {
     const q = this.filters(input),
       paging = page(input.offset, input.limit),
-      unassignedPaging = page(input.unassignedOffset, input.unassignedLimit);
+      unassigned = page(input.unassignedOffset, input.unassignedLimit);
     return this.source.transaction('REPEATABLE READ', async (m) => {
-      const site = await this.scope(m, actor, siteId);
-      const teams = (await m.query(
-        `SELECT t.id,t.name,t.description,t.contractor_id AS "contractorId",c.name AS "contractorName",t.is_active AS "isActive"
-        FROM contractor_team t JOIN contractor c ON c.id=t.contractor_id WHERE t.site_id=$1
-        AND t.created_at< (($2::date+1)::timestamp AT TIME ZONE $3)
-        AND ($4::uuid IS NULL OR t.contractor_id=$4) AND ($5::uuid IS NULL OR t.id=$5) ORDER BY c.name,t.name,t.id`,
-        [siteId, q.date, q.timezone, q.contractorId ?? null, q.teamId ?? null],
-      )) as SafetyOverviewTeam[];
-      const workers = await this.workers(m, siteId, q);
-      for (const t of teams) {
-        const members = workers.filter((w) => w.teamId === t.id);
-        t.workerCount = new Set(members.map((w) => w.id)).size;
-        t.scheduledWorkerCount = new Set(members.filter((w) => w.startsAt).map((w) => w.id)).size;
-      }
-      const unassigned = q.teamId ? [] : workers.filter((w) => !w.teamId);
+      const site = await this.scope(m, actor, siteId),
+        teams = await this.teamPage(m, siteId, q, paging.offset, paging.limit);
+      const summaries = teams.items.length
+        ? await m.query(
+            `SELECT "teamId",count(DISTINCT id)::int AS "workerCount",count(DISTINCT id) FILTER(WHERE "startsAt" IS NOT NULL)::int AS "scheduledWorkerCount",COALESCE(jsonb_agg(DISTINCT jsonb_build_object('startsAt',"startsAt",'endsAt',"endsAt",'shiftName',"shiftName")) FILTER(WHERE "startsAt" IS NOT NULL),'[]'::jsonb) AS "workWindows" FROM (${workerProjection}) w GROUP BY "teamId"`,
+            this.workerArgs(
+              siteId,
+              q,
+              teams.items.map((t) => t.id),
+            ),
+          )
+        : [];
+      for (const t of teams.items)
+        Object.assign(
+          t,
+          summaries.find((r: { teamId: string }) => r.teamId === t.id) ?? {
+            workerCount: 0,
+            scheduledWorkerCount: 0,
+            workWindows: [],
+          },
+        );
       return {
         site,
         date: q.date,
         timezone: q.timezone,
+        teams,
+        unassignedWorkers: q.teamId
+          ? { items: [], total: 0 }
+          : await this.workerPage(m, siteId, q, [], unassigned.offset, unassigned.limit, true),
+      };
+    });
+  }
+  async week(
+    actor: AuthenticatedUser,
+    siteId: string,
+    input: SafetyOverviewQuery,
+  ): Promise<import('@smartsite/contracts').SafetyWeekResponse> {
+    const q = this.filters(input),
+      paging = page(input.offset, input.limit),
+      day = new Date(q.date + 'T12:00:00Z');
+    day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(day);
+      d.setUTCDate(d.getUTCDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+    return this.source.transaction('REPEATABLE READ', async (m) => {
+      const site = await this.scope(m, actor, siteId),
+        teams = await this.teamPage(
+          m,
+          siteId,
+          { ...q, date: dates[6]! },
+          paging.offset,
+          paging.limit,
+        );
+      const rows = teams.items.length
+        ? await m.query(
+            `WITH scheduled AS (
+        SELECT ws.worker_id,ws.work_date::text AS date,s.name AS "shiftName",
+        ((ws.work_date+(s.starts_at AT TIME ZONE s.timezone)::time) AT TIME ZONE s.timezone) AS "startsAt",
+        ((ws.work_date+(s.ends_at AT TIME ZONE s.timezone)::time+(((s.ends_at AT TIME ZONE s.timezone)::date-(s.starts_at AT TIME ZONE s.timezone)::date)*interval '1 day')) AT TIME ZONE s.timezone) AS "endsAt"
+        FROM worker_schedule ws JOIN shift s ON s.id=ws.shift_id AND s.site_id=ws.site_id WHERE ws.site_id=$1 AND ws.is_active AND ws.work_date BETWEEN $2::date AND $3::date
+      ) SELECT tm.team_id AS "teamId",s.date,count(DISTINCT w.id)::int AS "scheduledWorkerCount",jsonb_agg(DISTINCT jsonb_build_object('startsAt',s."startsAt",'endsAt',s."endsAt",'shiftName',s."shiftName")) AS "workWindows"
+      FROM scheduled s JOIN worker w ON w.id=s.worker_id AND w.site_id=$1
+      JOIN contractor_team_membership tm ON tm.worker_id=w.id AND tm.site_id=w.site_id AND tm.contractor_id=w.contractor_id AND tm.joined_at<=s."startsAt" AND (tm.left_at IS NULL OR tm.left_at>s."startsAt")
+      WHERE tm.team_id=ANY($4::uuid[]) GROUP BY tm.team_id,s.date`,
+            [siteId, dates[0], dates[6], teams.items.map((t) => t.id)],
+          )
+        : [];
+      return {
+        site,
+        weekStart: dates[0]!,
+        weekEnd: dates[6]!,
+        timezone: q.timezone,
+        updatedAt: new Date().toISOString(),
         teams: {
-          items: teams.slice(paging.offset, paging.offset + paging.limit),
-          total: teams.length,
-        },
-        unassignedWorkers: {
-          items: unassigned.slice(
-            unassignedPaging.offset,
-            unassignedPaging.offset + unassignedPaging.limit,
-          ),
-          total: unassigned.length,
+          total: teams.total,
+          items: teams.items.map((t) => ({
+            ...t,
+            days: dates.map((date) => ({
+              date,
+              scheduledWorkerCount: 0,
+              workWindows: [],
+              ...rows.find(
+                (r: { teamId: string; date: string }) => r.teamId === t.id && r.date === date,
+              ),
+            })),
+          })),
         },
       };
+    });
+  }
+  async zoneTeams(
+    actor: AuthenticatedUser,
+    siteId: string,
+    zoneId: string,
+    input: SafetyOverviewQuery,
+  ) {
+    const q = this.filters(input),
+      paging = page(input.offset, input.limit);
+    return this.source.transaction(async (m) => {
+      await this.scope(m, actor, siteId);
+      if (
+        !(await m.query('SELECT id FROM zone WHERE id=$1 AND site_id=$2', [uuid(zoneId), siteId]))
+          .length
+      )
+        missing();
+      const where = `g.site_id=$1 AND g.zone_id=$2 AND g.valid_from<(($3::date+1)::timestamp AT TIME ZONE $4) AND g.valid_until>($3::date::timestamp AT TIME ZONE $4)`;
+      const args = [siteId, zoneId, q.date, q.timezone];
+      const [count] = await m.query(
+        'SELECT count(DISTINCT g.team_id)::int AS total FROM ' +
+          safetyTeamZoneContextSql +
+          ' g WHERE ' +
+          where,
+        args,
+      );
+      const items = await m.query(
+        'SELECT DISTINCT t.id,t.name,t.description,t.contractor_id AS "contractorId",c.name AS "contractorName",t.is_active AS "isActive",0 AS "workerCount",0 AS "scheduledWorkerCount" FROM ' +
+          safetyTeamZoneContextSql +
+          ' g JOIN contractor_team t ON t.id=g.team_id JOIN contractor c ON c.id=t.contractor_id WHERE ' +
+          where +
+          ' ORDER BY c.name,t.name,t.id LIMIT $5 OFFSET $6',
+        [...args, paging.limit, paging.offset],
+      );
+      return { items, total: count.total as number };
     });
   }
   async team(
@@ -170,9 +320,18 @@ export class SafetyWorkContextService {
         [siteId, uuid(teamId), q.contractorId ?? null],
       )) as SafetyOverviewTeam[];
       if (!team) missing();
-      const workers = (
-        await this.workers(m, siteId, { ...q, contractorId: team.contractorId })
-      ).filter((w) => w.teamId === teamId);
+      const workers = await this.workerPage(
+        m,
+        siteId,
+        { ...q, contractorId: team.contractorId },
+        [teamId],
+        paging.offset,
+        paging.limit,
+      );
+      const [summary] = await m.query(
+        `SELECT count(DISTINCT id)::int AS "workerCount",count(DISTINCT id) FILTER(WHERE "startsAt" IS NOT NULL)::int AS "scheduledWorkerCount",COALESCE(jsonb_agg(DISTINCT jsonb_build_object('startsAt',"startsAt",'endsAt',"endsAt",'shiftName',"shiftName")) FILTER(WHERE "startsAt" IS NOT NULL),'[]'::jsonb) AS "workWindows" FROM (${workerProjection}) w`,
+        this.workerArgs(siteId, q, [teamId]),
+      );
       const rows = (await m.query(
         `SELECT z.id,z.name,z.code,GREATEST(tp.valid_from,cp.valid_from,p.valid_from) AS "validFrom",
         LEAST(tp.valid_until,cp.valid_until,COALESCE(p.valid_until,tp.valid_until),COALESCE(tp.revoked_at,tp.valid_until),COALESCE(cp.revoked_at,tp.valid_until)) AS "validUntil"
@@ -190,12 +349,8 @@ export class SafetyWorkContextService {
         ...team,
         date: q.date,
         timezone: q.timezone,
-        workerCount: new Set(workers.map((w) => w.id)).size,
-        scheduledWorkerCount: new Set(workers.filter((w) => w.startsAt).map((w) => w.id)).size,
-        workers: {
-          items: workers.slice(paging.offset, paging.offset + paging.limit),
-          total: workers.length,
-        },
+        ...summary,
+        workers,
         zones: rows
           .filter((z) => z.validUntil > z.validFrom)
           .map((z) => ({

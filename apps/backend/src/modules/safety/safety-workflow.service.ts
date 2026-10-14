@@ -159,6 +159,31 @@ export class SafetyWorkflowService {
     });
     return value ?? missing();
   }
+  async checklistIncidentReferences(
+    manager: EntityManager,
+    actor: AuthenticatedUser,
+    siteId: string,
+    resultIds: string[],
+  ) {
+    if (!resultIds.length) return [];
+    const full = this.fullIncident(actor, siteId);
+    const contractors = full
+      ? []
+      : await this.workforce.incidentRepresentativeContractors(manager, siteId, actor.id);
+    if (!full && !contractors.length) return [];
+    return manager.query(
+      `SELECT i.source_checklist_result_id AS "resultId",i.id,i.title,i.status FROM incident i
+      WHERE i.site_id=$1 AND i.source_checklist_result_id=ANY($2::uuid[]) AND ($3::boolean OR (i.contractor_id=ANY($4::uuid[]) AND EXISTS(SELECT 1 FROM corrective_action a WHERE a.incident_id=i.id AND a.assigned_to=$5 AND a.superseded_at IS NULL)))`,
+      [siteId, resultIds, full, contractors, actor.id],
+    ) as Promise<
+      {
+        resultId: string;
+        id: string;
+        title: string;
+        status: import('@smartsite/contracts').IncidentStatus;
+      }[]
+    >;
+  }
   private async task(
     manager: EntityManager,
     siteId: string,

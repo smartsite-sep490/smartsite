@@ -1,3 +1,4 @@
+import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DataSource, type EntityManager } from 'typeorm';
@@ -75,6 +76,7 @@ export class SafetyChecklistService {
     private readonly workforce: WorkforceConfigurationService,
     private readonly uploads: SafetyUploadService,
     private readonly notifications: SchedulingNotificationService,
+    private readonly workflow?: SafetyWorkflowService,
   ) {}
   private full(actor: AuthenticatedUser, siteId: string) {
     return (
@@ -104,21 +106,22 @@ export class SafetyChecklistService {
     )
       denied();
   }
-  private async header(
+  private async headers(
     m: EntityManager,
-    a: SafetyChecklistAssignmentEntity,
-  ): Promise<ChecklistResponse> {
-    const [names] = (await m.query(
-      `SELECT c.name AS "contractorName",t.name AS "teamName",z.name AS "zoneName",u.display_name AS "assignedToName",s.display_name AS "assignedByName" FROM safety_checklist_assignment a LEFT JOIN contractor c ON c.id=a.contractor_id LEFT JOIN contractor_team t ON t.id=a.team_id LEFT JOIN zone z ON z.id=a.zone_id LEFT JOIN app_user u ON u.id=a.assigned_to LEFT JOIN app_user s ON s.id=a.assigned_by WHERE a.id=$1`,
-      [a.id],
-    )) as {
-      contractorName: string | null;
-      teamName: string | null;
-      zoneName: string | null;
-      assignedToName: string | null;
-      assignedByName: string | null;
-    }[];
-    return json({ ...a, ...names });
+    assignments: SafetyChecklistAssignmentEntity[],
+  ): Promise<ChecklistResponse[]> {
+    if (!assignments.length) return [];
+    const rows = (await m.query(
+      `SELECT a.id,c.name AS "contractorName",t.name AS "teamName",z.name AS "zoneName",u.display_name AS "assignedToName",s.display_name AS "assignedByName",(SELECT min(sub.submitted_at) FROM safety_checklist_submission sub WHERE sub.assignment_id=a.id) AS "firstSubmittedAt" FROM safety_checklist_assignment a LEFT JOIN contractor c ON c.id=a.contractor_id LEFT JOIN contractor_team t ON t.id=a.team_id LEFT JOIN zone z ON z.id=a.zone_id LEFT JOIN app_user u ON u.id=a.assigned_to LEFT JOIN app_user s ON s.id=a.assigned_by WHERE a.id=ANY($1::uuid[])`,
+      [assignments.map((a) => a.id)],
+    )) as (Pick<
+      ChecklistResponse,
+      'id' | 'contractorName' | 'teamName' | 'zoneName' | 'assignedToName' | 'assignedByName'
+    > & { firstSubmittedAt: Date | null })[];
+    return assignments.map((a) => json({ ...a, ...rows.find((r) => r.id === a.id) }));
+  }
+  private async header(m: EntityManager, a: SafetyChecklistAssignmentEntity) {
+    return (await this.headers(m, [a]))[0]!;
   }
   private async detail(
     m: EntityManager,
@@ -144,12 +147,24 @@ export class SafetyChecklistService {
       mediaType: 'image/jpeg' | 'image/png' | 'application/pdf';
       size: number;
     }[];
-    const links = this.full(actor, a.siteId)
-      ? ((await m.query(
-          `SELECT source_checklist_result_id AS "resultId",id FROM incident WHERE site_id=$1 AND source_checklist_result_id=ANY($2::uuid[])`,
-          [a.siteId, results.map((r) => r.id)],
-        )) as { resultId: string; id: string }[])
-      : [];
+    const links = this.workflow
+      ? await this.workflow.checklistIncidentReferences(
+          m,
+          actor,
+          a.siteId,
+          results.map((r) => r.id),
+        )
+      : this.full(actor, a.siteId)
+        ? ((await m.query(
+            'SELECT source_checklist_result_id AS "resultId",id,title,status FROM incident WHERE site_id=$1 AND source_checklist_result_id=ANY($2::uuid[])',
+            [a.siteId, results.map((r) => r.id)],
+          )) as {
+            resultId: string;
+            id: string;
+            title: string;
+            status: import('@smartsite/contracts').IncidentStatus;
+          }[])
+        : [];
     const audits = await m.getRepository(SafetyWorkflowAuditEntity).find({
       where: { siteId: a.siteId, resourceType: 'CHECKLIST', resourceId: a.id },
       order: { occurredAt: 'ASC', id: 'ASC' },
@@ -175,6 +190,10 @@ export class SafetyChecklistService {
             .filter((e) => e.resultId === r.id)
             .map((e) => ({ id: e.id, mediaType: e.mediaType, size: e.size })),
           incidentId: links.find((l) => l.resultId === r.id)?.id ?? null,
+          linkedIncident: (() => {
+            const linked = links.find((l) => l.resultId === r.id);
+            return linked ? { id: linked.id, title: linked.title, status: linked.status } : null;
+          })(),
         })),
     }));
     return {
@@ -277,7 +296,7 @@ export class SafetyChecklistService {
         .skip(paging.offset)
         .take(paging.limit)
         .getManyAndCount();
-      return { items: await Promise.all(rows.map((r) => this.header(m, r))), total };
+      return { items: await this.headers(m, rows), total };
     });
   }
   private async execute(

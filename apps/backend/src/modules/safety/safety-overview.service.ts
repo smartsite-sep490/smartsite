@@ -16,6 +16,8 @@ import { CameraConfigurationService } from '../cameras/camera-configuration.serv
 import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { SafetyAlertEntity } from '../../database/entities/safety-alert.entity.js';
 import { attentionAlertSql } from './alerts/safety-alert-query.service.js';
+import { SafetyAlertEvidenceService } from './alerts/safety-alert-evidence.service.js';
+import { UserRole } from '../../database/entities/user.entity.js';
 import { missing, uuid } from '../../common/configuration/commands.js';
 @Injectable()
 export class SafetyOverviewService {
@@ -24,9 +26,19 @@ export class SafetyOverviewService {
     private readonly cameras: CameraConfigurationService,
     private readonly db: DataSource,
     private readonly workflow: SafetyWorkflowService,
+    private readonly evidence?: SafetyAlertEvidenceService,
   ) {}
   contractors(actor: AuthenticatedUser, siteId: string, q: SafetyOverviewQuery) {
     return this.workforce.contractors(actor, siteId, q);
+  }
+  teamOptions(actor: AuthenticatedUser, siteId: string, q: SafetyOverviewQuery) {
+    return this.workforce.teamOptions(actor, siteId, q);
+  }
+  week(actor: AuthenticatedUser, siteId: string, q: SafetyOverviewQuery) {
+    return this.workforce.week(actor, siteId, q);
+  }
+  zoneTeams(actor: AuthenticatedUser, siteId: string, zoneId: string, q: SafetyOverviewQuery) {
+    return this.workforce.zoneTeams(actor, siteId, zoneId, q);
   }
   async overview(actor: AuthenticatedUser, siteId: string, q: SafetyOverviewQuery) {
     const result = await this.workforce.overview(actor, siteId, q);
@@ -64,8 +76,19 @@ export class SafetyOverviewService {
        count(*) FILTER(WHERE a.status='ACCEPTED' AND last.failed)::int AS "recordedWithFindings",
        count(*) FILTER(WHERE a.status='ACCEPTED' AND NOT last.failed)::int AS "recordedWithoutFailures",
        count(*) FILTER(WHERE a.status IN ('ASSIGNED','IN_PROGRESS','SUBMITTED') AND a.starts_at<=$5::timestamptz)::int AS "pastPlannedStart"
+       ,count(*) FILTER(WHERE a.status<>'CANCELLED' AND last.first_submitted_at IS NULL AND a.starts_at<=$5::timestamptz)::int AS "pastStartWithoutReport"
+       ,count(*) FILTER(WHERE last.first_submitted_at>a.starts_at)::int AS "lateFirstReports"
+       ,count(*) FILTER(WHERE a.status='SUBMITTED' AND a.starts_at<=$5::timestamptz)::int AS "reviewPendingPastStart"
+       ,COALESCE(sum(last.unlinked) FILTER(WHERE a.status='ACCEPTED'),0)::int AS "findingsWithoutIncident"
+       ,COALESCE(sum(last.open_cases) FILTER(WHERE a.status='ACCEPTED'),0)::int AS "openIncidentFindings"
+       ,COALESCE(sum(last.closed_cases) FILTER(WHERE a.status='ACCEPTED'),0)::int AS "closedIncidentFindings"
        FROM safety_checklist_assignment a LEFT JOIN LATERAL(
-        SELECT s.status,EXISTS(SELECT 1 FROM safety_checklist_item_result r WHERE r.submission_id=s.id AND r.answer='FAIL') AS failed
+        SELECT s.status,
+        (SELECT min(first.submitted_at) FROM safety_checklist_submission first WHERE first.assignment_id=a.id) AS first_submitted_at,
+        EXISTS(SELECT 1 FROM safety_checklist_item_result r WHERE r.submission_id=s.id AND r.answer='FAIL') AS failed,
+        (SELECT count(*) FROM safety_checklist_item_result r LEFT JOIN incident i ON i.source_checklist_result_id=r.id AND i.site_id=a.site_id WHERE r.submission_id=s.id AND r.answer='FAIL' AND i.id IS NULL) AS unlinked,
+        (SELECT count(*) FROM safety_checklist_item_result r JOIN incident i ON i.source_checklist_result_id=r.id AND i.site_id=a.site_id WHERE r.submission_id=s.id AND r.answer='FAIL' AND i.status<>'CLOSED') AS open_cases,
+        (SELECT count(*) FROM safety_checklist_item_result r JOIN incident i ON i.source_checklist_result_id=r.id AND i.site_id=a.site_id WHERE r.submission_id=s.id AND r.answer='FAIL' AND i.status='CLOSED') AS closed_cases
         FROM safety_checklist_submission s WHERE s.assignment_id=a.id ORDER BY s.submitted_at DESC,s.id DESC LIMIT 1
        ) last ON TRUE WHERE a.site_id=$1 AND a.team_id=ANY($2::uuid[]) AND a.status<>'CANCELLED'
        AND a.starts_at<(($3::date+1)::timestamp AT TIME ZONE $4) AND a.ends_at>($3::date::timestamp AT TIME ZONE $4) GROUP BY a.team_id`,
@@ -116,6 +139,42 @@ export class SafetyOverviewService {
       ),
     );
     await this.summaries(siteId, q, [detail], detail);
+    if (
+      actor.roleAssignments.some(
+        (r) =>
+          (r.role === UserRole.ADMIN && r.siteId === null) ||
+          (r.role === UserRole.SAFETY_OFFICER && r.siteId === siteId),
+      )
+    ) {
+      const rows = detail.cameras.length
+        ? await this.db.query(
+            `SELECT DISTINCT ON(e.camera_external_id,a.zone_id) e.camera_external_id,a.zone_id,a.id AS "alertId",e.event_id AS "eventId",e.captured_at AS "capturedAt",e.raw_payload AS "rawPayload"
+        FROM safety_alert a JOIN alert_detection_mapping am ON am.alert_id=a.id JOIN ai_observation_event e ON e.event_id=am.event_id
+        WHERE a.site_id=$1 AND e.camera_external_id=ANY($2::varchar[]) AND e.captured_at>=($3::date::timestamp AT TIME ZONE $4) AND e.captured_at<(($3::date+1)::timestamp AT TIME ZONE $4) AND ${attentionAlertSql}
+        ORDER BY e.camera_external_id,a.zone_id,e.captured_at DESC,e.event_id,a.id`,
+            [siteId, detail.cameras.map((c) => c.externalId), q.date, q.timezone],
+          )
+        : [];
+      for (const camera of detail.cameras) {
+        const event = rows.find(
+          (r: { camera_external_id: string; zone_id: string }) =>
+            r.camera_external_id === camera.externalId && r.zone_id === camera.zoneId,
+        );
+        const item =
+          event &&
+          this.evidence
+            ?.summarize(event.rawPayload, event.eventId)
+            .find((e) => e.available && e.kind !== 'CROP');
+        camera.latestEvidence = event
+          ? {
+              alertId: event.alertId,
+              eventId: event.eventId,
+              capturedAt: new Date(event.capturedAt).toISOString(),
+              evidenceIndex: item?.index ?? null,
+            }
+          : null;
+      }
+    }
     return detail;
   }
   async alert(

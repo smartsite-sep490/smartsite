@@ -51,6 +51,61 @@ export class SafetyOverviewController {
       ...pagination(offset, limit),
     });
   }
+  @Get('safety-overview/team-options')
+  @Header('Cache-Control', 'private, no-store')
+  teamOptions(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('date') date: string,
+    @Query('timezone') timezone: string,
+    @Query('contractorId') contractorId?: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.teamOptions(req.user!, siteId, {
+      date,
+      timezone,
+      contractorId,
+      ...pagination(offset, limit),
+    });
+  }
+  @Get('safety-overview/week')
+  @Header('Cache-Control', 'private, no-store')
+  week(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query('date') date: string,
+    @Query('timezone') timezone: string,
+    @Query('contractorId') contractorId?: string,
+    @Query('teamId') teamId?: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.week(req.user!, siteId, {
+      date,
+      timezone,
+      contractorId,
+      teamId,
+      ...pagination(offset, limit),
+    });
+  }
+  @Get('safety-overview/zones/:zoneId/teams')
+  @Header('Cache-Control', 'private, no-store')
+  zoneTeams(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('zoneId') zoneId: string,
+    @Query('date') date: string,
+    @Query('timezone') timezone: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.zoneTeams(req.user!, siteId, zoneId, {
+      date,
+      timezone,
+      ...pagination(offset, limit),
+    });
+  }
   @Get('safety-overview/teams/:id')
   @Header('Cache-Control', 'private, no-store')
   team(

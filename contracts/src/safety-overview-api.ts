@@ -21,6 +21,12 @@ export interface SafetyOverviewWorker {
   isActive: boolean;
 }
 export interface SafetyChecklistSummary {
+  pastStartWithoutReport?: number;
+  lateFirstReports?: number;
+  reviewPendingPastStart?: number;
+  findingsWithoutIncident?: number;
+  openIncidentFindings?: number;
+  closedIncidentFindings?: number;
   total: number;
   noChecklistAssigned: boolean;
   notSubmitted: number;
@@ -30,7 +36,13 @@ export interface SafetyChecklistSummary {
   recordedWithoutFailures: number;
   pastPlannedStart: number;
 }
+export interface SafetyWorkWindow {
+  startsAt: string;
+  endsAt: string;
+  shiftName: string;
+}
 export interface SafetyOverviewTeam {
+  workWindows?: SafetyWorkWindow[];
   attentionAlertCount?: number;
   checklistSummary?: SafetyChecklistSummary;
   id: string;
@@ -50,7 +62,14 @@ export interface SafetyOverviewZone {
   validFrom: string;
   validUntil: string;
 }
+export interface SafetyCameraEvidenceReference {
+  alertId: string;
+  eventId: string;
+  capturedAt: string;
+  evidenceIndex: number | null;
+}
 export interface SafetyOverviewCamera {
+  latestEvidence?: SafetyCameraEvidenceReference | null;
   attentionAlertCount?: number;
   id: string;
   name: string;
@@ -90,3 +109,23 @@ export interface SafetyAlertWorkContextResponse {
   relatedTeams: SafetyOverviewTeam[];
   warning: string;
 }
+
+export interface SafetyWeekTeam extends Pick<
+  SafetyOverviewTeam,
+  'id' | 'name' | 'description' | 'contractorId' | 'contractorName' | 'isActive'
+> {
+  days: { date: string; scheduledWorkerCount: number; workWindows: SafetyWorkWindow[] }[];
+}
+export interface SafetyWeekResponse {
+  site: SafetyOverviewResponse['site'];
+  weekStart: string;
+  weekEnd: string;
+  timezone: string;
+  updatedAt: string;
+  teams: Page<SafetyWeekTeam>;
+}
+
+export type SafetyTeamOption = Pick<
+  SafetyOverviewTeam,
+  'id' | 'name' | 'description' | 'contractorId' | 'contractorName' | 'isActive'
+>;
