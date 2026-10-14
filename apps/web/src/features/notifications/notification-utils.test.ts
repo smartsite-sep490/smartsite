@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import i18n, { translate } from '../../i18n';
 import type { UserNotificationResponse } from '@smartsite/api-client';
-import { notificationHref, formatNotificationDisplayMessage } from './notification-utils';
+import {
+  notificationHref,
+  formatNotificationDisplayMessage,
+  formatNotificationTitle,
+} from './notification-utils';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('notification-utils', () => {
   it('opens the worker schedule for a denied entry without inventing an attendance day', () => {
@@ -61,4 +70,28 @@ it('opens a checklist notification in the shared Safety workspace with its Site'
       target: { siteId: 'site/a', checklistId: 'checklist/a', tab: 'checklists' },
     }),
   ).toBe('/incidents?siteId=site%2Fa&checklistId=checklist%2Fa&tab=checklists');
+});
+
+it('preserves authored Safety bodies even when they exactly match known system copy', async () => {
+  const message = 'Checklist report recorded';
+  await i18n.changeLanguage('vi');
+  expect(translate('safety_workspace.checklist_report_recorded')).not.toBe(message);
+  for (const event of [
+    'SAFETY_HANDOVER',
+    'CHECKLIST_ASSIGNED',
+    'CHECKLIST_SUBMITTED',
+    'CHECKLIST_RETURNED',
+    'CHECKLIST_RECORDED',
+  ] as const) {
+    expect(formatNotificationDisplayMessage({ event, message })).toBe(message);
+    expect(
+      formatNotificationDisplayMessage({ event, message: '  Ghi chú do người dùng nhập\nα <>&  ' }),
+    ).toBe('  Ghi chú do người dùng nhập\nα <>&  ');
+  }
+  expect(formatNotificationTitle({ event: 'CHECKLIST_RECORDED', title: message })).toBe(
+    'Đã ghi nhận báo cáo phiếu kiểm tra',
+  );
+  await i18n.changeLanguage('en');
+  expect(formatNotificationDisplayMessage({ event: 'CHECKLIST_RECORDED', message })).toBe(message);
+  expect(formatNotificationTitle({ event: 'CHECKLIST_RECORDED', title: message })).toBe(message);
 });

@@ -2,14 +2,16 @@ import { SafetyOverviewView } from './SafetyOverviewView';
 import { CreateChecklistForm, ReportChecklistForm } from './ChecklistForms';
 // @vitest-environment jsdom
 import { afterEach, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { SafetyZoneContext } from './SafetyZoneContext';
 import { SafetyAlertsView } from '../alerts/SafetyAlertsView';
-afterEach(() => {
+import i18n from '../../i18n';
+afterEach(async () => {
   cleanup();
   vi.restoreAllMocks();
+  await i18n.changeLanguage('en');
 });
 const siteId = 'site-a';
 const user = {
@@ -69,6 +71,46 @@ it('PPE navigation still opens Alerts instead of Overview', async () => {
     'true',
   );
   expect(await screen.findByLabelText('Alert type')).not.toBeNull();
+});
+
+it('localizes workspace tabs both ways while retaining the chosen checklist tab and open draft', async () => {
+  await i18n.changeLanguage('en');
+  mount();
+  fireEvent.click(await screen.findByRole('button', { name: 'Checklists' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'New checklist' }));
+  fireEvent.change(screen.getByLabelText('Work description'), {
+    target: { value: 'Safety overview\nMy authored work' },
+  });
+  fireEvent.change(screen.getByLabelText('Criterion 1'), {
+    target: { value: 'Checklist report recorded' },
+  });
+  const description = screen.getByLabelText('Work description');
+  await act(async () => {
+    await i18n.changeLanguage('vi');
+  });
+  expect(screen.getByRole('button', { name: 'Phiếu kiểm tra' }).getAttribute('aria-pressed')).toBe(
+    'true',
+  );
+  expect(screen.getByRole('button', { name: 'Tổng quan' }).getAttribute('aria-pressed')).toBe(
+    'false',
+  );
+  expect(screen.getByRole('button', { name: 'Cảnh báo' })).not.toBeNull();
+  expect(screen.getByRole('button', { name: 'Sự cố' })).not.toBeNull();
+  expect(screen.getByLabelText('Mô tả công việc')).toBe(description);
+  expect((description as HTMLTextAreaElement).value).toBe('Safety overview\nMy authored work');
+  expect((screen.getByLabelText('Tiêu chí 1') as HTMLTextAreaElement).value).toBe(
+    'Checklist report recorded',
+  );
+  await act(async () => {
+    await i18n.changeLanguage('en');
+  });
+  expect(screen.getByRole('button', { name: 'Checklists' }).getAttribute('aria-pressed')).toBe(
+    'true',
+  );
+  expect(screen.getByLabelText('Work description')).toBe(description);
+  expect((screen.getByLabelText('Criterion 1') as HTMLTextAreaElement).value).toBe(
+    'Checklist report recorded',
+  );
 });
 
 it('checklist report keeps missing evidence editable and previews/removes a selected image', async () => {
@@ -204,35 +246,31 @@ it('Overview exposes independent unassigned pagination and opens the counted tea
   );
   fireEvent.click(screen.getByRole('button', { name: 'View checklists for this date' }));
   expect(checklists).toHaveBeenCalledWith('team-a', expect.any(String), 'Height team');
-  const weekly = vi
-    .spyOn(client, 'getSafetyWeek')
-    .mockResolvedValue({
-      site: { id: siteId, name: 'Site A', code: 'A' },
-      weekStart: '2026-10-12',
-      weekEnd: '2026-10-18',
-      timezone: 'Asia/Ho_Chi_Minh',
-      updatedAt: '2026-10-14T01:00:00Z',
-      teams: {
-        items: [
-          {
-            ...team,
-            days: Array.from({ length: 7 }, (_, i) => ({
-              date: '2026-10-' + (12 + i),
-              scheduledWorkerCount: i === 3 ? 3 : 0,
-              workWindows: [],
-            })),
-          },
-        ],
-        total: 1,
-      },
-    });
+  const weekly = vi.spyOn(client, 'getSafetyWeek').mockResolvedValue({
+    site: { id: siteId, name: 'Site A', code: 'A' },
+    weekStart: '2026-10-12',
+    weekEnd: '2026-10-18',
+    timezone: 'Asia/Ho_Chi_Minh',
+    updatedAt: '2026-10-14T01:00:00Z',
+    teams: {
+      items: [
+        {
+          ...team,
+          days: Array.from({ length: 7 }, (_, i) => ({
+            date: '2026-10-' + (12 + i),
+            scheduledWorkerCount: i === 3 ? 3 : 0,
+            workWindows: [],
+          })),
+        },
+      ],
+      total: 1,
+    },
+  });
   fireEvent.click(screen.getByRole('button', { name: /^Week$/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'Height team on 2026-10-15' }));
   fireEvent.click(await screen.findByRole('button', { name: 'View checklists for this date' }));
   expect(checklists).toHaveBeenLastCalledWith('team-a', '2026-10-15', 'Height team');
-  expect(
-    screen.getByRole('button', { name: /^Week$/ }).getAttribute('aria-pressed'),
-  ).toBe('true');
+  expect(screen.getByRole('button', { name: /^Week$/ }).getAttribute('aria-pressed')).toBe('true');
   expect(weekly.mock.calls.length).toBeLessThanOrEqual(2);
 });
 

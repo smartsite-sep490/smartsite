@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -17,6 +19,7 @@ import {
   dangerClass,
   fieldClass,
   date,
+  label,
   useWorkflowCommand,
 } from './safety-workflow';
 import {
@@ -52,6 +55,8 @@ export function SafetyChecklistsView(
     onIncident: (id: string) => void;
   },
 ) {
+  useTranslation();
+
   const safety = hasRole(p, 'SAFETY_OFFICER'),
     representative = hasRole(p, 'CONTRACTOR_REPRESENTATIVE');
   const [status, setStatus] = useState(''),
@@ -141,13 +146,13 @@ export function SafetyChecklistsView(
     <div className="space-y-5">
       {p.context && (
         <div className={cardClass}>
-          <p>Checklists: {p.context.caption}</p>
+          <p>{tr('safety_workspace.checklists_value1', { value1: p.context.caption })}</p>
           <div className="mt-2 flex gap-3">
             <button className={buttonClass} onClick={p.onBackToOverview}>
-              Back to overview
+              {tr('safety_workspace.back_to_overview')}
             </button>
             <button className={buttonClass} onClick={p.onClearContext}>
-              Clear context filter
+              {tr('safety_workspace.clear_context_filter')}
             </button>
           </div>
         </div>
@@ -160,10 +165,12 @@ export function SafetyChecklistsView(
       >
         <div>
           <h2 className="text-xl font-bold">
-            {representative && !safety ? 'My checklists' : 'Safety checklists'}
+            {representative && !safety
+              ? tr('safety_workspace.my_checklists')
+              : tr('safety_workspace.safety_checklists')}
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Pre-work reports and follow-up.
+            {tr('safety_workspace.pre_work_reports_and_follow_up')}
           </p>
         </div>
         {safety && (
@@ -174,14 +181,14 @@ export function SafetyChecklistsView(
               open({ op: 'create', version: 0 });
             }}
           >
-            New checklist
+            {tr('safety_workspace.new_checklist')}
           </button>
         )}
       </div>
       {!editor && <RequestError error={mutation.error} retry={reload} />}
       {mutation.isSuccess && (
         <p role="status" className="rounded-lg bg-[var(--semantic-green-bg)] p-3 text-sm">
-          Change recorded.
+          {tr('common.change_recorded')}
         </p>
       )}
       <div
@@ -191,7 +198,7 @@ export function SafetyChecklistsView(
         }
       >
         <label className="text-sm font-semibold">
-          Status
+          {tr('common.status')}
           <select
             className={fieldClass}
             value={status}
@@ -201,10 +208,10 @@ export function SafetyChecklistsView(
               setOffset(0);
             }}
           >
-            <option value="">All statuses</option>
+            <option value="">{tr('common.all_statuses_8ee573')}</option>
             {statuses.map((s) => (
               <option key={s} value={s}>
-                {s === 'ACCEPTED' ? 'Recorded' : s.toLowerCase().replaceAll('_', ' ')}
+                {s === 'ACCEPTED' ? tr('safety_workspace.recorded') : label(s)}
               </option>
             ))}
           </select>
@@ -222,19 +229,25 @@ export function SafetyChecklistsView(
             }}
           />
         )}
-        <button className={buttonClass} aria-label="Refresh checklists" onClick={reload}>
-          Refresh
+        <button
+          className={buttonClass}
+          aria-label={tr('safety_workspace.refresh_checklists')}
+          onClick={reload}
+        >
+          {tr('common.refresh')}
         </button>
       </div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
         <section
-          aria-label="Checklist list"
+          aria-label={tr('safety_workspace.checklist_list')}
           className={'min-w-0 space-y-3 ' + (mobileDetail ? 'hidden lg:block' : '')}
         >
-          {list.isPending && p.active && <p className={cardClass}>Loading checklists…</p>}
+          {list.isPending && p.active && (
+            <p className={cardClass}>{tr('safety_workspace.loading_checklists')}</p>
+          )}
           <RequestError error={list.error} retry={() => void list.refetch()} />
           {list.data && !list.data.items.length && (
-            <p className={cardClass}>No checklists found.</p>
+            <p className={cardClass}>{tr('safety_workspace.no_checklists_found')}</p>
           )}
           {list.data?.items.map((a) => (
             <button
@@ -253,12 +266,13 @@ export function SafetyChecklistsView(
               }}
             >
               <p className="text-xs font-semibold text-[var(--text-secondary)]">
-                {a.contractorName ?? 'Contractor unavailable'} · {a.teamName ?? 'Team unavailable'}
+                {a.contractorName ?? tr('common.contractor_unavailable')} ·{' '}
+                {a.teamName ?? tr('safety_workspace.team_unavailable')}
               </p>
               <strong className="block break-words">{a.description}</strong>
               <StatusBadge
                 value={a.status}
-                text={a.status === 'ACCEPTED' ? 'Recorded' : undefined}
+                text={a.status === 'ACCEPTED' ? tr('safety_workspace.recorded') : undefined}
               />
               <p className="text-xs text-[var(--text-secondary)]">
                 {date(a.startsAt)} – {date(a.endsAt)}
@@ -268,14 +282,14 @@ export function SafetyChecklistsView(
           <Pager offset={offset} total={list.data?.total ?? 0} onChange={setOffset} />
         </section>
         <section
-          aria-label="Checklist detail"
+          aria-label={tr('safety_workspace.checklist_detail')}
           className={'min-w-0 space-y-4 ' + (!mobileDetail ? 'hidden lg:block' : '')}
         >
           <button className={buttonClass + ' lg:hidden'} onClick={() => setMobileDetail(false)}>
-            Back to checklists
+            {tr('safety_workspace.back_to_checklists')}
           </button>
           {detail.isPending && selectedId && p.active && (
-            <p className={cardClass}>Loading checklist…</p>
+            <p className={cardClass}>{tr('safety_workspace.loading_checklist')}</p>
           )}
           <RequestError error={detail.error} retry={() => void detail.refetch()} />
           {current && (
@@ -285,46 +299,52 @@ export function SafetyChecklistsView(
                   <h3 className="text-xl font-bold break-words">{current.description}</h3>
                   <StatusBadge
                     value={current.status}
-                    text={current.status === 'ACCEPTED' ? 'Recorded' : undefined}
+                    text={
+                      current.status === 'ACCEPTED' ? tr('safety_workspace.recorded') : undefined
+                    }
                   />
                 </div>
                 <dl className="grid gap-3 text-sm sm:grid-cols-2">
                   {[
-                    ['Contractor', current.contractorName],
-                    ['Team', current.teamName],
-                    ['Zone', current.zoneName],
-                    ['Assigned to', current.assignedToName],
+                    [tr('common.contractor'), current.contractorName],
+                    [tr('labels.TEAM'), current.teamName],
+                    [tr('common.zone'), current.zoneName],
+                    [tr('common.assigned_to'), current.assignedToName],
                   ].map(([name, value]) => (
                     <div key={name}>
                       <dt className="text-xs font-semibold text-[var(--text-secondary)]">{name}</dt>
-                      <dd>{value ?? 'Unavailable'}</dd>
+                      <dd>{value ?? tr('labels.UNAVAILABLE')}</dd>
                     </div>
                   ))}
                 </dl>
                 <p className="text-sm">
-                  Work window: {date(current.startsAt)} – {date(current.endsAt)}
+                  {tr('safety_workspace.work_window_value1_value2', {
+                    value1: date(current.startsAt),
+                    value2: date(current.endsAt),
+                  })}
                 </p>
                 <p className="text-sm">
-                  First report:{' '}
-                  {current.firstSubmittedAt
-                    ? (new Date(current.firstSubmittedAt) <= new Date(current.startsAt)
-                        ? 'Submitted before planned start'
-                        : 'Submitted after planned start') +
-                      ' · ' +
-                      date(current.firstSubmittedAt)
-                    : 'Not submitted'}
+                  {tr('safety_workspace.first_report_value1', {
+                    value1: current.firstSubmittedAt
+                      ? (new Date(current.firstSubmittedAt) <= new Date(current.startsAt)
+                          ? tr('safety_workspace.submitted_before_planned_start')
+                          : tr('safety_workspace.submitted_after_planned_start')) +
+                        ' · ' +
+                        date(current.firstSubmittedAt)
+                      : tr('safety_workspace.not_submitted'),
+                  })}
                 </p>
                 {current.status === 'SUBMITTED' && (
-                  <p className="text-sm">Awaiting Safety review.</p>
+                  <p className="text-sm">{tr('safety_workspace.awaiting_safety_review')}</p>
                 )}
                 {new Date(current.endsAt) < new Date() &&
                   !['ACCEPTED', 'CANCELLED'].includes(current.status) && (
                     <p className="text-sm text-[var(--semantic-red-text)]">
-                      Work window ended; report pending.
+                      {tr('safety_workspace.work_window_ended_report_pending')}
                     </p>
                   )}
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Recorded reports do not grant work permission.
+                  {tr('safety_workspace.recorded_reports_do_not_grant_work_permission')}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {representative &&
@@ -348,7 +368,7 @@ export function SafetyChecklistsView(
                           })
                         }
                       >
-                        Start checklist
+                        {tr('safety_workspace.start_checklist')}
                       </button>
                     )}
                   {representative &&
@@ -358,7 +378,7 @@ export function SafetyChecklistsView(
                         className={primaryClass}
                         onClick={() => open({ op: 'submit', version: current.version })}
                       >
-                        Report checklist
+                        {tr('safety_workspace.report_checklist')}
                       </button>
                     )}
                   {safety && pending && pending.submittedBy !== p.user.id && (
@@ -367,13 +387,13 @@ export function SafetyChecklistsView(
                         className={primaryClass}
                         onClick={() => open({ op: 'record', version: current.version })}
                       >
-                        Record checklist
+                        {tr('safety_workspace.record_checklist')}
                       </button>
                       <button
                         className={buttonClass}
                         onClick={() => open({ op: 'return', version: current.version })}
                       >
-                        Request update
+                        {tr('safety_workspace.request_update')}
                       </button>
                     </>
                   )}
@@ -382,19 +402,25 @@ export function SafetyChecklistsView(
                       className={dangerClass}
                       onClick={() => open({ op: 'cancel', version: current.version })}
                     >
-                      Cancel checklist
+                      {tr('safety_workspace.cancel_checklist')}
                     </button>
                   )}
                 </div>
                 <TechnicalDetails>
-                  <p>Assigned by {current.assignedByName ?? 'Unavailable'}</p>
-                  <p>Checklist {current.id}</p>
-                  <p>Version {current.version}</p>
+                  <p>
+                    {tr('common.assigned_by_value', {
+                      value1: current.assignedByName ?? tr('labels.UNAVAILABLE'),
+                    })}
+                  </p>
+                  <p>{tr('safety_workspace.checklist_value1', { value1: current.id })}</p>
+                  <p>{tr('common.version_value', { value1: current.version })}</p>
                 </TechnicalDetails>
               </article>
               <details key={current.id} open={!current.submissions.length} className={cardClass}>
                 <summary className="cursor-pointer font-semibold">
-                  Assigned criteria ({current.items.length})
+                  {tr('safety_workspace.assigned_criteria_value1', {
+                    value1: current.items.length,
+                  })}
                 </summary>
                 <ol className="list-decimal space-y-2 pl-5">
                   {current.items.map((i) => (
@@ -402,7 +428,7 @@ export function SafetyChecklistsView(
                       {i.text}
                       {i.evidenceRequired && (
                         <span className="ml-2 text-xs text-[var(--text-secondary)]">
-                          Evidence required for Pass
+                          {tr('safety_workspace.evidence_required_for_pass')}
                         </span>
                       )}
                     </li>
@@ -410,7 +436,9 @@ export function SafetyChecklistsView(
                 </ol>
               </details>
               {!current.submissions.length && (
-                <p className={cardClass}>No report has been submitted yet.</p>
+                <p className={cardClass}>
+                  {tr('safety_workspace.no_report_has_been_submitted_yet')}
+                </p>
               )}
               {[...current.submissions].reverse().map((submission, index) =>
                 index === 0 ? (
@@ -428,8 +456,10 @@ export function SafetyChecklistsView(
                 ) : (
                   <details key={submission.id} className={cardClass}>
                     <summary className="cursor-pointer text-sm font-semibold">
-                      Earlier report · {date(submission.submittedAt)} ·{' '}
-                      {submission.status.toLowerCase()}
+                      {tr('safety_workspace.earlier_report_value1_value2', {
+                        value1: date(submission.submittedAt),
+                        value2: label(submission.status),
+                      })}
                     </summary>
                     <ChecklistReport
                       p={p}
@@ -448,7 +478,9 @@ export function SafetyChecklistsView(
             </>
           )}
           {!selectedId && (
-            <p className={cardClass}>Select a checklist to see its criteria and reports.</p>
+            <p className={cardClass}>
+              {tr('safety_workspace.select_a_checklist_to_see_its_criteria_and_reports')}
+            </p>
           )}
         </section>
       </div>
@@ -456,12 +488,12 @@ export function SafetyChecklistsView(
         <Dialog
           title={
             {
-              create: 'Assign checklist',
-              submit: 'Report checklist',
-              record: 'Record checklist',
-              return: 'Request checklist update',
-              cancel: 'Cancel checklist',
-              incident: 'Create incident from finding',
+              create: tr('safety_workspace.assign_checklist'),
+              submit: tr('safety_workspace.report_checklist'),
+              record: tr('safety_workspace.record_checklist'),
+              return: tr('safety_workspace.request_checklist_update'),
+              cancel: tr('safety_workspace.cancel_checklist'),
+              incident: tr('safety_workspace.create_incident_from_finding'),
             }[editor.op]
           }
           onClose={close}
@@ -528,10 +560,10 @@ export function SafetyChecklistsView(
                 pending={mutation.isPending}
                 label={
                   editor.op === 'record'
-                    ? 'Record checklist'
+                    ? tr('safety_workspace.record_checklist')
                     : editor.op === 'return'
-                      ? 'Request update'
-                      : 'Cancel checklist'
+                      ? tr('safety_workspace.request_update')
+                      : tr('safety_workspace.cancel_checklist')
                 }
                 onSubmit={(form) => {
                   const reason = String(form.get('reason') ?? '').trim();
@@ -577,15 +609,16 @@ export function SafetyChecklistsView(
               >
                 <Field
                   name="reason"
-                  label={editor.op === 'record' ? 'Recording note' : 'Reason'}
+                  label={editor.op === 'record' ? tr('common.recording_note') : tr('common.reason')}
                   type="textarea"
                   maxLength={2000}
                   required
                 />
                 {editor.op === 'record' && (
                   <p className="text-sm text-[var(--text-secondary)]">
-                    Failed criteria remain failed after recording. You can create an Incident for a
-                    verified finding.
+                    {tr(
+                      'safety_workspace.failed_criteria_remain_failed_after_recording_you_can_create_an_incident_for_a_verified_finding',
+                    )}
                   </p>
                 )}
               </CommandForm>
@@ -611,22 +644,28 @@ function ChecklistReport({
   onIncident: (result: ChecklistResultResponse) => void;
   onOpenIncident: (id: string) => void;
 }) {
+  useTranslation();
+
   return (
     <section
       className={cardClass + (submission.status === 'PENDING' ? ' border-[var(--accent)]' : '')}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-bold">
-          {submission.status === 'PENDING' ? 'Report awaiting Safety' : 'Handling report'}
+          {submission.status === 'PENDING'
+            ? tr('safety_workspace.report_awaiting_safety')
+            : tr('safety_workspace.handling_report')}
         </h3>
         <StatusBadge
           value={submission.status}
-          text={submission.status === 'ACCEPTED' ? 'Recorded' : undefined}
+          text={submission.status === 'ACCEPTED' ? tr('safety_workspace.recorded') : undefined}
         />
       </div>
       <p className="text-sm">
-        Submitted by {submission.submittedByName ?? 'Account unavailable'} ·{' '}
-        {date(submission.submittedAt)}
+        {tr('safety_workspace.submitted_by_value1_value2', {
+          value1: submission.submittedByName ?? tr('common.account_unavailable'),
+          value2: date(submission.submittedAt),
+        })}
       </p>
       {current.items.map((item) => {
         const result = submission.results.find((r) => r.itemId === item.id);
@@ -652,34 +691,42 @@ function ChecklistReport({
                 <div className="text-sm">
                   <p>
                     {!result.linkedIncident
-                      ? 'Incident follow-up unavailable with your current access.'
+                      ? tr(
+                          'safety_workspace.incident_follow_up_unavailable_with_your_current_access',
+                        )
                       : result.linkedIncident.status === 'CLOSED'
-                        ? 'Follow-up closed; original Fail is retained.'
-                        : 'Incident follow-up still needs attention.'}
+                        ? tr('safety_workspace.follow_up_closed_original_fail_is_retained')
+                        : tr('safety_workspace.incident_follow_up_still_needs_attention')}
                   </p>
                   {result.linkedIncident && (
                     <button
                       className={buttonClass}
                       onClick={() => onOpenIncident(result.linkedIncident!.id)}
                     >
-                      View incident ·{' '}
-                      {result.linkedIncident.status.toLowerCase().replaceAll('_', ' ')}
+                      {tr('safety_workspace.view_incident_value1', {
+                        value1: label(result.linkedIncident.status),
+                      })}
                     </button>
                   )}
                 </div>
               ) : safety ? (
                 <button className={buttonClass} onClick={() => onIncident(result)}>
-                  Create incident
+                  {tr('common.create_incident')}
                 </button>
               ) : (
-                <p className="text-sm">No incident available for this finding.</p>
+                <p className="text-sm">
+                  {tr('safety_workspace.no_incident_available_for_this_finding')}
+                </p>
               ))}
           </article>
         ) : null;
       })}
       {submission.reviewNote && (
         <p className="rounded-lg bg-[var(--surface-bone)] p-3 text-sm">
-          By {submission.reviewedByName ?? 'Account unavailable'} · {date(submission.reviewedAt)}
+          {tr('safety_workspace.by_value1_value2', {
+            value1: submission.reviewedByName ?? tr('common.account_unavailable'),
+            value2: date(submission.reviewedAt),
+          })}
           <br />
           {submission.reviewNote}
         </p>
@@ -700,12 +747,14 @@ function IncidentFindingForm({
   pending: boolean;
   onSubmit: (input: Omit<CreateIncidentCommand, 'commandId'>) => void;
 }) {
+  useTranslation();
+
   const [confirmed, setConfirmed] = useState(false),
     item = current.items.find((i) => i.id === result.itemId);
   return (
     <CommandForm
       pending={pending}
-      label="Create incident"
+      label={tr('common.create_incident')}
       onSubmit={(form) =>
         onSubmit({
           sourceChecklistResultId: result.id,
@@ -726,34 +775,37 @@ function IncidentFindingForm({
       }
     >
       <p className="text-sm">
-        {current.contractorName ?? 'Contractor unavailable'} ·{' '}
-        {current.teamName ?? 'Team unavailable'} · {current.zoneName ?? 'Zone unavailable'}
+        {current.contractorName ?? tr('common.contractor_unavailable')} ·{' '}
+        {current.teamName ?? tr('safety_workspace.team_unavailable')} ·{' '}
+        {current.zoneName ?? tr('common.zone_unavailable')}
       </p>
       <Field
         name="title"
-        label="Title"
+        label={tr('common.title')}
         required
         maxLength={200}
-        defaultValue={(item?.text ?? 'Checklist finding').slice(0, 200)}
+        defaultValue={(item?.text ?? tr('safety_workspace.checklist_finding')).slice(0, 200)}
       />
       <Field
         name="description"
-        label="Description"
+        label={tr('common.description')}
         type="textarea"
         required
         defaultValue={current.description + '\n' + (item?.text ?? '') + '\n' + result.note}
       />
       <label className="text-sm font-semibold">
-        Severity
+        {tr('common.severity')}
         <select className={fieldClass} name="severity" defaultValue="MEDIUM">
           {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
-            <option key={s}>{s}</option>
+            <option key={s} value={s}>
+              {label(s)}
+            </option>
           ))}
         </select>
       </label>
       <Field
         name="occurredAt"
-        label="Occurred at"
+        label={tr('safety_workspace.occurred_at')}
         type="datetime-local"
         required
         defaultValue={localInput(submission.submittedAt)}
@@ -764,21 +816,23 @@ function IncidentFindingForm({
           checked={confirmed}
           onChange={(e) => setConfirmed(e.target.checked)}
         />
-        I have verified that {current.contractorName ?? 'this contractor'} is responsible for this
-        finding.
+        {tr('safety_workspace.i_have_verified_that_value1_is_responsible_for_this_finding', {
+          value1: current.contractorName ?? tr('safety_workspace.this_contractor'),
+        })}
       </label>
       {confirmed && (
         <Field
           name="reason"
-          label="Responsibility confirmation reason"
+          label={tr('safety_workspace.responsibility_confirmation_reason')}
           type="textarea"
           maxLength={2000}
           required
         />
       )}
       <p className="text-xs text-[var(--text-secondary)]">
-        Worker remains unknown. Confirm responsibility before handing over; source evidence stays on
-        the checklist.
+        {tr(
+          'safety_workspace.worker_remains_unknown_confirm_responsibility_before_handing_over_source_evidence_stays_on_the_checklist',
+        )}
       </p>
     </CommandForm>
   );

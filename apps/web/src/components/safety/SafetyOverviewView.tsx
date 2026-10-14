@@ -1,6 +1,15 @@
+import { useTranslation } from 'react-i18next';
+import { translate as tr, uiLocale } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { type WorkflowProps, fieldClass, cardClass, buttonClass, date } from './safety-workflow';
+import {
+  type WorkflowProps,
+  fieldClass,
+  cardClass,
+  buttonClass,
+  date,
+  label,
+} from './safety-workflow';
 import { RequestError, Pager } from './SafetyWorkflowUi';
 import { SafetyZoneContext } from './SafetyZoneContext';
 import {
@@ -21,6 +30,8 @@ export function SafetyOverviewView(
     canAssign: boolean;
   },
 ) {
+  useTranslation();
+
   const [day, setDay] = useState(localDay),
     [mode, setMode] = useState<'day' | 'week'>('day'),
     [contractorId, setContractor] = useState(''),
@@ -165,9 +176,9 @@ export function SafetyOverviewView(
       cameraExternalId,
       ...dayWindow(day),
       caption:
-        (detail.data?.contractorName ?? 'Contractor') +
+        (detail.data?.contractorName ?? tr('common.contractor')) +
         ' · ' +
-        (detail.data?.name ?? 'Team') +
+        (detail.data?.name ?? tr('labels.TEAM')) +
         ' · ' +
         day,
     });
@@ -176,9 +187,9 @@ export function SafetyOverviewView(
     <div className="space-y-3 min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-bold">Safety overview</h2>
+          <h2 className="text-lg font-bold">{tr('safety_workspace.safety_overview')}</h2>
           <p className="text-xs text-[var(--text-secondary)]">
-            Planned teams, work preparation and related alerts.
+            {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
           </p>
         </div>
         <button
@@ -192,11 +203,11 @@ export function SafetyOverviewView(
             void contractors.refetch();
           }}
         >
-          Refresh overview
+          {tr('safety_workspace.refresh_overview')}
         </button>
       </div>
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-white p-3">
-        <div className="flex gap-1" aria-label="Overview period">
+        <div className="flex gap-1" aria-label={tr('safety_workspace.overview_period')}>
           <button
             className={buttonClass}
             aria-pressed={mode === 'day'}
@@ -205,7 +216,7 @@ export function SafetyOverviewView(
               reset();
             }}
           >
-            Day
+            {tr('labels.DAY')}
           </button>
           <button
             className={buttonClass}
@@ -215,11 +226,11 @@ export function SafetyOverviewView(
               reset();
             }}
           >
-            Week
+            {tr('labels.WEEK')}
           </button>
         </div>
         <label className="text-xs font-semibold">
-          Work date
+          {tr('common.work_date')}
           <input
             className={fieldClass}
             type="date"
@@ -231,10 +242,10 @@ export function SafetyOverviewView(
           />
         </label>
         <button className={buttonClass} onClick={() => changeDay(localDay())}>
-          Today
+          {tr('calendar.today')}
         </button>
         <label className="min-w-0 w-full sm:w-44 text-xs font-semibold">
-          Contractor
+          {tr('common.contractor')}
           <select
             className={fieldClass}
             value={contractorId}
@@ -244,7 +255,7 @@ export function SafetyOverviewView(
               reset();
             }}
           >
-            <option value="">All contractors</option>
+            <option value="">{tr('safety_workspace.all_contractors')}</option>
             {contractors.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -253,7 +264,7 @@ export function SafetyOverviewView(
           </select>
         </label>
         <label className="min-w-0 w-full sm:w-44 text-xs font-semibold">
-          Team
+          {tr('labels.TEAM')}
           <select
             className={fieldClass}
             value={teamFilter}
@@ -262,7 +273,7 @@ export function SafetyOverviewView(
               reset();
             }}
           >
-            <option value="">All teams</option>
+            <option value="">{tr('common.all_teams_bf65fc')}</option>
             {options.data?.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
@@ -272,32 +283,37 @@ export function SafetyOverviewView(
         </label>
       </div>
       <div className="flex flex-wrap justify-between gap-2 text-xs text-[var(--text-secondary)]">
-        <span>Timezone: {timezone} · Scheduled does not mean present.</span>
         <span>
-          {query.data?.updatedAt
-            ? 'Updated ' + date(query.data.updatedAt)
-            : 'Update time unavailable'}{' '}
-          · Refreshes every 30 seconds while visible.
+          {tr('safety_workspace.timezone_value1_scheduled_does_not_mean_present', {
+            value1: timezone,
+          })}
+        </span>
+        <span>
+          {tr('safety_workspace.value1_refreshes_every_30_seconds_while_visible', {
+            value1: query.data?.updatedAt
+              ? tr('safety_workspace.updated_value1', { value1: date(query.data.updatedAt) })
+              : tr('safety_workspace.update_time_unavailable'),
+          })}
         </span>
       </div>
       <RequestError error={query.error} retry={() => void query.refetch()} />
       <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
       <RequestError error={options.error} retry={() => void options.refetch()} />
       {mode === 'week' && (
-        <section className="min-w-0" aria-label="Weekly schedule">
+        <section className="min-w-0" aria-label={tr('safety_workspace.weekly_schedule')}>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <button className={buttonClass} onClick={() => moveWeek(-7)}>
-              Previous week
+              {tr('common.previous_week')}
             </button>
             <strong className="text-sm">
               {week.data?.weekStart} – {week.data?.weekEnd}
             </strong>
             <button className={buttonClass} onClick={() => moveWeek(7)}>
-              Next week
+              {tr('common.next_week')}
             </button>
           </div>
           <RequestError error={week.error} retry={() => void week.refetch()} />
-          {week.isPending && <p>Loading week…</p>}
+          {week.isPending && <p>{tr('safety_workspace.loading_week')}</p>}
           <div className="lg:hidden flex flex-wrap gap-1">
             {week.data?.teams.items[0]?.days.map((d) => (
               <button
@@ -315,10 +331,12 @@ export function SafetyOverviewView(
           </div>
           <div className="hidden lg:block overflow-x-auto rounded-xl border border-[var(--border)]">
             <table className="w-full text-xs">
-              <caption className="sr-only">Planned work by team and day</caption>
+              <caption className="sr-only">
+                {tr('safety_workspace.planned_work_by_team_and_day')}
+              </caption>
               <thead>
                 <tr>
-                  <th className="p-2 text-left">Team</th>
+                  <th className="p-2 text-left">{tr('labels.TEAM')}</th>
                   {week.data?.teams.items[0]?.days.map((d) => (
                     <th key={d.date} className="p-2">
                       {d.date.slice(5)}
@@ -342,10 +360,17 @@ export function SafetyOverviewView(
                               ? 'bg-[var(--surface-bone)] ring-1 ring-[var(--accent)]'
                               : 'hover:bg-[var(--surface-bone)]')
                           }
-                          aria-label={t.name + ' on ' + d.date}
+                          aria-label={tr('safety_workspace.value1_on_value2', {
+                            value1: t.name,
+                            value2: d.date,
+                          })}
                           onClick={() => selectTeam(t.id, d.date)}
                         >
-                          <span>{d.scheduledWorkerCount} scheduled</span>
+                          <span>
+                            {tr('safety_workspace.value1_scheduled', {
+                              value1: d.scheduledWorkerCount,
+                            })}
+                          </span>
                           {d.workWindows.map((w, i) => (
                             <span className="block text-[10px]" key={i}>
                               {windowLabel(w.startsAt, w.endsAt)}
@@ -363,14 +388,14 @@ export function SafetyOverviewView(
       )}
       <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,0.35fr)_minmax(0,0.65fr)]">
         <section
-          aria-label="Safety teams"
+          aria-label={tr('safety_workspace.safety_teams')}
           className={'min-w-0 space-y-3 ' + (mobileDetail ? 'hidden lg:block' : '')}
         >
           {(mode === 'day' ? query.isPending : week.isPending) && (
-            <p className={cardClass}>Loading teams…</p>
+            <p className={cardClass}>{tr('safety_workspace.loading_teams')}</p>
           )}
           {page && !page.items.length && (
-            <p className={cardClass}>No teams found for this selection.</p>
+            <p className={cardClass}>{tr('safety_workspace.no_teams_found_for_this_selection')}</p>
           )}
           {page?.items.map((t, i) => (
             <div key={t.id}>
@@ -392,10 +417,15 @@ export function SafetyOverviewView(
                 {'scheduledWorkerCount' in t ? (
                   <>
                     <p className="text-xs">
-                      {t.scheduledWorkerCount} scheduled · {t.workerCount} members
+                      {tr('safety_workspace.value1_scheduled_value2_members', {
+                        value1: t.scheduledWorkerCount,
+                        value2: t.workerCount,
+                      })}
                     </p>
                     {!t.scheduledWorkerCount && (
-                      <p className="text-xs">No planned shift for this date</p>
+                      <p className="text-xs">
+                        {tr('safety_workspace.no_planned_shift_for_this_date')}
+                      </p>
                     )}
                     {t.workWindows?.map((w, i) => (
                       <p className="text-xs" key={i}>
@@ -409,22 +439,30 @@ export function SafetyOverviewView(
                           : 'text-xs'
                       }
                     >
-                      Related alerts: {t.attentionAlertCount ?? 'Unavailable'}
+                      {tr('safety_workspace.related_alerts_value1', {
+                        value1: t.attentionAlertCount ?? tr('labels.UNAVAILABLE'),
+                      })}
                     </p>
                     <ChecklistSummary value={t.checklistSummary} />
                   </>
                 ) : (
                   <div className="text-xs">
-                    <p>{t.days.find((d) => d.date === day)?.scheduledWorkerCount ?? 0} scheduled</p>
+                    <p>
+                      {tr('safety_workspace.value1_scheduled', {
+                        value1: t.days.find((d) => d.date === day)?.scheduledWorkerCount ?? 0,
+                      })}
+                    </p>
                     {t.days
                       .find((d) => d.date === day)
                       ?.workWindows.map((w, i) => (
                         <p key={i}>{windowLabel(w.startsAt, w.endsAt)}</p>
                       ))}
                     <p>
-                      Related alerts:{' '}
-                      {query.data?.teams.items.find((d) => d.id === t.id)?.attentionAlertCount ??
-                        'Unavailable'}
+                      {tr('safety_workspace.related_alerts_value1', {
+                        value1:
+                          query.data?.teams.items.find((d) => d.id === t.id)?.attentionAlertCount ??
+                          tr('labels.UNAVAILABLE'),
+                      })}
                     </p>
                     <ChecklistSummary
                       value={query.data?.teams.items.find((d) => d.id === t.id)?.checklistSummary}
@@ -446,13 +484,18 @@ export function SafetyOverviewView(
             />
           )}
           {!!query.data?.unassignedWorkers.total && (
-            <section aria-label="Workers without a team" className={cardClass}>
+            <section
+              aria-label={tr('safety_workspace.workers_without_a_team')}
+              className={cardClass}
+            >
               <h3 className="text-sm font-bold">
-                Workers without a resolved team ({query.data.unassignedWorkers.total})
+                {tr('safety_workspace.workers_without_a_resolved_team_value1', {
+                  value1: query.data.unassignedWorkers.total,
+                })}
               </h3>
               {query.data.unassignedWorkers.items.map((w) => (
                 <p className="text-xs" key={w.id + (w.startsAt ?? '')}>
-                  {w.displayName} · {w.shiftName ?? 'No recorded shift'}
+                  {w.displayName} · {w.shiftName ?? tr('safety_workspace.no_recorded_shift')}
                 </p>
               ))}
               <Pager
@@ -464,13 +507,15 @@ export function SafetyOverviewView(
           )}
         </section>
         <section
-          aria-label="Safety team details"
+          aria-label={tr('safety_workspace.safety_team_details')}
           className={'min-w-0 space-y-3 ' + (!mobileDetail ? 'hidden lg:block' : '')}
         >
           <button className={buttonClass + ' lg:hidden'} onClick={() => setMobileDetail(false)}>
-            Back to teams
+            {tr('safety_workspace.back_to_teams')}
           </button>
-          {detail.isPending && selectedId && <p className={cardClass}>Loading team details…</p>}
+          {detail.isPending && selectedId && (
+            <p className={cardClass}>{tr('safety_workspace.loading_team_details')}</p>
+          )}
           <RequestError error={detail.error} retry={() => void detail.refetch()} />
           {current && (
             <>
@@ -483,14 +528,16 @@ export function SafetyOverviewView(
                 <div className="mt-3 flex flex-wrap gap-2">
                   {p.canAlerts && (
                     <button className={buttonClass} onClick={() => alerts()}>
-                      View related alerts ({current.attentionAlertCount ?? 0})
+                      {tr('safety_workspace.view_related_alerts_value1', {
+                        value1: current.attentionAlertCount ?? 0,
+                      })}
                     </button>
                   )}
                   <button
                     className={buttonClass}
                     onClick={() => p.onViewChecklists(current.id, day, current.name)}
                   >
-                    View checklists for this date
+                    {tr('safety_workspace.view_checklists_for_this_date')}
                   </button>
                   {p.canAssign && (
                     <button
@@ -498,36 +545,44 @@ export function SafetyOverviewView(
                       disabled={!current.isActive || !current.zones.length}
                       onClick={() => p.onChecklist(current.id, day)}
                     >
-                      Assign checklist
+                      {tr('safety_workspace.assign_checklist')}
                     </button>
                   )}
                 </div>
               </article>
               <article className={cardClass}>
-                <h3 className="font-bold">Work preparation for this date</h3>
+                <h3 className="font-bold">
+                  {tr('safety_workspace.work_preparation_for_this_date')}
+                </h3>
 
-                {jobs.isPending && <p>Loading work…</p>}
+                {jobs.isPending && <p>{tr('safety_workspace.loading_work')}</p>}
                 <RequestError error={jobs.error} retry={() => void jobs.refetch()} />
                 {jobs.data?.items.map((job) => (
                   <div className="mt-2 border-t pt-2" key={job.id}>
                     <strong className="text-sm">{job.description}</strong>
                     <p className="text-xs">
-                      {job.zoneName ?? 'Zone unavailable'} · {windowLabel(job.startsAt, job.endsAt)}{' '}
-                      · {job.assignedToName ?? 'Account unavailable'}
+                      {job.zoneName ?? tr('common.zone_unavailable')} ·{' '}
+                      {windowLabel(job.startsAt, job.endsAt)} ·{' '}
+                      {job.assignedToName ?? tr('common.account_unavailable')}
                     </p>
                     <p className="text-xs">
                       {job.status === 'ACCEPTED'
-                        ? 'Recorded'
-                        : job.status.toLowerCase().replaceAll('_', ' ')}
+                        ? tr('safety_workspace.recorded')
+                        : label(job.status)}
                     </p>
                   </div>
                 ))}
                 {jobs.data && !jobs.data.items.length && (
-                  <p className="text-sm">No checklist assigned for this date.</p>
+                  <p className="text-sm">
+                    {tr('safety_workspace.no_checklist_assigned_for_this_date')}
+                  </p>
                 )}
                 {jobs.data && jobs.data.total > 5 && (
                   <p className="text-xs">
-                    Showing 5 of {jobs.data.total}. Open the checklist list for all work.
+                    {tr(
+                      'safety_workspace.showing_5_of_value1_open_the_checklist_list_for_all_work',
+                      { value1: jobs.data.total },
+                    )}
                   </p>
                 )}
               </article>
@@ -545,19 +600,23 @@ export function SafetyOverviewView(
                   aria-expanded={workersOpen}
                   onClick={() => setWorkersOpen(!workersOpen)}
                 >
-                  Workers and planned shifts ({current.scheduledWorkerCount} scheduled /{' '}
-                  {current.workerCount} members)
+                  {tr(
+                    'safety_workspace.workers_and_planned_shifts_value1_scheduled_value2_members',
+                    { value1: current.scheduledWorkerCount, value2: current.workerCount },
+                  )}
                 </button>
                 {workersOpen && (
                   <>
                     <p className="text-xs">
-                      Membership is resolved at shift start; this list does not prove attendance.
+                      {tr(
+                        'safety_workspace.membership_is_resolved_at_shift_start_this_list_does_not_prove_attendance',
+                      )}
                     </p>
                     {current.workers.items.map((w) => (
                       <div className="mt-2 border-t pt-2 text-sm" key={w.id + (w.startsAt ?? '')}>
                         <strong>{w.displayName}</strong>
                         <p className="text-xs">
-                          {w.shiftName ?? 'No recorded shift'}
+                          {w.shiftName ?? tr('safety_workspace.no_recorded_shift')}
                           {w.startsAt && w.endsAt ? ' · ' + windowLabel(w.startsAt, w.endsAt) : ''}
                         </p>
                       </div>
@@ -572,7 +631,11 @@ export function SafetyOverviewView(
               </article>
             </>
           )}
-          {!selectedId && <p className={cardClass}>Select a team to see its work context.</p>}
+          {!selectedId && (
+            <p className={cardClass}>
+              {tr('safety_workspace.select_a_team_to_see_its_work_context')}
+            </p>
+          )}
         </section>
       </div>
     </div>
@@ -582,12 +645,14 @@ function windowLabel(startsAt: string, endsAt: string) {
   const start = new Date(startsAt),
     end = new Date(endsAt);
   const time = (d: Date) =>
-    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    d.toLocaleTimeString(uiLocale(), { hour: '2-digit', minute: '2-digit', hour12: false });
   return (
     time(start) +
     ' – ' +
     time(end) +
-    (localDay(start) !== localDay(end) ? ' · ends ' + localDay(end) : '')
+    (localDay(start) !== localDay(end)
+      ? ' · ' + tr('safety_workspace.ends_value1', { value1: localDay(end) })
+      : '')
   );
 }
 
@@ -596,48 +661,96 @@ function ChecklistSummary({
 }: {
   value?: import('@smartsite/api-client').SafetyChecklistSummary;
 }) {
+  useTranslation();
+
   if (!value)
-    return <p className="text-xs text-[var(--text-secondary)]">Checklist summary unavailable.</p>;
+    return (
+      <p className="text-xs text-[var(--text-secondary)]">
+        {tr('safety_workspace.checklist_summary_unavailable')}
+      </p>
+    );
   return (
-    <div className="mt-2 space-y-1 text-xs" aria-label="Checklist summary">
+    <div className="mt-2 space-y-1 text-xs" aria-label={tr('safety_workspace.checklist_summary')}>
       {value.noChecklistAssigned && (
-        <p className="font-semibold text-[var(--accent)]">No checklist assigned</p>
+        <p className="font-semibold text-[var(--accent)]">
+          {tr('safety_workspace.no_checklist_assigned')}
+        </p>
       )}
-      {!value.total && !value.noChecklistAssigned && <p>No checklist for this date.</p>}
-      {value.notSubmitted > 0 && <p>Not submitted: {value.notSubmitted}</p>}
+      {!value.total && !value.noChecklistAssigned && (
+        <p>{tr('safety_workspace.no_checklist_for_this_date')}</p>
+      )}
+      {value.notSubmitted > 0 && (
+        <p>{tr('safety_workspace.not_submitted_value1', { value1: value.notSubmitted })}</p>
+      )}
       {value.needsUpdate > 0 && (
-        <p className="font-semibold text-[var(--accent)]">Needs update: {value.needsUpdate}</p>
+        <p className="font-semibold text-[var(--accent)]">
+          {tr('safety_workspace.needs_update_value1', { value1: value.needsUpdate })}
+        </p>
       )}
-      {value.awaitingReview > 0 && <p>Awaiting review: {value.awaitingReview}</p>}
+      {value.awaitingReview > 0 && (
+        <p>{tr('safety_workspace.awaiting_review_value1', { value1: value.awaitingReview })}</p>
+      )}
       {value.recordedWithFindings > 0 && (
         <p className="font-semibold text-[var(--accent)]">
-          Recorded with findings: {value.recordedWithFindings}
+          {tr('safety_workspace.recorded_with_findings_value1', {
+            value1: value.recordedWithFindings,
+          })}
         </p>
       )}
       {value.recordedWithoutFailures > 0 && (
-        <p>Recorded, no reported failures: {value.recordedWithoutFailures}</p>
+        <p>
+          {tr('safety_workspace.recorded_no_reported_failures_value1', {
+            value1: value.recordedWithoutFailures,
+          })}
+        </p>
       )}
       {!!value.pastStartWithoutReport && (
         <p className="text-[var(--accent)]">
-          Past planned start, no report: {value.pastStartWithoutReport}
+          {tr('safety_workspace.past_planned_start_no_report_value1', {
+            value1: value.pastStartWithoutReport,
+          })}
         </p>
       )}
       {!!value.lateFirstReports && (
-        <p>First report submitted after planned start: {value.lateFirstReports}</p>
+        <p>
+          {tr('safety_workspace.first_report_submitted_after_planned_start_value1', {
+            value1: value.lateFirstReports,
+          })}
+        </p>
       )}
       {!!value.reviewPendingPastStart && (
-        <p>Past planned start, awaiting Safety: {value.reviewPendingPastStart}</p>
+        <p>
+          {tr('safety_workspace.past_planned_start_awaiting_safety_value1', {
+            value1: value.reviewPendingPastStart,
+          })}
+        </p>
       )}
       {!!value.findingsWithoutIncident && (
-        <p>Findings without an Incident: {value.findingsWithoutIncident}</p>
+        <p>
+          {tr('safety_workspace.findings_without_an_incident_value1', {
+            value1: value.findingsWithoutIncident,
+          })}
+        </p>
       )}
-      {!!value.openIncidentFindings && <p>Incident follow-up open: {value.openIncidentFindings}</p>}
+      {!!value.openIncidentFindings && (
+        <p>
+          {tr('safety_workspace.incident_follow_up_open_value1', {
+            value1: value.openIncidentFindings,
+          })}
+        </p>
+      )}
       {!!value.closedIncidentFindings && (
-        <p>Incident follow-up closed: {value.closedIncidentFindings}</p>
+        <p>
+          {tr('safety_workspace.incident_follow_up_closed_value1', {
+            value1: value.closedIncidentFindings,
+          })}
+        </p>
       )}
       {value.pastStartWithoutReport === undefined && value.pastPlannedStart > 0 && (
         <p className="font-semibold text-[var(--accent)]">
-          Past planned start — needs attention: {value.pastPlannedStart}
+          {tr('safety_workspace.past_planned_start_needs_attention_value1', {
+            value1: value.pastPlannedStart,
+          })}
         </p>
       )}
     </div>

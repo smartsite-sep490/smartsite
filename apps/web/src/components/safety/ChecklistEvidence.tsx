@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { translate as tr } from '../../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ChecklistEvidenceResponse } from '@smartsite/api-client';
@@ -6,6 +8,8 @@ import { BlobImage, RequestError, Dialog } from './SafetyWorkflowUi';
 export function ChecklistEvidence(
   p: WorkflowProps & { assignmentId: string; evidence: ChecklistEvidenceResponse },
 ) {
+  useTranslation();
+
   const [zoom, setZoom] = useState(false);
   const query = useQuery({
     queryKey: [
@@ -36,19 +40,19 @@ export function ChecklistEvidence(
         : 'jpg';
   return (
     <div className="min-w-0 space-y-2">
-      {query.isPending && <p className="text-xs">Loading evidence…</p>}
+      {query.isPending && <p className="text-xs">{tr('safety_workspace.loading_evidence')}</p>}
       <RequestError error={query.error} retry={() => void query.refetch()} />
       {query.data && (
         <>
           {ext !== 'pdf' && (
             <div>
-              <BlobImage blob={query.data} alt="Checklist evidence" />
+              <BlobImage blob={query.data} alt={tr('safety_workspace.checklist_evidence')} />
               <button
                 type="button"
                 className="mt-2 text-sm font-semibold underline"
                 onClick={() => setZoom(true)}
               >
-                Enlarge image
+                {tr('safety_workspace.enlarge_image')}
               </button>
             </div>
           )}
@@ -57,13 +61,16 @@ export function ChecklistEvidence(
             ref={link}
             download={'checklist-evidence.' + ext}
           >
-            Download {ext.toUpperCase()} · {(p.evidence.size / 1024).toFixed(1)} KiB
+            {tr('safety_workspace.download_value1_value2_kib', {
+              value1: ext.toUpperCase(),
+              value2: (p.evidence.size / 1024).toFixed(1),
+            })}
           </a>
         </>
       )}
       {zoom && query.data && (
-        <Dialog title="Checklist evidence" onClose={() => setZoom(false)}>
-          <BlobImage blob={query.data} alt="Checklist evidence enlarged" />
+        <Dialog title={tr('safety_workspace.checklist_evidence')} onClose={() => setZoom(false)}>
+          <BlobImage blob={query.data} alt={tr('safety_workspace.checklist_evidence_enlarged')} />
         </Dialog>
       )}
     </div>

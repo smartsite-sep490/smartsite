@@ -17,7 +17,7 @@ describe('account-first enrollment', () => {
       </QueryClientProvider>,
     );
     expect(html).toContain('face-account-search');
-    expect(html).toContain('Chọn account đã có trên hệ thống');
+    expect(html).toContain('Select an existing account');
     expect(html).not.toContain('worker-select');
     expect(html).not.toContain('Tạo &amp; chọn');
     expect(html).not.toContain('name="externalId"');

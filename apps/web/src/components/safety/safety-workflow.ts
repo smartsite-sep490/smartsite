@@ -1,3 +1,6 @@
+import { localizedLabel } from '../../i18n/labels';
+import { uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
 import { useEffect, useRef, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AccountResponse, SmartSiteManagementClient } from '@smartsite/api-client';
@@ -27,12 +30,9 @@ export const primaryClass =
 export const dangerClass =
   buttonBase +
   ' border-red-200 bg-white text-[var(--semantic-red-text)] hover:bg-[var(--semantic-red-bg)]';
-export const label = (value: string) =>
-  value
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/^./, (c) => c.toUpperCase());
-export const date = (value: string | null) => (value ? new Date(value).toLocaleString() : '—');
+export const label = localizedLabel;
+export const date = (value: string | null) =>
+  value ? new Date(value).toLocaleString(uiLocale()) : '—';
 export const formValues = (event: FormEvent<HTMLFormElement>) => {
   event.preventDefault();
   return new FormData(event.currentTarget);
@@ -105,6 +105,6 @@ export function photo(form: FormData) {
   const value = form.get('file');
   if (!(value instanceof File) || !value.size) return undefined;
   if (value.type !== 'image/jpeg' || value.size > 1048576)
-    throw new Error('Choose a JPEG image at most 1 MiB.');
+    throw new Error(tr('safety-workflow.choose_a_jpeg_image_at_most_1_mib'));
   return value;
 }

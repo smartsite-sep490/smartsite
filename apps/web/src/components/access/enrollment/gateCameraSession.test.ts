@@ -1,3 +1,8 @@
+import i18n from '../../../i18n';
+import { beforeEach as beforeLocaleTest } from 'vitest';
+beforeLocaleTest(async () => {
+  await i18n.changeLanguage('vi');
+});
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GateCameraSession } from './gateCameraSession';
 

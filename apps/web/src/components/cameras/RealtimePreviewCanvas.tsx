@@ -1,3 +1,6 @@
+import { localizedLabel } from '../../i18n/labels';
+import { translate as tr, uiLanguage } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useLayoutEffect, useRef } from 'react';
 import type { DecodedPreview } from './useRealtimePreview';
 
@@ -8,7 +11,10 @@ export function RealtimePreviewCanvas({
   preview: DecodedPreview;
   mode: 'ppe' | 'zone';
 }) {
+  useTranslation();
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const language = uiLanguage();
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
@@ -43,13 +49,16 @@ export function RealtimePreviewCanvas({
       context.strokeStyle = detection.active ? '#F66B17' : '#d6d3d1';
       context.fillStyle = context.strokeStyle;
       context.strokeRect(x, y, (box.x2 - box.x1) * frame.width, (box.y2 - box.y1) * frame.height);
-      context.fillText(`${detection.label} · #${detection.trackId}`, x, Math.max(16, y - 5));
+      const label = localizedLabel(detection.label) + ' · #' + detection.trackId;
+      const width = Math.min(context.measureText(label).width, frame.width - 8);
+      const labelX = Math.max(4, Math.min(x, frame.width - width - 4));
+      context.fillText(label, labelX, Math.max(16, y - 5), frame.width - 8);
     }
-  }, [preview, mode]);
+  }, [preview, mode, language]);
   return (
     <canvas
       ref={canvasRef}
-      aria-label="Synchronized AI camera frame"
+      aria-label={tr('realtime_preview_canvas.synchronized_ai_camera_frame')}
       data-frame-id={`${preview.frame.sessionId}:${preview.frame.sequenceNumber}`}
       className="absolute inset-0 w-full h-full object-cover"
     />

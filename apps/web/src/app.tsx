@@ -1,3 +1,5 @@
+import { translate as tr } from './i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -28,6 +30,7 @@ import { RegisterScreen } from './features/auth/RegisterScreen';
 import { WorkforceView } from './components/workforce/components/WorkforceView';
 import { SiteSetupView } from './components/workforce/components/SiteSetupView';
 import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
+import { WorkerOnboardingView } from './components/workforce/components/WorkerOnboardingView';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -45,6 +48,8 @@ interface ProtectedRoutesProps {
 }
 
 function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
+  useTranslation();
+
   const { accessToken } = useAuth();
   const currentUser = useCurrentUser(apiUrl);
   const profile = currentUser;
@@ -59,16 +64,16 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
   if (currentUser.isPending) {
     return (
       <main className="min-h-screen flex items-center justify-center" role="status">
-        Loading your account...
+        {tr('common.loading_your_account')}
       </main>
     );
   }
   if (currentUser.isError) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p role="alert">Could not load your account.</p>
+        <p role="alert">{tr('app.could_not_load_your_account')}</p>
         <button type="button" onClick={() => currentUser.refetch()}>
-          Try again
+          {tr('common.try_again')}
         </button>
       </main>
     );
@@ -102,6 +107,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           }
         />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+        <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
@@ -141,11 +147,11 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               />
             ) : profile.isError ? (
               <div role="alert">
-                Could not load your account.{' '}
-                <button onClick={() => void profile.refetch()}>Retry</button>
+                {tr('app.could_not_load_your_account')}{' '}
+                <button onClick={() => void profile.refetch()}>{tr('common.retry')}</button>
               </div>
             ) : (
-              <p role="status">Loading your account…</p>
+              <p role="status">{tr('common.loading_your_account_8fa5b7')}</p>
             )
           }
         />
@@ -156,9 +162,13 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
                 <IconRadio className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-[#041D2E]">IoT Environmental Sensors</h2>
+              <h2 className="text-xl font-bold text-[#041D2E]">
+                {tr('common.iot_environmental_sensors')}
+              </h2>
               <p className="text-sm text-[#62748E] max-w-md mx-auto">
-                Environmental air quality, noise thresholds, crane wind speed and perimeter beams.
+                {tr(
+                  'app.environmental_air_quality_noise_thresholds_crane_wind_speed_and_perimeter_beams',
+                )}
               </p>
             </div>
           }
@@ -170,9 +180,11 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
                 <IconTrendingUp className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-[#041D2E]">Construction Progress Monitoring</h2>
+              <h2 className="text-xl font-bold text-[#041D2E]">
+                {tr('common.construction_progress_monitoring')}
+              </h2>
               <p className="text-sm text-[#62748E] max-w-md mx-auto">
-                4D BIM overlay, photogrammetry site scans and milestone progress tracking.
+                {tr('app.4d_bim_overlay_photogrammetry_site_scans_and_milestone_progress_tracking')}
               </p>
             </div>
           }
@@ -190,6 +202,8 @@ function PublicOnlyRoute({
   children: React.ReactNode;
   defaultAuthTab: string;
 }) {
+  useTranslation();
+
   const { accessToken } = useAuth();
   if (accessToken) {
     return <Navigate to={`/${defaultAuthTab}`} replace />;
@@ -198,6 +212,8 @@ function PublicOnlyRoute({
 }
 
 export function App() {
+  useTranslation();
+
   const navigate = useNavigate();
   const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
   const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
@@ -230,7 +246,7 @@ export function App() {
     return (
       <div
         role="status"
-        aria-label="Loading account permissions"
+        aria-label={tr('common.loading_account_permissions')}
         className="min-h-screen bg-[#041D2E] flex items-center justify-center"
       >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
@@ -245,9 +261,11 @@ export function App() {
           role="alert"
           className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
         >
-          <h1 className="text-lg font-bold text-slate-900">Could not load your account</h1>
+          <h1 className="text-lg font-bold text-slate-900">
+            {tr('app.could_not_load_your_account_03c0b0')}
+          </h1>
           <p className="text-sm text-slate-600">
-            Your permissions could not be loaded. Please try again.
+            {tr('app.your_permissions_could_not_be_loaded_please_try_again')}
           </p>
           <button
             type="button"
@@ -255,7 +273,7 @@ export function App() {
             onClick={() => void currentUserQuery.refetch()}
             className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-blue-600"
           >
-            Retry
+            {tr('common.retry')}
           </button>
         </div>
       </div>

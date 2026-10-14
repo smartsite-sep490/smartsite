@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -15,32 +17,52 @@ import {
   safetyContractors,
   safetyTeams,
 } from './safety-context';
-const presets = {
+const presets = () => ({
   HEIGHT: [
     {
-      text: 'Team briefed on the hazards and precautions of this specific task',
+      text: tr(
+        'safety_workspace.team_briefed_on_the_hazards_and_precautions_of_this_specific_task',
+      ),
       evidenceRequired: false,
     },
     {
-      text: 'Fall-protection equipment prepared for this team/task; provide dated photos',
+      text: tr(
+        'safety_workspace.fall_protection_equipment_prepared_for_this_team_task_provide_dated_photos',
+      ),
       evidenceRequired: true,
     },
-    { text: 'Work area and access arrangements checked', evidenceRequired: false },
     {
-      text: 'Attach the inspection or training documents requested for this task',
+      text: tr('safety_workspace.work_area_and_access_arrangements_checked'),
+      evidenceRequired: false,
+    },
+    {
+      text: tr(
+        'safety_workspace.attach_the_inspection_or_training_documents_requested_for_this_task',
+      ),
       evidenceRequired: true,
     },
   ],
   ELECTRICAL: [
-    { text: 'Work-specific safety briefing completed', evidenceRequired: false },
     {
-      text: 'Protective equipment prepared for this electrical task; provide dated photos',
+      text: tr('safety_workspace.work_specific_safety_briefing_completed'),
+      evidenceRequired: false,
+    },
+    {
+      text: tr(
+        'safety_workspace.protective_equipment_prepared_for_this_electrical_task_provide_dated_photos',
+      ),
       evidenceRequired: true,
     },
-    { text: 'Work area and equipment condition checked', evidenceRequired: true },
-    { text: 'Required inspection or training documents available', evidenceRequired: true },
+    {
+      text: tr('safety_workspace.work_area_and_equipment_condition_checked'),
+      evidenceRequired: true,
+    },
+    {
+      text: tr('safety_workspace.required_inspection_or_training_documents_available'),
+      evidenceRequired: true,
+    },
   ],
-};
+});
 export function CreateChecklistForm(
   p: WorkflowProps & {
     draft?: { teamId: string; day: string };
@@ -48,13 +70,15 @@ export function CreateChecklistForm(
     onSubmit: (input: Omit<CreateChecklistCommand, 'commandId'>) => void;
   },
 ) {
+  useTranslation();
+
   const [day, setDay] = useState(p.draft?.day ?? localDay()),
     [contractor, setContractor] = useState(''),
     [teamId, setTeam] = useState(p.draft?.teamId ?? ''),
     [zoneId, setZone] = useState(''),
     [windowChoice, setWindowChoice] = useState(''),
     [preset, setPreset] = useState<'HEIGHT' | 'ELECTRICAL'>('HEIGHT'),
-    [items, setItems] = useState(() => presets.HEIGHT.map((i) => ({ ...i })));
+    [items, setItems] = useState(() => presets().HEIGHT);
   const timezone = browserTimezone(),
     base = ['safety-workflow', p.apiUrl, p.scope, p.siteId] as const;
   const contractors = useQuery({
@@ -92,11 +116,11 @@ export function CreateChecklistForm(
   return (
     <CommandForm
       pending={p.pending}
-      label="Assign checklist"
+      label={tr('safety_workspace.assign_checklist')}
       onSubmit={(form) => {
-        if (!team || !zoneId) throw Error('Choose a team and Zone');
+        if (!team || !zoneId) throw Error(tr('safety_workspace.choose_a_team_and_zone'));
         if (!items.length || items.some((i) => !i.text.trim()))
-          throw Error('Every criterion needs a description');
+          throw Error(tr('safety_workspace.every_criterion_needs_a_description'));
         p.onSubmit({
           teamId,
           zoneId,
@@ -110,7 +134,7 @@ export function CreateChecklistForm(
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm font-semibold">
-          Work date
+          {tr('common.work_date')}
           <input
             className={fieldClass}
             required
@@ -124,7 +148,7 @@ export function CreateChecklistForm(
           />
         </label>
         <label className="text-sm font-semibold">
-          Contractor
+          {tr('common.contractor')}
           <select
             className={fieldClass}
             value={contractor}
@@ -134,7 +158,7 @@ export function CreateChecklistForm(
               setZone('');
             }}
           >
-            <option value="">All contractors</option>
+            <option value="">{tr('safety_workspace.all_contractors')}</option>
             {contractors.data?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -143,7 +167,7 @@ export function CreateChecklistForm(
           </select>
         </label>
         <label className="text-sm font-semibold">
-          Team
+          {tr('labels.TEAM')}
           <select
             className={fieldClass}
             required
@@ -154,7 +178,7 @@ export function CreateChecklistForm(
               setZone('');
             }}
           >
-            <option value="">Choose a team</option>
+            <option value="">{tr('safety_workspace.choose_a_team')}</option>
             {teams.data
               ?.filter((t) => t.isActive)
               .map((t) => (
@@ -165,14 +189,14 @@ export function CreateChecklistForm(
           </select>
         </label>
         <label className="text-sm font-semibold">
-          Zone
+          {tr('common.zone')}
           <select
             className={fieldClass}
             required
             value={zoneId}
             onChange={(e) => setZone(e.target.value)}
           >
-            <option value="">Choose a recorded Zone grant</option>
+            <option value="">{tr('safety_workspace.choose_a_recorded_zone_grant')}</option>
             {detail.data?.zones.map((z) => (
               <option key={z.id + z.validFrom} value={z.id}>
                 {z.name} · {z.code}
@@ -182,13 +206,15 @@ export function CreateChecklistForm(
         </label>
         {windows.length > 1 && (
           <label className="text-sm font-semibold">
-            Planned work window
+            {tr('safety_workspace.planned_work_window')}
             <select
               className={fieldClass}
               value={windowChoice}
               onChange={(e) => setWindowChoice(e.target.value)}
             >
-              <option value="">Choose a shift or enter custom times</option>
+              <option value="">
+                {tr('safety_workspace.choose_a_shift_or_enter_custom_times')}
+              </option>
               {windows.map((w, i) => (
                 <option key={i} value={String(i + 1)}>
                   {w.shiftName} · {localInput(w.startsAt)} – {localInput(w.endsAt)}
@@ -199,7 +225,9 @@ export function CreateChecklistForm(
         )}
         {!windows.length && !detail.isPending && (
           <p className="text-xs">
-            No planned shift for this team/date. Enter the work window explicitly.
+            {tr(
+              'safety_workspace.no_planned_shift_for_this_team_date_enter_the_work_window_explicitly',
+            )}
           </p>
         )}
         <fieldset
@@ -208,7 +236,7 @@ export function CreateChecklistForm(
         >
           <Field
             name="startsAt"
-            label="Work starts"
+            label={tr('safety_workspace.work_starts')}
             type="datetime-local"
             required
             defaultValue={planned ? localInput(planned.startsAt) : ''}
@@ -220,7 +248,7 @@ export function CreateChecklistForm(
         >
           <Field
             name="endsAt"
-            label="Work ends"
+            label={tr('safety_workspace.work_ends')}
             type="datetime-local"
             required
             defaultValue={planned ? localInput(planned.endsAt) : ''}
@@ -228,19 +256,24 @@ export function CreateChecklistForm(
         </fieldset>
       </div>
       <p className="text-xs text-[var(--text-secondary)]">
-        Times use {timezone}. The team's Zone grant must cover the whole work window.
+        {tr(
+          'safety_workspace.times_use_value1_the_team_s_zone_grant_must_cover_the_whole_work_window',
+          { value1: timezone },
+        )}
       </p>
       <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
       <RequestError error={teams.error} retry={() => void teams.refetch()} />
       <RequestError error={detail.error} retry={() => void detail.refetch()} />
       {detail.data && !detail.data.zones.length && (
         <p className="text-sm">
-          No applicable Zone grant. Coordinate with the Site Manager before assigning.
+          {tr(
+            'safety_workspace.no_applicable_zone_grant_coordinate_with_the_site_manager_before_assigning',
+          )}
         </p>
       )}
       <Field
         name="description"
-        label="Work description"
+        label={tr('safety_workspace.work_description')}
         type="textarea"
         maxLength={2000}
         required
@@ -254,28 +287,30 @@ export function CreateChecklistForm(
         />
       )}
       <label className="text-sm font-semibold">
-        Suggested checklist
+        {tr('safety_workspace.suggested_checklist')}
         <select
           className={fieldClass}
           value={preset}
           onChange={(e) => {
             const value = e.target.value as typeof preset;
             setPreset(value);
-            setItems(presets[value].map((i) => ({ ...i })));
+            setItems(presets()[value]);
           }}
         >
-          <option value="HEIGHT">Working at height</option>
-          <option value="ELECTRICAL">Electrical work</option>
+          <option value="HEIGHT">{tr('safety_workspace.working_at_height')}</option>
+          <option value="ELECTRICAL">{tr('safety_workspace.electrical_work')}</option>
         </select>
       </label>
       <p className="text-xs text-[var(--text-secondary)]">
-        Adapt these suggested criteria to the actual work. Criteria become fixed when assigned.
+        {tr(
+          'safety_workspace.adapt_these_suggested_criteria_to_the_actual_work_criteria_become_fixed_when_assigned',
+        )}
       </p>
       <div className="space-y-3">
         {items.map((item, index) => (
           <div key={index} className={cardClass}>
             <label className="block text-sm font-semibold">
-              Criterion {index + 1}
+              {tr('safety_workspace.criterion_value1', { value1: index + 1 })}
               <textarea
                 className={fieldClass}
                 required
@@ -298,7 +333,9 @@ export function CreateChecklistForm(
                   )
                 }
               />
-              Require evidence for criterion {index + 1} when reported as Pass
+              {tr('safety_workspace.require_evidence_for_criterion_value1_when_reported_as_pass', {
+                value1: index + 1,
+              })}
             </label>
             <button
               className={buttonClass}
@@ -306,7 +343,7 @@ export function CreateChecklistForm(
               disabled={items.length === 1}
               onClick={() => setItems(items.filter((_, n) => n !== index))}
             >
-              Remove criterion {index + 1}
+              {tr('safety_workspace.remove_criterion_value1', { value1: index + 1 })}
             </button>
           </div>
         ))}
@@ -317,7 +354,7 @@ export function CreateChecklistForm(
         disabled={items.length >= 30}
         onClick={() => setItems([...items, { text: '', evidenceRequired: false }])}
       >
-        Add criterion
+        {tr('safety_workspace.add_criterion')}
       </button>
     </CommandForm>
   );
@@ -332,6 +369,8 @@ export function ReportChecklistForm({
   pending: boolean;
   onSubmit: (results: ChecklistResultInput[], files: File[]) => void;
 }) {
+  useTranslation();
+
   const [draft, setDraft] = useState<Record<string, DraftResult>>(() =>
       Object.fromEntries(items.map((i) => [i.id, { answer: '', note: '', files: [] }])),
     ),
@@ -341,16 +380,18 @@ export function ReportChecklistForm({
   return (
     <CommandForm
       pending={pending}
-      label="Submit checklist"
+      label={tr('safety_workspace.submit_checklist')}
       onSubmit={() => {
         const files: File[] = [];
         const results = items.map((item) => {
           const r = draft[item.id]!;
-          if (!r.answer) throw Error('Choose a result for every criterion');
+          if (!r.answer) throw Error(tr('safety_workspace.choose_a_result_for_every_criterion'));
           if (r.answer !== 'PASS' && !r.note.trim())
-            throw Error('Explain failed or not applicable items');
+            throw Error(tr('safety_workspace.explain_failed_or_not_applicable_items'));
           if (r.answer === 'PASS' && item.evidenceRequired && !r.files.length)
-            throw Error('Add required evidence or report the missing evidence as Fail');
+            throw Error(
+              tr('safety_workspace.add_required_evidence_or_report_the_missing_evidence_as_fail'),
+            );
           const fileIndexes = r.files.map((f) => {
             files.push(f);
             return files.length - 1;
@@ -361,8 +402,9 @@ export function ReportChecklistForm({
       }}
     >
       <p className="text-sm text-[var(--text-secondary)]">
-        Report each criterion. JPEG, PNG or PDF; up to 3 files per criterion, 5 MiB per file and 20
-        MiB in total.
+        {tr(
+          'safety_workspace.report_each_criterion_jpeg_png_or_pdf_up_to_3_files_per_criterion_5_mib_per_file_and_20_mib_in_total',
+        )}
       </p>
       {items.map((item) => {
         const r = draft[item.id]!;
@@ -372,7 +414,7 @@ export function ReportChecklistForm({
               {item.position + 1}. {item.text}
             </h3>
             <label className="block text-sm font-semibold">
-              Result: {item.text}
+              {tr('safety_workspace.result_value1', { value1: item.text })}
               <select
                 className={fieldClass}
                 required
@@ -381,14 +423,14 @@ export function ReportChecklistForm({
                   change(item.id, { answer: e.target.value as DraftResult['answer'] })
                 }
               >
-                <option value="">Choose result</option>
-                <option value="PASS">Pass</option>
-                <option value="FAIL">Fail</option>
-                <option value="NOT_APPLICABLE">Not applicable</option>
+                <option value="">{tr('safety_workspace.choose_result')}</option>
+                <option value="PASS">{tr('safety_workspace.pass')}</option>
+                <option value="FAIL">{tr('safety_workspace.fail')}</option>
+                <option value="NOT_APPLICABLE">{tr('safety_workspace.not_applicable')}</option>
               </select>
             </label>
             <label className="block text-sm font-semibold">
-              Notes: {item.text}
+              {tr('safety_workspace.notes_value1', { value1: item.text })}
               <textarea
                 className={fieldClass}
                 required={r.answer === 'FAIL' || r.answer === 'NOT_APPLICABLE'}
@@ -398,10 +440,10 @@ export function ReportChecklistForm({
               />
             </label>
             <label className="block text-sm font-semibold">
-              Evidence: {item.text}
+              {tr('safety_workspace.evidence_value1', { value1: item.text })}
               {item.evidenceRequired && (
                 <span className="block text-xs font-normal">
-                  Required to report this criterion as Pass.
+                  {tr('safety_workspace.required_to_report_this_criterion_as_pass')}
                 </span>
               )}
               <input
@@ -413,7 +455,8 @@ export function ReportChecklistForm({
                   const next = [...r.files, ...Array.from(e.currentTarget.files ?? [])];
                   e.currentTarget.value = '';
                   try {
-                    if (next.length > 3) throw Error('At most three files per criterion');
+                    if (next.length > 3)
+                      throw Error(tr('safety_workspace.at_most_three_files_per_criterion'));
                     if (
                       next.some(
                         (f) =>
@@ -422,13 +465,14 @@ export function ReportChecklistForm({
                           f.size > 5242880,
                       )
                     )
-                      throw Error('Choose a JPEG, PNG or PDF at most 5 MiB');
+                      throw Error(tr('safety_workspace.choose_a_jpeg_png_or_pdf_at_most_5_mib'));
                     const total = Object.entries(draft).reduce(
                       (sum, [id, value]) =>
                         sum + (id === item.id ? next : value.files).reduce((n, f) => n + f.size, 0),
                       0,
                     );
-                    if (total > 20971520) throw Error('Files must total at most 20 MiB');
+                    if (total > 20971520)
+                      throw Error(tr('safety_workspace.files_must_total_at_most_20_mib'));
                     change(item.id, { files: next });
                     setError(undefined);
                   } catch (error) {
@@ -440,10 +484,16 @@ export function ReportChecklistForm({
             {r.files.map((file, index) => (
               <div key={index} className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-3">
                 <p className="break-words text-sm">
-                  {file.name} · {(file.size / 1024).toFixed(1)} KiB
+                  {tr('safety_workflow_ui.value_value_kib', {
+                    value1: file.name,
+                    value2: (file.size / 1024).toFixed(1),
+                  })}
                 </p>
                 {file.type !== 'application/pdf' && (
-                  <BlobImage blob={file} alt={'Selected evidence for ' + item.text} />
+                  <BlobImage
+                    blob={file}
+                    alt={tr('safety_workspace.selected_evidence_for_value1', { value1: item.text })}
+                  />
                 )}
                 <button
                   type="button"
@@ -453,7 +503,7 @@ export function ReportChecklistForm({
                     setError(undefined);
                   }}
                 >
-                  Remove {file.name}
+                  {tr('safety_workspace.remove_value1', { value1: file.name })}
                 </button>
               </div>
             ))}

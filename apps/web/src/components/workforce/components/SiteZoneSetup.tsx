@@ -1,3 +1,6 @@
+import { localizedError } from '../../../i18n/messages';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, type ZoneResponse } from '@smartsite/api-client';
@@ -14,6 +17,8 @@ export function SiteZoneSetup({
   siteId: string;
   userId: string;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['site-setup', apiUrl, userId, 'zones', siteId];
@@ -48,9 +53,9 @@ export function SiteZoneSetup({
   return (
     <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-[#071A2B]">Create Zone</h2>
+        <h2 className="text-lg font-bold text-[#071A2B]">{tr('common.create_zone')}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Add a work area and configure its access policy and required PPE.
+          {tr('site_zone_setup.add_a_work_area_and_configure_its_access_policy_and_required_ppe')}
         </p>
       </div>
       <form
@@ -61,10 +66,10 @@ export function SiteZoneSetup({
         className="grid gap-4 sm:grid-cols-2"
       >
         <p className="sm:col-span-2 text-xs text-slate-500">
-          Zone code is generated automatically when saved.
+          {tr('site_zone_setup.zone_code_is_generated_automatically_when_saved')}
         </p>
         <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
-          Zone name
+          {tr('common.zone_name')}
           <input
             className={inputClass}
             required
@@ -74,60 +79,60 @@ export function SiteZoneSetup({
           />
         </label>
         <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
-          Zone type
+          {tr('common.zone_type')}
           <select
             className={inputClass}
             value={type}
             onChange={(e) => setType(e.target.value as ZoneResponse['type'])}
           >
-            <option value="STANDARD">Standard</option>
-            <option value="RESTRICTED">Restricted</option>
-            <option value="HAZARDOUS">Hazardous</option>
+            <option value="STANDARD">{tr('common.standard')}</option>
+            <option value="RESTRICTED">{tr('common.restricted')}</option>
+            <option value="HAZARDOUS">{tr('common.hazardous')}</option>
           </select>
         </label>
         <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
-          Access policy
+          {tr('common.access_policy')}
           <select
             className={inputClass}
             value={policy}
             onChange={(e) => setPolicy(e.target.value as ZoneResponse['restrictionPolicy'])}
           >
-            <option value="NONE">No restriction</option>
-            <option value="AUTHORIZATION_REQUIRED">Authorization required</option>
-            <option value="PROHIBITED_FOR_ALL">Prohibited for all</option>
+            <option value="NONE">{tr('common.no_restriction')}</option>
+            <option value="AUTHORIZATION_REQUIRED">{tr('common.authorization_required')}</option>
+            <option value="PROHIBITED_FOR_ALL">{tr('common.prohibited_for_all')}</option>
           </select>
         </label>
         <label>
           <input type="checkbox" checked={hardHat} onChange={(e) => setHardHat(e.target.checked)} />{' '}
-          Hard hat
+          {tr('common.hard_hat')}
         </label>
         <label>
           <input type="checkbox" checked={vest} onChange={(e) => setVest(e.target.checked)} />{' '}
-          Safety vest
+          {tr('common.safety_vest_280adb')}
         </label>
         <button
           className="rounded-xl bg-[#071A2B] text-white px-4 py-2 min-h-10 disabled:opacity-50"
           disabled={create.isPending || !name.trim()}
           type="submit"
         >
-          {create.isPending ? 'Creating…' : 'Create Zone'}
+          {create.isPending ? tr('common.creating') : tr('common.create_zone')}
         </button>
       </form>
-      {create.isError && <p role="alert">{create.error.message}</p>}
-      {create.isSuccess && <p role="status">Zone created.</p>}
+      {create.isError && <p role="alert">{localizedError(create.error.message)}</p>}
+      {create.isSuccess && <p role="status">{tr('common.zone_created')}</p>}
       <div className="border-t border-slate-100 pt-4 space-y-3">
-        <h3 className="font-bold text-[#071A2B]">Configured Zones</h3>
+        <h3 className="font-bold text-[#071A2B]">{tr('common.configured_zones')}</h3>
         {zones.isPending ? (
-          <p role="status">Loading zones…</p>
+          <p role="status">{tr('common.loading_zones')}</p>
         ) : zones.isError ? (
           <div role="alert">
-            Zones unavailable.{' '}
+            {tr('common.zones_unavailable')}{' '}
             <button type="button" onClick={() => void zones.refetch()}>
-              Retry
+              {tr('common.retry')}
             </button>
           </div>
         ) : zones.data.items.length === 0 ? (
-          <p>No zones configured for this site.</p>
+          <p>{tr('site_zone_setup.no_zones_configured_for_this_site')}</p>
         ) : (
           <ul>
             {zones.data.items.map((zone) => (

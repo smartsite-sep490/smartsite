@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { SafetyTeamDetailResponse } from '@smartsite/api-client';
@@ -13,6 +15,8 @@ export function SafetyZoneContext(
     onAlerts: (zoneId?: string, camera?: string) => void;
   },
 ) {
+  useTranslation();
+
   const [zone, setZone] = useState(''),
     [camera, setCamera] = useState(''),
     [offset, setOffset] = useState(0),
@@ -72,13 +76,13 @@ export function SafetyZoneContext(
   });
   return (
     <article className={cardClass}>
-      <h3 className="font-bold">Zones and cameras</h3>
+      <h3 className="font-bold">{tr('safety_workspace.zones_and_cameras')}</h3>
       {!selected ? (
-        <p className="text-sm">No recorded Zone grant for this date.</p>
+        <p className="text-sm">{tr('safety_workspace.no_recorded_zone_grant_for_this_date')}</p>
       ) : (
         <>
           <label className="block text-sm">
-            Zone
+            {tr('common.zone')}
             <select
               className="mt-2 w-full rounded-lg border p-2"
               value={selected.id}
@@ -97,14 +101,19 @@ export function SafetyZoneContext(
             </select>
           </label>
           <p className="text-xs text-[var(--text-secondary)]">
-            Recorded grant: {date(selected.validFrom)} – {date(selected.validUntil)}
+            {tr('safety_workspace.recorded_grant_value1_value2', {
+              value1: date(selected.validFrom),
+              value2: date(selected.validUntil),
+            })}
           </p>
           <div className="rounded-lg bg-[var(--surface-bone)] p-3">
-            <strong className="text-sm">Teams related to this Zone</strong>
+            <strong className="text-sm">{tr('safety_workspace.teams_related_to_this_zone')}</strong>
             <p className="text-xs">
-              Zone grants support verification; they do not establish responsibility or presence.
+              {tr(
+                'safety_workspace.zone_grants_support_verification_they_do_not_establish_responsibility_or_presence',
+              )}
             </p>
-            {teams.isPending && <p>Loading teams…</p>}
+            {teams.isPending && <p>{tr('safety_workspace.loading_teams')}</p>}
             <RequestError error={teams.error} retry={() => void teams.refetch()} />
             {teams.data?.items.map((t) => (
               <p key={t.id} className="text-sm">
@@ -115,10 +124,16 @@ export function SafetyZoneContext(
           </div>
           {p.canAlerts && (
             <button className={buttonClass} onClick={() => p.onAlerts(selected.id)}>
-              View Zone alerts ({selected.attentionAlertCount ?? 0})
+              {tr('safety_workspace.view_zone_alerts_value1', {
+                value1: selected.attentionAlertCount ?? 0,
+              })}
             </button>
           )}
-          {!cameras.length && <p className="text-sm">No current camera linked to this Zone.</p>}
+          {!cameras.length && (
+            <p className="text-sm">
+              {tr('safety_workspace.no_current_camera_linked_to_this_zone')}
+            </p>
+          )}
           <div className="grid gap-2 sm:grid-cols-2">
             {cameras.map((c) => (
               <button
@@ -135,41 +150,56 @@ export function SafetyZoneContext(
               >
                 <strong className="block text-sm">{c.name}</strong>
                 <span className="text-xs">
-                  Configuration: <StatusBadge value={c.status} />
+                  {tr('safety_workspace.configuration')}
+                  <StatusBadge value={c.status} />
                 </span>
                 <span className="block text-xs">
-                  Related alerts: {c.attentionAlertCount ?? 'Unavailable'}
+                  {tr('safety_workspace.related_alerts_value1', {
+                    value1: c.attentionAlertCount ?? tr('labels.UNAVAILABLE'),
+                  })}
                 </span>
               </button>
             ))}
           </div>
           {current && (
             <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
-              <h4 className="font-semibold">{current.name} · Alert evidence</h4>
+              <h4 className="font-semibold">
+                {tr('safety_workspace.value1_alert_evidence', { value1: current.name })}
+              </h4>
               <p className="text-xs">
-                Current camera link · This is retained evidence, not a live feed.
+                {tr(
+                  'safety_workspace.current_camera_link_this_is_retained_evidence_not_a_live_feed',
+                )}
               </p>
               {!p.canAlerts ? (
-                <p className="text-sm">Alert evidence requires Safety or Admin access.</p>
+                <p className="text-sm">
+                  {tr('safety_workspace.alert_evidence_requires_safety_or_admin_access')}
+                </p>
               ) : !ref ? (
-                <p className="text-sm">No alert evidence for this camera and date.</p>
+                <p className="text-sm">
+                  {tr('safety_workspace.no_alert_evidence_for_this_camera_and_date')}
+                </p>
               ) : (
                 <>
-                  <p className="text-xs">Captured {date(ref.capturedAt)}</p>
+                  <p className="text-xs">
+                    {tr('safety_workspace.captured_value1', { value1: date(ref.capturedAt) })}
+                  </p>
                   {ref.evidenceIndex === null ? (
-                    <p>Evidence unavailable.</p>
+                    <p>{tr('safety_workspace.evidence_unavailable')}</p>
                   ) : (
                     <>
-                      {image.isPending && <p>Loading evidence…</p>}
+                      {image.isPending && <p>{tr('safety_workspace.loading_evidence')}</p>}
                       <RequestError error={image.error} retry={() => void image.refetch()} />
                       {image.data && (
                         <>
                           <BlobImage
                             blob={image.data}
-                            alt={'Alert evidence from ' + current.name}
+                            alt={tr('safety_workspace.alert_evidence_from_value1', {
+                              value1: current.name,
+                            })}
                           />
                           <button className={buttonClass} onClick={() => setZoom(true)}>
-                            Enlarge evidence
+                            {tr('safety_workspace.enlarge_evidence')}
                           </button>
                         </>
                       )}
@@ -179,7 +209,7 @@ export function SafetyZoneContext(
                     className={buttonClass}
                     onClick={() => p.onAlerts(selected.id, current.externalId)}
                   >
-                    View camera alerts
+                    {tr('safety_workspace.view_camera_alerts')}
                   </button>
                 </>
               )}
@@ -188,8 +218,11 @@ export function SafetyZoneContext(
         </>
       )}
       {zoom && image.data && (
-        <Dialog title="Alert evidence" onClose={() => setZoom(false)}>
-          <BlobImage blob={image.data} alt={'Alert evidence from ' + current?.name} />
+        <Dialog title={tr('safety_workspace.alert_evidence')} onClose={() => setZoom(false)}>
+          <BlobImage
+            blob={image.data}
+            alt={tr('safety_workspace.alert_evidence_from_value1', { value1: current?.name })}
+          />
         </Dialog>
       )}
     </article>

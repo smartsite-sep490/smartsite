@@ -174,6 +174,37 @@ export interface WorkerResponse {
   createdAt: string;
 }
 
+export const WORKER_DEFAULT_TEMPORARY_PASSWORD = '12345678';
+
+export interface CreateContractorWorkerAccountCommand {
+  siteId: string;
+  /** Omit to let the Backend generate a Worker code. Accepted for legacy clients. */
+  externalId?: string;
+  displayName: string;
+  username: string;
+  /** Omit to use 12345678. Legacy clients may supply a password meeting the account policy. */
+  temporaryPassword?: string;
+}
+
+export interface ContractorWorkerAccountResponse {
+  worker: WorkerResponse;
+  account: AccountResponse;
+}
+
+export interface ContractorWorkerAccountOptionsResponse {
+  contractors: Array<{ id: string; name: string }>;
+}
+
+export interface WorkerProfileSnapshot {
+  externalId: string;
+  displayName: string;
+  isActive: boolean;
+}
+
+export interface UpdateContractorWorkerCommand extends WorkerProfileSnapshot {
+  expectedSnapshot: WorkerProfileSnapshot;
+}
+
 export interface ContractorParticipationResponse {
   id: string;
   contractorId: string;

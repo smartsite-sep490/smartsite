@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, type AccountResponse, ApiError } from '@smartsite/api-client';
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -21,6 +23,8 @@ export const AuthContext = createContext<AuthState>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  useTranslation();
+
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
 
@@ -66,13 +70,9 @@ export function useAuth() {
 }
 
 // ── Session Expired Luxury Modal ──────────────────────────────────────────────
-export function SessionExpiredModal({
-  open,
-  onReLogin,
-}: {
-  open: boolean;
-  onReLogin: () => void;
-}) {
+export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLogin: () => void }) {
+  useTranslation();
+
   if (!open) return null;
 
   return (
@@ -83,18 +83,30 @@ export function SessionExpiredModal({
 
         {/* Warning Badge Icon */}
         <div className="w-16 h-16 rounded-2xl bg-[#FFF7ED] border border-[#FFEDD5] text-[#F66B17] mx-auto flex items-center justify-center shadow-inner relative">
-          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          <svg
+            className="w-8 h-8"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
           </svg>
         </div>
 
         {/* Title & Description */}
         <div className="space-y-2">
           <h2 className="text-xl font-extrabold text-[#071A2B] tracking-tight">
-            Your session has expired
+            {tr('auth-session.your_session_has_expired')}
           </h2>
           <p className="text-xs font-medium text-[#607A96] leading-relaxed max-w-xs mx-auto">
-            Your session ended automatically for security. Please sign in again to continue working on SmartSite.
+            {tr(
+              'auth-session.your_session_ended_automatically_for_security_please_sign_in_again_to_continue_wor',
+            )}
           </p>
         </div>
 
@@ -104,8 +116,14 @@ export function SessionExpiredModal({
           onClick={onReLogin}
           className="w-full py-3 px-5 rounded-xl bg-[#071A2B] text-white text-xs font-bold shadow-[0_4px_16px_rgba(7,26,43,0.25)] hover:bg-[#F66B17] hover:shadow-[0_4px_16px_rgba(246,107,23,0.35)] transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 group"
         >
-          <span>Sign in again</span>
-          <svg className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <span>{tr('common.sign_in_again')}</span>
+          <svg
+            className="w-4 h-4 text-white group-hover:translate-x-1 transition-transform"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
           </svg>
         </button>
@@ -198,8 +216,14 @@ export function useCurrentUser(apiUrl: string) {
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) {
           triggerSessionExpired();
-        } else if (typeof err === 'object' && err !== null && ('status' in err || 'statusCode' in err)) {
-          const status = (err as { status?: number; statusCode?: number }).status ?? (err as { statusCode?: number }).statusCode;
+        } else if (
+          typeof err === 'object' &&
+          err !== null &&
+          ('status' in err || 'statusCode' in err)
+        ) {
+          const status =
+            (err as { status?: number; statusCode?: number }).status ??
+            (err as { statusCode?: number }).statusCode;
           if (status === 401) {
             triggerSessionExpired();
           }

@@ -2,6 +2,10 @@ import { SafetyOverviewView } from '../safety/SafetyOverviewView';
 import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
 import { AlertWorkContext } from '../safety/AlertWorkContext';
 import type { RelatedAlertFilter } from '../safety/safety-context';
+import { localizedLabel } from '../../i18n/labels';
+import { uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { StatusBadge, TechnicalDetails } from '../safety/SafetyWorkflowUi';
 import { IncidentView } from '../safety/IncidentView';
 import { SafetyTasksView } from '../safety/SafetyTasksView';
@@ -44,29 +48,39 @@ const alertTypeOptions: readonly SafetyAlertType[] = ['PPE_VIOLATION', 'RESTRICT
 const alertPageSize = 20;
 
 function formatLabel(value: string): string {
-  return value
-    .toLowerCase()
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+  const translated = localizedLabel(value);
+  return translated !== value
+    ? translated
+    : value
+        .toLowerCase()
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
 }
 
 function formatDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(uiLocale());
 }
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 401) return 'Your session is no longer valid. Sign in again.';
-    if (error.status === 403) return 'This account cannot view the selected Site alerts.';
-    if (error.status === 404) return 'The requested safety alert or site was not found.';
+    if (error.status === 401)
+      return tr('safety_alert_evidence_utils.your_session_is_no_longer_valid_sign_in_again');
+    if (error.status === 403)
+      return tr('safety_alerts_view.this_account_cannot_view_the_selected_site_alerts');
+    if (error.status === 404)
+      return tr('safety_alerts_view.the_requested_safety_alert_or_site_was_not_found');
     if (error.status === 409)
-      return 'This alert changed while you were reviewing it. The latest record has been loaded; review it before submitting again.';
-    if (error.code === 'network') return 'Could not connect to the backend.';
+      return tr(
+        'safety_alerts_view.this_alert_changed_while_you_were_reviewing_it_the_latest_record_has_been_loaded_r',
+      );
+    if (error.code === 'network') return tr('safety_alerts_view.could_not_connect_to_the_backend');
     return error.message;
   }
-  return error instanceof Error ? error.message : 'The request could not be completed.';
+  return error instanceof Error
+    ? error.message
+    : tr('access_control_view.the_request_could_not_be_completed');
 }
 
 function statusTone(status: SafetyAlertStatus): string {
@@ -85,6 +99,8 @@ function AlertRow({
   selected: boolean;
   onSelect(): void;
 }) {
+  useTranslation();
+
   return (
     <button
       type="button"
@@ -112,9 +128,13 @@ function AlertRow({
         </span>
       </div>
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B6B6B]">
-        <span>{alert.detectionCount} detections</span>
-        <span>Last seen {formatDate(alert.lastDetectedAt)}</span>
-        <span>{alert.zoneId ? `Zone ${alert.zoneId.slice(0, 8)}` : 'No resolved Zone'}</span>
+        <span>{tr('common.value_detections', { value1: alert.detectionCount })}</span>
+        <span>{tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}</span>
+        <span>
+          {alert.zoneId
+            ? tr('common.zone_value', { value1: alert.zoneId.slice(0, 8) })
+            : tr('common.no_resolved_zone')}
+        </span>
       </div>
     </button>
   );
@@ -142,6 +162,8 @@ export function SafetyAlertsView({
   initialStatus,
   initialType,
 }: SafetyAlertsViewProps) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(
@@ -281,12 +303,16 @@ export function SafetyAlertsView({
       if (!canReviewSafetyAlerts) {
         await client.logout().catch(() => undefined);
         throw new Error(
-          'A global Admin or Site-scoped Safety, Contractor Representative or Manager role is required.',
+          tr(
+            'safety_alerts_view.a_global_admin_or_site_scoped_safety_contractor_representative_or_manager_role_is',
+          ),
         );
       }
       if (result.user.mustChangePassword) {
         await client.logout().catch(() => undefined);
-        throw new Error('Change the temporary password before opening safety alerts.');
+        throw new Error(
+          tr('safety_alerts_view.change_the_temporary_password_before_opening_safety_alerts'),
+        );
       }
       if (generation !== lifecycleGeneration.current) {
         void client.logout().catch(() => undefined);
@@ -421,7 +447,8 @@ export function SafetyAlertsView({
 
   const review = useMutation({
     mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
-      if (!detail.data) throw new Error('Load an alert before submitting a review.');
+      if (!detail.data)
+        throw new Error(tr('safety_alerts_view.load_an_alert_before_submitting_a_review'));
       return client.reviewSafetyAlert(token, selectedSiteId, detail.data.id, {
         commandId: crypto.randomUUID(),
         expectedRevision: detail.data.revision,
@@ -483,16 +510,19 @@ export function SafetyAlertsView({
     return (
       <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
         <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#6B6B6B]">
-          Site safety workspace
+          {tr('common.site_safety_workspace')}
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">Safety alert queue</h1>
+        <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">
+          {tr('common.safety_alert_queue')}
+        </h1>
         <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
-          Sign in with your Site role to manage incidents, corrective work and Safety Tasks, or
-          record an auditable review decision.
+          {tr(
+            'safety_alerts_view.sign_in_with_your_site_role_to_manage_incidents_corrective_work_and_safety_tasks_o',
+          )}
         </p>
         <form className="mt-6 space-y-4" onSubmit={handleLogin}>
           <label className="block text-sm font-semibold text-[#2F3437]">
-            Username
+            {tr('common.username')}
             <input
               required
               autoComplete="username"
@@ -502,7 +532,7 @@ export function SafetyAlertsView({
             />
           </label>
           <label className="block text-sm font-semibold text-[#2F3437]">
-            Password
+            {tr('common.password')}
             <input
               required
               type="password"
@@ -522,7 +552,7 @@ export function SafetyAlertsView({
             disabled={login.isPending}
             className="w-full rounded-md bg-[#111111] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#333333] disabled:cursor-wait disabled:opacity-60"
           >
-            {login.isPending ? 'Signing in…' : 'Sign in'}
+            {login.isPending ? tr('common.signing_in') : tr('common.sign_in')}
           </button>
         </form>
       </div>
@@ -534,12 +564,12 @@ export function SafetyAlertsView({
       <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#111111]">
-            Safety operations
+            {tr('common.safety_operations')}
           </h1>
         </div>
         <div className="flex min-w-0 flex-wrap items-end gap-3 lg:max-w-[55%]">
           <label className="min-w-0 w-full sm:w-72 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
-            Site
+            {tr('common.site_fa7955')}
             <select
               value={selectedSiteId}
               onChange={(event) => {
@@ -571,14 +601,14 @@ export function SafetyAlertsView({
             onClick={handleLogout}
             className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] shrink-0 max-w-full truncate"
           >
-            Sign out {session.user.displayName}
+            {tr('common.sign_out_value', { value1: session.user.displayName })}
           </button>
         </div>
       </header>
 
       <nav
         className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-2"
-        aria-label="Safety workspace"
+        aria-label={tr('common.safety_workspace')}
       >
         {(['Overview', 'Alerts', 'Incidents', 'Checklists', 'Safety Tasks'] as const).map((tab) => (
           <button
@@ -597,7 +627,7 @@ export function SafetyAlertsView({
                 : 'text-[var(--text-secondary)] hover:bg-[var(--surface-bone)]')
             }
           >
-            {tab}
+            {localizedLabel(tab)}
           </button>
         ))}
       </nav>
@@ -614,7 +644,7 @@ export function SafetyAlertsView({
         {workspaceTab === 'Alerts' && canAlerts && (
           <>
             <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
-              Status
+              {tr('common.status')}
               <select
                 value={status}
                 onChange={(event) => {
@@ -625,7 +655,7 @@ export function SafetyAlertsView({
                 }}
                 className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
               >
-                <option value="ALL">All statuses</option>
+                <option value="ALL">{tr('common.all_statuses_8ee573')}</option>
                 {statusOptions.map((value) => (
                   <option key={value} value={value}>
                     {formatLabel(value)}
@@ -634,7 +664,7 @@ export function SafetyAlertsView({
               </select>
             </label>
             <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B] sm:col-span-2 lg:col-span-1">
-              Alert type
+              {tr('common.alert_type')}
               <select
                 value={type}
                 onChange={(event) => {
@@ -645,7 +675,7 @@ export function SafetyAlertsView({
                 }}
                 className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
               >
-                <option value="ALL">All types</option>
+                <option value="ALL">{tr('common.all_types')}</option>
                 {alertTypeOptions.map((value) => (
                   <option key={value} value={value}>
                     {formatLabel(value)}
@@ -657,7 +687,9 @@ export function SafetyAlertsView({
         )}
       </section>
 
-      {sites.isPending && <p className="rounded-lg bg-white p-5 text-sm">Loading Sites…</p>}
+      {sites.isPending && (
+        <p className="rounded-lg bg-white p-5 text-sm">{tr('common.loading_sites_c334d0')}</p>
+      )}
       {sites.error && (
         <p role="alert" className="rounded-lg bg-[#FDEBEC] p-5 text-sm text-[#9F2F2D]">
           {errorMessage(sites.error)}
@@ -665,7 +697,7 @@ export function SafetyAlertsView({
       )}
       {sites.data && visibleSites.length === 0 && (
         <p className="rounded-lg bg-white p-5 text-sm text-[#6B6B6B]">
-          No Site with Safety workflow access is assigned to this account.
+          {tr('safety_alerts_view.no_site_with_safety_workflow_access_is_assigned_to_this_account')}
         </p>
       )}
 
@@ -738,13 +770,15 @@ export function SafetyAlertsView({
       )}
       {workspaceTab === 'Alerts' && relatedAlertFilter && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-bone)] p-3">
-          <p className="text-sm">Related alerts: {relatedAlertFilter.caption}</p>
+          <p className="text-sm">
+            {tr('safety_workspace.related_alerts_value1', { value1: relatedAlertFilter.caption })}
+          </p>
           <div className="flex gap-2">
             <button
               className="text-sm font-semibold underline"
               onClick={() => setWorkspaceTab('Overview')}
             >
-              Back to overview
+              {tr('safety_workspace.back_to_overview')}
             </button>
             <button
               className="text-sm font-semibold underline"
@@ -753,7 +787,7 @@ export function SafetyAlertsView({
                 setOffset(0);
               }}
             >
-              Clear context filter
+              {tr('safety_workspace.clear_context_filter')}
             </button>
           </div>
         </div>
@@ -762,7 +796,11 @@ export function SafetyAlertsView({
       {selectedSiteId && workspaceTab === 'Incidents' && (
         <IncidentView
           onBack={incidentReturn ? () => setWorkspaceTab(incidentReturn) : undefined}
-          backLabel={incidentReturn === 'Overview' ? 'Back to overview' : 'Back to checklists'}
+          backLabel={
+            incidentReturn === 'Overview'
+              ? tr('safety_workspace.back_to_overview')
+              : tr('safety_workspace.back_to_checklists')
+          }
           onOpenChecklist={(id) => {
             setRelatedChecklistFilter(undefined);
             setChecklistDraft(undefined);
@@ -796,17 +834,21 @@ export function SafetyAlertsView({
       {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
           <section
-            aria-label="Alert list"
+            aria-label={tr('common.alert_list')}
             className={'space-y-3 min-w-0 ' + (mobileAlertDetail ? 'hidden lg:block' : '')}
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-[#111111]">Alert queue</h2>
+                <h2 className="text-lg font-bold text-[#111111]">{tr('common.alert_queue')}</h2>
                 {alerts.data && (
                   <p className="text-xs text-[#6B6B6B]">
                     {alerts.data.total === 0
-                      ? '0 alerts'
-                      : `${offset + 1}–${Math.min(offset + alerts.data.items.length, alerts.data.total)} of ${alerts.data.total}`}
+                      ? tr('common.0_alerts')
+                      : tr('common.value_value_of_value', {
+                          value1: offset + 1,
+                          value2: Math.min(offset + alerts.data.items.length, alerts.data.total),
+                          value3: alerts.data.total,
+                        })}
                   </p>
                 )}
               </div>
@@ -818,10 +860,12 @@ export function SafetyAlertsView({
                 }}
                 className="text-sm font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
               >
-                Refresh
+                {tr('common.refresh')}
               </button>
             </div>
-            {alerts.isPending && <p className="rounded-lg bg-white p-5 text-sm">Loading alerts…</p>}
+            {alerts.isPending && (
+              <p className="rounded-lg bg-white p-5 text-sm">{tr('common.loading_alerts')}</p>
+            )}
             {alerts.error && (
               <p role="alert" className="rounded-lg bg-[#FDEBEC] p-5 text-sm text-[#9F2F2D]">
                 {errorMessage(alerts.error)}
@@ -829,7 +873,7 @@ export function SafetyAlertsView({
             )}
             {alerts.data?.items.length === 0 && (
               <p className="rounded-lg border border-dashed border-[#EAEAEA] bg-white p-8 text-center text-sm text-[#6B6B6B]">
-                No alerts match the selected Site and filters.
+                {tr('safety_alerts_view.no_alerts_match_the_selected_site_and_filters')}
               </p>
             )}
             {alerts.data?.items.map((alert) => (
@@ -857,7 +901,7 @@ export function SafetyAlertsView({
                   }}
                   className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Previous
+                  {tr('common.previous')}
                 </button>
                 <button
                   type="button"
@@ -872,14 +916,14 @@ export function SafetyAlertsView({
                   }}
                   className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Next
+                  {tr('common.next')}
                 </button>
               </div>
             )}
           </section>
 
           <aside
-            aria-label="Alert detail"
+            aria-label={tr('common.alert_detail')}
             className={
               'min-h-80 rounded-xl border border-[#EAEAEA] bg-white p-4 sm:p-5 min-w-0 ' +
               (!mobileAlertDetail ? 'hidden lg:block' : '')
@@ -890,25 +934,27 @@ export function SafetyAlertsView({
               className="mb-4 min-h-10 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold lg:hidden"
               onClick={() => setMobileAlertDetail(false)}
             >
-              Back to alerts
+              {tr('common.back_to_alerts')}
             </button>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-[#111111]">Alert detail</h2>
+              <h2 className="text-lg font-bold text-[#111111]">{tr('common.alert_detail')}</h2>
               {selectedAlertId && (
                 <button
                   type="button"
                   onClick={() => void detail.refetch()}
                   className="text-xs font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
                 >
-                  Refresh detail
+                  {tr('common.refresh_detail')}
                 </button>
               )}
             </div>
             {!selectedAlertId && (
-              <p className="mt-4 text-sm text-[#6B6B6B]">Select an alert to inspect its sources.</p>
+              <p className="mt-4 text-sm text-[#6B6B6B]">
+                {tr('safety_alerts_view.select_an_alert_to_inspect_its_sources')}
+              </p>
             )}
             {detail.isPending && selectedAlertId && (
-              <p className="mt-4 text-sm text-[#6B6B6B]">Loading alert detail…</p>
+              <p className="mt-4 text-sm text-[#6B6B6B]">{tr('common.loading_alert_detail')}</p>
             )}
             {detail.error && (
               <p role="alert" className="mt-4 rounded-md bg-[#FDEBEC] p-3 text-sm text-[#9F2F2D]">
@@ -918,42 +964,47 @@ export function SafetyAlertsView({
             {detail.data && (
               <div className="mt-4 space-y-5 min-w-0">
                 <TechnicalDetails>
-                  Alert {detail.data.id} · Revision {detail.data.revision}
+                  {tr('safety_alerts_view.alert_value_revision_value', {
+                    value1: detail.data.id,
+                    value2: detail.data.revision,
+                  })}
                 </TechnicalDetails>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
                   <div>
-                    <dt className="text-[#6B6B6B]">Candidate identity</dt>
+                    <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
                     <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {detail.data.candidateWorkerId ?? 'Unknown'}
+                      {detail.data.candidateWorkerId ?? tr('common.unknown')}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-[#6B6B6B]">Detections</dt>
+                    <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
                     <dd className="mt-1 font-semibold text-[#2F3437]">
                       {detail.data.detectionsTotal}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-[#6B6B6B]">Status</dt>
+                    <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
                     <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       <StatusBadge value={detail.data.status} />
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-[#6B6B6B]">First seen</dt>
+                    <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
                     <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       {formatDate(detail.data.firstDetectedAt)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-[#6B6B6B]">Last seen</dt>
+                    <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
                     <dd className="mt-1 font-semibold text-[#2F3437] break-words">
                       {formatDate(detail.data.lastDetectedAt)}
                     </dd>
                   </div>
                 </dl>
                 <div>
-                  <h3 className="text-sm font-bold text-[#2F3437]">Evidence &amp; sources</h3>
+                  <h3 className="text-sm font-bold text-[#2F3437]">
+                    {tr('common.evidence_amp_sources')}
+                  </h3>
                   <div
                     className={`mt-2 space-y-2 ${safetyOfficerSiteIds.has(selectedSiteId) ? '' : 'max-h-80 overflow-auto'}`}
                   >
@@ -972,7 +1023,7 @@ export function SafetyAlertsView({
                         </div>
                         <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
                         <TechnicalDetails>
-                          Observation <span>{detection.eventId}</span>
+                          {tr('common.observation')} <span>{detection.eventId}</span>
                         </TechnicalDetails>
                         <AlertWorkContext
                           client={client}
@@ -998,7 +1049,7 @@ export function SafetyAlertsView({
                     ))}
                     {detail.data.detections.length === 0 && (
                       <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                        No source observation is linked to this alert.
+                        {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
                       </p>
                     )}
                   </div>
@@ -1006,28 +1057,35 @@ export function SafetyAlertsView({
                 {(detail.data.status === 'PENDING_REVIEW' ||
                   detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
                   <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
-                    <h3 className="text-sm font-bold text-[#111111]">Record review decision</h3>
+                    <h3 className="text-sm font-bold text-[#111111]">
+                      {tr('common.record_review_decision')}
+                    </h3>
                     <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
-                      Explain the evidence behind the decision. The reason is required and cannot be
-                      edited after submission.
+                      {tr(
+                        'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
+                      )}
                     </p>
                     <label
                       htmlFor="review-reason-textarea"
                       className="mt-3 block text-xs font-semibold text-[#2F3437]"
                     >
-                      Decision reason{' '}
-                      <span className="font-normal text-[#6B6B6B]">(minimum 5 characters)</span>
+                      {tr('common.decision_reason')}{' '}
+                      <span className="font-normal text-[#6B6B6B]">
+                        {tr('common.minimum_5_characters')}
+                      </span>
                     </label>
                     <textarea
                       id="review-reason-textarea"
                       name="reviewReason"
-                      aria-label="Decision reason (minimum 5 characters)"
+                      aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
                       value={reviewReason}
                       onChange={(event) => setReviewReason(event.target.value)}
                       minLength={5}
                       maxLength={1000}
                       rows={3}
-                      placeholder="Example: Worker is clearly visible without a hard hat across the linked observations."
+                      placeholder={tr(
+                        'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+                      )}
                       className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
                     />
                     {review.error && (
@@ -1043,7 +1101,7 @@ export function SafetyAlertsView({
                         role="status"
                         className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
                       >
-                        Review decision recorded.
+                        {tr('common.review_decision_recorded')}
                       </p>
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1053,7 +1111,7 @@ export function SafetyAlertsView({
                         onClick={() => review.mutate('CONFIRMED')}
                         className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Confirm violation
+                        {tr('common.confirm_violation')}
                       </button>
                       <button
                         type="button"
@@ -1061,7 +1119,7 @@ export function SafetyAlertsView({
                         onClick={() => review.mutate('DISMISSED')}
                         className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Dismiss alert
+                        {tr('common.dismiss_alert')}
                       </button>
                       {detail.data.status === 'PENDING_REVIEW' && (
                         <button
@@ -1070,7 +1128,7 @@ export function SafetyAlertsView({
                           onClick={() => review.mutate('NEEDS_MORE_EVIDENCE')}
                           className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          Request more evidence
+                          {tr('common.request_more_evidence')}
                         </button>
                       )}
                     </div>
@@ -1090,12 +1148,12 @@ export function SafetyAlertsView({
                         setWorkspaceTab('Incidents');
                       }}
                     >
-                      Create incident from alert
+                      {tr('safety_alerts_view.create_incident_from_alert')}
                     </button>
                   )}
                 <section className="min-w-0">
                   <h3 className="text-sm font-bold text-[#2F3437]">
-                    Review history ({detail.data.reviewsTotal})
+                    {tr('common.review_history_value', { value1: detail.data.reviewsTotal })}
                   </h3>
                   <div className="mt-2 space-y-2">
                     {detail.data.reviews.map((item) => (
@@ -1113,13 +1171,16 @@ export function SafetyAlertsView({
                           {item.reason}
                         </p>
                         <TechnicalDetails>
-                          Actor {item.actorUserId} · Revision {item.alertRevision}
+                          {tr('safety_alerts_view.actor_value_revision_value', {
+                            value1: item.actorUserId,
+                            value2: item.alertRevision,
+                          })}
                         </TechnicalDetails>
                       </article>
                     ))}
                     {detail.data.reviews.length === 0 && (
                       <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                        No review decision has been recorded.
+                        {tr('safety_alerts_view.no_review_decision_has_been_recorded')}
                       </p>
                     )}
                   </div>

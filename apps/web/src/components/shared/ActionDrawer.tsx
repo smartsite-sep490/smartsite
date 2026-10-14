@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { IconX } from '../icons';
 
@@ -18,6 +20,8 @@ export function ActionDrawer({
   badgeType = 'info',
   children,
 }: ActionDrawerProps) {
+  useTranslation();
+
   // We use a slight delay for the mount/unmount logic to allow CSS transitions to play
   const [shouldRender, setShouldRender] = useState(isOpen);
 
@@ -73,7 +77,7 @@ export function ActionDrawer({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close drawer"
+              aria-label={tr('common.close_drawer')}
               className="p-1.5 rounded-md text-[#6B6B6B] hover:text-[#2F3437] hover:bg-[#F7F6F3] transition-colors active:scale-95 cursor-pointer"
             >
               <IconX className="w-5 h-5" />

@@ -25,18 +25,11 @@ export function EmptyState({
       </div>
       <div className="space-y-1">
         <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-        <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-          {description}
-        </p>
+        <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">{description}</p>
       </div>
       {actionLabel && onAction && (
         <div className="pt-1">
-          <Button
-            variant="default"
-            size="md"
-            onClick={onAction}
-            leftIcon={actionIcon}
-          >
+          <Button variant="default" size="md" onClick={onAction} leftIcon={actionIcon}>
             {actionLabel}
           </Button>
         </div>

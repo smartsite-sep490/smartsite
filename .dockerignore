@@ -6,6 +6,8 @@ node_modules
 **/.turbo
 **/.test-build
 **/coverage
+apps/web/test-results
+apps/web/playwright-report
 **/.env
 **/.env.*
 !**/.env.example

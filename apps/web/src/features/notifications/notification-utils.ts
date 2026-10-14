@@ -1,3 +1,6 @@
+import { translate as tr, uiLanguage } from '../../i18n';
+import { localizeMessage } from '../../i18n/messages';
+import { localizedLabel } from '../../i18n/labels';
 import type { UserNotificationResponse } from '@smartsite/api-client';
 
 export function notificationHref(notification: UserNotificationResponse) {
@@ -12,7 +15,33 @@ export function formatNotificationDisplayMessage(
     item.message?.startsWith('Bạn chưa được phân công ca làm')
   ) {
     const workDate = item.workDate || 'today';
-    return `You are not scheduled for a shift on ${workDate} at this site and entry is not permitted. Please contact your contractor representative.`;
+    return tr(
+      'notification-utils.you_are_not_scheduled_for_a_shift_on_value_at_this_site_and_entry_is_not_permitted',
+      { value1: workDate },
+    );
   }
-  return item.message;
+  // Safety bodies contain authored incident titles or checklist work descriptions.
+  if (
+    [
+      'SAFETY_HANDOVER',
+      'CHECKLIST_ASSIGNED',
+      'CHECKLIST_SUBMITTED',
+      'CHECKLIST_RETURNED',
+      'CHECKLIST_RECORDED',
+    ].includes(item.event)
+  )
+    return item.message;
+  const reasonAt = item.message.indexOf(' Reason: ');
+  if (reasonAt !== -1 && ['SWAP_DECLINED', 'REQUEST_REJECTED'].includes(item.event)) {
+    return (
+      localizeMessage(item.message.slice(0, reasonAt)) +
+      tr('notifications.reason', { reason: item.message.slice(reasonAt + 9) })
+    );
+  }
+  return localizeMessage(item.message);
+}
+
+export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
+  if (uiLanguage() === 'en') return item.title;
+  return localizeMessage(localizedLabel(item.title));
 }

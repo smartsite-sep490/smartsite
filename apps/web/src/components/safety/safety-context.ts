@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import type { WorkflowProps } from './safety-workflow';
 import type { SafetyContractorResponse, SafetyTeamOption } from '@smartsite/api-client';
 export const localDay = (d = new Date()) =>
@@ -34,7 +35,8 @@ export async function safetyContractors(p: WorkflowProps, signal: AbortSignal) {
       { signal },
     );
     total = page.total;
-    if (!page.items.length && items.length < total) throw Error('Contractor lookup unavailable');
+    if (!page.items.length && items.length < total)
+      throw Error(tr('safety_workspace.contractor_lookup_unavailable'));
     items.push(...page.items);
   }
   return items;
@@ -62,7 +64,8 @@ export async function safetyTeams(
       { signal },
     );
     total = page.total;
-    if (!page.items.length && items.length < total) throw Error('Team lookup unavailable');
+    if (!page.items.length && items.length < total)
+      throw Error(tr('safety_workspace.team_lookup_unavailable'));
     items.push(...page.items);
   }
   return items;
@@ -100,7 +103,8 @@ export async function overviewContractors(
       { signal },
     );
     total = page.total;
-    if (!page.items.length && items.length < total) throw Error('Contractor lookup unavailable');
+    if (!page.items.length && items.length < total)
+      throw Error(tr('safety_workspace.contractor_lookup_unavailable'));
     items.push(...page.items);
   }
   return items;

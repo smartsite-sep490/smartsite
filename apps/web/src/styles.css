@@ -1,67 +1,73 @@
 @import 'tailwindcss';
 
 /*
- * SmartSite Design Tokens — Restrained Utilitarian Minimalism
+ * SmartSite Design Tokens — Modern High-Contrast Construction Operations
  *
- * Naming: --surface-*, --text-*, --border*, --semantic-*, --accent.
- * Components reference via var(--token) in Tailwind arbitrary values.
+ * Primary Brand Palette:
+ *   - Safety Orange: #F66B17 (hover: #E05A0B)
+ *   - Deep Operations Navy: #041D2E (hover: #072A42)
+ *   - Clean Slate Surfaces: #F8FAFC (canvas), #F1F5F9 (bone/recessed), #FFFFFF (cards)
  *
- * Contrast notes (WCAG AA on white #fff):
- *   --text-heading  #111111  15.9:1  ✓ any size
- *   --text-body     #2F3437  11.8:1  ✓ any size
- *   --text-secondary #6B6B6B  5.36:1 ✓ small text (timestamps, counts, availability, placeholders, hints)
- *   --text-muted    #A3A09C  2.85:1  ✗ small — decorative/disabled ONLY
+ * Contrast notes (WCAG AA compliant):
+ *   --text-heading   #041D2E  16.8:1  ✓ any size
+ *   --text-body      #1E293B  12.4:1  ✓ any size
+ *   --text-secondary #64748B  5.1:1   ✓ small text (timestamps, counts, meta, hints)
+ *   --text-muted     #94A3B8  2.9:1   ✗ small — disabled / placeholder ONLY
  */
 
 :root {
   /* ── Surfaces ────────────────────────────────────────── */
-  --surface-canvas: #fbfbfa; /* page background */
-  --surface-bone: #f7f6f3; /* recessed panels, hover states */
-  --surface-white: #ffffff; /* cards, header */
-  --surface-sidebar: #1c1c1c; /* warm dark neutral sidebar */
-  --border-sidebar: #2a2a2a; /* sidebar border, slightly lighter */
+  --surface-canvas: #f8fafc; /* clean modern slate-50 background */
+  --surface-bone: #f1f5f9; /* soft slate-100 recessed panels */
+  --surface-white: #ffffff; /* crisp white cards & header */
+  --surface-sidebar: #041d2e; /* SmartSite operations navy */
+  --border-sidebar: rgba(255, 255, 255, 0.12); /* subtle dark sidebar divider */
 
   /* ── Borders ─────────────────────────────────────────── */
-  --border: #eaeaea; /* hairline dividers and card borders */
+  --border: #e2e8f0; /* clean slate-200 card & table dividers */
 
   /* ── Text hierarchy ──────────────────────────────────── */
-  --text-heading: #111111; /* page titles, primary actions */
-  --text-body: #2f3437; /* readable body copy */
-  --text-secondary: #6b6b6b; /* timestamps, counts, meta, placeholders, hints — AA compliant */
-  --text-muted: #a3a09c; /* disabled, decorative ONLY */
+  --text-heading: #041d2e; /* SmartSite deep navy headings */
+  --text-body: #1e293b; /* crisp slate-800 copy */
+  --text-secondary: #64748b; /* readable slate-500 meta & timestamps */
+  --text-muted: #94a3b8; /* disabled, placeholder only */
 
   /* ── Accent ──────────────────────────────────────────── */
-  --accent: #f66b17; /* brand orange, sparingly */
-  --accent-hover: #d94e07;
+  --accent: #f66b17; /* iconic construction safety orange */
+  --accent-hover: #e05a0b;
 
   /* ── Primary actions ─────────────────────────────────── */
-  --action-primary: #111111;
-  --action-primary-hover: #333333;
+  --action-primary: #f66b17;
+  --action-primary-hover: #e05a0b;
 
   /* ── Semantic safety states ──────────────────────────── */
-  --semantic-amber-bg: #fbf3db;
-  --semantic-amber-text: #956400;
-  --semantic-red-bg: #fdebec;
-  --semantic-red-text: #9f2f2d;
-  --semantic-blue-bg: #e1f3fe;
-  --semantic-blue-text: #1f6c9f;
-  --semantic-green-bg: #edf3ec;
-  --semantic-green-text: #346538;
+  --semantic-amber-bg: #fef3c7;
+  --semantic-amber-text: #b45309;
+  --semantic-red-bg: #fee2e2;
+  --semantic-red-text: #b91c1c;
+  --semantic-blue-bg: #e0f2fe;
+  --semantic-blue-text: #0369a1;
+  --semantic-green-bg: #dcfce7;
+  --semantic-green-text: #15803d;
 }
 
-/* Scrollbar — minimal */
+/* Scrollbar — modern & minimal */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
+  height: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 2px;
+  background: rgba(100, 116, 139, 0.25);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
 }
 
-/* Focus — visible keyboard outline */
+/* Focus — visible orange keyboard outline */
 :focus-visible:not(input, textarea) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

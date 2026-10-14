@@ -1,3 +1,7 @@
+import { localizedError } from '../../../i18n/messages';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { ScheduleAssignmentForm } from './ScheduleAssignmentForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -70,6 +74,8 @@ interface ScheduleSetupViewProps {
 }
 
 export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
+  useTranslation();
+
   const { accessToken } = useAuth();
   const { data: currentUser } = useCurrentUser(apiUrl);
   const queryClient = useQueryClient();
@@ -381,7 +387,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       if (err instanceof ApiError) {
         setShiftError(err.message);
       } else {
-        setShiftError('Failed to create shift. Please check input parameters.');
+        setShiftError(
+          tr('schedule_setup_view.failed_to_create_shift_please_check_input_parameters'),
+        );
       }
     },
   });
@@ -389,7 +397,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const archiveShiftMutation = useMutation({
     mutationFn: (shiftId: string) => client.archiveShift(accessToken!, activeSiteId!, shiftId),
     onSuccess: () => {
-      setShiftSuccess('Shift archived successfully.');
+      setShiftSuccess(tr('common.shift_archived_successfully'));
       setShiftError(null);
       setShiftToArchive(null);
       setAssignContractorShiftId('');
@@ -397,7 +405,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       queryClient.invalidateQueries({ queryKey: ['eligible-shifts'] });
     },
     onError: (err: unknown) => {
-      setShiftError(err instanceof Error ? err.message : 'Failed to archive shift.');
+      setShiftError(
+        err instanceof Error ? err.message : tr('schedule_setup_view.failed_to_archive_shift'),
+      );
     },
   });
 
@@ -405,7 +415,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     mutationFn: ({ shiftId, contractorId }: { shiftId: string; contractorId: string }) =>
       client.assignShiftToContractor(accessToken!, activeSiteId!, shiftId, { contractorId }),
     onSuccess: () => {
-      setAssignContractorSuccess('Shift assigned to contractor successfully.');
+      setAssignContractorSuccess(
+        tr('schedule_setup_view.shift_assigned_to_contractor_successfully'),
+      );
       setAssignContractorError(null);
       setShowAssignContractorModal(false);
       queryClient.invalidateQueries({ queryKey: ['shift-contractor-assignments', activeSiteId] });
@@ -416,7 +428,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       if (err instanceof ApiError) {
         setAssignContractorError(err.message);
       } else {
-        setAssignContractorError('Failed to assign shift to contractor.');
+        setAssignContractorError(tr('schedule_setup_view.failed_to_assign_shift_to_contractor'));
       }
     },
   });
@@ -436,7 +448,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       if (err instanceof ApiError) {
         setVersionError(err.message);
       } else {
-        setVersionError('Failed to create schedule version.');
+        setVersionError(tr('schedule_setup_view.failed_to_create_schedule_version'));
       }
     },
   });
@@ -448,15 +460,15 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     setShiftSuccess(null);
 
     if (!activeSiteId) {
-      setShiftError('No site selected.');
+      setShiftError(tr('common.no_site_selected_2b1789'));
       return;
     }
     if (!shiftName.trim()) {
-      setShiftError('Shift name is required.');
+      setShiftError(tr('schedule_setup_view.shift_name_is_required'));
       return;
     }
     if (!shiftStartsAt || !shiftEndsAt) {
-      setShiftError('Start and end times are required.');
+      setShiftError(tr('schedule_setup_view.start_and_end_times_are_required'));
       return;
     }
 
@@ -481,7 +493,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     const breakEndsAt =
       hasShiftBreak && shiftBreakEndsAt ? formatIso(shiftBreakEndsAt, true) : null;
     if (endsAt <= startsAt) {
-      setShiftError('Shift end must be after its start.');
+      setShiftError(tr('schedule_setup_view.shift_end_must_be_after_its_start'));
       return;
     }
     if (
@@ -492,7 +504,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         breakEndsAt > endsAt ||
         breakEndsAt <= breakStartsAt)
     ) {
-      setShiftError('Enter both break times within the shift, with the end after the start.');
+      setShiftError(
+        tr(
+          'schedule_setup_view.enter_both_break_times_within_the_shift_with_the_end_after_the_start',
+        ),
+      );
       return;
     }
     createShiftMutation.mutate({
@@ -511,15 +527,15 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     setAssignContractorSuccess(null);
 
     if (!activeSiteId) {
-      setAssignContractorError('No site selected.');
+      setAssignContractorError(tr('common.no_site_selected_2b1789'));
       return;
     }
     if (!availableShifts.some((shift) => shift.id === assignContractorShiftId)) {
-      setAssignContractorError('Please select an available shift.');
+      setAssignContractorError(tr('schedule_setup_view.please_select_an_available_shift'));
       return;
     }
     if (!assignContractorId) {
-      setAssignContractorError('Please select a contractor.');
+      setAssignContractorError(tr('schedule_setup_view.please_select_a_contractor'));
       return;
     }
 
@@ -535,15 +551,15 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     setVersionSuccess(null);
 
     if (!activeSiteId) {
-      setVersionError('No site selected.');
+      setVersionError(tr('common.no_site_selected_2b1789'));
       return;
     }
     if (!versionFrom) {
-      setVersionError('Effective from date is required.');
+      setVersionError(tr('schedule_setup_view.effective_from_date_is_required'));
       return;
     }
     if (versionFrom < currentDateIso()) {
-      setVersionError('Effective from date cannot be in the past.');
+      setVersionError(tr('schedule_setup_view.effective_from_date_cannot_be_in_the_past'));
       return;
     }
 
@@ -586,13 +602,17 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     }[] = [
       {
         id: 'shifts',
-        label: 'Shifts',
+        get label() {
+          return tr('common.shifts');
+        },
         count: shifts.length,
         icon: <IconClock className="w-3.5 h-3.5 text-[#F66B17]" />,
       },
       {
         id: 'version',
-        label: 'Schedule Versions',
+        get label() {
+          return tr('common.schedule_versions');
+        },
         count: versions.length,
         icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" />,
       },
@@ -600,7 +620,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     if (canAssignWorker) {
       items.push({
         id: 'assignment',
-        label: 'Worker Assignment',
+        get label() {
+          return tr('common.worker_assignment');
+        },
         count: schedulesTotal,
         icon: <IconUsers className="w-3.5 h-3.5 text-emerald-600" />,
       });
@@ -615,10 +637,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
           <IconShield className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">Access Restricted</h2>
+        <h2 className="text-lg font-bold text-slate-900">{tr('common.access_restricted')}</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Schedule Setup is reserved for Contractor Representatives, Site Managers, and
-          Administrators.
+          {tr(
+            'schedule_setup_view.schedule_setup_is_reserved_for_contractor_representatives_site_managers_and_admini',
+          )}
         </p>
       </div>
     );
@@ -634,18 +657,22 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Workforce Management</span>
+              <span className="text-xs font-semibold text-slate-500">
+                {tr('common.workforce_management')}
+              </span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">Schedule Setup</h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
+              {tr('common.schedule_setup')}
+            </h1>
           </div>
         </div>
 
         {/* Site Switcher & Refresh */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 max-w-full">
           {availableSites.length > 1 && (
             <div className="flex items-center gap-1.5 min-w-[200px]">
               <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
-                Site:
+                {tr('common.site')}
               </span>
               <SmartSelect
                 size="sm"
@@ -671,7 +698,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             isLoading={shiftsQuery.isFetching || versionsQuery.isFetching}
             leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
           >
-            Refresh
+            {tr('common.refresh')}
           </Button>
         </div>
       </div>
@@ -683,7 +710,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             role="status"
             className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
           >
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.4)] shrink-0">
                   <IconCheck className="w-4 h-4 text-white" />
@@ -706,7 +733,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             role="status"
             className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
           >
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.4)] shrink-0">
                   <IconCheck className="w-4 h-4 text-white" />
@@ -731,7 +758,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             role="status"
             className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(59,130,246,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
           >
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.4)] shrink-0">
                   <IconCheck className="w-4 h-4 text-white" />
@@ -752,9 +779,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
       {/* 2. Top Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">Configured Shifts</span>
+            <span className="text-xs font-medium text-slate-500">
+              {tr('common.configured_shifts')}
+            </span>
             <p className="text-xl font-bold tracking-tight text-[#071A2B]">{shifts.length}</p>
           </div>
           <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -762,9 +791,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
         </div>
 
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">Schedule Versions</span>
+            <span className="text-xs font-medium text-slate-500">
+              {tr('common.schedule_versions')}
+            </span>
             <p className="text-xl font-bold tracking-tight text-[#071A2B]">{versions.length}</p>
           </div>
           <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -772,11 +803,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
         </div>
 
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">Active Site</span>
+            <span className="text-xs font-medium text-slate-500">{tr('common.active_site')}</span>
             <p className="text-sm font-bold tracking-tight text-[#071A2B] truncate max-w-[180px]">
-              {activeSite?.name || 'No Site'}
+              {activeSite?.name || tr('common.no_site')}
             </p>
           </div>
           <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -790,7 +821,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         <Tabs items={tabItems} activeTab={activeTab} onChange={(tab) => setActiveTab(tab)} />
 
         {/* Tab Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-w-full">
           {activeTab === 'shifts' && (
             <label className="flex items-center gap-2 text-xs text-slate-600">
               <input
@@ -798,7 +829,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 checked={showArchivedShifts}
                 onChange={(event) => setShowArchivedShifts(event.target.checked)}
               />
-              Show archived
+              {tr('common.show_archived')}
             </label>
           )}
           {activeTab === 'shifts' && canManageShiftsAndVersions && (
@@ -815,7 +846,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 disabled={availableShifts.length === 0 || contractors.length === 0}
                 leftIcon={<IconBuilding2 className="w-3.5 h-3.5 text-slate-600" />}
               >
-                Assign Contractor
+                {tr('common.assign_contractor')}
               </Button>
 
               <Button
@@ -828,7 +859,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 }}
                 leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
               >
-                New Shift
+                {tr('common.new_shift')}
               </Button>
             </>
           )}
@@ -843,7 +874,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               }}
               leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
             >
-              New Version
+              {tr('common.new_version')}
             </Button>
           )}
         </div>
@@ -855,19 +886,25 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           {shiftsQuery.isLoading ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 shadow-xs">
               <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-              <span>Loading shift schedules...</span>
+              <span>{tr('common.loading_shift_schedules')}</span>
             </div>
           ) : filteredShifts.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs">
               <EmptyState
                 icon={<IconClock className="w-6 h-6 text-[#F66B17]" />}
-                title="No Available Shifts"
+                title={tr('common.no_available_shifts')}
                 description={
                   canManageShiftsAndVersions
-                    ? 'Define operational shifts with specific hours and timezones for this site.'
-                    : 'The Site Manager has not configured any shifts for this site yet.'
+                    ? tr(
+                        'schedule_setup_view.define_operational_shifts_with_specific_hours_and_timezones_for_this_site',
+                      )
+                    : tr(
+                        'schedule_setup_view.the_site_manager_has_not_configured_any_shifts_for_this_site_yet',
+                      )
                 }
-                actionLabel={canManageShiftsAndVersions ? 'Create First Shift' : undefined}
+                actionLabel={
+                  canManageShiftsAndVersions ? tr('common.create_first_shift') : undefined
+                }
                 actionIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
                 onAction={() => {
                   setShiftError(null);
@@ -890,7 +927,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-[#F66B17]" />
                           <h3 className="text-sm font-bold text-slate-900">{shift.name}</h3>
-                          {shift.archivedAt && <Badge variant="neutral">Archived</Badge>}
+                          {shift.archivedAt && (
+                            <Badge variant="neutral">{tr('common.archived')}</Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 font-mono text-[11.5px] font-medium text-slate-700 bg-slate-50 border border-[#E2E8F0] px-2.5 py-1 rounded-lg w-fit">
                           <IconClock className="w-3 h-3 text-slate-400" />
@@ -898,12 +937,13 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                             {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)}
                             {shift.breakStartsAt && shift.breakEndsAt && (
                               <span className="block text-xs text-slate-500">
-                                Unpaid break:{' '}
-                                {formatShiftRange(
-                                  shift.breakStartsAt,
-                                  shift.breakEndsAt,
-                                  shift.timezone,
-                                )}
+                                {tr('common.unpaid_break_value', {
+                                  value1: formatShiftRange(
+                                    shift.breakStartsAt,
+                                    shift.breakEndsAt,
+                                    shift.timezone,
+                                  ),
+                                })}
                               </span>
                             )}
                           </span>
@@ -921,7 +961,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                                 setShiftToArchive({ id: shift.id, name: shift.name });
                               }}
                             >
-                              Archive
+                              {tr('common.archive')}
                             </Button>
                           )}
                         </div>
@@ -930,9 +970,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
                     {/* Assigned Contractors Section */}
                     <div className="pt-2 border-t border-slate-100 space-y-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          Assigned Contractors ({assignedContractorList.length})
+                          {tr('common.assigned_contractors_value', {
+                            value1: assignedContractorList.length,
+                          })}
                         </span>
                         {canManageShiftsAndVersions && !shift.archivedAt && (
                           <button
@@ -940,7 +982,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                             onClick={() => openAssignContractorForShift(shift.id)}
                             className="text-[11px] font-bold text-[#F66B17] hover:underline cursor-pointer"
                           >
-                            + Assign
+                            {tr('common.assign')}
                           </button>
                         )}
                       </div>
@@ -948,7 +990,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                       <div className="flex flex-wrap gap-1.5">
                         {assignedContractorList.length === 0 ? (
                           <span className="text-[11px] text-slate-400 italic">
-                            No contractor assigned
+                            {tr('common.no_contractor_assigned')}
                           </span>
                         ) : (
                           assignedContractorList.map((c) => (
@@ -973,18 +1015,20 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           {versionsQuery.isLoading ? (
             <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
               <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-              <span>Loading schedule versions...</span>
+              <span>{tr('common.loading_schedule_versions')}</span>
             </div>
           ) : versions.length === 0 ? (
             <EmptyState
               icon={<IconCalendar className="w-6 h-6 text-blue-600" />}
-              title="No Schedule Versions"
+              title={tr('common.no_schedule_versions')}
               description={
                 canManageShiftsAndVersions
-                  ? 'Create a schedule version defining effective date ranges before assigning worker shifts.'
-                  : 'No active schedule versions found for this site.'
+                  ? tr(
+                      'schedule_setup_view.create_a_schedule_version_defining_effective_date_ranges_before_assigning_worker_s',
+                    )
+                  : tr('schedule_setup_view.no_active_schedule_versions_found_for_this_site')
               }
-              actionLabel={canManageShiftsAndVersions ? 'Create New Version' : undefined}
+              actionLabel={canManageShiftsAndVersions ? tr('common.create_new_version') : undefined}
               actionIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
               onAction={() => {
                 setVersionError(null);
@@ -996,29 +1040,29 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">Version</th>
-                    <th className="py-3 px-4">Effective From</th>
-                    <th className="py-3 px-4">Effective Until</th>
-                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">{tr('common.version')}</th>
+                    <th className="py-3 px-4">{tr('common.effective_from')}</th>
+                    <th className="py-3 px-4">{tr('common.effective_until')}</th>
+                    <th className="py-3 px-4">{tr('common.status')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {versions.map((ver) => (
                     <tr key={ver.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        Version {ver.version}
+                        {tr('common.version_value', { value1: ver.version })}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-slate-700">
-                        {new Date(ver.effectiveFrom).toLocaleDateString('vi-VN')}
+                        {new Date(ver.effectiveFrom).toLocaleDateString(uiLocale())}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-slate-700">
                         {ver.effectiveUntil
-                          ? new Date(ver.effectiveUntil).toLocaleDateString('vi-VN')
-                          : 'Ongoing (No end date)'}
+                          ? new Date(ver.effectiveUntil).toLocaleDateString(uiLocale())
+                          : tr('schedule_setup_view.ongoing_no_end_date')}
                       </td>
                       <td className="py-3.5 px-4">
                         <Badge variant="success" dot>
-                          Active
+                          {tr('common.active')}
                         </Badge>
                       </td>
                     </tr>
@@ -1052,10 +1096,10 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           <div className="lg:col-span-8 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
             <div className="bg-white rounded-[22px] border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="p-4 border-b border-slate-100/80 bg-slate-50/40 space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      Assigned Schedules
+                      {tr('common.assigned_schedules')}
                     </h3>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
                       {schedulesTotal}
@@ -1064,7 +1108,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                   {schedulesQuery.isFetching && (
                     <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                       <IconLoader className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                      <span>Syncing…</span>
+                      <span>{tr('common.syncing')}</span>
                     </div>
                   )}
                 </div>
@@ -1073,10 +1117,10 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 <div className="inline-flex items-center p-1 bg-slate-100/80 rounded-xl gap-1 border border-slate-200/50">
                   {(
                     [
-                      ['TODAY', 'Today'],
-                      ['WEEK', 'This week'],
-                      ['MONTH', 'This month'],
-                      ['CUSTOM', 'Custom range'],
+                      ['TODAY', tr('common.today')],
+                      ['WEEK', tr('common.this_week')],
+                      ['MONTH', tr('common.this_month')],
+                      ['CUSTOM', tr('common.custom_range')],
                     ] as const
                   ).map(([value, label]) => (
                     <button
@@ -1100,7 +1144,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 {assignmentRange === 'CUSTOM' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200/70">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      From
+                      {tr('common.from')}
                       <input
                         type="date"
                         value={assignmentFromDate}
@@ -1112,7 +1156,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                       />
                     </label>
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      To
+                      {tr('common.to')}
                       <input
                         type="date"
                         value={assignmentToDate}
@@ -1129,7 +1173,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <div>
                     <SmartSelect
-                      label="Team"
+                      label={tr('common.team')}
                       size="sm"
                       value={assignmentTeamFilter}
                       onChange={(val) => {
@@ -1143,18 +1187,28 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         resetAssignmentPage();
                       }}
                       options={[
-                        { value: '', label: 'All teams' },
+                        {
+                          value: '',
+                          get label() {
+                            return tr('common.all_teams_bf65fc');
+                          },
+                        },
                         ...contractorTeams.map((team) => ({
                           value: team.id,
                           label: team.name,
-                          badge: `${team.memberCount} member${team.memberCount === 1 ? '' : 's'}`,
+                          get badge() {
+                            return tr('common.value_membervalue', {
+                              value1: team.memberCount,
+                              value2: team.memberCount === 1 ? '' : 's',
+                            });
+                          },
                         })),
                       ]}
                     />
                   </div>
                   <div>
                     <SmartSelect
-                      label="Worker"
+                      label={tr('common.worker')}
                       size="sm"
                       searchable
                       searchPlaceholder="Filter worker..."
@@ -1164,7 +1218,12 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         resetAssignmentPage();
                       }}
                       options={[
-                        { value: '', label: 'All workers' },
+                        {
+                          value: '',
+                          get label() {
+                            return tr('common.all_workers_499a01');
+                          },
+                        },
                         ...visibleWorkers.map((worker) => ({
                           value: worker.id,
                           label: worker.displayName,
@@ -1175,7 +1234,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                   </div>
                   <div>
                     <SmartSelect
-                      label="Shift"
+                      label={tr('common.shift')}
                       size="sm"
                       value={assignmentShiftFilter}
                       onChange={(val) => {
@@ -1183,7 +1242,12 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         resetAssignmentPage();
                       }}
                       options={[
-                        { value: '', label: 'All shifts' },
+                        {
+                          value: '',
+                          get label() {
+                            return tr('common.all_shifts');
+                          },
+                        },
                         ...shifts.map((shift) => ({
                           value: shift.id,
                           label: shift.name,
@@ -1199,8 +1263,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                   <div>
                     <SmartInput
                       id="search-name-input"
-                      label="Search Name"
-                      placeholder="Worker name or ID..."
+                      label={tr('common.search_name')}
+                      placeholder={tr('schedule_setup_view.worker_name_or_id')}
                       value={assignmentSearchName}
                       onChange={(e) => {
                         setAssignmentSearchName(e.target.value);
@@ -1214,22 +1278,24 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               {schedulesQuery.isLoading ? (
                 <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
                   <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-                  <span>Loading worker schedules...</span>
+                  <span>{tr('common.loading_worker_schedules')}</span>
                 </div>
               ) : schedules.length === 0 ? (
                 <div className="py-12 px-4 text-center space-y-2">
-                  <p className="text-xs text-slate-500">No worker schedules assigned yet.</p>
+                  <p className="text-xs text-slate-500">
+                    {tr('schedule_setup_view.no_worker_schedules_assigned_yet')}
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto max-h-[480px]">
                   <table className="w-full text-left text-xs">
                     <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-100 z-10">
                       <tr className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                        <th className="py-3 px-4">Worker</th>
-                        <th className="py-3 px-4">Shift</th>
-                        <th className="py-3 px-4">Work Date</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Created</th>
+                        <th className="py-3 px-4">{tr('common.worker')}</th>
+                        <th className="py-3 px-4">{tr('common.shift')}</th>
+                        <th className="py-3 px-4">{tr('common.work_date_f7426e')}</th>
+                        <th className="py-3 px-4">{tr('common.status')}</th>
+                        <th className="py-3 px-4">{tr('common.created')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1260,7 +1326,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                                       </span>
                                     </div>
                                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 shadow-2xs">
-                                      {dateSchedules.length} schedule(s)
+                                      {tr('common.value_schedule_s', {
+                                        value1: dateSchedules.length,
+                                      })}
                                     </span>
                                   </div>
                                   <span className="text-xs font-bold text-slate-400 group-hover:text-slate-600">
@@ -1282,14 +1350,16 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                                     className="hover:bg-slate-50/70 transition-colors"
                                   >
                                     <td className="py-3 px-4">
-                                      <div className="flex items-center gap-2.5">
+                                      <div className="flex flex-wrap items-center gap-2.5 max-w-full">
                                         <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center text-[10px] font-bold text-slate-700 shrink-0">
                                           {(workerObj?.displayName || 'W').charAt(0).toUpperCase()}
                                         </div>
                                         <div>
                                           <span className="font-bold text-slate-900 block leading-tight">
                                             {workerObj?.displayName ||
-                                              `Worker (${sched.workerId.slice(0, 6)})`}
+                                              tr('common.worker_value', {
+                                                value1: sched.workerId.slice(0, 6),
+                                              })}
                                           </span>
                                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                             {workerObj?.externalId && (
@@ -1307,13 +1377,13 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                                       </div>
                                     </td>
                                     <td className="py-3 px-4">
-                                      <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border border-blue-200/90 shadow-2xs hover:shadow-xs transition-shadow">
+                                      <div className="inline-flex flex-wrap items-center gap-2.5 max-w-full px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border border-blue-200/90 shadow-2xs hover:shadow-xs transition-shadow">
                                         <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-xs">
                                           <IconClock className="w-3.5 h-3.5" />
                                         </div>
                                         <div className="min-w-0">
                                           <span className="font-bold text-slate-900 block text-xs leading-tight tracking-tight">
-                                            {shiftObj?.name || 'Shift'}
+                                            {shiftObj?.name || tr('common.shift')}
                                           </span>
                                           {shiftObj && (
                                             <span className="text-[10px] font-mono font-bold text-blue-700 block mt-0.5 leading-none">
@@ -1345,11 +1415,13 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                                               : 'bg-slate-400'
                                           }`}
                                         />
-                                        {sched.isActive ? 'Active' : 'Inactive'}
+                                        {sched.isActive
+                                          ? tr('common.active')
+                                          : tr('common.inactive_ac7c94')}
                                       </span>
                                     </td>
                                     <td className="py-3 px-4 text-slate-400 text-[11px] font-mono">
-                                      {new Date(sched.createdAt).toLocaleDateString('vi-VN')}
+                                      {new Date(sched.createdAt).toLocaleDateString(uiLocale())}
                                     </td>
                                   </tr>
                                 );
@@ -1359,11 +1431,13 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                       })}
                     </tbody>
                   </table>
-                  <div className="flex items-center justify-between border-t border-slate-100/90 bg-slate-50/50 px-4 py-3 text-[11px] text-slate-500">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100/90 bg-slate-50/50 px-4 py-3 text-[11px] text-slate-500">
                     <span className="font-medium">
-                      Page <strong className="text-slate-800">{assignmentPage + 1}</strong> of{' '}
-                      <strong className="text-slate-800">{assignmentPageCount}</strong> · 25 per
-                      page
+                      {tr('common.page')}{' '}
+                      <strong className="text-slate-800">{assignmentPage + 1}</strong>{' '}
+                      {tr('common.of')}{' '}
+                      <strong className="text-slate-800">{assignmentPageCount}</strong>{' '}
+                      {tr('schedule_setup_view.25_per_page')}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -1372,7 +1446,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         onClick={() => setAssignmentPage((page) => Math.max(0, page - 1))}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all cursor-pointer shadow-2xs"
                       >
-                        Previous
+                        {tr('common.previous')}
                       </button>
                       <button
                         type="button"
@@ -1382,7 +1456,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         }
                         className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all cursor-pointer shadow-2xs"
                       >
-                        Next
+                        {tr('common.next')}
                       </button>
                     </div>
                   </div>
@@ -1397,25 +1471,27 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       <Dialog
         open={showCreateShiftModal}
         onClose={() => setShowCreateShiftModal(false)}
-        title="Create New Shift"
-        description={`Define work shift hours on ${activeSite?.name}`}
+        title={tr('common.create_new_shift')}
+        description={tr('schedule_setup_view.define_work_shift_hours_on_value', {
+          value1: activeSite?.name,
+        })}
         icon={<IconClock className="w-4 h-4 text-[#F66B17]" />}
       >
         <form onSubmit={handleCreateShift} className="space-y-4">
           {shiftError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>{shiftError}</span>
+              <span>{localizedError(shiftError ?? undefined)}</span>
             </div>
           )}
 
           <div className="space-y-1">
             <SmartInput
               id="shift-name-input"
-              label="Shift Name"
+              label={tr('common.shift_name')}
               fieldRequired
               type="text"
-              placeholder="e.g. Day Shift / Ca Sáng"
+              placeholder={tr('schedule_setup_view.e_g_day_shift_ca_sang')}
               value={shiftName}
               onChange={(e) => setShiftName(e.target.value)}
               required
@@ -1426,7 +1502,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             <div className="space-y-1">
               <SmartTimePicker
                 id="shift-starts-at-input"
-                label="Starts At"
+                label={tr('common.starts_at')}
                 fieldRequired
                 value={shiftStartsAt}
                 onChange={setShiftStartsAt}
@@ -1436,7 +1512,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             <div className="space-y-1">
               <SmartTimePicker
                 id="shift-ends-at-input"
-                label="Ends At"
+                label={tr('common.ends_at')}
                 fieldRequired
                 value={shiftEndsAt}
                 onChange={setShiftEndsAt}
@@ -1450,35 +1526,36 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               checked={hasShiftBreak}
               onChange={(e) => setHasShiftBreak(e.target.checked)}
             />
-            Include an unpaid lunch break
+            {tr('schedule_setup_view.include_an_unpaid_lunch_break')}
           </label>
           {hasShiftBreak && (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-3.5">
                 <SmartTimePicker
                   id="shift-break-start-input"
-                  label="Break Starts At"
+                  label={tr('common.break_starts_at')}
                   fieldRequired
                   value={shiftBreakStartsAt}
                   onChange={setShiftBreakStartsAt}
                 />
                 <SmartTimePicker
                   id="shift-break-end-input"
-                  label="Break Ends At"
+                  label={tr('common.break_ends_at')}
                   fieldRequired
                   value={shiftBreakEndsAt}
                   onChange={setShiftBreakEndsAt}
                 />
               </div>
               <p className="text-xs text-slate-500">
-                Only break time overlapping actual presence is deducted. Times use Asia/Ho_Chi_Minh;
-                after midnight belongs to the next day for overnight shifts.
+                {tr(
+                  'schedule_setup_view.only_break_time_overlapping_actual_presence_is_deducted_times_use_asia_ho_chi_minh',
+                )}
               </p>
             </div>
           )}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="outline" size="md" onClick={() => setShowCreateShiftModal(false)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1487,7 +1564,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               isLoading={createShiftMutation.isPending}
               leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
             >
-              Create Shift
+              {tr('common.create_shift')}
             </Button>
           </div>
         </form>
@@ -1497,22 +1574,22 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       <Dialog
         open={showAssignContractorModal}
         onClose={() => setShowAssignContractorModal(false)}
-        title="Assign Shift to Contractor"
-        description="Allow subcontractor workers to take this shift"
+        title={tr('schedule_setup_view.assign_shift_to_contractor')}
+        description={tr('schedule_setup_view.allow_subcontractor_workers_to_take_this_shift')}
         icon={<IconBuilding2 className="w-4 h-4 text-[#F66B17]" />}
       >
         <form onSubmit={handleAssignShiftToContractor} className="space-y-4">
           {assignContractorError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>{assignContractorError}</span>
+              <span>{localizedError(assignContractorError ?? undefined)}</span>
             </div>
           )}
 
           <div className="space-y-1">
             <SmartSelect
               id="assign-contractor-shift-select"
-              label="Target Shift"
+              label={tr('common.target_shift')}
               fieldRequired
               value={assignContractorShiftId}
               onChange={setAssignContractorShiftId}
@@ -1526,7 +1603,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           <div className="space-y-1">
             <SmartSelect
               id="assign-contractor-select"
-              label="Subcontractor"
+              label={tr('common.subcontractor')}
               fieldRequired
               value={assignContractorId}
               onChange={setAssignContractorId}
@@ -1539,7 +1616,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="outline" size="md" onClick={() => setShowAssignContractorModal(false)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1548,7 +1625,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               isLoading={assignShiftToContractorMutation.isPending}
               leftIcon={<IconCheck className="w-3.5 h-3.5 text-[#F66B17]" />}
             >
-              Assign Contractor
+              {tr('common.assign_contractor')}
             </Button>
           </div>
         </form>
@@ -1558,22 +1635,22 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       <Dialog
         open={showCreateVersionModal}
         onClose={() => setShowCreateVersionModal(false)}
-        title="Create Schedule Version"
-        description="Define a new planning period on this site"
+        title={tr('common.create_schedule_version')}
+        description={tr('schedule_setup_view.define_a_new_planning_period_on_this_site')}
         icon={<IconCalendar className="w-4 h-4 text-[#F66B17]" />}
       >
         <form onSubmit={handleCreateVersion} className="space-y-4">
           {versionError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>{versionError}</span>
+              <span>{localizedError(versionError ?? undefined)}</span>
             </div>
           )}
 
           <div className="space-y-1">
             <SmartDatePicker
               id="version-from-input"
-              label="Effective From"
+              label={tr('common.effective_from')}
               fieldRequired
               value={versionFrom}
               onChange={setVersionFrom}
@@ -1583,7 +1660,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           <div className="space-y-1">
             <SmartDatePicker
               id="version-until-input"
-              label="Effective Until (Optional)"
+              label={tr('common.effective_until_optional')}
               value={versionUntil}
               onChange={setVersionUntil}
             />
@@ -1591,7 +1668,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="outline" size="md" onClick={() => setShowCreateVersionModal(false)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1600,7 +1677,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               isLoading={createVersionMutation.isPending}
               leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
             >
-              Create Version
+              {tr('common.create_version')}
             </Button>
           </div>
         </form>
@@ -1609,29 +1686,31 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       <Dialog
         open={Boolean(shiftToArchive)}
         onClose={() => setShiftToArchive(null)}
-        title="Archive Shift"
-        description="Stop using this shift for new assignments."
+        title={tr('common.archive_shift')}
+        description={tr('schedule_setup_view.stop_using_this_shift_for_new_assignments')}
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Archive &quot;{shiftToArchive?.name}&quot;? Existing schedules, attendance and request
-            history will be kept.
+            {tr(
+              'schedule_setup_view.archive_quot_value_quot_existing_schedules_attendance_and_request_history_will_be',
+              { value1: shiftToArchive?.name },
+            )}
           </p>
           {shiftError && (
             <p role="alert" className="text-sm text-rose-600">
-              {shiftError}
+              {localizedError(shiftError ?? undefined)}
             </p>
           )}
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="md" onClick={() => setShiftToArchive(null)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               size="md"
               isLoading={archiveShiftMutation.isPending}
               onClick={() => shiftToArchive && archiveShiftMutation.mutate(shiftToArchive.id)}
             >
-              Archive Shift
+              {tr('common.archive_shift')}
             </Button>
           </div>
         </div>

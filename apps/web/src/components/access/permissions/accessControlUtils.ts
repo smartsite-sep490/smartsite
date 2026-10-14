@@ -1,3 +1,4 @@
+import { translate as tr } from '../../../i18n';
 import type { ZoneEntryDecisionStatus } from '@smartsite/api-client';
 
 type GrantWindow = {
@@ -16,9 +17,9 @@ export function grantState(grant: GrantWindow, now = new Date()): GrantState {
 }
 
 export function zoneDecisionLabel(status: ZoneEntryDecisionStatus): string {
-  if (status === 'ALLOWED') return 'Allowed';
-  if (status === 'DENIED') return 'Denied';
-  return 'Authorization unavailable';
+  if (status === 'ALLOWED') return tr('common.allowed_1bb201');
+  if (status === 'DENIED') return tr('common.denied_da404d');
+  return tr('common.authorization_unavailable');
 }
 
 export function toUtcIso(value: string): string | null {

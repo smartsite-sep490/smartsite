@@ -1,3 +1,7 @@
+import { localizeMessage } from '../../i18n/messages';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useRef, useState } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
@@ -9,7 +13,13 @@ interface RegisterScreenProps {
   onBackToSite: () => void;
 }
 
-export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite }: RegisterScreenProps) {
+export function RegisterScreen({
+  onRegisterSuccess,
+  onBackToLogin,
+  onBackToSite,
+}: RegisterScreenProps) {
+  useTranslation();
+
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -28,26 +38,32 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
       gsap.set('.register-loading-content', { display: 'none' });
 
       const tl = gsap.timeline({ delay: 0.01 });
-      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' })
-        .to('.register-form-content', {
+      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' }).to(
+        '.register-form-content',
+        {
           opacity: 1,
           scale: 1,
-          duration: 0.3
-        }, '-=0.1');
+          duration: 0.3,
+        },
+        '-=0.1',
+      );
     },
-    { scope: containerRef }
+    { scope: containerRef },
   );
 
   const handleNavigateLogin = () => {
     const tl = gsap.timeline();
-    tl.to('.register-form-content', { opacity: 0, scale: 0.95, duration: 0.2 })
-      .to(panelRef.current, {
+    tl.to('.register-form-content', { opacity: 0, scale: 0.95, duration: 0.2 }).to(
+      panelRef.current,
+      {
         width: 240,
         height: 240,
         duration: 0.4,
         ease: 'back.in(1.2)',
-        onComplete: onBackToLogin
-      }, '-=0.1');
+        onComplete: onBackToLogin,
+      },
+      '-=0.1',
+    );
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -55,7 +71,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
     setErrorMessage('');
 
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
+      setErrorMessage(tr('register_screen.passwords_do_not_match'));
       return;
     }
 
@@ -76,13 +92,25 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
           duration: 0.7,
           ease: 'back.inOut(1.2)',
         },
-        'morph'
+        'morph',
       )
-      .to('.register-loading-content', { opacity: 1, scale: 1, duration: 0.4, onStart: () => gsap.set('.register-loading-content', { display: 'flex' }) }, 'morph+=0.4');
+      .to(
+        '.register-loading-content',
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 0.4,
+          onStart: () => gsap.set('.register-loading-content', { display: 'flex' }),
+        },
+        'morph+=0.4',
+      );
 
     setTimeout(() => {
       // Success transition
-      gsap.to('.orb-core', { backgroundColor: '#10B981', boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)' });
+      gsap.to('.orb-core', {
+        backgroundColor: '#10B981',
+        boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)',
+      });
       gsap.to(panelRef.current, {
         scale: 1.1,
         opacity: 0,
@@ -95,7 +123,11 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
   };
 
   return (
-    <div ref={containerRef} className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#020810]" style={{ perspective: 1200 }}>
+    <div
+      ref={containerRef}
+      className="relative min-h-screen w-full flex items-center justify-center pt-24 pb-8 overflow-x-hidden bg-[#020810]"
+      style={{ perspective: 1200 }}
+    >
       {/* Background with abstract dark glow */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-[#F66B17] opacity-[0.03] blur-[150px] rounded-full pointer-events-none" />
@@ -104,31 +136,42 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
       <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] opacity-[0.02] pointer-events-none mix-blend-overlay" />
 
       {/* Top Nav */}
-      <div className="absolute top-0 inset-x-0 h-24 flex items-center px-8 z-20">
+      <div className="absolute top-0 inset-x-0 h-24 flex items-center justify-between px-4 sm:px-8 z-20">
         <button
           onClick={onBackToSite}
           className="text-white/40 hover:text-white transition-colors text-xs font-bold tracking-widest flex items-center gap-2"
         >
           <IconArrowRight className="w-4 h-4 rotate-180" />
-          BACK TO SITE
+          {tr('common.back_to_site')}
         </button>
+        <LanguageSwitcher dark />
       </div>
 
       {/* Cyber-Chamfered Panel */}
-      <div ref={panelRef} className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4 mt-8 mb-8" style={{ minHeight: 600 }}>
-
+      <div
+        ref={panelRef}
+        data-auth-panel
+        className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4 mt-8 mb-8"
+        style={{ maxWidth: 'calc(100vw - 32px)', minHeight: 600 }}
+      >
         {/* Outer Thin Border Layer */}
         <div
           className="absolute inset-0 bg-white/20 transition-all"
-          style={{ clipPath: 'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)' }}
+          style={{
+            clipPath:
+              'polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px)',
+          }}
         />
 
         {/* Inner Dark Glass Layer */}
         <div
           className="absolute inset-[1px] bg-[#0A1118]/80 backdrop-blur-2xl transition-all"
-          style={{ clipPath: 'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)' }}
+          style={{
+            clipPath:
+              'polygon(39px 0, 100% 0, 100% calc(100% - 39px), calc(100% - 39px) 100%, 0 100%, 0 39px)',
+          }}
         >
-           <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent pointer-events-none" />
         </div>
 
         {/* Top Left Glass Accent */}
@@ -145,19 +188,32 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
         {/* --- FORM STATE --- */}
         <div className="register-form-content absolute inset-0 flex flex-col p-10 justify-center">
           <div className="mb-6 text-center">
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
+                <img
+                  src="/smartsite-app-icon-white.png"
+                  alt="SmartSite"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <span className="text-2xl font-black tracking-tight text-white">
+                Smart<span className="text-[#F66B17]">Site</span>
+              </span>
+            </div>
             <h1 className="text-3xl font-black text-white tracking-tight mb-2">
-              Create <span className="text-[#F66B17]">Account</span>
+              {tr('common.create')} <span className="text-[#F66B17]">{tr('common.account')}</span>
             </h1>
             <p className="text-white/40 text-xs font-medium tracking-wide">
-              Join SmartSite to access operational data
+              {tr('register_screen.join_smartsite_to_access_operational_data')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 flex-1 flex flex-col justify-center">
-
             <div className="space-y-3">
               <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">Full Name</label>
+                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
+                  {tr('common.full_name_8e00cd')}
+                </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
@@ -165,14 +221,16 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Enter your full name"
+                    placeholder={tr('register_screen.enter_your_full_name')}
                     className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">Username</label>
+                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
+                  {tr('common.username')}
+                </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
@@ -180,14 +238,16 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Choose a username"
+                    placeholder={tr('common.choose_a_username')}
                     className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">Password</label>
+                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
+                  {tr('common.password')}
+                </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
@@ -195,14 +255,16 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a strong password"
+                    placeholder={tr('register_screen.create_a_strong_password')}
                     className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">Confirm Password</label>
+                <label className="block text-[10px] font-bold text-white/60 mb-1.5 uppercase tracking-widest">
+                  {tr('common.confirm_password')}
+                </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
@@ -210,7 +272,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repeat your password"
+                    placeholder={tr('common.repeat_your_password')}
                     className="bg-transparent text-white w-full focus:outline-none text-sm placeholder:text-white/20"
                   />
                 </div>
@@ -220,7 +282,7 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                 <IconAlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                <p className="text-red-400 text-xs font-medium">{errorMessage}</p>
+                <p className="text-red-400 text-xs font-medium">{localizeMessage(errorMessage)}</p>
               </div>
             )}
 
@@ -230,22 +292,25 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
                 disabled={isSubmitting}
                 className="group relative w-full flex items-center justify-center gap-2 py-4 bg-[#F66B17] hover:bg-[#D94E07] transition-all rounded-xl overflow-hidden active:scale-[0.98] shadow-[0_0_20px_rgba(246,107,23,0.3)]"
               >
-                <span className="font-bold text-white tracking-wide text-sm">Create Account</span>
+                <span className="font-bold text-white tracking-wide text-sm">
+                  {tr('common.create_account')}
+                </span>
                 <IconArrowRight className="w-4 h-4 text-white transition-transform group-hover:translate-x-1" />
               </button>
             </div>
 
             <div className="text-center mt-2">
-              <span className="text-white/40 text-xs font-medium">Already have an account? </span>
+              <span className="text-white/40 text-xs font-medium">
+                {tr('register_screen.already_have_an_account')}
+              </span>{' '}
               <button
                 type="button"
                 onClick={handleNavigateLogin}
                 className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
               >
-                Sign In
+                {tr('common.sign_in_bcc0bc')}
               </button>
             </div>
-
           </form>
         </div>
 
@@ -254,7 +319,10 @@ export function RegisterScreen({ onRegisterSuccess, onBackToLogin, onBackToSite 
           <div className="relative w-full h-full flex items-center justify-center">
             <div className="absolute w-20 h-20 border border-white/10 rounded-2xl" />
             <div className="absolute w-24 h-24 border border-[#F66B17]/20 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
-            <div className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" style={{ animationDelay: '1s' }} />
+            <div
+              className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"
+              style={{ animationDelay: '1s' }}
+            />
             <div className="orb-core relative w-8 h-8 bg-[#F66B17] rounded-full shadow-[0_0_40px_20px_rgba(246,107,23,0.4)] animate-pulse" />
           </div>
         </div>

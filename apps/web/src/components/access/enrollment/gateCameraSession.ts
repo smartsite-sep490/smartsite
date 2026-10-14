@@ -1,3 +1,4 @@
+import { translate as tr } from '../../../i18n';
 interface GateCameraCallbacks {
   video: () => HTMLVideoElement | null;
   ready: (devices: MediaDeviceInfo[], deviceId: string) => void;
@@ -50,7 +51,9 @@ export class GateCameraSession {
       this.ended = () => {
         if (generation !== this.generation) return;
         this.stop();
-        this.callbacks.failed('Camera đã ngắt kết nối. Kết nối lại rồi khởi động lại camera.');
+        this.callbacks.failed(
+          tr('gate_camera_session.camera_a_ngat_ket_noi_ket_noi_lai_roi_khoi_ong_lai_camera'),
+        );
       };
       stream.getVideoTracks().forEach((track) => track.addEventListener('ended', this.ended!));
       const video = this.callbacks.video();
@@ -71,12 +74,20 @@ export class GateCameraSession {
       const name = error instanceof Error ? error.name : '';
       this.callbacks.failed(
         error instanceof Error && error.message === 'CAMERA_UNSUPPORTED'
-          ? 'Trình duyệt chưa hỗ trợ camera. Mở trang bằng HTTPS hoặc localhost.'
+          ? tr(
+              'gate_camera_session.trinh_duyet_chua_ho_tro_camera_mo_trang_bang_https_hoac_localhost',
+            )
           : name === 'NotAllowedError'
-            ? 'Chưa được cấp quyền camera. Cho phép camera trong trình duyệt rồi thử lại.'
+            ? tr(
+                'gate_camera_session.chua_uoc_cap_quyen_camera_cho_phep_camera_trong_trinh_duyet_roi_thu_lai',
+              )
             : name === 'NotFoundError' || name === 'OverconstrainedError'
-              ? 'Không tìm thấy camera đã chọn. Kết nối camera hoặc chọn camera khác.'
-              : 'Không mở được camera. Kiểm tra thiết bị, đóng ứng dụng đang dùng camera rồi thử lại.',
+              ? tr(
+                  'gate_camera_session.khong_tim_thay_camera_a_chon_ket_noi_camera_hoac_chon_camera_khac',
+                )
+              : tr(
+                  'gate_camera_session.khong_mo_uoc_camera_kiem_tra_thiet_bi_ong_ung_dung_ang_dung_camera_roi_thu_lai',
+                ),
       );
     }
   }

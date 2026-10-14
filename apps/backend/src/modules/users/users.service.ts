@@ -22,6 +22,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { DataSource, In, type EntityManager } from 'typeorm';
+import { WORKER_DEFAULT_TEMPORARY_PASSWORD } from '@smartsite/contracts/management';
 import { command, knownUnique, page, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { AuthSessionEntity } from '../../database/entities/auth-session.entity.js';
@@ -50,6 +51,13 @@ const PROVISIONABLE_USER_ROLES = [
   UserRole.WORKER,
 ] as const;
 type ProvisionableUserRole = (typeof PROVISIONABLE_USER_ROLES)[number];
+
+export interface PreparedWorkerAccount {
+  username: string;
+  displayName: string;
+  passwordHash: string;
+  siteId: string;
+}
 const PROVISIONABLE_SITE_ROLES: ReadonlySet<UserRole> = new Set([
   UserRole.SITE_MANAGER,
   UserRole.CONTRACTOR_REPRESENTATIVE,
@@ -78,7 +86,7 @@ export class ReplaceRoleAssignmentsDto {
   roleAssignments!: RoleAssignmentDto[];
 }
 
-export class CreateUserDto extends ReplaceRoleAssignmentsDto {
+class AccountIdentityDto extends ReplaceRoleAssignmentsDto {
   @Transform(username)
   @IsString()
   @Matches(/^[a-z0-9][a-z0-9._-]{2,63}$/)
@@ -90,12 +98,25 @@ export class CreateUserDto extends ReplaceRoleAssignmentsDto {
   @MaxLength(255)
   @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
   displayName!: string;
+}
 
+export class CreateUserDto extends AccountIdentityDto {
   @IsString()
   @MinLength(PASSWORD_MIN_LENGTH)
   @MaxLength(PASSWORD_MAX_LENGTH)
   @Matches(PASSWORD_POLICY_PATTERN, { message: PASSWORD_POLICY_MESSAGE })
   temporaryPassword!: string;
+}
+
+class CreateWorkerAccountDto extends AccountIdentityDto {
+  @ValidateIf(
+    (_object, value) => value !== undefined && value !== WORKER_DEFAULT_TEMPORARY_PASSWORD,
+  )
+  @IsString()
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
+  @Matches(PASSWORD_POLICY_PATTERN, { message: PASSWORD_POLICY_MESSAGE })
+  temporaryPassword?: string;
 }
 
 export class SetUserStatusDto {
@@ -258,6 +279,49 @@ export class UsersService {
         siteId,
       })),
     );
+    return this.response(manager, user);
+  }
+
+  /** Credentials are validated and hashed before the caller opens its write transaction. */
+  async prepareWorkerAccount(input: {
+    username: string;
+    displayName: string;
+    temporaryPassword?: string;
+    siteId: string;
+  }): Promise<PreparedWorkerAccount> {
+    const value = command(CreateWorkerAccountDto, {
+      username: input.username,
+      displayName: input.displayName,
+      temporaryPassword: input.temporaryPassword,
+      roleAssignments: [{ role: UserRole.WORKER, siteId: input.siteId }],
+    });
+    await this.validateAssignments(value.roleAssignments);
+    return {
+      username: value.username,
+      displayName: value.displayName,
+      siteId: input.siteId,
+      passwordHash: await hashPassword(
+        value.temporaryPassword ?? WORKER_DEFAULT_TEMPORARY_PASSWORD,
+      ),
+    };
+  }
+
+  /** The consuming workflow authorizes Site/Contractor scope and owns the transaction. */
+  async createWorkerAccount(manager: EntityManager, input: PreparedWorkerAccount) {
+    const user = await manager.getRepository(UserEntity).save({
+      id: randomUUID(),
+      username: input.username,
+      displayName: input.displayName,
+      passwordHash: input.passwordHash,
+      isActive: true,
+      mustChangePassword: false,
+    });
+    await manager.getRepository(UserRoleAssignmentEntity).insert({
+      id: randomUUID(),
+      userId: user.id,
+      role: UserRole.WORKER,
+      siteId: input.siteId,
+    });
     return this.response(manager, user);
   }
 

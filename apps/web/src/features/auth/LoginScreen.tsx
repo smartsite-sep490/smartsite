@@ -1,3 +1,7 @@
+import { localizeMessage } from '../../i18n/messages';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useRef, useState } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
@@ -13,6 +17,8 @@ interface LoginScreenProps {
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScreenProps) {
+  useTranslation();
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -114,14 +120,14 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
           });
         },
         onError: (err: unknown) => {
-          let msg = 'An unexpected error occurred.';
+          let msg = tr('login_screen.an_unexpected_error_occurred');
           const errorObj = err as { status?: number; message?: string; type?: string };
           if (errorObj?.status === 401) {
-            msg = 'Invalid credentials.';
+            msg = tr('common.invalid_credentials');
           } else if (errorObj?.status === 429) {
-            msg = 'Too many attempts.';
+            msg = tr('common.too_many_attempts');
           } else if (errorObj?.message === 'Network Error' || errorObj?.type === 'network') {
-            msg = 'Connection failed.';
+            msg = tr('common.connection_failed');
           }
 
           setErrorMessage(msg);
@@ -172,7 +178,7 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
   return (
     <div
       ref={containerRef}
-      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#020810]"
+      className="relative min-h-screen w-full flex items-center justify-center pt-24 pb-8 overflow-x-hidden bg-[#020810]"
       style={{ perspective: 1200 }}
     >
       {/* Background with abstract dark glow */}
@@ -185,20 +191,23 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
       <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] opacity-[0.02] pointer-events-none mix-blend-overlay" />
 
       {/* Top Nav */}
-      <div className="absolute top-0 inset-x-0 h-24 flex items-center px-8 z-20">
+      <div className="absolute top-0 inset-x-0 h-24 flex items-center justify-between px-4 sm:px-8 z-20">
         <button
           onClick={onBack}
           className="text-white/40 hover:text-white transition-colors text-xs font-bold tracking-widest flex items-center gap-2"
         >
           <IconArrowRight className="w-4 h-4 rotate-180" />
-          BACK TO SITE
+          {tr('common.back_to_site')}
         </button>
+        <LanguageSwitcher dark />
       </div>
 
       {/* Cyber-Chamfered Panel */}
       <div
         ref={panelRef}
+        data-auth-panel
         className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4"
+        style={{ maxWidth: 'calc(100vw - 32px)', minHeight: 600 }}
       >
         {/* Outer Thin Border Layer */}
         <div
@@ -234,11 +243,23 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
         {/* --- FORM STATE --- */}
         <div className="login-form-content absolute inset-0 flex flex-col p-10 justify-center">
           <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
+                <img
+                  src="/smartsite-app-icon-white.png"
+                  alt="SmartSite"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <span className="text-2xl font-black tracking-tight text-white">
+                Smart<span className="text-[#F66B17]">Site</span>
+              </span>
+            </div>
             <h1 className="text-3xl font-black text-white tracking-tight mb-2">
-              Welcome <span className="text-[#F66B17]">Back</span>
+              {tr('common.welcome')} <span className="text-[#F66B17]">{tr('common.back')}</span>
             </h1>
             <p className="text-white/40 text-xs font-medium tracking-wide">
-              Enter your credentials to access your secure account
+              {tr('login_screen.enter_your_credentials_to_access_your_secure_account')}
             </p>
           </div>
 
@@ -247,7 +268,7 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
               {/* Username Input */}
               <div>
                 <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">
-                  Username
+                  {tr('common.username')}
                 </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
@@ -256,7 +277,7 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Enter your username"
+                    placeholder={tr('common.enter_your_username')}
                     className="bg-transparent text-white w-full !outline-none focus:outline-none focus-visible:!outline-none text-sm placeholder:text-white/20"
                   />
                 </div>
@@ -265,7 +286,7 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
               {/* Password Input */}
               <div>
                 <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">
-                  Password
+                  {tr('common.password')}
                 </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl pl-4 pr-3 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
@@ -324,13 +345,13 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
                 role="status"
                 className="rounded-lg border border-emerald-500/40 bg-emerald-950/50 p-3 text-xs text-emerald-200"
               >
-                {notice}
+                {localizeMessage(notice)}
               </p>
             )}
             {errorMessage && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                 <IconAlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                <p className="text-red-400 text-xs font-medium">{errorMessage}</p>
+                <p className="text-red-400 text-xs font-medium">{localizeMessage(errorMessage)}</p>
               </div>
             )}
 
@@ -339,19 +360,23 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
                 type="submit"
                 className="group relative w-full flex items-center justify-center gap-2 py-4 bg-[#F66B17] hover:bg-[#D94E07] transition-all rounded-xl overflow-hidden active:scale-[0.98] shadow-[0_0_20px_rgba(246,107,23,0.3)]"
               >
-                <span className="font-bold text-white tracking-wide text-sm">Sign In</span>
+                <span className="font-bold text-white tracking-wide text-sm">
+                  {tr('common.sign_in_bcc0bc')}
+                </span>
                 <IconArrowRight className="w-4 h-4 text-white transition-transform group-hover:translate-x-1" />
               </button>
             </div>
 
             <div className="text-center mt-2">
-              <span className="text-white/40 text-xs font-medium">Don't have an account? </span>
+              <span className="text-white/40 text-xs font-medium">
+                {tr('login_screen.don_t_have_an_account')}
+              </span>{' '}
               <button
                 type="button"
                 onClick={handleNavigateRegister}
                 className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
               >
-                Sign Up
+                {tr('common.sign_up')}
               </button>
             </div>
           </form>

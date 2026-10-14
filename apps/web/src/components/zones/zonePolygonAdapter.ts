@@ -1,9 +1,12 @@
+import { translate as tr } from '../../i18n';
 import { ApiError, type SmartSiteManagementClient } from '@smartsite/api-client';
 import type { NormalizedPoint } from '../cameras/monitoringUtils';
 
 export type CameraResponse = Awaited<ReturnType<SmartSiteManagementClient['getCamera']>>;
 export type RegionResponse = Awaited<ReturnType<SmartSiteManagementClient['getRegion']>>;
-export type RegionMutationResponse = Awaited<ReturnType<SmartSiteManagementClient['updatePolygon']>>;
+export type RegionMutationResponse = Awaited<
+  ReturnType<SmartSiteManagementClient['updatePolygon']>
+>;
 
 export const DEFAULT_ZONE_POLYGON: NormalizedPoint[] = [
   [0.63, 0.2],
@@ -117,7 +120,7 @@ export function backendPolygonToPoints(
 
 export function pointsToApiPolygon(points: NormalizedPoint[]): ApiPolygonPayload {
   if (!Array.isArray(points) || points.length < 3) {
-    throw new Error('A polygon must have at least 3 vertices.');
+    throw new Error(tr('zone_polygon_adapter.a_polygon_must_have_at_least_3_vertices'));
   }
 
   const coordinates: [number, number][] = points.map(([x, y]) => [
@@ -156,8 +159,13 @@ export function isConflictError(error: unknown): boolean {
 }
 
 export function formatConflictMessage(cameraExternalId?: string): string {
-  const cameraLabel = cameraExternalId ? `Camera ${cameraExternalId}` : 'The selected camera';
-  return `Configuration conflict: ${cameraLabel} was modified by another operator or process. The latest server configuration has been reloaded.`;
+  const cameraLabel = cameraExternalId
+    ? tr('common.camera_value', { value1: cameraExternalId })
+    : tr('common.the_selected_camera');
+  return tr(
+    'zone_polygon_adapter.configuration_conflict_value_was_modified_by_another_operator_or_process_the_lates',
+    { value1: cameraLabel },
+  );
 }
 
 export function getDraftStorageKey(

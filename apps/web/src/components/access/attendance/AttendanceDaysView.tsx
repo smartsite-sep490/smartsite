@@ -1,8 +1,13 @@
+import { localizedError } from '../../../i18n/messages';
+import { uiLocale } from '../../../i18n';
+import { localizedLabel } from '../../../i18n/labels';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { loadAllPages } from '../../workforce/load-all-pages';
-import { attendanceLabel } from './attendance-display';
+import { attendanceLabel, attendanceHours } from './attendance-display';
 import { attendanceDate } from './attendance-display';
 import { requestTimeInstant, requestShiftTimes, requestWallTime } from './attendance-request-time';
 import type {
@@ -25,24 +30,70 @@ import {
   IconUsers,
 } from '../../icons';
 
-const hours = (minutes: number) => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+const hours = (minutes: number) => attendanceHours(minutes);
 const shiftTime = (value: string | null, timezone: string) =>
-  value ? new Date(value).toLocaleString(undefined, { timeZone: timezone }) : 'Unavailable';
+  value
+    ? new Date(value).toLocaleString(uiLocale(), { timeZone: timezone })
+    : tr('common.unavailable');
 
 function StatusBadge({ status }: { status: string }) {
+  useTranslation();
+
   const map: Record<string, { label: string; cls: string }> = {
-    IN_PROGRESS: { label: 'In Progress', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-    NEEDS_REVIEW: { label: 'Needs Review', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    CONFIRMED: { label: 'Confirmed', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    MISSING_IN: { label: 'Missing IN', cls: 'bg-red-50 text-red-700 border-red-200' },
-    IGNORED: { label: 'Ignored', cls: 'bg-slate-100 text-slate-500 border-slate-200' },
-    PENDING: { label: 'Pending approval', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    PENDING_MANAGER: {
-      label: 'Pending approval',
+    IN_PROGRESS: {
+      get label() {
+        return tr('common.in_progress');
+      },
+      cls: 'bg-blue-50 text-blue-700 border-blue-200',
+    },
+    NEEDS_REVIEW: {
+      get label() {
+        return tr('common.needs_review');
+      },
       cls: 'bg-amber-50 text-amber-700 border-amber-200',
     },
-    APPROVED: { label: 'Approved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    REJECTED: { label: 'Rejected', cls: 'bg-red-50 text-red-700 border-red-200' },
+    CONFIRMED: {
+      get label() {
+        return tr('common.confirmed');
+      },
+      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    },
+    MISSING_IN: {
+      get label() {
+        return tr('common.missing_in');
+      },
+      cls: 'bg-red-50 text-red-700 border-red-200',
+    },
+    IGNORED: {
+      get label() {
+        return tr('common.ignored');
+      },
+      cls: 'bg-slate-100 text-slate-500 border-slate-200',
+    },
+    PENDING: {
+      get label() {
+        return tr('common.pending_approval');
+      },
+      cls: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+    PENDING_MANAGER: {
+      get label() {
+        return tr('common.pending_approval');
+      },
+      cls: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+    APPROVED: {
+      get label() {
+        return tr('common.approved');
+      },
+      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    },
+    REJECTED: {
+      get label() {
+        return tr('common.rejected');
+      },
+      cls: 'bg-red-50 text-red-700 border-red-200',
+    },
   };
   const cfg = map[status] ?? { label: status, cls: 'bg-slate-100 text-slate-600 border-slate-200' };
   return (
@@ -73,6 +124,8 @@ export function AttendanceDaysView({
   isWorker?: boolean;
   children?: React.ReactNode;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const [fromDate, setFromDate] = useState('');
@@ -280,9 +333,9 @@ export function AttendanceDaysView({
   const request = useMutation({
     mutationFn: async () => {
       if (!scheduleId || !startsAt || !endsAt || !reason.trim())
-        throw new Error('Select a schedule, start, end and reason.');
+        throw new Error(tr('attendance_days_view.select_a_schedule_start_end_and_reason'));
       if (!selectedRequestSchedule || schedules.isError || requestShifts.isError)
-        throw new Error('Select a current assigned shift.');
+        throw new Error(tr('attendance_days_view.select_a_current_assigned_shift'));
       const start = requestTimeInstant(startsAt, selectedRequestSchedule.shift.timezone);
       const end = requestTimeInstant(endsAt, selectedRequestSchedule.shift.timezone);
       const shiftStart = requestTimeInstant(
@@ -293,9 +346,11 @@ export function AttendanceDaysView({
         selectedRequestSchedule.endsAt,
         selectedRequestSchedule.shift.timezone,
       );
-      if (end <= start) throw new Error('End time must follow start time.');
+      if (end <= start) throw new Error(tr('attendance_days_view.end_time_must_follow_start_time'));
       if (kind === 'OVERTIME' && (start <= new Date() || (start < shiftEnd && end > shiftStart)))
-        throw new Error('Overtime must start in the future, outside regular shift hours.');
+        throw new Error(
+          tr('attendance_days_view.overtime_must_start_in_the_future_outside_regular_shift_hours'),
+        );
       if (
         kind === 'OVERTIME' &&
         startsAt.slice(0, 10) !==
@@ -304,9 +359,9 @@ export function AttendanceDaysView({
             selectedRequestSchedule.shift.timezone,
           )
       )
-        throw new Error('Overtime must start on the assigned shift day.');
+        throw new Error(tr('attendance_days_view.overtime_must_start_on_the_assigned_shift_day'));
       if (kind === 'LEAVE' && (start < shiftStart || end > shiftEnd))
-        throw new Error('Leave must be within the assigned shift.');
+        throw new Error(tr('attendance_days_view.leave_must_be_within_the_assigned_shift'));
       const input = {
         workerScheduleId: scheduleId,
         kind,
@@ -392,7 +447,7 @@ export function AttendanceDaysView({
     return (
       <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-6 text-xs text-slate-500">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-        <span>Loading daily attendance…</span>
+        <span>{tr('common.loading_daily_attendance')}</span>
       </div>
     );
 
@@ -402,12 +457,12 @@ export function AttendanceDaysView({
         role="alert"
         className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"
       >
-        <span>{query.error.message}</span>
+        <span>{localizedError(query.error.message)}</span>
         <button
           onClick={() => void query.refetch()}
           className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 transition-colors"
         >
-          <IconRefresh className="w-3.5 h-3.5" /> Retry
+          <IconRefresh className="w-3.5 h-3.5" /> {tr('common.retry')}
         </button>
       </div>
     );
@@ -428,7 +483,7 @@ export function AttendanceDaysView({
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Total Days
+                {tr('common.total_days')}
               </p>
               <p className="text-lg font-extrabold text-[#071A2B]">{data.total}</p>
             </div>
@@ -439,7 +494,7 @@ export function AttendanceDaysView({
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Confirmed · This page
+                {tr('attendance_days_view.confirmed_this_page')}
               </p>
               <p className="text-lg font-extrabold text-[#071A2B]">
                 {data.items.filter((d) => d.status === 'CONFIRMED').length}
@@ -452,7 +507,7 @@ export function AttendanceDaysView({
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Needs Review · This page
+                {tr('attendance_days_view.needs_review_this_page')}
               </p>
               <p className="text-lg font-extrabold text-[#071A2B]">
                 {data.items.filter((d) => d.status === 'NEEDS_REVIEW').length}
@@ -466,7 +521,7 @@ export function AttendanceDaysView({
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Workers · This page
+                  {tr('attendance_days_view.workers_this_page')}
                 </p>
                 <p className="text-lg font-extrabold text-[#071A2B]">
                   {new Set(data.items.map((d) => d.workerId)).size}
@@ -488,9 +543,9 @@ export function AttendanceDaysView({
               <IconClock className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#071A2B]">Daily Work Hours</h2>
+              <h2 className="text-sm font-bold text-[#071A2B]">{tr('common.daily_work_hours')}</h2>
               <p className="text-[11px] text-slate-400 font-medium">
-                MF03 · Attendance & Timesheets
+                {tr('attendance_days_view.mf03_attendance_timesheets')}
               </p>
             </div>
           </div>
@@ -501,17 +556,17 @@ export function AttendanceDaysView({
                 className="flex items-center gap-1.5 rounded-lg bg-[#071A2B] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition-colors"
               >
                 <IconUsers className="w-3.5 h-3.5 text-orange-400" />
-                <span>+ Enrol Worker</span>
+                <span>{tr('common.enrol_worker')}</span>
               </a>
             )}
             <button
               onClick={handleRefresh}
-              title="Refresh"
-              aria-label="Refresh"
+              title={tr('common.refresh')}
+              aria-label={tr('common.refresh')}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-all"
             >
               <IconRefresh className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Refresh</span>
+              <span className="hidden sm:inline">{tr('common.refresh')}</span>
             </button>
           </div>
         </div>
@@ -524,7 +579,7 @@ export function AttendanceDaysView({
                 htmlFor="filter-from-date"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                From
+                {tr('common.from')}
               </label>
               <div className="relative">
                 <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -545,7 +600,7 @@ export function AttendanceDaysView({
                 htmlFor="filter-to-date"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                To
+                {tr('common.to')}
               </label>
               <div className="relative">
                 <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -566,7 +621,7 @@ export function AttendanceDaysView({
                 htmlFor="filter-status"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                Status
+                {tr('common.status')}
               </label>
               <div className="relative">
                 <IconFilter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -579,10 +634,10 @@ export function AttendanceDaysView({
                     setOffset(0);
                   }}
                 >
-                  <option value="">All Statuses</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="NEEDS_REVIEW">Needs Review</option>
-                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="">{tr('common.all_statuses')}</option>
+                  <option value="IN_PROGRESS">{tr('common.in_progress')}</option>
+                  <option value="NEEDS_REVIEW">{tr('common.needs_review')}</option>
+                  <option value="CONFIRMED">{tr('common.confirmed')}</option>
                 </select>
               </div>
             </div>
@@ -592,7 +647,7 @@ export function AttendanceDaysView({
                   htmlFor="filter-worker"
                   className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                 >
-                  Worker
+                  {tr('common.worker')}
                 </label>
                 <div className="relative">
                   <IconUsers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -606,7 +661,7 @@ export function AttendanceDaysView({
                       setRequestOffset(0);
                     }}
                   >
-                    <option value="">All Workers</option>
+                    <option value="">{tr('common.all_workers')}</option>
                     {workers.data?.items.map((worker) => (
                       <option key={worker.id} value={worker.id}>
                         {worker.displayName}
@@ -625,7 +680,9 @@ export function AttendanceDaysView({
             <div className="mx-auto w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
               <IconCalendar className="w-5 h-5" />
             </div>
-            <p className="text-sm font-semibold text-slate-500">No attendance days in this range</p>
+            <p className="text-sm font-semibold text-slate-500">
+              {tr('attendance_days_view.no_attendance_days_in_this_range')}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -633,16 +690,21 @@ export function AttendanceDaysView({
               <thead>
                 <tr className="border-b border-slate-100">
                   {(isWorker
-                    ? ['Date', 'Shift', 'Recorded Hours', 'Confirmed Hours']
+                    ? [
+                        tr('common.date_99c40a'),
+                        tr('common.shift'),
+                        tr('common.recorded_hours'),
+                        tr('common.confirmed_hours'),
+                      ]
                     : [
-                        'Worker / Date',
-                        'Shift',
-                        'Presence',
-                        'Regular',
-                        'Overtime',
-                        'Provisional',
-                        'Confirmed',
-                        'Status',
+                        tr('common.worker_date'),
+                        tr('common.shift'),
+                        tr('common.presence'),
+                        tr('common.regular'),
+                        tr('common.overtime'),
+                        tr('common.provisional'),
+                        tr('common.confirmed'),
+                        tr('common.status'),
                         '',
                       ]
                   ).map((h) => (
@@ -679,18 +741,24 @@ export function AttendanceDaysView({
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">
-                        {day.shiftName ?? <span className="text-slate-400 italic">Unassigned</span>}
+                        {day.shiftName ?? (
+                          <span className="text-slate-400 italic">{tr('common.unassigned')}</span>
+                        )}
                         {day.breakStartsAt && day.breakEndsAt && (
                           <p className="text-[11px] text-slate-500">
-                            Unpaid break: {shiftTime(day.breakStartsAt, day.timezone)}–
-                            {shiftTime(day.breakEndsAt, day.timezone)}
+                            {tr('common.unpaid_break_value_value', {
+                              value1: shiftTime(day.breakStartsAt, day.timezone),
+                              value2: shiftTime(day.breakEndsAt, day.timezone),
+                            })}
                           </p>
                         )}
                       </td>
                       {!isWorker && (
                         <>
                           <td className="px-4 py-3.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
-                            {day.presence === 'INSIDE' ? 'Open session' : 'No open session'}
+                            {day.presence === 'INSIDE'
+                              ? tr('common.open_session')
+                              : tr('common.no_open_session')}
                           </td>
                           <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
                             {hours(day.regularMinutes)}
@@ -705,7 +773,9 @@ export function AttendanceDaysView({
                       </td>
                       <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
                         {day.confirmedMinutes === null ? (
-                          <span className="text-slate-400 italic">Awaiting confirmation</span>
+                          <span className="text-slate-400 italic">
+                            {tr('common.awaiting_confirmation')}
+                          </span>
                         ) : (
                           <span className="text-emerald-700">{hours(day.confirmedMinutes)}</span>
                         )}
@@ -725,7 +795,7 @@ export function AttendanceDaysView({
                       {!isWorker && (
                         <td className="px-4 py-3.5">
                           <button
-                            aria-label="View"
+                            aria-label={tr('common.view')}
                             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
                               isSelected
                                 ? 'bg-[#F66B17] text-white'
@@ -743,7 +813,7 @@ export function AttendanceDaysView({
                             }}
                           >
                             <IconEye className="w-3 h-3" />
-                            {isSelected ? 'Hide' : 'View'}
+                            {isSelected ? tr('common.hide') : tr('common.view')}
                           </button>
                         </td>
                       )}
@@ -762,15 +832,17 @@ export function AttendanceDaysView({
             onClick={() => setOffset(Math.max(0, offset - 20))}
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
           >
-            <IconChevronLeft className="w-3.5 h-3.5" /> Previous
+            <IconChevronLeft className="w-3.5 h-3.5" /> {tr('common.previous')}
           </button>
-          <span className="text-xs text-slate-500 font-medium">{data.total} days total</span>
+          <span className="text-xs text-slate-500 font-medium">
+            {tr('common.value_days_total', { value1: data.total })}
+          </span>
           <button
             disabled={offset + 20 >= data.total}
             onClick={() => setOffset(offset + 20)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
           >
-            Next <IconChevronRight className="w-3.5 h-3.5" />
+            {tr('common.next')} <IconChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -790,16 +862,22 @@ export function AttendanceDaysView({
                   <span className="ml-2 text-slate-500 font-semibold">{activeDay.workDate}</span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  {activeDay.startsAt ? new Date(activeDay.startsAt).toLocaleString() : '—'}
+                  {activeDay.startsAt
+                    ? new Date(activeDay.startsAt).toLocaleString(uiLocale())
+                    : '—'}
                   {' → '}
-                  {activeDay.endsAt ? new Date(activeDay.endsAt).toLocaleString() : '—'} (
+                  {activeDay.endsAt ? new Date(activeDay.endsAt).toLocaleString(uiLocale()) : '—'} (
                   {activeDay.timezone})
                 </p>
                 {activeDay.breakStartsAt && activeDay.breakEndsAt && (
                   <p className="text-xs text-slate-500">
-                    Unpaid break: {shiftTime(activeDay.breakStartsAt, activeDay.timezone)}–
-                    {shiftTime(activeDay.breakEndsAt, activeDay.timezone)}. Only time overlapping
-                    presence is deducted.
+                    {tr(
+                      'attendance_days_view.unpaid_break_value_value_only_time_overlapping_presence_is_deducted',
+                      {
+                        value1: shiftTime(activeDay.breakStartsAt, activeDay.timezone),
+                        value2: shiftTime(activeDay.breakEndsAt, activeDay.timezone),
+                      },
+                    )}
                   </p>
                 )}
               </div>
@@ -811,7 +889,7 @@ export function AttendanceDaysView({
               }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:border-slate-300 transition-colors"
             >
-              <IconX className="w-3.5 h-3.5" /> Close
+              <IconX className="w-3.5 h-3.5" /> {tr('common.close')}
             </button>
           </div>
 
@@ -821,13 +899,17 @@ export function AttendanceDaysView({
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <IconAlertTriangle className="w-4 h-4 text-amber-600" />
-                  <h4 className="text-sm font-bold text-amber-800">Resolve Changed Schedule</h4>
+                  <h4 className="text-sm font-bold text-amber-800">
+                    {tr('common.resolve_changed_schedule')}
+                  </h4>
                 </div>
-                <p className="text-xs text-amber-800">Original shift used for attendance</p>
+                <p className="text-xs text-amber-800">
+                  {tr('attendance_days_view.original_shift_used_for_attendance')}
+                </p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="rounded-lg border border-amber-200 bg-white p-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
-                      Original Shift
+                      {tr('common.original_shift')}
                     </p>
                     <p className="text-xs font-semibold text-slate-700">{activeDay.shiftName}</p>
                     <p className="text-[11px] text-slate-500">
@@ -837,7 +919,7 @@ export function AttendanceDaysView({
                   </div>
                   <div className="rounded-lg border border-slate-200 bg-white p-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Current Assigned Shift
+                      {tr('common.current_assigned_shift')}
                     </p>
                     {detail.data?.currentSchedule ? (
                       <>
@@ -845,7 +927,9 @@ export function AttendanceDaysView({
                           {detail.data.currentSchedule.shiftName}
                         </p>
                         {detail.data.currentSchedule.isActive === false && (
-                          <p className="text-[11px] text-red-600 font-bold">Inactive schedule</p>
+                          <p className="text-[11px] text-red-600 font-bold">
+                            {tr('common.inactive_schedule')}
+                          </p>
                         )}
                         <p className="text-[11px] text-slate-500">
                           {shiftTime(
@@ -860,9 +944,9 @@ export function AttendanceDaysView({
                         </p>
                       </>
                     ) : detail.isPending ? (
-                      <p className="text-[11px] text-slate-400">Loading…</p>
+                      <p className="text-[11px] text-slate-400">{tr('common.loading')}</p>
                     ) : (
-                      <p className="text-[11px] text-slate-400">Unavailable</p>
+                      <p className="text-[11px] text-slate-400">{tr('common.unavailable')}</p>
                     )}
                   </div>
                 </div>
@@ -871,7 +955,7 @@ export function AttendanceDaysView({
                     className="inline-flex items-center gap-1 text-xs font-semibold text-[#F66B17] hover:underline"
                     href={`/workforce?siteId=${encodeURIComponent(siteId)}&tab=schedule`}
                   >
-                    Open workforce schedule <IconChevronRight className="w-3 h-3" />
+                    {tr('common.open_workforce_schedule')} <IconChevronRight className="w-3 h-3" />
                   </a>
                 )}
               </div>
@@ -880,12 +964,12 @@ export function AttendanceDaysView({
             {/* Work Intervals */}
             <div className="space-y-2">
               <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Work Intervals
+                {tr('common.work_intervals')}
               </h4>
               {detail.isPending && (
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-                  Loading intervals…
+                  {tr('common.loading_intervals')}
                 </div>
               )}
               {detail.data?.sessions.some((s) => s.status === 'MISSING_IN') && (
@@ -893,7 +977,9 @@ export function AttendanceDaysView({
                   <div className="flex items-start gap-2">
                     <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
                     <p className="text-xs text-amber-700">
-                      Missing IN: request a correction with the actual entry time.
+                      {tr(
+                        'attendance_days_view.missing_in_request_a_correction_with_the_actual_entry_time',
+                      )}
                     </p>
                   </div>
                   {isWorker && (
@@ -901,7 +987,7 @@ export function AttendanceDaysView({
                       href="#attendance-correction-form"
                       className="text-xs font-bold text-amber-800 underline hover:text-amber-900 shrink-0"
                     >
-                      Request correction ↓
+                      {tr('common.request_correction')}
                     </a>
                   )}
                 </div>
@@ -909,7 +995,9 @@ export function AttendanceDaysView({
               {detail.data?.sessions.some((s) => s.effectiveInAt && !s.effectiveOutAt) && (
                 <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
                   <IconClock className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" />
-                  <p className="text-xs text-blue-700">Open session · checkout not recorded</p>
+                  <p className="text-xs text-blue-700">
+                    {tr('attendance_days_view.open_session_checkout_not_recorded')}
+                  </p>
                 </div>
               )}
               <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
@@ -919,17 +1007,20 @@ export function AttendanceDaysView({
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-xs font-semibold text-slate-600">
-                            Duplicate IN:{' '}
-                            {s.rawInAt ? new Date(s.rawInAt).toLocaleString() : 'Recorded entry'}
+                            {tr('common.duplicate_in_value', {
+                              value1: s.rawInAt
+                                ? new Date(s.rawInAt).toLocaleString(uiLocale())
+                                : tr('common.recorded_entry'),
+                            })}
                           </p>
                           <p className="text-[11px] text-slate-400">
                             {s.status === 'IGNORED'
-                              ? 'Ignored — no work hours added'
-                              : 'Needs representative review'}
+                              ? tr('attendance_days_view.ignored_no_work_hours_added')
+                              : tr('common.needs_representative_review')}
                           </p>
                           {s.ignoreReason && (
                             <p className="text-[11px] text-slate-400 mt-0.5">
-                              Reason: {s.ignoreReason}
+                              {tr('common.reason_value', { value1: s.ignoreReason })}
                             </p>
                           )}
                         </div>
@@ -940,21 +1031,21 @@ export function AttendanceDaysView({
                         <div>
                           <p className="text-xs font-semibold text-slate-700">
                             {s.effectiveInAt
-                              ? new Date(s.effectiveInAt).toLocaleString()
-                              : 'Missing entry'}
+                              ? new Date(s.effectiveInAt).toLocaleString(uiLocale())
+                              : tr('common.missing_entry')}
                             {' → '}
                             {s.effectiveOutAt
-                              ? new Date(s.effectiveOutAt).toLocaleString()
-                              : 'Awaiting checkout'}
+                              ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
+                              : tr('common.awaiting_checkout')}
                           </p>
                           {s.effectiveInAt && !s.effectiveOutAt && (
                             <p className="text-[11px] text-blue-600">
-                              Open session · checkout not recorded
+                              {tr('attendance_days_view.open_session_checkout_not_recorded')}
                             </p>
                           )}
                           {!s.effectiveInAt && s.status !== 'IGNORED' && (
                             <p className="text-[11px] text-amber-600">
-                              Incomplete evidence · hours not counted
+                              {tr('attendance_days_view.incomplete_evidence_hours_not_counted')}
                             </p>
                           )}
                         </div>
@@ -967,14 +1058,14 @@ export function AttendanceDaysView({
                         disabled={ignoreDuplicate.isPending || reviewNote.trim().length < 5}
                         onClick={() => ignoreDuplicate.mutate(s)}
                       >
-                        Ignore duplicate IN
+                        {tr('common.ignore_duplicate_in')}
                       </button>
                     )}
                   </div>
                 ))}
                 {detail.isSuccess && !detail.data?.sessions.length && (
                   <div className="px-4 py-6 text-center text-xs text-slate-400">
-                    No work intervals recorded.
+                    {tr('attendance_days_view.no_work_intervals_recorded')}
                   </div>
                 )}
               </div>
@@ -1000,13 +1091,13 @@ export function AttendanceDaysView({
                       htmlFor="review-note-input"
                       className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                     >
-                      Review note
+                      {tr('common.review_note')}
                     </label>
                     <input
                       id="review-note-input"
                       className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
                       maxLength={1000}
-                      placeholder="Add a note for your review decision…"
+                      placeholder={tr('attendance_days_view.add_a_note_for_your_review_decision')}
                       value={reviewNote}
                       onChange={(e) => setReviewNote(e.target.value)}
                     />
@@ -1015,15 +1106,18 @@ export function AttendanceDaysView({
                   {canConfirmEarly && (
                     <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-xs text-slate-600">
-                        Confirm actual hours for early departure?
+                        {tr('attendance_days_view.confirm_actual_hours_for_early_departure')}
                       </p>
                       <button
                         disabled={confirm.isPending || !reviewNote.trim()}
                         onClick={() => confirm.mutate(activeDay)}
-                        aria-label="Confirm actual hours for early departure"
+                        aria-label={tr(
+                          'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
+                        )}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
                       >
-                        <IconCheck className="w-3.5 h-3.5" /> Confirm actual hours for early departure
+                        <IconCheck className="w-3.5 h-3.5" />{' '}
+                        {tr('attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a')}
                       </button>
                     </div>
                   )}
@@ -1038,40 +1132,48 @@ export function AttendanceDaysView({
       {data.canRequest && submittedRequest && (
         <section
           className="rounded-2xl border border-emerald-200 bg-white p-6 space-y-3"
-          aria-label="Submitted request"
+          aria-label={tr('common.submitted_request')}
         >
-          <h3 className="font-bold text-[#071A2B]">Request submitted.</h3>
+          <h3 className="font-bold text-[#071A2B]">{tr('common.request_submitted')}</h3>
           <p className="text-sm text-slate-600">
-            Your {submittedRequest.kind === 'OVERTIME' ? 'overtime' : 'leave'} request was sent to
-            your contractor representative.
+            {tr(
+              'attendance_days_view.your_value_request_was_sent_to_your_contractor_representative',
+              { value1: submittedRequest.kind === 'OVERTIME' ? 'overtime' : 'leave' },
+            )}
           </p>
           <div aria-live="polite">
             {submittedStatus.isPending ? (
-              <p>Loading request status…</p>
+              <p>{tr('common.loading_request_status')}</p>
             ) : submittedStatus.isError || !submittedStatus.data ? (
               <div role="alert">
-                Status unavailable.{' '}
+                {tr('common.status_unavailable')}{' '}
                 <button className="underline" onClick={() => void submittedStatus.refetch()}>
-                  Retry request status
+                  {tr('common.retry_request_status')}
                 </button>
               </div>
             ) : (
               <>
                 <StatusBadge status={submittedStatus.data.status} />
                 <p className="mt-2 text-sm">
-                  {new Date(submittedStatus.data.startsAt).toLocaleString('en-GB', {
+                  {new Date(submittedStatus.data.startsAt).toLocaleString(uiLocale(), {
                     hour12: false,
                   })}{' '}
                   →{' '}
-                  {new Date(submittedStatus.data.endsAt).toLocaleString('en-GB', { hour12: false })}
+                  {new Date(submittedStatus.data.endsAt).toLocaleString(uiLocale(), {
+                    hour12: false,
+                  })}
                 </p>
                 <p className="text-sm text-slate-600">{submittedStatus.data.reason}</p>
                 {submittedStatus.data.reviewNote && (
-                  <p className="text-sm">Review: {submittedStatus.data.reviewNote}</p>
+                  <p className="text-sm">
+                    {tr('common.review_value', { value1: submittedStatus.data.reviewNote })}
+                  </p>
                 )}
                 {['PENDING', 'PENDING_MANAGER'].includes(submittedStatus.data.status) && (
                   <p className="mt-2 text-sm text-amber-700">
-                    Waiting for your contractor representative to review this request.
+                    {tr(
+                      'attendance_days_view.waiting_for_your_contractor_representative_to_review_this_request',
+                    )}
                   </p>
                 )}
               </>
@@ -1084,36 +1186,40 @@ export function AttendanceDaysView({
               request.reset();
             }}
           >
-            New request
+            {tr('common.new_request')}
           </button>
         </section>
       )}
       {data.canRequest && !submittedRequest ? (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-[#071A2B]">Request Overtime or Leave</h3>
+            <h3 className="text-sm font-bold text-[#071A2B]">
+              {tr('attendance_days_view.request_overtime_or_leave')}
+            </h3>
           </div>
           {(schedules.isPending || requestShifts.isPending) && (
             <p role="status" className="p-6">
-              Loading assigned shifts…
+              {tr('common.loading_assigned_shifts')}
             </p>
           )}
           {(schedules.isError || requestShifts.isError) && (
             <div role="alert" className="p-6">
-              Assigned shifts unavailable.{' '}
+              {tr('common.assigned_shifts_unavailable')}{' '}
               <button
                 onClick={() => {
                   void schedules.refetch();
                   void requestShifts.refetch();
                 }}
               >
-                Retry assigned shifts
+                {tr('common.retry_assigned_shifts')}
               </button>
             </div>
           )}
           {schedules.isSuccess && requestShifts.isSuccess && !availableSchedules.length && (
             <p className="p-6">
-              No current or upcoming assigned shifts. Contact your contractor representative.
+              {tr(
+                'attendance_days_view.no_current_or_upcoming_assigned_shifts_contact_your_contractor_representative',
+              )}
             </p>
           )}
           {availableSchedules.length > 0 && !schedules.isError && !requestShifts.isError && (
@@ -1130,7 +1236,7 @@ export function AttendanceDaysView({
                     htmlFor="assigned-shift"
                     className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Assigned shift
+                    {tr('common.assigned_shift')}
                   </label>
                   <select
                     id="assigned-shift"
@@ -1139,7 +1245,7 @@ export function AttendanceDaysView({
                     value={selectedRequestSchedule ? scheduleId : ''}
                     onChange={(e) => suggestTimes(e.target.value, kind, new Date())}
                   >
-                    <option value="">Select shift</option>
+                    <option value="">{tr('common.select_shift')}</option>
                     {availableSchedules.map(({ schedule, shift, startsAt, endsAt }) => (
                       <option key={schedule.id} value={schedule.id}>
                         {schedule.workDate} · {shift.name} · {startsAt.slice(11)}–{endsAt.slice(11)}{' '}
@@ -1153,7 +1259,7 @@ export function AttendanceDaysView({
                     htmlFor="request-kind"
                     className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Request Type
+                    {tr('common.request_type')}
                   </label>
                   <select
                     id="request-kind"
@@ -1165,8 +1271,10 @@ export function AttendanceDaysView({
                       suggestTimes(scheduleId, next, new Date());
                     }}
                   >
-                    <option value="OVERTIME">Overtime</option>
-                    <option value="LEAVE">Leave (whole or partial shift)</option>
+                    <option value="OVERTIME">{tr('common.overtime')}</option>
+                    <option value="LEAVE">
+                      {tr('attendance_days_view.leave_whole_or_partial_shift')}
+                    </option>
                   </select>
                 </div>
 
@@ -1175,14 +1283,14 @@ export function AttendanceDaysView({
                     htmlFor="request-start"
                     className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Start Date & Time
+                    {tr('attendance_days_view.start_date_time')}
                   </label>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                       <input
                         id="request-start-date"
-                        aria-label="Start date"
+                        aria-label={tr('common.start_date')}
                         type="date"
                         required
                         className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
@@ -1196,7 +1304,7 @@ export function AttendanceDaysView({
                       <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                       <input
                         id="request-start"
-                        aria-label="Start time"
+                        aria-label={tr('common.start_time')}
                         type="time"
                         required
                         className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
@@ -1211,14 +1319,14 @@ export function AttendanceDaysView({
                     htmlFor="request-end"
                     className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    End Date & Time
+                    {tr('attendance_days_view.end_date_time')}
                   </label>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                       <input
                         id="request-end-date"
-                        aria-label="End date"
+                        aria-label={tr('common.end_date')}
                         type="date"
                         required
                         className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
@@ -1232,7 +1340,7 @@ export function AttendanceDaysView({
                       <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                       <input
                         id="request-end"
-                        aria-label="End time"
+                        aria-label={tr('common.end_time')}
                         type="time"
                         required
                         className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
@@ -1248,7 +1356,7 @@ export function AttendanceDaysView({
                     htmlFor="request-reason"
                     className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Reason
+                    {tr('common.reason')}
                   </label>
                   <input
                     id="request-reason"
@@ -1264,21 +1372,21 @@ export function AttendanceDaysView({
               <div className="flex items-center gap-3">
                 <button
                   type="submit"
-                  aria-label="Submit request"
+                  aria-label={tr('common.submit_request')}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors"
                   disabled={request.isPending || !selectedRequestSchedule}
                 >
-                  Submit request
+                  {tr('common.submit_request')}
                 </button>
                 {request.isSuccess && (
                   <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-                    <IconCheck className="w-3.5 h-3.5" /> Request submitted.
+                    <IconCheck className="w-3.5 h-3.5" /> {tr('common.request_submitted')}
                   </span>
                 )}
               </div>
               {request.error && (
                 <p role="alert" className="text-xs text-red-600">
-                  {request.error.message}
+                  {localizedError(request.error.message)}
                 </p>
               )}
             </form>
@@ -1289,14 +1397,14 @@ export function AttendanceDaysView({
       {/* ── TIME REQUESTS QUEUE ─────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-[#071A2B]">Time Requests</h3>
+          <h3 className="text-sm font-bold text-[#071A2B]">{tr('common.time_requests')}</h3>
           <div className="flex items-center gap-2">
             <label htmlFor="queue-kind" className="sr-only">
-              Queue type
+              {tr('common.queue_type')}
             </label>
             <select
               id="queue-kind"
-              aria-label="Queue type"
+              aria-label={tr('common.queue_type')}
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
               value={requestKind}
               onChange={(e) => {
@@ -1304,15 +1412,15 @@ export function AttendanceDaysView({
                 setRequestOffset(0);
               }}
             >
-              <option value="OVERTIME">Overtime</option>
-              <option value="LEAVE">Leave</option>
+              <option value="OVERTIME">{tr('common.overtime')}</option>
+              <option value="LEAVE">{tr('common.leave')}</option>
             </select>
             <label htmlFor="queue-status" className="sr-only">
-              Request status
+              {tr('common.request_status')}
             </label>
             <select
               id="queue-status"
-              aria-label="Request status"
+              aria-label={tr('common.request_status')}
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
               value={requestStatus}
               onChange={(e) => {
@@ -1320,10 +1428,10 @@ export function AttendanceDaysView({
                 setRequestOffset(0);
               }}
             >
-              <option value="">All Statuses</option>
-              <option value="PENDING">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
+              <option value="">{tr('common.all_statuses')}</option>
+              <option value="PENDING">{tr('common.pending')}</option>
+              <option value="APPROVED">{tr('common.approved')}</option>
+              <option value="REJECTED">{tr('common.rejected')}</option>
             </select>
           </div>
         </div>
@@ -1332,7 +1440,7 @@ export function AttendanceDaysView({
           {timeRequests.isPending && (
             <div className="flex items-center gap-2 p-5 text-xs text-slate-400">
               <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-              Loading time requests…
+              {tr('common.loading_time_requests')}
             </div>
           )}
           {timeRequests.error && (
@@ -1340,22 +1448,24 @@ export function AttendanceDaysView({
               role="alert"
               className="flex items-center justify-between p-5 text-xs text-red-600"
             >
-              <span>{timeRequests.error.message}</span>
+              <span>{localizedError(timeRequests.error.message)}</span>
               <button
-                aria-label="Retry time requests"
+                aria-label={tr('common.retry_time_requests')}
                 onClick={() => void timeRequests.refetch()}
                 className="font-bold underline"
               >
-                Retry time requests
+                {tr('common.retry_time_requests')}
               </button>
             </div>
           )}
           {timeRequests.data?.items.length === 0 && (
-            <div className="px-6 py-8 text-center text-xs text-slate-400">No time requests.</div>
+            <div className="px-6 py-8 text-center text-xs text-slate-400">
+              {tr('common.no_time_requests')}
+            </div>
           )}
           {!timeRequests.isError &&
             timeRequests.data?.items.map((r) => (
-              <div key={`${r.kind}:${r.id}`} className="px-6 py-4">
+              <div key={`${localizedLabel(r.kind)}:${r.id}`} className="px-6 py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -1366,12 +1476,14 @@ export function AttendanceDaysView({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      {new Date(r.startsAt).toLocaleString()} →{' '}
-                      {new Date(r.endsAt).toLocaleString()}
+                      {new Date(r.startsAt).toLocaleString(uiLocale())} →{' '}
+                      {new Date(r.endsAt).toLocaleString(uiLocale())}
                     </p>
                     <p className="text-[11px] text-slate-500 mt-0.5">{r.reason}</p>
                     {r.reviewNote && (
-                      <p className="text-[11px] text-emerald-700 mt-0.5">Review: {r.reviewNote}</p>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">
+                        {tr('common.review_value', { value1: r.reviewNote })}
+                      </p>
                     )}
                   </div>
                   {data.canReview && ['PENDING', 'PENDING_MANAGER'].includes(r.status) && (
@@ -1379,10 +1491,10 @@ export function AttendanceDaysView({
                       <button
                         disabled={review.isPending}
                         onClick={() => review.mutate({ r, approve: true })}
-                        title="Approve this request"
+                        title={tr('common.approve_this_request')}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
                       >
-                        <IconCheck className="w-3 h-3" /> Approve
+                        <IconCheck className="w-3 h-3" /> {tr('common.approve')}
                       </button>
                       <button
                         disabled={review.isPending}
@@ -1390,10 +1502,10 @@ export function AttendanceDaysView({
                           setRejectingRequest(`${r.kind}:${r.id}`);
                           setRejectionReason('');
                         }}
-                        title="Enter a reason to reject this request"
+                        title={tr('attendance_days_view.enter_a_reason_to_reject_this_request')}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold disabled:opacity-50 hover:bg-red-50 transition-colors"
                       >
-                        <IconX className="w-3 h-3" /> Reject
+                        <IconX className="w-3 h-3" /> {tr('common.reject')}
                       </button>
                     </div>
                   )}
@@ -1403,7 +1515,7 @@ export function AttendanceDaysView({
                   rejectingRequest === `${r.kind}:${r.id}` && (
                     <form
                       className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 space-y-3"
-                      aria-label="Reject request"
+                      aria-label={tr('common.reject_request')}
                       onSubmit={(event) => {
                         event.preventDefault();
                         if (rejectionReason.trim())
@@ -1414,7 +1526,7 @@ export function AttendanceDaysView({
                         htmlFor={`rejection-${r.id}`}
                         className="block text-sm font-semibold text-red-800"
                       >
-                        Reason for rejection
+                        {tr('common.reason_for_rejection')}
                       </label>
                       <textarea
                         id={`rejection-${r.id}`}
@@ -1430,7 +1542,7 @@ export function AttendanceDaysView({
                           disabled={review.isPending || !rejectionReason.trim()}
                           className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                         >
-                          Confirm rejection
+                          {tr('common.confirm_rejection')}
                         </button>
                         <button
                           type="button"
@@ -1441,7 +1553,7 @@ export function AttendanceDaysView({
                           }}
                           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                         >
-                          Cancel rejection
+                          {tr('common.cancel_rejection')}
                         </button>
                       </div>
                     </form>
@@ -1453,16 +1565,18 @@ export function AttendanceDaysView({
         {(timeRequests.data?.total ?? 0) > 0 && (
           <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-slate-50/40">
             <button
-              aria-label="Previous requests"
+              aria-label={tr('common.previous_requests')}
               disabled={timeRequests.isFetching || requestOffset === 0}
               onClick={() => setRequestOffset(Math.max(0, requestOffset - 20))}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
             >
-              <IconChevronLeft className="w-3.5 h-3.5" /> Previous
+              <IconChevronLeft className="w-3.5 h-3.5" /> {tr('common.previous')}
             </button>
-            <span className="text-xs text-slate-500">{timeRequests.data?.total ?? 0} requests</span>
+            <span className="text-xs text-slate-500">
+              {tr('common.value_requests', { value1: timeRequests.data?.total ?? 0 })}
+            </span>
             <button
-              aria-label="Next requests"
+              aria-label={tr('common.next_requests')}
               disabled={
                 timeRequests.isFetching ||
                 !timeRequests.data ||
@@ -1471,7 +1585,7 @@ export function AttendanceDaysView({
               onClick={() => setRequestOffset(requestOffset + 20)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
             >
-              Next <IconChevronRight className="w-3.5 h-3.5" />
+              {tr('common.next')} <IconChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -1481,21 +1595,25 @@ export function AttendanceDaysView({
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h3 className="text-sm font-bold text-[#071A2B]">
-            Confirmed Timesheet · Selected Date Range
+            {tr('attendance_days_view.confirmed_timesheet_selected_date_range')}
           </h3>
         </div>
         <div className="divide-y divide-slate-50">
           {timesheets.isPending && (
-            <div className="p-5 text-xs text-slate-400">Loading timesheet…</div>
+            <div className="p-5 text-xs text-slate-400">{tr('common.loading_timesheet')}</div>
           )}
           {timesheets.isError && (
             <div role="alert" className="p-5 text-sm text-red-700">
-              Timesheet unavailable.{' '}
-              <button onClick={() => void timesheets.refetch()}>Retry timesheet</button>
+              {tr('common.timesheet_unavailable')}{' '}
+              <button onClick={() => void timesheets.refetch()}>
+                {tr('common.retry_timesheet')}
+              </button>
             </div>
           )}
           {timesheets.isSuccess && timesheets.data.items.length === 0 && (
-            <div className="p-5 text-xs text-slate-400">No confirmed hours in this range.</div>
+            <div className="p-5 text-xs text-slate-400">
+              {tr('attendance_days_view.no_confirmed_hours_in_this_range')}
+            </div>
           )}
           {timesheets.data?.items?.map((row) => (
             <div key={row.workerId} className="flex items-center justify-between px-6 py-3.5">
@@ -1505,20 +1623,26 @@ export function AttendanceDaysView({
                 </div>
                 <span className="text-xs font-bold text-[#071A2B]">{row.workerName}</span>
                 <span className="text-[11px] text-slate-400">
-                  {row.confirmedDays} confirmed days
+                  {tr('common.value_confirmed_days', { value1: row.confirmedDays })}
                 </span>
               </div>
               <div className="flex items-center gap-4 text-xs font-mono">
                 <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">Regular</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                    {tr('common.regular')}
+                  </p>
                   <p className="font-semibold text-slate-700">{hours(row.regularMinutes)}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">Overtime</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                    {tr('common.overtime')}
+                  </p>
                   <p className="font-semibold text-slate-700">{hours(row.overtimeMinutes)}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">Total</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                    {tr('common.total')}
+                  </p>
                   <p className="font-bold text-[#071A2B]">{hours(row.totalMinutes)}</p>
                 </div>
               </div>
@@ -1540,7 +1664,7 @@ export function AttendanceDaysView({
         .filter(Boolean)
         .map((error, i) => (
           <p role="alert" key={i} className="text-xs text-red-600 font-semibold px-1">
-            {error!.message}
+            {localizedError(error!.message ?? undefined)}
           </p>
         ))}
     </section>

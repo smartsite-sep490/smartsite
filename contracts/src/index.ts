@@ -72,8 +72,15 @@ export type {
   WorkerSiteZoneAssignmentStatus,
 } from './identity-access-api.js';
 
+export { WORKER_DEFAULT_TEMPORARY_PASSWORD } from './management-api.js';
+
 export type {
   AccountResponse,
+  CreateContractorWorkerAccountCommand,
+  ContractorWorkerAccountResponse,
+  ContractorWorkerAccountOptionsResponse,
+  WorkerProfileSnapshot,
+  UpdateContractorWorkerCommand,
   AuthClientType,
   LoginResponse,
   ProvisionableRoleAssignment,

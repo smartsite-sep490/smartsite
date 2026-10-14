@@ -1,3 +1,8 @@
+import i18n from '../../../i18n';
+import { beforeEach as beforeLocaleTest } from 'vitest';
+beforeLocaleTest(async () => {
+  await i18n.changeLanguage('vi');
+});
 import { describe, expect, it } from 'vitest';
 import { CAPTURE_GUIDANCE, enrollmentQualityMessage } from './enrollmentCapture';
 

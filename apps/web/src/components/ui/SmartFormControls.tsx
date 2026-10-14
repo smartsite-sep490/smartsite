@@ -1,3 +1,6 @@
+import { localizeMessage } from '../../i18n/messages';
+import { vi, enUS } from 'date-fns/locale';
+import { uiLanguage } from '../../i18n';
 /* eslint-disable react-refresh/only-export-components */
 /**
  * SmartFormControls — Premium form primitives for SmartSite
@@ -5,11 +8,36 @@
  * Design language: Soft Structuralism, #071A2B palette
  */
 
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useId } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { DayPicker } from 'react-day-picker';
+import { DayPicker, type Labels } from 'react-day-picker';
 import { format, parse, isValid } from 'date-fns';
 import 'react-day-picker/style.css';
+
+function calendarLabels(): Partial<Labels> {
+  if (uiLanguage() !== 'vi') return {};
+  const dayLabel: Labels['labelDayButton'] = (day, modifiers) => {
+    const label = format(day, 'PPPP', { locale: vi });
+    return [
+      modifiers.today ? tr('calendar.today') : '',
+      label,
+      modifiers.selected ? tr('calendar.selected') : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+  };
+  return {
+    labelNav: () => tr('calendar.navigation'),
+    labelNext: () => tr('calendar.next'),
+    labelPrevious: () => tr('calendar.previous'),
+    labelMonthDropdown: () => tr('calendar.month'),
+    labelYearDropdown: () => tr('calendar.year'),
+    labelDayButton: dayLabel,
+    labelWeekNumber: (week) => tr('calendar.week', { count: week }),
+  };
+}
 
 // ── Shared field base class ────────────────────────────────────────────────────
 const FIELD_BASE =
@@ -24,6 +52,8 @@ export interface SmartInputProps extends React.InputHTMLAttributes<HTMLInputElem
 
 export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
   ({ label, fieldRequired, error, className = '', id: propId, type, ...props }, ref) => {
+    useTranslation();
+
     const fallbackId = useId();
     const id = propId ?? fallbackId;
     const [showPassword, setShowPassword] = useState(false);
@@ -90,7 +120,7 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
             </button>
           )}
         </div>
-        {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
+        {error && <p className="text-[11px] text-red-500 font-medium">{localizeMessage(error)}</p>}
       </div>
     );
   },
@@ -142,10 +172,12 @@ export function SmartSelect({
   disabled = false,
   size = 'md',
   searchable = false,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder = tr('common.search'),
   icon,
   align = 'start',
 }: SmartSelectProps) {
+  useTranslation();
+
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
@@ -203,7 +235,9 @@ export function SmartSelect({
               {icon && <span className="shrink-0 text-slate-500">{icon}</span>}
               {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
               <span className="truncate">
-                {selectedOption ? selectedOption.label : placeholder || 'Select an option'}
+                {selectedOption
+                  ? selectedOption.label
+                  : placeholder || tr('common.select_an_option')}
               </span>
             </div>
             <IconChevDown open={open} />
@@ -254,7 +288,9 @@ export function SmartSelect({
             <div className="max-h-[260px] overflow-y-auto space-y-0.5 custom-scrollbar p-0.5">
               {filteredOptions.length === 0 ? (
                 <div className="p-3 text-xs text-[#94A3B8] text-center">
-                  {searchQuery ? 'No matching options' : 'No options available'}
+                  {searchQuery
+                    ? tr('common.no_matching_options')
+                    : tr('common.no_options_available')}
                 </div>
               ) : (
                 filteredOptions.map((opt) => {
@@ -321,7 +357,7 @@ export function SmartSelect({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
+      {error && <p className="text-[11px] text-red-500 font-medium">{localizeMessage(error)}</p>}
     </div>
   );
 }
@@ -342,6 +378,8 @@ export function SmartCheckbox({
   onChange,
   description,
 }: SmartCheckboxProps) {
+  useTranslation();
+
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   return (
@@ -412,6 +450,8 @@ const rdpClassNames: Partial<Record<string, string>> = {
 
 // ── Inline Mini Icons ─────────────────────────────────────────────────────────
 function IconCalSm({ className = '' }: { className?: string }) {
+  useTranslation();
+
   return (
     <svg className={`w-4 h-4 shrink-0 ${className}`} viewBox="0 0 16 16" fill="none">
       <rect
@@ -432,6 +472,8 @@ function IconCalSm({ className = '' }: { className?: string }) {
   );
 }
 function IconChevDown({ open }: { open: boolean }) {
+  useTranslation();
+
   return (
     <svg
       className={`w-4 h-4 shrink-0 text-[#607A96] transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
@@ -449,6 +491,8 @@ function IconChevDown({ open }: { open: boolean }) {
   );
 }
 function IconClockSm({ className = '' }: { className?: string }) {
+  useTranslation();
+
   return (
     <svg className={`w-4 h-4 shrink-0 ${className}`} viewBox="0 0 16 16" fill="none">
       <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
@@ -483,7 +527,7 @@ export function SmartDatePicker({
   fieldRequired,
   value,
   onChange,
-  placeholder = 'Pick a date',
+  placeholder = tr('common.pick_a_date'),
   error,
   id: propId,
   disablePast = true,
@@ -491,6 +535,8 @@ export function SmartDatePicker({
   min,
   max,
 }: SmartDatePickerProps) {
+  useTranslation();
+
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
@@ -553,6 +599,8 @@ export function SmartDatePicker({
           >
             <div className="bg-white rounded-2xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)] overflow-hidden">
               <DayPicker
+                locale={uiLanguage() === 'vi' ? vi : enUS}
+                labels={calendarLabels()}
                 mode="single"
                 selected={validDate}
                 defaultMonth={validDate}
@@ -569,7 +617,7 @@ export function SmartDatePicker({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
+      {error && <p className="text-[11px] text-red-500 font-medium">{localizeMessage(error)}</p>}
     </div>
   );
 }
@@ -609,7 +657,7 @@ export function formatDisplayTime(timeStr: string) {
   const { hour12, minute, period } = parseHHMM(timeStr);
   const hStr = String(hour12).padStart(2, '0');
   const mStr = String(minute).padStart(2, '0');
-  return `${hStr}:${mStr} ${period}`;
+  return `${hStr}:${mStr} ${period === 'AM' ? tr('time.am') : tr('time.pm')}`;
 }
 
 // ── LuxuryTimeSelector (Interactive 3-Column Shadcn Time Selector) ────────────
@@ -626,6 +674,8 @@ export function LuxuryTimeSelector({
   minuteStep = 5,
   embedded = false,
 }: LuxuryTimeSelectorProps) {
+  useTranslation();
+
   const { hour12, minute, period } = parseHHMM(timeStr);
 
   const hoursList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -646,10 +696,30 @@ export function LuxuryTimeSelector({
   };
 
   const presets = [
-    { label: '08:00 AM', val: '08:00' },
-    { label: '12:00 PM', val: '12:00' },
-    { label: '04:00 PM', val: '16:00' },
-    { label: '08:00 PM', val: '20:00' },
+    {
+      get label() {
+        return tr('common.08_00_am');
+      },
+      val: '08:00',
+    },
+    {
+      get label() {
+        return tr('common.12_00_pm');
+      },
+      val: '12:00',
+    },
+    {
+      get label() {
+        return tr('common.04_00_pm');
+      },
+      val: '16:00',
+    },
+    {
+      get label() {
+        return tr('common.08_00_pm');
+      },
+      val: '20:00',
+    },
   ];
 
   return (
@@ -666,7 +736,7 @@ export function LuxuryTimeSelector({
       <div className="pb-2.5 mb-2.5 border-b border-[#F5F8FB] space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]">
-            Select Time
+            {tr('common.select_time_379c05')}
           </span>
           <span className="text-xs font-mono font-bold text-[#071A2B] bg-[#F5F8FB] px-2 py-0.5 rounded-md border border-[#DCE6EF]/60">
             {formatDisplayTime(timeStr)}
@@ -698,7 +768,7 @@ export function LuxuryTimeSelector({
         {/* Hours Column */}
         <div className="space-y-1">
           <span className="block text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">
-            Hour
+            {tr('common.hour')}
           </span>
           <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1 pr-0.5">
             {hoursList.map((h) => {
@@ -707,7 +777,7 @@ export function LuxuryTimeSelector({
                 <button
                   key={h}
                   type="button"
-                  aria-label={`Hour ${String(h).padStart(2, '0')}`}
+                  aria-label={tr('common.hour_value', { value1: String(h).padStart(2, '0') })}
                   aria-pressed={isSelected}
                   onClick={() => handleHourSelect(h)}
                   className={`w-full py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -726,7 +796,7 @@ export function LuxuryTimeSelector({
         {/* Minutes Column */}
         <div className="space-y-1">
           <span className="block text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">
-            Minute
+            {tr('common.minute')}
           </span>
           <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1 pr-0.5">
             {minutesList.map((m) => {
@@ -735,7 +805,7 @@ export function LuxuryTimeSelector({
                 <button
                   key={m}
                   type="button"
-                  aria-label={`Minute ${String(m).padStart(2, '0')}`}
+                  aria-label={tr('common.minute_value', { value1: String(m).padStart(2, '0') })}
                   aria-pressed={isSelected}
                   onClick={() => handleMinuteSelect(m)}
                   className={`w-full py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -754,7 +824,7 @@ export function LuxuryTimeSelector({
         {/* Period Column */}
         <div className="space-y-1">
           <span className="block text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">
-            Period
+            {tr('common.period')}
           </span>
           <div className="flex flex-col gap-1.5 pt-1">
             {(['AM', 'PM'] as const).map((p) => {
@@ -771,7 +841,7 @@ export function LuxuryTimeSelector({
                       : 'bg-[#F5F8FB] text-[#607A96] hover:bg-[#EBF1F6] hover:text-[#071A2B]'
                   }`}
                 >
-                  {p}
+                  {p === 'AM' ? tr('time.am') : tr('time.pm')}
                 </button>
               );
             })}
@@ -800,12 +870,14 @@ export function SmartTimePicker({
   fieldRequired,
   value,
   onChange,
-  placeholder = 'Select time',
+  placeholder = tr('common.select_time'),
   error,
   id: propId,
   className = '',
   minuteStep = 5,
 }: SmartTimePickerProps) {
+  useTranslation();
+
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
@@ -846,7 +918,11 @@ export function SmartTimePicker({
             align="start"
             collisionPadding={12}
             className="z-50"
-            aria-label={label ? `Choose ${label.toLowerCase()}` : 'Choose time'}
+            aria-label={
+              label
+                ? tr('common.choose_value', { value1: label.toLowerCase() })
+                : tr('common.choose_time')
+            }
             style={{
               outline: 'none',
               width: 'min(320px, calc(100vw - 24px))',
@@ -865,13 +941,13 @@ export function SmartTimePicker({
                 type="button"
                 className="mt-2 w-full rounded-xl bg-[#071A2B] px-3 py-2 text-xs font-bold text-white"
               >
-                Done
+                {tr('common.done')}
               </button>
             </Popover.Close>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
+      {error && <p className="text-[11px] text-red-500 font-medium">{localizeMessage(error)}</p>}
     </div>
   );
 }
@@ -893,11 +969,13 @@ export function SmartDateTimePicker({
   fieldRequired,
   value,
   onChange,
-  placeholder = 'Pick date & time',
+  placeholder = tr('smart_form_controls.pick_date_time'),
   error,
   id: propId,
   disablePast = true,
 }: SmartDateTimePickerProps) {
+  useTranslation();
+
   const fallbackId = useId();
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
@@ -913,7 +991,7 @@ export function SmartDateTimePicker({
   });
 
   const displayValue = validParsed
-    ? `${format(validParsed, 'dd MMM yyyy')}, ${formatDisplayTime(timeStr)}`
+    ? `${format(validParsed, 'dd MMM yyyy', { locale: uiLanguage() === 'vi' ? vi : enUS })}, ${formatDisplayTime(timeStr)}`
     : '';
 
   const selectedDay = validParsed
@@ -980,6 +1058,8 @@ export function SmartDateTimePicker({
           >
             <div className="bg-white rounded-2xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)] overflow-hidden p-1">
               <DayPicker
+                locale={uiLanguage() === 'vi' ? vi : enUS}
+                labels={calendarLabels()}
                 mode="single"
                 selected={selectedDay}
                 onSelect={handleSelectDay}
@@ -994,7 +1074,7 @@ export function SmartDateTimePicker({
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      {error && <p className="text-[11px] text-red-500 font-medium">{error}</p>}
+      {error && <p className="text-[11px] text-red-500 font-medium">{localizeMessage(error)}</p>}
     </div>
   );
 }

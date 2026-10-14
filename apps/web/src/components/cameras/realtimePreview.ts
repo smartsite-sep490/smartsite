@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import type { VideoTestDetection } from './videoTestFixture';
 
 export interface RealtimePreview {
@@ -18,7 +19,8 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): VideoTestDetection[] {
-  if (!Array.isArray(value) || value.length > 1024) throw new Error('Invalid preview detections');
+  if (!Array.isArray(value) || value.length > 1024)
+    throw new Error(tr('common.invalid_preview_detections'));
   return value.map((item: unknown) => {
     if (
       !record(item) ||
@@ -33,7 +35,7 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
       item.label.length > 128 ||
       !record(item.boundingBox)
     ) {
-      throw new Error('Invalid preview detection');
+      throw new Error(tr('common.invalid_preview_detection'));
     }
     const box = item.boundingBox;
     const values = [box.x1, box.y1, box.x2, box.y2];
@@ -42,18 +44,19 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
       (box.x1 as number) >= (box.x2 as number) ||
       (box.y1 as number) >= (box.y2 as number)
     ) {
-      throw new Error('Invalid preview box');
+      throw new Error(tr('common.invalid_preview_box'));
     }
     const status = {
       HARD_HAT: 'UNKNOWN',
       SAFETY_VEST: 'UNKNOWN',
     } as VideoTestDetection['ppeStatus'];
     if (mode === 'ppe') {
-      if (!record(item.ppeStatus)) throw new Error('Invalid preview PPE status');
+      if (!record(item.ppeStatus))
+        throw new Error(tr('realtime_preview.invalid_preview_ppe_status'));
       for (const key of ['HARD_HAT', 'SAFETY_VEST'] as const) {
         const state = item.ppeStatus[key];
         if (state !== 'UNKNOWN' && state !== 'MISSING' && state !== 'PRESENT')
-          throw new Error('Invalid preview PPE status');
+          throw new Error(tr('realtime_preview.invalid_preview_ppe_status'));
         status[key] = state;
       }
     }
@@ -65,7 +68,7 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
       alertState !== 'COMPLIANT' &&
       alertState !== 'CONFIRMED'
     )
-      throw new Error('Invalid preview alert state');
+      throw new Error(tr('realtime_preview.invalid_preview_alert_state'));
     const missing = item.confirmedMissingItems;
     if (
       missing !== undefined &&
@@ -73,13 +76,13 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
         missing.length > 2 ||
         !missing.every((v) => v === 'HARD_HAT' || v === 'SAFETY_VEST'))
     )
-      throw new Error('Invalid preview PPE items');
+      throw new Error(tr('realtime_preview.invalid_preview_ppe_items'));
     if (
       item.regionId !== undefined &&
       item.regionId !== null &&
       (typeof item.regionId !== 'string' || item.regionId.length > 128)
     )
-      throw new Error('Invalid preview region');
+      throw new Error(tr('common.invalid_preview_region'));
     return {
       active: item.active,
       alertState,
@@ -128,11 +131,11 @@ export function parseRealtimePreview(value: unknown): RealtimePreview {
     value.imageDataUrl.length > 1_400_000 ||
     !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value.imageDataUrl)
   ) {
-    throw new Error('Synchronized preview unavailable or malformed');
+    throw new Error(tr('realtime_preview.synchronized_preview_unavailable_or_malformed'));
   }
   const rawPolygons = value.zonePolygons ?? [];
   if (!Array.isArray(rawPolygons) || rawPolygons.length > 64)
-    throw new Error('Invalid preview geometry');
+    throw new Error(tr('common.invalid_preview_geometry'));
   const zonePolygons = rawPolygons.map((polygon: unknown) => {
     if (
       !record(polygon) ||
@@ -152,7 +155,7 @@ export function parseRealtimePreview(value: unknown): RealtimePreview {
           ),
       )
     ) {
-      throw new Error('Invalid preview geometry');
+      throw new Error(tr('common.invalid_preview_geometry'));
     }
     return {
       regionId: polygon.regionId,

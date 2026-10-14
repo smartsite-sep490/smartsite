@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import {
   createPreviewDecoder,
   parseRealtimePreview,
@@ -21,7 +22,9 @@ async function decodeImage(frame: RealtimePreview) {
   image.src = frame.imageDataUrl;
   await image.decode();
   if (image.naturalWidth !== frame.width || image.naturalHeight !== frame.height) {
-    throw new Error('Preview image dimensions do not match metadata');
+    throw new Error(
+      tr('realtime_preview_connection.preview_image_dimensions_do_not_match_metadata'),
+    );
   }
   return image;
 }
@@ -49,7 +52,11 @@ export function connectRealtimePreview(
     clearTimeout(stale);
     stale = setTimeout(() => {
       invalidate();
-      update({ error: 'No fresh camera frame received' });
+      update({
+        get error() {
+          return tr('realtime_preview_connection.no_fresh_camera_frame_received');
+        },
+      });
     }, 5000);
   };
   const decoder = createPreviewDecoder(
@@ -61,7 +68,11 @@ export function connectRealtimePreview(
     },
     () => {
       invalidate();
-      update({ error: 'Camera frame could not be decoded' });
+      update({
+        get error() {
+          return tr('realtime_preview_connection.camera_frame_could_not_be_decoded');
+        },
+      });
     },
   );
   const connect = () => {
@@ -73,7 +84,9 @@ export function connectRealtimePreview(
       update({
         preview: null,
         connected: false,
-        error: 'WebSocket connection could not be started',
+        get error() {
+          return tr('realtime_preview_connection.websocket_connection_could_not_be_started');
+        },
       });
       return;
     }
@@ -97,13 +110,22 @@ export function connectRealtimePreview(
         decoder.push(frame);
       } catch {
         invalidate();
-        update({ error: 'Synchronized camera preview unavailable' });
+        update({
+          get error() {
+            return tr('realtime_preview_connection.synchronized_camera_preview_unavailable');
+          },
+        });
       }
     };
     current.onerror = () => {
       if (disposed || socket !== current) return;
       invalidate();
-      update({ connected: false, error: 'WebSocket connection error' });
+      update({
+        connected: false,
+        get error() {
+          return tr('common.websocket_connection_error');
+        },
+      });
     };
     current.onclose = () => {
       if (disposed || socket !== current) return;
