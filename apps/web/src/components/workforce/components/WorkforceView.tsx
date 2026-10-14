@@ -1,3 +1,5 @@
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -12,10 +14,12 @@ import { getWorkforceTabs } from '../utils/workforce-tabs';
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 function LoadingState() {
+  useTranslation();
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[50dvh] gap-3">
       <IconLoader className="w-6 h-6 animate-spin text-slate-500" />
-      <p className="text-xs font-semibold text-slate-500">Loading workforce data...</p>
+      <p className="text-xs font-semibold text-slate-500">{tr('common.loading_workforce_data')}</p>
     </div>
   );
 }
@@ -30,6 +34,8 @@ function ErrorState({
   detail: string;
   onRetry?: () => void;
 }) {
+  useTranslation();
+
   return (
     <div className="max-w-md mx-auto mt-20 p-8 rounded-2xl border border-rose-200 bg-white text-center space-y-4 shadow-sm">
       <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
@@ -39,7 +45,7 @@ function ErrorState({
       <p className="text-xs text-slate-600 leading-relaxed">{detail}</p>
       {onRetry && (
         <Button variant="default" size="md" onClick={onRetry}>
-          Retry
+          {tr('common.retry')}
         </Button>
       )}
     </div>
@@ -50,6 +56,8 @@ function ErrorState({
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
+  useTranslation();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const resolvedApiUrl = apiUrlProp || apiUrl;
   const { accessToken } = useAuth();
@@ -118,14 +126,14 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
     if (status === 401) {
       return (
         <ErrorState
-          title="Session expired"
+          title={tr('common.session_expired')}
           detail="Your session has expired. Please log out and log in again."
         />
       );
     }
     return (
       <ErrorState
-        title="Could not load user profile"
+        title={tr('workforce_view.could_not_load_user_profile')}
         detail="The server returned an error while loading your account."
         onRetry={() => void refetchUser()}
       />
@@ -140,11 +148,19 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
     const status = (sitesQuery.error as { status?: number } | null)?.status;
     return (
       <ErrorState
-        title={status === 403 ? 'Access denied' : 'Could not load sites'}
+        title={
+          status === 403
+            ? tr('common.access_denied_cc11d4')
+            : tr('workforce_view.could_not_load_sites')
+        }
         detail={
           status === 403
-            ? 'Your account does not have permission to list sites. Contact your system administrator.'
-            : 'The server returned an error while loading site data. Try again later.'
+            ? tr(
+                'workforce_view.your_account_does_not_have_permission_to_list_sites_contact_your_system_administra',
+              )
+            : tr(
+                'workforce_view.the_server_returned_an_error_while_loading_site_data_try_again_later',
+              )
         }
         onRetry={status !== 403 ? () => void sitesQuery.refetch() : undefined}
       />
@@ -157,10 +173,11 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
         <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center">
           <IconShield className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">No site assigned</h2>
+        <h2 className="text-lg font-bold text-slate-900">{tr('common.no_site_assigned')}</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Your account is not assigned to any site yet. Ask your Site Manager or Admin to add you to
-          a site.
+          {tr(
+            'workforce_view.your_account_is_not_assigned_to_any_site_yet_ask_your_site_manager_or_admin_to_add',
+          )}
         </p>
       </div>
     );
@@ -172,9 +189,9 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
         <div className="w-12 h-12 rounded-xl bg-slate-50 text-slate-500 mx-auto flex items-center justify-center">
           <IconShield className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">No access</h2>
+        <h2 className="text-lg font-bold text-slate-900">{tr('common.no_access')}</h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Your current role does not include Workforce access on this site.
+          {tr('workforce_view.your_current_role_does_not_include_workforce_access_on_this_site')}
         </p>
       </div>
     );
@@ -190,12 +207,16 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
             items={[
               {
                 id: 'schedule' as const,
-                label: 'My Schedule & Requests',
+                get label() {
+                  return tr('app_layout.my_schedule_requests');
+                },
                 icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" />,
               },
               {
                 id: 'review' as const,
-                label: 'Contractor Review',
+                get label() {
+                  return tr('common.contractor_review');
+                },
                 icon: <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />,
               },
             ]}

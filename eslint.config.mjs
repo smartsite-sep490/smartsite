@@ -14,6 +14,8 @@ export default tseslint.config(
       '**/.expo/**',
       '**/.turbo/**',
       '**/coverage/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
       '**/generated/**',
       '**/*.d.ts',
       '**/.agents/**',

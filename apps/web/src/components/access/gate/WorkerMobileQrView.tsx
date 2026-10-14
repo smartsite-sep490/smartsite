@@ -1,3 +1,6 @@
+import { localizedError } from '../../../i18n/messages';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -15,6 +18,8 @@ export function WorkerMobileQrView({
   siteId: string;
   workerName: string;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const [fallbackId, setFallbackId] = useState('');
   const pass = useMutation({
@@ -36,7 +41,7 @@ export function WorkerMobileQrView({
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-200 backdrop-blur-xs">
               <IconKey className="h-3.5 w-3.5 text-[#FF7A1A]" />
-              Gate Fallback Pass
+              {tr('common.gate_fallback_pass')}
             </span>
             <span className="text-[11px] font-mono text-slate-400">QR</span>
           </div>
@@ -47,10 +52,12 @@ export function WorkerMobileQrView({
             </div>
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight text-white">
-                Fallback QR · {workerName}
+                {tr('worker_mobile_qr_view.fallback_qr_value', { value1: workerName })}
               </h2>
               <p className="mt-0.5 text-xs text-slate-300">
-                Emergency gate access fallback when webcam fails or face verification is inconclusive
+                {tr(
+                  'worker_mobile_qr_view.emergency_gate_access_fallback_when_webcam_fails_or_face_verification_is_inconclus',
+                )}
               </p>
             </div>
           </div>
@@ -63,19 +70,25 @@ export function WorkerMobileQrView({
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF7A1A]/15 font-bold text-[#FF7A1A]">
                 1
               </span>
-              <p className="text-slate-600">Receive session code from security officer at gate</p>
+              <p className="text-slate-600">
+                {tr('worker_mobile_qr_view.receive_session_code_from_security_officer_at_gate')}
+              </p>
             </div>
             <div className="flex items-start gap-2.5">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF7A1A]/15 font-bold text-[#FF7A1A]">
                 2
               </span>
-              <p className="text-slate-600">Enter the session code below</p>
+              <p className="text-slate-600">
+                {tr('worker_mobile_qr_view.enter_the_session_code_below')}
+              </p>
             </div>
             <div className="flex items-start gap-2.5">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF7A1A]/15 font-bold text-[#FF7A1A]">
                 3
               </span>
-              <p className="text-slate-600">Present dynamic QR code at scanner</p>
+              <p className="text-slate-600">
+                {tr('worker_mobile_qr_view.present_dynamic_qr_code_at_scanner')}
+              </p>
             </div>
           </div>
         </div>
@@ -84,8 +97,11 @@ export function WorkerMobileQrView({
         <div className="p-6">
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label htmlFor="fallback-session-id" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Officer Session Code
+              <label
+                htmlFor="fallback-session-id"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+              >
+                {tr('common.officer_session_code')}
               </label>
               <div className="relative mt-1.5">
                 <input
@@ -97,7 +113,7 @@ export function WorkerMobileQrView({
                     pass.reset();
                   }}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-3 font-mono text-sm tracking-wide text-slate-900 placeholder:font-sans placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
-                  placeholder="Session UUID (e.g. b81a5d44-...)"
+                  placeholder={tr('worker_mobile_qr_view.session_uuid_e_g_b81a5d44')}
                 />
               </div>
             </div>
@@ -110,12 +126,12 @@ export function WorkerMobileQrView({
               {pass.isPending ? (
                 <>
                   <IconLoader className="h-4 w-4" />
-                  <span>Generating QR…</span>
+                  <span>{tr('common.generating_qr')}</span>
                 </>
               ) : (
                 <>
                   <IconKey className="h-4 w-4" />
-                  <span>Get My QR</span>
+                  <span>{tr('common.get_my_qr')}</span>
                 </>
               )}
             </button>
@@ -123,9 +139,12 @@ export function WorkerMobileQrView({
 
           {/* Error Message */}
           {pass.error && (
-            <div role="alert" className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700">
+            <div
+              role="alert"
+              className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
+            >
               <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-              <span>{pass.error.message}</span>
+              <span>{localizedError(pass.error.message)}</span>
             </div>
           )}
 
@@ -142,7 +161,9 @@ export function WorkerMobileQrView({
           <div className="flex items-start gap-2.5 text-xs text-amber-900">
             <IconShield className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
             <p className="leading-relaxed">
-              Backend enforces gate clearance rules, worker status, and contractor credentials before authorizing IN/OUT.
+              {tr(
+                'worker_mobile_qr_view.backend_enforces_gate_clearance_rules_worker_status_and_contractor_credentials_bef',
+              )}
             </p>
           </div>
         </div>

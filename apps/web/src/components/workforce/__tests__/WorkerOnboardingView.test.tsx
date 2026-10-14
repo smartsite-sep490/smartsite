@@ -9,6 +9,8 @@ import {
   type WorkerResponse,
 } from '@smartsite/api-client';
 import { WorkerOnboardingView } from '../components/WorkerOnboardingView';
+import i18n, { translate as tr } from '../../../i18n';
+import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
 
 const session = vi.hoisted(() => ({ user: null as AccountResponse | null }));
 vi.mock('../../../features/auth/auth-session', () => ({
@@ -97,6 +99,7 @@ afterEach(() => {
 function mount() {
   render(
     <QueryClientProvider client={cache}>
+      <LanguageSwitcher />
       <WorkerOnboardingView apiUrl="https://api.example.test" />
     </QueryClientProvider>,
   );
@@ -132,6 +135,40 @@ it('Representative creates a Worker login at its Site/Contractor without Admin a
   );
   expect(screen.getByText('W000001')).toBeTruthy();
 });
+
+it.each(['en', 'vi'] as const)(
+  'preserves the Worker draft, scope and API payload when switching from %s',
+  async (language) => {
+    await i18n.changeLanguage(language);
+    mount();
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: tr('common.create_worker_account') });
+    await user.type(screen.getByLabelText(tr('common.full_name')), 'Nguyễn Văn QA');
+    await user.type(screen.getByLabelText(tr('common.username')), 'workerqa');
+    const calls = vi.mocked(SmartSiteManagementClient.prototype.listSites).mock.calls.length;
+    await user.click(screen.getByRole('button', { name: tr('language.choose') }));
+    await user.click(
+      screen.getByRole('button', { name: language === 'en' ? /Tiếng Việt/ : /English/ }),
+    );
+    expect((screen.getByLabelText(tr('common.full_name')) as HTMLInputElement).value).toBe(
+      'Nguyễn Văn QA',
+    );
+    expect((screen.getByLabelText(tr('common.username')) as HTMLInputElement).value).toBe(
+      'workerqa',
+    );
+    expect(SmartSiteManagementClient.prototype.listSites).toHaveBeenCalledTimes(calls);
+    await user.click(screen.getByRole('button', { name: tr('common.create_worker_account') }));
+    await waitFor(() =>
+      expect(
+        SmartSiteManagementClient.prototype.createContractorWorkerAccount,
+      ).toHaveBeenCalledWith('representative-token', 'own-contractor', {
+        siteId: 'site-a',
+        displayName: 'Nguyễn Văn QA',
+        username: 'workerqa',
+      }),
+    );
+  },
+);
 it('displays creation errors and permits a corrected retry', async () => {
   vi.mocked(
     SmartSiteManagementClient.prototype.createContractorWorkerAccount,

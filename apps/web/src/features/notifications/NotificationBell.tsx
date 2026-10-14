@@ -1,3 +1,6 @@
+import { uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
@@ -20,7 +23,11 @@ import {
   IconRefreshCw,
   IconTrash,
 } from '../../components/icons';
-import { notificationHref, formatNotificationDisplayMessage } from './notification-utils';
+import {
+  notificationHref,
+  formatNotificationDisplayMessage,
+  formatNotificationTitle,
+} from './notification-utils';
 
 export const NOTIFICATION_POLL_MS = 15_000;
 
@@ -29,17 +36,17 @@ function formatNotificationTime(isoString: string): string {
     const date = new Date(isoString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    if (Number.isNaN(diffMs)) return date.toLocaleString('en-GB');
+    if (Number.isNaN(diffMs)) return date.toLocaleString(uiLocale());
 
     const diffMinutes = Math.floor(diffMs / 60000);
-    if (diffMinutes < 1) return 'Just now';
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffMinutes < 1) return tr('common.just_now');
+    if (diffMinutes < 60) return tr('common.valuem_ago', { value1: diffMinutes });
     const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return tr('common.valueh_ago', { value1: diffHours });
     const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 7) return tr('common.valued_ago', { value1: diffDays });
 
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+    return date.toLocaleDateString(uiLocale(), { day: '2-digit', month: '2-digit' });
   } catch {
     return isoString;
   }
@@ -54,6 +61,8 @@ export function NotificationBell({
   userId: string;
   enabled?: boolean;
 }) {
+  useTranslation();
+
   const { accessToken, triggerSessionExpired } = useAuth();
   const client = new SmartSiteManagementClient(apiUrl);
   const queryClient = useQueryClient();
@@ -131,9 +140,7 @@ export function NotificationBell({
     mutationFn: () => client.deleteReadNotifications(accessToken!),
     onSuccess: async (result) => {
       setConfirmDelete(false);
-      setDeleteMessage(
-        `${result.deleted} read notification${result.deleted === 1 ? '' : 's'} deleted.`,
-      );
+      setDeleteMessage(tr('counts.deletedNotifications', { count: result.deleted }));
       await queryClient.resetQueries({ queryKey: key });
     },
     onError: (error) => {
@@ -145,7 +152,7 @@ export function NotificationBell({
     mutationFn: (id: string) => client.deleteNotification(accessToken!, id),
     onSuccess: async () => {
       setTargetSingleDelete(null);
-      setDeleteMessage('Notification deleted.');
+      setDeleteMessage(tr('common.notification_deleted'));
       await queryClient.resetQueries({ queryKey: key });
     },
     onError: (error) => {
@@ -185,7 +192,11 @@ export function NotificationBell({
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={count === undefined ? 'Notifications' : `Notifications, ${count} unread`}
+          aria-label={
+            count === undefined
+              ? tr('common.notifications')
+              : tr('common.notifications_value_unread', { value1: count })
+          }
           className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 hover:text-[#071A2B] shadow-2xs transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F66B17] cursor-pointer"
         >
           <IconBell className="w-4 h-4 text-slate-600 group-hover:text-[#071A2B]" />
@@ -211,7 +222,7 @@ export function NotificationBell({
           sideOffset={10}
           align="end"
           role="dialog"
-          aria-label="Notifications"
+          aria-label={tr('common.notifications')}
           className="z-50 w-[min(440px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-2xl shadow-[0_24px_60px_-12px_rgba(7,26,43,0.18)] text-slate-900 animate-in fade-in-0 zoom-in-95 duration-200"
         >
           {/* Header */}
@@ -221,11 +232,11 @@ export function NotificationBell({
                 <IconBell className="w-3.5 h-3.5 text-[#F66B17]" />
               </div>
               <h2 className="text-xs font-bold tracking-wider text-[#071A2B]">
-                Notifications
+                {tr('common.notifications')}
               </h2>
               {count !== undefined && count > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full bg-amber-100/90 text-amber-800 text-[10px] font-bold border border-amber-200/70">
-                  {count} new
+                  {tr('common.value_new', { value1: count })}
                 </span>
               )}
             </div>
@@ -237,14 +248,14 @@ export function NotificationBell({
               onClick={() => markAll.mutate()}
             >
               <IconCheck className="w-3 h-3 text-[#F66B17]" />
-              <span>Mark all as read</span>
+              <span>{tr('notification_bell.mark_all_as_read')}</span>
             </button>
           </div>
 
           {/* Segmented Filter Control */}
           <div
             className="px-4 py-2 border-b border-slate-100/80 bg-white"
-            aria-label="Notification filter"
+            aria-label={tr('common.notification_filter')}
           >
             <div className="inline-flex p-0.5 bg-slate-100/90 rounded-xl border border-slate-200/60 text-xs gap-1 w-full sm:w-auto">
               {(['ALL', 'UNREAD'] as const).map((filter) => (
@@ -267,7 +278,7 @@ export function NotificationBell({
                       : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
                   }`}
                 >
-                  {filter === 'ALL' ? 'All' : 'Unread'}
+                  {filter === 'ALL' ? tr('common.all') : tr('common.unread')}
                 </button>
               ))}
             </div>
@@ -287,20 +298,21 @@ export function NotificationBell({
                   deleteSingle.reset();
                 }}
               >
-                Delete read notifications
+                {tr('common.delete_read_notifications')}
               </button>
             </div>
           )}
           {confirmDelete && (
             <div
               role="alertdialog"
-              aria-label="Delete read notifications?"
+              aria-label={tr('common.delete_read_notifications_16bed9')}
               aria-describedby="delete-read-description"
               className="mx-4 my-2 p-3 rounded-xl border border-rose-200 bg-rose-50 space-y-2 text-xs"
             >
               <p id="delete-read-description">
-                Delete all your read notifications? Unread notifications will be kept. This cannot
-                be undone from the app.
+                {tr(
+                  'notification_bell.delete_all_your_read_notifications_unread_notifications_will_be_kept_this_cannot_b',
+                )}
               </p>
               <div className="flex gap-2">
                 <button
@@ -312,7 +324,7 @@ export function NotificationBell({
                     deleteRead.reset();
                   }}
                 >
-                  Cancel
+                  {tr('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -320,7 +332,7 @@ export function NotificationBell({
                   disabled={actionPending || unavailable}
                   onClick={() => deleteRead.mutate()}
                 >
-                  {deleteRead.isPending ? 'Deleting...' : 'Confirm deletion'}
+                  {deleteRead.isPending ? tr('common.deleting') : tr('common.confirm_deletion')}
                 </button>
               </div>
             </div>
@@ -328,13 +340,15 @@ export function NotificationBell({
           {targetSingleDelete && (
             <div
               role="alertdialog"
-              aria-label="Delete notification?"
+              aria-label={tr('common.delete_notification')}
               aria-describedby="delete-single-description"
               className="mx-4 my-2 p-3 rounded-xl border border-rose-200 bg-rose-50 space-y-2 text-xs"
             >
               <p id="delete-single-description">
-                Delete notification &ldquo;{targetSingleDelete.title}&rdquo;? This cannot be undone
-                from the app.
+                {tr(
+                  'notification_bell.delete_notification_ldquo_value_rdquo_this_cannot_be_undone_from_the_app',
+                  { value1: targetSingleDelete.title },
+                )}
               </p>
               <div className="flex gap-2">
                 <button
@@ -346,7 +360,7 @@ export function NotificationBell({
                     deleteSingle.reset();
                   }}
                 >
-                  Cancel
+                  {tr('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -354,19 +368,19 @@ export function NotificationBell({
                   disabled={actionPending || unavailable}
                   onClick={() => deleteSingle.mutate(targetSingleDelete.id)}
                 >
-                  {deleteSingle.isPending ? 'Deleting...' : 'Confirm deletion'}
+                  {deleteSingle.isPending ? tr('common.deleting') : tr('common.confirm_deletion')}
                 </button>
               </div>
             </div>
           )}
           {deleteRead.isError && (
             <p role="alert" className="mx-4 my-2 text-xs text-rose-700">
-              Could not delete read notifications. Please try again.
+              {tr('notification_bell.could_not_delete_read_notifications_please_try_again')}
             </p>
           )}
           {deleteSingle.isError && (
             <p role="alert" className="mx-4 my-2 text-xs text-rose-700">
-              Could not delete notification. Please try again.
+              {tr('notification_bell.could_not_delete_notification_please_try_again')}
             </p>
           )}
           {deleteMessage && (
@@ -382,7 +396,7 @@ export function NotificationBell({
               className="mx-4 mt-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs text-rose-700 font-medium"
             >
               <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>Could not update this notification. Try again.</span>
+              <span>{tr('notification_bell.could_not_update_this_notification_try_again')}</span>
             </div>
           )}
 
@@ -394,7 +408,7 @@ export function NotificationBell({
                 className="p-10 text-center flex flex-col items-center justify-center gap-2.5 text-xs text-slate-400"
               >
                 <IconLoader className="w-5 h-5 text-slate-500 animate-spin" />
-                <span>Loading notifications…</span>
+                <span>{tr('common.loading_notifications')}</span>
               </div>
             )}
 
@@ -405,8 +419,8 @@ export function NotificationBell({
                 </div>
                 <p className="text-xs font-medium text-slate-600">
                   {enabled
-                    ? 'Notifications are currently unavailable.'
-                    : 'Notifications are unavailable for this account.'}
+                    ? tr('notification_bell.notifications_are_currently_unavailable')
+                    : tr('notification_bell.notifications_are_unavailable_for_this_account')}
                 </p>
                 {enabled && (
                   <button
@@ -415,7 +429,7 @@ export function NotificationBell({
                     onClick={() => void query.refetch()}
                   >
                     <IconRefreshCw className="w-3 h-3 text-slate-500" />
-                    <span>Retry</span>
+                    <span>{tr('common.retry')}</span>
                   </button>
                 )}
               </div>
@@ -429,13 +443,15 @@ export function NotificationBell({
                       </div>
                       <p className="text-xs font-semibold text-slate-600">
                         {readStatus === 'UNREAD'
-                          ? 'You have no unread notifications.'
-                          : 'No notifications yet.'}
+                          ? tr('notification_bell.you_have_no_unread_notifications')
+                          : tr('common.no_notifications_yet')}
                       </p>
                       <p className="text-[11px] text-slate-400">
                         {readStatus === 'UNREAD'
-                          ? 'All recent notifications have been reviewed.'
-                          : 'Updates regarding shifts, swaps, and decisions will appear here.'}
+                          ? tr('notification_bell.all_recent_notifications_have_been_reviewed')
+                          : tr(
+                              'notification_bell.updates_regarding_shifts_swaps_and_decisions_will_appear_here',
+                            )}
                       </p>
                     </div>
                   )}
@@ -495,14 +511,17 @@ export function NotificationBell({
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   {isUnread && (
-                                    <span className="w-2 h-2 rounded-full bg-[#F66B17] shrink-0" aria-label="Unread" />
+                                    <span
+                                      className="w-2 h-2 rounded-full bg-[#F66B17] shrink-0"
+                                      aria-label={tr('common.unread')}
+                                    />
                                   )}
                                   <span
                                     className={`text-xs font-bold leading-tight break-words ${
                                       isUnread ? 'text-[#071A2B]' : 'text-slate-800'
                                     }`}
                                   >
-                                    {item.title}
+                                    {formatNotificationTitle(item)}
                                   </span>
                                 </div>
                                 <time
@@ -546,8 +565,8 @@ export function NotificationBell({
                             <div className="flex items-center gap-1 self-center pl-1 shrink-0">
                               <button
                                 type="button"
-                                title="Delete notification"
-                                aria-label="Delete notification"
+                                title={tr('common.delete_notification_511c88')}
+                                aria-label={tr('common.delete_notification_511c88')}
                                 disabled={actionPending || confirmDelete || !!targetSingleDelete}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -581,10 +600,10 @@ export function NotificationBell({
                       {query.isFetchingNextPage ? (
                         <>
                           <IconLoader className="w-3.5 h-3.5 text-slate-500 animate-spin" />
-                          <span>Loading…</span>
+                          <span>{tr('common.loading')}</span>
                         </>
                       ) : (
-                        <span>Load more</span>
+                        <span>{tr('common.load_more')}</span>
                       )}
                     </button>
                   )}
@@ -593,7 +612,7 @@ export function NotificationBell({
             )}
           </div>
 
-          <Popover.Close className="sr-only">Close notifications</Popover.Close>
+          <Popover.Close className="sr-only">{tr('common.close_notifications')}</Popover.Close>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

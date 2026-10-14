@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import {
   type WorkflowProps,
   type WithoutCommandId,
@@ -82,18 +84,40 @@ type Editor = {
   submissionId?: string;
 };
 const titles = {
-  responsibility: 'Confirm responsibility',
-  'correct-responsibility': 'Correct responsibility',
-  transfer: 'Transfer action',
-  create: 'New incident',
-  link: 'Link alerts',
-  assign: 'Hand over to contractor',
-  submit: 'Report handling outcome',
-  review: 'Record handling outcome',
-  close: 'Close incident',
-  reopen: 'Reopen incident',
+  get responsibility() {
+    return tr('common.confirm_responsibility');
+  },
+  get 'correct-responsibility'() {
+    return tr('common.correct_responsibility');
+  },
+  get transfer() {
+    return tr('common.transfer_action');
+  },
+  get create() {
+    return tr('common.new_incident');
+  },
+  get link() {
+    return tr('common.link_alerts');
+  },
+  get assign() {
+    return tr('incident_view.hand_over_to_contractor');
+  },
+  get submit() {
+    return tr('common.report_handling_outcome');
+  },
+  get review() {
+    return tr('common.record_handling_outcome');
+  },
+  get close() {
+    return tr('common.close_incident');
+  },
+  get reopen() {
+    return tr('common.reopen_incident');
+  },
 };
 export function IncidentView(p: IncidentViewProps) {
+  useTranslation();
+
   const [occurredDefault] = useState(() =>
     new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
   );
@@ -207,12 +231,16 @@ export function IncidentView(p: IncidentViewProps) {
     currentActions.every((a) => a.status === 'VERIFIED' || a.status === 'CLOSED') &&
     !currentActions.some((a) => a.submissions.some((s) => s.status === 'PENDING'));
   const closeHint = !current?.contractorId
-    ? 'Confirm the responsible contractor before assigning or closing this incident.'
+    ? tr(
+        'incident_view.confirm_the_responsible_contractor_before_assigning_or_closing_this_incident',
+      )
     : !currentActions.length
-      ? 'Hand over the case before closing.'
+      ? tr('incident_view.hand_over_the_case_before_closing')
       : !ready
-        ? 'Record every current handling outcome before closing.'
-        : 'All current handling outcomes are recorded. This incident can be closed.';
+        ? tr('incident_view.record_every_current_handling_outcome_before_closing')
+        : tr(
+            'incident_view.all_current_handling_outcomes_are_recorded_this_incident_can_be_closed',
+          );
   return (
     <div className="space-y-5">
       <div
@@ -223,12 +251,14 @@ export function IncidentView(p: IncidentViewProps) {
       >
         <div>
           <h2 className="text-xl font-bold">
-            {representative && !safety ? 'My assigned cases' : 'Incidents'}
+            {representative && !safety ? tr('common.my_assigned_cases') : tr('common.incidents')}
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
             {representative && !safety
-              ? 'Handle cases independently and report the outcome to Safety.'
-              : 'Confirm responsibility, hand over to the contractor and record the handling outcome.'}
+              ? tr('incident_view.handle_cases_independently_and_report_the_outcome_to_safety')
+              : tr(
+                  'incident_view.confirm_responsibility_hand_over_to_the_contractor_and_record_the_handling_outcome',
+                )}
           </p>
         </div>
         {safety && (
@@ -237,7 +267,7 @@ export function IncidentView(p: IncidentViewProps) {
             disabled={mutation.isPending}
             onClick={() => open({ op: 'create' })}
           >
-            New incident
+            {tr('common.new_incident')}
           </button>
         )}
       </div>
@@ -247,7 +277,7 @@ export function IncidentView(p: IncidentViewProps) {
           role="status"
           className="rounded-lg bg-[var(--semantic-green-bg)] p-3 text-sm text-[var(--semantic-green-text)]"
         >
-          Change recorded.
+          {tr('common.change_recorded')}
         </p>
       )}
       <div
@@ -257,7 +287,7 @@ export function IncidentView(p: IncidentViewProps) {
         }
       >
         <label className="text-sm font-semibold">
-          Status
+          {tr('common.status')}
           <select
             className={fieldClass}
             value={status}
@@ -266,7 +296,7 @@ export function IncidentView(p: IncidentViewProps) {
               setOffset(0);
             }}
           >
-            <option value="">All statuses</option>
+            <option value="">{tr('common.all_statuses_8ee573')}</option>
             {statuses.map((s) => (
               <option key={s} value={s}>
                 {label(s)}
@@ -287,19 +317,19 @@ export function IncidentView(p: IncidentViewProps) {
           />
         )}
         <button className={buttonClass} onClick={reload}>
-          Refresh incidents
+          {tr('common.refresh_incidents')}
         </button>
       </div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
         <section
-          aria-label="Incident list"
+          aria-label={tr('common.incident_list')}
           className={'min-w-0 space-y-3 ' + (mobileDetail ? 'hidden lg:block' : '')}
         >
-          {list.isPending && <p className={cardClass}>Loading incidents…</p>}
+          {list.isPending && <p className={cardClass}>{tr('common.loading_incidents')}</p>}
           <RequestError error={list.error} retry={() => void list.refetch()} />
           {list.data && !list.data.items.length && (
             <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
-              No incidents found.
+              {tr('common.no_incidents_found')}
             </p>
           )}
           {list.data?.items.map((item) => (
@@ -323,28 +353,30 @@ export function IncidentView(p: IncidentViewProps) {
                 <StatusBadge value={item.severity} />
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
-                Occurred {date(item.occurredAt)}
+                {tr('common.occurred_value', { value1: date(item.occurredAt) })}
               </p>
             </button>
           ))}
           {list.data && <Pager offset={offset} total={list.data.total} onChange={setOffset} />}
         </section>
         <section
-          aria-label="Incident detail"
+          aria-label={tr('common.incident_detail')}
           className={'min-w-0 space-y-4 ' + (!mobileDetail ? 'hidden lg:block' : '')}
         >
           <button className={buttonClass + ' lg:hidden'} onClick={() => setMobileDetail(false)}>
-            Back to incidents
+            {tr('common.back_to_incidents')}
           </button>
           {!selected && (
             <div className={cardClass + ' py-14 text-center'}>
-              <h3 className="font-bold">Select an incident</h3>
+              <h3 className="font-bold">{tr('common.select_an_incident')}</h3>
               <p className="text-sm text-[var(--text-secondary)]">
-                View its source alerts, corrective actions and history here.
+                {tr('incident_view.view_its_source_alerts_corrective_actions_and_history_here')}
               </p>
             </div>
           )}
-          {detail.isPending && selected && <p className={cardClass}>Loading incident…</p>}
+          {detail.isPending && selected && (
+            <p className={cardClass}>{tr('common.loading_incident')}</p>
+          )}
           <RequestError error={detail.error} retry={() => void detail.refetch()} />
           {current && (
             <>
@@ -360,22 +392,33 @@ export function IncidentView(p: IncidentViewProps) {
                   {current.description}
                 </p>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Occurred {date(current.occurredAt)}
-                  {current.closedAt && ' · Closed ' + date(current.closedAt)}
+                  {tr('common.occurred_valuevalue', {
+                    value1: date(current.occurredAt),
+                    value2:
+                      current.closedAt && ' · ' + label('CLOSED') + ' ' + date(current.closedAt),
+                  })}
                 </p>
                 <p className="text-sm">
-                  Reported by {current.reportedByName ?? 'Account unavailable'}
+                  {tr('common.reported_by_value', {
+                    value1: current.reportedByName ?? tr('common.account_unavailable'),
+                  })}
                 </p>
                 {current.zoneId && (
-                  <p className="text-sm">Zone: {current.zoneName ?? 'Zone unavailable'}</p>
+                  <p className="text-sm">
+                    {tr('common.zone_value_22c565', {
+                      value1: current.zoneName ?? tr('common.zone_unavailable'),
+                    })}
+                  </p>
                 )}
                 <section className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-4">
-                  <h3 className="font-bold">Responsibility</h3>
+                  <h3 className="font-bold">{tr('common.responsibility')}</h3>
                   <p className="text-sm">
                     {current.contractorId ? (
-                      <strong>{current.contractorName ?? 'Contractor unavailable'}</strong>
+                      <strong>
+                        {current.contractorName ?? tr('common.contractor_unavailable')}
+                      </strong>
                     ) : (
-                      'Unresolved — Safety must confirm the contractor'
+                      tr('incident_view.unresolved_safety_must_confirm_the_contractor')
                     )}
                   </p>
                   <p className="text-sm">
@@ -384,8 +427,10 @@ export function IncidentView(p: IncidentViewProps) {
                         ? current.workers
                             .map((w) => w.displayName + ' · ' + w.externalId)
                             .join(', ')
-                        : 'Worker references unavailable'
-                      : 'Worker identity unknown. The contractor can handle the case after Safety confirms responsibility.'}
+                        : tr('common.worker_references_unavailable')
+                      : tr(
+                          'incident_view.worker_identity_unknown_the_contractor_can_handle_the_case_after_safety_confirms_r',
+                        )}
                   </p>
                   {current.responsibilityReason && (
                     <p className="whitespace-pre-wrap text-sm">{current.responsibilityReason}</p>
@@ -396,7 +441,7 @@ export function IncidentView(p: IncidentViewProps) {
                       disabled={mutation.isPending}
                       onClick={() => open({ op: 'responsibility' })}
                     >
-                      Confirm responsibility
+                      {tr('common.confirm_responsibility')}
                     </button>
                   )}
                   {safety && current.contractorId && current.actions.length > 0 && (
@@ -405,16 +450,16 @@ export function IncidentView(p: IncidentViewProps) {
                       disabled={mutation.isPending}
                       onClick={() => open({ op: 'correct-responsibility' })}
                     >
-                      Correct responsibility
+                      {tr('common.correct_responsibility')}
                     </button>
                   )}
                   {current.contractorId && (
                     <TechnicalDetails>
-                      Contractor {current.contractorId}
+                      {tr('common.contractor')} {current.contractorId}
                       <br />
-                      Workers {current.workerIds?.join(', ') || 'Unknown'}
+                      {tr('common.workers')} {current.workerIds?.join(', ') || tr('common.unknown')}
                       <br />
-                      Confirmed {date(current.responsibilityConfirmedAt)}
+                      {tr('common.confirmed')} {date(current.responsibilityConfirmedAt)}
                     </TechnicalDetails>
                   )}
                 </section>
@@ -426,7 +471,7 @@ export function IncidentView(p: IncidentViewProps) {
                         disabled={mutation.isPending || !current.contractorId}
                         onClick={() => open({ op: 'reopen' })}
                       >
-                        Reopen incident
+                        {tr('common.reopen_incident')}
                       </button>
                     ) : (
                       <>
@@ -435,14 +480,14 @@ export function IncidentView(p: IncidentViewProps) {
                           disabled={mutation.isPending || !current.contractorId}
                           onClick={() => open({ op: 'assign' })}
                         >
-                          Hand over to contractor
+                          {tr('incident_view.hand_over_to_contractor')}
                         </button>
                         <button
                           className={buttonClass}
                           disabled={mutation.isPending}
                           onClick={() => open({ op: 'link' })}
                         >
-                          Link alerts
+                          {tr('common.link_alerts')}
                         </button>
                         <button
                           className={buttonClass}
@@ -450,7 +495,7 @@ export function IncidentView(p: IncidentViewProps) {
                           title={closeHint}
                           onClick={() => open({ op: 'close' })}
                         >
-                          Close incident
+                          {tr('common.close_incident')}
                         </button>
                       </>
                     )}
@@ -462,20 +507,20 @@ export function IncidentView(p: IncidentViewProps) {
                   </p>
                 )}
                 <TechnicalDetails>
-                  <p>Incident {current.id}</p>
-                  <p>Version {current.version}</p>
-                  <p>Reported by {current.reportedBy}</p>
-                  {current.zoneId && <p>Zone {current.zoneId}</p>}
+                  <p>{tr('common.incident_value', { value1: current.id })}</p>
+                  <p>{tr('common.version_value', { value1: current.version })}</p>
+                  <p>{tr('common.reported_by_value', { value1: current.reportedBy })}</p>
+                  {current.zoneId && <p>{tr('common.zone_value', { value1: current.zoneId })}</p>}
                 </TechnicalDetails>
               </article>
               <section className={cardClass}>
                 <h3 className="font-bold">
-                  Source alerts{' '}
+                  {tr('common.source_alerts')}{' '}
                   <span className="text-[var(--text-secondary)]">({current.alerts.length})</span>
                 </h3>
                 {!current.alerts.length && (
                   <p className="text-sm text-[var(--text-secondary)]">
-                    Manual incident; no source alert.
+                    {tr('incident_view.manual_incident_no_source_alert')}
                   </p>
                 )}
                 {current.alerts.map((alert) => (
@@ -484,15 +529,20 @@ export function IncidentView(p: IncidentViewProps) {
               </section>
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold">Handovers ({currentActions.length} current)</h3>
+                  <h3 className="font-bold">
+                    {tr('common.handovers_value_current', { value1: currentActions.length })}
+                  </h3>
                   <span className="text-xs text-[var(--text-secondary)]">
-                    {currentActions.filter((a) => ['VERIFIED', 'CLOSED'].includes(a.status)).length}{' '}
-                    outcomes recorded
+                    {tr('common.value_outcomes_recorded', {
+                      value1: currentActions.filter((a) =>
+                        ['VERIFIED', 'CLOSED'].includes(a.status),
+                      ).length,
+                    })}
                   </span>
                 </div>
                 {!current.actions.length && (
                   <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
-                    No handover yet.
+                    {tr('common.no_handover_yet')}
                   </p>
                 )}
                 {current.actions.map((a) => (
@@ -528,9 +578,9 @@ export function IncidentView(p: IncidentViewProps) {
             pending={mutation.isPending}
             label={
               editor.op === 'create'
-                ? 'Create incident'
+                ? tr('common.create_incident')
                 : editor.op === 'review'
-                  ? 'Record handling outcome'
+                  ? tr('common.record_handling_outcome')
                   : titles[editor.op]
             }
             onSubmit={(form) => {
@@ -621,10 +671,15 @@ export function IncidentView(p: IncidentViewProps) {
           >
             {editor.op === 'create' && (
               <>
-                <Field name="title" label="Title" required maxLength={200} />
-                <Field name="description" label="Description" required type="textarea" />
+                <Field name="title" label={tr('common.title')} required maxLength={200} />
+                <Field
+                  name="description"
+                  label={tr('common.description')}
+                  required
+                  type="textarea"
+                />
                 <label className="block text-sm font-semibold">
-                  Severity
+                  {tr('common.severity')}
                   <select className={fieldClass} name="severity">
                     {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
                       <option key={s} value={s}>
@@ -635,19 +690,22 @@ export function IncidentView(p: IncidentViewProps) {
                 </label>
                 <Field
                   name="occurredAt"
-                  label="Occurred at (local time)"
+                  label={tr('incident_view.occurred_at_local_time')}
                   type="datetime-local"
                   required
                   defaultValue={occurredDefault}
                 />
                 <details className="text-sm">
-                  <summary className="cursor-pointer font-semibold">Optional references</summary>
-                  <Field name="zoneId" label="Zone ID (optional)" />
+                  <summary className="cursor-pointer font-semibold">
+                    {tr('common.optional_references')}
+                  </summary>
+                  <Field name="zoneId" label={tr('common.zone_id_optional')} />
                 </details>
                 <ConfirmedAlerts p={p} initialAlertId={p.initialAlertId} />
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Select no alerts for a manual incident. Source evidence and review history stay
-                  intact.
+                  {tr(
+                    'incident_view.select_no_alerts_for_a_manual_incident_source_evidence_and_review_history_stay_int',
+                  )}
                 </p>
               </>
             )}
@@ -668,13 +726,15 @@ export function IncidentView(p: IncidentViewProps) {
                 />
                 <Field
                   name="reason"
-                  label="Transfer reason"
+                  label={tr('common.transfer_reason')}
                   type="textarea"
                   required
                   maxLength={2000}
                 />
                 <p className="text-sm">
-                  The action returns to Assigned. Earlier submissions and reviews are preserved.
+                  {tr(
+                    'incident_view.the_action_returns_to_assigned_earlier_submissions_and_reviews_are_preserved',
+                  )}
                 </p>
               </>
             )}
@@ -682,20 +742,34 @@ export function IncidentView(p: IncidentViewProps) {
             {(editor.op === 'assign' || editor.op === 'reopen') && (
               <>
                 {editor.op === 'reopen' && (
-                  <Field name="reason" label="Reopening reason" type="textarea" required />
+                  <Field
+                    name="reason"
+                    label={tr('common.reopening_reason')}
+                    type="textarea"
+                    required
+                  />
                 )}
                 <Assignee
                   p={p}
                   role="CONTRACTOR_REPRESENTATIVE"
                   contractorId={current?.contractorId ?? undefined}
                 />
-                <Field name="description" label="Handling request" type="textarea" required />
-                <Field name="dueAt" label="Deadline (optional, local time)" type="datetime-local" />
+                <Field
+                  name="description"
+                  label={tr('common.handling_request')}
+                  type="textarea"
+                  required
+                />
+                <Field
+                  name="dueAt"
+                  label={tr('incident_view.deadline_optional_local_time')}
+                  type="datetime-local"
+                />
               </>
             )}
             {editor.op === 'close' && (
               <>
-                <Field name="reason" label="Closure reason" type="textarea" required />
+                <Field name="reason" label={tr('common.closure_reason')} type="textarea" required />
                 <p className="text-sm text-[var(--text-secondary)]">{closeHint}</p>
               </>
             )}
@@ -703,10 +777,11 @@ export function IncidentView(p: IncidentViewProps) {
             {editor.op === 'review' && (
               <>
                 <p className="text-sm">
-                  Record the contractor's handling outcome. The contractor determines how to handle
-                  the violation.
+                  {tr(
+                    'incident_view.record_the_contractor_s_handling_outcome_the_contractor_determines_how_to_handle_t',
+                  )}
                 </p>
-                <Field name="reason" label="Recording note" type="textarea" required />
+                <Field name="reason" label={tr('common.recording_note')} type="textarea" required />
               </>
             )}
           </CommandForm>
@@ -732,6 +807,8 @@ function Action({
   command: (op: 'start', input: WithoutCommandId<VersionCommand>, actionId: string) => void;
   open: (editor: Editor) => void;
 }) {
+  useTranslation();
+
   const mine =
     !action.supersededAt &&
     hasRole(p, 'CONTRACTOR_REPRESENTATIVE') &&
@@ -748,17 +825,28 @@ function Action({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <StatusBadge value={submission.status} />
         <time className="text-xs text-[var(--text-secondary)]">
-          Submitted {date(submission.submittedAt)}
+          {tr('common.submitted_value', { value1: date(submission.submittedAt) })}
         </time>
       </div>
       <p className="whitespace-pre-wrap break-words text-sm">{submission.resultDescription}</p>
-      <p className="text-xs">Reported by {submission.submittedByName ?? 'Account unavailable'}</p>
+      <p className="text-xs">
+        {tr('common.reported_by_value', {
+          value1: submission.submittedByName ?? tr('common.account_unavailable'),
+        })}
+      </p>
       {submission.reviewedBy && (
-        <p className="text-xs">Recorded by {submission.reviewedByName ?? 'Account unavailable'}</p>
+        <p className="text-xs">
+          {tr('common.recorded_by_value', {
+            value1: submission.reviewedByName ?? tr('common.account_unavailable'),
+          })}
+        </p>
       )}
       {submission.reviewNote && (
         <p className="text-sm">
-          Review: {submission.reviewNote} · {date(submission.reviewedAt)}
+          {tr('incident_view.review_value_value', {
+            value1: submission.reviewNote,
+            value2: date(submission.reviewedAt),
+          })}
         </p>
       )}
       {submission.evidence && (
@@ -773,7 +861,7 @@ function Action({
             disabled={pending}
             onClick={() => open({ op: 'review', actionId: action.id, submissionId: submission.id })}
           >
-            Record handling outcome
+            {tr('common.record_handling_outcome')}
           </button>
         )}
     </section>
@@ -782,7 +870,7 @@ function Action({
     <article id={'action-' + action.id} className={cardClass}>
       {action.supersededAt && (
         <p className="text-sm font-semibold">
-          Superseded handover · {date(action.supersededAt)}
+          {tr('common.superseded_handover')} {date(action.supersededAt)}
           <br />
           {action.supersededReason}
         </p>
@@ -791,16 +879,21 @@ function Action({
         <h4 className="min-w-0 break-words font-semibold">{action.description}</h4>
         <StatusBadge
           value={action.status}
-          text={action.status === 'VERIFIED' ? 'Outcome recorded' : undefined}
+          text={action.status === 'VERIFIED' ? tr('common.outcome_recorded') : undefined}
         />
       </div>
       <p className="text-xs text-[var(--text-secondary)]">
-        {action.assignedToName ?? 'Account unavailable'} · Deadline {date(action.dueAt)}
+        {tr('incident_view.value_deadline_value', {
+          value1: action.assignedToName ?? tr('common.account_unavailable'),
+          value2: date(action.dueAt),
+        })}
       </p>
       {action.dueAt &&
         new Date(action.dueAt).getTime() < checkedAt &&
         !['CLOSED', 'VERIFIED'].includes(action.status) && (
-          <p className="text-xs font-semibold text-[var(--semantic-red-text)]">Past deadline</p>
+          <p className="text-xs font-semibold text-[var(--semantic-red-text)]">
+            {tr('common.past_deadline')}
+          </p>
         )}
       {!action.supersededAt &&
         hasRole(p, 'SAFETY_OFFICER') &&
@@ -812,10 +905,12 @@ function Action({
               disabled={pending || !incident.contractorId || waiting.length > 0}
               onClick={() => open({ op: 'transfer', actionId: action.id })}
             >
-              Transfer action
+              {tr('common.transfer_action')}
             </button>
             {waiting.length > 0 && (
-              <p className="text-xs">Review the pending result before transferring this action.</p>
+              <p className="text-xs">
+                {tr('incident_view.review_the_pending_result_before_transferring_this_action')}
+              </p>
             )}
           </div>
         )}
@@ -825,7 +920,7 @@ function Action({
           disabled={pending}
           onClick={() => command('start', { expectedVersion: action.version }, action.id)}
         >
-          Start handling
+          {tr('common.start_handling')}
         </button>
       )}
       {mine && action.status === 'IN_PROGRESS' && (
@@ -834,27 +929,27 @@ function Action({
           disabled={pending}
           onClick={() => open({ op: 'submit', actionId: action.id })}
         >
-          Report handling outcome
+          {tr('common.report_handling_outcome')}
         </button>
       )}
       {waiting.length > 0 && (
         <div className="space-y-3">
-          <h5 className="text-sm font-bold">Awaiting Safety recording</h5>
+          <h5 className="text-sm font-bold">{tr('common.awaiting_safety_recording')}</h5>
           {waiting.map(result)}
         </div>
       )}
       {history.length > 0 && (
         <details>
           <summary className="cursor-pointer text-sm font-semibold">
-            Submission history ({history.length})
+            {tr('common.submission_history_value', { value1: history.length })}
           </summary>
           <div className="mt-3 space-y-3">{history.map(result)}</div>
         </details>
       )}
       <TechnicalDetails>
-        <p>Action {action.id}</p>
-        <p>Version {action.version}</p>
-        <p>Assignee {action.assignedTo}</p>
+        <p>{tr('common.action_value', { value1: action.id })}</p>
+        <p>{tr('common.version_value', { value1: action.version })}</p>
+        <p>{tr('common.assignee_value', { value1: action.assignedTo })}</p>
       </TechnicalDetails>
     </article>
   );
@@ -869,6 +964,8 @@ function SourceAlert({
   incidentId: string;
   alertId: string;
 }) {
+  useTranslation();
+
   const [open, setOpen] = useState(false);
   const query = useQuery({
     queryKey: [
@@ -888,19 +985,26 @@ function SourceAlert({
   return (
     <section className="space-y-2">
       <button className={buttonClass} onClick={() => setOpen(!open)}>
-        Source alert {alertId.slice(0, 8)}
+        {tr('common.source_alert_value', { value1: alertId.slice(0, 8) })}
       </button>
       {open && (
         <>
           <RequestError error={query.error} retry={() => void query.refetch()} />
-          {query.isPending && <p>Loading source evidence…</p>}
+          {query.isPending && <p>{tr('common.loading_source_evidence')}</p>}
           {query.data && (
             <>
               <p>
-                {label(query.data.alertType)} · {label(query.data.status)} ·{' '}
-                {query.data.detectionCount} observations
+                {tr('incident_view.value_value_value_observations', {
+                  value1: label(query.data.alertType),
+                  value2: label(query.data.status),
+                  value3: query.data.detectionCount,
+                })}
               </p>
-              <p>Candidate reference {query.data.candidateWorkerId ?? 'unknown'} (unverified)</p>
+              <p>
+                {tr('incident_view.candidate_reference_value_unverified', {
+                  value1: query.data.candidateWorkerId ?? 'unknown',
+                })}
+              </p>
               {query.data.detections.map((d) =>
                 d.evidence.map((e) => (
                   <CameraPhoto
@@ -938,6 +1042,8 @@ function CameraPhoto({
   eventId: string;
   index: number;
 }) {
+  useTranslation();
+
   const query = useQuery({
     queryKey: [
       'safety-workflow',
@@ -959,7 +1065,7 @@ function CameraPhoto({
   return (
     <>
       <RequestError error={query.error} retry={() => void query.refetch()} />
-      {query.data && <BlobImage blob={query.data} alt="Original camera observation" />}
+      {query.data && <BlobImage blob={query.data} alt={tr('common.original_camera_observation')} />}
     </>
   );
 }
@@ -973,6 +1079,8 @@ function ResponsibilityFields({
   incident: IncidentDetailResponse;
   handover?: boolean;
 }) {
+  useTranslation();
+
   const [contractorId, setContractorId] = useState(incident.contractorId ?? '');
   const [contractorOffset, setContractorOffset] = useState(0),
     [workerOffset, setWorkerOffset] = useState(0);
@@ -1012,7 +1120,7 @@ function ResponsibilityFields({
   return (
     <>
       <label className="block text-sm font-semibold">
-        Responsible contractor
+        {tr('common.responsible_contractor')}
         <select
           className={fieldClass}
           name="contractorId"
@@ -1024,9 +1132,11 @@ function ResponsibilityFields({
             setWorkerOffset(0);
           }}
         >
-          <option value="">Choose a contractor participating in this Site</option>
+          <option value="">
+            {tr('incident_view.choose_a_contractor_participating_in_this_site')}
+          </option>
           {contractorId && !contractors.data?.items.some((c) => c.id === contractorId) && (
-            <option value={contractorId}>Current confirmed contractor</option>
+            <option value={contractorId}>{tr('common.current_confirmed_contractor')}</option>
           )}
           {contractors.data?.items.map((c) => (
             <option key={c.id} value={c.id}>
@@ -1035,7 +1145,7 @@ function ResponsibilityFields({
           ))}
         </select>
       </label>
-      {contractors.isPending && <p>Loading contractors…</p>}
+      {contractors.isPending && <p>{tr('common.loading_contractors')}</p>}
       <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
       {contractors.data && contractors.data.total > 20 && (
         <Pager
@@ -1046,12 +1156,15 @@ function ResponsibilityFields({
       )}
       {contractorId && (
         <fieldset className="space-y-2">
-          <legend className="text-sm font-semibold">Confirmed Worker subjects (optional)</legend>
+          <legend className="text-sm font-semibold">
+            {tr('incident_view.confirmed_worker_subjects_optional')}
+          </legend>
           <p className="text-sm">
-            Select only Workers you have verified. Leave empty when identity is unknown; camera
-            candidates never prove identity.
+            {tr(
+              'incident_view.select_only_workers_you_have_verified_leave_empty_when_identity_is_unknown_camera',
+            )}
           </p>
-          {workers.isPending && <p>Loading Workers…</p>}
+          {workers.isPending && <p>{tr('common.loading_workers')}</p>}
           <RequestError error={workers.error} retry={() => void workers.refetch()} />
           {workers.data?.items.map((w) => (
             <label key={w.id} className="flex items-center gap-2 text-sm">
@@ -1068,9 +1181,13 @@ function ResponsibilityFields({
             </label>
           ))}
           {workers.data && !workers.data.total && (
-            <p>No active Workers registered for this contractor. Identity may remain unknown.</p>
+            <p>
+              {tr(
+                'incident_view.no_active_workers_registered_for_this_contractor_identity_may_remain_unknown',
+              )}
+            </p>
           )}
-          <p className="text-xs">{chosen.length} selected</p>
+          <p className="text-xs">{tr('common.value_selected', { value1: chosen.length })}</p>
           {workers.data && workers.data.total > 20 && (
             <Pager offset={workerOffset} total={workers.data.total} onChange={setWorkerOffset} />
           )}
@@ -1079,7 +1196,7 @@ function ResponsibilityFields({
       <input type="hidden" name="workerIds" value={chosen.join(',')} />
       <Field
         name="reason"
-        label={handover ? 'Correction reason' : 'Verification reason'}
+        label={handover ? tr('common.correction_reason') : tr('common.verification_reason')}
         type="textarea"
         required
         maxLength={2000}
@@ -1092,17 +1209,28 @@ function ResponsibilityFields({
             role="CONTRACTOR_REPRESENTATIVE"
             contractorId={contractorId || undefined}
           />
-          <Field name="description" label="Handling request" type="textarea" required />
-          <Field name="dueAt" label="Deadline (optional, local time)" type="datetime-local" />
+          <Field
+            name="description"
+            label={tr('common.handling_request')}
+            type="textarea"
+            required
+          />
+          <Field
+            name="dueAt"
+            label={tr('incident_view.deadline_optional_local_time')}
+            type="datetime-local"
+          />
           <p className="text-sm">
-            Previous handovers and reports are preserved for Safety. The previous contractor loses
-            access.
+            {tr(
+              'incident_view.previous_handovers_and_reports_are_preserved_for_safety_the_previous_contractor_lo',
+            )}
           </p>
         </>
       )}
       <p className="text-sm">
-        Explain how you confirmed the contractor and any Worker identity. Do not infer the
-        contractor from the Zone.
+        {tr(
+          'incident_view.explain_how_you_confirmed_the_contractor_and_any_worker_identity_do_not_infer_the',
+        )}
       </p>
     </>
   );

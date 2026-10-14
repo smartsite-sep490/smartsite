@@ -1,3 +1,6 @@
+import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SmartDatePicker } from '../../ui';
 import { formatShiftRange, formatWorkDate } from '../utils/workforce-format';
@@ -16,7 +19,15 @@ const field =
   'mt-1 block w-full rounded-xl border border-slate-200/90 bg-slate-50/50 px-3 py-2 text-xs font-semibold text-slate-900 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)] hover:border-slate-300 focus:bg-white focus:border-[#071A2B] focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all cursor-pointer';
 const action =
   'w-full flex items-center justify-center gap-2 rounded-xl bg-[#071A2B] hover:bg-slate-800 active:scale-[0.98] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
-const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const weekdays = () => [
+  tr('common.mon'),
+  tr('common.tue'),
+  tr('common.wed'),
+  tr('common.thu'),
+  tr('common.fri'),
+  tr('common.sat'),
+  tr('common.sun'),
+];
 function today() {
   return new Intl.DateTimeFormat('en-CA').format(new Date());
 }
@@ -58,6 +69,8 @@ export function ScheduleAssignmentForm({
   versions: ScheduleVersionResponse[];
   onScopeChange?: (scope: { siteId: string; contractorId: string }) => void;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const cache = useQueryClient();
   const key = ['schedule-assignment-batches', apiUrl, token, siteId];
@@ -160,7 +173,9 @@ export function ScheduleAssignmentForm({
   const save = useMutation({
     mutationFn: () => {
       if (!currentPreview || currentPreview.conflicts.length)
-        throw new Error('Preview an assignment without conflicts before saving.');
+        throw new Error(
+          tr('schedule_assignment_form.preview_an_assignment_without_conflicts_before_saving'),
+        );
       const fingerprint = JSON.stringify([input, currentPreview.fingerprint]);
       if (request.current?.key !== fingerprint)
         request.current = { key: fingerprint, id: crypto.randomUUID() };
@@ -171,7 +186,12 @@ export function ScheduleAssignmentForm({
       });
     },
     onSuccess: async (batch) => {
-      setMessage(`Assigned ${batch.members.length} worker(s) across ${batch.dates.length} day(s).`);
+      setMessage(
+        tr('schedule_assignment_form.assigned_value_worker_s_across_value_day_s', {
+          value1: batch.members.length,
+          value2: batch.dates.length,
+        }),
+      );
       setTargetId('');
       setMembers(undefined);
       preview.reset();
@@ -201,11 +221,13 @@ export function ScheduleAssignmentForm({
       <div className="space-y-1">
         <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] uppercase tracking-[0.2em] font-bold bg-orange-50 text-orange-600 border border-orange-200/60 w-fit">
           <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-          Roster Dispatch
+          {tr('common.roster_dispatch')}
         </div>
-        <h3 className="text-base font-extrabold text-[#071A2B] tracking-tight">Assign schedules</h3>
+        <h3 className="text-base font-extrabold text-[#071A2B] tracking-tight">
+          {tr('common.assign_schedules')}
+        </h3>
         <p className="text-xs text-slate-500 leading-relaxed">
-          Assign a team or worker, then preview before saving.
+          {tr('schedule_assignment_form.assign_a_team_or_worker_then_preview_before_saving')}
         </p>
       </div>
       {loadError && (
@@ -213,7 +235,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded-xl border border-red-200"
         >
-          {loadError.message}{' '}
+          {localizedError(loadError.message)}{' '}
           <button
             className="underline font-bold hover:text-red-800"
             onClick={() => {
@@ -223,14 +245,14 @@ export function ScheduleAssignmentForm({
               void grants.refetch();
             }}
           >
-            Retry assignment data
+            {tr('common.retry_assignment_data')}
           </button>
         </p>
       )}
       {loading && (
         <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
           <div className="w-3 h-3 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-          <span>Loading teams and available shifts…</span>
+          <span>{tr('schedule_assignment_form.loading_teams_and_available_shifts')}</span>
         </div>
       )}
       {!loading && !loadError && !contractorId && (
@@ -238,7 +260,9 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200"
         >
-          No active contractor assignment is available for this site.
+          {tr(
+            'schedule_assignment_form.no_active_contractor_assignment_is_available_for_this_site',
+          )}
         </p>
       )}
       <form
@@ -257,7 +281,7 @@ export function ScheduleAssignmentForm({
           {/* Assignment target Segmented Control */}
           <div className="space-y-1.5">
             <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Assignment target
+              {tr('common.assignment_target')}
             </span>
             <div className="grid grid-cols-2 p-1 bg-slate-100/80 rounded-xl gap-1">
               <button
@@ -273,7 +297,7 @@ export function ScheduleAssignmentForm({
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Team
+                {tr('common.team')}
               </button>
               <button
                 type="button"
@@ -288,11 +312,11 @@ export function ScheduleAssignmentForm({
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Worker
+                {tr('common.worker')}
               </button>
             </div>
             <label className="sr-only">
-              Assignment target
+              {tr('common.assignment_target')}
               <select
                 value={target}
                 onChange={(e) => {
@@ -301,8 +325,8 @@ export function ScheduleAssignmentForm({
                   setMembers(undefined);
                 }}
               >
-                <option value="TEAM">Team</option>
-                <option value="WORKER">Worker</option>
+                <option value="TEAM">{tr('common.team')}</option>
+                <option value="WORKER">{tr('common.worker')}</option>
               </select>
             </label>
           </div>
@@ -310,7 +334,7 @@ export function ScheduleAssignmentForm({
           {/* Team / Worker Select */}
           <label className="block">
             <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              {target === 'TEAM' ? 'Team' : 'Worker'}
+              {target === 'TEAM' ? tr('common.team') : tr('common.worker')}
             </span>
             <select
               required
@@ -321,7 +345,9 @@ export function ScheduleAssignmentForm({
                 setMembers(undefined);
               }}
             >
-              <option value="">Select {target === 'TEAM' ? 'team' : 'worker'}</option>
+              <option value="">
+                {tr('common.select_value', { value1: target === 'TEAM' ? 'team' : 'worker' })}
+              </option>
               {target === 'TEAM'
                 ? teams.data?.map((team) => (
                     <option key={team.id} value={team.id}>
@@ -341,7 +367,9 @@ export function ScheduleAssignmentForm({
             <fieldset className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <legend className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  Members to assign ({members.length})
+                  {tr('schedule_assignment_form.members_to_assign_value', {
+                    value1: members.length,
+                  })}
                 </legend>
                 {members.length > 0 && (
                   <button
@@ -356,8 +384,8 @@ export function ScheduleAssignmentForm({
                     className="text-[10px] font-bold text-orange-600 hover:underline"
                   >
                     {!selectedMembers || selectedMembers.length === members.length
-                      ? 'Deselect all'
-                      : 'Select all'}
+                      ? tr('common.deselect_all_967549')
+                      : tr('common.select_all_1fc9a3')}
                   </button>
                 )}
               </div>
@@ -393,10 +421,14 @@ export function ScheduleAssignmentForm({
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">This team has no active members.</p>
+                <p className="text-xs text-slate-400">
+                  {tr('schedule_assignment_form.this_team_has_no_active_members')}
+                </p>
               )}
               <p className="text-[10px] text-slate-400">
-                Exclude members who need a different shift, then assign them separately.
+                {tr(
+                  'schedule_assignment_form.exclude_members_who_need_a_different_shift_then_assign_them_separately',
+                )}
               </p>
             </fieldset>
           )}
@@ -404,7 +436,7 @@ export function ScheduleAssignmentForm({
           {/* Schedule Version */}
           <label className="block">
             <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Schedule Version
+              {tr('common.schedule_version')}
             </span>
             <select
               required
@@ -412,10 +444,10 @@ export function ScheduleAssignmentForm({
               value={versionId}
               onChange={(e) => setVersion(e.target.value)}
             >
-              <option value="">Select version</option>
+              <option value="">{tr('common.select_version')}</option>
               {versions.map((version) => (
                 <option key={version.id} value={version.id}>
-                  Version {version.version}
+                  {tr('common.version_value', { value1: version.version })}
                 </option>
               ))}
             </select>
@@ -424,7 +456,7 @@ export function ScheduleAssignmentForm({
           {/* Shift */}
           <label className="block">
             <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Shift
+              {tr('common.shift')}
             </span>
             <select
               required
@@ -432,7 +464,7 @@ export function ScheduleAssignmentForm({
               value={shiftId}
               onChange={(e) => setShift(e.target.value)}
             >
-              <option value="">Select shift</option>
+              <option value="">{tr('common.select_shift')}</option>
               {availableShifts.map((shift) => (
                 <option key={shift.id} value={shift.id}>
                   {shift.name} · {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)} (
@@ -445,7 +477,7 @@ export function ScheduleAssignmentForm({
             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
               <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
               <span>
-                Unpaid lunch break:{' '}
+                {tr('common.unpaid_lunch_break')}{' '}
                 <strong className="text-slate-700">
                   {clock(
                     shifts.find((shift) => shift.id === shiftId)!.breakStartsAt!,
@@ -457,7 +489,7 @@ export function ScheduleAssignmentForm({
                     shifts.find((shift) => shift.id === shiftId)!.timezone,
                   )}
                 </strong>
-                . Deducted on attendance overlap.
+                {tr('schedule_assignment_form.deducted_on_attendance_overlap')}
               </span>
             </div>
           )}
@@ -465,7 +497,7 @@ export function ScheduleAssignmentForm({
           {/* Apply schedule */}
           <label className="block">
             <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              Apply schedule
+              {tr('common.apply_schedule')}
             </span>
             <select
               className={field}
@@ -478,9 +510,11 @@ export function ScheduleAssignmentForm({
                 }
               }}
             >
-              <option value="DAY">One day</option>
-              <option value="WEEK">One week</option>
-              <option value="REPEAT">Repeat weekly until an end date</option>
+              <option value="DAY">{tr('common.one_day')}</option>
+              <option value="WEEK">{tr('common.one_week')}</option>
+              <option value="REPEAT">
+                {tr('schedule_assignment_form.repeat_weekly_until_an_end_date')}
+              </option>
             </select>
           </label>
 
@@ -488,24 +522,26 @@ export function ScheduleAssignmentForm({
           {mode === 'WEEK' ? (
             <div>
               <SmartDatePicker
-                label="Week starting Monday"
+                label={tr('common.week_starting_monday')}
                 fieldRequired
                 value={fromDate}
                 onChange={setFrom}
                 disablePast={false}
                 disabledWeekdays={[0, 2, 3, 4, 5, 6]}
-                placeholder="Select a Monday"
+                placeholder={tr('common.select_a_monday')}
               />
               <p className="mt-1 text-xs text-slate-500">
                 {validStart
-                  ? `Week ends on Sunday, ${weekEnd(fromDate)}.`
-                  : 'Select a Monday to continue.'}
+                  ? tr('schedule_assignment_form.week_ends_on_sunday_value', {
+                      value1: weekEnd(fromDate),
+                    })
+                  : tr('schedule_assignment_form.select_a_monday_to_continue')}
               </p>
             </div>
           ) : (
             <label className="block">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                {mode === 'DAY' ? 'Work date' : 'Start date'}
+                {mode === 'DAY' ? tr('common.work_date') : tr('common.start_date')}
               </span>
               <input
                 required
@@ -520,7 +556,7 @@ export function ScheduleAssignmentForm({
           {mode === 'REPEAT' && (
             <label className="block">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                End date
+                {tr('common.end_date')}
               </span>
               <input
                 required
@@ -537,10 +573,10 @@ export function ScheduleAssignmentForm({
           {mode !== 'DAY' && (
             <fieldset className="space-y-1.5">
               <legend className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Working days
+                {tr('common.working_days')}
               </legend>
               <div className="grid grid-cols-7 gap-1">
-                {weekdays.map((label, index) => {
+                {weekdays().map((label, index) => {
                   const isChecked = days.includes(index + 1);
                   return (
                     <label
@@ -584,7 +620,7 @@ export function ScheduleAssignmentForm({
               selectedMembers?.length === 0
             }
           >
-            <span>Preview assignments</span>
+            <span>{tr('common.preview_assignments')}</span>
             <span
               aria-hidden="true"
               className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]"
@@ -599,7 +635,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200"
         >
-          {preview.error.message}
+          {localizedError(preview.error.message)}
         </p>
       )}
       {save.error && (
@@ -607,7 +643,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200"
         >
-          {save.error.message}
+          {localizedError(save.error.message)}
         </p>
       )}
       {message && (
@@ -615,39 +651,43 @@ export function ScheduleAssignmentForm({
           role="status"
           className="text-xs text-emerald-800 bg-emerald-50 p-3 rounded-xl border border-emerald-200 font-semibold"
         >
-          {message}
+          {localizeMessage(message)}
         </p>
       )}
       {currentPreview && (
         <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-              Assignment preview
+              {tr('common.assignment_preview')}
             </h4>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#071A2B] text-white">
-              {currentPreview.assignmentCount} shifts
+              {tr('common.value_shifts', { value1: currentPreview.assignmentCount })}
             </span>
           </div>
           <div className="p-3 bg-white rounded-xl border border-slate-200/60 shadow-xs space-y-1.5 text-xs">
             <p className="font-semibold text-slate-800">
               {currentPreview.targetName}:{' '}
               <span className="font-normal text-slate-500">
-                {currentPreview.members.length} worker(s) across {currentPreview.dates.length}{' '}
-                day(s)
+                {tr('schedule_assignment_form.value_worker_s_across_value_day_s', {
+                  value1: currentPreview.members.length,
+                  value2: currentPreview.dates.length,
+                })}
               </span>
             </p>
             <p className="text-[11px] text-slate-500 truncate">
-              Members: {currentPreview.members.map((member) => member.workerName).join(', ')}
+              {tr('common.members_value', {
+                value1: currentPreview.members.map((member) => member.workerName).join(', '),
+              })}
             </p>
             <div className="max-h-24 overflow-auto text-[11px] text-slate-400 font-mono">
-              Dates: {currentPreview.dates.join(', ')}
+              {tr('common.dates_value', { value1: currentPreview.dates.join(', ') })}
             </div>
           </div>
           {currentPreview.conflicts.length ? (
             <div className="p-3 bg-red-50 border border-red-200/80 rounded-xl space-y-1.5 text-xs">
               <p role="alert" className="font-bold text-red-700 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                Conflicts found. Nothing will be overwritten.
+                {tr('schedule_assignment_form.conflicts_found_nothing_will_be_overwritten')}
               </p>
               <ul className="max-h-32 overflow-auto text-[11px] text-red-600 font-mono space-y-0.5">
                 {currentPreview.conflicts.map((item) => (
@@ -660,7 +700,7 @@ export function ScheduleAssignmentForm({
           ) : (
             <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-50 border border-emerald-200/80 p-2.5 rounded-xl">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Ready to schedule · No conflicts found</span>
+              <span>{tr('schedule_assignment_form.ready_to_schedule_no_conflicts_found')}</span>
             </div>
           )}
           <button
@@ -668,7 +708,7 @@ export function ScheduleAssignmentForm({
             disabled={save.isPending || currentPreview.conflicts.length > 0}
             onClick={() => save.mutate()}
           >
-            <span>Confirm assignments</span>
+            <span>{tr('common.confirm_assignments')}</span>
             <span
               aria-hidden="true"
               className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]"
@@ -679,16 +719,18 @@ export function ScheduleAssignmentForm({
         </div>
       )}
       <div className="space-y-3 border-t border-slate-200 pt-4">
-        <h4 className="text-sm font-bold">Assignment batches</h4>
-        {batches.isPending && <p role="status">Loading batches…</p>}
+        <h4 className="text-sm font-bold">{tr('common.assignment_batches')}</h4>
+        {batches.isPending && <p role="status">{tr('common.loading_batches')}</p>}
         {batches.error && (
           <p role="alert">
-            {batches.error.message}{' '}
-            <button onClick={() => void batches.refetch()}>Retry batches</button>
+            {localizedError(batches.error.message)}{' '}
+            <button onClick={() => void batches.refetch()}>{tr('common.retry_batches')}</button>
           </p>
         )}
         {batches.data?.items.length === 0 && (
-          <p className="text-xs text-slate-500">No team or bulk assignments yet.</p>
+          <p className="text-xs text-slate-500">
+            {tr('schedule_assignment_form.no_team_or_bulk_assignments_yet')}
+          </p>
         )}
         {batches.data?.items.map((batch) => (
           <BatchEditor
@@ -704,13 +746,13 @@ export function ScheduleAssignmentForm({
         {(batches.data?.total ?? 0) > 10 && (
           <div className="flex gap-2">
             <button disabled={!batchPage} onClick={() => setBatchPage(batchPage - 1)}>
-              Previous batches
+              {tr('common.previous_batches')}
             </button>
             <button
               disabled={(batchPage + 1) * 10 >= (batches.data?.total ?? 0)}
               onClick={() => setBatchPage(batchPage + 1)}
             >
-              Next batches
+              {tr('common.next_batches')}
             </button>
           </div>
         )}
@@ -730,6 +772,8 @@ function BatchEditor({
   onChange: (input: ChangeScheduleAssignmentCommand) => Promise<ScheduleAssignmentChangeResponse>;
   onSaved: () => Promise<unknown>;
 }) {
+  useTranslation();
+
   const [open, setOpen] = useState(false);
   const [actionValue, setAction] = useState<ChangeScheduleAssignmentCommand['action']>('CANCEL');
   const [scope, setScope] = useState<ChangeScheduleAssignmentCommand['scope']>('DAY');
@@ -759,8 +803,15 @@ function BatchEditor({
     onSuccess: async (result) => {
       setSavedMessage(
         result.changedCount !== undefined
-          ? `${result.changedCount} schedule(s) ${actionValue === 'CANCEL' ? 'cancelled' : 'updated'}. ${result.skippedCount ?? 0} started or attendance-protected schedule(s) skipped.`
-          : 'Schedule change saved.',
+          ? tr(
+              'schedule_assignment_form.value_schedule_s_value_value_started_or_attendance_protected_schedule_s_skipped',
+              {
+                value1: result.changedCount,
+                value2: actionValue === 'CANCEL' ? tr('actions.cancelled') : tr('actions.updated'),
+                value3: result.skippedCount ?? 0,
+              },
+            )
+          : tr('common.schedule_change_saved'),
       );
       setOpen(false);
       setReason('');
@@ -771,8 +822,11 @@ function BatchEditor({
   return (
     <article className="space-y-2 rounded-lg border border-slate-200 p-3">
       <p className="text-xs font-bold">
-        Original assignment: {batch.targetName} · {batch.members.length} worker(s) ·{' '}
-        {batch.dates.length} day(s)
+        {tr('schedule_assignment_form.original_assignment_value_value_worker_s_value_day_s', {
+          value1: batch.targetName,
+          value2: batch.members.length,
+          value3: batch.dates.length,
+        })}
       </p>
       <p className="text-xs text-slate-500">
         {batch.dates[0]} – {batch.dates.at(-1)}
@@ -782,7 +836,7 @@ function BatchEditor({
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        Edit or cancel schedules
+        {tr('schedule_assignment_form.edit_or_cancel_schedules')}
       </button>
       {open && (
         <form
@@ -793,31 +847,35 @@ function BatchEditor({
           }}
         >
           <label className="block text-xs">
-            Action
+            {tr('common.action')}
             <select
               className={field}
               value={actionValue}
               onChange={(e) => setAction(e.target.value as typeof actionValue)}
             >
-              <option value="CANCEL">Cancel schedules</option>
-              <option value="CHANGE_SHIFT">Change shift</option>
+              <option value="CANCEL">{tr('common.cancel_schedules')}</option>
+              <option value="CHANGE_SHIFT">{tr('common.change_shift')}</option>
             </select>
           </label>
           <label className="block text-xs">
-            Apply change to
+            {tr('common.apply_change_to')}
             <select
               className={field}
               value={scope}
               onChange={(e) => setScope(e.target.value as typeof scope)}
             >
-              <option value="DAY">This day only</option>
-              <option value="FROM_DATE">From this date onward</option>
-              <option value="UNSTARTED">All unstarted schedules in this batch</option>
+              <option value="DAY">{tr('common.this_day_only')}</option>
+              <option value="FROM_DATE">
+                {tr('schedule_assignment_form.from_this_date_onward')}
+              </option>
+              <option value="UNSTARTED">
+                {tr('schedule_assignment_form.all_unstarted_schedules_in_this_batch')}
+              </option>
             </select>
           </label>
           {scope !== 'UNSTARTED' && (
             <label className="block text-xs">
-              Change date
+              {tr('common.change_date')}
               <input
                 required
                 className={field}
@@ -828,9 +886,9 @@ function BatchEditor({
             </label>
           )}
           <label className="block text-xs">
-            Affected workers
+            {tr('common.affected_workers')}
             <select className={field} value={worker} onChange={(e) => setWorker(e.target.value)}>
-              <option value="">All assigned members</option>
+              <option value="">{tr('common.all_assigned_members')}</option>
               {batch.members.map((member) => (
                 <option key={member.workerId} value={member.workerId}>
                   {member.workerName}
@@ -840,14 +898,14 @@ function BatchEditor({
           </label>
           {actionValue === 'CHANGE_SHIFT' && (
             <label className="block text-xs">
-              Replacement shift
+              {tr('common.replacement_shift')}
               <select
                 required
                 className={field}
                 value={shift}
                 onChange={(e) => setShift(e.target.value)}
               >
-                <option value="">Select shift</option>
+                <option value="">{tr('common.select_shift')}</option>
                 {shifts.map((shift) => (
                   <option key={shift.id} value={shift.id}>
                     {shift.name}
@@ -857,7 +915,7 @@ function BatchEditor({
             </label>
           )}
           <label className="block text-xs">
-            Change reason
+            {tr('common.change_reason')}
             <input
               required
               maxLength={1000}
@@ -868,17 +926,21 @@ function BatchEditor({
           </label>
           <p className="text-xs text-slate-500">
             {scope === 'UNSTARTED'
-              ? 'Apply once to all unstarted schedules in this batch. Started shifts and days with attendance are skipped. Linked leave, overtime or shift requests must be resolved first.'
-              : 'Started shifts and days with attendance are protected. Historical attendance is retained.'}
+              ? tr(
+                  'schedule_assignment_form.apply_once_to_all_unstarted_schedules_in_this_batch_started_shifts_and_days_with_a',
+                )
+              : tr(
+                  'schedule_assignment_form.started_shifts_and_days_with_attendance_are_protected_historical_attendance_is_ret',
+                )}
           </p>
           <button className={action} disabled={mutation.isPending || !reason.trim()} type="submit">
-            Confirm schedule change
+            {tr('common.confirm_schedule_change')}
           </button>
         </form>
       )}
       {mutation.error && (
         <p role="alert" className="text-xs text-red-700">
-          {mutation.error.message}
+          {localizedError(mutation.error.message)}
         </p>
       )}
       {mutation.isSuccess && (

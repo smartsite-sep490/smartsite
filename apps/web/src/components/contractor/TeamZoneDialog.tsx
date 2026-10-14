@@ -1,3 +1,7 @@
+import { localizedError } from '../../i18n/messages';
+import { uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -21,6 +25,8 @@ export function TeamZoneDialog({
   teamName: string;
   onClose: () => void;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]),
     cache = useQueryClient();
   const key = ['team-zones', apiUrl, userId, siteId, contractorId, teamId];
@@ -42,7 +48,7 @@ export function TeamZoneDialog({
     return `${parts.find((p) => p.type === 'year')!.value}-${parts.find((p) => p.type === 'month')!.value}-${parts.find((p) => p.type === 'day')!.value}`;
   };
   const display = (instant: string) =>
-    new Date(instant).toLocaleDateString('en-GB', { timeZone: timezone });
+    new Date(instant).toLocaleDateString(uiLocale(), { timeZone: timezone });
   const current = data.data?.permissions.find((p) => !p.revokedAt);
   const permissionId = permissionChoice || current?.contractorZonePermissionId || '';
   const start = startChoice || (current ? day(current.validFrom) : '');
@@ -77,27 +83,36 @@ export function TeamZoneDialog({
     <Dialog
       open
       onClose={onClose}
-      title={`${current ? 'Edit' : 'Assign'} Zone · ${teamName}`}
+      title={tr('team_zone_dialog.value_zone_value', {
+        value1: current ? tr('common.edit') : tr('common.assign_8ece89'),
+        value2: teamName,
+      })}
       maxWidth="xl"
     >
       <div className="max-h-[65vh] overflow-y-auto space-y-4">
         <p className="text-sm text-slate-500">
-          Choose a Zone granted to your contractor. Dates are inclusive; permission remains within
-          the contractor grant. Timezone: {timezone}. Members still need approved Site/Zone access.
+          {tr(
+            'team_zone_dialog.choose_a_zone_granted_to_your_contractor_dates_are_inclusive_permission_remains_wi',
+            { value1: timezone },
+          )}
         </p>
         {data.isPending ? (
-          <p role="status">Loading team Zones…</p>
+          <p role="status">{tr('common.loading_team_zones')}</p>
         ) : data.isError ? (
           <div role="alert">
-            Team Zones unavailable. {data.error.message}{' '}
+            {tr('common.team_zones_unavailable')} {localizedError(data.error.message)}{' '}
             <button type="button" onClick={() => void data.refetch()}>
-              Retry
+              {tr('common.retry')}
             </button>
           </div>
         ) : (
           <>
             {!data.data.availableZones.length ? (
-              <p>No available Zones. Ask your Site Manager to assign a Zone to your contractor.</p>
+              <p>
+                {tr(
+                  'team_zone_dialog.no_available_zones_ask_your_site_manager_to_assign_a_zone_to_your_contractor',
+                )}
+              </p>
             ) : (
               <form
                 className="space-y-4"
@@ -107,7 +122,7 @@ export function TeamZoneDialog({
                 }}
               >
                 <label className="grid gap-2 text-sm font-semibold">
-                  Granted Zone
+                  {tr('common.granted_zone')}
                   <select
                     required
                     value={permissionId}
@@ -121,7 +136,7 @@ export function TeamZoneDialog({
                     }}
                     className="rounded-xl border border-slate-200 p-2"
                   >
-                    <option value="">Select Zone</option>
+                    <option value="">{tr('common.select_zone')}</option>
                     {data.data.availableZones.map((p) => (
                       <option key={p.permissionId} value={p.permissionId}>
                         {p.name} · {display(p.validFrom)} –{' '}
@@ -131,7 +146,7 @@ export function TeamZoneDialog({
                   </select>
                 </label>
                 <SmartDatePicker
-                  label="Start date"
+                  label={tr('common.start_date')}
                   value={start}
                   onChange={setStart}
                   disablePast={false}
@@ -144,7 +159,7 @@ export function TeamZoneDialog({
                   fieldRequired
                 />
                 <SmartDatePicker
-                  label="End date"
+                  label={tr('common.end_date')}
                   value={end}
                   onChange={setEnd}
                   disablePast={false}
@@ -161,14 +176,20 @@ export function TeamZoneDialog({
                   disabled={grant.isPending || !permissionId || !start || !end || end < start}
                   className="rounded-xl bg-[#071A2B] px-4 py-2 text-white disabled:opacity-40"
                 >
-                  {grant.isPending ? 'Saving…' : current ? 'Save Zone Changes' : 'Assign Team Zone'}
+                  {grant.isPending
+                    ? tr('common.saving')
+                    : current
+                      ? tr('common.save_zone_changes')
+                      : tr('common.assign_team_zone')}
                 </button>
               </form>
             )}
-            {grant.isError && <p role="alert">{grant.error.message}</p>}
-            {grant.isSuccess && <p role="status">Team Zone saved.</p>}
-            <h3 className="font-bold">Assigned team Zones</h3>
-            {!data.data.permissions.length && <p>This team has no Zone assignments.</p>}
+            {grant.isError && <p role="alert">{localizedError(grant.error.message)}</p>}
+            {grant.isSuccess && <p role="status">{tr('common.team_zone_saved')}</p>}
+            <h3 className="font-bold">{tr('common.assigned_team_zones')}</h3>
+            {!data.data.permissions.length && (
+              <p>{tr('team_zone_dialog.this_team_has_no_zone_assignments')}</p>
+            )}
             {data.data.permissions.map((p) => (
               <div key={p.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
                 <p className="font-semibold">{p.name}</p>
@@ -176,10 +197,10 @@ export function TeamZoneDialog({
                   {display(p.validFrom)} –{' '}
                   {display(new Date(+new Date(p.validUntil) - 1).toISOString())} ·{' '}
                   {p.revokedAt
-                    ? 'Revoked'
+                    ? tr('common.revoked')
                     : p.effective
-                      ? 'Active'
-                      : 'Inactive / outside effective period'}
+                      ? tr('common.active')
+                      : tr('team_zone_dialog.inactive_outside_effective_period')}
                 </p>
               </div>
             ))}

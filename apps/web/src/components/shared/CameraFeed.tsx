@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { IconPlay, IconPause, IconVolume, IconMaximize, IconGrid } from '../icons';
 
@@ -13,9 +15,11 @@ export function CameraFeed({
   cameraId,
   zoneName,
   imageUrl,
-  timestamp = 'LIVE - 10:42:16',
+  timestamp = tr('common.live_10_42_16'),
   children,
 }: CameraFeedProps) {
+  useTranslation();
+
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
 
@@ -26,7 +30,7 @@ export function CameraFeed({
         <div className="absolute inset-0">
           <img
             src={imageUrl}
-            alt={`Live feed from ${cameraId}`}
+            alt={tr('camera_feed.live_feed_from_value', { value1: cameraId })}
             className="w-full h-full object-cover opacity-90 mix-blend-lighten"
           />
 
@@ -59,8 +63,8 @@ export function CameraFeed({
               type="button"
               onClick={() => setIsPlaying(!isPlaying)}
               className="group p-2 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
-              title={isPlaying ? 'Pause' : 'Play'}
-              aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
+              title={isPlaying ? tr('common.pause') : tr('common.play')}
+              aria-label={isPlaying ? tr('common.pause_playback') : tr('common.resume_playback')}
             >
               {isPlaying ? (
                 <IconPause className="w-4 h-4 group-active:scale-90 transition-transform" />
@@ -72,8 +76,8 @@ export function CameraFeed({
               type="button"
               onClick={() => setIsMuted(!isMuted)}
               className="group p-2 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
-              title="Sound"
-              aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
+              title={tr('common.sound')}
+              aria-label={isMuted ? tr('common.unmute_audio') : tr('common.mute_audio')}
             >
               <IconVolume className="w-4 h-4 group-active:scale-90 transition-transform" />
             </button>
@@ -84,8 +88,8 @@ export function CameraFeed({
               type="button"
               disabled
               className="p-2 rounded-md text-white/40 cursor-not-allowed"
-              title="Multi-camera grid view is currently unavailable"
-              aria-label="Grid view unavailable"
+              title={tr('ppe_monitoring_view.multi_camera_grid_view_is_currently_unavailable')}
+              aria-label={tr('common.grid_view_unavailable')}
             >
               <IconGrid className="w-4 h-4" />
             </button>
@@ -93,8 +97,8 @@ export function CameraFeed({
               type="button"
               disabled
               className="p-2 rounded-md text-white/40 cursor-not-allowed"
-              title="Fullscreen view is currently unavailable"
-              aria-label="Fullscreen view unavailable"
+              title={tr('camera_feed.fullscreen_view_is_currently_unavailable')}
+              aria-label={tr('common.fullscreen_view_unavailable')}
             >
               <IconMaximize className="w-4 h-4" />
             </button>

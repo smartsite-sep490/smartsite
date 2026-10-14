@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { IconCamera, IconHardHat, IconShield } from '../icons';
 import { PpeMonitoringView } from '../ppe/PpeMonitoringView';
@@ -14,6 +16,8 @@ export function CameraMonitoringView({
   activeSubTab: controlledTab,
   onSubTabChange,
 }: CameraMonitoringViewProps) {
+  useTranslation();
+
   const [internalTab, setInternalTab] = useState<CameraSubTab>('ppe');
   const activeTab = controlledTab ?? internalTab;
 
@@ -36,13 +40,17 @@ export function CameraMonitoringView({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-[#111111]">Camera Monitoring</h1>
+                <h1 className="text-xl font-bold text-[#111111]">
+                  {tr('common.camera_monitoring')}
+                </h1>
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]">
-                  Vision Workspace
+                  {tr('common.vision_workspace')}
                 </span>
               </div>
               <p className="text-xs text-[#6B6B6B] mt-0.5">
-                Real-time computer vision stream analysis for safety compliance & perimeter security
+                {tr(
+                  'camera_monitoring_view.real_time_computer_vision_stream_analysis_for_safety_compliance_perimeter_security',
+                )}
               </p>
             </div>
           </div>
@@ -62,7 +70,7 @@ export function CameraMonitoringView({
             <IconHardHat
               className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-[#2F3437]' : 'text-[#6B6B6B]'}`}
             />
-            <span>PPE Monitoring</span>
+            <span>{tr('common.ppe_monitoring')}</span>
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 activeTab === 'ppe'
@@ -70,7 +78,7 @@ export function CameraMonitoringView({
                   : 'bg-[#EAEAEA] text-[#6B6B6B]'
               }`}
             >
-              MF04
+              {tr('common.mf04')}
             </span>
           </button>
 
@@ -86,7 +94,7 @@ export function CameraMonitoringView({
             <IconShield
               className={`w-4 h-4 ${activeTab === 'zones' ? 'text-[#2F3437]' : 'text-[#6B6B6B]'}`}
             />
-            <span>Restricted Zones</span>
+            <span>{tr('common.restricted_zones')}</span>
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 activeTab === 'zones'

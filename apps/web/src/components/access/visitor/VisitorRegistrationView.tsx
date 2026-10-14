@@ -1,3 +1,8 @@
+import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -32,6 +37,8 @@ export function VisitorRegistrationView({
   apiUrl: string;
   onBack: () => void;
 }) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const [reference, setReference] = useState(readReference);
   const [siteId, setSiteId] = useState('');
@@ -104,26 +111,28 @@ export function VisitorRegistrationView({
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50/50 to-slate-100 py-8 px-4 sm:px-6 lg:px-8">
       {/* Top Header Bar */}
-      <div className="mx-auto max-w-3xl mb-6 flex items-center justify-between">
+      <div className="mx-auto max-w-3xl mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FF7A1A] text-white font-black text-sm">
             S
           </div>
           <span className="font-bold text-slate-900 tracking-tight">
-            Smart<span className="text-[#FF7A1A]">Site</span>
+            Smart
+            <span className="text-[#FF7A1A]">Site</span>
           </span>
           <span className="text-slate-300">|</span>
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Visitor Portal
+            {tr('common.visitor_portal')}
           </span>
         </div>
 
+        <LanguageSwitcher />
         <button
           type="button"
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 underline transition-colors"
         >
-          <span>Staff / Security / Site Manager Login</span>
+          <span>{tr('visitor_registration_view.staff_security_site_manager_login')}</span>
         </button>
       </div>
 
@@ -132,14 +141,15 @@ export function VisitorRegistrationView({
         <div className="space-y-2 border-b border-slate-100 pb-6">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#FF7A1A] border border-orange-100">
             <IconKey className="h-3.5 w-3.5" />
-            Temporary Access Pass
+            {tr('common.temporary_access_pass')}
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
-            Visitor Site Registration
+            {tr('common.visitor_site_registration')}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            One representative for an individual or entire party. Requests are routed to the Site
-            Manager of the selected site for clearance.
+            {tr(
+              'visitor_registration_view.one_representative_for_an_individual_or_entire_party_requests_are_routed_to_the_si',
+            )}
           </p>
         </div>
 
@@ -152,7 +162,7 @@ export function VisitorRegistrationView({
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Save Tracking Link
+                  {tr('common.save_tracking_link')}
                 </span>
                 {message && (
                   <span
@@ -160,16 +170,18 @@ export function VisitorRegistrationView({
                     className="text-xs font-semibold text-emerald-700 flex items-center gap-1"
                   >
                     <IconCheck className="h-3.5 w-3.5" />
-                    {message}
+                    {localizeMessage(message)}
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500">
-                Save this link to check approval status and access your QR pass on mobile.
+                {tr(
+                  'visitor_registration_view.save_this_link_to_check_approval_status_and_access_your_qr_pass_on_mobile',
+                )}
               </p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
-                  aria-label="Visitor Pass Tracking Link"
+                  aria-label={tr('visitor_registration_view.visitor_pass_tracking_link')}
                   readOnly
                   value={shareUrl}
                   className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-mono text-xs text-slate-800 focus:outline-none"
@@ -179,8 +191,10 @@ export function VisitorRegistrationView({
                   onClick={() => {
                     void navigator.clipboard
                       .writeText(shareUrl)
-                      .then(() => setMessage('Copied to clipboard.'))
-                      .catch(() => setMessage('Select and copy the URL above.'));
+                      .then(() => setMessage(tr('common.copied_to_clipboard')))
+                      .catch(() =>
+                        setMessage(tr('visitor_registration_view.select_and_copy_the_url_above')),
+                      );
                   }}
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition-all shadow-xs"
                 >
@@ -197,7 +211,7 @@ export function VisitorRegistrationView({
                       d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                     />
                   </svg>
-                  <span>Copy Tracking Link</span>
+                  <span>{tr('common.copy_tracking_link')}</span>
                 </button>
               </div>
             </div>
@@ -209,7 +223,7 @@ export function VisitorRegistrationView({
                 className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500"
               >
                 <IconLoader className="h-4 w-4" />
-                <span>Checking approval status…</span>
+                <span>{tr('common.checking_approval_status')}</span>
               </div>
             )}
 
@@ -219,7 +233,7 @@ export function VisitorRegistrationView({
                 className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-                <span>{pass.error.message}</span>
+                <span>{localizedError(pass.error.message)}</span>
               </div>
             )}
 
@@ -230,10 +244,13 @@ export function VisitorRegistrationView({
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
                     <div>
                       <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                        {pass.data.visit.visitorName} · {pass.data.visit.groupSize} visitors
+                        {tr('visitor_registration_view.value_value_visitors', {
+                          value1: pass.data.visit.visitorName,
+                          value2: pass.data.visit.groupSize,
+                        })}
                       </h2>
                       <p className="mt-1 text-xs text-slate-500">
-                        Site:{' '}
+                        {tr('common.site')}{' '}
                         <span className="font-semibold text-slate-800">
                           {sites.data?.items.find((s) => s.id === pass.data?.visit.siteId)?.name ??
                             pass.data.visit.siteId}
@@ -262,12 +279,14 @@ export function VisitorRegistrationView({
                           }`}
                         />
                         <span>
-                          Status:{' '}
-                          {pass.data.visit.status === 'PENDING'
-                            ? 'Pending Site Manager Approval'
-                            : pass.data.visit.status === 'APPROVED'
-                              ? 'Approved'
-                              : pass.data.visit.status}
+                          {tr('common.status_value', {
+                            value1:
+                              pass.data.visit.status === 'PENDING'
+                                ? tr('visitor_registration_view.pending_site_manager_approval')
+                                : pass.data.visit.status === 'APPROVED'
+                                  ? tr('common.approved')
+                                  : pass.data.visit.status,
+                          })}
                         </span>
                       </span>
                     </div>
@@ -276,34 +295,38 @@ export function VisitorRegistrationView({
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
                     <div className="rounded-xl bg-slate-50 p-3 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Target Area & Host Contact
+                        {tr('visitor_registration_view.target_area_host_contact')}
                       </span>
                       <p className="text-slate-800 font-semibold">
-                        Area: {pass.data.visit.targetArea} · Host: {pass.data.visit.hostName}
+                        {tr('visitor_registration_view.area_value_host_value', {
+                          value1: pass.data.visit.targetArea,
+                          value2: pass.data.visit.hostName,
+                        })}
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-3 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Authorized Schedule
+                        {tr('common.authorized_schedule')}
                       </span>
                       <p className="font-mono text-slate-800">
-                        {new Date(pass.data.visit.validFrom).toLocaleString()} –{' '}
-                        {new Date(pass.data.visit.validUntil).toLocaleString()}
+                        {new Date(pass.data.visit.validFrom).toLocaleString(uiLocale())} –{' '}
+                        {new Date(pass.data.visit.validUntil).toLocaleString(uiLocale())}
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2 space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Entry / Exit Headcount
+                        {tr('visitor_registration_view.entry_exit_headcount')}
                       </span>
                       <p className="font-medium text-slate-800">
-                        In: {pass.data.visit.enteredCount} · Out: {pass.data.visit.exitedCount} ·
-                        On-site:{' '}
+                        {tr('common.in_76d6aa')} {pass.data.visit.enteredCount}{' '}
+                        {tr('common.out_331e30')} {pass.data.visit.exitedCount}{' '}
+                        {tr('common.on_site_babffe')}{' '}
                         <span className="font-bold text-[#FF7A1A]">
                           {pass.data.visit.enteredCount - pass.data.visit.exitedCount}
                         </span>{' '}
-                        visitors in site
+                        {tr('common.visitors_in_site')}
                       </p>
                     </div>
                   </div>
@@ -316,7 +339,7 @@ export function VisitorRegistrationView({
                   ) : (
                     pass.data.visit.status === 'APPROVED' && (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-500">
-                        Visit pass has concluded or expired.
+                        {tr('visitor_registration_view.visit_pass_has_concluded_or_expired')}
                       </div>
                     )
                   )}
@@ -333,7 +356,7 @@ export function VisitorRegistrationView({
                 onClick={() => void pass.refetch()}
               >
                 <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
-                <span>Check Status / Refresh QR</span>
+                <span>{tr('visitor_registration_view.check_status_refresh_qr')}</span>
               </button>
 
               <button
@@ -346,7 +369,7 @@ export function VisitorRegistrationView({
                   window.history.replaceState(null, '', window.location.pathname);
                 }}
               >
-                <span>Register New Visit</span>
+                <span>{tr('common.register_new_visit')}</span>
               </button>
             </div>
           </div>
@@ -359,19 +382,19 @@ export function VisitorRegistrationView({
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconBuilding2 className="h-3.5 w-3.5" />
-                1. Site & Designated Gate
+                {tr('visitor_registration_view.1_site_designated_gate')}
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Registration Site
+                  {tr('common.registration_site')}
                   <select
                     required
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                     value={siteId || sites.data?.items[0]?.id || ''}
                     onChange={(e) => setSiteId(e.target.value)}
                   >
-                    <option value="">Select site</option>
+                    <option value="">{tr('common.select_site')}</option>
                     {sites.data?.items.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -383,7 +406,7 @@ export function VisitorRegistrationView({
                 {sites.isPending && (
                   <div className="flex items-center gap-2 text-xs text-slate-500 sm:col-span-2">
                     <IconLoader className="h-3.5 w-3.5" />
-                    <span>Loading sites…</span>
+                    <span>{tr('common.loading_sites')}</span>
                   </div>
                 )}
 
@@ -392,19 +415,19 @@ export function VisitorRegistrationView({
                     role="alert"
                     className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 sm:col-span-2"
                   >
-                    <span>{sites.error.message}</span>
+                    <span>{localizedError(sites.error.message)}</span>
                     <button
                       type="button"
                       className="underline font-bold"
                       onClick={() => void sites.refetch()}
                     >
-                      Retry
+                      {tr('common.retry')}
                     </button>
                   </div>
                 )}
 
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Designated Gate
+                  {tr('common.designated_gate')}
                   <select
                     name="gateId"
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
@@ -423,38 +446,38 @@ export function VisitorRegistrationView({
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconUser className="h-3.5 w-3.5" />
-                2. Representative Information
+                {tr('common.2_representative_information')}
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Representative Full Name
+                  {tr('common.representative_full_name')}
                   <input
                     name="visitorName"
                     required
                     maxLength={255}
-                    placeholder="Full name of party representative"
+                    placeholder={tr('visitor_registration_view.full_name_of_party_representative')}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Company / Organization
+                  {tr('common.company_organization')}
                   <input
                     name="company"
                     maxLength={255}
-                    placeholder="Company or agency name (optional)"
+                    placeholder={tr('visitor_registration_view.company_or_agency_name_optional')}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Contact Phone / Email
+                  {tr('visitor_registration_view.contact_phone_email')}
                   <input
                     name="contact"
                     required
                     maxLength={255}
-                    placeholder="Phone number or email address"
+                    placeholder={tr('visitor_registration_view.phone_number_or_email_address')}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
@@ -465,40 +488,46 @@ export function VisitorRegistrationView({
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconShield className="h-3.5 w-3.5" />
-                3. Host & Visit Purpose
+                {tr('visitor_registration_view.3_host_visit_purpose')}
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Host Contact at Site
+                  {tr('visitor_registration_view.host_contact_at_site')}
                   <input
                     name="hostName"
                     required
                     maxLength={255}
-                    placeholder="Name of site host / supervising engineer"
+                    placeholder={tr(
+                      'visitor_registration_view.name_of_site_host_supervising_engineer',
+                    )}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Target Visit Area
+                  {tr('common.target_visit_area')}
                   <input
                     name="targetArea"
                     required
                     maxLength={255}
-                    placeholder="e.g. Building A, Admin Block, Foundation..."
+                    placeholder={tr(
+                      'visitor_registration_view.e_g_building_a_admin_block_foundation',
+                    )}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
 
                 <fieldset className="sm:col-span-2 space-y-2">
-                  <legend className="text-xs font-bold">Requested Zones</legend>
-                  {zones.isPending && selectedSiteId && <p role="status">Loading Site zones…</p>}
+                  <legend className="text-xs font-bold">{tr('common.requested_zones')}</legend>
+                  {zones.isPending && selectedSiteId && (
+                    <p role="status">{tr('common.loading_site_zones')}</p>
+                  )}
                   {zones.error && (
                     <p role="alert">
-                      Unable to load Site zones.{' '}
+                      {tr('visitor_registration_view.unable_to_load_site_zones')}{' '}
                       <button type="button" onClick={() => void zones.refetch()}>
-                        Retry
+                        {tr('common.retry')}
                       </button>
                     </p>
                   )}
@@ -509,16 +538,20 @@ export function VisitorRegistrationView({
                     </label>
                   ))}
                   <p className="text-xs text-slate-500">
-                    Requested access takes effect only after Site Manager approval.
+                    {tr(
+                      'visitor_registration_view.requested_access_takes_effect_only_after_site_manager_approval',
+                    )}
                   </p>
                 </fieldset>
                 <label className="sm:col-span-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Visit Purpose
+                  {tr('common.visit_purpose')}
                   <input
                     name="purpose"
                     required
                     maxLength={1000}
-                    placeholder="Reason for site entry or official inspection..."
+                    placeholder={tr(
+                      'visitor_registration_view.reason_for_site_entry_or_official_inspection',
+                    )}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
                   />
                 </label>
@@ -529,12 +562,12 @@ export function VisitorRegistrationView({
             <div className="space-y-3 pt-3 border-t border-slate-100">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#FF7A1A] flex items-center gap-1.5">
                 <IconCalendar className="h-3.5 w-3.5" />
-                4. Schedule & Headcount
+                {tr('visitor_registration_view.4_schedule_headcount')}
               </h3>
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Total Visitors (Headcount)
+                  {tr('common.total_visitors_headcount')}
                   <input
                     name="groupSize"
                     type="number"
@@ -547,7 +580,7 @@ export function VisitorRegistrationView({
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Valid From
+                  {tr('common.valid_from_f38b0e')}
                   <input
                     name="validFrom"
                     type="datetime-local"
@@ -558,7 +591,7 @@ export function VisitorRegistrationView({
                 </label>
 
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Valid Until
+                  {tr('common.valid_until_b252ed')}
                   <input
                     name="validUntil"
                     type="datetime-local"
@@ -577,7 +610,7 @@ export function VisitorRegistrationView({
                 className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-                <span>{register.error.message}</span>
+                <span>{localizedError(register.error.message)}</span>
               </div>
             )}
 
@@ -591,12 +624,12 @@ export function VisitorRegistrationView({
                 {register.isPending ? (
                   <>
                     <IconLoader className="h-4 w-4" />
-                    <span>Submitting…</span>
+                    <span>{tr('common.submitting')}</span>
                   </>
                 ) : (
                   <>
                     <IconCheck className="h-4 w-4" />
-                    <span>Submit for Site Manager Approval</span>
+                    <span>{tr('visitor_registration_view.submit_for_site_manager_approval')}</span>
                   </>
                 )}
               </button>

@@ -1,3 +1,7 @@
+import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { uiLocale } from '../../../i18n';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
@@ -59,24 +63,33 @@ const gates = SITE_GATES;
 
 function getGateFaceMessage(reasonCode: string): string {
   const map: Record<string, string> = {
-    FACE_QUALITY_ACCEPTED: 'Face quality accepted.',
-    FACE_NOT_FOUND: 'No face detected. Position face within viewfinder.',
-    FACE_MULTIPLE_FOUND: 'Multiple faces detected. Only one person at a time.',
-    FACE_TOO_SMALL: 'Face is too far. Step closer to the camera.',
-    FACE_TOO_CLOSE: 'Face is too close. Step back slightly.',
-    FACE_CLIPPED: 'Face clipped at edge. Center your face.',
-    FACE_NOT_CENTERED: 'Face off-center. Align with center frame.',
-    FACE_TOO_DARK: 'Lighting too dim. Face toward a light source.',
-    FACE_TOO_BRIGHT: 'Lighting too bright. Avoid strong direct glare.',
-    FACE_BLURRY: 'Image blurry. Hold still during scan.',
-    FACE_HEAD_TILTED: 'Head is tilted. Keep head upright.',
-    FACE_TURN_TOO_FAR: 'Turned too far. Face the camera directly.',
-    FACE_POSE_FRONT_REQUIRED: 'Look directly at the camera.',
-    FACE_NOT_CLEAR: 'Face not clearly visible. Hold still and remove coverings.',
-    FACE_LANDMARKS_UNAVAILABLE: 'Facial landmarks not clear. Remove coverings and pose directly.',
-    FACE_IMAGE_INVALID: 'Image unreadable. Hold still for retake.',
+    FACE_QUALITY_ACCEPTED: tr('common.face_quality_accepted'),
+    FACE_NOT_FOUND: tr('security_gate_desk_view.no_face_detected_position_face_within_viewfinder'),
+    FACE_MULTIPLE_FOUND: tr(
+      'security_gate_desk_view.multiple_faces_detected_only_one_person_at_a_time',
+    ),
+    FACE_TOO_SMALL: tr('worker_enrollment_view.face_is_too_far_step_closer_to_the_camera'),
+    FACE_TOO_CLOSE: tr('security_gate_desk_view.face_is_too_close_step_back_slightly'),
+    FACE_CLIPPED: tr('security_gate_desk_view.face_clipped_at_edge_center_your_face'),
+    FACE_NOT_CENTERED: tr('security_gate_desk_view.face_off_center_align_with_center_frame'),
+    FACE_TOO_DARK: tr('worker_enrollment_view.lighting_too_dim_face_toward_a_light_source'),
+    FACE_TOO_BRIGHT: tr('security_gate_desk_view.lighting_too_bright_avoid_strong_direct_glare'),
+    FACE_BLURRY: tr('security_gate_desk_view.image_blurry_hold_still_during_scan'),
+    FACE_HEAD_TILTED: tr('security_gate_desk_view.head_is_tilted_keep_head_upright'),
+    FACE_TURN_TOO_FAR: tr('security_gate_desk_view.turned_too_far_face_the_camera_directly'),
+    FACE_POSE_FRONT_REQUIRED: tr('security_gate_desk_view.look_directly_at_the_camera'),
+    FACE_NOT_CLEAR: tr(
+      'security_gate_desk_view.face_not_clearly_visible_hold_still_and_remove_coverings',
+    ),
+    FACE_LANDMARKS_UNAVAILABLE: tr(
+      'security_gate_desk_view.facial_landmarks_not_clear_remove_coverings_and_pose_directly',
+    ),
+    FACE_IMAGE_INVALID: tr('security_gate_desk_view.image_unreadable_hold_still_for_retake'),
   };
-  return map[reasonCode] ?? 'Face quality insufficient. Adjust position and hold still.';
+  return (
+    map[reasonCode] ??
+    tr('security_gate_desk_view.face_quality_insufficient_adjust_position_and_hold_still')
+  );
 }
 
 export function SecurityGateDeskView({
@@ -88,6 +101,8 @@ export function SecurityGateDeskView({
   sites,
   onSelectSite,
 }: SecurityGateDeskViewProps) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   // Gate selection & direction
@@ -112,7 +127,7 @@ export function SecurityGateDeskView({
   );
   const scanBusy = useRef(false);
   const presenceSession = useRef('');
-  const [scanMessage, setScanMessage] = useState('Awaiting face…');
+  const [scanMessage, setScanMessage] = useState(tr('common.awaiting_face'));
 
   // In-memory frame preview (never stored in localStorage/sessionStorage)
   const capturedPreviewUrlRef = useRef<string | null>(null);
@@ -191,7 +206,7 @@ export function SecurityGateDeskView({
   const passageKey = useRef<{ attemptId: string; idempotencyKey: string } | null>(null);
   const passage = useMutation({
     mutationFn: () => {
-      if (!currentAttempt) throw new Error('Verify the worker first.');
+      if (!currentAttempt) throw new Error(tr('security_gate_desk_view.verify_the_worker_first'));
       if (passageKey.current?.attemptId !== currentAttempt.id)
         passageKey.current = { attemptId: currentAttempt.id, idempotencyKey: crypto.randomUUID() };
       return client.confirmGatePassage(token!, selectedSiteId, currentAttempt.id, {
@@ -278,8 +293,8 @@ export function SecurityGateDeskView({
   });
   const recentEvents: GateDeskEventRecord[] = (accessLogs.data?.items ?? []).map((log) => ({
     id: log.id,
-    timestamp: new Date(log.createdAt).toLocaleString(),
-    workerName: log.workerName ?? 'Unknown',
+    timestamp: new Date(log.createdAt).toLocaleString(uiLocale()),
+    workerName: log.workerName ?? tr('common.unknown'),
     workerExternalId: log.workerExternalId ?? '—',
     contractorName: log.contractorName ?? '—',
     direction: log.direction,
@@ -359,7 +374,7 @@ export function SecurityGateDeskView({
     if (scanBusy.current || !token || !selectedSiteId) return;
     const video = videoRef.current;
     if (!video || !cameraActive) {
-      setCameraError('Webcam feed is not running.');
+      setCameraError(tr('security_gate_desk_view.webcam_feed_is_not_running'));
       return;
     }
 
@@ -385,16 +400,22 @@ export function SecurityGateDeskView({
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       if (presence.state !== 'NEW_FACE' && presence.state !== 'AI_UNAVAILABLE') {
         if (presence.state === 'SAME_FACE')
-          setScanMessage('Worker already scanned. Awaiting next worker or step out of frame.');
+          setScanMessage(
+            tr(
+              'security_gate_desk_view.worker_already_scanned_awaiting_next_worker_or_step_out_of_frame',
+            ),
+          );
         else if (presence.state === 'WAITING') {
-          setScanMessage('Face detected. Hold still to verify…');
+          setScanMessage(tr('security_gate_desk_view.face_detected_hold_still_to_verify'));
         } else {
           setScanMessage(getGateFaceMessage(presence.reasonCode));
         }
         return;
       }
       setIsScanning(true);
-      setScanMessage('New face detected. Verifying gate access clearance…');
+      setScanMessage(
+        tr('security_gate_desk_view.new_face_detected_verifying_gate_access_clearance'),
+      );
       updateCapturedPreview(frameBlob);
 
       try {
@@ -509,7 +530,7 @@ export function SecurityGateDeskView({
     scanGeneration.current += 1;
     presenceSession.current = '';
     setIsScanning(false);
-    setScanMessage('Awaiting face…');
+    setScanMessage(tr('common.awaiting_face'));
     updateCapturedPreview(null);
     setLastDecision(null);
     setCurrentAttempt(null);
@@ -566,7 +587,7 @@ export function SecurityGateDeskView({
                 htmlFor="gate-site-select"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                Active Site
+                {tr('common.active_site')}
               </label>
               <select
                 id="gate-site-select"
@@ -597,7 +618,7 @@ export function SecurityGateDeskView({
                 htmlFor="gate-selector"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                Access Gate
+                {tr('common.access_gate')}
               </label>
               <select
                 id="gate-selector"
@@ -622,7 +643,7 @@ export function SecurityGateDeskView({
         {/* Direction Switcher (IN vs OUT) */}
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Direction:
+            {tr('common.direction')}
           </span>
           <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/90 p-1 shadow-2xs">
             <button
@@ -639,7 +660,7 @@ export function SecurityGateDeskView({
               }`}
             >
               <span className="h-2 w-2 rounded-full bg-emerald-300" />
-              <span>IN (CHECK IN)</span>
+              <span>{tr('common.in_check_in')}</span>
             </button>
             <button
               type="button"
@@ -655,7 +676,7 @@ export function SecurityGateDeskView({
               }`}
             >
               <span className="h-2 w-2 rounded-full bg-blue-300" />
-              <span>OUT (CHECK OUT)</span>
+              <span>{tr('common.out_check_out')}</span>
             </button>
           </div>
         </div>
@@ -673,7 +694,7 @@ export function SecurityGateDeskView({
                 htmlFor="gate-camera-device-select"
                 className="text-xs font-bold uppercase tracking-wider text-slate-700"
               >
-                Camera Device:
+                {tr('common.camera_device')}
               </label>
               <select
                 id="gate-camera-device-select"
@@ -688,10 +709,10 @@ export function SecurityGateDeskView({
                   void startCamera();
                 }}
               >
-                <option value="">Default Camera</option>
+                <option value="">{tr('common.default_camera')}</option>
                 {cameraDevices.map((device, index) => (
                   <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Camera ${index + 1}`}
+                    {device.label || tr('common.camera_value', { value1: index + 1 })}
                   </option>
                 ))}
               </select>
@@ -704,7 +725,7 @@ export function SecurityGateDeskView({
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${cameraActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}
                 />
-                {cameraActive ? 'LIVE · 720p' : 'OFFLINE'}
+                {cameraActive ? tr('common.live_720p') : 'OFFLINE'}
               </span>
             </div>
           </div>
@@ -728,10 +749,12 @@ export function SecurityGateDeskView({
             {!cameraActive && (
               <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-slate-400">
                 <IconCamera className="mb-3 h-12 w-12 text-slate-600" />
-                <p className="text-sm font-semibold text-slate-300">Webcam Not Active</p>
+                <p className="text-sm font-semibold text-slate-300">
+                  {tr('common.webcam_not_active')}
+                </p>
                 {cameraError && (
                   <div className="mt-2 max-w-sm space-y-2">
-                    <p className="text-xs text-red-400">{cameraError}</p>
+                    <p className="text-xs text-red-400">{localizeMessage(cameraError)}</p>
                     {lastDecision?.authorization !== 'DENIED' && (
                       <button
                         type="button"
@@ -747,14 +770,14 @@ export function SecurityGateDeskView({
                         <IconKey className="h-3.5 w-3.5" />
                         <span>
                           {fallbackMutation.isPending
-                            ? 'Opening Session…'
-                            : 'Camera Error · Use Fallback QR'}
+                            ? tr('common.opening_session')
+                            : tr('security_gate_desk_view.camera_error_use_fallback_qr')}
                         </span>
                       </button>
                     )}
                     {fallbackMutation.error && (
                       <p role="alert" className="text-red-400">
-                        {fallbackMutation.error.message}
+                        {localizedError(fallbackMutation.error.message)}
                       </p>
                     )}
                   </div>
@@ -768,7 +791,7 @@ export function SecurityGateDeskView({
                   }}
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-xs font-bold text-white hover:bg-orange-700 shadow-sm transition-all"
                 >
-                  <IconRefresh className="h-4 w-4" /> Restart Camera
+                  <IconRefresh className="h-4 w-4" /> {tr('common.restart_camera')}
                 </button>
               </div>
             )}
@@ -778,7 +801,9 @@ export function SecurityGateDeskView({
               <div className="pointer-events-none absolute top-3.5 left-3.5 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-md border border-white/10">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>
-                  GATE: {gates.find((g) => g.id === selectedGateId)?.name ?? selectedGateId}
+                  {tr('common.gate_value', {
+                    value1: gates.find((g) => g.id === selectedGateId)?.name ?? selectedGateId,
+                  })}
                 </span>
               </div>
             )}
@@ -789,7 +814,7 @@ export function SecurityGateDeskView({
                 <div className="h-64 w-52 rounded-4xl border-2 border-dashed border-white/50 shadow-inner">
                   <div className="flex h-full items-end justify-center pb-2">
                     <span className="rounded-full bg-black/70 px-3 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur-xs border border-white/10">
-                      Align face within frame
+                      {tr('security_gate_desk_view.align_face_within_frame')}
                     </span>
                   </div>
                 </div>
@@ -801,11 +826,11 @@ export function SecurityGateDeskView({
               <div className="absolute top-3.5 right-3.5 z-10 rounded-xl border border-white/20 bg-black/80 p-1.5 backdrop-blur-md shadow-lg">
                 <img
                   src={capturedPreviewUrl}
-                  alt="Captured scan frame in memory"
+                  alt={tr('security_gate_desk_view.captured_scan_frame_in_memory')}
                   className="h-16 w-20 rounded-lg object-cover"
                 />
                 <span className="mt-1 block text-center text-[9px] font-bold tracking-wider text-slate-300 uppercase">
-                  Last Frame
+                  {tr('common.last_frame')}
                 </span>
               </div>
             )}
@@ -814,7 +839,7 @@ export function SecurityGateDeskView({
             {isScanning && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#F66B17] border-t-transparent" />
-                <p className="mt-3 text-sm font-bold text-white">Analyzing face…</p>
+                <p className="mt-3 text-sm font-bold text-white">{tr('common.analyzing_face')}</p>
               </div>
             )}
           </div>
@@ -834,13 +859,14 @@ export function SecurityGateDeskView({
                 onClick={handleResetScan}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 shadow-2xs transition-all"
               >
-                Clear / New Scan
+                {tr('security_gate_desk_view.clear_new_scan')}
               </button>
             )}
           </div>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            * Automatic face detection active; repeated scans for the same person or empty frames
-            are suppressed. Click Clear to reset session.
+            {tr(
+              'security_gate_desk_view.automatic_face_detection_active_repeated_scans_for_the_same_person_or_empty_frames',
+            )}
           </p>
         </div>
 
@@ -852,7 +878,7 @@ export function SecurityGateDeskView({
             {/* Header: Outcome Badge */}
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
               <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">
-                Last Scan Result
+                {tr('common.last_scan_result')}
               </span>
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${uiState.badgeClass}`}
@@ -885,8 +911,9 @@ export function SecurityGateDeskView({
             {candidateWorker && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
                 <p className="mb-3 text-[11px] font-semibold text-slate-500">
-                  Last identified worker — retained until another worker is identified. Not
-                  clearance for the person currently in camera.
+                  {tr(
+                    'security_gate_desk_view.last_identified_worker_retained_until_another_worker_is_identified_not_clearance_f',
+                  )}
                 </p>
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-slate-800 to-slate-700 text-sm font-bold text-white shadow-xs">
@@ -896,9 +923,11 @@ export function SecurityGateDeskView({
                     <h4 className="truncate font-bold text-slate-900">
                       {candidateWorker.displayName}
                     </h4>
-                    <p className="text-xs text-slate-600">Account: {candidateWorker.username}</p>
+                    <p className="text-xs text-slate-600">
+                      {tr('common.account_value', { value1: candidateWorker.username })}
+                    </p>
                     <p className="text-xs text-slate-500">
-                      ID:{' '}
+                      {tr('common.id')}{' '}
                       <span className="font-mono font-bold text-slate-700">
                         {candidateWorker.externalId}
                       </span>{' '}
@@ -907,7 +936,7 @@ export function SecurityGateDeskView({
                   </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
-                  <span className="text-slate-500 font-medium">Site Assignment:</span>
+                  <span className="text-slate-500 font-medium">{tr('common.site_assignment')}</span>
                   <span className="font-bold text-emerald-700">
                     {candidateWorker.assignmentStatus}
                   </span>
@@ -920,14 +949,16 @@ export function SecurityGateDeskView({
               {uiState.canRecordInOut && (
                 <div>
                   <p className="mb-2 text-xs font-medium text-emerald-700">
-                    {direction} clearance recorded in database.
+                    {tr('security_gate_desk_view.value_clearance_recorded_in_database', {
+                      value1: direction,
+                    })}
                   </p>
                   <button
                     type="button"
                     onClick={handleRecordGateEvent}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-all"
                   >
-                    <IconCheck className="h-4 w-4" /> Scan Next Worker
+                    <IconCheck className="h-4 w-4" /> {tr('common.scan_next_worker')}
                   </button>
                 </div>
               )}
@@ -944,7 +975,7 @@ export function SecurityGateDeskView({
                   }}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-100/90 py-3 text-xs font-bold text-amber-950 hover:bg-amber-200 transition-all"
                 >
-                  <span>⚡ Launch Dynamic QR Fallback</span>
+                  <span>{tr('security_gate_desk_view.launch_dynamic_qr_fallback')}</span>
                 </button>
               )}
 
@@ -955,7 +986,7 @@ export function SecurityGateDeskView({
                   disabled
                   className="w-full rounded-xl bg-blue-700 py-2.5 text-xs font-bold text-white hover:bg-blue-800"
                 >
-                  Manual clearance is not implemented
+                  {tr('security_gate_desk_view.manual_clearance_is_not_implemented')}
                 </button>
               )}
 
@@ -966,7 +997,7 @@ export function SecurityGateDeskView({
                   onClick={handleScanFace}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-xs font-bold text-white hover:bg-red-700 transition-all"
                 >
-                  <IconRefresh className="h-4 w-4" /> Retry Scan
+                  <IconRefresh className="h-4 w-4" /> {tr('common.retry_scan')}
                 </button>
               )}
             </div>
@@ -976,20 +1007,23 @@ export function SecurityGateDeskView({
           <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs text-xs text-slate-600 space-y-2">
             <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-100 pb-2">
               <IconShield className="h-4 w-4 text-[#F66B17]" />
-              <h5>Security Officer Operating Guidelines (SOP)</h5>
+              <h5>{tr('security_gate_desk_view.security_officer_operating_guidelines_sop')}</h5>
             </div>
             <ul className="list-disc space-y-1 pl-4 text-slate-600">
               <li>
-                Webcam match provides preliminary identity verification; backend authorizes access
-                based on zone permissions.
+                {tr(
+                  'security_gate_desk_view.webcam_match_provides_preliminary_identity_verification_backend_authorizes_access',
+                )}
               </li>
               <li>
-                When clearance is DENIED (red), do not admit worker or initiate QR fallback without
-                supervisor authorization.
+                {tr(
+                  'security_gate_desk_view.when_clearance_is_denied_red_do_not_admit_worker_or_initiate_qr_fallback_without_s',
+                )}
               </li>
               <li>
-                For inconclusive face matches, give the worker a fallback session ID and request
-                their dynamic pass from “My QR Pass”.
+                {tr(
+                  'security_gate_desk_view.for_inconclusive_face_matches_give_the_worker_a_fallback_session_id_and_request_th',
+                )}
               </li>
             </ul>
           </div>
@@ -1003,11 +1037,13 @@ export function SecurityGateDeskView({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <IconKey className="h-5 w-5 text-[#F66B17]" />
-                <h3 className="font-bold text-slate-900">Worker Dynamic QR Fallback</h3>
+                <h3 className="font-bold text-slate-900">
+                  {tr('security_gate_desk_view.worker_dynamic_qr_fallback')}
+                </h3>
               </div>
               <button
                 type="button"
-                aria-label="Close QR fallback modal"
+                aria-label={tr('security_gate_desk_view.close_qr_fallback_modal')}
                 onClick={() => setQrModalOpen(false)}
                 className="rounded-lg p-1 text-slate-400 hover:text-slate-600"
               >
@@ -1021,22 +1057,24 @@ export function SecurityGateDeskView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
                       <IconKey className="h-3.5 w-3.5 text-blue-600" />
-                      Worker Fallback Session
+                      {tr('common.worker_fallback_session')}
                     </span>
                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800">
-                      Direction: {fallback.direction}
+                      {tr('common.direction_value', { value1: fallback.direction })}
                     </span>
                   </div>
                   <p className="text-xs text-blue-800">
-                    Provide this session code to the worker to enter in “My QR Pass”:
+                    {tr(
+                      'security_gate_desk_view.provide_this_session_code_to_the_worker_to_enter_in_my_qr_pass',
+                    )}
                   </p>
                   <div className="rounded-xl border border-blue-200 bg-white p-2.5 font-mono text-xs text-blue-950 font-bold break-all select-all shadow-inner">
                     {fallback.id}
                   </div>
                   <p className="text-[11px] text-blue-700">
-                    Expires:{' '}
+                    {tr('common.expires')}{' '}
                     <span className="font-semibold">
-                      {new Date(fallback.expiresAt).toLocaleTimeString()}
+                      {new Date(fallback.expiresAt).toLocaleTimeString(uiLocale())}
                     </span>
                   </p>
                 </div>
@@ -1048,7 +1086,7 @@ export function SecurityGateDeskView({
                   className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700"
                 >
                   <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-                  <span>{qrVerification.error.message}</span>
+                  <span>{localizedError(qrVerification.error.message)}</span>
                 </div>
               )}
               {qrResultMessage && (
@@ -1061,9 +1099,9 @@ export function SecurityGateDeskView({
                 </div>
               )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
-                ⚠️ Dynamic QR is a fallback method when facial recognition is inconclusive. Security
-                officers must physically verify worker credentials and contractor badge before
-                granting entry.
+                {tr(
+                  'security_gate_desk_view.dynamic_qr_is_a_fallback_method_when_facial_recognition_is_inconclusive_security_o',
+                )}
               </div>
 
               <div>
@@ -1071,12 +1109,12 @@ export function SecurityGateDeskView({
                   htmlFor="qr-code-input"
                   className="block text-xs font-bold uppercase tracking-wider text-slate-700"
                 >
-                  Worker QR Code or Token
+                  {tr('security_gate_desk_view.worker_qr_code_or_token')}
                 </label>
                 <input
                   id="qr-code-input"
                   type="text"
-                  placeholder="SSQ-..."
+                  placeholder={tr('common.ssq')}
                   disabled={qrProcessing}
                   value={qrCodeInput}
                   onChange={(e) => setQrCodeInput(e.target.value)}
@@ -1090,7 +1128,7 @@ export function SecurityGateDeskView({
                   onClick={() => setQrModalOpen(false)}
                   className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
                 >
-                  Cancel
+                  {tr('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -1098,7 +1136,9 @@ export function SecurityGateDeskView({
                   onClick={handleConfirmQrFallback}
                   className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-xs"
                 >
-                  {qrProcessing ? 'Verifying…' : `Confirm ${direction} (QR)`}
+                  {qrProcessing
+                    ? tr('common.verifying')
+                    : tr('common.confirm_value_qr', { value1: direction })}
                 </button>
               </div>
             </div>
@@ -1108,9 +1148,9 @@ export function SecurityGateDeskView({
 
       {canManualVerify && (
         <section className="space-y-3 rounded-xl border bg-white p-5">
-          <h3 className="font-semibold">Security manual verification</h3>
+          <h3 className="font-semibold">{tr('common.security_manual_verification')}</h3>
           <label className="block text-xs">
-            Worker profile
+            {tr('common.worker_profile')}
             <select
               value={manualWorkerId}
               onChange={(e) => {
@@ -1119,7 +1159,7 @@ export function SecurityGateDeskView({
               }}
               className="mt-1 block w-full rounded border p-2"
             >
-              <option value="">Select Worker</option>
+              <option value="">{tr('common.select_worker')}</option>
               {manualWorkers.data?.items.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.displayName} · {w.externalId}
@@ -1128,7 +1168,7 @@ export function SecurityGateDeskView({
             </select>
           </label>
           <label className="block text-xs">
-            Verification reason
+            {tr('common.verification_reason')}
             <input
               className="mt-1 block w-full rounded border p-2"
               value={reviewNote}
@@ -1142,7 +1182,7 @@ export function SecurityGateDeskView({
               checked={manualIdentityConfirmed}
               onChange={(e) => setManualIdentityConfirmed(e.target.checked)}
             />{' '}
-            I physically verified this Worker&apos;s identity.
+            {tr('security_gate_desk_view.i_physically_verified_this_worker_apos_s_identity')}
           </label>
           <button
             className="rounded border px-4 py-2 text-sm disabled:opacity-50"
@@ -1151,15 +1191,17 @@ export function SecurityGateDeskView({
             }
             onClick={() => manual.mutate()}
           >
-            Verify Worker manually
+            {tr('common.verify_worker_manually')}
           </button>
-          {manualWorkers.error && <p role="alert">{manualWorkers.error.message}</p>}
-          {manual.error && <p role="alert">{manual.error.message}</p>}
+          {manualWorkers.error && <p role="alert">{localizedError(manualWorkers.error.message)}</p>}
+          {manual.error && <p role="alert">{localizedError(manual.error.message)}</p>}
           {manual.data?.status === 'DENIED' && (
             <p role="alert">
               {manual.data.scheduleStatus === 'NO_SCHEDULE'
                 ? getSafeReasonMessage('NO_SCHEDULE')
-                : 'Worker identity verified. Site entry permission was denied.'}
+                : tr(
+                    'security_gate_desk_view.worker_identity_verified_site_entry_permission_was_denied',
+                  )}
             </p>
           )}
         </section>
@@ -1169,14 +1211,21 @@ export function SecurityGateDeskView({
         candidateWorker && (
           <section className="rounded-xl border bg-white p-5 space-y-3">
             <p className="font-semibold">
-              Verification recorded. Confirm the actual passage for {candidateWorker.displayName}.
+              {tr(
+                'security_gate_desk_view.verification_recorded_confirm_the_actual_passage_for_value',
+                { value1: candidateWorker.displayName },
+              )}
             </p>
             <p className="text-xs">
-              Schedule: {currentAttempt.scheduleStatus}. Temporary passage does not create
-              attendance.
+              {tr(
+                'security_gate_desk_view.schedule_value_temporary_passage_does_not_create_attendance',
+                { value1: currentAttempt.scheduleStatus },
+              )}
             </p>
             <label className="block text-xs">
-              Security review reason (required outside a shift or for a separate passage)
+              {tr(
+                'security_gate_desk_view.security_review_reason_required_outside_a_shift_or_for_a_separate_passage',
+              )}
               <input
                 className="mt-1 block w-full rounded border p-2"
                 value={reviewNote}
@@ -1200,13 +1249,13 @@ export function SecurityGateDeskView({
               }
               onClick={() => passage.mutate()}
             >
-              Confirm actual passage
+              {tr('common.confirm_actual_passage')}
             </button>
             {(repeatNotice ||
               (passage.error instanceof ApiError &&
                 passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED')) && (
               <div className="space-y-2">
-                <p role="status">{repeatNotice || passage.error?.message}</p>
+                <p role="status">{localizedError(repeatNotice || passage.error?.message)}</p>
                 {canManualVerify && (
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -1214,30 +1263,36 @@ export function SecurityGateDeskView({
                       checked={separatePassage}
                       onChange={(event) => setSeparatePassage(event.target.checked)}
                     />
-                    This is a separate physical passage, not a repeated scan
+                    {tr(
+                      'security_gate_desk_view.this_is_a_separate_physical_passage_not_a_repeated_scan',
+                    )}
                   </label>
                 )}
                 <button type="button" onClick={handleResetScan}>
-                  Dismiss repeated scan
+                  {tr('common.dismiss_repeated_scan')}
                 </button>
               </div>
             )}
-            {passage.error && <p role="alert">{passage.error.message}</p>}
+            {passage.error && <p role="alert">{localizedError(passage.error.message)}</p>}
             {direction === 'IN' &&
               currentAttempt.scheduleStatus !== 'SCHEDULED' &&
               !canManualVerify && (
                 <p className="text-sm text-amber-700">
-                  Security must verify and confirm entry outside a scheduled shift.
+                  {tr(
+                    'security_gate_desk_view.security_must_verify_and_confirm_entry_outside_a_scheduled_shift',
+                  )}
                 </p>
               )}
           </section>
         )}
-      {passage.isSuccess && <p role="status">Actual passage recorded.</p>}
+      {passage.isSuccess && <p role="status">{tr('common.actual_passage_recorded')}</p>}
       {confirmedEvent && canManualVerify && (
         <section className="space-y-3 rounded-xl border bg-white p-5">
           <p className="text-sm">
-            This {confirmedEvent.direction === 'IN' ? 'entry' : 'exit'} is recorded. Attendance has
-            been updated automatically.
+            {tr(
+              'security_gate_desk_view.this_value_is_recorded_attendance_has_been_updated_automatically',
+              { value1: confirmedEvent.direction === 'IN' ? 'entry' : 'exit' },
+            )}
           </p>
         </section>
       )}
@@ -1249,14 +1304,18 @@ export function SecurityGateDeskView({
               <IconClock className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900">Gate Access & Clearance Audit Trail</h3>
+              <h3 className="font-bold text-slate-900">
+                {tr('security_gate_desk_view.gate_access_clearance_audit_trail')}
+              </h3>
               <p className="text-[11px] text-slate-500">
-                Verification decisions; actual passage requires confirmation
+                {tr(
+                  'security_gate_desk_view.verification_decisions_actual_passage_requires_confirmation',
+                )}
               </p>
             </div>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            {recentEvents.length} entries recorded
+            {tr('common.value_entries_recorded', { value1: recentEvents.length })}
           </span>
         </div>
 
@@ -1264,13 +1323,13 @@ export function SecurityGateDeskView({
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-3.5 py-3">Timestamp</th>
-                <th className="px-3.5 py-3">Worker</th>
-                <th className="px-3.5 py-3">Worker ID</th>
-                <th className="px-3.5 py-3">Direction</th>
-                <th className="px-3.5 py-3">Method</th>
-                <th className="px-3.5 py-3">Clearance</th>
-                <th className="px-3.5 py-3">Gate</th>
+                <th className="px-3.5 py-3">{tr('common.timestamp')}</th>
+                <th className="px-3.5 py-3">{tr('common.worker')}</th>
+                <th className="px-3.5 py-3">{tr('common.worker_id')}</th>
+                <th className="px-3.5 py-3">{tr('common.direction_9c8a95')}</th>
+                <th className="px-3.5 py-3">{tr('common.method')}</th>
+                <th className="px-3.5 py-3">{tr('common.clearance')}</th>
+                <th className="px-3.5 py-3">{tr('common.gate')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1279,7 +1338,7 @@ export function SecurityGateDeskView({
                   <td colSpan={7} className="p-6 text-center text-xs text-slate-500">
                     <div className="flex items-center justify-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-                      <span>Loading gate access logs…</span>
+                      <span>{tr('security_gate_desk_view.loading_gate_access_logs')}</span>
                     </div>
                   </td>
                 </tr>
@@ -1291,13 +1350,13 @@ export function SecurityGateDeskView({
                     role="alert"
                     className="p-4 text-center text-xs text-red-700 bg-red-50"
                   >
-                    Unable to load access logs.{' '}
+                    {tr('security_gate_desk_view.unable_to_load_access_logs')}{' '}
                     <button
                       type="button"
                       onClick={() => void accessLogs.refetch()}
                       className="font-bold underline hover:text-red-900"
                     >
-                      Retry
+                      {tr('common.retry')}
                     </button>
                   </td>
                 </tr>
@@ -1305,7 +1364,7 @@ export function SecurityGateDeskView({
               {!accessLogs.isPending && !accessLogs.isError && recentEvents.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-xs text-slate-400">
-                    No gate events recorded for this session yet.
+                    {tr('security_gate_desk_view.no_gate_events_recorded_for_this_session_yet')}
                   </td>
                 </tr>
               )}
@@ -1339,12 +1398,12 @@ export function SecurityGateDeskView({
                       {evt.outcome === 'ALLOWED' ? (
                         <>
                           <IconCheck className="h-3.5 w-3.5" />
-                          <span>ALLOWED</span>
+                          <span>{tr('common.allowed')}</span>
                         </>
                       ) : (
                         <>
                           <IconX className="h-3.5 w-3.5" />
-                          <span>DENIED</span>
+                          <span>{tr('common.denied')}</span>
                         </>
                       )}
                     </span>

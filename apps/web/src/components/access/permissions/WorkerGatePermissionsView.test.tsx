@@ -40,7 +40,7 @@ describe('worker gate permissions', () => {
     expect(html).toContain('Gate 1');
     expect(html).toContain('Gate 2');
     expect(html).toContain('Gate 3');
-    expect(html).toContain('Không chọn cửa nào');
+    expect(html).toContain('Selecting no gates denies the worker access to all gates.');
     expect(html).not.toContain('Restricted Zone');
     queryClient.clear();
   });

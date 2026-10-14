@@ -82,3 +82,7 @@ docs/local/
 .neon
 .agents/
 skills-lock.json
+
+# Browser QA artifacts
+apps/web/test-results/
+apps/web/playwright-report/

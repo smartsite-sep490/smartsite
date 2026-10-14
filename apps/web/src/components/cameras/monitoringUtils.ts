@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import type { VideoTestDetection } from './videoTestFixture';
 
 export interface Size2D {
@@ -36,8 +37,11 @@ export function buildAiWebSocketUrl(
   if (!trimmedToken) {
     return {
       url: null,
-      error:
-        'Realtime AI WebSocket requires an authentication token. Set VITE_AI_BACKEND_SERVICE_TOKEN or VITE_AI_WS_TOKEN.',
+      get error() {
+        return tr(
+          'monitoring_utils.realtime_ai_websocket_requires_an_authentication_token_set_vite_ai_backend_service',
+        );
+      },
     };
   }
 
@@ -237,8 +241,9 @@ export function exportZoneBrowserDraft(
   cameraExternalId = 'CAM-04',
 ): { filename: string; content: string; label: string } {
   const payload = {
-    _disclaimer:
-      'Browser-local restricted zone draft. This configuration is stored in browser local storage and does not update AI socket detections or backend contracts.',
+    _disclaimer: tr(
+      'monitoring_utils.browser_local_restricted_zone_draft_this_configuration_is_stored_in_browser_local_',
+    ),
     cameraExternalId,
     regionId: 'crane-operation-zone-draft',
     coordinateSpace: 'NORMALIZED_0_1',
@@ -250,7 +255,9 @@ export function exportZoneBrowserDraft(
   return {
     filename: `smartsite-restricted-zone-draft.${camSlug}.json`,
     content: `${JSON.stringify(payload, null, 2)}\n`,
-    label: 'Browser-local draft (not a contract v1 configuration)',
+    get label() {
+      return tr('monitoring_utils.browser_local_draft_not_a_contract_v1_configuration');
+    },
   };
 }
 
@@ -261,7 +268,7 @@ export function exportZoneBrowserDraft(
 export function resolveCameraAndWorkArea(
   cameraExternalId?: string | null,
   regionId?: string | null,
-  defaultCamera = 'Chưa có mã camera',
+  defaultCamera = tr('monitoring_utils.chua_co_ma_camera'),
 ): { camera: string; workArea: string } {
   const camera = (cameraExternalId && cameraExternalId.trim()) || defaultCamera;
 
@@ -269,11 +276,11 @@ export function resolveCameraAndWorkArea(
   if (regionId && regionId.trim()) {
     workArea = `Region ${regionId.trim()}`;
   } else if (camera === 'CAM-07') {
-    workArea = 'Work Area B';
+    workArea = tr('common.work_area_b_ba4a34');
   } else if (camera === 'CAM-04') {
-    workArea = 'Crane Operation Area';
+    workArea = tr('common.crane_operation_area');
   } else {
-    workArea = `Zone (${camera})`;
+    workArea = tr('messages.5897642880d2', { value1: camera });
   }
 
   return { camera, workArea };

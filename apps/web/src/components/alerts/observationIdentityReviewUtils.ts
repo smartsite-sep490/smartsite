@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import {
   ApiError,
   type ObservationIdentityContextResponse,
@@ -36,16 +37,22 @@ const MAX_BLOB_SIZE_BYTES = 1048576; // 1 MiB
  */
 export async function computeViewedEvidenceSha256(blob: Blob): Promise<string> {
   if (blob.size === 0) {
-    throw new Error('Ảnh bằng chứng không có dữ liệu.');
+    throw new Error(tr('observation_identity_review_utils.anh_bang_chung_khong_co_du_lieu'));
   }
 
   if (blob.size > MAX_BLOB_SIZE_BYTES) {
-    throw new Error('Ảnh bằng chứng vượt quá dung lượng cho phép (tối đa 1MB).');
+    throw new Error(
+      tr('observation_identity_review_utils.anh_bang_chung_vuot_qua_dung_luong_cho_phep_toi_a_1mb'),
+    );
   }
 
   const mime = blob.type.toLowerCase();
   if (mime !== 'image/jpeg') {
-    throw new Error('Định dạng ảnh bằng chứng không hợp lệ (yêu cầu định dạng JPEG).');
+    throw new Error(
+      tr(
+        'observation_identity_review_utils.inh_dang_anh_bang_chung_khong_hop_le_yeu_cau_inh_dang_jpeg',
+      ),
+    );
   }
 
   const buffer = await blob.arrayBuffer();
@@ -141,7 +148,9 @@ export function validateReason(reason: string): ReasonValidationResult {
   ) {
     return {
       valid: false,
-      error: 'Reason contains invalid characters.',
+      get error() {
+        return tr('observation_identity_review_utils.reason_contains_invalid_characters');
+      },
       trimmed,
     };
   }
@@ -149,7 +158,11 @@ export function validateReason(reason: string): ReasonValidationResult {
   if (codePoints < 5) {
     return {
       valid: false,
-      error: 'Reason must be at least 5 characters after trimming.',
+      get error() {
+        return tr(
+          'observation_identity_review_utils.reason_must_be_at_least_5_characters_after_trimming',
+        );
+      },
       trimmed,
     };
   }
@@ -157,7 +170,9 @@ export function validateReason(reason: string): ReasonValidationResult {
   if (codePoints > 1000) {
     return {
       valid: false,
-      error: 'Reason must not exceed 1000 characters.',
+      get error() {
+        return tr('observation_identity_review_utils.reason_must_not_exceed_1000_characters');
+      },
       trimmed,
     };
   }
@@ -354,13 +369,19 @@ export function formatIdentityErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const rawMessage = error.message || error.backendError?.message || '';
     if (rawMessage.includes('Observation identity revision is stale')) {
-      return 'Phiên bản xem xét đã thay đổi bởi người khác. Vui lòng làm mới dữ liệu và xem lại.';
+      return tr(
+        'observation_identity_review_utils.phien_ban_xem_xet_a_thay_oi_boi_nguoi_khac_vui_long_lam_moi_du_lieu_va_xem_lai',
+      );
     }
     if (rawMessage.includes('Worker is inactive')) {
-      return 'Nhân viên đã ngừng hoạt động trên công trường. Vui lòng chọn nhân viên khác.';
+      return tr(
+        'observation_identity_review_utils.nhan_vien_a_ngung_hoat_ong_tren_cong_truong_vui_long_chon_nhan_vien_khac',
+      );
     }
     if (error.status === 409 || error.backendError?.code === 'CONFLICT') {
-      return 'Xung đột dữ liệu hoặc phiên bản đã cũ. Vui lòng làm mới và thử lại.';
+      return tr(
+        'observation_identity_review_utils.xung_ot_du_lieu_hoac_phien_ban_a_cu_vui_long_lam_moi_va_thu_lai',
+      );
     }
     if (
       error.status === 403 ||
@@ -368,20 +389,28 @@ export function formatIdentityErrorMessage(error: unknown): string {
       rawMessage.toLowerCase().includes('forbidden') ||
       (error.code as string) === 'forbidden'
     ) {
-      return 'Bạn không có thẩm quyền thực hiện thao tác nhận diện tại công trường này.';
+      return tr(
+        'observation_identity_review_utils.ban_khong_co_tham_quyen_thuc_hien_thao_tac_nhan_dien_tai_cong_truong_nay',
+      );
     }
     if (error.status === 404 || error.backendError?.code === 'NOT_FOUND') {
-      return 'Không tìm thấy đối tượng hoặc bằng chứng được yêu cầu.';
+      return tr(
+        'observation_identity_review_utils.khong_tim_thay_oi_tuong_hoac_bang_chung_uoc_yeu_cau',
+      );
     }
     if (error.status === 503 || error.backendError?.code === 'SERVICE_UNAVAILABLE') {
-      return 'Dịch vụ nhận diện tạm thời không khả dụng. Vui lòng thử lại sau.';
+      return tr(
+        'observation_identity_review_utils.dich_vu_nhan_dien_tam_thoi_khong_kha_dung_vui_long_thu_lai_sau',
+      );
     }
     return rawMessage;
   }
   if (error instanceof Error) {
     return error.message;
   }
-  return 'Đã xảy ra lỗi không xác định trong quá trình xử lý nhận diện.';
+  return tr(
+    'observation_identity_review_utils.a_xay_ra_loi_khong_xac_inh_trong_qua_trinh_xu_ly_nhan_dien',
+  );
 }
 
 /**
@@ -393,19 +422,31 @@ export function formatResolveBlockReason(
   if (!reason) return '';
   switch (reason) {
     case 'FRAME_UNAVAILABLE':
-      return 'Ảnh bằng chứng (full frame) không khả dụng hoặc đã hết hạn trên hệ thống lưu trữ.';
+      return tr(
+        'observation_identity_review_utils.anh_bang_chung_full_frame_khong_kha_dung_hoac_a_het_han_tren_he_thong_luu_tru',
+      );
     case 'EVENT_INCONSISTENT':
-      return 'Dữ liệu sự kiện không nhất quán với bằng chứng gốc.';
+      return tr(
+        'observation_identity_review_utils.du_lieu_su_kien_khong_nhat_quan_voi_bang_chung_goc',
+      );
     case 'SUBJECT_UNAVAILABLE':
-      return 'Đối tượng không khả dụng để xác minh.';
+      return tr('observation_identity_review_utils.oi_tuong_khong_kha_dung_e_xac_minh');
     case 'WORKER_READER_UNAVAILABLE':
-      return 'Hệ thống danh bạ nhân viên tạm thời không khả dụng.';
+      return tr(
+        'observation_identity_review_utils.he_thong_danh_ba_nhan_vien_tam_thoi_khong_kha_dung',
+      );
     case 'REVISION_EXHAUSTED':
-      return 'Đã đạt giới hạn tối đa số lần sửa đổi cho đối tượng này.';
+      return tr(
+        'observation_identity_review_utils.a_at_gioi_han_toi_a_so_lan_sua_oi_cho_oi_tuong_nay',
+      );
     case 'STATE_INCONSISTENT':
-      return 'Trạng thái nhận diện không nhất quán để xác nhận.';
+      return tr(
+        'observation_identity_review_utils.trang_thai_nhan_dien_khong_nhat_quan_e_xac_nhan',
+      );
     default:
-      return 'Không thể xác nhận danh tính đối tượng vào thời điểm này.';
+      return tr(
+        'observation_identity_review_utils.khong_the_xac_nhan_danh_tinh_oi_tuong_vao_thoi_iem_nay',
+      );
   }
 }
 
@@ -416,13 +457,19 @@ export function formatClearBlockReason(reason: ObservationIdentityClearBlockReas
   if (!reason) return '';
   switch (reason) {
     case 'NO_ACTIVE_RESOLUTION':
-      return 'Chưa có quyết định xác minh thủ công nào đang hoạt động để thu hồi.';
+      return tr(
+        'observation_identity_review_utils.chua_co_quyet_inh_xac_minh_thu_cong_nao_ang_hoat_ong_e_thu_hoi',
+      );
     case 'STATE_INCONSISTENT':
-      return 'Trạng thái nhận diện không nhất quán để thu hồi.';
+      return tr('observation_identity_review_utils.trang_thai_nhan_dien_khong_nhat_quan_e_thu_hoi');
     case 'REVISION_EXHAUSTED':
-      return 'Đã đạt giới hạn tối đa số lần sửa đổi cho đối tượng này.';
+      return tr(
+        'observation_identity_review_utils.a_at_gioi_han_toi_a_so_lan_sua_oi_cho_oi_tuong_nay',
+      );
     default:
-      return 'Không thể thu hồi quyết định nhận diện vào thời điểm này.';
+      return tr(
+        'observation_identity_review_utils.khong_the_thu_hoi_quyet_inh_nhan_dien_vao_thoi_iem_nay',
+      );
   }
 }
 
@@ -434,12 +481,12 @@ export function formatTechnicalStatus(
 ): string {
   switch (status) {
     case 'CANDIDATE':
-      return 'Gợi ý AI';
+      return tr('common.goi_y_ai');
     case 'UNKNOWN':
-      return 'Chưa xác định';
+      return tr('common.chua_xac_inh');
     case 'UNAVAILABLE':
-      return 'Không khả dụng';
+      return tr('common.khong_kha_dung');
     case 'CONFLICTED':
-      return 'Xung đột kỹ thuật';
+      return tr('observation_identity_review_utils.xung_ot_ky_thuat');
   }
 }
