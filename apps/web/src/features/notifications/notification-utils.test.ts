@@ -37,9 +37,28 @@ describe('notification-utils', () => {
     expect(
       formatNotificationDisplayMessage({
         event: 'ENTRY_DENIED_NO_SCHEDULE',
-        message: 'You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted.',
+        message:
+          'You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted.',
         workDate: '2026-10-11',
       }),
-    ).toBe('You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted.');
+    ).toBe(
+      'You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted.',
+    );
   });
+});
+
+it('opens a checklist notification in the shared Safety workspace with its Site', () => {
+  expect(
+    notificationHref({
+      id: 'notice',
+      event: 'CHECKLIST_RETURNED',
+      siteId: 'site/a',
+      siteName: 'Synthetic site',
+      title: 'Update checklist',
+      message: 'Add evidence',
+      createdAt: '2026-10-13T01:00:00Z',
+      readAt: null,
+      target: { siteId: 'site/a', checklistId: 'checklist/a', tab: 'checklists' },
+    }),
+  ).toBe('/incidents?siteId=site%2Fa&checklistId=checklist%2Fa&tab=checklists');
 });

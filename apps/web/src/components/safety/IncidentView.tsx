@@ -51,6 +51,7 @@ import {
 export interface IncidentViewProps extends WorkflowProps {
   initialAlertId?: string;
   initialIncidentId?: string;
+  onOpenChecklist?: (id: string) => void;
   initialActionId?: string;
   onSourceConsumed?: () => void;
 }
@@ -468,6 +469,23 @@ export function IncidentView(p: IncidentViewProps) {
                   {current.zoneId && <p>Zone {current.zoneId}</p>}
                 </TechnicalDetails>
               </article>
+              {current.sourceChecklist && (
+                <section className={cardClass}>
+                  <h3 className="font-bold">Checklist finding</h3>
+                  <p className="text-sm">{current.sourceChecklist.description}</p>
+                  <strong className="text-sm">{current.sourceChecklist.itemText}</strong>
+                  <p className="whitespace-pre-wrap text-sm">{current.sourceChecklist.note}</p>
+                  {p.onOpenChecklist && (
+                    <button
+                      className={buttonClass}
+                      onClick={() => p.onOpenChecklist!(current.sourceChecklist!.assignmentId)}
+                    >
+                      View source checklist and evidence
+                    </button>
+                  )}
+                </section>
+              )}
+
               <section className={cardClass}>
                 <h3 className="font-bold">
                   Source alerts{' '}
@@ -475,7 +493,9 @@ export function IncidentView(p: IncidentViewProps) {
                 </h3>
                 {!current.alerts.length && (
                   <p className="text-sm text-[var(--text-secondary)]">
-                    Manual incident; no source alert.
+                    {current.sourceChecklistResultId
+                      ? 'Created from a recorded checklist finding; no linked AI alert.'
+                      : 'Manual incident; no source alert.'}
                   </p>
                 )}
                 {current.alerts.map((alert) => (

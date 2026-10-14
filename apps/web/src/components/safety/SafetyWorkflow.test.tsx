@@ -417,6 +417,10 @@ it('Create-from-alert navigation does not carry a hidden Alert into another Site
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'safety' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password123!' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Alerts' }).hasAttribute('disabled')).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Alerts' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Create incident from alert' }));
   fireEvent.change(screen.getByLabelText('Site'), { target: { value: 'other' } });
   await screen.findByText('No incidents found.');

@@ -1,7 +1,7 @@
 import type { UserNotificationResponse } from '@smartsite/api-client';
 
 export function notificationHref(notification: UserNotificationResponse) {
-  return `${'incidentId' in notification.target ? '/incidents' : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
+  return `${'incidentId' in notification.target || 'checklistId' in notification.target ? '/incidents' : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
 }
 
 export function formatNotificationDisplayMessage(

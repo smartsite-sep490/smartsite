@@ -132,9 +132,9 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
   );
 }
 export function StatusBadge({ value, text: caption }: { value: string; text?: string }) {
-  const tone = ['VERIFIED', 'APPROVED'].includes(value)
+  const tone = ['VERIFIED', 'APPROVED', 'ACCEPTED', 'PASS'].includes(value)
     ? 'bg-[var(--semantic-green-bg)] text-[var(--semantic-green-text)]'
-    : ['REJECTED', 'CONFIRMED', 'CRITICAL', 'HIGH'].includes(value)
+    : ['REJECTED', 'CONFIRMED', 'CRITICAL', 'HIGH', 'FAIL'].includes(value)
       ? 'bg-[var(--semantic-red-bg)] text-[var(--semantic-red-text)]'
       : ['IN_PROGRESS', 'SUBMITTED', 'COMPLETED', 'NEEDS_MORE_EVIDENCE'].includes(value)
         ? 'bg-[var(--semantic-blue-bg)] text-[var(--semantic-blue-text)]'
@@ -405,7 +405,20 @@ export function Audit({ items }: { items: SafetyAuditResponse[] }) {
                         'correct-responsibility': 'Responsibility corrected',
                       } as Record<string, string>
                     )[item.action] ?? label(item.action))
-                  : label(item.action)}
+                  : item.resourceType === 'CHECKLIST'
+                    ? ((
+                        {
+                          create: 'Checklist assigned',
+                          start: 'Checklist started',
+                          submit: 'Checklist reported',
+                          review:
+                            item.changes.decision === 'RETURNED'
+                              ? 'Checklist update requested'
+                              : 'Checklist recorded',
+                          cancel: 'Checklist cancelled',
+                        } as Record<string, string>
+                      )[item.action] ?? label(item.action))
+                    : label(item.action)}
               </strong>
               <time className="text-xs text-[var(--text-secondary)]">{date(item.occurredAt)}</time>
             </div>
