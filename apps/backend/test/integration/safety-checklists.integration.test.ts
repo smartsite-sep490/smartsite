@@ -6,6 +6,15 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
+import { DataSource } from 'typeorm';
+import { AppModule } from '../../src/app.module.js';
+import { configureApplication } from '../../src/configure-app.js';
+import { createLoggerParams } from '../../src/observability/logger.js';
+import { AuthService } from '../../src/modules/auth/auth.service.js';
 import source from '../support/test-data-source.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
@@ -21,7 +30,7 @@ import { SafetyWorkflowService } from '../../src/modules/safety/safety-workflow.
 import { SafetyUploadService } from '../../src/modules/safety/safety-upload.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { StorageService } from '../../src/integrations/storage/storage.service.js';
-import { validateEnvironment } from '../../src/config/environment.js';
+import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { SafetyChecklists1792195200000 } from '../../src/database/migrations/1792195200000-SafetyChecklists.js';
 import {
@@ -339,6 +348,137 @@ test('Safety overview resolves a past scheduled team, persists role checks and k
   );
   await source.getRepository(UserEntity).update(id.safety, { isActive: true });
 });
+
+test('alert work-context enforces Site access and excludes inactive or out-of-interval grants over HTTP', async () => {
+  const at = new Date('2026-10-13T02:00:00Z');
+  const alertId = randomUUID();
+  await source.getRepository(SafetyAlertEntity).save({
+    id: alertId,
+    siteId: id.site,
+    zoneId: id.zone,
+    candidateWorkerId: id.worker,
+    alertType: AlertType.PPE_VIOLATION,
+    candidateSubtype: 'MISSING_HARD_HAT',
+    groupingKey: alertId,
+    status: AlertStatus.PENDING_REVIEW,
+    firstDetectedAt: at,
+    lastDetectedAt: at,
+  });
+  const permission = await source.getRepository(TeamZonePermissionEntity).findOneByOrFail({
+    teamId: id.team,
+  });
+  const contractorPermission = await source
+    .getRepository(ContractorZonePermissionEntity)
+    .findOneByOrFail({ id: permission.contractorZonePermissionId });
+  const participation = await source
+    .getRepository(ContractorSiteParticipationEntity)
+    .findOneByOrFail({ id: contractorPermission.siteContractorId });
+  const config = new ConfigService<BackendEnvironment, true>(
+    validateEnvironment({ NODE_ENV: 'test', LOG_FORMAT: 'json' }),
+  );
+  const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(ConfigService)
+    .useValue(config)
+    .overrideProvider(PARAMS_PROVIDER_TOKEN)
+    .useValue(createLoggerParams(config, { write: () => undefined }))
+    .overrideProvider(getDataSourceToken())
+    .useValue(source)
+    .overrideProvider(DataSource)
+    .useValue(source)
+    .overrideProvider(AuthService)
+    .useValue({
+      authenticate: async (token: string) => ({
+        user: await actor(
+          token === 'synthetic.foreign.token'
+            ? id.foreignSafety
+            : token === 'synthetic.representative.token'
+              ? id.rep
+              : token === 'synthetic.noScope.token'
+                ? id.none
+                : id.safety,
+        ),
+        sessionId: randomUUID(),
+        clientType: 'MOBILE',
+      }),
+    })
+    .compile();
+  const app = module.createNestApplication<NestExpressApplication>({
+    logger: false,
+    bodyParser: false,
+  });
+  await configureApplication(app);
+  await app.listen(0, '127.0.0.1');
+  const baseUrl = await app.getUrl();
+  const path = `${baseUrl}/api/v1/sites/${id.site}/safety-alerts/${alertId}/work-context`;
+  const read = (url = path, token = 'synthetic.safety.token') =>
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  try {
+    assert.equal((await fetch(path)).status, 401);
+    for (const token of [
+      'synthetic.foreign.token',
+      'synthetic.representative.token',
+      'synthetic.noScope.token',
+    ])
+      assert.equal((await read(path, token)).status, 403);
+    assert.equal((await read(path.replace(id.site, id.other))).status, 403);
+    assert.equal((await read(path.replace(alertId, randomUUID()))).status, 404);
+    const response = await read();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    const context = await response.json();
+    assert.equal(context.capturedAt, '2026-10-13T02:00:00.000Z');
+    assert.equal(context.identity, 'UNKNOWN', 'a candidate Worker is not verified identity');
+    assert.deepEqual(context.workers, []);
+    assert.equal(context.zoneName, 'Synthetic Zone');
+    assert.equal(context.cameraName, null);
+    assert.deepEqual(
+      new Set(context.relatedTeams.map((t: { id: string }) => t.id)),
+      new Set([id.team, id.oldTeam]),
+    );
+
+    await source.getRepository(TeamZonePermissionEntity).update(permission.id, { validUntil: at });
+    const expired = await (await read()).json();
+    assert.deepEqual(
+      expired.relatedTeams.map((t: { id: string }) => t.id),
+      [id.oldTeam],
+    );
+    await source.getRepository(TeamZonePermissionEntity).save(permission);
+
+    await source.getRepository(ContractorZonePermissionEntity).update(contractorPermission.id, {
+      revokedAt: new Date('2026-10-13T03:00:00Z'),
+    });
+    const historical = await (await read()).json();
+    assert.deepEqual(
+      new Set(historical.relatedTeams.map((t: { id: string }) => t.id)),
+      new Set([id.team, id.oldTeam]),
+      'later revocation does not erase context that was valid at capture time',
+    );
+    await source.getRepository(ContractorZonePermissionEntity).update(contractorPermission.id, {
+      revokedAt: at,
+    });
+    assert.deepEqual((await (await read()).json()).relatedTeams, []);
+    await source.getRepository(ContractorZonePermissionEntity).save(contractorPermission);
+
+    await source.getRepository(ContractorSiteParticipationEntity).update(participation.id, {
+      validUntil: at,
+    });
+    assert.deepEqual((await (await read()).json()).relatedTeams, []);
+    await source.getRepository(ContractorSiteParticipationEntity).save(participation);
+
+    await source.getRepository(ContractorSiteParticipationEntity).update(participation.id, {
+      isActive: false,
+    });
+    assert.deepEqual((await (await read()).json()).relatedTeams, []);
+  } finally {
+    await source.getRepository(TeamZonePermissionEntity).save(permission);
+    await source.getRepository(ContractorZonePermissionEntity).save(contractorPermission);
+    await source.getRepository(ContractorSiteParticipationEntity).save(participation);
+    await source.getRepository(SafetyAlertEntity).delete(alertId);
+    await app.close();
+    if (!source.isInitialized) await source.initialize();
+  }
+});
+
 test('weekly context normalizes Monday and paginates teams without losing scheduled work windows', async () => {
   const read = Reflect.get(overview, 'week');
   assert.equal(typeof read, 'function', 'weekly query is exported');

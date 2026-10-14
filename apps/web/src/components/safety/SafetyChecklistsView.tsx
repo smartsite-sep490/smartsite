@@ -71,6 +71,7 @@ export function SafetyChecklistsView(
     [previousContext, setPreviousContext] = useState(p.context);
   if (previousContext !== p.context) {
     setPreviousContext(p.context);
+    setEditor(null);
     setSelected('');
     setOffset(0);
     setStatus('');
@@ -79,6 +80,7 @@ export function SafetyChecklistsView(
   }
   if (previousId !== p.initialChecklistId) {
     setPreviousId(p.initialChecklistId);
+    setEditor(null);
     if (p.initialChecklistId) {
       setSelected(p.initialChecklistId);
       setMobileDetail(true);

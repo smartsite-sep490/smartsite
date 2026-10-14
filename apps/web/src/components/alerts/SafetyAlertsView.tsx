@@ -246,7 +246,7 @@ export function SafetyAlertsView({
     setRelatedAlertFilter(undefined);
     setChecklistDraft(undefined);
     setRelatedChecklistFilter(undefined);
-    setRequestedChecklistId('');
+    setRequestedChecklistId(initialChecklistId ?? '');
     setCreatedIncidentId('');
     setRequestedSiteId(initialSiteId ?? '');
     setRequestedAlertId('');
@@ -745,7 +745,15 @@ export function SafetyAlertsView({
       {selectedSiteId && (
         <section hidden={workspaceTab !== 'Checklists'}>
           <SafetyChecklistsView
-            key={'checklists' + sessionScope + selectedSiteId}
+            key={JSON.stringify([
+              sessionScope,
+              selectedSiteId,
+              requestedChecklistId,
+              relatedChecklistFilter?.teamId,
+              relatedChecklistFilter?.fromDate,
+              relatedChecklistFilter?.toDate,
+              relatedChecklistFilter?.timezone,
+            ])}
             client={client}
             apiUrl={apiUrl}
             scope={sessionScope}

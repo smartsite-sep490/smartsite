@@ -196,7 +196,9 @@ export class SafetyOverviewService {
       )) as { zoneName: string | null; cameraName: string | null }[];
       const relatedTeams = alert.zoneId
         ? ((await m.query(
-            `SELECT DISTINCT t.id,t.name,t.description,t.contractor_id AS "contractorId",c.name AS "contractorName",t.is_active AS "isActive",0 AS "workerCount",0 AS "scheduledWorkerCount" FROM team_zone_permission tp JOIN contractor_team t ON t.id=tp.team_id JOIN contractor c ON c.id=t.contractor_id JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id JOIN contractor_site_participation p ON p.id=cp.site_contractor_id WHERE t.site_id=$1 AND p.site_id=$1 AND p.contractor_id=t.contractor_id AND cp.zone_id=$2 AND tp.valid_from<=$3 AND tp.valid_until>$3 AND cp.valid_from<=$3 AND cp.valid_until>$3 AND p.valid_from<=$3 AND (p.valid_until IS NULL OR p.valid_until>$3) AND (tp.revoked_at IS NULL OR tp.revoked_at>$3) AND (cp.revoked_at IS NULL OR cp.revoked_at>$3) ORDER BY t.name,t.id LIMIT 20`,
+            `SELECT DISTINCT t.id,t.name,t.description,t.contractor_id AS "contractorId",c.name AS "contractorName",t.is_active AS "isActive",0 AS "workerCount",0 AS "scheduledWorkerCount"
+             FROM ${safetyTeamZoneContextSql} g JOIN contractor_team t ON t.id=g.team_id JOIN contractor c ON c.id=t.contractor_id
+             WHERE g.site_id=$1 AND g.zone_id=$2 AND g.valid_from<=$3 AND g.valid_until>$3 ORDER BY t.name,t.id LIMIT 20`,
             [siteId, alert.zoneId, alert.firstDetectedAt],
           )) as SafetyAlertWorkContextResponse['relatedTeams'])
         : [];
