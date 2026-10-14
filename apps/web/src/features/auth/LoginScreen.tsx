@@ -243,6 +243,18 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
         {/* --- FORM STATE --- */}
         <div className="login-form-content absolute inset-0 flex flex-col p-10 justify-center">
           <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
+                <img
+                  src="/smartsite-app-icon-white.png"
+                  alt="SmartSite"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <span className="text-2xl font-black tracking-tight text-white">
+                Smart<span className="text-[#F66B17]">Site</span>
+              </span>
+            </div>
             <h1 className="text-3xl font-black text-white tracking-tight mb-2">
               {tr('common.welcome')} <span className="text-[#F66B17]">{tr('common.back')}</span>
             </h1>
