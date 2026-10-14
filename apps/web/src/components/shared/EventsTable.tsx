@@ -1,4 +1,6 @@
+import { localizedLabel } from '../../i18n/labels';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface TableColumn<T> {
   header: string;
@@ -22,6 +24,7 @@ export function EventsTable<T>({
   columns,
   keyExtractor,
 }: EventsTableProps<T>) {
+  useTranslation();
   return (
     <div className="w-full bg-white border border-[#EAEAEA] rounded-lg">
       <div className="p-6 space-y-5">
@@ -58,7 +61,9 @@ export function EventsTable<T>({
                     >
                       {col.render
                         ? col.render(item)
-                        : String((item as Record<string, unknown>)[col.key])}
+                        : ['type', 'status', 'issue', 'result', 'authorization'].includes(col.key)
+                          ? localizedLabel(String((item as Record<string, unknown>)[col.key]))
+                          : String((item as Record<string, unknown>)[col.key])}
                     </td>
                   ))}
                 </tr>
@@ -79,6 +84,7 @@ export function StatusBadge({
   status: string;
   type: 'error' | 'warning' | 'success' | 'info';
 }) {
+  useTranslation();
   const styles = {
     error: 'bg-[#FDEBEC] text-[#9F2F2D] border border-[#EAEAEA]',
     warning: 'bg-[#FBF3DB] text-[#956400] border border-[#EAEAEA]',
@@ -90,7 +96,7 @@ export function StatusBadge({
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase ${styles[type]}`}
     >
-      {status}
+      {localizedLabel(status)}
     </span>
   );
 }

@@ -1,3 +1,6 @@
+import { localizedError } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo, useRef } from 'react';
 import { TeamZoneDialog } from './TeamZoneDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -68,6 +71,8 @@ export function ContractorDashboardView({
   initialContractorId,
   onScopeChange,
 }: ContractorDashboardViewProps) {
+  useTranslation();
+
   const resolvedApiUrl = apiUrlProp || DEFAULT_API_URL;
   const { accessToken } = useAuth();
   const currentUser = useCurrentUser(resolvedApiUrl);
@@ -327,7 +332,7 @@ export function ContractorDashboardView({
     mutationFn: async () => {
       setCreateTeamError(null);
       if (!createTeamName.trim()) {
-        throw new Error('Team name is required.');
+        throw new Error(tr('contractor_dashboard_view.team_name_is_required'));
       }
       const input = {
         name: createTeamName.trim(),
@@ -354,7 +359,12 @@ export function ContractorDashboardView({
       await invalidateAll();
     },
     onError: (err: unknown) => {
-      setCreateTeamError(getErrorMessage(err, 'Could not create team. Please try again.'));
+      setCreateTeamError(
+        getErrorMessage(
+          err,
+          tr('contractor_dashboard_view.could_not_create_team_please_try_again'),
+        ),
+      );
     },
   });
 
@@ -376,7 +386,7 @@ export function ContractorDashboardView({
       setEditTeamError(null);
       if (!editingTeam) return;
       if (!editTeamName.trim()) {
-        throw new Error('Team name is required.');
+        throw new Error(tr('contractor_dashboard_view.team_name_is_required'));
       }
       return client.updateContractorTeam(
         accessToken!,
@@ -398,8 +408,10 @@ export function ContractorDashboardView({
       const status = getErrorStatus(err);
       setEditTeamError(
         status === 409
-          ? 'Conflict: Team was updated by another user. Please refresh and try again.'
-          : getErrorMessage(err, 'Could not update team.'),
+          ? tr(
+              'contractor_dashboard_view.conflict_team_was_updated_by_another_user_please_refresh_and_try_again',
+            )
+          : getErrorMessage(err, tr('contractor_dashboard_view.could_not_update_team')),
       );
       if (status === 409) {
         void invalidateAll();
@@ -442,8 +454,10 @@ export function ContractorDashboardView({
       const status = getErrorStatus(err);
       setArchiveError(
         status === 409
-          ? 'Conflict: Team status or membership was modified. Please reload.'
-          : getErrorMessage(err, 'Could not archive team.'),
+          ? tr(
+              'contractor_dashboard_view.conflict_team_status_or_membership_was_modified_please_reload',
+            )
+          : getErrorMessage(err, tr('contractor_dashboard_view.could_not_archive_team')),
       );
       if (status === 409) {
         void invalidateAll();
@@ -514,8 +528,10 @@ export function ContractorDashboardView({
       const status = getErrorStatus(err);
       setAssignError(
         status === 409
-          ? 'Conflict: Worker membership was changed by another user. Reloading data...'
-          : getErrorMessage(err, 'Could not update team membership.'),
+          ? tr(
+              'contractor_dashboard_view.conflict_worker_membership_was_changed_by_another_user_reloading_data',
+            )
+          : getErrorMessage(err, tr('contractor_dashboard_view.could_not_update_team_membership')),
       );
       if (status === 409) {
         void invalidateAll();
@@ -528,11 +544,13 @@ export function ContractorDashboardView({
     return (
       <div
         role="status"
-        aria-label="Loading contractor scopes"
+        aria-label={tr('common.loading_contractor_scopes')}
         className="flex flex-col items-center justify-center min-h-[50dvh] gap-3 text-slate-500"
       >
         <div className="w-8 h-8 rounded-full border-2 border-[#071A2B] border-t-transparent animate-spin" />
-        <p className="text-xs font-semibold">Loading contractor workspaces and sites...</p>
+        <p className="text-xs font-semibold">
+          {tr('contractor_dashboard_view.loading_contractor_workspaces_and_sites')}
+        </p>
       </div>
     );
   }
@@ -548,13 +566,19 @@ export function ContractorDashboardView({
           <IconAlertTriangle className="w-6 h-6" />
         </div>
         <h2 className="text-lg font-bold text-slate-900">
-          {status === 403 ? 'Access Denied' : 'Could Not Load Contractor Scopes'}
+          {status === 403
+            ? tr('common.access_denied')
+            : tr('contractor_dashboard_view.could_not_load_contractor_scopes')}
         </h2>
         <p className="text-xs text-slate-600">
           {status === 403
-            ? 'Your account does not have active contractor representative permissions.'
+            ? tr(
+                'contractor_dashboard_view.your_account_does_not_have_active_contractor_representative_permissions',
+              )
             : scopesQuery.error?.message ||
-              'A network error occurred while discovering your assigned sites.'}
+              tr(
+                'contractor_dashboard_view.a_network_error_occurred_while_discovering_your_assigned_sites',
+              )}
         </p>
         <Button
           variant="default"
@@ -562,7 +586,7 @@ export function ContractorDashboardView({
           onClick={() => void scopesQuery.refetch()}
           disabled={scopesQuery.isFetching}
         >
-          Retry
+          {tr('common.retry')}
         </Button>
       </div>
     );
@@ -573,8 +597,10 @@ export function ContractorDashboardView({
       <div className="max-w-2xl mx-auto my-12 p-8">
         <EmptyState
           icon={<IconBuilding className="w-8 h-8 text-slate-400" />}
-          title="No Contractor Scopes Available"
-          description="You are currently not assigned as a Contractor Representative to any active Site."
+          title={tr('contractor_dashboard_view.no_contractor_scopes_available')}
+          description={tr(
+            'contractor_dashboard_view.you_are_currently_not_assigned_as_a_contractor_representative_to_any_active_site',
+          )}
         />
       </div>
     );
@@ -602,12 +628,12 @@ export function ContractorDashboardView({
         )}
       {scheduleLink && (
         <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm">
-          Team updated. Existing schedules remain unchanged.{' '}
+          {tr('contractor_dashboard_view.team_updated_existing_schedules_remain_unchanged')}{' '}
           <a className="font-bold text-blue-800 underline" href={scheduleLink}>
-            Choose whether to apply remaining team schedules
+            {tr('contractor_dashboard_view.choose_whether_to_apply_remaining_team_schedules')}
           </a>
           <button className="ml-3 text-xs" onClick={() => setScheduleLink('')}>
-            Dismiss
+            {tr('common.dismiss')}
           </button>
         </div>
       )}
@@ -616,7 +642,7 @@ export function ContractorDashboardView({
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#071A2B] text-white tracking-wide uppercase">
-              Contractor Dashboard
+              {tr('common.contractor_dashboard')}
             </span>
             {activeScope && (
               <>
@@ -634,7 +660,7 @@ export function ContractorDashboardView({
             </h1>
           ) : (
             <h1 className="text-2xl font-black text-[#071A2B] tracking-tight mt-1.5">
-              Select Site & Contractor Scope
+              {tr('contractor_dashboard_view.select_site_contractor_scope')}
             </h1>
           )}
         </div>
@@ -645,11 +671,11 @@ export function ContractorDashboardView({
             htmlFor="contractor-scope-select"
             className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1"
           >
-            Active Site Scope
+            {tr('common.active_site_scope')}
           </label>
           <select
             id="contractor-scope-select"
-            aria-label="Active Site Scope"
+            aria-label={tr('common.active_site_scope')}
             value={
               selectedSiteId && selectedContractorId
                 ? `${selectedSiteId}:${selectedContractorId}`
@@ -659,7 +685,9 @@ export function ContractorDashboardView({
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-[#071A2B] outline-none transition-all duration-200 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-2 focus:ring-[#071A2B]/10 shadow-xs cursor-pointer"
           >
             {availableScopes.length > 1 && (
-              <option value="">-- Select Site & Contractor Scope --</option>
+              <option value="">
+                {tr('contractor_dashboard_view.select_site_contractor_scope_239619')}
+              </option>
             )}
             {availableScopes.map((scope) => (
               <option
@@ -677,8 +705,10 @@ export function ContractorDashboardView({
         <div className="bg-white p-8 rounded-2xl border border-slate-200/80 shadow-xs">
           <EmptyState
             icon={<IconBuilding className="w-8 h-8 text-slate-400" />}
-            title="Scope Selection Required"
-            description="You represent multiple sites or contractors. Please select a specific Site and Contractor from the dropdown above to view metrics and manage teams."
+            title={tr('common.scope_selection_required')}
+            description={tr(
+              'contractor_dashboard_view.you_represent_multiple_sites_or_contractors_please_select_a_specific_site_and_cont',
+            )}
           />
         </div>
       ) : (
@@ -688,13 +718,13 @@ export function ContractorDashboardView({
             {/* Managed Workers Card */}
             <div
               role="region"
-              aria-label="Managed Workers KPI"
+              aria-label={tr('common.managed_workers_kpi')}
               className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs relative overflow-hidden group"
             >
               <div className="absolute inset-x-0 top-0 h-0.5 bg-blue-500 rounded-t-2xl" />
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Managed Workers
+                  {tr('common.managed_workers')}
                 </p>
                 <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                   <IconUsers className="w-4.5 h-4.5" />
@@ -704,20 +734,22 @@ export function ContractorDashboardView({
                 <p className="text-4xl font-black text-[#071A2B] leading-none">
                   {dashboardQuery.isLoading ? '—' : (dashboardQuery.data?.workerCount ?? 0)}
                 </p>
-                <span className="text-sm font-semibold text-slate-500 mb-0.5">Active Workers</span>
+                <span className="text-sm font-semibold text-slate-500 mb-0.5">
+                  {tr('common.active_workers')}
+                </span>
               </div>
             </div>
 
             {/* Active Teams Card */}
             <div
               role="region"
-              aria-label="Active Teams KPI"
+              aria-label={tr('common.active_teams_kpi')}
               className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs relative overflow-hidden group"
             >
               <div className="absolute inset-x-0 top-0 h-0.5 bg-emerald-500 rounded-t-2xl" />
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Active Teams
+                  {tr('common.active_teams')}
                 </p>
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                   <IconBuilding className="w-4.5 h-4.5" />
@@ -727,14 +759,16 @@ export function ContractorDashboardView({
                 <p className="text-4xl font-black text-[#071A2B] leading-none">
                   {dashboardQuery.isLoading ? '—' : (dashboardQuery.data?.teamCount ?? 0)}
                 </p>
-                <span className="text-sm font-semibold text-slate-500 mb-0.5">Organized Teams</span>
+                <span className="text-sm font-semibold text-slate-500 mb-0.5">
+                  {tr('common.organized_teams')}
+                </span>
               </div>
             </div>
 
             {/* Unassigned Workers Card */}
             <div
               role="region"
-              aria-label="Unassigned Workers KPI"
+              aria-label={tr('common.unassigned_workers_kpi')}
               className={`bg-white p-6 rounded-2xl border shadow-xs relative overflow-hidden group ${
                 (dashboardQuery.data?.unassignedWorkerCount ?? 0) > 0
                   ? 'border-amber-200'
@@ -750,7 +784,7 @@ export function ContractorDashboardView({
               />
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Unassigned Workers
+                  {tr('common.unassigned_workers')}
                 </p>
                 <div
                   className={`w-9 h-9 rounded-xl flex items-center justify-center ${
@@ -774,11 +808,15 @@ export function ContractorDashboardView({
                     ? '—'
                     : (dashboardQuery.data?.unassignedWorkerCount ?? 0)}
                 </p>
-                <span className="text-sm font-semibold text-slate-500 mb-0.5">Awaiting Team</span>
+                <span className="text-sm font-semibold text-slate-500 mb-0.5">
+                  {tr('common.awaiting_team')}
+                </span>
               </div>
               {(dashboardQuery.data?.unassignedWorkerCount ?? 0) > 0 && (
                 <p className="text-[11px] text-amber-600 mt-2 font-medium">
-                  Workers not in a team cannot participate in shift swaps.
+                  {tr(
+                    'contractor_dashboard_view.workers_not_in_a_team_cannot_participate_in_shift_swaps',
+                  )}
                 </p>
               )}
             </div>
@@ -796,7 +834,7 @@ export function ContractorDashboardView({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-[#071A2B] group-hover:text-indigo-700 transition-colors">
-                  Review Shift Swaps & Leaves
+                  {tr('contractor_dashboard_view.review_shift_swaps_leaves')}
                 </p>
               </div>
               <IconChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
@@ -812,7 +850,7 @@ export function ContractorDashboardView({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-[#071A2B] group-hover:text-teal-700 transition-colors">
-                  Schedule Setup
+                  {tr('common.schedule_setup')}
                 </p>
               </div>
               <IconChevronRight className="w-4 h-4 text-slate-300 group-hover:text-teal-500 group-hover:translate-x-0.5 transition-all shrink-0" />
@@ -828,7 +866,7 @@ export function ContractorDashboardView({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-[#071A2B] group-hover:text-orange-700 transition-colors">
-                  Attendance & Gate Pass
+                  {tr('contractor_dashboard_view.attendance_gate_pass')}
                 </p>
               </div>
               <IconChevronRight className="w-4 h-4 text-slate-300 group-hover:text-orange-500 group-hover:translate-x-0.5 transition-all shrink-0" />
@@ -848,7 +886,9 @@ export function ContractorDashboardView({
                 }`}
               >
                 <IconBuilding className="w-4 h-4" />
-                <span>Teams Management ({teamsQuery.data?.total ?? 0})</span>
+                <span>
+                  {tr('common.teams_management_value', { value1: teamsQuery.data?.total ?? 0 })}
+                </span>
               </button>
               <button
                 type="button"
@@ -860,7 +900,9 @@ export function ContractorDashboardView({
                 }`}
               >
                 <IconUsers className="w-4 h-4" />
-                <span>Worker Assignments ({workersQuery.data?.total ?? 0})</span>
+                <span>
+                  {tr('common.worker_assignments_value', { value1: workersQuery.data?.total ?? 0 })}
+                </span>
               </button>
             </div>
 
@@ -872,12 +914,12 @@ export function ContractorDashboardView({
                   onClick={openCreateTeam}
                   className="rounded-xl font-bold bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs"
                 >
-                  + Create Team
+                  {tr('common.create_team')}
                 </Button>
               )}
               <button
                 type="button"
-                aria-label="Refresh dashboard data"
+                aria-label={tr('common.refresh_dashboard_data')}
                 onClick={() => void invalidateAll()}
                 className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer"
               >
@@ -900,8 +942,8 @@ export function ContractorDashboardView({
                       setTeamSearch(e.target.value);
                       setTeamOffset(0);
                     }}
-                    placeholder="Search team by name..."
-                    aria-label="Search team by name"
+                    placeholder={tr('contractor_dashboard_view.search_team_by_name')}
+                    aria-label={tr('contractor_dashboard_view.search_team_by_name_00a2f7')}
                     className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-[#071A2B] placeholder-slate-400 outline-none focus:bg-white focus:border-[#071A2B]"
                   />
                 </div>
@@ -911,11 +953,11 @@ export function ContractorDashboardView({
                     htmlFor="team-status-filter"
                     className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
                   >
-                    Status:
+                    {tr('common.status_755c8b')}
                   </label>
                   <select
                     id="team-status-filter"
-                    aria-label="Filter teams by status"
+                    aria-label={tr('contractor_dashboard_view.filter_teams_by_status')}
                     value={teamStatusFilter}
                     onChange={(e) => {
                       setTeamStatusFilter(e.target.value as 'ACTIVE' | 'ARCHIVED' | 'ALL');
@@ -923,9 +965,9 @@ export function ContractorDashboardView({
                     }}
                     className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-[#071A2B] outline-none cursor-pointer"
                   >
-                    <option value="ACTIVE">Active Teams</option>
-                    <option value="ARCHIVED">Archived Teams</option>
-                    <option value="ALL">All Teams</option>
+                    <option value="ACTIVE">{tr('common.active_teams')}</option>
+                    <option value="ARCHIVED">{tr('common.archived_teams')}</option>
+                    <option value="ALL">{tr('common.all_teams')}</option>
                   </select>
                 </div>
               </div>
@@ -936,7 +978,7 @@ export function ContractorDashboardView({
                   role="status"
                   className="py-12 text-center text-xs font-semibold text-slate-500 bg-white rounded-2xl border border-slate-200"
                 >
-                  Loading teams...
+                  {tr('common.loading_teams')}
                 </div>
               ) : teamsQuery.isError ? (
                 <div
@@ -944,21 +986,24 @@ export function ContractorDashboardView({
                   className="p-6 text-center rounded-2xl border border-rose-200 bg-white space-y-3"
                 >
                   <p className="text-xs font-bold text-rose-600">
-                    {teamsQuery.error?.message || 'Could not load contractor teams.'}
+                    {teamsQuery.error?.message ||
+                      tr('contractor_dashboard_view.could_not_load_contractor_teams')}
                   </p>
                   <Button variant="outline" size="sm" onClick={() => void teamsQuery.refetch()}>
-                    Retry
+                    {tr('common.retry')}
                   </Button>
                 </div>
               ) : (teamsQuery.data?.items ?? []).length === 0 ? (
                 <div className="bg-white p-8 rounded-2xl border border-slate-200/80">
                   <EmptyState
                     icon={<IconBuilding className="w-8 h-8 text-slate-400" />}
-                    title="No Teams Found"
+                    title={tr('common.no_teams_found')}
                     description={
                       teamSearch
-                        ? 'No teams match your search query.'
-                        : 'No contractor teams configured yet. Create a team (e.g. Painting Team, Flooring Team) to organize workers.'
+                        ? tr('contractor_dashboard_view.no_teams_match_your_search_query')
+                        : tr(
+                            'contractor_dashboard_view.no_contractor_teams_configured_yet_create_a_team_e_g_painting_team_flooring_team_t',
+                          )
                     }
                   />
                 </div>
@@ -968,11 +1013,11 @@ export function ContractorDashboardView({
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] uppercase font-bold tracking-wider text-slate-500">
                         <tr>
-                          <th className="py-3 px-4">Team Name</th>
-                          <th className="py-3 px-4">Description</th>
-                          <th className="py-3 px-4 text-center">Active Members</th>
-                          <th className="py-3 px-4 text-center">Status</th>
-                          <th className="py-3 px-4 text-right">Actions</th>
+                          <th className="py-3 px-4">{tr('common.team_name')}</th>
+                          <th className="py-3 px-4">{tr('common.description')}</th>
+                          <th className="py-3 px-4 text-center">{tr('common.active_members')}</th>
+                          <th className="py-3 px-4 text-center">{tr('common.status')}</th>
+                          <th className="py-3 px-4 text-right">{tr('common.actions')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
@@ -983,14 +1028,19 @@ export function ContractorDashboardView({
                               <p className="mt-1 text-xs font-medium text-slate-500">
                                 {team.zoneAssignments?.length
                                   ? team.zoneAssignments
-                                      .map((z) => `${z.name}${z.effective ? '' : ' (inactive)'}`)
+                                      .map(
+                                        (z) =>
+                                          `${z.name}${z.effective ? '' : tr('common.inactive_suffix')}`,
+                                      )
                                       .join(', ')
-                                  : 'Zone: Unassigned'}
+                                  : tr('common.zone_unassigned')}
                               </p>
                             </td>
                             <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
                               {team.description || (
-                                <span className="text-slate-400 italic">No description</span>
+                                <span className="text-slate-400 italic">
+                                  {tr('common.no_description')}
+                                </span>
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-center">
@@ -1001,13 +1051,12 @@ export function ContractorDashboardView({
                                     : 'bg-slate-100 text-slate-500'
                                 }`}
                               >
-                                {team.memberCount} member
-                                {team.memberCount !== 1 ? 's' : ''}
+                                {tr('counts.members', { count: team.memberCount })}
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-center">
                               <Badge variant={team.isActive ? 'success' : 'neutral'}>
-                                {team.isActive ? 'Active' : 'Archived'}
+                                {team.isActive ? tr('common.active') : tr('common.archived')}
                               </Badge>
                             </td>
                             <td className="py-3.5 px-4 text-right">
@@ -1020,7 +1069,7 @@ export function ContractorDashboardView({
                                   }}
                                   className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-slate-700 transition-colors cursor-pointer"
                                 >
-                                  Members
+                                  {tr('common.members')}
                                 </button>
                                 {team.isActive && (
                                   <>
@@ -1036,22 +1085,26 @@ export function ContractorDashboardView({
                                       }
                                       className="px-2.5 py-1 rounded-lg border border-orange-200 text-[11px] font-bold text-orange-700"
                                     >
-                                      {team.zoneAssignments?.length ? 'Edit Zone' : 'Assign Zone'}
+                                      {team.zoneAssignments?.length
+                                        ? tr('common.edit_zone')
+                                        : tr('common.assign_zone')}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => openEditTeam(team)}
                                       className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-slate-700 transition-colors cursor-pointer"
                                     >
-                                      Edit
+                                      {tr('common.edit')}
                                     </button>
                                     <button
                                       type="button"
                                       disabled={team.memberCount > 0}
                                       title={
                                         team.memberCount > 0
-                                          ? 'Cannot archive team with active members. Remove or transfer members first.'
-                                          : 'Archive team'
+                                          ? tr(
+                                              'contractor_dashboard_view.cannot_archive_team_with_active_members_remove_or_transfer_members_first',
+                                            )
+                                          : tr('common.archive_team')
                                       }
                                       onClick={() => openArchiveTeam(team)}
                                       className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors ${
@@ -1060,7 +1113,7 @@ export function ContractorDashboardView({
                                           : 'border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer'
                                       }`}
                                     >
-                                      Archive
+                                      {tr('common.archive')}
                                     </button>
                                   </>
                                 )}
@@ -1076,9 +1129,11 @@ export function ContractorDashboardView({
                   {teamsQuery.data!.total > PAGE_SIZE && (
                     <div className="flex items-center justify-between p-4 border-t border-slate-100 text-xs text-slate-600">
                       <p>
-                        Showing {teamOffset + 1} to{' '}
-                        {Math.min(teamOffset + PAGE_SIZE, teamsQuery.data!.total)} of{' '}
-                        {teamsQuery.data!.total} teams
+                        {tr('contractor_dashboard_view.showing_value_to_value_of_value_teams', {
+                          value1: teamOffset + 1,
+                          value2: Math.min(teamOffset + PAGE_SIZE, teamsQuery.data!.total),
+                          value3: teamsQuery.data!.total,
+                        })}
                       </p>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1087,7 +1142,7 @@ export function ContractorDashboardView({
                           disabled={teamOffset === 0}
                           onClick={() => setTeamOffset((prev) => Math.max(0, prev - PAGE_SIZE))}
                         >
-                          Previous
+                          {tr('common.previous')}
                         </Button>
                         <Button
                           variant="outline"
@@ -1095,7 +1150,7 @@ export function ContractorDashboardView({
                           disabled={teamOffset + PAGE_SIZE >= teamsQuery.data!.total}
                           onClick={() => setTeamOffset((prev) => prev + PAGE_SIZE)}
                         >
-                          Next
+                          {tr('common.next')}
                         </Button>
                       </div>
                     </div>
@@ -1119,8 +1174,8 @@ export function ContractorDashboardView({
                       setWorkerSearch(e.target.value);
                       setWorkerOffset(0);
                     }}
-                    placeholder="Search worker by name..."
-                    aria-label="Search worker by name"
+                    placeholder={tr('contractor_dashboard_view.search_worker_by_name')}
+                    aria-label={tr('contractor_dashboard_view.search_worker_by_name_89169f')}
                     className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-[#071A2B] placeholder-slate-400 outline-none focus:bg-white focus:border-[#071A2B]"
                   />
                 </div>
@@ -1130,11 +1185,11 @@ export function ContractorDashboardView({
                     htmlFor="worker-team-filter"
                     className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
                   >
-                    Filter by Team:
+                    {tr('common.filter_by_team')}
                   </label>
                   <select
                     id="worker-team-filter"
-                    aria-label="Filter workers by team"
+                    aria-label={tr('contractor_dashboard_view.filter_workers_by_team')}
                     value={workerTeamFilter}
                     onChange={(e) => {
                       setWorkerTeamFilter(e.target.value);
@@ -1142,8 +1197,8 @@ export function ContractorDashboardView({
                     }}
                     className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-[#071A2B] outline-none cursor-pointer"
                   >
-                    <option value="ALL">All Workers</option>
-                    <option value="UNASSIGNED">Unassigned Only</option>
+                    <option value="ALL">{tr('common.all_workers')}</option>
+                    <option value="UNASSIGNED">{tr('common.unassigned_only')}</option>
                     {activeTeamsList.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -1159,7 +1214,7 @@ export function ContractorDashboardView({
                   role="status"
                   className="py-12 text-center text-xs font-semibold text-slate-500 bg-white rounded-2xl border border-slate-200"
                 >
-                  Loading workers...
+                  {tr('common.loading_workers_1c8719')}
                 </div>
               ) : workersQuery.isError ? (
                 <div
@@ -1167,21 +1222,22 @@ export function ContractorDashboardView({
                   className="p-6 text-center rounded-2xl border border-rose-200 bg-white space-y-3"
                 >
                   <p className="text-xs font-bold text-rose-600">
-                    {workersQuery.error?.message || 'Could not load contractor workers.'}
+                    {workersQuery.error?.message ||
+                      tr('contractor_dashboard_view.could_not_load_contractor_workers')}
                   </p>
                   <Button variant="outline" size="sm" onClick={() => void workersQuery.refetch()}>
-                    Retry
+                    {tr('common.retry')}
                   </Button>
                 </div>
               ) : (workersQuery.data?.items ?? []).length === 0 ? (
                 <div className="bg-white p-8 rounded-2xl border border-slate-200/80">
                   <EmptyState
                     icon={<IconUsers className="w-8 h-8 text-slate-400" />}
-                    title="No Workers Found"
+                    title={tr('common.no_workers_found')}
                     description={
                       workerSearch || workerTeamFilter !== 'ALL'
-                        ? 'No workers match the selected filters.'
-                        : 'No workers found under this contractor.'
+                        ? tr('contractor_dashboard_view.no_workers_match_the_selected_filters')
+                        : tr('contractor_dashboard_view.no_workers_found_under_this_contractor')
                     }
                   />
                 </div>
@@ -1191,10 +1247,10 @@ export function ContractorDashboardView({
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] uppercase font-bold tracking-wider text-slate-500">
                         <tr>
-                          <th className="py-3 px-4">Worker Name</th>
-                          <th className="py-3 px-4">Assigned Team</th>
-                          <th className="py-3 px-4">Membership Status</th>
-                          <th className="py-3 px-4 text-right">Actions</th>
+                          <th className="py-3 px-4">{tr('common.worker_name')}</th>
+                          <th className="py-3 px-4">{tr('common.assigned_team')}</th>
+                          <th className="py-3 px-4">{tr('common.membership_status')}</th>
+                          <th className="py-3 px-4 text-right">{tr('common.actions')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
@@ -1216,17 +1272,19 @@ export function ContractorDashboardView({
                                 <span className="font-bold text-[#071A2B]">{worker.teamName}</span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200">
-                                  Unassigned
+                                  {tr('common.unassigned')}
                                 </span>
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-slate-500">
                               {worker.membershipId ? (
                                 <span className="font-mono text-[11px] text-emerald-700">
-                                  Active Membership
+                                  {tr('common.active_membership')}
                                 </span>
                               ) : (
-                                <span className="text-slate-400">No active membership</span>
+                                <span className="text-slate-400">
+                                  {tr('common.no_active_membership')}
+                                </span>
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-right">
@@ -1236,7 +1294,9 @@ export function ContractorDashboardView({
                                 onClick={() => openAssignWorker(worker)}
                                 className="font-bold"
                               >
-                                {worker.teamId ? 'Transfer / Remove' : 'Assign Team'}
+                                {worker.teamId
+                                  ? tr('common.transfer_remove')
+                                  : tr('common.assign_team')}
                               </Button>
                             </td>
                           </tr>
@@ -1249,9 +1309,11 @@ export function ContractorDashboardView({
                   {workersQuery.data!.total > PAGE_SIZE && (
                     <div className="flex items-center justify-between p-4 border-t border-slate-100 text-xs text-slate-600">
                       <p>
-                        Showing {workerOffset + 1} to{' '}
-                        {Math.min(workerOffset + PAGE_SIZE, workersQuery.data!.total)} of{' '}
-                        {workersQuery.data!.total} workers
+                        {tr('contractor_dashboard_view.showing_value_to_value_of_value_workers', {
+                          value1: workerOffset + 1,
+                          value2: Math.min(workerOffset + PAGE_SIZE, workersQuery.data!.total),
+                          value3: workersQuery.data!.total,
+                        })}
                       </p>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1260,7 +1322,7 @@ export function ContractorDashboardView({
                           disabled={workerOffset === 0}
                           onClick={() => setWorkerOffset((prev) => Math.max(0, prev - PAGE_SIZE))}
                         >
-                          Previous
+                          {tr('common.previous')}
                         </Button>
                         <Button
                           variant="outline"
@@ -1268,7 +1330,7 @@ export function ContractorDashboardView({
                           disabled={workerOffset + PAGE_SIZE >= workersQuery.data!.total}
                           onClick={() => setWorkerOffset((prev) => prev + PAGE_SIZE)}
                         >
-                          Next
+                          {tr('common.next')}
                         </Button>
                       </div>
                     </div>
@@ -1284,8 +1346,11 @@ export function ContractorDashboardView({
       <Dialog
         open={isCreateTeamOpen}
         onClose={() => setIsCreateTeamOpen(false)}
-        title="Create New Contractor Team"
-        description={`Create a new team for ${activeScope?.contractorName} at ${activeScope?.siteName}`}
+        title={tr('contractor_dashboard_view.create_new_contractor_team')}
+        description={tr('contractor_dashboard_view.create_a_new_team_for_value_at_value', {
+          value1: activeScope?.contractorName,
+          value2: activeScope?.siteName,
+        })}
       >
         <form
           onSubmit={(e) => {
@@ -1296,8 +1361,8 @@ export function ContractorDashboardView({
         >
           {createTeamError && (
             <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{createTeamError}</AlertDescription>
+              <AlertTitle>{tr('common.error')}</AlertTitle>
+              <AlertDescription>{localizedError(createTeamError ?? undefined)}</AlertDescription>
             </Alert>
           )}
 
@@ -1306,7 +1371,7 @@ export function ContractorDashboardView({
               htmlFor="create-team-name"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Team Name <span className="text-rose-500">*</span>
+              {tr('common.team_name')} <span className="text-rose-500">*</span>
             </label>
             <input
               id="create-team-name"
@@ -1314,7 +1379,7 @@ export function ContractorDashboardView({
               required
               value={createTeamName}
               onChange={(e) => setCreateTeamName(e.target.value)}
-              placeholder="e.g. Painting Team A, Flooring Team..."
+              placeholder={tr('contractor_dashboard_view.e_g_painting_team_a_flooring_team')}
               className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] outline-none focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-xs"
             />
           </div>
@@ -1324,21 +1389,21 @@ export function ContractorDashboardView({
               htmlFor="create-team-desc"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Description (Optional)
+              {tr('common.description_optional')}
             </label>
             <textarea
               id="create-team-desc"
               rows={3}
               value={createTeamDescription}
               onChange={(e) => setCreateTeamDescription(e.target.value)}
-              placeholder="Responsibilities or trade scope..."
+              placeholder={tr('contractor_dashboard_view.responsibilities_or_trade_scope')}
               className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] outline-none focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-xs resize-none"
             />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setIsCreateTeamOpen(false)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1347,7 +1412,7 @@ export function ContractorDashboardView({
               disabled={!createTeamName.trim()}
               className="rounded-full px-6 font-bold bg-[#071A2B] hover:bg-[#0E2841] text-white shadow-xs"
             >
-              Create Team
+              {tr('common.create_team_971983')}
             </Button>
           </div>
         </form>
@@ -1357,8 +1422,12 @@ export function ContractorDashboardView({
       <Dialog
         open={!!editingTeam}
         onClose={() => setEditingTeam(null)}
-        title="Edit Team"
-        description={editingTeam ? `Update details for ${editingTeam.name}` : ''}
+        title={tr('common.edit_team')}
+        description={
+          editingTeam
+            ? tr('contractor_dashboard_view.update_details_for_value', { value1: editingTeam.name })
+            : ''
+        }
       >
         <form
           onSubmit={(e) => {
@@ -1369,8 +1438,8 @@ export function ContractorDashboardView({
         >
           {editTeamError && (
             <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{editTeamError}</AlertDescription>
+              <AlertTitle>{tr('common.error')}</AlertTitle>
+              <AlertDescription>{localizedError(editTeamError ?? undefined)}</AlertDescription>
             </Alert>
           )}
 
@@ -1379,7 +1448,7 @@ export function ContractorDashboardView({
               htmlFor="edit-team-name"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Team Name <span className="text-rose-500">*</span>
+              {tr('common.team_name')} <span className="text-rose-500">*</span>
             </label>
             <input
               id="edit-team-name"
@@ -1396,7 +1465,7 @@ export function ContractorDashboardView({
               htmlFor="edit-team-desc"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Description
+              {tr('common.description')}
             </label>
             <textarea
               id="edit-team-desc"
@@ -1409,7 +1478,7 @@ export function ContractorDashboardView({
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setEditingTeam(null)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1418,7 +1487,7 @@ export function ContractorDashboardView({
               disabled={!editTeamName.trim()}
               className="rounded-full px-6 font-bold bg-[#071A2B] hover:bg-[#0E2841] text-white shadow-xs"
             >
-              Save Changes
+              {tr('common.save_changes')}
             </Button>
           </div>
         </form>
@@ -1428,10 +1497,13 @@ export function ContractorDashboardView({
       <Dialog
         open={!!archivingTeam}
         onClose={() => setArchivingTeam(null)}
-        title="Archive Contractor Team"
+        title={tr('common.archive_contractor_team')}
         description={
           archivingTeam
-            ? `Archive team "${archivingTeam.name}". Archiving is only allowed when a team has 0 members.`
+            ? tr(
+                'contractor_dashboard_view.archive_team_value_archiving_is_only_allowed_when_a_team_has_0_members',
+                { value1: archivingTeam.name },
+              )
             : ''
         }
       >
@@ -1444,19 +1516,25 @@ export function ContractorDashboardView({
         >
           {archiveError && (
             <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{archiveError}</AlertDescription>
+              <AlertTitle>{tr('common.error')}</AlertTitle>
+              <AlertDescription>{localizedError(archiveError ?? undefined)}</AlertDescription>
             </Alert>
           )}
 
           <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
-            <p className="font-bold">Are you sure you want to archive this team?</p>
-            <p>The team will be deactivated. History and audit records will remain preserved.</p>
+            <p className="font-bold">
+              {tr('contractor_dashboard_view.are_you_sure_you_want_to_archive_this_team')}
+            </p>
+            <p>
+              {tr(
+                'contractor_dashboard_view.the_team_will_be_deactivated_history_and_audit_records_will_remain_preserved',
+              )}
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setArchivingTeam(null)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1465,7 +1543,7 @@ export function ContractorDashboardView({
               disabled={archiveTeamMutation.isPending}
               className="rounded-full px-6 font-bold"
             >
-              Confirm Archive
+              {tr('common.confirm_archive')}
             </Button>
           </div>
         </form>
@@ -1475,12 +1553,17 @@ export function ContractorDashboardView({
       <Dialog
         open={!!assigningWorker}
         onClose={() => setAssigningWorker(null)}
-        title={assigningWorker?.teamId ? 'Transfer or Remove Worker Team' : 'Assign Worker to Team'}
+        title={
+          assigningWorker?.teamId
+            ? tr('contractor_dashboard_view.transfer_or_remove_worker_team')
+            : tr('contractor_dashboard_view.assign_worker_to_team')
+        }
         description={
           assigningWorker
-            ? `Worker: ${assigningWorker.displayName} · Current Team: ${
-                assigningWorker.teamName || 'None'
-              }`
+            ? tr('contractor_dashboard_view.worker_value_current_team_value', {
+                value1: assigningWorker.displayName,
+                value2: assigningWorker.teamName || tr('common.none'),
+              })
             : ''
         }
       >
@@ -1493,8 +1576,8 @@ export function ContractorDashboardView({
         >
           {assignError && (
             <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{assignError}</AlertDescription>
+              <AlertTitle>{tr('common.error')}</AlertTitle>
+              <AlertDescription>{localizedError(assignError ?? undefined)}</AlertDescription>
             </Alert>
           )}
 
@@ -1503,30 +1586,32 @@ export function ContractorDashboardView({
               htmlFor="assign-team-target"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Target Team <span className="text-rose-500">*</span>
+              {tr('common.target_team')} <span className="text-rose-500">*</span>
             </label>
             <select
               id="assign-team-target"
-              aria-label="Target Team"
+              aria-label={tr('common.target_team')}
               value={targetTeamId}
               onChange={(e) => setTargetTeamId(e.target.value)}
               className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] outline-none focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-xs cursor-pointer"
             >
-              <option value="UNASSIGN">-- Remove from Team --</option>
+              <option value="UNASSIGN">{tr('contractor_dashboard_view.remove_from_team')}</option>
               {activeTeamsList.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.memberCount} members)
+                  {tr('common.value_value_members', { value1: t.name, value2: t.memberCount })}
                 </option>
               ))}
             </select>
             <p className="text-[11px] text-slate-500">
-              Each worker can belong to at most one active team per site.
+              {tr(
+                'contractor_dashboard_view.each_worker_can_belong_to_at_most_one_active_team_per_site',
+              )}
             </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setAssigningWorker(null)}>
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1535,7 +1620,7 @@ export function ContractorDashboardView({
               disabled={targetTeamId === 'UNASSIGN' && !assigningWorker?.membershipId}
               className="rounded-full px-6 font-bold bg-[#071A2B] hover:bg-[#0E2841] text-white shadow-xs"
             >
-              Confirm Assignment
+              {tr('common.confirm_assignment')}
             </Button>
           </div>
         </form>

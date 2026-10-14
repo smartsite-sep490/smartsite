@@ -1,3 +1,6 @@
+import { localizedLabel } from '../../../i18n/labels';
+import { translate as tr } from '../../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNotificationRequest } from '../hooks/useNotificationRequest';
@@ -75,8 +78,24 @@ function getWeekDays(fromDateIso: string) {
   const [y, m, d] = fromDateIso.split('-').map(Number);
   const start = new Date(y!, m! - 1, d!);
 
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const shortDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = [
+    tr('common.sunday'),
+    tr('common.monday'),
+    tr('common.tuesday'),
+    tr('common.wednesday'),
+    tr('common.thursday'),
+    tr('common.friday'),
+    tr('common.saturday'),
+  ];
+  const shortDayNames = [
+    tr('common.sun'),
+    tr('common.mon'),
+    tr('common.tue'),
+    tr('common.wed'),
+    tr('common.thu'),
+    tr('common.fri'),
+    tr('common.sat'),
+  ];
 
   const days: {
     dateIso: string;
@@ -119,6 +138,8 @@ function ScheduleSiteName({
   token: string;
   currentUserId: string;
 }) {
+  useTranslation();
+
   const siteQuery = useQuery({
     queryKey: ['schedule-site', apiUrl, currentUserId, siteId],
     queryFn: () => client.getSite(token, siteId),
@@ -127,8 +148,9 @@ function ScheduleSiteName({
   });
   const siteName = siteQuery.data?.id === siteId ? siteQuery.data.name : undefined;
   const label = siteQuery.isError
-    ? 'Site name unavailable'
-    : siteName || (siteQuery.isPending ? 'Loading site...' : 'Site name unavailable');
+    ? tr('common.site_name_unavailable')
+    : siteName ||
+      (siteQuery.isPending ? tr('common.loading_site') : tr('common.site_name_unavailable'));
 
   return (
     <div className="flex items-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
@@ -149,12 +171,12 @@ function ScheduleSiteName({
       {siteQuery.isError && (
         <button
           type="button"
-          aria-label="Retry loading site name"
+          aria-label={tr('workforce_schedule_tab.retry_loading_site_name')}
           disabled={siteQuery.isFetching}
           onClick={() => void siteQuery.refetch()}
           className="shrink-0 text-blue-600 underline focus-visible:outline-2 focus-visible:outline-blue-600"
         >
-          Retry
+          {tr('common.retry')}
         </button>
       )}
     </div>
@@ -176,6 +198,8 @@ export function WorkforceScheduleTab({
   currentUserId,
   sessionScope: sessionScopeProp,
 }: WorkforceScheduleTabProps) {
+  useTranslation();
+
   const sessionScope = sessionScopeProp || currentUserId || 'workforce-session';
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
@@ -223,10 +247,7 @@ export function WorkforceScheduleTab({
   const [collapsedScheduleDates, setCollapsedScheduleDates] = useState<Set<string>>(new Set());
 
   const activeWeekRange = useMemo(() => getWeekRangeFromOffset(weekOffset), [weekOffset]);
-  const activeWeekDays = useMemo(
-    () => getWeekDays(activeWeekRange.fromDate),
-    [activeWeekRange.fromDate],
-  );
+  const activeWeekDays = getWeekDays(activeWeekRange.fromDate);
 
   const scheduleDateRange = useMemo(() => {
     if (scheduleRange === 'TODAY') {
@@ -387,11 +408,11 @@ export function WorkforceScheduleTab({
 
   // Helper resolvers
   const getWorkerName = (id?: string) => {
-    if (!id) return 'Worker';
+    if (!id) return tr('common.worker');
     const w =
       workers?.items.find((item) => item.id === id) ||
       coworkers?.items.find((item) => item.id === id);
-    return w?.displayName || `Worker (${id.slice(0, 6)})`;
+    return w?.displayName || tr('common.worker_value', { value1: id.slice(0, 6) });
   };
 
   const getShiftObj = (id: string) => shifts?.items.find((item) => item.id === id);
@@ -399,7 +420,7 @@ export function WorkforceScheduleTab({
     const s = getShiftObj(id);
     return s
       ? `${s.name} (${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)})`
-      : `Shift (${id.slice(0, 6)})`;
+      : tr('common.shift_value', { value1: id.slice(0, 6) });
   };
 
   const scheduleList = useMemo(() => schedules?.items || [], [schedules?.items]);
@@ -482,7 +503,7 @@ export function WorkforceScheduleTab({
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2 shadow-xs">
         <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-        <span>Loading your schedule data...</span>
+        <span>{tr('workforce_schedule_tab.loading_your_schedule_data')}</span>
       </div>
     );
   }
@@ -501,7 +522,7 @@ export function WorkforceScheduleTab({
             void incomingQuery.refetch();
           }}
         >
-          Retry
+          {tr('common.retry')}
         </Button>
       </div>
     );
@@ -509,7 +530,7 @@ export function WorkforceScheduleTab({
     (activeView === 'requests' && requestsQuery.isLoading) ||
     (activeView === 'coworker' && incomingQuery.isLoading)
   )
-    return <p role="status">Loading shift requests...</p>;
+    return <p role="status">{tr('common.loading_shift_requests')}</p>;
 
   // ── Error state ────────────────────────────────────────────────────────────
   if (schedError) {
@@ -518,12 +539,14 @@ export function WorkforceScheduleTab({
         <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
           <IconAlertCircle className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">Failed to Load Schedule</h2>
+        <h2 className="text-lg font-bold text-slate-900">
+          {tr('workforce_schedule_tab.failed_to_load_schedule')}
+        </h2>
         <p className="text-xs text-slate-600 leading-relaxed">
-          An error occurred while loading your schedule and requests.
+          {tr('workforce_schedule_tab.an_error_occurred_while_loading_your_schedule_and_requests')}
         </p>
         <Button variant="default" size="md" onClick={() => void refetchSchedules()}>
-          Retry
+          {tr('common.retry')}
         </Button>
       </div>
     );
@@ -531,15 +554,17 @@ export function WorkforceScheduleTab({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      {target.isLoading && <p role="status">Loading selected request…</p>}
+      {target.isLoading && <p role="status">{tr('common.loading_selected_request')}</p>}
       {target.isError && (
         <div
           role="alert"
           className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
         >
-          This request is unavailable or you no longer have access.{' '}
+          {tr(
+            'workforce_manager_review_tab.this_request_is_unavailable_or_you_no_longer_have_access',
+          )}{' '}
           <button type="button" onClick={() => void target.refetch()} className="underline">
-            Retry
+            {tr('common.retry')}
           </button>
         </div>
       )}
@@ -555,7 +580,9 @@ export function WorkforceScheduleTab({
 
       <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6 pb-2 border-b border-slate-100/0">
         <div className="space-y-1 mt-2">
-          <h1 className="text-3xl font-black tracking-tight text-[#071A2B]">My Schedule</h1>
+          <h1 className="text-3xl font-black tracking-tight text-[#071A2B]">
+            {tr('common.my_schedule')}
+          </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -576,13 +603,15 @@ export function WorkforceScheduleTab({
               </div>
               <div className="space-y-0.5 min-w-[100px]">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                  Upcoming shifts
+                  {tr('common.upcoming_shifts')}
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-black tracking-tight text-[#071A2B]">
                     {scheduleList.length}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium">This week</span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {tr('common.this_week')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -608,13 +637,15 @@ export function WorkforceScheduleTab({
               </div>
               <div className="space-y-0.5 min-w-[100px]">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                  Shift Requests
+                  {tr('common.shift_requests')}
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-black tracking-tight text-orange-600">
                     {requestsTotal}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium">Awaiting review</span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {tr('common.awaiting_review')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -641,7 +672,7 @@ export function WorkforceScheduleTab({
               <div className="space-y-0.5 min-w-[100px]">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                    Swap invitations
+                    {tr('common.swap_invitations')}
                   </span>
                   {coworkerPendingSwaps.length > 0 && (
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -651,7 +682,9 @@ export function WorkforceScheduleTab({
                   <span className="text-2xl font-black tracking-tight text-emerald-700">
                     {coworkerPendingSwaps.length}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium">From coworkers</span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {tr('common.from_coworkers')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -675,7 +708,7 @@ export function WorkforceScheduleTab({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1">
                   <AlertTitle className="text-amber-950 font-bold flex items-center gap-2 text-xs">
-                    <span>Action Required · Coworker Shift Swap</span>
+                    <span>{tr('workforce_schedule_tab.action_required_coworker_shift_swap')}</span>
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                   </AlertTitle>
                   <AlertDescription className="text-amber-900/90 font-medium text-xs">
@@ -684,17 +717,19 @@ export function WorkforceScheduleTab({
                         <span className="font-semibold text-slate-950">
                           {getWorkerName(coworkerPendingSwaps[0]!.requesterWorkerId)}
                         </span>{' '}
-                        wants to swap with your shift on{' '}
+                        {tr('workforce_schedule_tab.wants_to_swap_with_your_shift_on')}{' '}
                         {formatWorkDate(coworkerPendingSwaps[0]!.coworkerWorkDate)} (
                         {getShiftName(coworkerPendingSwaps[0]!.coworkerShiftId)}).
                       </>
                     ) : (
                       <>
-                        You have{' '}
+                        {tr('common.you_have')}{' '}
                         <span className="font-semibold text-slate-950">
-                          {coworkerPendingSwaps.length} shift swap requests
+                          {tr('workforce_schedule_tab.value_shift_swap_requests', {
+                            value1: coworkerPendingSwaps.length,
+                          })}
                         </span>{' '}
-                        from coworkers waiting for your confirmation.
+                        {tr('workforce_schedule_tab.from_coworkers_waiting_for_your_confirmation')}
                       </>
                     )}
                   </AlertDescription>
@@ -707,7 +742,7 @@ export function WorkforceScheduleTab({
                     rightIcon={<IconArrowRight className="w-3.5 h-3.5 text-[#F66B17]" />}
                     className="bg-[#071A2B] text-white hover:bg-[#0E2841] shadow-xs text-xs"
                   >
-                    Review ({coworkerPendingSwaps.length})
+                    {tr('common.review_value_3df099', { value1: coworkerPendingSwaps.length })}
                   </Button>
                 </div>
               </div>
@@ -720,11 +755,11 @@ export function WorkforceScheduleTab({
       {myTeamQuery.isLoading ? (
         <div
           role="status"
-          aria-label="Loading worker team status"
+          aria-label={tr('workforce_schedule_tab.loading_worker_team_status')}
           className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs text-xs text-slate-500"
         >
           <div className="w-5 h-5 rounded-full border-2 border-[#071A2B] border-t-transparent animate-spin" />
-          <span>Loading worker team status...</span>
+          <span>{tr('workforce_schedule_tab.loading_worker_team_status_b91897')}</span>
         </div>
       ) : myTeamQuery.isError ? (
         <div
@@ -734,22 +769,24 @@ export function WorkforceScheduleTab({
           <div className="flex items-center gap-2.5">
             <IconAlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             <div>
-              <p className="font-bold text-rose-900">Failed to load worker team status</p>
+              <p className="font-bold text-rose-900">
+                {tr('workforce_schedule_tab.failed_to_load_worker_team_status')}
+              </p>
               <p className="text-[11px] text-rose-700 mt-0.5">
                 {myTeamQuery.error instanceof Error
                   ? myTeamQuery.error.message
-                  : 'Please try again to check shift swap eligibility.'}
+                  : tr('workforce_schedule_tab.please_try_again_to_check_shift_swap_eligibility')}
               </p>
             </div>
           </div>
           <button
             type="button"
-            aria-label="Retry loading team status"
+            aria-label={tr('workforce_schedule_tab.retry_loading_team_status')}
             disabled={myTeamQuery.isFetching}
             onClick={() => void myTeamQuery.refetch()}
             className="px-3 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-xs transition-colors shrink-0 cursor-pointer"
           >
-            Retry
+            {tr('common.retry')}
           </button>
         </div>
       ) : (
@@ -765,26 +802,29 @@ export function WorkforceScheduleTab({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-[#071A2B]">
-                  <span className="block text-slate-500 text-[10px]">Worker profile</span>
-                  {myTeam?.displayName || 'Worker'}
+                  <span className="block text-slate-500 text-[10px]">
+                    {tr('common.worker_profile')}
+                  </span>
+                  {myTeam?.displayName || tr('common.worker')}
                 </span>
                 {myTeam?.teamName ? (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                    Team: {myTeam.teamName}
+                    {tr('common.team_value', { value1: myTeam.teamName })}
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                    Unassigned
+                    {tr('common.unassigned')}
                   </span>
                 )}
               </div>
               <p className="mt-2 text-xs text-slate-600">
-                Zone:{' '}
-                {myTeam?.zones?.length
-                  ? myTeam.zones
-                      .map((z) => `${z.name}${z.effective ? '' : ' (inactive)'}`)
-                      .join(', ')
-                  : 'Not assigned'}
+                {tr('common.zone_value_22c565', {
+                  value1: myTeam?.zones?.length
+                    ? myTeam.zones
+                        .map((z) => `${z.name}${z.effective ? '' : tr('common.inactive_suffix')}`)
+                        .join(', ')
+                    : tr('common.not_assigned'),
+                })}
               </p>
             </div>
           </div>
@@ -797,19 +837,25 @@ export function WorkforceScheduleTab({
           [
             {
               id: 'schedule',
-              label: 'My Shifts',
+              get label() {
+                return tr('common.my_shifts');
+              },
               count: scheduleList.length,
               icon: <IconCalendar className="w-4 h-4" />,
             },
             {
               id: 'requests',
-              label: 'Swap Requests',
+              get label() {
+                return tr('common.swap_requests');
+              },
               count: requestsTotal,
               icon: <IconArrowRight className="w-4 h-4" />,
             },
             {
               id: 'coworker',
-              label: 'Coworker Swaps',
+              get label() {
+                return tr('common.coworker_swaps');
+              },
               count: coworkerPendingSwaps.length,
               icon: <IconUsers className="w-4 h-4" />,
             },
@@ -848,10 +894,10 @@ export function WorkforceScheduleTab({
               <div className="flex items-center gap-1 bg-white p-1 rounded-full border border-slate-200/90 shadow-xs">
                 {(
                   [
-                    ['TODAY', 'Today'],
-                    ['WEEK', 'This week'],
-                    ['MONTH', 'This month'],
-                    ['CUSTOM', 'Custom range'],
+                    ['TODAY', tr('common.today')],
+                    ['WEEK', tr('common.this_week')],
+                    ['MONTH', tr('common.this_month')],
+                    ['CUSTOM', tr('common.custom_range')],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -887,7 +933,7 @@ export function WorkforceScheduleTab({
                   }`}
                 >
                   <IconCalendar className="w-4 h-4" />
-                  <span>Timetable</span>
+                  <span>{tr('common.timetable')}</span>
                 </button>
                 <button
                   type="button"
@@ -899,7 +945,7 @@ export function WorkforceScheduleTab({
                   }`}
                 >
                   <IconClock className="w-4 h-4" />
-                  <span>List</span>
+                  <span>{tr('common.list')}</span>
                 </button>
               </div>
 
@@ -911,14 +957,14 @@ export function WorkforceScheduleTab({
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200/90 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
                   >
                     <IconChevronLeft className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Previous week</span>
+                    <span className="hidden sm:inline">{tr('common.previous_week')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setWeekOffset((prev) => prev + 1)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200/90 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
                   >
-                    <span className="hidden sm:inline">Next week</span>
+                    <span className="hidden sm:inline">{tr('common.next_week')}</span>
                     <IconChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -929,7 +975,7 @@ export function WorkforceScheduleTab({
           {scheduleRange === 'CUSTOM' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                From
+                {tr('common.from')}
                 <input
                   type="date"
                   value={scheduleFromDate}
@@ -941,7 +987,7 @@ export function WorkforceScheduleTab({
                 />
               </label>
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                To
+                {tr('common.to')}
                 <input
                   type="date"
                   value={scheduleToDate}
@@ -1001,11 +1047,13 @@ export function WorkforceScheduleTab({
 
                       {isToday && (
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F66B17] text-white tracking-wider uppercase">
-                          Today
+                          {tr('common.today')}
                         </span>
                       )}
                       {isPast && !isToday && (
-                        <span className="text-[10px] font-medium text-slate-400">Past</span>
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {tr('common.past')}
+                        </span>
                       )}
                     </div>
 
@@ -1013,7 +1061,9 @@ export function WorkforceScheduleTab({
                     <div className="p-2 flex-1 flex flex-col justify-between space-y-2 min-h-[160px]">
                       {daySchedules.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center p-3 text-center">
-                          <span className="text-xs font-semibold text-slate-400">Off Day</span>
+                          <span className="text-xs font-semibold text-slate-400">
+                            {tr('common.off_day')}
+                          </span>
                         </div>
                       ) : (
                         <div className="space-y-2 flex-1 flex flex-col">
@@ -1042,7 +1092,7 @@ export function WorkforceScheduleTab({
                                         className="text-xs font-bold text-slate-900 truncate"
                                         title={shiftObj?.name}
                                       >
-                                        {shiftObj?.name || 'Shift'}
+                                        {shiftObj?.name || tr('common.shift')}
                                       </h4>
                                     </div>
                                     <span
@@ -1089,7 +1139,7 @@ export function WorkforceScheduleTab({
                                 <div className="pt-2 border-t border-slate-100">
                                   {isPast ? (
                                     <div className="text-[10px] text-slate-400 italic text-center py-1 bg-slate-50/80 rounded-md border border-slate-100">
-                                      Shift ended (Locked)
+                                      {tr('common.shift_ended_locked')}
                                     </div>
                                   ) : (
                                     <div className="flex flex-col gap-1.5">
@@ -1100,12 +1150,12 @@ export function WorkforceScheduleTab({
                                         className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 h-7 rounded-full border border-slate-200 bg-white text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
                                         title={
                                           hasPendingRequest
-                                            ? 'Request pending approval.'
-                                            : 'Change shift'
+                                            ? tr('common.request_pending_approval')
+                                            : tr('common.change_shift')
                                         }
                                       >
                                         <IconClock className="w-3 h-3 text-blue-600 shrink-0" />
-                                        <span>Request change</span>
+                                        <span>{tr('common.request_change')}</span>
                                       </button>
                                       <button
                                         type="button"
@@ -1114,12 +1164,12 @@ export function WorkforceScheduleTab({
                                         className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 h-7 rounded-full bg-[#071A2B] text-white text-[10px] font-bold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
                                         title={
                                           hasPendingRequest
-                                            ? 'Request pending approval.'
-                                            : 'Swap with coworker'
+                                            ? tr('common.request_pending_approval')
+                                            : tr('common.swap_with_coworker')
                                         }
                                       >
                                         <IconUsers className="w-3 h-3 text-white shrink-0" />
-                                        <span>Swap shift</span>
+                                        <span>{tr('common.swap_shift')}</span>
                                       </button>
                                     </div>
                                   )}
@@ -1141,7 +1191,7 @@ export function WorkforceScheduleTab({
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs">
                   <EmptyState
                     icon={<IconCalendar className="w-6 h-6 text-slate-400" />}
-                    title="No Shifts Assigned"
+                    title={tr('common.no_shifts_assigned')}
                     description=""
                   />
                 </div>
@@ -1175,11 +1225,10 @@ export function WorkforceScheduleTab({
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold">
-                              {date} · {dateSchedules.length} shift
-                              {dateSchedules.length === 1 ? '' : 's'}
+                              {tr('counts.datedShifts', { date, count: dateSchedules.length })}
                             </span>
-                            {isDateToday && <Badge variant="default">Today</Badge>}
-                            {isDatePast && <Badge variant="neutral">Past</Badge>}
+                            {isDateToday && <Badge variant="default">{tr('common.today')}</Badge>}
+                            {isDatePast && <Badge variant="neutral">{tr('common.past')}</Badge>}
                           </div>
                           <span className="text-sm font-bold">{collapsed ? '+' : '−'}</span>
                         </button>
@@ -1199,7 +1248,7 @@ export function WorkforceScheduleTab({
                                           className={`w-2 h-2 rounded-full ${isPast ? 'bg-slate-400' : 'bg-[#F66B17]'}`}
                                         />
                                         <h3 className="text-sm font-bold text-slate-900">
-                                          {shiftObj?.name || 'Shift'}
+                                          {shiftObj?.name || tr('common.shift')}
                                         </h3>
                                       </div>
                                     </div>
@@ -1216,7 +1265,7 @@ export function WorkforceScheduleTab({
                                       {isPast
                                         ? 'PAST'
                                         : hasPendingRequest
-                                          ? 'PENDING REVIEW'
+                                          ? tr('common.pending_review_ac9bf8')
                                           : 'SCHEDULED'}
                                     </Badge>
                                   </div>
@@ -1244,7 +1293,9 @@ export function WorkforceScheduleTab({
                                   <div className="pt-2.5 border-t border-slate-100">
                                     {isPast ? (
                                       <div className="text-xs text-slate-400 italic text-center py-1.5 bg-slate-50 rounded-lg border border-slate-100">
-                                        Shift ended (change/swap unavailable)
+                                        {tr(
+                                          'workforce_schedule_tab.shift_ended_change_swap_unavailable',
+                                        )}
                                       </div>
                                     ) : (
                                       <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5">
@@ -1255,12 +1306,14 @@ export function WorkforceScheduleTab({
                                           className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
                                           title={
                                             hasPendingRequest
-                                              ? 'A request for this shift is already pending review.'
+                                              ? tr(
+                                                  'workforce_schedule_tab.a_request_for_this_shift_is_already_pending_review',
+                                                )
                                               : undefined
                                           }
                                         >
                                           <IconClock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                          <span>Request change</span>
+                                          <span>{tr('common.request_change')}</span>
                                         </button>
                                         <button
                                           type="button"
@@ -1269,12 +1322,14 @@ export function WorkforceScheduleTab({
                                           className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
                                           title={
                                             hasPendingRequest
-                                              ? 'A request for this shift is already pending review.'
+                                              ? tr(
+                                                  'workforce_schedule_tab.a_request_for_this_shift_is_already_pending_review',
+                                                )
                                               : undefined
                                           }
                                         >
                                           <IconUsers className="w-3.5 h-3.5 text-white shrink-0" />
-                                          <span>Swap shift</span>
+                                          <span>{tr('common.swap_shift')}</span>
                                         </button>
                                       </div>
                                     )}
@@ -1290,7 +1345,10 @@ export function WorkforceScheduleTab({
 
                   <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] text-slate-500">
                     <span>
-                      Page {schedulePage + 1} of {schedulePageCount}
+                      {tr('workforce_schedule_tab.page_value_of_value', {
+                        value1: schedulePage + 1,
+                        value2: schedulePageCount,
+                      })}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -1299,7 +1357,7 @@ export function WorkforceScheduleTab({
                         onClick={() => setSchedulePage((page) => Math.max(0, page - 1))}
                         className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                       >
-                        Previous
+                        {tr('common.previous')}
                       </button>
                       <button
                         type="button"
@@ -1309,7 +1367,7 @@ export function WorkforceScheduleTab({
                         }
                         className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                       >
-                        Next
+                        {tr('common.next')}
                       </button>
                     </div>
                   </div>
@@ -1326,7 +1384,7 @@ export function WorkforceScheduleTab({
           {paginatedRequests.length === 0 ? (
             <EmptyState
               icon={<IconArrowRight className="w-6 h-6 text-slate-400" />}
-              title="No Requests Filed"
+              title={tr('common.no_requests_filed')}
               description=""
             />
           ) : (
@@ -1335,11 +1393,11 @@ export function WorkforceScheduleTab({
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-4">Type</th>
-                      <th className="py-3 px-4">Shift Details</th>
-                      <th className="py-3 px-4">Reason</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Filed Date</th>
+                      <th className="py-3 px-4">{tr('common.type')}</th>
+                      <th className="py-3 px-4">{tr('common.shift_details')}</th>
+                      <th className="py-3 px-4">{tr('common.reason')}</th>
+                      <th className="py-3 px-4">{tr('common.status')}</th>
+                      <th className="py-3 px-4">{tr('common.filed_date')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1349,23 +1407,28 @@ export function WorkforceScheduleTab({
                         className="hover:bg-slate-50/70 transition-colors"
                       >
                         <td className="py-3.5 px-4 font-bold text-slate-800">
-                          {req.requestType === 'CHANGE' ? 'Shift Change' : 'Shift Swap'}
+                          {req.requestType === 'CHANGE'
+                            ? tr('common.shift_change_6e6c74')
+                            : tr('common.shift_swap')}
                         </td>
                         <td className="py-3.5 px-4 font-semibold text-slate-900">
                           {req.requestType === 'CHANGE' ? (
                             <span className="font-normal text-slate-700">
-                              Shift date: {formatWorkDate(req.workDate)} · To:{' '}
-                              {getShiftName(req.toShiftId)}
+                              {tr('workforce_schedule_tab.shift_date_value_to_value', {
+                                value1: formatWorkDate(req.workDate),
+                                value2: getShiftName(req.toShiftId),
+                              })}
                             </span>
                           ) : (
                             <div className="space-y-1">
                               <div>
-                                Swap with{' '}
-                                {getWorkerName(
-                                  req.coworkerWorkerId === currentWorkerId
-                                    ? req.requesterWorkerId
-                                    : req.coworkerWorkerId,
-                                )}
+                                {tr('common.swap_with_value', {
+                                  value1: getWorkerName(
+                                    req.coworkerWorkerId === currentWorkerId
+                                      ? req.requesterWorkerId
+                                      : req.coworkerWorkerId,
+                                  ),
+                                })}
                               </div>
                               <div>
                                 {formatWorkDate(req.requesterWorkDate)} ·{' '}
@@ -1379,10 +1442,10 @@ export function WorkforceScheduleTab({
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 italic">
-                          <div>{req.reason || 'No reason specified'}</div>
+                          <div>{req.reason || tr('common.no_reason_specified')}</div>
                           {req.reviewReason && (
                             <div className="mt-1 border-t border-slate-200/70 pt-1 text-[11px] not-italic text-rose-700 font-medium">
-                              Review message: {req.reviewReason}
+                              {tr('common.review_message_value', { value1: req.reviewReason })}
                             </div>
                           )}
                         </td>
@@ -1397,7 +1460,7 @@ export function WorkforceScheduleTab({
                             }
                             dot
                           >
-                            {req.status}
+                            {localizedLabel(req.status)}
                           </Badge>
                         </td>
                         <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">
@@ -1413,18 +1476,20 @@ export function WorkforceScheduleTab({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500 font-medium">
                 <div className="flex items-center gap-2">
                   <span>
-                    Showing{' '}
+                    {tr('common.showing')}{' '}
                     <span className="font-bold text-slate-900">
                       {requestsTotal === 0 ? 0 : requestsPage * requestsPageSize + 1}
                     </span>{' '}
-                    to{' '}
+                    {tr('common.to_663ea1')}{' '}
                     <span className="font-bold text-slate-900">
                       {Math.min((requestsPage + 1) * requestsPageSize, requestsTotal)}
                     </span>{' '}
-                    of <span className="font-bold text-slate-900">{requestsTotal}</span> requests
+                    {tr('common.of')}{' '}
+                    <span className="font-bold text-slate-900">{requestsTotal}</span>{' '}
+                    {tr('common.requests')}
                   </span>
                   <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
-                    <span className="text-[11px] text-slate-400">Per page:</span>
+                    <span className="text-[11px] text-slate-400">{tr('common.per_page')}</span>
                     <select
                       value={requestsPageSize}
                       onChange={(e) => {
@@ -1450,7 +1515,7 @@ export function WorkforceScheduleTab({
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
                     >
                       <IconChevronLeft className="w-3.5 h-3.5" />
-                      <span>Prev</span>
+                      <span>{tr('common.prev')}</span>
                     </button>
 
                     <div className="flex items-center gap-1">
@@ -1476,7 +1541,7 @@ export function WorkforceScheduleTab({
                       onClick={() => setRequestsPage((p) => Math.min(requestsPageCount - 1, p + 1))}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs cursor-pointer"
                     >
-                      <span>Next</span>
+                      <span>{tr('common.next')}</span>
                       <IconChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -1502,7 +1567,7 @@ export function WorkforceScheduleTab({
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs">
               <EmptyState
                 icon={<IconCheckCircle2 className="w-6 h-6 text-emerald-500" />}
-                title="No Pending Coworker Swaps"
+                title={tr('workforce_schedule_tab.no_pending_coworker_swaps')}
                 description=""
               />
             </div>
@@ -1526,25 +1591,27 @@ export function WorkforceScheduleTab({
                     </div>
 
                     <Badge variant="warning" dot>
-                      PENDING COWORKER
+                      {tr('common.pending_coworker')}
                     </Badge>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700 space-y-1">
                     <div>
                       <span className="font-semibold">
-                        {getWorkerName(swap.requesterWorkerId)}&apos;s shift:
+                        {tr('common.value_apos_s_shift', {
+                          value1: getWorkerName(swap.requesterWorkerId),
+                        })}
                       </span>{' '}
                       {formatWorkDate(swap.requesterWorkDate)} ·{' '}
                       {getShiftName(swap.requesterShiftId)}
                     </div>
                     <div>
-                      <span className="font-semibold">Your shift:</span>{' '}
+                      <span className="font-semibold">{tr('common.your_shift')}</span>{' '}
                       {formatWorkDate(swap.coworkerWorkDate)} · {getShiftName(swap.coworkerShiftId)}
                     </div>
                     {swap.reason && (
                       <p className="text-[11px] text-slate-500 italic pt-1 border-t border-slate-200/60">
-                        &quot;{swap.reason}&quot;
+                        {tr('common.quot_value_quot', { value1: swap.reason })}
                       </p>
                     )}
                   </div>
@@ -1561,7 +1628,7 @@ export function WorkforceScheduleTab({
                       }}
                       className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
                     >
-                      Decline
+                      {tr('common.decline')}
                     </Button>
 
                     <Button
@@ -1572,7 +1639,7 @@ export function WorkforceScheduleTab({
                       onClick={() => confirmCoworkerSwap.mutate(swap.id)}
                       leftIcon={<IconCheck className="w-3.5 h-3.5 text-emerald-400" />}
                     >
-                      Accept Swap
+                      {tr('common.accept_swap')}
                     </Button>
                   </div>
                 </Card>
@@ -1586,7 +1653,7 @@ export function WorkforceScheduleTab({
       <Dialog
         open={Boolean(declineTarget)}
         onClose={closeDeclineModal}
-        title="Decline Shift Swap"
+        title={tr('common.decline_shift_swap')}
         icon={<IconAlertCircle className="w-4 h-4 text-rose-500" />}
       >
         <form
@@ -1608,9 +1675,11 @@ export function WorkforceScheduleTab({
           )}
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs text-slate-700">
-            You are declining the swap request from{' '}
+            {tr('workforce_schedule_tab.you_are_declining_the_swap_request_from')}{' '}
             <span className="font-bold">
-              {declineTarget ? getWorkerName(declineTarget.requesterWorkerId) : 'the requester'}
+              {declineTarget
+                ? getWorkerName(declineTarget.requesterWorkerId)
+                : tr('common.the_requester')}
             </span>
             .
           </div>
@@ -1620,7 +1689,7 @@ export function WorkforceScheduleTab({
               htmlFor="coworker-decline-reason"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Reason for declining <span className="text-rose-500">*</span>
+              {tr('common.reason_for_declining')} <span className="text-rose-500">*</span>
             </label>
             <textarea
               id="coworker-decline-reason"
@@ -1630,7 +1699,7 @@ export function WorkforceScheduleTab({
               maxLength={1000}
               value={declineReason}
               onChange={(event) => setDeclineReason(event.target.value)}
-              placeholder="Why can you not accept this swap?"
+              placeholder={tr('workforce_schedule_tab.why_can_you_not_accept_this_swap')}
               className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 outline-none transition-all duration-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/10 shadow-sm resize-none"
             />
           </div>
@@ -1643,7 +1712,7 @@ export function WorkforceScheduleTab({
               onClick={closeDeclineModal}
               className="rounded-full px-5 font-bold"
             >
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1653,7 +1722,7 @@ export function WorkforceScheduleTab({
               isLoading={declineCoworkerSwap.isPending}
               className="rounded-full px-6 font-bold shadow-xs"
             >
-              Decline Swap
+              {tr('common.decline_swap')}
             </Button>
           </div>
         </form>
@@ -1662,8 +1731,10 @@ export function WorkforceScheduleTab({
       <Dialog
         open={modalType === 'change'}
         onClose={closeModal}
-        title="Request Shift Change"
-        description={`Request changing shift on ${selectedSchedule?.workDate}`}
+        title={tr('common.request_shift_change')}
+        description={tr('workforce_schedule_tab.request_changing_shift_on_value', {
+          value1: selectedSchedule?.workDate,
+        })}
         icon={<IconClock className="w-4 h-4 text-[#F66B17]" />}
       >
         <form
@@ -1687,19 +1758,21 @@ export function WorkforceScheduleTab({
           className="space-y-4"
         >
           {selectedSchedule && isPastSchedule(selectedSchedule) && (
-            <p role="alert">This shift has ended. Changes are no longer allowed.</p>
+            <p role="alert">
+              {tr('workforce_schedule_tab.this_shift_has_ended_changes_are_no_longer_allowed')}
+            </p>
           )}
-          {eligibleQuery.isLoading && <p role="status">Loading eligible shifts...</p>}
+          {eligibleQuery.isLoading && <p role="status">{tr('common.loading_eligible_shifts')}</p>}
           {eligibleQuery.isError && (
             <div role="alert">
               {schedulingError(eligibleQuery.error)}{' '}
               <Button type="button" onClick={() => void eligibleQuery.refetch()}>
-                Retry
+                {tr('common.retry')}
               </Button>
             </div>
           )}
           {eligibleQuery.isSuccess && !eligibleShifts?.items.length && (
-            <p>No eligible shifts are available.</p>
+            <p>{tr('workforce_schedule_tab.no_eligible_shifts_are_available')}</p>
           )}
           {createChange.isError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
@@ -1710,14 +1783,14 @@ export function WorkforceScheduleTab({
 
           <div className="space-y-1">
             <SmartSelect
-              label="Target Shift"
+              label={tr('common.target_shift')}
               fieldRequired
               value={changeTargetShiftId}
               onChange={(value) => {
                 setChangeTargetShiftId(value);
                 if (createChange.isError) createChange.reset();
               }}
-              placeholder="-- Select Target Shift --"
+              placeholder={tr('workforce_schedule_tab.select_target_shift')}
               options={(eligibleShifts?.items ?? []).map((s) => ({
                 value: s.id,
                 label: `${s.name} (${formatShiftTime(s.startsAt)} - ${formatShiftTime(s.endsAt)})`,
@@ -1730,12 +1803,12 @@ export function WorkforceScheduleTab({
               htmlFor="shift-change-reason"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Reason <span className="text-rose-500">*</span>
+              {tr('common.reason')} <span className="text-rose-500">*</span>
             </label>
             <textarea
               rows={3}
               required
-              placeholder="Why do you need to change your shift?"
+              placeholder={tr('workforce_schedule_tab.why_do_you_need_to_change_your_shift')}
               id="shift-change-reason"
               minLength={5}
               maxLength={1000}
@@ -1754,8 +1827,8 @@ export function WorkforceScheduleTab({
               className={`text-[11px] ${changeReason.length > 0 && changeReason.trim().length < 5 ? 'text-rose-700' : 'text-slate-500'}`}
             >
               {changeReason.length > 0 && changeReason.trim().length < 5
-                ? 'Reason must be at least 5 characters.'
-                : 'Reason must be 5 to 1000 characters.'}
+                ? tr('workforce_schedule_tab.reason_must_be_at_least_5_characters')
+                : tr('workforce_schedule_tab.reason_must_be_5_to_1000_characters')}
             </p>
           </div>
 
@@ -1767,7 +1840,7 @@ export function WorkforceScheduleTab({
               onClick={closeModal}
               className="rounded-full px-5 font-bold"
             >
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1784,7 +1857,7 @@ export function WorkforceScheduleTab({
               isLoading={createChange.isPending}
               className="rounded-full px-6 font-bold bg-[#071A2B] hover:bg-[#0E2841] text-white shadow-xs"
             >
-              Submit Change Request
+              {tr('common.submit_change_request')}
             </Button>
           </div>
         </form>
@@ -1803,8 +1876,10 @@ export function WorkforceScheduleTab({
       <Dialog
         open={modalType === 'swap'}
         onClose={closeModal}
-        title="Request Shift Swap"
-        description={`Swap your shift on ${selectedSchedule?.workDate} with a coworker`}
+        title={tr('common.request_shift_swap')}
+        description={tr('workforce_schedule_tab.swap_your_shift_on_value_with_a_coworker', {
+          value1: selectedSchedule?.workDate,
+        })}
         icon={<IconUser className="w-4 h-4 text-[#F66B17]" />}
       >
         <form
@@ -1834,7 +1909,7 @@ export function WorkforceScheduleTab({
               className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 flex items-center gap-2"
             >
               <div className="w-4 h-4 rounded-full border-2 border-slate-600 border-t-transparent animate-spin" />
-              <span>Checking team status...</span>
+              <span>{tr('common.checking_team_status')}</span>
             </div>
           )}
           {myTeamQuery.isError && (
@@ -1842,14 +1917,14 @@ export function WorkforceScheduleTab({
               role="alert"
               className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs text-rose-800"
             >
-              <span>Cannot verify team for shift swap.</span>
+              <span>{tr('workforce_schedule_tab.cannot_verify_team_for_shift_swap')}</span>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => void myTeamQuery.refetch()}
               >
-                Retry
+                {tr('common.retry')}
               </Button>
             </div>
           )}
@@ -1857,25 +1932,29 @@ export function WorkforceScheduleTab({
             <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-900 text-xs">
               <IconAlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
               <div className="space-y-0.5">
-                <p className="font-bold">Unassigned</p>
+                <p className="font-bold">{tr('common.unassigned')}</p>
               </div>
             </div>
           )}
           {selectedSchedule && isPastSchedule(selectedSchedule) && (
-            <p role="alert">This shift has ended. Changes are no longer allowed.</p>
+            <p role="alert">
+              {tr('workforce_schedule_tab.this_shift_has_ended_changes_are_no_longer_allowed')}
+            </p>
           )}
-          {candidateQuery.isLoading && <p role="status">Loading coworker shifts...</p>}
+          {candidateQuery.isLoading && <p role="status">{tr('common.loading_coworker_shifts')}</p>}
           {candidateQuery.isError && (
             <div role="alert">
               {schedulingError(candidateQuery.error)}{' '}
               <Button type="button" onClick={() => void candidateQuery.refetch()}>
-                Retry
+                {tr('common.retry')}
               </Button>
             </div>
           )}
           {candidateQuery.isSuccess && !swapCandidates?.items.length && (
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-              <p className="font-bold text-slate-800">No eligible coworker shifts are available.</p>
+              <p className="font-bold text-slate-800">
+                {tr('workforce_schedule_tab.no_eligible_coworker_shifts_are_available')}
+              </p>
             </div>
           )}
           {createSwap.isError && (
@@ -1887,14 +1966,14 @@ export function WorkforceScheduleTab({
 
           <div className="space-y-1">
             <SmartSelect
-              label="Select Coworker Shift"
+              label={tr('common.select_coworker_shift')}
               fieldRequired
               value={swapTargetScheduleId}
               onChange={(value) => {
                 setSwapTargetScheduleId(value);
                 if (createSwap.isError) createSwap.reset();
               }}
-              placeholder="-- Select Candidate --"
+              placeholder={tr('workforce_schedule_tab.select_candidate')}
               options={(swapCandidates?.items || []).map((cand) => ({
                 value: cand.candidateWorkerScheduleId,
                 label: `${cand.candidateWorkerDisplayName} - ${cand.workDate} (${cand.currentShift.name})`,
@@ -1907,12 +1986,12 @@ export function WorkforceScheduleTab({
               htmlFor="shift-swap-reason"
               className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
             >
-              Reason <span className="text-rose-500">*</span>
+              {tr('common.reason')} <span className="text-rose-500">*</span>
             </label>
             <textarea
               rows={3}
               required
-              placeholder="Why do you wish to swap this shift?"
+              placeholder={tr('workforce_schedule_tab.why_do_you_wish_to_swap_this_shift')}
               id="shift-swap-reason"
               minLength={5}
               maxLength={1000}
@@ -1931,8 +2010,8 @@ export function WorkforceScheduleTab({
               className={`text-[11px] ${swapReason.length > 0 && swapReason.trim().length < 5 ? 'text-rose-700' : 'text-slate-500'}`}
             >
               {swapReason.length > 0 && swapReason.trim().length < 5
-                ? 'Reason must be at least 5 characters.'
-                : 'Reason must be 5 to 1000 characters.'}
+                ? tr('workforce_schedule_tab.reason_must_be_at_least_5_characters')
+                : tr('workforce_schedule_tab.reason_must_be_5_to_1000_characters')}
             </p>
           </div>
 
@@ -1944,7 +2023,7 @@ export function WorkforceScheduleTab({
               onClick={closeModal}
               className="rounded-full px-5 font-bold"
             >
-              Cancel
+              {tr('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -1962,7 +2041,7 @@ export function WorkforceScheduleTab({
               isLoading={createSwap.isPending}
               className="rounded-full px-6 font-bold bg-[#071A2B] hover:bg-[#0E2841] text-white shadow-xs"
             >
-              Submit Swap Request
+              {tr('common.submit_swap_request')}
             </Button>
           </div>
         </form>

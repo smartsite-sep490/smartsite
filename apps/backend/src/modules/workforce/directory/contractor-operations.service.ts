@@ -189,14 +189,16 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     contractorId: string,
     siteId: string,
+    lock = false,
   ): Promise<void> {
     this.assertPasswordChanged(actor);
     if (this.isAdmin(actor)) return;
     if (!this.hasSiteRole(actor, siteId, UserRole.CONTRACTOR_REPRESENTATIVE)) this.forbidden();
-    const grant = await manager.getRepository(ContractorRepresentativeGrantEntity).findOneBy({
-      userId: actor.id,
-      contractorId,
-    });
+    const grants = manager.getRepository(ContractorRepresentativeGrantEntity);
+    const where = { userId: actor.id, contractorId };
+    const grant = lock
+      ? await grants.findOne({ where, lock: { mode: 'pessimistic_read' } })
+      : await grants.findOneBy(where);
     if (!grant) this.forbidden();
   }
 
@@ -233,17 +235,22 @@ export class ContractorOperationsService {
     contractorId: string,
     siteId: string,
     at: Date,
+    lock = false,
   ): Promise<void> {
-    const contractor = await manager
-      .getRepository(ContractorEntity)
-      .findOneBy({ id: contractorId });
+    const contractors = manager.getRepository(ContractorEntity);
+    const contractor = lock
+      ? await contractors.findOne({
+          where: { id: contractorId },
+          lock: { mode: 'pessimistic_read' },
+        })
+      : await contractors.findOneBy({ id: contractorId });
     if (!contractor) missing();
     if (!contractor.isActive) this.forbidden();
-    const participation = await manager.getRepository(ContractorSiteParticipationEntity).findBy({
-      contractorId,
-      siteId,
-      isActive: true,
-    });
+    const participations = manager.getRepository(ContractorSiteParticipationEntity);
+    const where = { contractorId, siteId, isActive: true };
+    const participation = lock
+      ? await participations.find({ where, lock: { mode: 'pessimistic_read' } })
+      : await participations.findBy(where);
     if (
       !participation.some(
         ({ validFrom, validUntil }) =>
@@ -364,8 +371,7 @@ export class ContractorOperationsService {
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
     return this.dataSource.transaction(async (manager) => {
-      await this.requireContractorRepresentative(manager, actor, contractorId, siteId);
-      await this.requireActiveParticipation(manager, contractorId, siteId, new Date());
+      await this.requireWorkerCreationAccess(manager, actor, contractorId, siteId);
       try {
         return await manager.getRepository(WorkerEntity).save({
           id: randomUUID(),
@@ -379,6 +385,17 @@ export class ContractorOperationsService {
         knownUnique(error, ['uq_worker_site_external_id']);
       }
     });
+  }
+
+  async requireWorkerCreationAccess(
+    manager: EntityManager,
+    actor: WorkforceActor,
+    contractorId: string,
+    siteId: string,
+    lock = false,
+  ): Promise<void> {
+    await this.requireContractorRepresentative(manager, actor, contractorId, siteId, lock);
+    await this.requireActiveParticipation(manager, contractorId, siteId, new Date(), lock);
   }
 
   async requestAssignment(

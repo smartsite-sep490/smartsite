@@ -1,3 +1,8 @@
+import i18n from '../../i18n';
+import { beforeEach as beforeLocaleTest } from 'vitest';
+beforeLocaleTest(async () => {
+  await i18n.changeLanguage('vi');
+});
 // @vitest-environment jsdom
 import React from 'react';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
@@ -252,8 +257,8 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
-    const tab1 = await screen.findByRole('tab', { name: /PERSON #1/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
+    const tab1 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #1/i });
 
     expect(tab0.getAttribute('aria-selected')).toBe('false');
     expect(tab1.getAttribute('aria-selected')).toBe('false');
@@ -310,7 +315,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     expect(tab0.getAttribute('aria-selected')).toBe('true');
@@ -327,7 +332,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     expect(workerSelect.value).toBe('00000000-0000-4000-8000-000000000777');
     expect(reasonInput.value).toBe('Xác nhận nhân viên đang thực hiện công việc số 0');
 
-    const tab1 = screen.getByRole('tab', { name: /PERSON #1/i });
+    const tab1 = screen.getByRole('tab', { name: /ĐỐI TƯỢNG #1/i });
     await user.click(tab1);
 
     expect(tab1.getAttribute('aria-selected')).toBe('true');
@@ -368,7 +373,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const reasonInput = (await screen.findByLabelText(/Lý do đánh giá/i)) as HTMLTextAreaElement;
@@ -466,7 +471,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     expect(
@@ -571,7 +576,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const img = await screen.findByAltText('Khung hình bằng chứng quan sát');
@@ -695,7 +700,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     await waitFor(() => {
@@ -760,7 +765,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Fail-closed error notice must be visible: decoder is not available
@@ -835,7 +840,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Bitmap close must have been called even when dimensions are invalid
@@ -907,7 +912,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Blob A hash matched
@@ -1055,7 +1060,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Evidence full frame container is rendered
@@ -1068,7 +1073,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     // Exact bounding box overlay is rendered
     const boxOverlay = await screen.findByTestId('person-bounding-box-overlay');
     expect(boxOverlay).not.toBeNull();
-    expect(boxOverlay.textContent).toContain('PERSON #0');
+    expect(boxOverlay.textContent).toContain('ĐỐI TƯỢNG #0');
   });
 
   it('session cache isolation partitions queries and unmount aborts active signals', async () => {
@@ -1137,7 +1142,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     expect(screen.getByText('Gợi ý kỹ thuật (AI)')).not.toBeNull();
@@ -1150,8 +1155,8 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     expect(
       screen.getByText('Quyết định vào vùng gốc (Original Zone Decisions - Bất biến)'),
     ).not.toBeNull();
-    expect(screen.getByText('DENIED')).not.toBeNull();
-    expect(screen.getByText('PROHIBITED_ZONE')).not.toBeNull();
+    expect(screen.getByText('Bị từ chối')).not.toBeNull();
+    expect(screen.getByText('Khu vực cấm')).not.toBeNull();
     expect(screen.getByText(/không cấp quyền ra\/vào vùng \(Zone Access\)/i)).not.toBeNull();
   });
 
@@ -1208,7 +1213,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Initial call rejects -> Error notice appears with retry button
@@ -1306,7 +1311,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Initial rejection shows error banner for history
@@ -1402,7 +1407,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const clearRadio = screen.getByLabelText(/Thu hồi xác minh \(CLEAR\)/i);
@@ -1488,7 +1493,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const clearRadio = screen.getByLabelText(/Thu hồi xác minh \(CLEAR\)/i);
@@ -1647,8 +1652,8 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
-    const tab1 = await screen.findByRole('tab', { name: /PERSON #1/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
+    const tab1 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #1/i });
 
     // Keyboard roving tabIndex test:
     tab0.focus();
@@ -1727,7 +1732,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tallTab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tallTab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tallTab0);
 
     const tallImg = await screen.findByAltText('Khung hình bằng chứng quan sát');
@@ -1769,8 +1774,8 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
-    const tab1 = await screen.findByRole('tab', { name: /PERSON #1/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
+    const tab1 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #1/i });
 
     // Initial state: Tab 0 is tabbable (tabIndex=0) but NOT selected (aria-selected=false)
     expect(tab0.getAttribute('tabindex')).toBe('0');
@@ -1928,7 +1933,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const img = await screen.findByAltText('Khung hình bằng chứng quan sát');
@@ -1993,7 +1998,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const workerSelect = (await screen.findByLabelText(
@@ -2067,7 +2072,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Validation error displayed
@@ -2236,7 +2241,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Mock container layout measurement
@@ -2351,7 +2356,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const container = screen.getByTestId('evidence-frame-container');
@@ -2413,7 +2418,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     );
 
     // 1. Initial authenticated state loads context
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     const workerSelect = (await screen.findByLabelText(
@@ -2427,7 +2432,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     const reasonInput = screen.getByLabelText(/Lý do đánh giá/i);
     await user.type(reasonInput, 'Lý do đánh giá bí mật cá nhân');
 
-    expect(screen.getByText('PERSON #0')).not.toBeNull();
+    expect(screen.getByText('ĐỐI TƯỢNG #0')).not.toBeNull();
     expect(screen.getByText(/Nguyễn Văn A/i)).not.toBeNull();
     expect((reasonInput as HTMLTextAreaElement).value).toBe('Lý do đánh giá bí mật cá nhân');
     expect(mockClient.getObservationIdentityContext).toHaveBeenCalledTimes(1);
@@ -2447,7 +2452,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
 
     // 4. No identity name, reason, context, form or tabs remain in the DOM
     expect(screen.queryByRole('tablist')).toBeNull();
-    expect(screen.queryByText(/PERSON #0/i)).toBeNull();
+    expect(screen.queryByText(/ĐỐI TƯỢNG #0/i)).toBeNull();
     expect(screen.queryByText(/Nguyễn Văn A/i)).toBeNull();
     expect(screen.queryByLabelText(/Lý do đánh giá/i)).toBeNull();
     expect(screen.queryByLabelText(/Chọn nhân viên.*danh bạ/i)).toBeNull();
@@ -2525,7 +2530,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     );
 
     // Select Person #0 so viewer is active
-    const tab0 = await screen.findByRole('tab', { name: /PERSON #0/i });
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
     await user.click(tab0);
 
     // Wait for image viewer to mount and allocate URL

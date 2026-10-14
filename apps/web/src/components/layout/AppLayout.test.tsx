@@ -43,6 +43,7 @@ it.each([
     expect(navigation.queryByRole('button', { name: 'Site Access' })).toBeNull();
     expect(navigation.getByRole('button', { name: 'Contractor Review' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
+    expect(navigation.getByRole('button', { name: 'Worker Onboarding' })).toBeTruthy();
   },
 );
 

@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -42,58 +44,109 @@ const ACCESS_TABS: readonly TabDefinition[] = [
   {
     id: 'attendance',
     code: 'MF03',
-    label: 'Attendance',
-    subLabel: 'Hours & Approvals',
-    description: 'Daily work hours, overtime, leave and attendance corrections',
+    get label() {
+      return tr('common.attendance');
+    },
+    get subLabel() {
+      return tr('common.hours_approvals');
+    },
+    get description() {
+      return tr('access_control_view.daily_work_hours_overtime_leave_and_attendance_corrections');
+    },
     icon: IconUsers,
   },
   {
     id: 'worker-qr',
     code: 'MF02 QR',
-    label: 'My QR Pass',
-    subLabel: 'Worker QR Fallback',
-    description: 'Dynamic QR pass for an authorized gate fallback session',
+    get label() {
+      return tr('common.my_qr_pass');
+    },
+    get subLabel() {
+      return tr('common.worker_qr_fallback');
+    },
+    get description() {
+      return tr('access_control_view.dynamic_qr_pass_for_an_authorized_gate_fallback_session');
+    },
     icon: IconKey,
   },
   {
     id: 'zone-permissions',
     code: 'MF06',
-    label: 'Zone Permissions',
-    subLabel: 'Zone Grants & AI Audit',
-    description:
-      'Manage worker zone access grants and audit AI-assisted restricted zone entry decisions',
+    get label() {
+      return tr('common.zone_permissions');
+    },
+    get subLabel() {
+      return tr('access_control_view.zone_grants_ai_audit');
+    },
+    get description() {
+      return tr(
+        'access_control_view.manage_worker_zone_access_grants_and_audit_ai_assisted_restricted_zone_entry_decis',
+      );
+    },
     icon: IconShield,
   },
   {
     id: 'gate-desk',
     code: 'MF02',
-    label: 'Security Gate Desk',
-    subLabel: 'Face & Dynamic QR Scan',
-    description: 'Physical gate security desk for real-time facial verification and check-in/out',
+    get label() {
+      return tr('common.security_gate_desk');
+    },
+    get subLabel() {
+      return tr('access_control_view.face_dynamic_qr_scan');
+    },
+    get description() {
+      return tr(
+        'access_control_view.physical_gate_security_desk_for_real_time_facial_verification_and_check_in_out',
+      );
+    },
     icon: IconCamera,
   },
   {
     id: 'worker-enrollment',
     code: 'MF01',
-    label: 'Worker Biometrics',
-    subLabel: '3-Angle Face Enrollment',
-    description: 'Guided capture workflow for multi-angle face enrollment and template encryption',
+    get label() {
+      return tr('common.worker_biometrics');
+    },
+    get subLabel() {
+      return tr('common.3_angle_face_enrollment');
+    },
+    get description() {
+      return tr(
+        'access_control_view.guided_capture_workflow_for_multi_angle_face_enrollment_and_template_encryption',
+      );
+    },
     icon: IconUsers,
   },
   {
     id: 'gate-permissions',
     code: 'RBAC',
-    label: 'Gate Permissions',
-    subLabel: 'Per-Gate Clearance Rules',
-    description: 'Assign and revoke perimeter gate access permissions for enrolled site workers',
+    get label() {
+      return tr('common.gate_permissions');
+    },
+    get subLabel() {
+      return tr('common.per_gate_clearance_rules');
+    },
+    get description() {
+      return tr(
+        'access_control_view.assign_and_revoke_perimeter_gate_access_permissions_for_enrolled_site_workers',
+      );
+    },
     icon: IconKey,
   },
   {
     id: 'visitor-passes',
     code: 'MF04 QR',
-    label: 'Visitor Passes',
-    subLabel: 'Issue & Scan Dynamic QR',
-    description: 'Issue and verify time-limited visitor credentials strictly through dynamic QR',
+    get label() {
+      return tr('common.visitor_passes');
+    },
+    get subLabel() {
+      return tr('access_control_view.issue_scan_dynamic_qr');
+    },
+    get description() {
+      return tr(
+        'access_control_view.issue_and_verify_time_limited_visitor_credentials_strictly_through_dynamic_qr',
+      );
+    },
     icon: IconKey,
   },
 ] as const;
@@ -103,10 +156,14 @@ export interface AccessControlViewProps {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'The request could not be completed.';
+  return error instanceof Error
+    ? error.message
+    : tr('access_control_view.the_request_could_not_be_completed');
 }
 
 export function AccessControlView({ apiUrl }: AccessControlViewProps) {
+  useTranslation();
+
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const queryClient = useQueryClient();
   const { accessToken } = useAuth();
@@ -148,7 +205,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     ? requestedSiteId
     : (sites.data?.items[0]?.id ?? '');
 
-  const activeSiteName = sites.data?.items.find((site) => site.id === siteId)?.name ?? 'Site';
+  const activeSiteName =
+    sites.data?.items.find((site) => site.id === siteId)?.name ?? tr('common.site_fa7955');
   const siteRoles =
     currentUser?.roleAssignments.filter((r) => r.siteId === siteId).map((r) => r.role) ?? [];
   const visibleTabs = ACCESS_TABS.filter((tab) =>
@@ -193,7 +251,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       <div className="flex min-h-[60vh] items-center justify-center p-4">
         <div className="flex items-center gap-2 rounded-xl border border-[#EAEAEA] bg-white p-5 text-xs text-[#6B6B6B] shadow-xs">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-          <span>Restoring your authenticated session…</span>
+          <span>{tr('access_control_view.restoring_your_authenticated_session')}</span>
         </div>
       </div>
     );
@@ -235,10 +293,13 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           className="w-full max-w-md space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center shadow-xs"
         >
           <IconShield className="mx-auto h-8 w-8 text-amber-600" />
-          <h1 className="text-lg font-bold text-[#2F3437]">Site Access is restricted</h1>
+          <h1 className="text-lg font-bold text-[#2F3437]">
+            {tr('access_control_view.site_access_is_restricted')}
+          </h1>
           <p className="text-xs leading-relaxed text-amber-900">
-            An active Site staff, Contractor Representative, Worker or Admin account with a
-            permanent password is required.
+            {tr(
+              'access_control_view.an_active_site_staff_contractor_representative_worker_or_admin_account_with_a_perm',
+            )}
           </p>
         </div>
       </div>
@@ -254,14 +315,14 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             <div className="flex items-center gap-2.5">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
-                Access & Identity System
+                {tr('access_control_view.access_identity_system')}
               </span>
               <span className="hidden sm:inline-block rounded-full bg-[#F7F6F3] border border-[#EAEAEA] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
-                Security Portal
+                {tr('common.security_portal')}
               </span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
-              Site Access & Biometric Identity Control
+              {tr('access_control_view.site_access_biometric_identity_control')}
             </h1>
           </div>
 
@@ -277,7 +338,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 </span>
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                  {isGlobalAdmin ? 'Global Admin' : siteRoles.join(' · ')}
+                  {isGlobalAdmin ? tr('common.global_admin') : siteRoles.join(' · ')}
                 </span>
               </div>
             </div>
@@ -287,7 +348,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               disabled={logoutMutation.isPending}
               className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3.5 py-2 text-xs font-bold text-[#2F3437] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
             >
-              <span>Sign out</span>
+              <span>{tr('common.sign_out')}</span>
             </button>
           </div>
         </div>
@@ -295,7 +356,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
       {/* Modern Sub-Navigation Tabs */}
       <nav
-        aria-label="Access control tabs"
+        aria-label={tr('common.access_control_tabs')}
         className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${
           visibleTabs.length >= 6
             ? 'lg:grid-cols-6'
@@ -366,8 +427,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               {siteRoles.includes('WORKER') &&
               !isGlobalAdmin &&
               !siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
-                ? 'My Site:'
-                : 'Active Managed Site:'}
+                ? tr('common.my_site')
+                : tr('common.active_managed_site')}
             </label>
             <select
               id="access-site-select"
@@ -389,18 +450,18 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           <div className="hidden sm:flex items-center gap-2 rounded-lg bg-[#F7F6F3] border border-[#EAEAEA] px-3 py-1.5 text-xs">
             <span className="h-2 w-2 rounded-full bg-emerald-600" />
             <span className="font-semibold text-[#6B6B6B]">
-              Site: <span className="font-bold text-[#2F3437]">{activeSiteName}</span>
+              {tr('common.site')} <span className="font-bold text-[#2F3437]">{activeSiteName}</span>
             </span>
           </div>
 
           <button
             type="button"
             onClick={() => void sites.refetch()}
-            title="Reload sites list"
+            title={tr('common.reload_sites_list')}
             className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3 py-1.5 text-xs font-semibold text-[#2F3437] hover:bg-[#FBFBFA] transition-colors"
           >
             <IconRefresh className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Refresh</span>
+            <span className="hidden md:inline">{tr('common.refresh')}</span>
           </button>
         </div>
       </section>
@@ -409,7 +470,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       {sites.isPending && (
         <div className="flex items-center gap-2 rounded-xl border border-[#EAEAEA] bg-white p-4 text-xs text-[#6B6B6B]">
           <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-          <span>Loading construction sites…</span>
+          <span>{tr('common.loading_construction_sites')}</span>
         </div>
       )}
 
@@ -424,14 +485,14 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             className="flex items-center gap-1 font-bold underline hover:text-red-900"
           >
             <IconRefresh className="h-3.5 w-3.5" />
-            <span>Try again</span>
+            <span>{tr('common.try_again')}</span>
           </button>
         </div>
       )}
 
       {!sites.isPending && !sites.error && !sites.data?.items.length && (
         <div className="rounded-xl border border-[#EAEAEA] bg-white p-8 text-center text-xs text-[#6B6B6B]">
-          No construction sites currently configured on the system.
+          {tr('access_control_view.no_construction_sites_currently_configured_on_the_system')}
         </div>
       )}
 

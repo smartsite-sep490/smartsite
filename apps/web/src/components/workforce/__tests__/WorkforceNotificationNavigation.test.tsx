@@ -200,7 +200,7 @@ describe('notification request navigation', () => {
     };
     mount('review', 'pending');
     expect(screen.queryByText('Approve Swap')).toBeNull();
-    expect(await screen.findByText('APPLIED')).toBeTruthy();
+    expect(await screen.findByText('Applied')).toBeTruthy();
   });
 
   it('denies a notification link to an unassigned Site before requesting its details', async () => {

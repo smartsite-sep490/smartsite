@@ -83,7 +83,7 @@ it.each(['list', 'notification', 'history', 'missing-date'])(
     expect(date.textContent).toContain(view === 'missing-date' ? 'Date unavailable' : '12/02/2030');
     expect(date.textContent).not.toContain('01/12/2029');
     if (view === 'history') {
-      expect(await screen.findByText('REJECTED')).toBeTruthy();
+      expect(await screen.findByText('Rejected')).toBeTruthy();
     } else {
       expect(screen.getByRole('button', { name: 'Approve Change' })).toBeTruthy();
     }

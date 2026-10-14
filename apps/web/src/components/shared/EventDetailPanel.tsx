@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React from 'react';
 import { IconAlertTriangle, IconCheck } from '../icons';
 
@@ -33,6 +35,8 @@ export function EventDetailPanel({
   secondaryActionLabel,
   onSecondaryAction,
 }: EventDetailPanelProps) {
+  useTranslation();
+
   const resultColors = {
     error: 'border-[#9F2F2D] text-[#9F2F2D] bg-[#FDEBEC]/50',
     warning: 'border-[#956400] text-[#956400] bg-[#FBF3DB]/50',
@@ -45,11 +49,11 @@ export function EventDetailPanel({
       {/* Scrollable Content Area */}
       <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
         {/* Header */}
-        <div className="flex items-center justify-between pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 min-w-0">
           <span className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest">
             {title}
           </span>
-          <span className="px-2 py-0.5 rounded-full bg-[#F7F6F3] text-[#6B6B6B] font-mono text-[10px] font-semibold tracking-wider">
+          <span className="max-w-full break-all px-2 py-0.5 rounded-full bg-[#F7F6F3] text-[#6B6B6B] font-mono text-[10px] font-semibold tracking-wider">
             {eventId}
           </span>
         </div>
@@ -76,7 +80,9 @@ export function EventDetailPanel({
         {/* Result Alert Box */}
         <div className="pt-2">
           <div className={`border-l-[3px] p-3 rounded-r-md ${resultColors[resultStatus]}`}>
-            <p className="text-[9px] font-bold uppercase tracking-widest mb-1">RESULT</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest mb-1">
+              {tr('common.result')}
+            </p>
             <div className="flex items-center gap-1.5 text-xs font-bold mb-1">
               {resultStatus === 'error' && <IconAlertTriangle className="w-3.5 h-3.5" />}
               {resultStatus === 'warning' && <IconAlertTriangle className="w-3.5 h-3.5" />}

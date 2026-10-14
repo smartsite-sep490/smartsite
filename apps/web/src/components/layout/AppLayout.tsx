@@ -1,5 +1,8 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { ReactNode, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import {
   IconDashboard,
   IconUsers,
@@ -27,6 +30,7 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 export type ActiveTab =
   | 'dashboard'
   | 'workforce'
+  | 'worker-onboarding'
   | 'site-setup'
   | 'schedule-setup'
   | 'access'
@@ -45,6 +49,8 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }: AppLayoutProps) {
+  useTranslation();
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,17 +69,17 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
 
   // useCurrentUser calls /auth/me using the live accessToken; works after hard refresh.
   const { data: currentUser } = useCurrentUser(apiUrl);
-  const displayName = currentUser?.username || 'User';
+  const displayName = currentUser?.username || tr('common.user');
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const userRole = roles.includes('ADMIN')
-    ? 'System Admin'
+    ? tr('common.system_admin')
     : roles.includes('SITE_MANAGER')
-      ? 'Site Manager'
+      ? tr('common.site_manager')
       : roles.includes('CONTRACTOR_REPRESENTATIVE')
-        ? 'Contractor Rep'
+        ? tr('common.contractor_rep')
         : roles.includes('WORKER')
-          ? 'Worker'
-          : 'Authenticated User';
+          ? tr('common.worker')
+          : tr('common.authenticated_user');
   const userInitials = displayName.slice(0, 2).toUpperCase();
 
   const isAdmin = roles.includes('ADMIN');
@@ -88,35 +94,82 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const navGroups = isWorkerOnly
     ? [
         {
-          label: 'Workspace',
+          get label() {
+            return tr('common.workspace');
+          },
           items: [
-            { id: 'workforce', label: 'My Schedule & Requests', icon: IconUsers },
-            { id: 'access', label: 'My QR Pass', icon: IconKey },
+            {
+              id: 'workforce',
+              get label() {
+                return tr('app_layout.my_schedule_requests');
+              },
+              icon: IconUsers,
+            },
+            {
+              id: 'access',
+              get label() {
+                return tr('common.my_qr_pass');
+              },
+              icon: IconKey,
+            },
           ],
         },
       ]
     : [
         {
-          label: 'Workspace',
+          get label() {
+            return tr('common.workspace');
+          },
           items: [
-            { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
+            {
+              id: 'dashboard',
+              get label() {
+                return tr('common.dashboard');
+              },
+              icon: IconDashboard,
+            },
             ...(canAccessWorkforce
               ? [
                   {
                     id: 'workforce',
-                    label: isContractorRep ? 'Contractor Review' : 'Workforce',
+                    get label() {
+                      return isContractorRep
+                        ? tr('common.contractor_review')
+                        : tr('common.workforce');
+                    },
                     icon: IconUsers,
                   },
                 ]
               : []),
             ...(canAccessScheduleSetup
-              ? [{ id: 'schedule-setup', label: 'Schedule Setup', icon: IconCalendar }]
+              ? [
+                  {
+                    id: 'schedule-setup',
+                    get label() {
+                      return tr('common.schedule_setup');
+                    },
+                    icon: IconCalendar,
+                  },
+                ]
+              : []),
+            ...(isContractorRep
+              ? [
+                  {
+                    id: 'worker-onboarding',
+                    get label() {
+                      return tr('common.worker_onboarding');
+                    },
+                    icon: IconUsers,
+                  },
+                ]
               : []),
             ...(isAdmin || isManager
               ? [
                   {
                     id: 'site-setup',
-                    label: isAdmin ? 'Site Setup' : 'Contractors & Zones',
+                    get label() {
+                      return isAdmin ? tr('common.site_setup') : tr('common.contractors_zones');
+                    },
                     icon: IconBuilding,
                   },
                 ]
@@ -125,7 +178,11 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               ? [
                   {
                     id: 'access',
-                    label: isContractorRep ? 'Attendance & Access' : 'Site Access',
+                    get label() {
+                      return isContractorRep && !isAdmin
+                        ? tr('common.attendance_access')
+                        : tr('common.site_access');
+                    },
                     icon: IconKey,
                   },
                 ]
@@ -133,19 +190,59 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           ],
         },
         {
-          label: 'Safety',
+          get label() {
+            return tr('common.safety');
+          },
           items: [
-            { id: 'live-monitoring', label: 'Live Monitoring', icon: IconCamera },
-            { id: 'ppe', label: 'PPE Monitoring', icon: IconHardHat },
-            { id: 'zones', label: 'Restricted Zones', icon: IconShield },
-            { id: 'incidents', label: 'Safety Operations', icon: IconAlertTriangle },
+            {
+              id: 'live-monitoring',
+              get label() {
+                return tr('common.live_monitoring');
+              },
+              icon: IconCamera,
+            },
+            {
+              id: 'ppe',
+              get label() {
+                return tr('common.ppe_monitoring');
+              },
+              icon: IconHardHat,
+            },
+            {
+              id: 'zones',
+              get label() {
+                return tr('common.restricted_zones');
+              },
+              icon: IconShield,
+            },
+            {
+              id: 'incidents',
+              get label() {
+                return tr('common.safety_operations_06c3c3');
+              },
+              icon: IconAlertTriangle,
+            },
           ],
         },
         {
-          label: 'Site Data',
+          get label() {
+            return tr('common.site_data');
+          },
           items: [
-            { id: 'iot', label: 'IoT Monitoring', icon: IconRadio },
-            { id: 'progress', label: 'Progress', icon: IconTrendingUp },
+            {
+              id: 'iot',
+              get label() {
+                return tr('common.iot_monitoring');
+              },
+              icon: IconRadio,
+            },
+            {
+              id: 'progress',
+              get label() {
+                return tr('common.progress');
+              },
+              icon: IconTrendingUp,
+            },
           ],
         },
       ];
@@ -155,7 +252,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
-          isCollapsed ? 'w-20' : 'w-20 lg:w-64'
+          isCollapsed ? 'w-16 sm:w-20' : 'w-16 sm:w-20 lg:w-64'
         } bg-gradient-to-b from-[#071320] via-[#04121D] to-[#020B13] text-white flex flex-col justify-between shrink-0 select-none border-r border-white/10 transition-all duration-300 ease-in-out sticky top-0 h-screen z-30 shadow-2xl`}
       >
         <div>
@@ -169,13 +266,15 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <div
               className="flex items-center gap-3 cursor-pointer group"
               onClick={() => navigate('/')}
-              title="SmartSite Homepage"
-              aria-label="SmartSite Homepage"
+              title={tr('common.smartsite_homepage')}
+              aria-label={tr('common.smartsite_homepage')}
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF7A1A] via-[#F66B17] to-[#D95200] p-[1px] shadow-[0_0_20px_rgba(246,107,23,0.35)] shrink-0 flex items-center justify-center transition-transform group-hover:scale-105">
-                <div className="w-full h-full rounded-[11px] bg-gradient-to-br from-[#FF8833] to-[#E05500] flex items-center justify-center text-white">
-                  <IconHardHat className="w-5 h-5 drop-shadow-sm" />
-                </div>
+              <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-[0_0_20px_rgba(246,107,23,0.25)] transition-transform group-hover:scale-105 border border-white/10 bg-white p-0.5 flex items-center justify-center">
+                <img
+                  src="/smartsite-app-icon-white.png"
+                  alt="SmartSite"
+                  className="w-full h-full object-contain"
+                />
               </div>
               {!isCollapsed && (
                 <div className="hidden lg:flex flex-col whitespace-nowrap overflow-hidden transition-opacity duration-200">
@@ -186,7 +285,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                     </span>
                   </div>
                   <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase mt-0.5 font-semibold">
-                    Operations
+                    {tr('common.operations')}
                   </span>
                 </div>
               )}
@@ -196,8 +295,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="hidden lg:flex w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
-              title={isCollapsed ? 'Mở rộng sidebar' : 'Thu nhỏ sidebar'}
-              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={isCollapsed ? tr('common.mo_rong_sidebar') : tr('common.thu_nho_sidebar')}
+              aria-label={isCollapsed ? tr('common.expand_sidebar') : tr('common.collapse_sidebar')}
             >
               {isCollapsed ? (
                 <IconChevronRight className="w-3.5 h-3.5" />
@@ -209,7 +308,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
 
           {/* Navigation Section */}
           <div className="px-3 py-4 flex-1 overflow-y-auto custom-scrollbar">
-            <nav className="space-y-6" aria-label="Main navigation">
+            <nav className="space-y-6" aria-label={tr('common.main_navigation')}>
               {navGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1.5">
                   {!isCollapsed && (
@@ -281,8 +380,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         <div className="p-2 lg:p-3 border-t border-white/10">
           <button
             onClick={() => navigate('/')}
-            title={isCollapsed ? 'Public SmartSite Homepage' : undefined}
-            aria-label="Public SmartSite Homepage"
+            title={isCollapsed ? tr('common.public_smartsite_homepage') : undefined}
+            aria-label={tr('common.public_smartsite_homepage')}
             className={`w-full min-h-11 lg:min-h-0 flex items-center ${
               isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
             } rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-xs group`}
@@ -290,7 +389,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <IconHome className="w-4 h-4 text-[#FF7A1A] shrink-0 group-hover:scale-110 transition-transform filter drop-shadow-[0_0_6px_rgba(246,107,23,0.4)]" />
             {!isCollapsed && (
               <span className="hidden lg:inline whitespace-nowrap overflow-hidden font-medium">
-                Public SmartSite Homepage
+                {tr('common.public_smartsite_homepage')}
               </span>
             )}
           </button>
@@ -300,27 +399,32 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-canvas)]">
         {/* Top Header Bar */}
-        <header className="h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-xs">
+        <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs">
           {/* Left: Brand/Context info */}
-          <div className="hidden sm:flex items-center gap-4">
-            <span className="text-xs font-semibold text-[#62748E] uppercase tracking-wider">
-              SmartSite Operations Platform
+          <div className="hidden xl:flex min-w-0 items-center gap-4">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              {tr('common.smartsite_operations_platform')}
             </span>
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-xs font-bold text-[#008C47] shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-[#008C47] animate-pulse" />
+              <span>{tr('common.all_systems_online')}</span>
+            </div>
           </div>
 
           {/* Right: Search, Notification, Profile */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {/* Search Input */}
             <div className="relative w-56 hidden lg:block">
-              <IconSearch className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
+              <IconSearch className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search SmartSite"
-                aria-label="Search SmartSite"
-                className="w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-secondary)]"
+                placeholder={tr('common.search_smartsite')}
+                aria-label={tr('common.search_smartsite')}
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:bg-white transition-all placeholder:text-slate-400"
               />
             </div>
 
+            <LanguageSwitcher />
             <NotificationBell
               key={currentUser?.id ?? 'signed-out'}
               apiUrl={apiUrl}
@@ -333,7 +437,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 {userInitials}
               </div>
-              <div className="text-left leading-tight hidden sm:block">
+              <div className="text-left leading-tight hidden sm:block max-w-36 truncate">
                 <p className="font-semibold text-xs text-[#041D2E]">{displayName}</p>
                 <p className="text-[11px] text-[#62748E]">{userRole}</p>
               </div>
@@ -344,7 +448,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
-              title="Logout"
+              title={tr('common.logout')}
             >
               <IconLogOut className="w-4 h-4" />
             </button>

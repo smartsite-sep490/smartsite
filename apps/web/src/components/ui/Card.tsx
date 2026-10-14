@@ -4,12 +4,7 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   doubleBezel?: boolean;
 }
 
-export function Card({
-  children,
-  doubleBezel = false,
-  className = '',
-  ...props
-}: CardProps) {
+export function Card({ children, doubleBezel = false, className = '', ...props }: CardProps) {
   if (doubleBezel) {
     return (
       <div className="p-1 rounded-2xl bg-slate-100/80 border border-slate-200/90 shadow-xs">
@@ -47,7 +42,9 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={`flex items-center justify-between pb-3 border-b border-slate-100 ${className}`}>
+    <div
+      className={`flex items-center justify-between pb-3 border-b border-slate-100 ${className}`}
+    >
       <div className="flex items-center gap-2.5">
         {icon && (
           <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-700 shrink-0">

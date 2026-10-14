@@ -1,3 +1,9 @@
+import { localizedError } from '../../i18n/messages';
+import { localizeMessage } from '../../i18n/messages';
+import { localizedLabel } from '../../i18n/labels';
+import { uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -47,6 +53,8 @@ export interface ObservationIdentityReviewPanelProps {
 }
 
 export function ObservationIdentityReviewPanel(props: ObservationIdentityReviewPanelProps) {
+  useTranslation();
+
   if (!props.token || !props.token.trim()) {
     return (
       <div
@@ -54,7 +62,9 @@ export function ObservationIdentityReviewPanel(props: ObservationIdentityReviewP
         data-testid="observation-identity-unauthenticated"
         className="mt-3 rounded-md border border-dashed border-[#D3D1CB] bg-[#F7F6F3] p-4 text-center text-xs text-[#6B6B6B]"
       >
-        Vui lòng đăng nhập để xem thông tin nhận diện đối tượng.
+        {tr(
+          'observation_identity_review_panel.vui_long_ang_nhap_e_xem_thong_tin_nhan_dien_oi_tuong',
+        )}
       </div>
     );
   }
@@ -82,6 +92,8 @@ function ObservationIdentityReviewPanelScoped({
   evidenceIndex,
   evidenceBlob,
 }: ObservationIdentityReviewPanelProps) {
+  useTranslation();
+
   const [selectedPersonIndex, setSelectedPersonIndex] = useState<number | null>(null);
   const [focusedTabIndex, setFocusedTabIndex] = useState<number>(0);
   const [blobAudit, setBlobAudit] = useState<BlobAuditState | null>(null);
@@ -213,7 +225,10 @@ function ObservationIdentityReviewPanelScoped({
       try {
         sha256 = await computeViewedEvidenceSha256(targetBlob);
       } catch (err) {
-        digestError = err instanceof Error ? err.message : 'Lỗi kiểm tra tính toàn vẹn của ảnh.';
+        digestError =
+          err instanceof Error
+            ? err.message
+            : tr('observation_identity_review_panel.loi_kiem_tra_tinh_toan_ven_cua_anh');
       }
 
       if (!active) {
@@ -249,8 +264,9 @@ function ObservationIdentityReviewPanelScoped({
             ) {
               dimensions = { width: bitmap.width, height: bitmap.height };
             } else {
-              dimensionsError =
-                'Kích thước ảnh đã giải mã không hợp lệ (chiều dài hoặc chiều rộng không hợp lệ).';
+              dimensionsError = tr(
+                'observation_identity_review_panel.kich_thuoc_anh_a_giai_ma_khong_hop_le_chieu_dai_hoac_chieu_rong_khong_hop_le',
+              );
             }
           } finally {
             bitmap.close();
@@ -261,12 +277,15 @@ function ObservationIdentityReviewPanelScoped({
             return;
           }
           dimensionsError =
-            err instanceof Error ? err.message : 'Không thể giải mã hình ảnh bằng chứng.';
+            err instanceof Error
+              ? err.message
+              : tr('observation_identity_review_panel.khong_the_giai_ma_hinh_anh_bang_chung');
         }
       } else {
         // Decoder unavailable -> Fail closed! Never invent dummy dimensions!
-        dimensionsError =
-          'Trình duyệt không hỗ trợ giải mã ảnh bằng chứng (thiếu bộ giải mã createImageBitmap).';
+        dimensionsError = tr(
+          'observation_identity_review_panel.trinh_duyet_khong_ho_tro_giai_ma_anh_bang_chung_thieu_bo_giai_ma_createimagebitmap',
+        );
       }
 
       if (!active) {
@@ -304,7 +323,9 @@ function ObservationIdentityReviewPanelScoped({
   const effectiveDimensions = activeBlobAudit?.dimensions ?? null;
   const dimensionsError =
     activeBlobAudit?.dimensionsError ??
-    (evidenceBlob && !activeBlobAudit ? 'Đang kiểm tra và giải mã ảnh bằng chứng…' : null);
+    (evidenceBlob && !activeBlobAudit
+      ? tr('observation_identity_review_panel.ang_kiem_tra_va_giai_ma_anh_bang_chung')
+      : null);
 
   // Verify full-frame Blob hash matches context frame descriptor
   const frames = contextQuery.data?.frames;
@@ -330,7 +351,7 @@ function ObservationIdentityReviewPanelScoped({
           className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#EAEAEA] border-t-transparent"
           aria-hidden="true"
         />
-        <span>Đang tải dữ liệu nhận diện đối tượng…</span>
+        <span>{tr('observation_identity_review_panel.ang_tai_du_lieu_nhan_dien_oi_tuong')}</span>
       </div>
     );
   }
@@ -349,7 +370,7 @@ function ObservationIdentityReviewPanelScoped({
           className="inline-flex items-center gap-1 font-semibold text-[#9F2F2D] underline hover:no-underline"
         >
           <ArrowClockwise className="h-3 w-3" />
-          <span>Thử lại</span>
+          <span>{tr('common.thu_lai')}</span>
         </button>
       </div>
     );
@@ -359,7 +380,7 @@ function ObservationIdentityReviewPanelScoped({
   if (subjects.length === 0) {
     return (
       <div className="rounded-md border border-[#EAEAEA] bg-[#F7F6F3] p-3 text-[11px] text-[#6B6B6B]">
-        Không có đối tượng PERSON nào trong sự kiện này.
+        {tr('observation_identity_review_panel.khong_co_oi_tuong_person_nao_trong_su_kien_nay')}
       </div>
     );
   }
@@ -370,9 +391,15 @@ function ObservationIdentityReviewPanelScoped({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#EAEAEA] pb-2.5">
         <div className="flex items-center gap-1.5">
           <ShieldCheck className="h-4 w-4 text-[#111111]" aria-hidden="true" />
-          <span className="text-xs font-semibold text-[#111111]">Xác minh người trong ảnh</span>
+          <span className="text-xs font-semibold text-[#111111]">
+            {tr('observation_identity_review_panel.xac_minh_nguoi_trong_anh')}
+          </span>
         </div>
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Danh sách đối tượng người">
+        <div
+          className="flex flex-wrap gap-1"
+          role="tablist"
+          aria-label={tr('observation_identity_review_panel.danh_sach_oi_tuong_nguoi')}
+        >
           {subjects.map((sub, idx) => {
             const isSelected = sub.personObservationIndex === activePersonIndex;
             const isTabbable = idx === focusedTabIndex;
@@ -401,8 +428,12 @@ function ObservationIdentityReviewPanelScoped({
                 }`}
               >
                 <User className="h-3 w-3" />
-                <span>PERSON #{sub.personObservationIndex}</span>
-                {sub.trackId !== null && <span className="opacity-70">(Track #{sub.trackId})</span>}
+                <span>{tr('common.person_value', { value1: sub.personObservationIndex })}</span>
+                {sub.trackId !== null && (
+                  <span className="opacity-70">
+                    {tr('common.track_value', { value1: sub.trackId })}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -444,7 +475,9 @@ function ObservationIdentityReviewPanelScoped({
           data-testid="no-subject-selected-notice"
           className="rounded-md border border-dashed border-[#D3D1CB] bg-[#F7F6F3] p-4 text-center text-xs text-[#6B6B6B]"
         >
-          Vui lòng chọn một đối tượng PERSON bên trên để xem xét danh tính hoặc nhập quyết định.
+          {tr(
+            'observation_identity_review_panel.vui_long_chon_mot_oi_tuong_person_ben_tren_e_xem_xet_danh_tinh_hoac_nhap_quyet_inh',
+          )}
         </div>
       )}
     </div>
@@ -508,6 +541,8 @@ function ObservationIdentitySubjectForm({
   dimensionsError,
   onRefetchContext,
 }: ObservationIdentitySubjectFormProps) {
+  useTranslation();
+
   const queryClient = useQueryClient();
   const reasonInputId = useId();
   const workerSelectId = useId();
@@ -632,7 +667,7 @@ function ObservationIdentitySubjectForm({
       const formatted = formatIdentityErrorMessage(error);
       setSubmitError(formatted);
       if (
-        formatted.includes('Phiên bản xem xét đã thay đổi') ||
+        formatted.includes(tr('observation_identity_review_panel.phien_ban_xem_xet_a_thay_oi')) ||
         (error as { status?: number }).status === 409
       ) {
         setIsStaleConflict(true);
@@ -667,7 +702,9 @@ function ObservationIdentitySubjectForm({
 
     const reasonValidation = validateReason(reason);
     if (!reasonValidation.valid) {
-      setSubmitError(reasonValidation.error ?? 'Lý do không hợp lệ.');
+      setSubmitError(
+        reasonValidation.error ?? tr('observation_identity_review_panel.ly_do_khong_hop_le'),
+      );
       return;
     }
 
@@ -675,20 +712,26 @@ function ObservationIdentitySubjectForm({
       if (!currentSubject.canResolve) {
         setSubmitError(
           formatResolveBlockReason(currentSubject.resolveBlockReason) ||
-            'Không thể xác nhận đối tượng này.',
+            tr('observation_identity_review_panel.khong_the_xac_nhan_oi_tuong_nay'),
         );
         return;
       }
       if (isWorkersPending) {
-        setSubmitError('Danh bạ nhân viên đang tải, vui lòng đợi.');
+        setSubmitError(
+          tr('observation_identity_review_panel.danh_ba_nhan_vien_ang_tai_vui_long_oi'),
+        );
         return;
       }
       if (isWorkersError) {
-        setSubmitError('Danh bạ nhân viên gặp lỗi, không thể xác nhận.');
+        setSubmitError(
+          tr('observation_identity_review_panel.danh_ba_nhan_vien_gap_loi_khong_the_xac_nhan'),
+        );
         return;
       }
       if (!selectedWorkerId) {
-        setSubmitError('Vui lòng chọn nhân viên trong danh bạ.');
+        setSubmitError(
+          tr('observation_identity_review_panel.vui_long_chon_nhan_vien_trong_danh_ba'),
+        );
         return;
       }
       const isSelectedWorkerOnCurrentPage = workers.some(
@@ -696,27 +739,41 @@ function ObservationIdentitySubjectForm({
       );
       if (!isSelectedWorkerOnCurrentPage) {
         setSubmitError(
-          'Nhân viên đã chọn không còn hiển thị trên trang danh bạ hiện tại hoặc đã ngừng hoạt động.',
+          tr(
+            'observation_identity_review_panel.nhan_vien_a_chon_khong_con_hien_thi_tren_trang_danh_ba_hien_tai_hoac_a_ngung_hoat',
+          ),
         );
         return;
       }
       if (evidenceIndex === null || !computedBlobSha256) {
-        setSubmitError('Chưa có ảnh bằng chứng được xác thực mã băm.');
+        setSubmitError(
+          tr('observation_identity_review_panel.chua_co_anh_bang_chung_uoc_xac_thuc_ma_bam'),
+        );
         return;
       }
       if (!isEvidenceDigestValid) {
-        setSubmitError('Mã băm ảnh đã xem không khớp với mô tả bằng chứng của hệ thống.');
+        setSubmitError(
+          tr(
+            'observation_identity_review_panel.ma_bam_anh_a_xem_khong_khop_voi_mo_ta_bang_chung_cua_he_thong',
+          ),
+        );
         return;
       }
 
       if (!decodedDimensions || decodedDimensions.width <= 0 || decodedDimensions.height <= 0) {
-        setSubmitError('Ảnh bằng chứng không thể giải mã hoặc có kích thước không hợp lệ.');
+        setSubmitError(
+          tr(
+            'observation_identity_review_panel.anh_bang_chung_khong_the_giai_ma_hoac_co_kich_thuoc_khong_hop_le',
+          ),
+        );
         return;
       }
 
       if (evidenceBlob !== null && !isFrameReady) {
         setSubmitError(
-          'Khung hình bằng chứng và hộp bao đối tượng chưa sẵn sàng để hiển thị hoặc có kích thước không hợp lệ.',
+          tr(
+            'observation_identity_review_panel.khung_hinh_bang_chung_va_hop_bao_oi_tuong_chua_san_sang_e_hien_thi_hoac_co_kich_th',
+          ),
         );
         return;
       }
@@ -754,7 +811,7 @@ function ObservationIdentitySubjectForm({
       if (!currentSubject.canClear) {
         setSubmitError(
           formatClearBlockReason(currentSubject.clearBlockReason) ||
-            'Không thể thu hồi quyết định cho đối tượng này.',
+            tr('observation_identity_review_panel.khong_the_thu_hoi_quyet_inh_cho_oi_tuong_nay'),
         );
         return;
       }
@@ -812,7 +869,7 @@ function ObservationIdentitySubjectForm({
         {/* Technical Candidate (Read-only, AI pipeline fact) */}
         <div className="rounded border border-[#EAEAEA] bg-[#F7F6F3] p-2">
           <div className="flex items-center justify-between text-[11px] font-semibold text-[#6B6B6B]">
-            <span>Gợi ý kỹ thuật (AI)</span>
+            <span>{tr('observation_identity_review_panel.goi_y_ky_thuat_ai')}</span>
             <span className="rounded bg-[#EAEAEA] px-1 py-0.5 text-[10px] text-[#2F3437]">
               {formatTechnicalStatus(currentSubject.technicalIdentity.status)}
             </span>
@@ -821,16 +878,22 @@ function ObservationIdentitySubjectForm({
             {currentSubject.technicalIdentity.candidates.length > 0 ? (
               currentSubject.technicalIdentity.candidates.map((cand, idx) => (
                 <div key={idx} className="flex items-center justify-between text-[#2F3437]">
-                  <span className="font-mono">{cand.candidateWorkerId ?? 'Chưa rõ'}</span>
+                  <span className="font-mono">
+                    {cand.candidateWorkerId ?? tr('common.chua_ro')}
+                  </span>
                   {cand.similarityScore !== undefined && (
                     <span className="text-[#6B6B6B]">
-                      Độ tương đồng: {(cand.similarityScore * 100).toFixed(0)}%
+                      {tr('observation_identity_review_panel.o_tuong_ong_value', {
+                        value1: (cand.similarityScore * 100).toFixed(0),
+                      })}
                     </span>
                   )}
                 </div>
               ))
             ) : (
-              <div className="text-[#787774]">Không có ứng viên nhận diện khuôn mặt</div>
+              <div className="text-[#787774]">
+                {tr('observation_identity_review_panel.khong_co_ung_vien_nhan_dien_khuon_mat')}
+              </div>
             )}
           </div>
         </div>
@@ -838,8 +901,10 @@ function ObservationIdentitySubjectForm({
         {/* Latest Manual Decision (Immutable human audit head) */}
         <div className="rounded border border-[#EAEAEA] bg-[#F7F6F3] p-2">
           <div className="flex items-center justify-between text-[11px] font-semibold text-[#6B6B6B]">
-            <span>Xác minh thủ công gần nhất</span>
-            <span className="text-[10px] text-[#787774]">Rev: #{currentSubject.revision}</span>
+            <span>{tr('observation_identity_review_panel.xac_minh_thu_cong_gan_nhat')}</span>
+            <span className="text-[10px] text-[#787774]">
+              {tr('common.rev_value', { value1: currentSubject.revision })}
+            </span>
           </div>
           <div className="mt-1.5 text-[11px]">
             {currentSubject.latestManualDecision ? (
@@ -848,21 +913,29 @@ function ObservationIdentitySubjectForm({
                   {currentSubject.latestManualDecision.action === 'RESOLVE' ? (
                     <>
                       <CheckCircle className="h-3 w-3 text-[#346538]" />
-                      <span>Đã xác nhận: {currentSubject.latestManualDecision.workerId}</span>
+                      <span>
+                        {tr('observation_identity_review_panel.a_xac_nhan_value', {
+                          value1: currentSubject.latestManualDecision.workerId,
+                        })}
+                      </span>
                     </>
                   ) : (
                     <>
                       <XCircle className="h-3 w-3 text-[#9F2F2D]" />
-                      <span>Đã thu hồi (CLEAR)</span>
+                      <span>{tr('observation_identity_review_panel.a_thu_hoi_clear')}</span>
                     </>
                   )}
                 </div>
                 <div className="text-[10px] text-[#6B6B6B]">
-                  Lý do: &quot;{currentSubject.latestManualDecision.reason}&quot;
+                  {tr('common.ly_do_quot_value_quot', {
+                    value1: currentSubject.latestManualDecision.reason,
+                  })}
                 </div>
               </div>
             ) : (
-              <div className="text-[#787774]">Chưa xác minh thủ công</div>
+              <div className="text-[#787774]">
+                {tr('observation_identity_review_panel.chua_xac_minh_thu_cong')}
+              </div>
             )}
           </div>
         </div>
@@ -871,9 +944,13 @@ function ObservationIdentitySubjectForm({
       {/* Original Zone Entry Decisions (Untouched & Read-only) */}
       <div className="rounded border border-[#EAEAEA] bg-white p-2">
         <div className="flex items-center justify-between text-[11px] font-semibold text-[#6B6B6B]">
-          <span>Quyết định vào vùng gốc (Original Zone Decisions - Bất biến)</span>
+          <span>
+            {tr(
+              'observation_identity_review_panel.quyet_inh_vao_vung_goc_original_zone_decisions_bat_bien',
+            )}
+          </span>
           <span className="text-[10px] text-[#787774]">
-            Tổng: {currentSubject.originalZoneDecisions.total}
+            {tr('common.tong_value', { value1: currentSubject.originalZoneDecisions.total })}
           </span>
         </div>
         <div className="mt-1.5 space-y-1">
@@ -893,49 +970,61 @@ function ObservationIdentitySubjectForm({
                           : 'bg-[#EAEAEA] text-[#6B6B6B]'
                     }`}
                   >
-                    {z.status}
+                    {localizedLabel(z.status)}
                   </span>
-                  <span className="text-[#2F3437]">{z.reasonCode}</span>
+                  <span className="text-[#2F3437]">{localizedLabel(z.reasonCode)}</span>
                 </div>
                 <span className="text-[10px] text-[#6B6B6B]">
-                  {new Date(z.evaluatedAt).toLocaleTimeString()}
+                  {new Date(z.evaluatedAt).toLocaleTimeString(uiLocale())}
                 </span>
               </div>
             ))
           ) : (
             <div className="text-[11px] text-[#787774]">
-              Không có quyết định kiểm soát vào vùng đã lưu cho sự kiện này.
+              {tr(
+                'observation_identity_review_panel.khong_co_quyet_inh_kiem_soat_vao_vung_a_luu_cho_su_kien_nay',
+              )}
             </div>
           )}
         </div>
         <div className="mt-1 text-[10px] text-[#787774]">
-          * Xác minh thủ công chỉ mang tính hồi cứu cho quan sát này, không cấp quyền ra/vào vùng
-          (Zone Access) và không thay đổi các quyết định đã ghi.
+          {tr(
+            'observation_identity_review_panel.xac_minh_thu_cong_chi_mang_tinh_hoi_cuu_cho_quan_sat_nay_khong_cap_quyen_ra_vao_vu',
+          )}
         </div>
       </div>
 
       {/* Evidence Digest Status Check */}
       <div className="rounded border border-[#EAEAEA] bg-[#F7F6F3] p-2 text-[11px]">
         <div className="flex items-center justify-between font-semibold text-[#6B6B6B]">
-          <span>Kiểm tra toàn vẹn ảnh bằng chứng (Mã băm SHA-256)</span>
+          <span>
+            {tr(
+              'observation_identity_review_panel.kiem_tra_toan_ven_anh_bang_chung_ma_bam_sha_256',
+            )}
+          </span>
           {isEvidenceDigestValid ? (
             <span className="inline-flex items-center gap-1 text-[#346538]">
               <CheckCircle className="h-3 w-3" />
-              Đã khớp SHA-256
+              {tr('common.a_khop_sha_256')}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-[#9F2F2D]">
               <Warning className="h-3 w-3" />
-              Chưa xác thực
+              {tr('common.chua_xac_thuc')}
             </span>
           )}
         </div>
-        {blobDigestError && <div className="mt-1 text-[#9F2F2D]">{blobDigestError}</div>}
-        {dimensionsError && <div className="mt-1 text-[#9F2F2D]">{dimensionsError}</div>}
+        {blobDigestError && (
+          <div className="mt-1 text-[#9F2F2D]">{localizedError(blobDigestError ?? undefined)}</div>
+        )}
+        {dimensionsError && (
+          <div className="mt-1 text-[#9F2F2D]">{localizedError(dimensionsError ?? undefined)}</div>
+        )}
         {!evidenceBlob && (
           <div className="mt-1 text-[#787774]">
-            Ảnh bằng chứng chưa được tải hoặc đã hết hạn. Nút xác nhận mới (RESOLVE) bị vô hiệu hóa;
-            nút thu hồi (CLEAR) vẫn khả dụng nếu có quyết định trước đó.
+            {tr(
+              'observation_identity_review_panel.anh_bang_chung_chua_uoc_tai_hoac_a_het_han_nut_xac_nhan_moi_resolve_bi_vo_hieu_hoa',
+            )}
           </div>
         )}
       </div>
@@ -943,7 +1032,9 @@ function ObservationIdentitySubjectForm({
       {/* Action Form: RESOLVE vs CLEAR */}
       <form onSubmit={handleSubmit} className="space-y-2.5 rounded border border-[#EAEAEA] p-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[#111111]">Thực hiện đánh giá</span>
+          <span className="text-xs font-semibold text-[#111111]">
+            {tr('observation_identity_review_panel.thuc_hien_anh_gia')}
+          </span>
           <div className="flex gap-2">
             <label className="flex items-center gap-1 cursor-pointer text-[11px]">
               <input
@@ -955,7 +1046,7 @@ function ObservationIdentitySubjectForm({
                 className="cursor-pointer"
               />
               <span className={currentSubject.canResolve ? 'text-[#111111]' : 'text-[#A3A09C]'}>
-                Xác nhận nhân viên (RESOLVE)
+                {tr('observation_identity_review_panel.xac_nhan_nhan_vien_resolve')}
               </span>
             </label>
             <label className="flex items-center gap-1 cursor-pointer text-[11px]">
@@ -968,7 +1059,7 @@ function ObservationIdentitySubjectForm({
                 className="cursor-pointer"
               />
               <span className={currentSubject.canClear ? 'text-[#111111]' : 'text-[#A3A09C]'}>
-                Thu hồi xác minh (CLEAR)
+                {tr('observation_identity_review_panel.thu_hoi_xac_minh_clear')}
               </span>
             </label>
           </div>
@@ -995,13 +1086,15 @@ function ObservationIdentitySubjectForm({
                 htmlFor={workerSelectId}
                 className="block text-[11px] font-semibold text-[#6B6B6B]"
               >
-                Chọn nhân viên trong danh bạ
+                {tr('observation_identity_review_panel.chon_nhan_vien_trong_danh_ba')}
               </label>
               {workersTotal > 50 && (
                 <div className="flex items-center gap-1 text-[10px] text-[#6B6B6B]">
                   <span>
-                    Trang {Math.floor(workerPageOffset / 50) + 1} /{' '}
-                    {Math.max(1, Math.ceil(workersTotal / 50))}
+                    {tr('observation_identity_review_panel.trang_value_value', {
+                      value1: Math.floor(workerPageOffset / 50) + 1,
+                      value2: Math.max(1, Math.ceil(workersTotal / 50)),
+                    })}
                   </span>
                   <button
                     type="button"
@@ -1009,7 +1102,7 @@ function ObservationIdentitySubjectForm({
                     disabled={workerPageOffset === 0 || isWorkersPending}
                     className="rounded border border-[#EAEAEA] px-1 py-0.5 hover:bg-[#F7F6F3] disabled:opacity-40"
                   >
-                    Trước
+                    {tr('common.truoc')}
                   </button>
                   <button
                     type="button"
@@ -1017,7 +1110,7 @@ function ObservationIdentitySubjectForm({
                     disabled={workerPageOffset + 50 >= workersTotal || isWorkersPending}
                     className="rounded border border-[#EAEAEA] px-1 py-0.5 hover:bg-[#F7F6F3] disabled:opacity-40"
                   >
-                    Sau
+                    {tr('common.sau')}
                   </button>
                 </div>
               )}
@@ -1028,13 +1121,15 @@ function ObservationIdentitySubjectForm({
                 role="alert"
                 className="flex items-center justify-between rounded bg-[#FDEBEC] p-1.5 text-[11px] text-[#9F2F2D]"
               >
-                <span>Không thể tải danh bạ nhân viên.</span>
+                <span>
+                  {tr('observation_identity_review_panel.khong_the_tai_danh_ba_nhan_vien')}
+                </span>
                 <button
                   type="button"
                   onClick={onRefetchWorkers}
                   className="font-bold underline hover:no-underline"
                 >
-                  Thử lại
+                  {tr('common.thu_lai')}
                 </button>
               </div>
             )}
@@ -1047,24 +1142,37 @@ function ObservationIdentitySubjectForm({
               className="mt-1 w-full rounded border border-[#EAEAEA] bg-white px-2 py-1.5 text-xs text-[#2F3437] focus:border-[#111111] focus:outline-hidden disabled:bg-[#F7F6F3] disabled:text-[#A3A09C]"
             >
               {isWorkersPending ? (
-                <option value="">Đang tải danh sách nhân viên…</option>
+                <option value="">
+                  {tr('observation_identity_review_panel.ang_tai_danh_sach_nhan_vien')}
+                </option>
               ) : isWorkersError ? (
-                <option value="">Lỗi tải danh sách nhân viên</option>
+                <option value="">
+                  {tr('observation_identity_review_panel.loi_tai_danh_sach_nhan_vien')}
+                </option>
               ) : workers.length === 0 ? (
-                <option value="">Danh bạ công trường chưa có nhân viên nào</option>
+                <option value="">
+                  {tr(
+                    'observation_identity_review_panel.danh_ba_cong_truong_chua_co_nhan_vien_nao',
+                  )}
+                </option>
               ) : (
                 <>
-                  <option value="">-- Chọn nhân viên trong danh bạ --</option>
+                  <option value="">
+                    {tr('observation_identity_review_panel.chon_nhan_vien_trong_danh_ba_ea4b72')}
+                  </option>
                   {workers.map((w) => (
                     <option key={w.id} value={w.id} disabled={!w.isActive}>
-                      {w.displayName} ({w.externalId}) {!w.isActive ? ' - Đã ngừng hoạt động' : ''}
+                      {w.displayName} ({w.externalId}){' '}
+                      {!w.isActive ? tr('observation_identity_review_panel.a_ngung_hoat_ong') : ''}
                     </option>
                   ))}
                 </>
               )}
             </select>
             <div className="mt-0.5 text-[10px] text-[#787774]">
-              Nhà thầu: Không khả dụng (Thông tin thuộc danh bạ hiện hành)
+              {tr(
+                'observation_identity_review_panel.nha_thau_khong_kha_dung_thong_tin_thuoc_danh_ba_hien_hanh',
+              )}
             </div>
           </div>
         )}
@@ -1072,14 +1180,16 @@ function ObservationIdentitySubjectForm({
         {/* Mandatory Reason Input (>=5 characters) */}
         <div>
           <label htmlFor={reasonInputId} className="block text-[11px] font-semibold text-[#6B6B6B]">
-            Lý do đánh giá (Bắt buộc, từ 5 đến 1000 ký tự)
+            {tr('observation_identity_review_panel.ly_do_anh_gia_bat_buoc_tu_5_en_1000_ky_tu')}
           </label>
           <textarea
             id={reasonInputId}
             rows={2}
             value={reason}
             onChange={(e) => handleReasonChange(e.target.value)}
-            placeholder="Nhập lý do xác minh hoặc thu hồi nhận diện đối tượng…"
+            placeholder={tr(
+              'observation_identity_review_panel.nhap_ly_do_xac_minh_hoac_thu_hoi_nhan_dien_oi_tuong',
+            )}
             className="mt-1 w-full rounded border border-[#EAEAEA] bg-white px-2 py-1 text-xs text-[#2F3437] placeholder-[#A3A09C] focus:border-[#111111] focus:outline-hidden"
           />
         </div>
@@ -1088,7 +1198,11 @@ function ObservationIdentitySubjectForm({
         {lastReplayed && (
           <div className="flex items-center gap-1.5 rounded bg-[#EDF3EC] p-2 text-[11px] text-[#346538]">
             <Info className="h-3.5 w-3.5" />
-            <span>Lệnh đã được hệ thống ghi nhận trước đó (trùng lặp an toàn).</span>
+            <span>
+              {tr(
+                'observation_identity_review_panel.lenh_a_uoc_he_thong_ghi_nhan_truoc_o_trung_lap_an_toan',
+              )}
+            </span>
           </div>
         )}
 
@@ -1098,7 +1212,7 @@ function ObservationIdentitySubjectForm({
             role="alert"
             className="flex flex-wrap items-center justify-between gap-1.5 rounded bg-[#FDEBEC] p-2 text-[11px] text-[#9F2F2D]"
           >
-            <span>{submitError}</span>
+            <span>{localizeMessage(submitError)}</span>
             {isStaleConflict && (
               <button
                 type="button"
@@ -1111,7 +1225,7 @@ function ObservationIdentitySubjectForm({
                 className="inline-flex items-center gap-1 font-bold underline hover:no-underline"
               >
                 <ArrowClockwise className="h-3 w-3" />
-                <span>Làm mới dữ liệu</span>
+                <span>{tr('observation_identity_review_panel.lam_moi_du_lieu')}</span>
               </button>
             )}
           </div>
@@ -1141,10 +1255,14 @@ function ObservationIdentitySubjectForm({
             {mutation.isPending ? (
               <>
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                <span>Đang lưu…</span>
+                <span>{tr('common.ang_luu')}</span>
               </>
             ) : (
-              <span>{actionType === 'RESOLVE' ? 'Xác nhận danh tính' : 'Thu hồi xác minh'}</span>
+              <span>
+                {actionType === 'RESOLVE'
+                  ? tr('observation_identity_review_panel.xac_nhan_danh_tinh')
+                  : tr('observation_identity_review_panel.thu_hoi_xac_minh')}
+              </span>
             )}
           </button>
         </div>
@@ -1155,17 +1273,19 @@ function ObservationIdentitySubjectForm({
         <div className="flex items-center justify-between text-[11px] font-semibold text-[#6B6B6B]">
           <span className="flex items-center gap-1">
             <ClockCounterClockwise className="h-3 w-3" />
-            Lịch sử đánh giá đối tượng (Audit Log)
+            {tr('observation_identity_review_panel.lich_su_anh_gia_oi_tuong_audit_log')}
           </span>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-[#787774]">
-              Tổng số: {decisionsQuery.data?.total ?? 0}
+              {tr('common.tong_so_value', { value1: decisionsQuery.data?.total ?? 0 })}
             </span>
             {(decisionsQuery.data?.total ?? 0) > 20 && (
               <div className="flex items-center gap-1 text-[10px]">
                 <span>
-                  Trang {Math.floor(historyPageOffset / 20) + 1} /{' '}
-                  {Math.max(1, Math.ceil((decisionsQuery.data?.total ?? 0) / 20))}
+                  {tr('observation_identity_review_panel.trang_value_value', {
+                    value1: Math.floor(historyPageOffset / 20) + 1,
+                    value2: Math.max(1, Math.ceil((decisionsQuery.data?.total ?? 0) / 20)),
+                  })}
                 </span>
                 <button
                   type="button"
@@ -1173,7 +1293,7 @@ function ObservationIdentitySubjectForm({
                   disabled={historyPageOffset === 0}
                   className="rounded border border-[#EAEAEA] px-1 py-0.5 hover:bg-[#F7F6F3] disabled:opacity-40"
                 >
-                  Trước
+                  {tr('common.truoc')}
                 </button>
                 <button
                   type="button"
@@ -1181,7 +1301,7 @@ function ObservationIdentitySubjectForm({
                   disabled={historyPageOffset + 20 >= (decisionsQuery.data?.total ?? 0)}
                   className="rounded border border-[#EAEAEA] px-1 py-0.5 hover:bg-[#F7F6F3] disabled:opacity-40"
                 >
-                  Sau
+                  {tr('common.sau')}
                 </button>
               </div>
             )}
@@ -1190,7 +1310,7 @@ function ObservationIdentitySubjectForm({
 
         {decisionsQuery.isPending && (
           <div className="mt-2 text-center text-[11px] text-[#787774]">
-            Đang tải lịch sử đánh giá…
+            {tr('observation_identity_review_panel.ang_tai_lich_su_anh_gia')}
           </div>
         )}
 
@@ -1199,13 +1319,15 @@ function ObservationIdentitySubjectForm({
             role="alert"
             className="mt-2 flex items-center justify-between rounded bg-[#FDEBEC] p-1.5 text-[11px] text-[#9F2F2D]"
           >
-            <span>Không thể tải lịch sử đánh giá đối tượng.</span>
+            <span>
+              {tr('observation_identity_review_panel.khong_the_tai_lich_su_anh_gia_oi_tuong')}
+            </span>
             <button
               type="button"
               onClick={() => void decisionsQuery.refetch()}
               className="font-bold underline hover:no-underline"
             >
-              Thử lại
+              {tr('common.thu_lai')}
             </button>
           </div>
         )}
@@ -1214,7 +1336,7 @@ function ObservationIdentitySubjectForm({
           !decisionsQuery.isError &&
           (!decisionsQuery.data?.items || decisionsQuery.data.items.length === 0) && (
             <div className="mt-1.5 text-[11px] text-[#787774]">
-              Chưa có lịch sử đánh giá cho đối tượng này.
+              {tr('observation_identity_review_panel.chua_co_lich_su_anh_gia_cho_oi_tuong_nay')}
             </div>
           )}
 
@@ -1230,15 +1352,23 @@ function ObservationIdentitySubjectForm({
                 >
                   <div className="flex items-center justify-between font-medium text-[#2F3437]">
                     <span>
-                      Rev #{item.revision}:{' '}
-                      {item.action === 'RESOLVE' ? `Gán ${item.workerId}` : 'Thu hồi (CLEAR)'}
+                      {tr('common.rev_value_value', {
+                        value1: item.revision,
+                        value2:
+                          item.action === 'RESOLVE'
+                            ? tr('messages.e6fc7e4c3516', { value1: item.workerId })
+                            : tr('common.thu_hoi_clear'),
+                      })}
                     </span>
                     <span className="text-[10px] text-[#6B6B6B]">
-                      {new Date(item.recordedAt).toLocaleString()}
+                      {new Date(item.recordedAt).toLocaleString(uiLocale())}
                     </span>
                   </div>
                   <div className="mt-0.5 text-[10px] text-[#6B6B6B]">
-                    Lý do: &quot;{item.reason}&quot; · Người duyệt: {item.actorUserId}
+                    {tr(
+                      'observation_identity_review_panel.ly_do_quot_value_quot_nguoi_duyet_value',
+                      { value1: item.reason, value2: item.actorUserId },
+                    )}
                   </div>
                 </div>
               ))}
@@ -1264,6 +1394,8 @@ function EvidenceFullFrameViewer({
   isEvidenceDigestValid,
   onReadyChange,
 }: EvidenceFullFrameViewerProps) {
+  useTranslation();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 0,
@@ -1404,13 +1536,15 @@ function EvidenceFullFrameViewer({
             }
           }}
           src={activeObjectUrl}
-          alt="Khung hình bằng chứng quan sát"
+          alt={tr('observation_identity_review_panel.khung_hinh_bang_chung_quan_sat')}
           onLoad={handleImageLoad}
           onError={handleImageError}
           className="h-full w-full object-contain"
         />
       ) : (
-        <div className="text-xs text-white/70">Đang chuẩn bị hình ảnh bằng chứng…</div>
+        <div className="text-xs text-white/70">
+          {tr('observation_identity_review_panel.ang_chuan_bi_hinh_anh_bang_chung')}
+        </div>
       )}
 
       {isImageError && (
@@ -1418,7 +1552,9 @@ function EvidenceFullFrameViewer({
           role="alert"
           className="absolute inset-0 flex items-center justify-center bg-black/80 p-3 text-center text-xs text-[#FDEBEC]"
         >
-          <span>Không thể tải hoặc hiển thị ảnh bằng chứng.</span>
+          <span>
+            {tr('observation_identity_review_panel.khong_the_tai_hoac_hien_thi_anh_bang_chung')}
+          </span>
         </div>
       )}
 
@@ -1428,14 +1564,22 @@ function EvidenceFullFrameViewer({
           className="absolute bottom-2 left-2 rounded bg-black/75 px-2 py-1 text-[11px] text-white/90 shadow-xs"
         >
           {!isEvidenceDigestValid
-            ? 'Ảnh bằng chứng chưa được xác thực tính toàn vẹn (SHA-256 không khớp hoặc chưa hoàn tất). Không thể hiển thị hộp bao đối tượng.'
+            ? tr(
+                'observation_identity_review_panel.anh_bang_chung_chua_uoc_xac_thuc_tinh_toan_ven_sha_256_khong_khop_hoac_chua_hoan_t',
+              )
             : !hasNormalizedBox
-              ? 'Không có hộp bao đối tượng hợp lệ để hiển thị.'
+              ? tr('observation_identity_review_panel.khong_co_hop_bao_oi_tuong_hop_le_e_hien_thi')
               : !naturalDimensions || naturalDimensions.width <= 0 || naturalDimensions.height <= 0
-                ? 'Không thể giải mã kích thước gốc của ảnh bằng chứng.'
+                ? tr(
+                    'observation_identity_review_panel.khong_the_giai_ma_kich_thuoc_goc_cua_anh_bang_chung',
+                  )
                 : containerSize.width <= 0 || containerSize.height <= 0
-                  ? 'Khung hiển thị chưa đo lường được kích thước (chiều rộng hoặc chiều cao bằng 0).'
-                  : 'Vùng chọn đối tượng nằm ngoài khung hình hiển thị.'}
+                  ? tr(
+                      'observation_identity_review_panel.khung_hien_thi_chua_o_luong_uoc_kich_thuoc_chieu_rong_hoac_chieu_cao_bang_0',
+                    )
+                  : tr(
+                      'observation_identity_review_panel.vung_chon_oi_tuong_nam_ngoai_khung_hinh_hien_thi',
+                    )}
         </div>
       )}
 
@@ -1452,8 +1596,13 @@ function EvidenceFullFrameViewer({
           className="pointer-events-none rounded-xs border-2 border-[#111111] bg-black/15 shadow-sm"
         >
           <span className="absolute -top-5 left-0 rounded bg-[#111111] px-1 py-0.5 text-[9px] font-bold text-white shadow-xs whitespace-nowrap">
-            PERSON #{subject.personObservationIndex}
-            {subject.trackId !== null ? ` (Track #${subject.trackId})` : ''}
+            {tr('common.person_valuevalue', {
+              value1: subject.personObservationIndex,
+              value2:
+                subject.trackId !== null
+                  ? tr('messages.1e50a92b018d', { value1: subject.trackId })
+                  : '',
+            })}
           </span>
         </div>
       )}

@@ -6,3 +6,5 @@ node_modules/
 **/.turbo/
 **/.test-build/
 coverage/
+apps/web/playwright-report/
+apps/web/test-results/

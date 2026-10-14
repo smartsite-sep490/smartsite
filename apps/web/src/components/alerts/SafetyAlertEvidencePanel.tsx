@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -33,6 +35,8 @@ export function SafetyAlertEvidencePanel({
   detection,
   canReviewIdentity = false,
 }: SafetyAlertEvidencePanelProps) {
+  useTranslation();
+
   const [selectedEvidenceIndex, setSelectedEvidenceIndex] = useState<number | null>(null);
 
   const evidenceList = detection.evidence ?? [];
@@ -55,7 +59,7 @@ export function SafetyAlertEvidencePanel({
     ),
     queryFn: ({ signal }) => {
       if (selectedEvidenceIndex === null) {
-        throw new Error('No evidence item selected.');
+        throw new Error(tr('safety_alert_evidence_panel.no_evidence_item_selected'));
       }
       return client.getSafetyAlertEvidence(
         token,
@@ -85,7 +89,7 @@ export function SafetyAlertEvidencePanel({
     return (
       <div className="mt-2 border-t border-[#EAEAEA] pt-2">
         <div className="text-[11px] text-[#6B6B6B]">
-          No evidence image retained for this observation.
+          {tr('safety_alert_evidence_panel.no_evidence_image_retained_for_this_observation')}
         </div>
         {canReviewIdentity && (
           <div className="mt-3 border-t border-[#EAEAEA] pt-3">
@@ -110,23 +114,25 @@ export function SafetyAlertEvidencePanel({
     <div className="mt-2 border-t border-[#EAEAEA] pt-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
-          Evidence
+          {tr('common.evidence')}
         </span>
         <div className="flex flex-wrap gap-1.5">
           {evidenceList.map((item) => {
             const isSelected = selectedEvidenceIndex === item.index;
             const kindLabel = formatEvidenceKind(item.kind);
-            const trackText = item.trackId !== undefined ? ` (Track #${item.trackId})` : '';
+            const trackText =
+              item.trackId !== undefined
+                ? tr('messages.1e50a92b018d', { value1: item.trackId })
+                : '';
 
             if (!item.available) {
               return (
                 <span
                   key={item.index}
                   className="inline-flex items-center rounded border border-[#EAEAEA] bg-[#F7F6F3] px-2 py-0.5 text-[11px] font-medium text-[#A3A09C] cursor-not-allowed"
-                  title="Evidence is not available on storage"
+                  title={tr('safety_alert_evidence_panel.evidence_is_not_available_on_storage')}
                 >
-                  {kindLabel}
-                  {trackText} · Unavailable
+                  {tr('common.valuevalue_unavailable', { value1: kindLabel, value2: trackText })}
                 </span>
               );
             }
@@ -143,7 +149,7 @@ export function SafetyAlertEvidencePanel({
                     : 'border border-[#EAEAEA] bg-white text-[#2F3437] hover:border-[#2F3437]/20 hover:bg-[#F7F6F3]'
                 }`}
               >
-                {isSelected ? 'Hide' : 'View'} {kindLabel}
+                {isSelected ? tr('common.hide') : tr('common.view')} {kindLabel}
                 {trackText}
               </button>
             );
@@ -163,7 +169,7 @@ export function SafetyAlertEvidencePanel({
                 className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#EAEAEA] border-t-transparent"
                 aria-hidden="true"
               />
-              <span>Loading evidence image…</span>
+              <span>{tr('common.loading_evidence_image')}</span>
             </div>
           )}
 
@@ -178,7 +184,7 @@ export function SafetyAlertEvidencePanel({
                 onClick={() => void evidenceQuery.refetch()}
                 className="font-bold text-[#9F2F2D] underline hover:no-underline"
               >
-                Retry
+                {tr('common.retry')}
               </button>
             </div>
           )}
@@ -199,14 +205,16 @@ export function SafetyAlertEvidencePanel({
               <div className="flex items-center justify-between px-0.5 text-[11px] text-[#6B6B6B]">
                 <span>
                   {formatEvidenceKind(selectedItem.kind)}
-                  {selectedItem.trackId !== undefined ? ` · Track #${selectedItem.trackId}` : ''}
+                  {selectedItem.trackId !== undefined
+                    ? tr('common.track_value_2a54ba', { value1: selectedItem.trackId })
+                    : ''}
                 </span>
                 <button
                   type="button"
                   onClick={() => setSelectedEvidenceIndex(null)}
                   className="font-semibold text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
                 >
-                  Close image
+                  {tr('common.close_image')}
                 </button>
               </div>
             </div>
@@ -234,6 +242,8 @@ export function SafetyAlertEvidencePanel({
 }
 
 function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
+  useTranslation();
+
   const [blobUrlState, setBlobUrlState] = useState<{ blob: Blob; url: string } | null>(null);
 
   useEffect(() => {
@@ -279,7 +289,7 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
           className="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#EAEAEA] border-t-transparent"
           aria-hidden="true"
         />
-        <span>Đang chuẩn bị ảnh bằng chứng…</span>
+        <span>{tr('safety_alert_evidence_panel.ang_chuan_bi_anh_bang_chung')}</span>
       </div>
     );
   }

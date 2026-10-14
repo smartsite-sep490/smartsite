@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import type { Page } from '@smartsite/contracts';
 
 export async function loadAllPages<T>(
@@ -12,6 +13,6 @@ export async function loadAllPages<T>(
     items.push(...result.items);
     if (items.length >= result.total) return { items, total: items.length };
     if (result.items.length === 0)
-      throw new Error('Site setup data is incomplete. Refresh and try again.');
+      throw new Error(tr('load-all-pages.site_setup_data_is_incomplete_refresh_and_try_again'));
   }
 }

@@ -88,6 +88,9 @@ import type {
   ReviewAttendanceCorrectionCommand,
   ReviewAttendanceTimeCommand,
   AccountResponse,
+  CreateContractorWorkerAccountCommand,
+  ContractorWorkerAccountResponse,
+  ContractorWorkerAccountOptionsResponse,
   AuthClientType,
   CameraResponse,
   LoginResponse,
@@ -104,6 +107,7 @@ import type {
   SiteResponse,
   ZoneResponse,
   WorkerResponse,
+  UpdateContractorWorkerCommand,
   ContractorResponse,
   ContractorParticipationResponse,
   ContractorRepresentativeGrantResponse,
@@ -1368,6 +1372,21 @@ export class SmartSiteManagementClient {
     );
   }
 
+  updateContractorWorker(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    workerId: string,
+    input: UpdateContractorWorkerCommand,
+  ) {
+    return this.request<WorkerResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/workers/${pathId(workerId)}`,
+      token,
+      input,
+    );
+  }
+
   createContractor(
     token: string,
     input: { code: string; name: string },
@@ -1417,6 +1436,27 @@ export class SmartSiteManagementClient {
       `/contractors/${pathId(contractorId)}/workers`,
       token,
       input,
+    );
+  }
+
+  createContractorWorkerAccount(
+    token: string,
+    contractorId: string,
+    input: CreateContractorWorkerAccountCommand,
+  ) {
+    return this.request<ContractorWorkerAccountResponse>(
+      'POST',
+      `/contractors/${pathId(contractorId)}/worker-accounts`,
+      token,
+      input,
+    );
+  }
+
+  contractorWorkerAccountOptions(token: string, siteId: string) {
+    return this.request<ContractorWorkerAccountOptionsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractor-worker-account-options`,
+      token,
     );
   }
   createWorkerSiteZoneAssignment(

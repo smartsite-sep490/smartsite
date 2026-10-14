@@ -1,18 +1,13 @@
+import { translate as tr } from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import React, { useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
 
-import {
-  IconCheck,
-  IconHardHat,
-  IconShield,
-  IconUsers,
-  IconKey,
-  IconAlertTriangle,
-  IconX,
-} from '../icons';
+import { IconCheck, IconShield, IconUsers, IconKey, IconAlertTriangle, IconX } from '../icons';
 import { SmartSiteScrollWorld } from './SmartSiteScrollWorld';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -23,6 +18,8 @@ interface LandingPageProps {
 }
 
 export function LandingPage({ onEnterApp }: LandingPageProps) {
+  useTranslation();
+
   const [activeAiTab, setActiveAiTab] = useState<'ppe' | 'zones'>('ppe');
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -262,49 +259,55 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
     >
       {/* 1. Header Navigation - Updated for Dark Hero */}
       <header className="absolute top-0 inset-x-0 z-50 bg-transparent">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-20 flex items-center justify-between">
           <div
             className="flex items-center gap-2.5 cursor-pointer"
             onClick={() => window.scrollTo(0, 0)}
           >
-            <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center font-black text-white text-base shadow-sm">
-              S
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
+              <img
+                src="/smartsite-app-icon-white.png"
+                alt="SmartSite"
+                className="w-full h-full object-contain"
+              />
             </div>
             <span className="text-xl font-bold tracking-tight text-white">
-              Smart<span className="text-[#F66B17]">Site</span>
+              Smart
+              <span className="text-[#F66B17]">Site</span>
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
+          <nav className="hidden xl:flex items-center gap-5 text-sm font-semibold text-slate-300">
             <a href="#platform" className="hover:text-white transition-colors">
-              Platform
+              {tr('common.platform')}
             </a>
             <a href="#solutions" className="hover:text-white transition-colors">
-              Solutions
+              {tr('common.solutions')}
             </a>
             <a href="#safety-ai" className="hover:text-white transition-colors">
-              Safety AI
+              {tr('common.safety_ai')}
             </a>
             <a href="#how-it-works" className="hover:text-white transition-colors">
-              How It Works
+              {tr('common.how_it_works')}
             </a>
             <a href="#about" className="hover:text-white transition-colors">
-              About
+              {tr('common.about')}
             </a>
           </nav>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <LanguageSwitcher dark />
             <button
               onClick={() => onEnterApp('dashboard')}
               className="text-sm font-semibold text-white hover:text-slate-200 px-2 py-2"
             >
-              Sign In
+              {tr('common.sign_in_bcc0bc')}
             </button>
             <button
               onClick={() => onEnterApp('dashboard')}
-              className="px-5 py-2.5 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white text-sm font-bold shadow-sm transition-colors"
+              className="hidden sm:inline-flex px-5 py-2.5 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white text-sm font-bold shadow-sm transition-colors"
             >
-              Request a Demo
+              {tr('common.request_a_demo')}
             </button>
           </div>
         </div>
@@ -327,29 +330,30 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-6 relative z-10 w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center h-full pb-20">
           <div className="lg:col-span-8">
             <div className="hero-badge inline-block mb-6 text-[#F66B17] text-xs font-bold tracking-widest uppercase bg-black/30 px-3 py-1.5 rounded backdrop-blur-sm">
-              Intelligent construction platform
+              {tr('common.intelligent_construction_platform')}
             </div>
-            <h1 className="hero-headline text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.1] mb-8 drop-shadow-2xl">
-              SMARTER SITES.
+            <h1 className="hero-headline text-[clamp(2rem,9vw,3rem)] sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.1] mb-8 drop-shadow-2xl">
+              {tr('common.smarter_sites')}
               <br />
-              <span className="text-[#F66B17]">SAFER</span> WORK.
+              <span className="text-[#F66B17]">{tr('common.safer')}</span> {tr('common.work')}
             </h1>
             <p className="hero-desc text-lg md:text-xl text-slate-200 mb-12 max-w-2xl leading-relaxed drop-shadow-lg font-medium">
-              Connect workforce management, site access, AI safety monitoring and construction
-              operations in one intelligent platform.
+              {tr(
+                'landing_page.connect_workforce_management_site_access_ai_safety_monitoring_and_construction_ope',
+              )}
             </p>
             <div className="hero-btns flex flex-col sm:flex-row items-center gap-4">
               <a
                 href="#platform"
                 className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] !text-white font-bold text-sm shadow-xl shadow-[#F66B17]/20 transition-all flex justify-center items-center gap-2"
               >
-                Explore SmartSite <span className="ml-1">↓</span>
+                {tr('common.explore_smartsite')} <span className="ml-1">↓</span>
               </a>
               <a
                 href="#safety-ai"
                 className="w-full sm:w-auto px-8 py-4 rounded-xl bg-black/40 hover:bg-black/60 backdrop-blur-md !text-white font-bold text-sm shadow-sm border border-white/20 transition-all flex justify-center items-center gap-2"
               >
-                See AI Safety <span className="ml-1">→</span>
+                {tr('common.see_ai_safety')} <span className="ml-1">→</span>
               </a>
             </div>
 
@@ -358,24 +362,24 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <div className="bg-[#0B1521]/30 backdrop-blur-2xl border border-white/20 rounded-xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
                   <span className="text-[10px] font-bold text-white tracking-widest">
-                    LIVE SITE
+                    {tr('common.live_site')}
                   </span>
                   <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Online
+                    {tr('common.online')}
                   </span>
                 </div>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-300">Workers On Site</span>
+                    <span className="text-xs text-slate-300">{tr('common.workers_on_site')}</span>
                     <span className="text-2xl font-black text-white">328</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-300">Safety Compliance</span>
+                    <span className="text-xs text-slate-300">{tr('common.safety_compliance')}</span>
                     <span className="text-2xl font-black text-white">96.8%</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-300">Active Alerts</span>
+                    <span className="text-xs text-slate-300">{tr('common.active_alerts')}</span>
                     <span className="text-2xl font-black text-white">7</span>
                   </div>
                 </div>
@@ -390,38 +394,47 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-6xl mx-auto">
           <div className="challenge-header mb-16">
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
-              The challenge
+              {tr('common.the_challenge')}
             </h2>
             <h3 className="text-3xl md:text-5xl font-black text-[#2F3437] max-w-3xl leading-tight">
-              Construction sites are complex.
+              {tr('landing_page.construction_sites_are_complex')}
               <br />
-              Your systems shouldn't be.
+              {tr('landing_page.your_systems_shouldn_t_be')}
             </h3>
           </div>
 
           <div className="challenge-cards-container space-y-0 text-sm md:text-base hover:opacity-100 group">
             <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-[#EAEAEA] transition-all hover:bg-white hover:px-4 rounded-lg cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">01</div>
-              <div className="md:col-span-4 font-bold text-[#2F3437]">DISCONNECTED WORKFORCE</div>
+              <div className="md:col-span-4 font-bold text-[#2F3437]">
+                {tr('common.disconnected_workforce')}
+              </div>
               <div className="md:col-span-7 text-[#787774] leading-relaxed">
-                Worker profiles, contractor assignments, certifications and site eligibility are
-                often managed separately.
+                {tr(
+                  'landing_page.worker_profiles_contractor_assignments_certifications_and_site_eligibility_are_oft',
+                )}
               </div>
             </div>
             <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-t border-[#EAEAEA] transition-all hover:bg-white hover:px-4 rounded-lg cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">02</div>
-              <div className="md:col-span-4 font-bold text-[#2F3437]">SAFETY RISKS</div>
+              <div className="md:col-span-4 font-bold text-[#2F3437]">
+                {tr('common.safety_risks')}
+              </div>
               <div className="md:col-span-7 text-[#787774] leading-relaxed">
-                Manual observation cannot continuously monitor every worker, camera and restricted
-                area.
+                {tr(
+                  'landing_page.manual_observation_cannot_continuously_monitor_every_worker_camera_and_restricted',
+                )}
               </div>
             </div>
             <div className="challenge-card grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-8 py-8 border-y border-[#EAEAEA] transition-all hover:bg-white hover:px-4 rounded-lg cursor-default">
               <div className="md:col-span-1 text-[#F66B17] font-mono font-bold">03</div>
-              <div className="md:col-span-4 font-bold text-[#2F3437]">FRAGMENTED SITE DATA</div>
+              <div className="md:col-span-4 font-bold text-[#2F3437]">
+                {tr('common.fragmented_site_data')}
+              </div>
               <div className="md:col-span-7 text-[#787774] leading-relaxed">
-                Access control, safety events, cameras, IoT and project operations can become
-                disconnected.
+                {tr(
+                  'landing_page.access_control_safety_events_cameras_iot_and_project_operations_can_become_disconn',
+                )}
               </div>
             </div>
           </div>
@@ -433,18 +446,19 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
           <div className="platform-text">
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
-              The SmartSite platform
+              {tr('common.the_smartsite_platform')}
             </h2>
             <h3 className="text-4xl md:text-5xl font-black text-[#2F3437] leading-tight mb-6">
-              One platform.
+              {tr('common.one_platform')}
               <br />
-              Every part of your
+              {tr('landing_page.every_part_of_your')}
               <br />
-              site connected.
+              {tr('common.site_connected')}
             </h3>
             <p className="text-lg text-[#787774] leading-relaxed">
-              SmartSite brings workforce, access, safety intelligence and site operations into one
-              connected construction platform.
+              {tr(
+                'landing_page.smartsite_brings_workforce_access_safety_intelligence_and_site_operations_into_one',
+              )}
             </p>
           </div>
 
@@ -465,22 +479,22 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             {/* Orbiting nodes */}
             <div className="orbit-node absolute top-[8%] left-1/2 -translate-x-1/2">
               <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
-                Workforce
+                {tr('common.workforce')}
               </div>
             </div>
             <div className="orbit-node absolute bottom-[8%] left-1/2 -translate-x-1/2">
               <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
-                Operations
+                {tr('common.operations')}
               </div>
             </div>
             <div className="orbit-node absolute left-[-2%] top-1/2 -translate-y-1/2">
               <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
-                Access
+                {tr('common.access')}
               </div>
             </div>
             <div className="orbit-node absolute right-[-2%] top-1/2 -translate-y-1/2">
               <div className="px-4 py-2.5 bg-white rounded-lg border border-[#EAEAEA] shadow-sm text-xs font-bold text-[#2F3437] tracking-wide uppercase animate-[spin_60s_linear_infinite_reverse] transition-transform hover:scale-110 cursor-pointer">
-                Safety AI
+                {tr('common.safety_ai')}
               </div>
             </div>
           </div>
@@ -497,9 +511,9 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       >
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl md:text-5xl font-black text-[#2F3437] leading-tight mb-20 max-w-2xl">
-            Built around how construction
+            {tr('landing_page.built_around_how_construction')}
             <br />
-            sites actually operate.
+            {tr('common.sites_actually_operate')}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-16">
@@ -510,27 +524,27 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
               <div>
                 <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
-                  Workforce Management
+                  {tr('common.workforce_management')}
                 </div>
                 <h4 className="text-xl font-black text-[#2F3437] mb-6">
-                  One verified workforce record
+                  {tr('landing_page.one_verified_workforce_record')}
                 </h4>
                 <ul className="space-y-4">
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Worker profiles
+                    {tr('common.worker_profiles')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Contractor assignments
+                    {tr('common.contractor_assignments')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Certificates
+                    {tr('common.certificates')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Site assignments
+                    {tr('common.site_assignments')}
                   </li>
                 </ul>
               </div>
@@ -543,27 +557,27 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
               <div>
                 <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
-                  Site Access
+                  {tr('common.site_access')}
                 </div>
                 <h4 className="text-xl font-black text-[#2F3437] mb-6">
-                  Secure every arrival and departure
+                  {tr('landing_page.secure_every_arrival_and_departure')}
                 </h4>
                 <ul className="space-y-4">
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Face recognition
+                    {tr('common.face_recognition')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Dynamic QR
+                    {tr('common.dynamic_qr')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Assignment verification
+                    {tr('common.assignment_verification')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Entry / exit records
+                    {tr('landing_page.entry_exit_records')}
                   </li>
                 </ul>
               </div>
@@ -576,23 +590,23 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
               <div>
                 <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
-                  AI Safety
+                  {tr('common.ai_safety')}
                 </div>
                 <h4 className="text-xl font-black text-[#2F3437] mb-6">
-                  Always-on safety intelligence
+                  {tr('common.always_on_safety_intelligence')}
                 </h4>
                 <ul className="space-y-4">
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    PPE Monitoring
+                    {tr('common.ppe_monitoring')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Restricted Zone Monitoring
+                    {tr('common.restricted_zone_monitoring')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Real-time safety alerts
+                    {tr('common.real_time_safety_alerts')}
                   </li>
                 </ul>
               </div>
@@ -605,27 +619,27 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               </div>
               <div>
                 <div className="text-[10px] font-bold text-[#6B6B6B] mb-2 uppercase tracking-widest">
-                  Incident Management
+                  {tr('common.incident_management')}
                 </div>
                 <h4 className="text-xl font-black text-[#2F3437] mb-6">
-                  Move evidence into action
+                  {tr('landing_page.move_evidence_into_action')}
                 </h4>
                 <ul className="space-y-4">
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Safety-event review
+                    {tr('common.safety_event_review')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Evidence
+                    {tr('common.evidence')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Status tracking
+                    {tr('common.status_tracking')}
                   </li>
                   <li className="flex items-center gap-3 text-sm text-[#787774] font-medium">
                     <IconCheck className="w-4 h-4 text-[#F66B17]" />
-                    Resolution workflow
+                    {tr('common.resolution_workflow')}
                   </li>
                 </ul>
               </div>
@@ -644,13 +658,14 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="max-w-2xl">
               <h3 className="text-4xl md:text-5xl font-black text-white leading-tight mb-4">
-                See risk.
+                {tr('common.see_risk')}
                 <br />
-                Verify context. Act faster.
+                {tr('landing_page.verify_context_act_faster')}
               </h3>
               <p className="text-slate-400 text-lg leading-relaxed">
-                SmartSite turns site cameras into an intelligent safety layer that detects potential
-                risks and connects them with real operational data.
+                {tr(
+                  'landing_page.smartsite_turns_site_cameras_into_an_intelligent_safety_layer_that_detects_potenti',
+                )}
               </p>
             </div>
             <div className="flex bg-[#0B1521] border border-white/10 rounded-xl p-1 shadow-inner">
@@ -662,7 +677,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                PPE MONITORING
+                {tr('common.ppe_monitoring_9005ce')}
               </button>
               <button
                 onClick={() => setActiveAiTab('zones')}
@@ -672,7 +687,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                RESTRICTED ZONES
+                {tr('common.restricted_zones_5d9fc9')}
               </button>
             </div>
           </div>
@@ -683,23 +698,23 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <div className="lg:w-2/3 relative aspect-video bg-black">
               <img
                 src="https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
-                alt="Construction AI View"
+                alt={tr('common.construction_ai_view')}
                 className="w-full h-full object-cover opacity-90"
               />
 
               {/* Video Overlays */}
               <div className="absolute top-4 left-4">
                 <div className="text-white text-xs font-bold tracking-widest bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10 shadow-sm mb-1">
-                  CAM-07
+                  {tr('common.cam_07')}
                 </div>
                 <div className="text-slate-300 text-[10px] tracking-widest font-semibold ml-1">
-                  WORK AREA B
+                  {tr('common.work_area_b')}
                 </div>
               </div>
 
               <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-md border border-white/10">
                 <span className="text-slate-300 text-[10px] font-bold tracking-widest uppercase">
-                  Illustrative example
+                  {tr('common.illustrative_example')}
                 </span>
               </div>
 
@@ -707,7 +722,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-80 border-[3px] border-[#F66B17] group cursor-pointer transition-colors hover:bg-[#F66B17]/10">
                 <div className="absolute -top-[28px] left-[-3px] bg-[#F66B17] px-3 py-1">
                   <span className="text-white text-[10px] font-bold tracking-widest">
-                    SAMPLE TRACK #1024 • 97%
+                    {tr('landing_page.sample_track_1024_97')}
                   </span>
                 </div>
               </div>
@@ -720,20 +735,22 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <div className="lg:w-1/3 bg-[#0B1521] p-8 flex flex-col h-full border-l border-white/5">
               <div className="mb-6 flex items-center justify-between">
                 <span className="text-[#F66B17] text-[10px] font-bold tracking-widest uppercase">
-                  PPE CHECK
+                  {tr('common.ppe_check')}
                 </span>
                 <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">
-                  Illustrative example
+                  {tr('common.illustrative_example')}
                 </span>
               </div>
 
               <div className="space-y-6 flex-1">
                 <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4">
-                  <span className="text-white text-sm font-semibold">Helmet</span>
+                  <span className="text-white text-sm font-semibold">{tr('common.helmet')}</span>
                   <IconCheck className="w-5 h-5 text-emerald-500" />
                 </div>
                 <div className="ai-checklist-item flex items-center justify-between border-b border-white/10 pb-4 bg-red-500/5 -mx-8 px-8 border-l-[3px] border-l-red-500">
-                  <span className="text-white text-sm font-semibold">Safety Vest</span>
+                  <span className="text-white text-sm font-semibold">
+                    {tr('common.safety_vest')}
+                  </span>
                   <IconX className="w-5 h-5 text-red-500" />
                 </div>
               </div>
@@ -741,14 +758,16 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               <div className="mt-8 pt-6 border-t border-white/10">
                 <div className="border-l-4 border-red-500 pl-4 mb-6">
                   <div className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mb-1">
-                    RESULT
+                    {tr('common.result')}
                   </div>
                   <div className="text-red-500 text-xl font-black tracking-tight mb-1">
-                    PPE VIOLATION
+                    {tr('common.ppe_violation')}
                   </div>
-                  <div className="text-slate-400 text-xs">Missing required PPE: Safety Vest</div>
+                  <div className="text-slate-400 text-xs">
+                    {tr('landing_page.missing_required_ppe_safety_vest')}
+                  </div>
                   <div className="text-slate-500 text-[10px] mt-1">
-                    Model scope: Hardhat &amp; Safety Vest detection
+                    {tr('landing_page.model_scope_hardhat_amp_safety_vest_detection')}
                   </div>
                 </div>
 
@@ -756,7 +775,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                   onClick={() => onEnterApp('ppe')}
                   className="w-full sm:w-auto px-6 py-3 rounded-lg bg-[#F66B17] hover:bg-[#D94E07] text-white font-bold text-sm shadow-xl transition-all flex items-center justify-between"
                 >
-                  <span>Explore PPE Monitoring</span>
+                  <span>{tr('common.explore_ppe_monitoring')}</span>
                   <span>→</span>
                 </button>
               </div>
@@ -770,10 +789,10 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-7xl mx-auto">
           <div className="mb-20">
             <div className="text-[#F66B17] text-[10px] font-black tracking-widest uppercase mb-4">
-              HOW IT WORKS
+              {tr('common.how_it_works_6a4cc4')}
             </div>
             <h2 className="text-4xl md:text-[44px] lg:text-[56px] font-black text-[#041D2E] tracking-tight leading-tight">
-              From site activity to actionable intelligence.
+              {tr('landing_page.from_site_activity_to_actionable_intelligence')}
             </h2>
           </div>
 
@@ -786,9 +805,11 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">01</div>
-                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">SENSE</h4>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
+                    {tr('common.sense')}
+                  </h4>
                   <p className="text-[#787774] text-sm leading-relaxed pr-4">
-                    Cameras, gates and site systems collect operational events.
+                    {tr('landing_page.cameras_gates_and_site_systems_collect_operational_events')}
                   </p>
                 </div>
               </div>
@@ -799,10 +820,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">02</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
-                    UNDERSTAND
+                    {tr('common.understand')}
                   </h4>
                   <p className="text-[#787774] text-sm leading-relaxed pr-4">
-                    SmartSite identifies workers, equipment and safety conditions.
+                    {tr(
+                      'landing_page.smartsite_identifies_workers_equipment_and_safety_conditions',
+                    )}
                   </p>
                 </div>
               </div>
@@ -813,10 +836,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">03</div>
                   <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
-                    VERIFY
+                    {tr('common.verify')}
                   </h4>
                   <p className="text-[#787774] text-sm leading-relaxed pr-4">
-                    The platform checks assignments, PPE requirements and zone permissions.
+                    {tr(
+                      'landing_page.the_platform_checks_assignments_ppe_requirements_and_zone_permissions',
+                    )}
                   </p>
                 </div>
               </div>
@@ -826,9 +851,13 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">04</div>
-                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">ALERT</h4>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
+                    {tr('common.alert')}
+                  </h4>
                   <p className="text-[#787774] text-sm leading-relaxed pr-4">
-                    Relevant violations or uncertain events generate classified alerts.
+                    {tr(
+                      'landing_page.relevant_violations_or_uncertain_events_generate_classified_alerts',
+                    )}
                   </p>
                 </div>
               </div>
@@ -837,9 +866,11 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 <div className="absolute left-0 md:left-auto md:top-0 w-4 h-4 rounded-full bg-[#F66B17] border-[4px] box-content border-[#F7F6F3] z-10" />
                 <div className="mt-8 md:mt-10">
                   <div className="text-[#F66B17] font-black text-xs mb-1">05</div>
-                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">ACT</h4>
+                  <h4 className="font-black text-[#041D2E] text-base mb-4 tracking-tight">
+                    {tr('common.act')}
+                  </h4>
                   <p className="text-[#787774] text-sm leading-relaxed pr-4">
-                    Responsible personnel review and resolve the event.
+                    {tr('landing_page.responsible_personnel_review_and_resolve_the_event')}
                   </p>
                 </div>
               </div>
@@ -853,13 +884,14 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 max-w-5xl">
             <h3 className="text-4xl md:text-5xl font-black leading-tight text-white">
-              Your construction site.
+              {tr('common.your_construction_site')}
               <br />
-              One operational view.
+              {tr('common.one_operational_view')}
             </h3>
             <p className="text-slate-400 text-sm leading-relaxed max-w-sm mb-2">
-              Live signals from people, access points, cameras and connected equipment — organized
-              for faster decisions.
+              {tr(
+                'landing_page.live_signals_from_people_access_points_cameras_and_connected_equipment_organized_f',
+              )}
             </p>
           </div>
 
@@ -868,35 +900,37 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             {/* Mockup Header bar */}
             <div className="bg-white px-6 py-4 flex items-center gap-2 border-b border-slate-100">
               <span className="w-2.5 h-2.5 rounded-full bg-[#F66B17]" />
-              <span className="text-sm font-bold text-slate-800">Tower A · Live Operations</span>
+              <span className="text-sm font-bold text-slate-800">
+                {tr('landing_page.tower_a_live_operations')}
+              </span>
             </div>
 
             <div className="flex flex-col md:flex-row h-[500px]">
               {/* Sidebar */}
               <div className="w-full md:w-56 bg-[#041D2E] p-4 flex flex-col gap-1 shrink-0 h-full">
                 <div className="bg-[#F66B17] text-white px-4 py-2.5 rounded-lg text-sm font-bold cursor-pointer">
-                  Overview
+                  {tr('common.overview')}
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
-                  Workforce
+                  {tr('common.workforce')}
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
-                  Access
+                  {tr('common.access')}
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
-                  Safety
+                  {tr('common.safety')}
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
-                  Cameras
+                  {tr('common.cameras')}
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
-                  Incidents
+                  {tr('common.incidents')}
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
                   IoT
                 </div>
                 <div className="text-slate-300 hover:bg-white/5 hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors">
-                  Progress
+                  {tr('common.progress')}
                 </div>
               </div>
 
@@ -906,25 +940,25 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
-                      Workers On Site
+                      {tr('common.workers_on_site')}
                     </div>
                     <div className="text-3xl font-black text-slate-900">328</div>
                   </div>
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
-                      Active Contractors
+                      {tr('common.active_contractors')}
                     </div>
                     <div className="text-3xl font-black text-slate-900">14</div>
                   </div>
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
-                      Safety Compliance
+                      {tr('common.safety_compliance')}
                     </div>
                     <div className="text-3xl font-black text-slate-900">96.8%</div>
                   </div>
                   <div className="dashboard-stat bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="text-[10px] text-[#787774] font-bold mb-2 tracking-widest uppercase">
-                      Open Alerts
+                      {tr('common.open_alerts')}
                     </div>
                     <div className="text-3xl font-black text-slate-900">7</div>
                   </div>
@@ -935,8 +969,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                   {/* Site Activity Chart */}
                   <div className="flex-[2] bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col">
                     <div className="flex justify-between items-center mb-6">
-                      <h4 className="font-bold text-slate-800 text-sm">Site activity</h4>
-                      <span className="text-xs text-slate-400 font-medium">Today</span>
+                      <h4 className="font-bold text-slate-800 text-sm">
+                        {tr('common.site_activity_82656f')}
+                      </h4>
+                      <span className="text-xs text-slate-400 font-medium">
+                        {tr('common.today')}
+                      </span>
                     </div>
                     <div className="flex-1 flex items-end justify-between gap-4 px-2">
                       {[30, 45, 60, 40, 80, 50, 70, 90, 65, 85].map((h, i) => (
@@ -951,19 +989,33 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
                   {/* Live Systems List */}
                   <div className="flex-1 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                    <h4 className="font-bold text-slate-800 text-sm mb-6">Live systems</h4>
+                    <h4 className="font-bold text-slate-800 text-sm mb-6">
+                      {tr('common.live_systems')}
+                    </h4>
                     <div className="space-y-6">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-semibold text-slate-500">Access Control</span>
-                        <span className="text-xs font-bold text-emerald-600">Online</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {tr('common.access_control')}
+                        </span>
+                        <span className="text-xs font-bold text-emerald-600">
+                          {tr('common.online')}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-semibold text-slate-500">Safety AI</span>
-                        <span className="text-xs font-bold text-emerald-600">12 cameras</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {tr('common.safety_ai')}
+                        </span>
+                        <span className="text-xs font-bold text-emerald-600">
+                          {tr('common.12_cameras')}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-semibold text-slate-500">IoT Sensors</span>
-                        <span className="text-xs font-bold text-emerald-600">48 active</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {tr('common.iot_sensors')}
+                        </span>
+                        <span className="text-xs font-bold text-emerald-600">
+                          {tr('common.48_active')}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -979,15 +1031,16 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-16 md:items-center">
           <div className="lifecycle-text md:w-1/2">
             <h3 className="text-4xl md:text-5xl font-black text-[#041D2E] mb-6 leading-tight">
-              Connected from
+              {tr('common.connected_from')}
               <br />
-              the gate to the
+              {tr('landing_page.the_gate_to_the')}
               <br />
-              jobsite.
+              {tr('common.jobsite')}
             </h3>
             <p className="text-[#787774] text-sm leading-relaxed max-w-sm">
-              SmartSite connects events across the worker lifecycle instead of operating as isolated
-              tools.
+              {tr(
+                'landing_page.smartsite_connects_events_across_the_worker_lifecycle_instead_of_operating_as_isol',
+              )}
             </p>
           </div>
 
@@ -995,12 +1048,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <div className="space-y-4">
               {[
                 'WORKFORCE',
-                'SITE ASSIGNMENT',
-                'SITE ACCESS',
-                'SITE OPERATIONS',
-                'AI SAFETY',
-                'INCIDENT RESPONSE',
-                'SITE INTELLIGENCE',
+                tr('common.site_assignment_240cbf'),
+                tr('common.site_access_863c29'),
+                tr('common.site_operations'),
+                tr('common.ai_safety_7e5661'),
+                tr('common.incident_response'),
+                tr('common.site_intelligence'),
               ].map((step, index) => (
                 <div
                   key={step}
@@ -1025,12 +1078,14 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-12">
           <div className="md:w-1/2">
             <h2 className="text-5xl md:text-6xl font-black mb-6 leading-tight">
-              Build smarter.
+              {tr('common.build_smarter')}
               <br />
-              <span className="text-[#F66B17]">Work safer.</span>
+              <span className="text-[#F66B17]">{tr('common.work_safer')}</span>
             </h2>
             <p className="text-slate-400 text-sm max-w-md leading-relaxed">
-              Connect your workforce, safety systems and construction operations with SmartSite.
+              {tr(
+                'landing_page.connect_your_workforce_safety_systems_and_construction_operations_with_smartsite',
+              )}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 items-center md:justify-end md:w-1/2">
@@ -1038,13 +1093,13 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
               onClick={() => onEnterApp('dashboard')}
               className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] !text-white font-bold text-sm transition-all whitespace-nowrap"
             >
-              Request a Demo
+              {tr('common.request_a_demo')}
             </button>
             <button
               onClick={() => onEnterApp('dashboard')}
               className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-transparent hover:bg-white/5 !text-white font-bold text-sm border border-slate-600 transition-all whitespace-nowrap flex items-center justify-center gap-2"
             >
-              Explore Platform <span className="ml-1">→</span>
+              {tr('common.explore_platform')} <span className="ml-1">→</span>
             </button>
           </div>
         </div>
@@ -1055,40 +1110,47 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-12 md:gap-8 text-sm">
           <div className="col-span-2 space-y-6">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center shadow-sm">
-                <IconHardHat className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm shrink-0 bg-white p-0.5 flex items-center justify-center">
+                <img
+                  src="/smartsite-app-icon-white.png"
+                  alt="SmartSite"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <span className="text-xl font-bold tracking-tight">
-                Smart<span className="text-white">Site</span>
+                Smart
+                <span className="text-white">Site</span>
               </span>
             </div>
             <p className="text-slate-400 text-xs max-w-xs leading-relaxed">
-              Intelligent construction operations and AI safety, connected in one platform.
+              {tr(
+                'landing_page.intelligent_construction_operations_and_ai_safety_connected_in_one_platform',
+              )}
             </p>
           </div>
 
           <div>
             <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">
-              PLATFORM
+              {tr('common.platform_6f38f6')}
             </h4>
             <ul className="space-y-4 text-slate-400 text-xs font-medium">
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('workforce')}
               >
-                Workforce
+                {tr('common.workforce')}
               </li>
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('access')}
               >
-                Site Access
+                {tr('common.site_access')}
               </li>
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('ppe')}
               >
-                Safety AI
+                {tr('common.safety_ai')}
               </li>
               <li
                 className="hover:text-white cursor-pointer transition-colors"
@@ -1100,64 +1162,70 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('progress')}
               >
-                Progress
+                {tr('common.progress')}
               </li>
             </ul>
           </div>
 
           <div>
             <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">
-              SOLUTIONS
+              {tr('common.solutions_df75ca')}
             </h4>
             <ul className="space-y-4 text-slate-400 text-xs font-medium">
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('ppe')}
               >
-                PPE Monitoring
+                {tr('common.ppe_monitoring')}
               </li>
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('zones')}
               >
-                Restricted Zones
+                {tr('common.restricted_zones')}
               </li>
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('incidents')}
               >
-                Incident Management
+                {tr('common.incident_management')}
               </li>
             </ul>
           </div>
 
           <div>
             <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">
-              RESOURCES
+              {tr('common.resources')}
             </h4>
             <ul className="space-y-4 text-slate-400 text-xs font-medium">
-              <li className="hover:text-white cursor-pointer transition-colors">Documentation</li>
-              <li className="hover:text-white cursor-pointer transition-colors">Support</li>
-              <li className="hover:text-white cursor-pointer transition-colors">About</li>
+              <li className="hover:text-white cursor-pointer transition-colors">
+                {tr('common.documentation')}
+              </li>
+              <li className="hover:text-white cursor-pointer transition-colors">
+                {tr('common.support')}
+              </li>
+              <li className="hover:text-white cursor-pointer transition-colors">
+                {tr('common.about')}
+              </li>
             </ul>
           </div>
 
           <div>
             <h4 className="font-black text-[#F66B17] mb-6 text-[10px] tracking-widest uppercase">
-              PRODUCT
+              {tr('common.product')}
             </h4>
             <ul className="space-y-4 text-slate-400 text-xs font-medium">
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('dashboard')}
               >
-                Sign In
+                {tr('common.sign_in_bcc0bc')}
               </li>
               <li
                 className="hover:text-white cursor-pointer transition-colors"
                 onClick={() => onEnterApp('dashboard')}
               >
-                Request Demo
+                {tr('common.request_demo')}
               </li>
             </ul>
           </div>
@@ -1165,7 +1233,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
         <div className="max-w-6xl mx-auto mt-16 pt-8 border-t border-slate-700/50">
           <p className="text-slate-500 text-[10px]">
-            © 2026 SmartSite. Built for safer construction.
+            {tr('landing_page.2026_smartsite_built_for_safer_construction')}
           </p>
         </div>
       </footer>
