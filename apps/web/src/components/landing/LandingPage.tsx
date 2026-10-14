@@ -5,15 +5,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
 
-import {
-  IconCheck,
-  IconHardHat,
-  IconShield,
-  IconUsers,
-  IconKey,
-  IconAlertTriangle,
-  IconX,
-} from '../icons';
+import { IconCheck, IconShield, IconUsers, IconKey, IconAlertTriangle, IconX } from '../icons';
 import { SmartSiteScrollWorld } from './SmartSiteScrollWorld';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 
@@ -272,8 +264,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             className="flex items-center gap-2.5 cursor-pointer"
             onClick={() => window.scrollTo(0, 0)}
           >
-            <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center font-black text-white text-base shadow-sm">
-              S
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
+              <img
+                src="/smartsite-app-icon-white.png"
+                alt="SmartSite"
+                className="w-full h-full object-contain"
+              />
             </div>
             <span className="text-xl font-bold tracking-tight text-white">
               Smart
@@ -1114,8 +1110,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-12 md:gap-8 text-sm">
           <div className="col-span-2 space-y-6">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#F66B17] flex items-center justify-center shadow-sm">
-                <IconHardHat className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden shadow-sm shrink-0 bg-white p-0.5 flex items-center justify-center">
+                <img
+                  src="/smartsite-app-icon-white.png"
+                  alt="SmartSite"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <span className="text-xl font-bold tracking-tight">
                 Smart
