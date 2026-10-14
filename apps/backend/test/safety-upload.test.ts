@@ -108,3 +108,42 @@ test('MF08 private store verifies digest, fails unavailable and refuses path tra
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('checklist files accept JPEG/PNG/PDF, reject forged signatures and preserve the legacy JPEG limit', async () => {
+  const module = await import('../src/modules/safety/safety-upload.service.js');
+  assert.ok(
+    'validateChecklistFile' in module,
+    'Checklist file validation has not been implemented',
+  );
+  const validate = module.validateChecklistFile as (file: {
+    buffer: Buffer;
+    mimetype: string;
+    size: number;
+  }) => { sha256: string; extension: string };
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  const pdf = Buffer.from('%PDF-1.4\nSynthetic document\n%%EOF\n');
+  assert.equal(
+    validate({ buffer: bytes, mimetype: 'image/jpeg', size: bytes.length }).extension,
+    'jpg',
+  );
+  assert.equal(validate({ buffer: png, mimetype: 'image/png', size: png.length }).extension, 'png');
+  assert.equal(
+    validate({ buffer: pdf, mimetype: 'application/pdf', size: pdf.length }).extension,
+    'pdf',
+  );
+  assert.throws(
+    () => validate({ buffer: pdf, mimetype: 'image/png', size: pdf.length }),
+    error('UNSUPPORTED_MEDIA_TYPE'),
+  );
+  assert.throws(
+    () => validate({ buffer: Buffer.alloc(5242881), mimetype: 'application/pdf', size: 5242881 }),
+    error('PAYLOAD_TOO_LARGE'),
+  );
+  assert.throws(
+    () => validateSafetyJpeg({ buffer: png, mimetype: 'image/png', size: png.length }),
+    error('UNSUPPORTED_MEDIA_TYPE'),
+  );
+});

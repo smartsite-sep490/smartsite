@@ -1,3 +1,4 @@
+import { SafetyChecklistItemResultEntity } from './safety-checklist.entity.js';
 import {
   Check,
   Column,
@@ -42,7 +43,17 @@ import type {
   '(contractor_id IS NULL AND responsibility_reason IS NULL AND responsibility_confirmed_by IS NULL AND responsibility_confirmed_at IS NULL) OR (contractor_id IS NOT NULL AND responsibility_reason IS NOT NULL AND length(trim(responsibility_reason))>0 AND responsibility_confirmed_by IS NOT NULL AND responsibility_confirmed_at IS NOT NULL)',
 )
 @Index('idx_incident_site_order', { synchronize: false })
+@Index('uq_incident_checklist_result', ['sourceChecklistResultId'], {
+  unique: true,
+  where: 'source_checklist_result_id IS NOT NULL',
+})
 export class IncidentEntity {
+  @Column({ name: 'source_checklist_result_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => SafetyChecklistItemResultEntity, {
+    name: 'fk_incident_checklist_result',
+    onDelete: 'RESTRICT',
+  })
+  sourceChecklistResultId!: string | null;
   @Column({ name: 'contractor_id', type: 'uuid', nullable: true })
   @ForeignKey(() => ContractorEntity, {
     name: 'incident_contractor_id_fkey',
@@ -281,9 +292,12 @@ export class SafetyTaskEntity {
 }
 
 @Entity({ name: 'safety_evidence' })
-@Check('safety_evidence_media_type_check', "media_type='image/jpeg'")
+@Check(
+  'safety_evidence_media_type_check',
+  "media_type IN ('image/jpeg','image/png','application/pdf')",
+)
 @Check('safety_evidence_sha256_check', "sha256 ~ '^[0-9a-f]{64}$'")
-@Check('safety_evidence_size_check', 'size BETWEEN 1 AND 1048576')
+@Check('safety_evidence_size_check', 'size BETWEEN 1 AND 5242880')
 @Check('safety_evidence_provider_check', "storage_provider IN ('LOCAL','R2')")
 @Unique('safety_evidence_provider_key_unique', ['storageProvider', 'storageKey'])
 export class SafetyEvidenceEntity {
@@ -308,7 +322,10 @@ export class SafetyEvidenceEntity {
 }
 
 @Entity({ name: 'safety_workflow_audit' })
-@Check('safety_workflow_audit_resource_type_check', "resource_type IN ('INCIDENT','SAFETY_TASK')")
+@Check(
+  'safety_workflow_audit_resource_type_check',
+  "resource_type IN ('INCIDENT','SAFETY_TASK','CHECKLIST')",
+)
 @Index('idx_workflow_audit_resource', { synchronize: false })
 @Unique('safety_workflow_audit_command_id_key', ['commandId'])
 export class SafetyWorkflowAuditEntity {
@@ -328,7 +345,7 @@ export class SafetyWorkflowAuditEntity {
   })
   siteId!: string;
   @Column({ name: 'resource_type', type: 'varchar', length: 16 })
-  resourceType!: 'INCIDENT' | 'SAFETY_TASK';
+  resourceType!: 'INCIDENT' | 'SAFETY_TASK' | 'CHECKLIST';
   @Column({ name: 'resource_id', type: 'uuid' })
   resourceId!: string;
   @Column({ name: 'action', type: 'varchar', length: 32 })

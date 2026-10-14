@@ -30,6 +30,7 @@ import {
   SafetyAlertPageResponseDto,
   SafetyAlertReviewMutationResponseDto,
 } from '../../../common/http/management-response.dto.js';
+import { invalid } from '../../../common/configuration/commands.js';
 import { pagination } from '../../../common/http/pagination.js';
 import { alertResponse } from './safety-alert-response.js';
 import type { SafetyAlertReviewEntity } from '../../../database/entities/safety-alert-review.entity.js';
@@ -96,9 +97,26 @@ export class SafetyAlertsController {
     @Query('limit') limit?: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
+    @Query('zoneId') zoneId?: string,
+    @Query('cameraExternalId') cameraExternalId?: string,
+    @Query('capturedFrom') capturedFrom?: string,
+    @Query('capturedUntil') capturedUntil?: string,
+    @Query('contextTeamId') contextTeamId?: string,
+    @Query('attentionOnly') attentionOnly?: string,
   ) {
+    if (attentionOnly !== undefined && !['true', 'false'].includes(attentionOnly))
+      invalid('Invalid attention filter');
     const value = pagination(offset, limit);
-    const result = await this.alerts.list(siteId, value.offset, value.limit, { status, type });
+    const result = await this.alerts.list(siteId, value.offset, value.limit, {
+      status,
+      type,
+      zoneId,
+      cameraExternalId,
+      capturedFrom,
+      capturedUntil,
+      contextTeamId,
+      attentionOnly: attentionOnly === undefined ? undefined : attentionOnly === 'true',
+    });
     return { items: result.items.map(alertResponse), total: result.total };
   }
 

@@ -126,8 +126,8 @@ export class WorkforceConfigurationService {
         lock: { mode: 'pessimistic_read' },
       })) &&
       !!(await manager
-        .getRepository(ContractorRepresentativeGrantEntity)
-        .findOne({ where: { userId, contractorId }, lock: { mode: 'pessimistic_read' } }))
+        .getRepository(ContractorRepresentativeAssignmentEntity)
+        .findOne({ where: { userId, contractorId, siteId }, lock: { mode: 'pessimistic_read' } }))
     );
   }
   async requireSingleIncidentContractor(
@@ -148,8 +148,8 @@ export class WorkforceConfigurationService {
   }
   async incidentRepresentativeContractors(manager: EntityManager, siteId: string, userId: string) {
     const grants = await manager
-      .getRepository(ContractorRepresentativeGrantEntity)
-      .findBy({ userId });
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .findBy({ userId, siteId });
     const ids: string[] = [];
     for (const grant of grants)
       if (await this.incidentRepresentativeAllowed(manager, siteId, grant.contractorId, userId))
@@ -212,7 +212,7 @@ export class WorkforceConfigurationService {
         { siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE },
       )
       .andWhere(
-        `EXISTS(SELECT 1 FROM contractor_representative_grant g JOIN contractor c ON c.id=g.contractor_id AND c.is_active=TRUE JOIN contractor_site_participation p ON p.contractor_id=c.id AND p.site_id=:siteId AND p.is_active=TRUE AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP) WHERE g.user_id=u.id ${contractorId ? 'AND g.contractor_id=:contractorId' : ''})`,
+        `EXISTS(SELECT 1 FROM contractor_representative_assignment g JOIN contractor c ON c.id=g.contractor_id AND c.is_active=TRUE JOIN contractor_site_participation p ON p.contractor_id=c.id AND p.site_id=:siteId AND p.is_active=TRUE AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP) WHERE g.user_id=u.id AND g.site_id=:siteId ${contractorId ? 'AND g.contractor_id=:contractorId' : ''})`,
         { siteId, ...(contractorId ? { contractorId } : {}) },
       )
       .orderBy('u.displayName', 'ASC')
