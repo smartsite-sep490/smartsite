@@ -1,3 +1,4 @@
+import { SafetyChecklists1792195200000 } from './migrations/1792195200000-SafetyChecklists.js';
 import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
 import { AttendanceAbsence1792022400000 } from './migrations/1792022400000-AttendanceAbsence.js';
 import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
@@ -67,6 +68,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      SafetyChecklists1792195200000,
       SingleSiteManager1791936000000,
       TeamZonePermissions1791940000000,
       ContractorZoneRegrant1791940000001,

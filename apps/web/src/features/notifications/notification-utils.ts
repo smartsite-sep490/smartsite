@@ -4,7 +4,7 @@ import { localizedLabel } from '../../i18n/labels';
 import type { UserNotificationResponse } from '@smartsite/api-client';
 
 export function notificationHref(notification: UserNotificationResponse) {
-  return `${'incidentId' in notification.target ? '/incidents' : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
+  return `${'incidentId' in notification.target || 'checklistId' in notification.target ? '/incidents' : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
 }
 
 export function formatNotificationDisplayMessage(
@@ -20,8 +20,17 @@ export function formatNotificationDisplayMessage(
       { value1: workDate },
     );
   }
-  // The safety handover body is an authored incident title, not system copy.
-  if (item.event === 'SAFETY_HANDOVER') return item.message;
+  // Safety bodies contain authored incident titles or checklist work descriptions.
+  if (
+    [
+      'SAFETY_HANDOVER',
+      'CHECKLIST_ASSIGNED',
+      'CHECKLIST_SUBMITTED',
+      'CHECKLIST_RETURNED',
+      'CHECKLIST_RECORDED',
+    ].includes(item.event)
+  )
+    return item.message;
   const reasonAt = item.message.indexOf(' Reason: ');
   if (reasonAt !== -1 && ['SWAP_DECLINED', 'REQUEST_REJECTED'].includes(item.event)) {
     return (

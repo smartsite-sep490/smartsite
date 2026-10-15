@@ -18,6 +18,7 @@ export interface ActionInput {
   dueAt?: string | null;
 }
 export interface CreateIncidentCommand {
+  sourceChecklistResultId?: string | null;
   contractorId?: string | null;
   workerIds?: string[];
   responsibilityReason?: string;
@@ -79,7 +80,7 @@ export interface SafetyAuditResponse {
   id: string;
   actorId: string;
   action: string;
-  resourceType: 'INCIDENT' | 'SAFETY_TASK';
+  resourceType: 'INCIDENT' | 'SAFETY_TASK' | 'CHECKLIST';
   resourceId: string;
   reason: string | null;
   changes: Record<string, unknown>;
@@ -123,6 +124,7 @@ export interface CorrectiveActionResponse {
   submissions: CorrectiveActionSubmissionResponse[];
 }
 export interface IncidentResponse {
+  sourceChecklistResultId?: string | null;
   reportedByName?: string | null;
   contractorName?: string | null;
   zoneName?: string | null;
@@ -148,6 +150,12 @@ export interface IncidentResponse {
   updatedAt: string;
 }
 export interface IncidentDetailResponse extends IncidentResponse {
+  sourceChecklist?: {
+    assignmentId: string;
+    description: string;
+    itemText: string;
+    note: string;
+  } | null;
   workers?: IncidentWorkerResponse[];
   workerIds: string[];
   alerts: import('./management-api.js').SafetyAlertResponse[];

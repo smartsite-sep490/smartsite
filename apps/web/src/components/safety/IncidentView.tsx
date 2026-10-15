@@ -51,8 +51,11 @@ import {
   TechnicalDetails,
 } from './SafetyWorkflowUi';
 export interface IncidentViewProps extends WorkflowProps {
+  onBack?: () => void;
+  backLabel?: string;
   initialAlertId?: string;
   initialIncidentId?: string;
+  onOpenChecklist?: (id: string) => void;
   initialActionId?: string;
   onSourceConsumed?: () => void;
 }
@@ -250,6 +253,11 @@ export function IncidentView(p: IncidentViewProps) {
         }
       >
         <div>
+          {p.onBack && (
+            <button className={buttonClass} onClick={p.onBack}>
+              {p.backLabel}
+            </button>
+          )}
           <h2 className="text-xl font-bold">
             {representative && !safety ? tr('common.my_assigned_cases') : tr('common.incidents')}
           </h2>
@@ -349,8 +357,14 @@ export function IncidentView(p: IncidentViewProps) {
             >
               <strong className="block break-words text-base">{item.title}</strong>
               <div className="flex flex-wrap gap-2">
-                <StatusBadge value={item.status} />
-                <StatusBadge value={item.severity} />
+                <span className="text-xs">
+                  {tr('common.status_755c8b')}
+                  <StatusBadge value={item.status} />
+                </span>
+                <span className="text-xs">
+                  {tr('safety_workspace.severity')}
+                  <StatusBadge value={item.severity} />
+                </span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
                 {tr('common.occurred_value', { value1: date(item.occurredAt) })}
@@ -384,8 +398,14 @@ export function IncidentView(p: IncidentViewProps) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="min-w-0 break-words text-xl font-bold">{current.title}</h3>
                   <div className="flex gap-2">
-                    <StatusBadge value={current.status} />
-                    <StatusBadge value={current.severity} />
+                    <span className="text-xs">
+                      {tr('common.status_755c8b')}
+                      <StatusBadge value={current.status} />
+                    </span>
+                    <span className="text-xs">
+                      {tr('safety_workspace.severity')}
+                      <StatusBadge value={current.severity} />
+                    </span>
                   </div>
                 </div>
                 <p className="whitespace-pre-wrap break-words text-sm leading-6">
@@ -437,7 +457,7 @@ export function IncidentView(p: IncidentViewProps) {
                   )}
                   {safety && (current.status !== 'CLOSED' || !current.contractorId) && (
                     <button
-                      className={buttonClass}
+                      className={current.contractorId ? buttonClass : primaryClass}
                       disabled={mutation.isPending}
                       onClick={() => open({ op: 'responsibility' })}
                     >
@@ -476,7 +496,7 @@ export function IncidentView(p: IncidentViewProps) {
                     ) : (
                       <>
                         <button
-                          className={primaryClass}
+                          className={currentActions.length ? buttonClass : primaryClass}
                           disabled={mutation.isPending || !current.contractorId}
                           onClick={() => open({ op: 'assign' })}
                         >
@@ -490,7 +510,7 @@ export function IncidentView(p: IncidentViewProps) {
                           {tr('common.link_alerts')}
                         </button>
                         <button
-                          className={buttonClass}
+                          className={ready ? primaryClass : buttonClass}
                           disabled={!ready || mutation.isPending}
                           title={closeHint}
                           onClick={() => open({ op: 'close' })}
@@ -513,6 +533,23 @@ export function IncidentView(p: IncidentViewProps) {
                   {current.zoneId && <p>{tr('common.zone_value', { value1: current.zoneId })}</p>}
                 </TechnicalDetails>
               </article>
+              {current.sourceChecklist && (
+                <section className={cardClass}>
+                  <h3 className="font-bold">{tr('safety_workspace.checklist_finding')}</h3>
+                  <p className="text-sm">{current.sourceChecklist.description}</p>
+                  <strong className="text-sm">{current.sourceChecklist.itemText}</strong>
+                  <p className="whitespace-pre-wrap text-sm">{current.sourceChecklist.note}</p>
+                  {p.onOpenChecklist && (
+                    <button
+                      className={buttonClass}
+                      onClick={() => p.onOpenChecklist!(current.sourceChecklist!.assignmentId)}
+                    >
+                      {tr('safety_workspace.view_source_checklist_and_evidence')}
+                    </button>
+                  )}
+                </section>
+              )}
+
               <section className={cardClass}>
                 <h3 className="font-bold">
                   {tr('common.source_alerts')}{' '}
@@ -520,7 +557,11 @@ export function IncidentView(p: IncidentViewProps) {
                 </h3>
                 {!current.alerts.length && (
                   <p className="text-sm text-[var(--text-secondary)]">
-                    {tr('incident_view.manual_incident_no_source_alert')}
+                    {current.sourceChecklistResultId
+                      ? tr(
+                          'safety_workspace.created_from_a_recorded_checklist_finding_no_linked_ai_alert',
+                        )
+                      : tr('incident_view.manual_incident_no_source_alert')}
                   </p>
                 )}
                 {current.alerts.map((alert) => (
