@@ -1,5 +1,18 @@
 # Scoped LOC exceptions
 
+## Configuration-image client, 15 October
+
+`packages/api-client/src/management.ts` already exceeds500 lines. Root reviewed a
+bounded addition of the purpose-specific method and an optional response budget
+to its existing authenticated request path. JSON streaming, byte limits and
+purpose/scope parsing live in `bounded-json.ts`, rather than growing the transport
+inside the manager. Existing call sites retain their original behavior; only the
+new endpoint opts into bounded success/error reads and late-body cancellation.
+No unrelated endpoint migration or broad class rewrite is included. Before
+further transport growth, extract request/session execution without weakening
+captured credential expiry semantics. Owner: Root; independent scoped client
+review: actual Agy p5. Review does not imply release or browser acceptance.
+
 These are reviewed local exceptions to the feature-context workflow, not
 permission for general growth or a claim that a CI size gate already exists.
 

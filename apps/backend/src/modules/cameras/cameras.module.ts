@@ -7,11 +7,13 @@ import { AuthModule } from '../auth/auth.module.js';
 import { CamerasController } from './cameras.controller.js';
 import { CameraPreviewController } from './camera-preview.controller.js';
 import { CameraPreviewService } from './camera-preview.service.js';
+import { CameraConfigurationImageController } from './camera-configuration-image.controller.js';
+import { CameraConfigurationImageService } from './camera-configuration-image.service.js';
 
 @Module({
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
-  controllers: [CamerasController, CameraPreviewController],
-  providers: [CameraConfigurationService, CameraPreviewService],
+  controllers: [CamerasController, CameraPreviewController, CameraConfigurationImageController],
+  providers: [CameraConfigurationService, CameraPreviewService, CameraConfigurationImageService],
   exports: [CameraConfigurationService],
 })
 export class CamerasModule {}

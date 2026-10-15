@@ -167,7 +167,15 @@ import {
 
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './index';
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
+import type { CameraConfigurationImageResponse } from '@smartsite/contracts/camera-configuration-image';
+import {
+  discardAbortedResponse,
+  MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
+  parseScopedCameraConfigurationImage,
+  readBoundedResponseJson,
+} from './bounded-json';
 import { parseMf05DemoStatus, type Mf05DemoStatus } from './mf05-demo';
+export type { CameraConfigurationImageResponse };
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
@@ -819,6 +827,7 @@ export class SmartSiteManagementClient {
     credentials?: RequestCredentials,
     options?: RequestOptions,
     transport?: { cache: 'no-store'; redirect: 'error' },
+    maxResponseBytes?: number,
   ): Promise<T> {
     const requestOptions = AUTH_SESSION_PATHS.has(path)
       ? { ...options, timeoutMs: options?.timeoutMs ?? AUTH_REQUEST_TIMEOUT_MS }
@@ -826,32 +835,45 @@ export class SmartSiteManagementClient {
     const sessionScopes = captureSessionScopes(token);
     return this.runRequest(requestOptions, async (signal) => {
       // Race headers as well as the body; some fetch adapters ignore abort.
-      const response = await this.readBody(
-        () =>
-          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-            method,
-            headers: {
-              Accept: 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-            },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-            ...(credentials ? { credentials } : {}),
-            ...(AUTH_SESSION_PATHS.has(path) ? { cache: 'no-store' as const } : {}),
-            ...transport,
-            ...(signal ? { signal } : {}),
-          }),
-        signal,
-      );
+      const response = await this.readBody(() => {
+        const pending = fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+          method,
+          headers: {
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          ...(credentials ? { credentials } : {}),
+          ...(AUTH_SESSION_PATHS.has(path) ? { cache: 'no-store' as const } : {}),
+          ...(transport ? { cache: transport.cache, redirect: transport.redirect } : {}),
+          ...(signal ? { signal } : {}),
+        });
+        if (maxResponseBytes !== undefined) {
+          void pending.then(
+            (response) => discardAbortedResponse(response, signal),
+            () => {},
+          );
+        }
+        return pending;
+      }, signal);
       if (response.status === 204) return undefined as T;
       if (response.status === 401 && !AUTH_SESSION_PATHS.has(path) && sessionScopes.length > 0) {
         dispatchSessionExpired(sessionScopes);
       }
       let payload: unknown;
       try {
-        payload = await this.readBody(() => response.json(), signal);
+        payload =
+          maxResponseBytes !== undefined
+            ? await readBoundedResponseJson(
+                response,
+                maxResponseBytes,
+                (read, s) => this.readBody(read, s),
+                signal,
+              )
+            : await this.readBody(() => response.json(), signal);
       } catch (error) {
-        if (signal?.aborted) throw error;
+        if (signal?.aborted || (response.ok && error instanceof ApiError)) throw error;
         if (response.ok)
           throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
@@ -1191,6 +1213,24 @@ export class SmartSiteManagementClient {
         'Backend returned invalid camera observation context.',
       );
     }
+  }
+  async getCameraConfigurationImage(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraConfigurationImageResponse> {
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/configuration-image`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
+    );
+    return parseScopedCameraConfigurationImage(result, siteId, cameraId);
   }
   getSafetyOverview(
     token: string,

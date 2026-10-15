@@ -186,3 +186,4 @@ export * from './manager-overview-api.js';
 export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
 export * from './camera-observation-zones.js';
+export * from './camera-configuration-image.js';

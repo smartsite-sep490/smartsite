@@ -106,6 +106,19 @@ export {
   type CameraVideoStreamOptions,
   type CameraMediaStreamValidationState,
 } from './camera-media-stream';
+export type {
+  CameraConfigurationImageFrame,
+  CameraConfigurationSourceImage,
+  CameraConfigurationImageResponse,
+} from '@smartsite/contracts/camera-configuration-image';
+export {
+  CONFIGURATION_REFERENCE_LIFETIME_MS,
+  MAX_CONFIGURATION_JPEG_BYTES,
+  decodeConfigurationJpeg,
+  parseCameraConfigurationSourceImage,
+  parseCameraConfigurationImageResponse,
+} from '@smartsite/contracts/camera-configuration-image';
+export { MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES } from './bounded-json';
 export type RequestOptions = { signal?: AbortSignal; timeoutMs?: number };
 export type ApiErrorCode = 'http' | 'network' | 'invalid-response' | 'timeout' | 'cancelled';
 export const BACKEND_ERROR_CODES = [
