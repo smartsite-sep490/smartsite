@@ -6,7 +6,6 @@ import {
   type CameraConfigurationImageResponse,
   type SmartSiteManagementClient,
 } from '@smartsite/api-client';
-import type { QueryClient } from '@tanstack/react-query';
 
 export const CONFIGURATION_DECODE_TIMEOUT_MS = 2_000;
 
@@ -21,25 +20,25 @@ export interface ConfigurationReferenceScopeInput {
   enabled: boolean;
 }
 
-const activeTokenNonceByClient = new WeakMap<QueryClient, { token: string; nonce: number }>();
+const activeTokenNonceByOwner = new WeakMap<object, { token: string; nonce: number }>();
 let nextTokenNonce = 0;
 
-export function getOpaqueTokenNonce(queryClient: QueryClient, token: string): number {
+export function getOpaqueTokenNonce(owner: object, token: string): number {
   if (!token) {
-    activeTokenNonceByClient.delete(queryClient);
+    activeTokenNonceByOwner.delete(owner);
     return 0;
   }
-  const existing = activeTokenNonceByClient.get(queryClient);
+  const existing = activeTokenNonceByOwner.get(owner);
   if (existing?.token === token) {
     return existing.nonce;
   }
   const nonce = ++nextTokenNonce;
-  activeTokenNonceByClient.set(queryClient, { token, nonce });
+  activeTokenNonceByOwner.set(owner, { token, nonce });
   return nonce;
 }
 
 export function resolveConfigurationReferenceScope(
-  queryClient: QueryClient,
+  owner: object,
   options: ConfigurationReferenceScopeInput,
 ) {
   const normalizedApiUrl = options.apiUrl.trim().replace(/\/+$/, '');
@@ -48,7 +47,7 @@ export function resolveConfigurationReferenceScope(
   const normalizedSiteId = options.siteId.trim().toLowerCase();
   const normalizedCameraId = options.cameraId.trim().toLowerCase();
   const trimmedExternalId = options.cameraExternalId.trim();
-  const tokenNonce = getOpaqueTokenNonce(queryClient, trimmedToken);
+  const tokenNonce = getOpaqueTokenNonce(owner, trimmedToken);
 
   const isScopeReady = Boolean(
     options.enabled &&
@@ -226,6 +225,10 @@ export async function validateAndDecodeReference(
     parsed.cameraId.toLowerCase() !== normalizedCameraId ||
     parsed.frame.cameraExternalId !== trimmedExternalId
   ) {
+    throw new ApiError('invalid-response', getSafeErrorMessage('invalid-response'));
+  }
+
+  if (Date.now() >= getEffectiveExpiryMs(parsed)) {
     throw new ApiError('invalid-response', getSafeErrorMessage('invalid-response'));
   }
 

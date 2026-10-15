@@ -48,10 +48,11 @@ export function useCameraConfigurationReference(
   const { apiUrl, token, sessionScope, credentialId, siteId, cameraId, cameraExternalId, enabled } =
     options;
   const queryClient = useQueryClient();
+  const [scopeOwner] = useState<object>(() => ({}));
 
   const scope = useMemo(
     () =>
-      resolveConfigurationReferenceScope(queryClient, {
+      resolveConfigurationReferenceScope(scopeOwner, {
         apiUrl,
         token,
         sessionScope,
@@ -67,7 +68,7 @@ export function useCameraConfigurationReference(
       cameraId,
       credentialId,
       enabled,
-      queryClient,
+      scopeOwner,
       sessionScope,
       siteId,
       token,
@@ -81,9 +82,12 @@ export function useCameraConfigurationReference(
     normalizedCameraId,
     trimmedExternalId,
     isScopeReady,
-    queryKey,
     activeScopeKey,
   } = scope;
+  const queryKey = useMemo(
+    () => JSON.parse(activeScopeKey) as readonly (string | number)[],
+    [activeScopeKey],
+  );
 
   const managementClient = useMemo(
     () => new SmartSiteManagementClient(normalizedApiUrl),
@@ -190,11 +194,11 @@ export function useCameraConfigurationReference(
     const requestQueryKey = queryKey;
     const requestGeneration = ++generationRef.current;
     const controller = new AbortController();
-    const isStale = () =>
-      controller.signal.aborted ||
+    const isSuperseded = () =>
       !isScopeReadyRef.current ||
       activeScopeKeyRef.current !== requestScopeKey ||
       generationRef.current !== requestGeneration;
+    const isStale = () => controller.signal.aborted || isSuperseded();
 
     setIsLoadingState(true);
     setErrorState(null);
@@ -249,7 +253,7 @@ export function useCameraConfigurationReference(
         setErrorState(toSafeApiError(err));
       } finally {
         if (inFlightRef.current?.controller === controller) inFlightRef.current = null;
-        if (!isStale()) setIsLoadingState(false);
+        if (!isSuperseded()) setIsLoadingState(false);
       }
     })();
 

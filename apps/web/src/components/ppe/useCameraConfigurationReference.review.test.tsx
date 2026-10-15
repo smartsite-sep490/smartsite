@@ -170,3 +170,121 @@ it('withholds an expired reference on render even when the browser expiry timer 
       .every((row) => !row.state.data),
   ).toBe(true);
 });
+
+it('settles same-scope query cancellation without leaving the action loading', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
+    payload,
+  );
+  decode = () => new Promise(() => {});
+  const { result, queryClient } = mount();
+  await act(async () => {
+    void result.current.request();
+    await Promise.resolve();
+  });
+  expect(result.current.isLoading).toBe(true);
+  await act(async () => {
+    await queryClient.cancelQueries();
+  });
+  expect(result.current.isLoading).toBe(false);
+  expect(result.current.reference).toBeNull();
+  expect(images[0]!.src).toBe('');
+});
+
+it('does not cancel an active decode for equivalent normalized scope inputs', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
+    payload,
+  );
+  let finish!: () => void;
+  decode = () =>
+    new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+  const { result, rerender } = mount();
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = result.current.request();
+    await Promise.resolve();
+  });
+  rerender({ ...options, apiUrl: options.apiUrl + '/' });
+  expect(images[0]!.src).toBe(payload.frame.imageDataUrl);
+  await act(async () => {
+    finish();
+    await pending;
+  });
+  expect(result.current.reference?.configurationVersion).toBe(4);
+});
+
+it('rejects an already expired reference before allocating or decoding image pixels', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
+    payload,
+  );
+  vi.setSystemTime(now + 300_001);
+  const { result } = mount();
+  await act(async () => {
+    await result.current.request();
+  });
+  expect(result.current.reference).toBeNull();
+  expect(images).toHaveLength(0);
+});
+
+it('accepts the new reference when the old reference expires during a held refresh', async () => {
+  const client = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage')
+    .mockResolvedValueOnce(payload);
+  const { result } = mount();
+  await act(async () => {
+    await result.current.request();
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(299_900);
+  });
+  let finish!: (value: CameraConfigurationImageResponse) => void;
+  client.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = result.current.request();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(200);
+  });
+  expect(result.current.reference).toBeNull();
+  await act(async () => {
+    finish({
+      ...payload,
+      referenceExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+      frame: {
+        ...payload.frame,
+        sequenceNumber: '2',
+        capturedAt: new Date(Date.now()).toISOString(),
+      },
+    });
+    await pending;
+  });
+  expect(result.current.reference?.frame.sequenceNumber).toBe('2');
+  expect(images[0]!.src).toBe('');
+  expect(images[1]!.src).toBe(payload.frame.imageDataUrl);
+});
+
+it('keeps an authorized reference isolated from a disabled empty-token sibling using the same query client', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
+    payload,
+  );
+  const active = mount();
+  await act(async () => {
+    await active.result.current.request();
+  });
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: active.queryClient }, children);
+  renderHook(() => useCameraConfigurationReference({ ...options, token: '', enabled: false }), {
+    wrapper,
+  });
+  active.rerender({ ...options, apiUrl: options.apiUrl + '/' });
+  expect(active.result.current.reference?.configurationVersion).toBe(4);
+  expect(images[0]!.src).toBe(payload.frame.imageDataUrl);
+});
