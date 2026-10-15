@@ -2,6 +2,7 @@ import type { AccountResponse } from '@smartsite/api-client';
 
 export type SharedSessionUser = Pick<AccountResponse, 'id' | 'displayName' | 'roleAssignments'> & {
   username?: string;
+  mustChangePassword?: boolean;
 };
 
 export interface SharedSession {

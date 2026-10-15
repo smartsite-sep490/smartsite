@@ -50,3 +50,32 @@ Root-reviewed baseline is local9cf35c0. The new boundary test is above the400-li
 soft target but below the700-line escalation threshold; preserve its four distinct
 scope/refetch/cancellation scenarios rather than compress assertions for a count.
 This exception is not browser, running-product or production acceptance.
+
+## Region polygon editing, 15 October
+
+| Path | Baseline | Current | Reason and follow-up |
+| --- | ---: | ---: | --- |
+| `apps/web/src/components/ppe/ZonePpeCameraRegionPanel.tsx` | 1430 | 1238 | Extract canvas, controls and geometry into cohesive files. Retain existing scoped metadata, mutations and pixel-TTL guards; add frozen optimistic revision, exact submitted geometry and create-to-edit transition. Root permits this smaller grandfathered orchestration file; extract existing query/mutation responsibilities before future growth. |
+| `apps/web/src/components/ppe/ZonePpeCameraRegionPanel.test.tsx` | 1419 | 1711 | Keep existing scope/security fixtures and add save/reopen, stale-preflight and PATCH409-race regressions. Root accepts the bounded shared-fixture increase; next editing task must extract its reusable setup and separate existing-region journeys rather than grow this suite again. |
+| `apps/web/src/i18n/ppe-catalog.ts` | 1513 | 1559 | Add actual editor controls, scoped read-only configuration notes and truthful existing-edit409 guidance in both languages. Preserve one i18n runtime and machine payloads. Root accepts bounded catalog growth; future catalog split must preserve typed keys and Main integration. |
+
+Physical lines counted after normal formatting at the reviewed source snapshot,
+baseline localf4c706f. New canvas418, controls266, pointer hook175 and geometry266
+lines stay below500; interaction lifecycle was extracted after independent review.
+Root owns the exception and subsequent extraction review. New Canvas tests452 lines
+are above the400 soft target, below700, retaining twelve meaningful cases; safety
+and submission journeys are separate files. Software checks do not close the
+independent-image, camera-viewpoint, browser or product gates.
+
+## Scoped Zone capability repair, 15 October
+
+| Path | Baseline | Current | Reason and follow-up |
+| --- | ---: | ---: | --- |
+| `apps/web/src/app.tsx` | 563 | 564 | Forward the existing API mustChangePassword fact in sharedSession; no shell/route/MF08 implementation change. Root permits this one-line projection; extract shared-session projection with its consumers before further unrelated shell growth. |
+| `apps/web/src/components/ppe/PpeMonitoringView.tsx` | 3356 | 3380 | Derive scoped Zone/Region capabilities through a small helper and pass explicit flags into the existing popup. No new transport/runtime architecture. Root permits the bounded gate/prop increase; extract configuration launch controls before another responsibility is added. |
+| `apps/web/src/components/ppe/PpeMonitoringView.test.tsx` | 2080 | 2122 | Two existing draft/locale fixtures now explicitly include the Site Manager roles required by Backend; normal formatting retained. Four actual capability journeys are in a new bounded test file. Root permits fixture changes only, extract common setup before new tests grow this file. |
+| `apps/web/src/components/ppe/ZonePpeSetupPanel.tsx` | 1132 | 1183 | Separate existing manager Zone-write controls from Admin read-only catalog/Region controls, including scoped mutation feedback and capability-loss reset. Preserve all validation/pagination. Root permits this existing-panel gate change; extract create/rename form responsibilities before further feature growth. |
+
+Reviewer/owner: Root; implementation and independent regression workers were actual
+Herdr Agy p7/p5, with p8 independent read-only review. No role grant or Backend
+permission bypass is implied. Context telemetry remains unknown.

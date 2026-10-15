@@ -15,12 +15,58 @@ export function getOpaqueTokenNonce(client: QueryClient, token: string): number 
   return nonce;
 }
 
+export interface ZonePpeCapabilities {
+  canManageZones: boolean;
+  canManageRegions: boolean;
+}
+
+export function deriveZonePpeCapabilities(
+  user:
+    | {
+        roleAssignments?: ReadonlyArray<{ role: string; siteId: string | null }> | null;
+        mustChangePassword?: boolean;
+      }
+    | null
+    | undefined,
+  siteId: string | null | undefined,
+): ZonePpeCapabilities {
+  if (
+    !user ||
+    user.mustChangePassword === true ||
+    !siteId ||
+    !Array.isArray(user.roleAssignments)
+  ) {
+    return { canManageZones: false, canManageRegions: false };
+  }
+  const canManageZones = user.roleAssignments.some(
+    (r) => r.role === 'SITE_MANAGER' && r.siteId === siteId,
+  );
+  const canManageRegions = user.roleAssignments.some(
+    (r) => r.role === 'ADMIN' && r.siteId === null,
+  );
+  return { canManageZones, canManageRegions };
+}
+
 /** Credential identity is opaque; raw tokens never become React or query keys. */
-export function getZonePpeScopeKey(client: QueryClient, props: {
-  apiUrl: string; sessionScope: string; credentialId: number; siteId: string; token: string;
-}): string {
+export function getZonePpeScopeKey(
+  client: QueryClient,
+  props: {
+    apiUrl: string;
+    sessionScope: string;
+    credentialId: number;
+    siteId: string;
+    token: string;
+    canManageZones?: boolean;
+    canManageRegions?: boolean;
+  },
+): string {
   return JSON.stringify([
-    props.apiUrl, props.sessionScope, props.credentialId, props.siteId,
+    props.apiUrl,
+    props.sessionScope,
+    props.credentialId,
+    props.siteId,
     getOpaqueTokenNonce(client, props.token),
+    Boolean(props.canManageZones),
+    Boolean(props.canManageRegions),
   ]);
 }

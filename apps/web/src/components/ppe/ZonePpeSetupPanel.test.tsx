@@ -33,6 +33,8 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
     render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeSetupPanel
+          canManageZones
+          canManageRegions
           apiUrl="http://localhost:3000"
           token="test-token"
           sessionScope="test-scope"
@@ -44,7 +46,9 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
       </QueryClientProvider>,
     );
 
-    const hardHatCheckbox = screen.getByRole('checkbox', { name: /Hard Hat \/ Helmet/i }) as HTMLInputElement;
+    const hardHatCheckbox = screen.getByRole('checkbox', {
+      name: /Hard Hat \/ Helmet/i,
+    }) as HTMLInputElement;
     const vestCheckbox = screen.getByRole('checkbox', { name: /Safety Vest/i }) as HTMLInputElement;
 
     expect(hardHatCheckbox).not.toBeNull();
@@ -59,6 +63,8 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
     render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeSetupPanel
+          canManageZones
+          canManageRegions
           apiUrl="http://localhost:3000"
           token="test-token"
           sessionScope="test-scope"
@@ -102,6 +108,8 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
     render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeSetupPanel
+          canManageZones
+          canManageRegions
           apiUrl="http://localhost:3000"
           token="test-token"
           sessionScope="test-scope"
@@ -129,6 +137,8 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
     render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeSetupPanel
+          canManageZones
+          canManageRegions
           apiUrl="http://localhost:3000"
           token="test-token"
           sessionScope="test-scope"
@@ -149,7 +159,9 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
 
     // Fill zone code and name
     fireEvent.change(screen.getByPlaceholderText(/ZONE-HAZ-01/i), { target: { value: 'ZONE-01' } });
-    fireEvent.change(screen.getByPlaceholderText(/Scaffold Work Area/i), { target: { value: 'Work Area' } });
+    fireEvent.change(screen.getByPlaceholderText(/Scaffold Work Area/i), {
+      target: { value: 'Work Area' },
+    });
 
     // Submit form
     fireEvent.click(screen.getByRole('button', { name: /Save Zone PPE/i }));
@@ -159,21 +171,25 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
   });
 
   it('submits zone creation with all canonical 5 items when selected', async () => {
-    const createZoneSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createZone').mockResolvedValue({
-      id: 'zone-1',
-      siteId: 'site-alpha',
-      code: 'ZONE-CANONICAL-5',
-      name: 'High Risk Steel Area',
-      type: 'HAZARDOUS',
-      restrictionPolicy: 'NONE',
-      requiredPpe: ['HARD_HAT', 'SAFETY_VEST', 'GLOVES', 'BOOTS', 'GOGGLES'],
-      configurationLocked: false,
-      createdAt: new Date().toISOString(),
-    });
+    const createZoneSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'createZone')
+      .mockResolvedValue({
+        id: 'zone-1',
+        siteId: 'site-alpha',
+        code: 'ZONE-CANONICAL-5',
+        name: 'High Risk Steel Area',
+        type: 'HAZARDOUS',
+        restrictionPolicy: 'NONE',
+        requiredPpe: ['HARD_HAT', 'SAFETY_VEST', 'GLOVES', 'BOOTS', 'GOGGLES'],
+        configurationLocked: false,
+        createdAt: new Date().toISOString(),
+      });
 
     render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeSetupPanel
+          canManageZones
+          canManageRegions
           apiUrl="http://localhost:3000"
           token="test-token"
           sessionScope="test-scope"
@@ -191,8 +207,12 @@ describe('ZonePpeSetupPanel Canonical 5 requiredPpe with Experimental Labels', (
     fireEvent.click(screen.getByRole('checkbox', { name: /Goggles/i }));
 
     // Input code & name
-    fireEvent.change(screen.getByPlaceholderText(/ZONE-HAZ-01/i), { target: { value: 'ZONE-CANONICAL-5' } });
-    fireEvent.change(screen.getByPlaceholderText(/Scaffold Work Area/i), { target: { value: 'High Risk Steel Area' } });
+    fireEvent.change(screen.getByPlaceholderText(/ZONE-HAZ-01/i), {
+      target: { value: 'ZONE-CANONICAL-5' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/Scaffold Work Area/i), {
+      target: { value: 'High Risk Steel Area' },
+    });
 
     // Submit form
     fireEvent.click(screen.getByRole('button', { name: /Save Zone PPE/i }));

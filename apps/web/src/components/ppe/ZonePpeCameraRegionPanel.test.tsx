@@ -267,6 +267,17 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.keyDown(canvas, { key: 'Escape' });
     expect(closeConfiguration).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Configuration' })).toBeDefined();
+    expect(screen.getByText(/Discard unsaved region geometry changes\?/i)).toBeDefined();
+    // Second Escape cancels confirmation (Keep Editing) and never discards or closes parent dialog
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(closeConfiguration).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Discard unsaved region geometry changes\?/i)).toBeNull();
+    expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).toBeDefined();
+    // Explicit Discard Changes closes inline editor and restores focus to Start Drawing Region
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    await user.click(screen.getByRole('button', { name: /Discard Changes/i }));
+    expect(closeConfiguration).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Configuration' })).toBeDefined();
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
     expect(document.activeElement).toBe(
       screen.getByRole('button', { name: /Start Drawing Region/i }),
@@ -560,8 +571,10 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.keyDown(svgCanvas, { key: 'z', ctrlKey: true });
     expect(screen.getByText(/Points: 1 \/ 32/i)).toBeDefined();
 
-    // 5E: Keyboard 'Escape' resets and exits drawing mode
+    // 5E: Keyboard 'Escape' on dirty draft opens confirmation; explicit Discard Changes exits drawing mode
     fireEvent.keyDown(svgCanvas, { key: 'Escape' });
+    expect(screen.getByText(/Discard unsaved region geometry changes\?/i)).toBeDefined();
+    await user.click(screen.getByRole('button', { name: /Discard Changes/i }));
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
     expect(screen.getByRole('button', { name: /Start Drawing Region/i })).toBeDefined();
   });
@@ -735,7 +748,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
 
     // Save second time with same draft points -> blocked
-    await user.click(saveBtn);
+    await screen.findByText(/Saved region "reg-dup" \(v1\)/i);
+    await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(await screen.findByText(/This polygon draft has already been saved/i)).toBeDefined();
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
   });
@@ -1415,5 +1429,283 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     // Drawing canvas is immediately revoked / cleared
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
+  });
+
+  // --------------------------------------------------------------------------
+  // 19. REOPEN EXISTING REGION, UPDATE POLYGON WITHOUT CREATE FALLBACK & ROUND-TRIP
+  // --------------------------------------------------------------------------
+  it('reopens existing region geometry, updates via updatePolygon without createRegion fallback on 409, and round-trips saved coordinates', async () => {
+    const user = userEvent.setup();
+    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+    const updatePolygonSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ZonePpeCameraRegionPanel
+          apiUrl="http://localhost:3000"
+          token="mock-token-xyz"
+          sessionScope="scope-01"
+          credentialId={1}
+          siteId="site-alpha"
+          zones={mockZones}
+        />
+      </QueryClientProvider>,
+    );
+
+    const editBtn = await screen.findByRole('button', { name: /Edit Geometry/i });
+    await user.click(editBtn);
+
+    const svgCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
+    expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
+    expect(screen.getByText(/Editing Region reg-1 \(v2\)/i)).toBeDefined();
+
+    // Clean reopened draft closes immediately on single Escape
+    fireEvent.keyDown(svgCanvas, { key: 'Escape' });
+    expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
+
+    // Reopen again and nudge Vertex 1 right by 10px (64 -> 74 => 74/640 = 0.1156)
+    await user.click(screen.getByRole('button', { name: /Edit Geometry/i }));
+    const vertex1 = screen.getByRole('button', { name: /Vertex 1/i });
+    act(() => vertex1.focus());
+    fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
+    expect(vertex1.getAttribute('cx')).toBe('73.984'); // 0.1156 * 640
+
+    // 19A: 409 conflict on updatePolygon refreshes camera version without auto-retry and NEVER falls back to createRegion
+    updatePolygonSpy.mockRejectedValueOnce(
+      new ApiError('http', 'Configuration version conflict', 409),
+    );
+    const saveBtn = screen.getByRole('button', { name: /Save Region/i });
+    await user.click(saveBtn);
+
+    expect(updatePolygonSpy).toHaveBeenCalledTimes(1);
+    expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/Configuration version conflict\. Camera configuration was updated/i),
+    ).toBeDefined();
+
+    // 19B: Successful updatePolygon updates region version and round-trips new geometry on reopen
+    const updatedCoords: [number, number][] = [
+      [0.1156, 0.1],
+      [0.5, 0.1],
+      [0.5, 0.5],
+      [0.1, 0.5],
+    ];
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue({
+      items: [
+        {
+          ...mockRegionsList.items[0]!,
+          polygon: { coordinates: updatedCoords },
+          version: 3,
+        },
+      ],
+      total: 1,
+    });
+    updatePolygonSpy.mockResolvedValueOnce({
+      region: {
+        ...mockRegionsList.items[0]!,
+        polygon: { coordinates: updatedCoords },
+        version: 3,
+      },
+      configurationVersion: 4,
+    });
+
+    await user.click(saveBtn);
+    expect(updatePolygonSpy).toHaveBeenCalledTimes(2);
+    expect(updatePolygonSpy).toHaveBeenLastCalledWith(
+      'mock-token-xyz',
+      'site-alpha',
+      'cam-1',
+      'reg-1',
+      {
+        polygon: { coordinates: updatedCoords },
+        expectedConfigurationVersion: 3,
+      },
+    );
+    expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Saved region "reg-1" \(v3\)/i)).toBeDefined();
+
+    // Close clean saved editor and reopen to verify round-tripped v3 coordinates
+    fireEvent.keyDown(screen.getByLabelText(/Camera Region Drawing Canvas/i), { key: 'Escape' });
+    expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
+    await user.click(await screen.findByRole('button', { name: /Edit Geometry/i }));
+    expect(screen.getByText(/Editing Region reg-1 \(v3\)/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Vertex 1/i }).getAttribute('cx')).toBe('73.984');
+  });
+
+  // --------------------------------------------------------------------------
+  // 20. EXISTING-REGION OPTIMISTIC REVISION: PREFLIGHT STALE CFG VERSION BLOCK
+  // --------------------------------------------------------------------------
+  it('existing-region optimistic revision: blocks updatePolygon and shows safe 409 conflict while retaining draft when getCamera preflight returns cfg2 after opening at cfg1', async () => {
+    vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
+    const user = userEvent.setup();
+
+    const camCfg1: CameraResponse = {
+      ...mockCamerasList.items[0]!,
+      configurationVersion: 1,
+    };
+    const camCfg2: CameraResponse = {
+      ...camCfg1,
+      configurationVersion: 2,
+    };
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue({
+      items: [camCfg1],
+      total: 1,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue({
+      items: [
+        {
+          ...mockRegionsList.items[0]!,
+          version: 1,
+        },
+      ],
+      total: 1,
+    });
+
+    const getCameraSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
+      .mockResolvedValue(camCfg2);
+    const updatePolygonSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+      .mockRejectedValue(new ApiError('http', 'Configuration version conflict', 409));
+    const createRegionSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .mockRejectedValue(new Error('Unexpected create fallback in isolated fixture'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ZonePpeCameraRegionPanel
+          apiUrl="http://localhost:3000"
+          token="mock-token-xyz"
+          sessionScope="scope-01"
+          credentialId={1}
+          siteId="site-alpha"
+          zones={mockZones}
+        />
+      </QueryClientProvider>,
+    );
+
+    const editBtn = await screen.findByRole('button', { name: /Edit Geometry/i });
+    await user.click(editBtn);
+
+    expect(screen.getByText(/Editing Region reg-1 \(v1\)/i)).toBeDefined();
+    const vertex1 = screen.getByRole('button', { name: /Vertex 1/i });
+    act(() => vertex1.focus());
+    fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
+    expect(vertex1.getAttribute('cx')).toBe('73.984');
+
+    const saveBtn = screen.getByRole('button', { name: /Save Region/i });
+    await user.click(saveBtn);
+
+    expect(
+      await screen.findByText(
+        /Configuration version conflict\. Camera configuration was updated by another operator/i,
+      ),
+    ).toBeDefined();
+    expect(getCameraSpy).toHaveBeenCalledTimes(1);
+    expect(updatePolygonSpy).not.toHaveBeenCalled();
+    expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Saved region/i)).toBeNull();
+    expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Vertex 1/i }).getAttribute('cx')).toBe('73.984');
+  });
+
+  // --------------------------------------------------------------------------
+  // 21. EXISTING-REGION OPTIMISTIC REVISION: CONCURRENT WRITE 409 AFTER GET
+  // --------------------------------------------------------------------------
+  it('existing-region optimistic revision: sends expectedConfigurationVersion 1 on updatePolygon and does not auto-retry or fallback to createRegion when PATCH rejects with 409 and refetch sees cfg2', async () => {
+    vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
+    const user = userEvent.setup();
+
+    const camCfg1: CameraResponse = {
+      ...mockCamerasList.items[0]!,
+      configurationVersion: 1,
+    };
+    const camCfg2: CameraResponse = {
+      ...camCfg1,
+      configurationVersion: 2,
+    };
+
+    const listCamerasSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listCameras')
+      .mockResolvedValueOnce({ items: [camCfg1], total: 1 })
+      .mockResolvedValue({ items: [camCfg2], total: 1 });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue({
+      items: [
+        {
+          ...mockRegionsList.items[0]!,
+          version: 1,
+        },
+      ],
+      total: 1,
+    });
+
+    const getCameraSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
+      .mockResolvedValue(camCfg1);
+    const updatePolygonSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+      .mockRejectedValue(new ApiError('http', 'Configuration version conflict', 409));
+    const createRegionSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .mockRejectedValue(new Error('Unexpected create fallback in isolated fixture'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ZonePpeCameraRegionPanel
+          apiUrl="http://localhost:3000"
+          token="mock-token-xyz"
+          sessionScope="scope-01"
+          credentialId={1}
+          siteId="site-alpha"
+          zones={mockZones}
+        />
+      </QueryClientProvider>,
+    );
+
+    const editBtn = await screen.findByRole('button', { name: /Edit Geometry/i });
+    await user.click(editBtn);
+
+    expect(screen.getByText(/Editing Region reg-1 \(v1\)/i)).toBeDefined();
+    const vertex1 = screen.getByRole('button', { name: /Vertex 1/i });
+    act(() => vertex1.focus());
+    fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
+    expect(vertex1.getAttribute('cx')).toBe('73.984');
+
+    const saveBtn = screen.getByRole('button', { name: /Save Region/i });
+    await user.click(saveBtn);
+
+    expect(
+      await screen.findByText(
+        /Configuration version conflict\. Camera configuration was updated by another operator/i,
+      ),
+    ).toBeDefined();
+    await waitFor(() => {
+      expect(listCamerasSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    expect(getCameraSpy).toHaveBeenCalledTimes(1);
+    expect(updatePolygonSpy).toHaveBeenCalledTimes(1);
+    expect(updatePolygonSpy).toHaveBeenCalledWith(
+      'mock-token-xyz',
+      'site-alpha',
+      'cam-1',
+      'reg-1',
+      {
+        polygon: {
+          coordinates: [
+            [0.1156, 0.1],
+            [0.5, 0.1],
+            [0.5, 0.5],
+            [0.1, 0.5],
+          ],
+        },
+        expectedConfigurationVersion: 1,
+      },
+    );
+    expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Saved region/i)).toBeNull();
+    expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Vertex 1/i }).getAttribute('cx')).toBe('73.984');
   });
 });

@@ -32,6 +32,7 @@ import {
   IconCamera,
 } from '../icons';
 import { ZonePpeSetupDialog } from './ZonePpeSetupDialog';
+import { deriveZonePpeCapabilities } from './zone-ppe-scope';
 import { CameraRegistrationDialog } from '../cameras/CameraRegistrationDialog';
 import { CameraManagementDialog } from '../cameras/CameraManagementDialog';
 import { PpeDialog } from './PpeDialog';
@@ -322,7 +323,7 @@ export function PpeMonitoringView({
 
   const effectiveUser = isControlled ? (sharedSession?.user ?? null) : (meQuery.data ?? null);
   const isGlobalAdmin = useMemo(() => {
-    if (!effectiveUser) return false;
+    if (!effectiveUser || effectiveUser.mustChangePassword === true) return false;
     return effectiveUser.roleAssignments.some(
       ({ role, siteId }) => role === 'ADMIN' && siteId === null,
     );
@@ -661,6 +662,20 @@ export function PpeMonitoringView({
   }
   if (!canRegisterCamera && registrationFeedback) {
     setRegistrationFeedback(null);
+  }
+
+  const zonePpeCapabilities = useMemo(
+    () => deriveZonePpeCapabilities(effectiveUser, selectedSiteId),
+    [effectiveUser, selectedSiteId],
+  );
+  const canOpenZonePpe =
+    (zonePpeCapabilities.canManageZones || zonePpeCapabilities.canManageRegions) &&
+    ![sitesQuery.error, previewCamerasQuery.error, meQuery.error].some(
+      (error) => error instanceof ApiError && error.status === 401,
+    );
+
+  if (!canOpenZonePpe && isZonePpeOpen) {
+    setIsZonePpeOpen(false);
   }
 
   const triggerSessionExpired = auth.triggerSessionExpired;
@@ -1569,8 +1584,8 @@ export function PpeMonitoringView({
                 )}
             </div>
 
-            {/* Global Admin Configure PPE by Zone trigger */}
-            {isGlobalAdmin && (
+            {/* Authorized Configure PPE by Zone trigger */}
+            {canOpenZonePpe && (
               <button
                 type="button"
                 onClick={() => {
@@ -2737,15 +2752,24 @@ export function PpeMonitoringView({
         </div>
       </div>
 
-      {isGlobalAdmin && isZonePpeOpen && selectedSiteId && (
+      {canOpenZonePpe && isZonePpeOpen && selectedSiteId && (
         <ZonePpeSetupDialog
-          key={JSON.stringify([apiUrl, sessionScope, credentialId, selectedSiteId])}
+          key={JSON.stringify([
+            apiUrl,
+            sessionScope,
+            credentialId,
+            selectedSiteId,
+            zonePpeCapabilities.canManageZones,
+            zonePpeCapabilities.canManageRegions,
+          ])}
           apiUrl={apiUrl}
           token={token}
           sessionScope={sessionScope}
           credentialId={credentialId}
           siteId={selectedSiteId}
           siteName={selectedSite?.name || selectedSite?.code || selectedSiteId}
+          canManageZones={zonePpeCapabilities.canManageZones}
+          canManageRegions={zonePpeCapabilities.canManageRegions}
           onClose={() => setIsZonePpeOpen(false)}
         />
       )}

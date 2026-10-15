@@ -72,6 +72,8 @@ describe('ZonePpeSetupPanel localization (vi/en)', () => {
         <QueryClientProvider client={queryClient}>
           <LocaleToggle />
           <ZonePpeSetupPanel
+            canManageZones
+            canManageRegions
             apiUrl="http://localhost:3000"
             token="test-token"
             sessionScope="test-scope"
@@ -114,6 +116,8 @@ describe('ZonePpeSetupPanel localization (vi/en)', () => {
         <QueryClientProvider client={queryClient}>
           <LocaleToggle />
           <ZonePpeSetupPanel
+            canManageZones
+            canManageRegions
             apiUrl="http://localhost:3000"
             token="test-token"
             sessionScope="test-scope"
@@ -171,6 +175,8 @@ describe('ZonePpeSetupPanel localization (vi/en)', () => {
         <QueryClientProvider client={queryClient}>
           <LocaleToggle />
           <ZonePpeSetupPanel
+            canManageZones
+            canManageRegions
             apiUrl="http://localhost:3000"
             token="test-token"
             sessionScope="test-scope"
@@ -236,6 +242,8 @@ describe('ZonePpeSetupPanel localization (vi/en)', () => {
         <QueryClientProvider client={queryClient}>
           <LocaleToggle />
           <ZonePpeSetupPanel
+            canManageZones
+            canManageRegions
             apiUrl="http://localhost:3000"
             token="test-token"
             sessionScope="test-scope"
@@ -294,6 +302,8 @@ describe('ZonePpeSetupPanel localization (vi/en)', () => {
         <QueryClientProvider client={queryClient}>
           <LocaleToggle />
           <ZonePpeSetupPanel
+            canManageZones
+            canManageRegions
             apiUrl="http://localhost:3000"
             token="test-token"
             sessionScope="test-scope"
@@ -329,6 +339,8 @@ describe('ZonePpeSetupPanel localization (vi/en)', () => {
         <QueryClientProvider client={queryClient}>
           <LocaleToggle />
           <ZonePpeSetupPanel
+            canManageZones
+            canManageRegions
             apiUrl="http://localhost:3000"
             token="test-token-2"
             sessionScope="test-scope-2"

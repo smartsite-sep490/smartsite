@@ -504,8 +504,12 @@ export const PPE_EN_CATALOG = {
     'Could not load additional zones. Please check your network and try again.',
   'zoneSetup.list.retryNextPage': 'Retry loading more zones',
   'zoneSetup.list.empty': 'No zones configured for this site yet.',
+  'zoneSetup.list.emptyReadOnly':
+    'No zones configured for this site yet. An assigned Site Manager must create zones before camera regions can be linked.',
   'zoneSetup.list.loadingMore': 'Loading more zones...',
   'zoneSetup.list.loadMore': 'Load more zones',
+  'zoneSetup.readOnly.notice':
+    'Zone catalog is read-only for your role. Only the assigned Site Manager can create or rename zones for this site.',
 
   'zoneSetup.rename.headingPrefix': 'Renaming zone:',
   'zoneSetup.rename.policyLockedBadge': 'Policy locked · Name editable',
@@ -517,6 +521,8 @@ export const PPE_EN_CATALOG = {
 
   'zoneSetup.regionLink.emptyHint':
     'Configure and save at least one zone above to enable Camera Observation Region linking.',
+  'zoneSetup.regionLink.emptyReadOnlyHint':
+    'An assigned Site Manager must create and save at least one zone above to enable Camera Observation Region linking.',
 
   'regionSetup.sectionAria': 'Link Zone to Camera Region',
   'regionSetup.title': 'Link Zone to Camera Region',
@@ -552,6 +558,20 @@ export const PPE_EN_CATALOG = {
   'regionSetup.previewWarning.connecting': 'Connecting to camera preview...',
   'regionSetup.drawer.undoPoint': 'Undo Point',
   'regionSetup.drawer.resetDrawing': 'Reset Drawing',
+  'regionSetup.drawer.deletePoint': 'Delete Point',
+  'regionSetup.drawer.zoomIn': 'Zoom In',
+  'regionSetup.drawer.zoomOut': 'Zoom Out',
+  'regionSetup.drawer.resetView': 'Reset View',
+  'regionSetup.drawer.panMode': 'Pan View',
+  'regionSetup.drawer.coordXLabel': 'Point X (0–1)',
+  'regionSetup.drawer.coordYLabel': 'Point Y (0–1)',
+  'regionSetup.drawer.addPoint': 'Add Point',
+  'regionSetup.drawer.vertexAria': 'Vertex {index} ({x}, {y})',
+  'regionSetup.drawer.editingNotice': 'Editing Region {id} (v{version})',
+  'regionSetup.drawer.cancelDrawing': 'Cancel Drawing',
+  'regionSetup.drawer.discardPrompt': 'Discard unsaved region geometry changes?',
+  'regionSetup.drawer.keepEditing': 'Keep Editing',
+  'regionSetup.drawer.confirmDiscard': 'Discard Changes',
   'regionSetup.drawer.pointsCount': 'Points: {count} / 32',
   'regionSetup.drawer.stalePixelsNotice': 'Snapshot pixels expired · draft points retained',
   'regionSetup.drawer.canvasAria': 'Camera Region Drawing Canvas',
@@ -578,6 +598,8 @@ export const PPE_EN_CATALOG = {
   'regionSetup.error.403': 'You do not have permission to perform this action.',
   'regionSetup.error.409':
     'Configuration version conflict. Camera configuration was updated by another operator. Please review and try saving again.',
+  'regionSetup.error.409Edit':
+    'Configuration version conflict. Camera configuration was updated by another operator. Your unsaved draft is kept; please review the current camera configuration and reopen this region to edit from the latest revision.',
   'regionSetup.error.saveDefault':
     'Failed to save observation region. Please verify your inputs and try again.',
   'regionSetup.feedback.saved':
@@ -596,6 +618,7 @@ export const PPE_EN_CATALOG = {
   'regionSetup.list.versionStatus': 'Version {version} · {status}',
   'regionSetup.list.statusActive': 'Active',
   'regionSetup.list.statusInactive': 'Inactive',
+  'regionSetup.list.editGeometry': 'Edit Geometry',
   'regionSetup.list.retryingMore': 'Retrying more regions…',
   'regionSetup.list.retryNextPage': 'Retry loading more regions',
   'regionSetup.list.loadingMore': 'Loading more regions…',
@@ -1259,8 +1282,12 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
     'Không thể tải thêm khu vực. Vui lòng kiểm tra kết nối mạng và thử lại.',
   'zoneSetup.list.retryNextPage': 'Thử tải thêm khu vực',
   'zoneSetup.list.empty': 'Chưa có khu vực nào được cấu hình cho công trường này.',
+  'zoneSetup.list.emptyReadOnly':
+    'Chưa có khu vực nào được cấu hình cho công trường này. Chỉ huy công trường (Site Manager) được phân công cần tạo khu vực trước khi liên kết vùng quan sát camera.',
   'zoneSetup.list.loadingMore': 'Đang tải thêm khu vực...',
   'zoneSetup.list.loadMore': 'Tải thêm khu vực',
+  'zoneSetup.readOnly.notice':
+    'Danh mục khu vực ở chế độ chỉ đọc đối với vai trò của bạn. Chỉ Chỉ huy công trường (Site Manager) được phân công mới có quyền tạo hoặc đổi tên khu vực cho công trường này.',
 
   'zoneSetup.rename.headingPrefix': 'Đang đổi tên khu vực:',
   'zoneSetup.rename.policyLockedBadge': 'Đã khóa chính sách · Có thể đổi tên',
@@ -1272,6 +1299,8 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
 
   'zoneSetup.regionLink.emptyHint':
     'Hãy cấu hình và lưu ít nhất một khu vực ở trên để bật liên kết Vùng quan sát của camera.',
+  'zoneSetup.regionLink.emptyReadOnlyHint':
+    'Chỉ huy công trường (Site Manager) được phân công cần tạo và lưu ít nhất một khu vực ở trên để bật liên kết Vùng quan sát của camera.',
 
   'regionSetup.sectionAria': 'Liên kết Khu vực với Vùng quan sát Camera',
   'regionSetup.title': 'Liên kết Khu vực với Vùng quan sát Camera',
@@ -1309,6 +1338,20 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'regionSetup.previewWarning.connecting': 'Đang kết nối xem trước camera...',
   'regionSetup.drawer.undoPoint': 'Hoàn tác điểm',
   'regionSetup.drawer.resetDrawing': 'Đặt lại bản vẽ',
+  'regionSetup.drawer.deletePoint': 'Xóa điểm',
+  'regionSetup.drawer.zoomIn': 'Phóng to',
+  'regionSetup.drawer.zoomOut': 'Thu nhỏ',
+  'regionSetup.drawer.resetView': 'Đặt lại khung nhìn',
+  'regionSetup.drawer.panMode': 'Kéo khung nhìn',
+  'regionSetup.drawer.coordXLabel': 'Tọa độ X (0–1)',
+  'regionSetup.drawer.coordYLabel': 'Tọa độ Y (0–1)',
+  'regionSetup.drawer.addPoint': 'Thêm điểm',
+  'regionSetup.drawer.vertexAria': 'Đỉnh {index} ({x}, {y})',
+  'regionSetup.drawer.editingNotice': 'Đang sửa vùng quan sát {id} (v{version})',
+  'regionSetup.drawer.cancelDrawing': 'Hủy vẽ',
+  'regionSetup.drawer.discardPrompt': 'Hủy các thay đổi hình học vùng quan sát chưa lưu?',
+  'regionSetup.drawer.keepEditing': 'Tiếp tục chỉnh sửa',
+  'regionSetup.drawer.confirmDiscard': 'Hủy thay đổi',
   'regionSetup.drawer.pointsCount': 'Số điểm: {count} / 32',
   'regionSetup.drawer.stalePixelsNotice':
     'Ảnh chụp đã quá hạn hiển thị · các điểm nháp vẫn được giữ nguyên',
@@ -1336,6 +1379,8 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'regionSetup.error.403': 'Bạn không có quyền thực hiện thao tác này.',
   'regionSetup.error.409':
     'Xung đột phiên bản cấu hình. Cấu hình camera đã được người vận hành khác cập nhật. Vui lòng kiểm tra và lưu lại.',
+  'regionSetup.error.409Edit':
+    'Xung đột phiên bản cấu hình. Cấu hình camera đã được người vận hành khác cập nhật. Bản nháp chưa lưu vẫn được giữ nguyên; vui lòng xem lại cấu hình camera hiện tại và mở lại vùng quan sát này để chỉnh sửa từ phiên bản mới nhất.',
   'regionSetup.error.saveDefault':
     'Không thể lưu vùng quan sát. Vui lòng kiểm tra dữ liệu và thử lại.',
   'regionSetup.feedback.saved':
@@ -1354,6 +1399,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'regionSetup.list.versionStatus': 'Phiên bản {version} · {status}',
   'regionSetup.list.statusActive': 'Đang hoạt động',
   'regionSetup.list.statusInactive': 'Ngừng hoạt động',
+  'regionSetup.list.editGeometry': 'Sửa hình học',
   'regionSetup.list.retryingMore': 'Đang thử tải thêm vùng quan sát…',
   'regionSetup.list.retryNextPage': 'Thử tải thêm vùng quan sát',
   'regionSetup.list.loadingMore': 'Đang tải thêm vùng quan sát…',

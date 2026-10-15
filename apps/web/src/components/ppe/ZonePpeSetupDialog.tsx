@@ -8,6 +8,9 @@ import { getZonePpeScopeKey } from './zone-ppe-scope';
 /** Owns closing the Zone form; authorization/scope changes still unmount it. */
 export function ZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
   const queryClient = useQueryClient();
+  if (!props.canManageZones && !props.canManageRegions) {
+    return null;
+  }
   return <ScopedZonePpeSetupDialog key={getZonePpeScopeKey(queryClient, props)} {...props} />;
 }
 
@@ -20,19 +23,39 @@ function ScopedZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
     if (draft.dirty) setConfirmDiscard(true);
     else props.onClose();
   };
-  return <PpeDialog open wide title={t('zoneSetup.dialog.title')}
-    description={t('zoneSetup.dialog.description', { siteName: props.siteName })}
-    onClose={requestClose} closeDisabled={draft.saving}>
-    <ZonePpeSetupPanel {...props} embedded onClose={requestClose} onDraftStateChange={setDraft} />
-    <PpeDialog open={confirmDiscard} title={t('zoneSetup.dialog.discardTitle')}
-      description={t('zoneSetup.dialog.discardDescription')}
-      onClose={() => setConfirmDiscard(false)}>
-      <div className="flex flex-wrap justify-end gap-3">
-        <button type="button" onClick={() => setConfirmDiscard(false)}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold">{t('zoneSetup.dialog.keepEditing')}</button>
-        <button type="button" onClick={props.onClose}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">{t('zoneSetup.dialog.discardChanges')}</button>
-      </div>
+  return (
+    <PpeDialog
+      open
+      wide
+      title={t('zoneSetup.dialog.title')}
+      description={t('zoneSetup.dialog.description', { siteName: props.siteName })}
+      onClose={requestClose}
+      closeDisabled={draft.saving}
+    >
+      <ZonePpeSetupPanel {...props} embedded onClose={requestClose} onDraftStateChange={setDraft} />
+      <PpeDialog
+        open={confirmDiscard}
+        title={t('zoneSetup.dialog.discardTitle')}
+        description={t('zoneSetup.dialog.discardDescription')}
+        onClose={() => setConfirmDiscard(false)}
+      >
+        <div className="flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setConfirmDiscard(false)}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold"
+          >
+            {t('zoneSetup.dialog.keepEditing')}
+          </button>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+          >
+            {t('zoneSetup.dialog.discardChanges')}
+          </button>
+        </div>
+      </PpeDialog>
     </PpeDialog>
-  </PpeDialog>;
+  );
 }

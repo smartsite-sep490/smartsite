@@ -101,8 +101,7 @@ vi.mock('../cameras/useScopedCameraPreview', () => ({
       preview: state.preview,
       status: state.status ?? (state.preview ? 'LIVE' : 'UNAVAILABLE'),
       sourceKind:
-        state.sourceKind ??
-        (state.status === 'REPLAY' ? 'REPLAY' : state.preview ? 'LIVE' : null),
+        state.sourceKind ?? (state.status === 'REPLAY' ? 'REPLAY' : state.preview ? 'LIVE' : null),
       error: state.error ?? null,
       errorStatus: state.errorStatus ?? null,
       isError: false,
@@ -141,10 +140,7 @@ vi.mock('./Mf05DemoControlPanel', () => ({
         >
           Apply Saved Region
         </button>
-        <button
-          type="button"
-          onClick={() => props.onApplyingChange?.(false)}
-        >
+        <button type="button" onClick={() => props.onApplyingChange?.(false)}>
           Finish Apply
         </button>
       </div>
@@ -590,7 +586,9 @@ describe('PpeMonitoringView Scope & Review Lifecycle (RED Suite)', () => {
     expect(screen.getByRole('heading', { name: 'Violation Review' })).not.toBeNull();
 
     // External scope updates must invalidate an open review even though its background is inert.
-    fireEvent.change(screen.getByRole('combobox', { name: 'Site', hidden: true }), { target: { value: 'site-beta' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Site', hidden: true }), {
+      target: { value: 'site-beta' },
+    });
 
     // Modal review PHẢI tự động đóng để tránh stale review trên site mới
     expect(screen.queryByRole('heading', { name: 'Violation Review' })).toBeNull();
@@ -613,7 +611,9 @@ describe('PpeMonitoringView Scope & Review Lifecycle (RED Suite)', () => {
     expect(screen.getByRole('heading', { name: 'Violation Review' })).not.toBeNull();
 
     // External camera updates must invalidate an open review even though its background is inert.
-    fireEvent.change(screen.getByRole('combobox', { name: 'Camera', hidden: true }), { target: { value: 'cam-2' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Camera', hidden: true }), {
+      target: { value: 'cam-2' },
+    });
 
     // Modal review PHẢI tự động đóng để tránh hiển thị sai camera
     expect(screen.queryByRole('heading', { name: 'Violation Review' })).toBeNull();
@@ -1172,7 +1172,6 @@ describe('PpeMonitoringView MF05 Demo Control Panel Integration', () => {
     },
   };
 
-
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -1381,7 +1380,11 @@ describe('PpeMonitoringView Live Raw Video vs AI Evidence Presentation Mode', ()
       drawImage: vi.fn(),
       clearRect: vi.fn(),
       measureText: (text: string) => ({ width: text.length * 7 }),
-      save: vi.fn(), restore: vi.fn(), strokeRect: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      strokeRect: vi.fn(),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
@@ -1566,25 +1569,37 @@ describe('PpeMonitoringView Live Raw Video vs AI Evidence Presentation Mode', ()
 
   it.each([
     { status: 403, message: 'You do not have permission to view this camera.', blocked: true },
-    { status: 429, message: 'Too many requests. The stream will reconnect automatically after the server waiting period.', blocked: true },
-    { status: 503, message: 'The camera source is offline. Check its connection or try again.', blocked: false },
-  ])('shows actionable raw camera feedback for HTTP $status', async ({ status, message, blocked }) => {
-    mediaState.status = status === 403 ? 'HALTED' : 'UNAVAILABLE';
-    mediaState.errorStatus = status;
-    mediaState.error = 'Technical stream error';
-    render(
-      <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={testPresentationSession} />
-      </QueryClientProvider>,
-    );
-    await screen.findByTestId('mode-toggle-live-raw');
-    expect(await screen.findByText(message)).not.toBeNull();
-    const retry = screen.getByRole('button', { name: 'Retry Stream' }) as HTMLButtonElement;
-    expect(retry.disabled).toBe(blocked);
-    mediaState.retry.mockClear();
-    await userEvent.setup().click(retry);
-    expect(mediaState.retry).toHaveBeenCalledTimes(blocked ? 0 : 1);
-  });
+    {
+      status: 429,
+      message:
+        'Too many requests. The stream will reconnect automatically after the server waiting period.',
+      blocked: true,
+    },
+    {
+      status: 503,
+      message: 'The camera source is offline. Check its connection or try again.',
+      blocked: false,
+    },
+  ])(
+    'shows actionable raw camera feedback for HTTP $status',
+    async ({ status, message, blocked }) => {
+      mediaState.status = status === 403 ? 'HALTED' : 'UNAVAILABLE';
+      mediaState.errorStatus = status;
+      mediaState.error = 'Technical stream error';
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PpeMonitoringView sharedSession={testPresentationSession} />
+        </QueryClientProvider>,
+      );
+      await screen.findByTestId('mode-toggle-live-raw');
+      expect(await screen.findByText(message)).not.toBeNull();
+      const retry = screen.getByRole('button', { name: 'Retry Stream' }) as HTMLButtonElement;
+      expect(retry.disabled).toBe(blocked);
+      mediaState.retry.mockClear();
+      await userEvent.setup().click(retry);
+      expect(mediaState.retry).toHaveBeenCalledTimes(blocked ? 0 : 1);
+    },
+  );
 
   it('explains recorded camera access denial and disables retry', async () => {
     recordedVideoState.status = 'HALTED';
@@ -1596,8 +1611,12 @@ describe('PpeMonitoringView Live Raw Video vs AI Evidence Presentation Mode', ()
       </QueryClientProvider>,
     );
     await screen.findByRole('option', { name: /Recorded Replay Demo/i });
-    await userEvent.setup().selectOptions(screen.getByRole('combobox', { name: 'Camera' }), 'cam-replay-1');
-    expect(await screen.findByText('You do not have permission to view this recorded video.')).not.toBeNull();
+    await userEvent
+      .setup()
+      .selectOptions(screen.getByRole('combobox', { name: 'Camera' }), 'cam-replay-1');
+    expect(
+      await screen.findByText('You do not have permission to view this recorded video.'),
+    ).not.toBeNull();
     const retry = screen.getByRole('button', { name: 'Retry Video' }) as HTMLButtonElement;
     expect(retry.disabled).toBe(true);
     recordedVideoState.retry.mockClear();
@@ -1648,9 +1667,7 @@ describe('PpeMonitoringView Live Raw Video vs AI Evidence Presentation Mode', ()
 
     // Cadence label truthfully states raw source independent capped 8 frames/s and AI snapshot polling 500ms
     expect(
-      screen.getByText(
-        'Raw source independent (capped 8 frames/s) · AI snapshot polling: 500ms',
-      ),
+      screen.getByText('Raw source independent (capped 8 frames/s) · AI snapshot polling: 500ms'),
     ).not.toBeNull();
   });
 
@@ -1717,7 +1734,11 @@ describe('PpeMonitoringView Paused Mode (VITE_AI_WORK_PAUSED=true)', () => {
     user: {
       id: 'admin-paused-1',
       displayName: 'Global Admin Paused',
-      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+      roleAssignments: [
+        { role: 'ADMIN', siteId: null },
+        { role: 'SITE_MANAGER', siteId: 'site-alpha' },
+        { role: 'SITE_MANAGER', siteId: 'site-beta' },
+      ],
     },
   };
 
@@ -1732,7 +1753,10 @@ describe('PpeMonitoringView Paused Mode (VITE_AI_WORK_PAUSED=true)', () => {
     vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
       mockCamerasList,
     );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listZones').mockResolvedValue({ items: [], total: 0 });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listZones').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'true');
     vi.stubEnv('VITE_MF05_DEMO_CONTROLS', 'true');
   });
@@ -1763,14 +1787,22 @@ describe('PpeMonitoringView Paused Mode (VITE_AI_WORK_PAUSED=true)', () => {
     const banner = await screen.findByTestId('ai-work-paused-banner');
     expect(banner).not.toBeNull();
     expect(banner.textContent).toContain('AI Work Paused by Human Operator');
-    expect(banner.textContent).toContain('Zone and region configuration remains active and can be saved');
+    expect(banner.textContent).toContain(
+      'Zone and region configuration remains active and can be saved',
+    );
 
     // Status header never shows "Live Monitored" even though preview is LIVE
     expect(screen.queryByText('Live Monitored')).toBeNull();
     expect(screen.getByText('AI Work Paused')).not.toBeNull();
     expect(screen.queryByText('Live AI Observations Active')).toBeNull();
-    expect(screen.getByTestId('toggle-diagnostics-drawer').getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('button', { name: /Retry Snapshot|Retry Stream|Retry Video|Reconnect Stream/i })).toBeNull();
+    expect(screen.getByTestId('toggle-diagnostics-drawer').getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    expect(
+      screen.queryByRole('button', {
+        name: /Retry Snapshot|Retry Stream|Retry Video|Reconnect Stream/i,
+      }),
+    ).toBeNull();
     expect(screen.queryByText('Missing Hard Hat')).toBeNull();
   });
 
@@ -1807,8 +1839,12 @@ describe('PpeMonitoringView Paused Mode (VITE_AI_WORK_PAUSED=true)', () => {
   });
 
   it('disables AI preview polling, live media, recorded media, and wall polling hooks while configuration queries remain accessible', async () => {
-    const listSitesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
-    const listCamerasSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(mockCamerasList);
+    const listSitesSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listSites')
+      .mockResolvedValue(mockSitesList);
+    const listCamerasSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras')
+      .mockResolvedValue(mockCamerasList);
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1837,7 +1873,11 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
     user: {
       id: 'admin-i18n-1',
       displayName: 'Global Admin i18n',
-      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+      roleAssignments: [
+        { role: 'ADMIN', siteId: null },
+        { role: 'SITE_MANAGER', siteId: 'site-alpha' },
+        { role: 'SITE_MANAGER', siteId: 'site-beta' },
+      ],
     },
   };
 
@@ -2071,7 +2111,9 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
     expect(screen.queryByText('Mũ bảo hộ · Thiếu · đã xác nhận')).toBeNull();
 
     const episodeWarningVi = screen.getByTestId('confirmed-episode-warning-7-HARD_HAT');
-    expect(episodeWarningVi.textContent).toContain('Đợt thiếu PPE đã xác nhận đang mở: Thiếu · đã xác nhận');
+    expect(episodeWarningVi.textContent).toContain(
+      'Đợt thiếu PPE đã xác nhận đang mở: Thiếu · đã xác nhận',
+    );
     expect(episodeWarningVi.textContent).toContain('Ảnh chụp hiện tại: Chưa xác định');
     expect(episodeWarningVi.textContent).toContain(
       'Chưa xác định nghĩa là ảnh chụp hiện tại chưa đủ bằng chứng quan sát và không xóa đợt thiếu bảo hộ đã xác nhận.',

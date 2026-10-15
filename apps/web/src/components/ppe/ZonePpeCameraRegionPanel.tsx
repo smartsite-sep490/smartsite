@@ -12,6 +12,12 @@ import { useScopedCameraPreview } from '../cameras/useScopedCameraPreview';
 import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import { IconCamera, IconAlertTriangle, IconCheck, IconX } from '../icons';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
+import { RegionPolygonCanvasEditor } from './RegionPolygonCanvasEditor';
+import {
+  extractRegionPolygonCoordinates,
+  validatePolygonGeometry,
+  type NormalizedPoint,
+} from './region-polygon-geometry';
 
 export interface ZonePpeCameraRegionPanelProps {
   apiUrl: string;
@@ -75,127 +81,6 @@ function getSafePublicErrorMessage(
     : t('regionSetup.region.error.default');
 }
 
-// ── Pure Geometry Helpers ───────────────────────────────────────────────────
-
-// Draft coordinates are already quantized to 4 decimals by toFixed(4); use integer shoelace to avoid floating-point cancellation.
-function calculatePolygonArea(coords: [number, number][]): number {
-  let crossSum = 0;
-  const n = coords.length;
-  for (let i = 0; i < n; i++) {
-    const [x1, y1] = coords[i]!;
-    const [x2, y2] = coords[(i + 1) % n]!;
-    const ix1 = Math.round(x1 * 10000);
-    const iy1 = Math.round(y1 * 10000);
-    const ix2 = Math.round(x2 * 10000);
-    const iy2 = Math.round(y2 * 10000);
-    crossSum += ix1 * iy2 - ix2 * iy1;
-  }
-  return Math.abs(crossSum) / (2 * 10000 * 10000);
-}
-
-function orientation(p: [number, number], q: [number, number], r: [number, number]): number {
-  const val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1]);
-  if (Math.abs(val) < 1e-9) return 0; // Collinear
-  return val > 0 ? 1 : 2; // 1: Clockwise, 2: Counterclockwise
-}
-
-function onSegment(p: [number, number], q: [number, number], r: [number, number]): boolean {
-  return (
-    q[0] <= Math.max(p[0], r[0]) + 1e-9 &&
-    q[0] >= Math.min(p[0], r[0]) - 1e-9 &&
-    q[1] <= Math.max(p[1], r[1]) + 1e-9 &&
-    q[1] >= Math.min(p[1], r[1]) - 1e-9
-  );
-}
-
-function segmentsIntersectOrOverlap(
-  p1: [number, number],
-  q1: [number, number],
-  p2: [number, number],
-  q2: [number, number],
-  isAdjacent: boolean,
-): boolean {
-  const o1 = orientation(p1, q1, p2);
-  const o2 = orientation(p1, q1, q2);
-  const o3 = orientation(p2, q2, p1);
-  const o4 = orientation(p2, q2, q1);
-
-  if (isAdjacent) {
-    // Adjacent edges share an endpoint. Check if they fold back on each other (180 degree overlap).
-    if (o1 === 0 && o2 === 0) {
-      if (
-        onSegment(p1, q2, q1) &&
-        (Math.abs(q2[0] - q1[0]) > 1e-6 || Math.abs(q2[1] - q1[1]) > 1e-6)
-      ) {
-        return true;
-      }
-      if (
-        onSegment(p2, p1, q2) &&
-        (Math.abs(p1[0] - p2[0]) > 1e-6 || Math.abs(p1[1] - p2[1]) > 1e-6)
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Non-adjacent edges:
-  // 1. General proper crossing:
-  if (o1 !== o2 && o3 !== o4 && o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0) {
-    return true;
-  }
-
-  // 2. Collinear overlaps or point touches non-adjacent edge:
-  if (o1 === 0 && onSegment(p1, p2, q1)) return true;
-  if (o2 === 0 && onSegment(p1, q2, q1)) return true;
-  if (o3 === 0 && onSegment(p2, p1, q2)) return true;
-  if (o4 === 0 && onSegment(p2, q1, q2)) return true;
-
-  return false;
-}
-
-function validatePolygonGeometry(coords: [number, number][]): TranslationKey | null {
-  const n = coords.length;
-  if (n < 3) return 'regionSetup.validation.minPoints';
-  if (n > 32) return 'regionSetup.validation.maxPoints';
-
-  // Reject any repeated vertex (not just consecutive)
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      if (
-        Math.abs(coords[i]![0] - coords[j]![0]) < 1e-6 &&
-        Math.abs(coords[i]![1] - coords[j]![1]) < 1e-6
-      ) {
-        return 'regionSetup.validation.duplicateVertices';
-      }
-    }
-  }
-
-  // Zero degenerate area only (no arbitrary threshold)
-  const area = calculatePolygonArea(coords);
-  if (area <= 0) {
-    return 'regionSetup.validation.zeroArea';
-  }
-
-  // Check self-intersections and collinear overlaps
-  for (let i = 0; i < n; i++) {
-    const p1 = coords[i]!;
-    const q1 = coords[(i + 1) % n]!;
-
-    for (let j = i + 1; j < n; j++) {
-      const isAdjacent = j === i + 1 || (i === 0 && j === n - 1);
-      const p2 = coords[j]!;
-      const q2 = coords[(j + 1) % n]!;
-
-      if (segmentsIntersectOrOverlap(p1, q1, p2, q2, isAdjacent)) {
-        return 'regionSetup.validation.selfIntersect';
-      }
-    }
-  }
-
-  return null;
-}
-
 // ── Internal Opaque Nonce Generator (Never serialize token in query keys) ────
 
 const tokenNonces = new WeakMap<QueryClient, { token: string; nonce: number }>();
@@ -214,6 +99,13 @@ function getOpaqueTokenNonce(client: QueryClient, token: string): number {
 
 // ── Inner Drawing & Mutation Component (Remounted on Scope Changes) ──────────
 
+interface EditingRegionScope {
+  id: string;
+  version: number;
+  expectedConfigurationVersion: number;
+  initialPoints: NormalizedPoint[];
+}
+
 interface ZonePpeCameraRegionDrawerProps {
   apiUrl: string;
   token: string;
@@ -224,9 +116,14 @@ interface ZonePpeCameraRegionDrawerProps {
   selectedCamera: CameraResponse;
   selectedZone: ZoneResponse;
   frozenPreview: DecodedPreview;
+  editingRegion?: EditingRegionScope | null;
   isStreamUnavailable?: boolean;
   lastSavedDraft: string | null;
-  onSaveSuccess: (data: RegionMutationResponse, savedDraftKey: string) => void;
+  onSaveSuccess: (
+    data: RegionMutationResponse,
+    savedDraftKey: string,
+    savedPoints: NormalizedPoint[],
+  ) => void;
   onClose: () => void;
 }
 
@@ -240,6 +137,7 @@ function ZonePpeCameraRegionDrawer({
   selectedCamera,
   selectedZone,
   frozenPreview,
+  editingRegion,
   isStreamUnavailable,
   lastSavedDraft,
   onSaveSuccess,
@@ -249,7 +147,10 @@ function ZonePpeCameraRegionDrawer({
   const queryClient = useQueryClient();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
 
-  const [draftPoints, setDraftPoints] = useState<[number, number][]>([]);
+  const initialPoints = useMemo(() => editingRegion?.initialPoints ?? [], [editingRegion]);
+  const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>(() =>
+    initialPoints.map(([x, y]) => [x, y]),
+  );
   const [validationErrorKey, setValidationErrorKey] = useState<TranslationKey | null>(null);
   const [serverErrorKey, setServerErrorKey] = useState<TranslationKey | null>(null);
 
@@ -276,97 +177,26 @@ function ZonePpeCameraRegionDrawer({
   const isImageStale = isSnapshotExpired || Boolean(isStreamUnavailable);
 
   const isMountedRef = useRef(true);
-  const svgRef = useRef<SVGSVGElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
-    const returnFocus =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    svgRef.current?.focus();
     return () => {
       isMountedRef.current = false;
       abortControllerRef.current?.abort();
-      if (returnFocus?.isConnected) returnFocus.focus();
     };
   }, []);
 
-  // Shortcuts belong to this editor, never another form or the parent dialog.
-  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-      return;
-    }
-    const target = e.target as HTMLElement | null;
-    const tagName = target?.tagName?.toLowerCase();
-    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
-      return; // Ignore global typing z undo
-    }
-
-    if (e.key.toLowerCase() === 'z' && !e.altKey && !e.shiftKey) {
-      e.preventDefault();
-      setDraftPoints((prev) => prev.slice(0, -1));
-      setValidationErrorKey(null);
-    }
-  };
-
-  const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (draftPoints.length >= 32) {
-      setValidationErrorKey('regionSetup.validation.maxPointsClick');
-      return;
-    }
-
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    const rawX = (e.clientX - rect.left) / rect.width;
-    const rawY = (e.clientY - rect.top) / rect.height;
-
-    // Never clamp out-of-bounds clicks; reject!
-    if (rawX < 0 || rawX > 1 || rawY < 0 || rawY > 1) {
-      setValidationErrorKey('regionSetup.validation.outOfBounds');
-      return;
-    }
-
-    const normX = Number(rawX.toFixed(4));
-    const normY = Number(rawY.toFixed(4));
-
-    // Reject ANY repeated vertex in the polygon
-    if (
-      draftPoints.some(([px, py]) => Math.abs(px - normX) < 1e-6 && Math.abs(py - normY) < 1e-6)
-    ) {
-      setValidationErrorKey('regionSetup.validation.duplicateVertexClick');
-      return;
-    }
-
-    setDraftPoints((prev) => [...prev, [normX, normY]]);
-    setValidationErrorKey(null);
-    setServerErrorKey(null);
-  };
-
-  const handleUndo = () => {
-    setDraftPoints((prev) => prev.slice(0, -1));
-    setValidationErrorKey(null);
-  };
-
-  const handleReset = () => {
-    setDraftPoints([]);
-    setValidationErrorKey(null);
-  };
-
   const createRegionMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (submittedPoints: NormalizedPoint[]) => {
       // 1. Client-side geometry validation
-      const geoErrorKey = validatePolygonGeometry(draftPoints);
+      const geoErrorKey = validatePolygonGeometry(submittedPoints);
       if (geoErrorKey) {
         throw new LocalRegionValidationError(geoErrorKey);
       }
 
       // 2. Duplicate draft block
-      const draftKey = JSON.stringify(draftPoints);
+      const draftKey = JSON.stringify(submittedPoints);
       if (draftKey === lastSavedDraft) {
         throw new LocalRegionValidationError('regionSetup.validation.alreadySaved');
       }
@@ -390,20 +220,36 @@ function ZonePpeCameraRegionDrawer({
         throw new LocalRegionValidationError('regionSetup.error.cameraChangedOrInactive');
       }
 
-      // 5. POST createRegion
+      // 5. PATCH updatePolygon when editing an existing region (never fallback to createRegion), else POST createRegion
+      if (editingRegion) {
+        if (freshCamera.configurationVersion !== editingRegion.expectedConfigurationVersion) {
+          throw new ApiError('http', 'Configuration version conflict', 409);
+        }
+        return client.updatePolygon(token, siteId, selectedCamera.id, editingRegion.id, {
+          polygon: {
+            coordinates: submittedPoints,
+          },
+          expectedConfigurationVersion: editingRegion.expectedConfigurationVersion,
+        });
+      }
+
       return client.createRegion(token, siteId, selectedCamera.id, {
         zoneId: selectedZone.id,
         polygon: {
-          coordinates: draftPoints,
+          coordinates: submittedPoints,
         },
         expectedConfigurationVersion: freshCamera.configurationVersion,
       });
     },
-    onSuccess: (data: RegionMutationResponse) => {
+    onSuccess: (data: RegionMutationResponse, submittedPoints: NormalizedPoint[]) => {
       if (!isMountedRef.current) return;
 
       // Wrong-scope response guard
-      if (data.region.cameraId !== selectedCamera.id || data.region.zoneId !== selectedZone.id) {
+      if (
+        data.region.cameraId !== selectedCamera.id ||
+        data.region.zoneId !== selectedZone.id ||
+        (editingRegion && data.region.id !== editingRegion.id)
+      ) {
         setServerErrorKey('regionSetup.error.wrongScope');
         return;
       }
@@ -441,7 +287,11 @@ function ZonePpeCameraRegionDrawer({
         queryKey: ['zone-admin', apiUrl, sessionScope, siteId, selectedCamera.id],
       });
 
-      onSaveSuccess(data, JSON.stringify(draftPoints));
+      onSaveSuccess(
+        data,
+        JSON.stringify(submittedPoints),
+        submittedPoints.map(([x, y]) => [x, y]),
+      );
     },
     onError: (err: unknown) => {
       if (!isMountedRef.current) return;
@@ -456,8 +306,8 @@ function ZonePpeCameraRegionDrawer({
           return;
         }
         if (err.status === 409) {
-          setServerErrorKey('regionSetup.error.409');
-          // Invalidate cameras-for-region to refresh configuration version (NO auto-POST retry!)
+          setServerErrorKey(editingRegion ? 'regionSetup.error.409Edit' : 'regionSetup.error.409');
+          // Invalidate cameras-for-region to refresh configuration version (NO auto-POST/PATCH retry!)
           queryClient.invalidateQueries({
             queryKey: [
               'ppe-monitoring',
@@ -501,11 +351,11 @@ function ZonePpeCameraRegionDrawer({
 
     setValidationErrorKey(null);
     setServerErrorKey(null);
-    createRegionMutation.mutate();
+    createRegionMutation.mutate(draftPoints.map(([x, y]) => [x, y]));
   };
 
   return (
-    <div className="space-y-3" data-ppe-region-editor onKeyDown={handleEditorKeyDown}>
+    <div className="space-y-3">
       {/* Validation & Server Error Notices */}
       {validationError && (
         <div
@@ -527,137 +377,22 @@ function ZonePpeCameraRegionDrawer({
         </div>
       )}
 
-      {/* Control Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleUndo}
-            disabled={draftPoints.length === 0 || createRegionMutation.isPending}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40"
-          >
-            {t('regionSetup.drawer.undoPoint')}
-          </button>
-          <button
-            type="button"
-            onClick={handleReset}
-            disabled={draftPoints.length === 0 || createRegionMutation.isPending}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40"
-          >
-            {t('regionSetup.drawer.resetDrawing')}
-          </button>
-        </div>
-
-        <div className="text-xs text-slate-500 flex items-center gap-3">
-          <span className="font-semibold text-slate-800">
-            {t('regionSetup.drawer.pointsCount', { count: draftPoints.length })}
-          </span>
-        </div>
-      </div>
-
-      {/* SVG Drawing Canvas on Frozen Frame */}
-      <div
-        className="relative w-full border border-slate-800 rounded-xl overflow-hidden bg-slate-950 select-none shadow-inner"
-        style={{ aspectRatio: `${frozenPreview.frame.width} / ${frozenPreview.frame.height}` }}
-      >
-        {isImageStale && (
-          <div
-            data-testid="stale-image-notice"
-            className="absolute top-2 right-2 z-10 rounded-xl bg-amber-950/80 border border-amber-600/50 px-2.5 py-1 text-[11px] text-amber-200 pointer-events-none flex items-center gap-1.5 backdrop-blur-xs"
-          >
-            <IconAlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-            <span>{t('regionSetup.drawer.stalePixelsNotice')}</span>
-          </div>
-        )}
-
-        <svg
-          ref={svgRef}
-          role="region"
-          aria-label={t('regionSetup.drawer.canvasAria')}
-          tabIndex={0}
-          viewBox={`0 0 ${frozenPreview.frame.width} ${frozenPreview.frame.height}`}
-          onClick={handleSvgClick}
-          className="absolute inset-0 w-full h-full cursor-crosshair touch-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white"
-        >
-          {/* Frozen Snapshot Image: never display expired frozen pixels */}
-          {!isImageStale && (
-            <image
-              href={frozenPreview.frame.imageDataUrl}
-              width={frozenPreview.frame.width}
-              height={frozenPreview.frame.height}
-            />
-          )}
-
-          {/* Polygon Path Preview */}
-          {draftPoints.length >= 2 && (
-            <polyline
-              points={draftPoints
-                .map(
-                  ([x, y]) => `${x * frozenPreview.frame.width},${y * frozenPreview.frame.height}`,
-                )
-                .join(' ')}
-              fill={draftPoints.length >= 3 ? 'rgba(59, 130, 246, 0.25)' : 'none'}
-              stroke="#3B82F6"
-              strokeWidth="2.5"
-              strokeDasharray={draftPoints.length >= 3 ? 'none' : '4 2'}
-            />
-          )}
-
-          {/* Points Anchors */}
-          {draftPoints.map(([x, y], idx) => (
-            <g key={idx}>
-              <circle
-                cx={x * frozenPreview.frame.width}
-                cy={y * frozenPreview.frame.height}
-                r="5"
-                fill="#3B82F6"
-                stroke="#FFFFFF"
-                strokeWidth="2"
-              />
-              <text
-                x={x * frozenPreview.frame.width + 7}
-                y={y * frozenPreview.frame.height - 7}
-                fill="#FFFFFF"
-                fontSize="11"
-                fontWeight="bold"
-                filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))"
-              >
-                {idx + 1}
-              </text>
-            </g>
-          ))}
-        </svg>
-      </div>
-
-      {/* Save Action Bar */}
-      <div className="flex items-center justify-between border-t border-slate-200/80 pt-3">
-        <div className="text-[11px] text-slate-500">
-          {t('regionSetup.drawer.shortcutsLabel')}{' '}
-          <kbd className="px-1.5 py-0.5 bg-slate-100 rounded-md text-[10px] font-mono border border-slate-200">
-            Z
-          </kbd>{' '}
-          {t('regionSetup.drawer.shortcutUndo')} ·{' '}
-          <kbd className="px-1.5 py-0.5 bg-slate-100 rounded-md text-[10px] font-mono border border-slate-200">
-            Esc
-          </kbd>{' '}
-          {t('regionSetup.drawer.shortcutCancel')}
-        </div>
-        <button
-          type="button"
-          onClick={handleSaveRegion}
-          disabled={draftPoints.length < 3 || createRegionMutation.isPending}
-          className="rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shadow-xs"
-        >
-          {createRegionMutation.isPending ? (
-            <>
-              <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              {t('regionSetup.drawer.saving')}
-            </>
-          ) : (
-            t('regionSetup.drawer.saveRegion')
-          )}
-        </button>
-      </div>
+      <RegionPolygonCanvasEditor
+        points={draftPoints}
+        initialPoints={initialPoints}
+        lastSavedDraft={lastSavedDraft}
+        editingRegion={
+          editingRegion ? { id: editingRegion.id, version: editingRegion.version } : null
+        }
+        frame={frozenPreview.frame}
+        isImageStale={isImageStale}
+        isSaving={createRegionMutation.isPending}
+        onChangePoints={setDraftPoints}
+        onValidationError={setValidationErrorKey}
+        onClearServerError={() => setServerErrorKey(null)}
+        onSaveRegion={handleSaveRegion}
+        onClose={onClose}
+      />
     </div>
   );
 }
@@ -674,6 +409,7 @@ interface DrawingScope {
   cameraId: string;
   zoneId: string;
   preview: DecodedPreview;
+  editingRegion: EditingRegionScope | null;
 }
 
 export function ZonePpeCameraRegionPanel(props: ZonePpeCameraRegionPanelProps) {
@@ -1013,6 +749,9 @@ function ZonePpeCameraRegionPanelContent({
 
   const handleStartDrawing = () => {
     if (!canStartDrawing || !scopedPreview.preview) return;
+    if (drawingScope?.editingRegion) {
+      setLastSavedDraft(null);
+    }
     setDrawingScope({
       apiUrl,
       token,
@@ -1023,15 +762,68 @@ function ZonePpeCameraRegionPanelContent({
       cameraId: selectedCameraId,
       zoneId: selectedZoneId,
       preview: scopedPreview.preview,
+      editingRegion: null,
     });
     setSavedRegionInfo(null);
   };
 
-  const handleSaveSuccess = (data: RegionMutationResponse, savedDraftKey: string) => {
+  const handleStartEditingRegion = (region: RegionResponse, initialPoints: NormalizedPoint[]) => {
+    if (!canStartDrawing || !scopedPreview.preview || !selectedCamera) return;
+    setDrawingScope({
+      apiUrl,
+      token,
+      sessionScope,
+      credentialId,
+      internalNonce,
+      siteId,
+      cameraId: selectedCameraId,
+      zoneId: selectedZoneId,
+      preview: scopedPreview.preview,
+      editingRegion: {
+        id: region.id,
+        version: region.version,
+        expectedConfigurationVersion: selectedCamera.configurationVersion,
+        initialPoints,
+      },
+    });
+    setLastSavedDraft(JSON.stringify(initialPoints));
+    setSavedRegionInfo(null);
+  };
+
+  const handleSaveSuccess = (
+    data: RegionMutationResponse,
+    savedDraftKey: string,
+    savedPoints: NormalizedPoint[],
+  ) => {
     setLastSavedDraft(savedDraftKey);
     setSavedRegionInfo({
       id: data.region.id,
       version: data.region.version,
+    });
+    setDrawingScope((prev) => {
+      if (
+        !prev ||
+        (prev.editingRegion && prev.editingRegion.id !== data.region.id) ||
+        prev.apiUrl !== apiUrl ||
+        prev.token !== token ||
+        prev.sessionScope !== sessionScope ||
+        prev.credentialId !== credentialId ||
+        prev.internalNonce !== internalNonce ||
+        prev.siteId !== siteId ||
+        prev.cameraId !== selectedCameraId ||
+        prev.zoneId !== selectedZoneId
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        editingRegion: {
+          id: data.region.id,
+          version: data.region.version,
+          expectedConfigurationVersion: data.configurationVersion,
+          initialPoints: savedPoints,
+        },
+      };
     });
   };
 
@@ -1256,7 +1048,7 @@ function ZonePpeCameraRegionPanelContent({
         {/* Remount inner drawing/mutation component keyed by opaque scope ID */}
         {isCurrentScopeActive && drawingScope && selectedCamera && selectedZone && (
           <ZonePpeCameraRegionDrawer
-            key={`${apiUrl}:${sessionScope}:${internalNonce}:${siteId}:${selectedCameraId}:${selectedZoneId}`}
+            key={`${apiUrl}:${sessionScope}:${internalNonce}:${siteId}:${selectedCameraId}:${selectedZoneId}:${drawingScope.editingRegion?.id ?? 'new'}`}
             apiUrl={apiUrl}
             token={token}
             sessionScope={sessionScope}
@@ -1266,6 +1058,7 @@ function ZonePpeCameraRegionPanelContent({
             selectedCamera={selectedCamera}
             selectedZone={selectedZone}
             frozenPreview={drawingScope.preview}
+            editingRegion={drawingScope.editingRegion}
             isStreamUnavailable={
               !scopedPreview.preview ||
               scopedPreview.status === 'UNAVAILABLE' ||
@@ -1361,30 +1154,45 @@ function ZonePpeCameraRegionPanelContent({
         {/* Render Region List */}
         {visibleLinkedRegions.length > 0 && (
           <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-            {visibleLinkedRegions.map((region) => (
-              <div
-                key={region.id}
-                className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs min-w-0"
-              >
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0 flex-1">
-                  <span className="font-bold text-slate-900 break-all select-all font-mono text-[11px]">
-                    {region.id}
-                  </span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-600 shrink-0">
-                    {t('regionSetup.list.versionStatus', {
-                      version: region.version,
-                      status: region.isActive
-                        ? t('regionSetup.list.statusActive')
-                        : t('regionSetup.list.statusInactive'),
-                    })}
-                  </span>
+            {visibleLinkedRegions.map((region) => {
+              const editablePoints = extractRegionPolygonCoordinates(region.polygon);
+              return (
+                <div
+                  key={region.id}
+                  className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs min-w-0"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0 flex-1">
+                    <span className="font-bold text-slate-900 break-all select-all font-mono text-[11px]">
+                      {region.id}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-600 shrink-0">
+                      {t('regionSetup.list.versionStatus', {
+                        version: region.version,
+                        status: region.isActive
+                          ? t('regionSetup.list.statusActive')
+                          : t('regionSetup.list.statusInactive'),
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {editablePoints && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditingRegion(region, editablePoints)}
+                        disabled={!canStartDrawing || isCurrentScopeActive}
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {t('regionSetup.list.editGeometry')}
+                      </button>
+                    )}
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] text-slate-600 shrink-0">
+                      {region.coordinateSpace}
+                    </span>
+                  </div>
                 </div>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] text-slate-600 shrink-0">
-                  {region.coordinateSpace}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

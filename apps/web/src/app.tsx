@@ -230,6 +230,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         displayName: currentUser.displayName,
         roleAssignments: currentUser.roleAssignments,
         username: currentUser.username,
+        mustChangePassword: currentUser.mustChangePassword,
       },
       sessionScope: providerScope,
       onSignOut: handleSignOut,
