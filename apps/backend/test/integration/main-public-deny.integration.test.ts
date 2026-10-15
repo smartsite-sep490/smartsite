@@ -21,13 +21,11 @@ import {
 } from '../../src/modules/zones/zone-access-management.service.js';
 import { ZoneAccessEffect } from '../../src/database/entities/zone-access-grant.entity.js';
 import type { MainConfigurationCommandContext } from '../../src/common/configuration/main-configuration-authority.js';
-import { installMainAuthorityCandidate } from '../support/main-authority-candidate.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   await database.initialize();
-  await installMainAuthorityCandidate(db);
 });
 after(async () => {
   await database.dispose();
@@ -113,9 +111,16 @@ test('existing public DENY create binds real actor, main fields and no legacy SE
       .access_policy_version,
     1,
   );
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM zone_authority_command'))[0].n, 0);
+  assert.equal(
+    (
+      await db.query(
+        "SELECT to_regclass(current_schema() || '.zone_authority_command') AS old_journal",
+      )
+    )[0].old_journal,
+    null,
+  );
 });
-test('existing public flat ALLOW is refused even with old Contractor ceiling and approved flat allocation', async () => {
+test('existing public flat ALLOW is refused even with Main Contractor permission and approved assignment', async () => {
   const f = await fixture(),
     participation = randomUUID();
   await db.query(
@@ -123,12 +128,12 @@ test('existing public flat ALLOW is refused even with old Contractor ceiling and
     [participation, f.contractorId, f.siteId],
   );
   await db.query(
-    "INSERT INTO worker_site_zone_assignment(id,site_id,contractor_id,site_contractor_id,worker_id,zone_ids,status,valid_from,valid_until,requested_by_user_id) VALUES($1,$2,$3,$4,$5,ARRAY[$6::uuid],'APPROVED','2026-10-01Z','2026-11-01Z',$7)",
-    [randomUUID(), f.siteId, f.contractorId, participation, f.workerId, f.zoneId, f.actorUserId],
+    "INSERT INTO worker_site_zone_assignment(id,site_id,site_contractor_id,worker_id,zone_ids,status,valid_from,valid_until,requested_by_user_id) VALUES($1,$2,$3,$4,ARRAY[$5::uuid],'APPROVED','2026-10-01Z','2026-11-01Z',$6)",
+    [randomUUID(), f.siteId, participation, f.workerId, f.zoneId, f.actorUserId],
   );
   await db.query(
-    "INSERT INTO contractor_zone_access_grant(id,site_id,zone_id,contractor_id,effect,valid_from,valid_until) VALUES($1,$2,$3,$4,'ALLOW','2026-10-01Z','2026-11-01Z')",
-    [randomUUID(), f.siteId, f.zoneId, f.contractorId],
+    "INSERT INTO contractor_zone_permission(id,site_contractor_id,zone_id,granted_by,valid_from,valid_until) VALUES($1,$2,$3,$4,'2026-10-01Z','2026-11-01Z')",
+    [randomUUID(), participation, f.zoneId, f.actorUserId],
   );
   await assert.rejects(
     f.access.createGrant(f.siteId, f.zoneId, {
@@ -177,7 +182,14 @@ test('actor-free public service callers remain unattributed instead of inventing
       .command_id,
     null,
   );
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM zone_authority_command'))[0].n, 0);
+  assert.equal(
+    (
+      await db.query(
+        "SELECT to_regclass(current_schema() || '.zone_authority_command') AS old_journal",
+      )
+    )[0].old_journal,
+    null,
+  );
 });
 test('concurrent public revokes keep one first timestamp and one actual revoke source fact', async () => {
   const f = await fixture(),

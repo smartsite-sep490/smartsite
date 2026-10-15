@@ -17,7 +17,7 @@ import {
   ZoneType,
   ZoneAccessEffect,
   ZoneAccessGrantEntity,
-} from '../../src/database/entities/index.js';
+} from '../support/legacy24/entities/index.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
   LegacyZoneAccessFixture,

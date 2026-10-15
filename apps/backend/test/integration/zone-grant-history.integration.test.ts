@@ -13,7 +13,7 @@ import {
   UserEntity,
   UserRole,
   UserRoleAssignmentEntity,
-} from '../../src/database/entities/index.js';
+} from '../support/legacy24/entities/index.js';
 import { LegacyZoneAccessFixture } from '../support/legacy-zone-access.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';

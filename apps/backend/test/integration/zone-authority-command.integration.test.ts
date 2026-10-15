@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { DataSource } from 'typeorm';
-import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
-import { resolveTestDatabaseUrl } from '../support/test-environment.js';
-import { LEGACY_TEST_MIGRATIONS } from '../support/legacy-test-migrations.js';
+import type { DataSource } from 'typeorm';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import {
   SiteEntity,
   ZoneRestrictionPolicy,
@@ -18,32 +16,17 @@ import {
   ZoneAccessGrantEntity,
   ZoneAccessEffect,
   UserEntity,
-} from '../../src/database/entities/index.js';
+} from '../support/legacy24/entities/index.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { LegacyZoneConfigurationFixture as ZoneConfigurationService } from '../support/legacy-zone-configuration.js';
 import { executeZoneAuthorityCommand } from '../../src/modules/zones/zone-authority-history.js';
 async function isolated(run: (db: DataSource) => Promise<void>) {
-  const schema = `authority_command_${randomUUID().replaceAll('-', '')}`;
-  const options = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
-  if (options.type !== 'postgres') throw new Error('Dedicated PostgreSQL required');
-  const control = new DataSource(options);
-  const db = new DataSource({
-    ...options,
-    // This suite exercises the old seven-source journal, not MAIN's row journal.
-    migrations: [...LEGACY_TEST_MIGRATIONS],
-    schema,
-    extra: { ...options.extra, options: `-c search_path=${schema}` },
-  });
-  await control.initialize();
+  const fixture = createIsolatedTestDatabase({ legacy: true });
   try {
-    await control.query(`CREATE SCHEMA "${schema}"`);
-    await db.initialize();
-    await db.runMigrations();
-    await run(db);
+    await fixture.initialize();
+    await run(fixture.dataSource);
   } finally {
-    if (db.isInitialized) await db.destroy();
-    await control.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await control.destroy();
+    await fixture.dispose();
   }
 }
 

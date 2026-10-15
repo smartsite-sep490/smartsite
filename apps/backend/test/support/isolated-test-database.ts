@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 import { resolveTestDatabaseUrl } from './test-environment.js';
 import { LEGACY_TEST_MIGRATIONS } from './legacy-test-migrations.js';
+import { Legacy24TestDataSource, LEGACY_ENTITIES } from './legacy24/data-source.js';
 
 /** File-owned disposable schema. Never truncate audit belonging to another integration suite. */
 export function createIsolatedTestDatabase(
@@ -13,11 +14,16 @@ export function createIsolatedTestDatabase(
   // Default is the actual release graph. Old branch fixtures opt into frozen24
   // explicitly; their PASS never proves canonical MAIN behavior.
   const options = profile.legacy
-    ? { ...productionOptions, migrations: [...LEGACY_TEST_MIGRATIONS] }
+    ? {
+        ...productionOptions,
+        migrations: [...LEGACY_TEST_MIGRATIONS],
+        entities: [...LEGACY_ENTITIES],
+      }
     : productionOptions;
   if (options.type !== 'postgres') throw new Error('Dedicated PostgreSQL required');
-  const control = new DataSource(options);
-  const dataSource = new DataSource({
+  const Source = profile.legacy ? Legacy24TestDataSource : DataSource;
+  const control = new Source(options);
+  const dataSource = new Source({
     ...options,
     schema,
     extra: { ...options.extra, options: `-c search_path=${schema}` },

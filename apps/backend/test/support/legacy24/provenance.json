@@ -1,0 +1,495 @@
+{
+  "scope": "FROZEN_LEGACY24_TEST_ONLY_NOT_CURRENT_PRODUCTION",
+  "sourceCommit": "587faebbd1e7f9481d485d97ede92d507c51ccce",
+  "sourceRepository": "smartsite",
+  "productionUsageAllowed": false,
+  "canonicalProfileChanged": false,
+  "files": [
+    {
+      "path": "apps/backend/test/support/legacy24/entities/absence-request.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/absence-request.entity.ts",
+      "gitBlob": "826effc3464352dd259e955c1ae5af2eb33f2833",
+      "originalSha256": "d970441900ec83bc5a46581123b30cf7c29a460b62828b2beebb59881e03281b",
+      "snapshotSha256": "77ae6546223dda2ad38cd75b6b28eba96c2590fa188e73ba440c6062e02e0691",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/ai-observation-event.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/ai-observation-event.entity.ts",
+      "gitBlob": "6dccf979bbfad952d64284f8b1937a9b1490dc08",
+      "originalSha256": "5c01b27756343b6d575a7e4d5b60501fbd6a4d100d863a1c96a06785e8362f9f",
+      "snapshotSha256": "53e42e09aee8e79e8001602cf8ff94c2b5e14f1a83783f73c6a8dabe3ed9e74d",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/alert-detection-mapping.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/alert-detection-mapping.entity.ts",
+      "gitBlob": "96b765e3477846b1c54a7afcd66f57c6a375a3bd",
+      "originalSha256": "9109960d8562dc1d9e42ac3bbd9281cca8abbbb7f55f4a4cb5485b4834b6b6a5",
+      "snapshotSha256": "412e259b1bc38bdc649e60aa802ccad1030ad1403232e9379fa21fd06a4a21a8",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/attendance-anomaly.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/attendance-anomaly.entity.ts",
+      "gitBlob": "d36183a1cb6de21d320c3c6c2769a3ec536cd01c",
+      "originalSha256": "d1a7ee80e876934c9e2a7b2225903b31b0b8739dacd69a4fcc492dad9e105055",
+      "snapshotSha256": "9179d8a95ad4ea7ddab6932c3ea9794ec1d10c117e1b9c2647a1737423c85663",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/attendance-correction-request.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/attendance-correction-request.entity.ts",
+      "gitBlob": "f428bfb5d72c277fd43ad6fe8b1f2009c729eab1",
+      "originalSha256": "26d80a3b4d50a0ef82fe9ba0e74eaf782a23913619a66a2a7de8be61360963c9",
+      "snapshotSha256": "79a261af6e4fb7eb3aae23e0440445f4a61efde1e45ba7516f75470d33ed9fc0",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/attendance-pair.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/attendance-pair.entity.ts",
+      "gitBlob": "6a24638700b0dc09510e518f4fa48ca39a61795e",
+      "originalSha256": "97b64a7ef19ac40e46cfdd0e57a524a104cf6e3123e5d371e851532503483775",
+      "snapshotSha256": "c07dbdb63f9407cf539eebacd0368185388c45f6e1880401235b3085b4cd3eeb",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/auth-session.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/auth-session.entity.ts",
+      "gitBlob": "7e76932b72a53bfbfb068c3fc8c4b70e63170694",
+      "originalSha256": "4b9098394f2a36ccef0139e0055b5d159b2a32630ce0aa9493a47b6e00f04248",
+      "snapshotSha256": "5328b33c867055ccf42908bb1a6db0eb38503aaa896d63994f0af50df07fcc3a",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/camera-observation-region.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/camera-observation-region.entity.ts",
+      "gitBlob": "5788839a28e44e60a854a569816f8c02443d8d27",
+      "originalSha256": "85f57971d0cf96dfb28b2d21c199d21649da03190985baf7a93d58be03cd1831",
+      "snapshotSha256": "a0c5d19078ecbd265d6109b737ecf6d97834edac6677b51d2e2835a3dbf9474b",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/camera.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/camera.entity.ts",
+      "gitBlob": "77f6165ff410f4982778b15bf8a5153a3610818a",
+      "originalSha256": "11e903f640db4ac097ff6b5d43d1ebfea8a4c2aa0a82c3f0209cf61568473c6f",
+      "snapshotSha256": "fbbd58fb41daf2e0915c1fdd9fbbf3883c4c28b9b6da627c0bee6132ab563b63",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/contractor-representative-assignment.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/contractor-representative-assignment.entity.ts",
+      "gitBlob": "1da9ed294fb221a0b0245846dec58c02eae35742",
+      "originalSha256": "e379d35938808dd8c7c0c214bbf53baeb363afa30dcc4eb52d5c13194da87260",
+      "snapshotSha256": "927ea0a654802d44a03c5d09fdc9395a0f35571eea9a2a634dbc650fa980d1d5",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/contractor-representative-grant.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/contractor-representative-grant.entity.ts",
+      "gitBlob": "39857280454151fec2fe73ce4c767a7032dd9165",
+      "originalSha256": "84b32d978b68537a4f9c6ed4c3794508f2461571efa27538b4bafc1cdd26890f",
+      "snapshotSha256": "cccc47a70c28d007e4cc0406fb70e11c902be4fa997520d296ddea068fa1f568",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/contractor-shift-assignment.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/contractor-shift-assignment.entity.ts",
+      "gitBlob": "796df90f18ce259dc6b66a7dc02ce2d566eb2a17",
+      "originalSha256": "ee53427d826eca21fd91ad660bddcc96f7cdd8853c1b1dc60eefe318ed3bf419",
+      "snapshotSha256": "05906554d2ce4cd786f3038b5761a82fb74b21384bcefed62f5156f09da6a90f",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/contractor-site-participation.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/contractor-site-participation.entity.ts",
+      "gitBlob": "f3db4327ada095dfcd342aa6ca5c3c474ab726fe",
+      "originalSha256": "429ad7b7dbf457de7ffea029eaad60645efc62e1e33dd132b93c3e5711323317",
+      "snapshotSha256": "03160a9b6d9b8c128692726ea201cf79556e674a811074f85fec6f5ef815e181",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/contractor-zone-access-grant.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/contractor-zone-access-grant.entity.ts",
+      "gitBlob": "aca0261e072b1c3758055558e39eeeb8cf7beec8",
+      "originalSha256": "fa0f52d1fe2881c7371623a146d0f6329c947a37199bfbe8caba152e12e39f70",
+      "snapshotSha256": "af9a3eeb69f89cd540b74b985aff52eaefdcd0a1714745791ca8f6d8a693230b",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/contractor.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/contractor.entity.ts",
+      "gitBlob": "0522b8ec9db91854d81c6691fda9bcbed739dabc",
+      "originalSha256": "760c3849defc0f6e27461431de26afcae4bf8f92fb2f2d213e9959c6f6e819df",
+      "snapshotSha256": "3ab4e1306a8e72f3f80a0670c8f94663627d58424a826270b2a7eb9488c75607",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/enums.ts",
+      "originalSource": "apps/backend/src/database/entities/enums.ts",
+      "gitBlob": "051c8f53687484f65aa7fce41e469ed0a2866bca",
+      "originalSha256": "e5408a9397f786ba3f4ed5792bccf37cade516fad2f6d5c011b8cb8e51e02048",
+      "snapshotSha256": "bc11a1ccda6f744d23f63695eb3c8bb4dad28900c552ecbca1bd96b9c7e8cb9b",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/face-enrollment-session.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/face-enrollment-session.entity.ts",
+      "gitBlob": "1a0a6ed9e7be5fa920416632b5d9c0add6d4a431",
+      "originalSha256": "ce25a0b4e434f8890031650a5eed48876aad2503d24964b19d297babeaea1ff3",
+      "snapshotSha256": "f212a943157901bf7630264908583572995a402fb4e541f2daacef90966131e6",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/face-profile.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/face-profile.entity.ts",
+      "gitBlob": "f6e51175cc2c4a9159ec45a07eabee456e4ea5f2",
+      "originalSha256": "d3528c9f159b5b84bead5c7676f5c10e1ae63373b5db79f1852933e33a2afd7a",
+      "snapshotSha256": "cad6678bdff14f150d0ae429f8cefd83de5dc757633dbde32975e2ce3bcd000b",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/gate-access-log.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/gate-access-log.entity.ts",
+      "gitBlob": "de710feed402c9496ced8c3c57cb7160f1e5b7e9",
+      "originalSha256": "6270194b032996bb3d0bc649e97d96d4376d2dfc24d60c7b1375a5ea69447b51",
+      "snapshotSha256": "b74f68eef308418934bfd294a751c293f2e795456065d2cae09e5499475919cc",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/index.ts",
+      "originalSource": "apps/backend/src/database/entities/index.ts",
+      "gitBlob": "603dc13d5a5fca3a995613fc7a53937e053ac8d4",
+      "originalSha256": "0ffb1f1f176ce7a410b1359be3898b7d694a44432d69b590d12b339a50cbdc9e",
+      "snapshotSha256": "4a1f6849bad6ddd38f01718742731041f526b808c63f169368c670cd637fb14b",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/mf06-assessment-job.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/mf06-assessment-job.entity.ts",
+      "gitBlob": "53efb8a9d2afc7b4f3fc10b090b195d8890a5d38",
+      "originalSha256": "316f7a6555445714d89ba8faac34e61d723bfda970d26ac42d537d4fcfb32ef9",
+      "snapshotSha256": "be5200487540e17391ccb58fe93a22cb0f2ee8f181eecfff52db7d3e65d6b637",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/mf06-assessment-request.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/mf06-assessment-request.entity.ts",
+      "gitBlob": "34dfcef2df9d5c0301a75b452192d0e6e367a16f",
+      "originalSha256": "24a27daad6e1a0f1fbed685eb903465a26581c7eb78ca82f733b07a2b44b77b4",
+      "snapshotSha256": "6aba8eeefc6cf6714869b103230c55d3c4f5b2313cb766d5a9a35b8782c50455",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/mf06-assessment.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/mf06-assessment.entity.ts",
+      "gitBlob": "cd818b5d1a040750ebe0eb2eeaadb0d1c96b2758",
+      "originalSha256": "9ad68cd8ee162c80647484e6afb97377758dfdc4de2ce528ed682bc02b58abd1",
+      "snapshotSha256": "d19afc507bcaa5e4c54e0706a43ac612b0b2f0032ad6c5bea641bfbcdd166427",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/mf06-authority-artifact.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/mf06-authority-artifact.entity.ts",
+      "gitBlob": "bd2e774fa8d89a7dddb38333dae81a8b6266b84f",
+      "originalSha256": "8d764343b23407d22bf5fa590499b7e98d02c90faa76b378ac866f95e3325e31",
+      "snapshotSha256": "08018c5ddd5312bf49c120ad7a5c9ad106e61071ec418739c7235bbeb20e83d2",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/numeric.transformer.ts",
+      "originalSource": "apps/backend/src/database/entities/numeric.transformer.ts",
+      "gitBlob": "2752ecca6cd4a5979649fe0c4573ea6a8ff980f7",
+      "originalSha256": "074ca9a1e5cfc40371ab90eeed42a5dc50ca4fbd8b3c4baf9c45686cc04e6ee1",
+      "snapshotSha256": "d0a2d16f9c42b714082592d95c9a300db2986a507948c4ab0b4554039bafa580",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/observation-identity-decision.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/observation-identity-decision.entity.ts",
+      "gitBlob": "cf5c1a7074756406f994b3273648f49dfac6b61b",
+      "originalSha256": "7cb60479db4601bbdae953183f3a6bec408625e29fa6a95ea09ab2a11504dd83",
+      "snapshotSha256": "1dd4b1f9be2d7653ecfda4750358a09d8009c60ab35ac8c8d7a27ca43446d7f1",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/observation-identity-resolution.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/observation-identity-resolution.entity.ts",
+      "gitBlob": "55b1db81f915a3328946263619a81df60d1d1d7c",
+      "originalSha256": "bcce01dbc615ad3acfd875cf10e70ea280d5b16d30d7472cf3d7f590a377e54c",
+      "snapshotSha256": "163b8156860f4d97216bf2d4a6e9a8e44f59c3864dc6d677e3b9026daeb74168",
+      "frozen": true,
+      "importPathsAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/safety-alert-review.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/safety-alert-review.entity.ts",
+      "gitBlob": "c54c6d770fb569dcd130640027f24a28b0d22341",
+      "originalSha256": "0e09a8c0775231b6c32c3ac6f6187f1a33139ad24a9958cbe986069cf11464f6",
+      "snapshotSha256": "1a3989a764934f296a074bac089fc1fe08117cf67943b7049aaee152e4d40243",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/safety-alert.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/safety-alert.entity.ts",
+      "gitBlob": "73ad152c68163806107de36f76cf411e288d59da",
+      "originalSha256": "52a61fbd524ef3a13ec0efc80245916969b6d14e205f50fe8232fe5115fb5010",
+      "snapshotSha256": "b5d9303b296e55c6a7e5a121de51ce536ade3aef6d4a042c8f5e45bdc68c45f2",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/schedule-version.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/schedule-version.entity.ts",
+      "gitBlob": "df44ba718a6915f48deceab1cfa259b1879abcff",
+      "originalSha256": "e86afc89c233d6de7375def5fd4eca97f7354cdb1235dd0dbb0271c1a36eb274",
+      "snapshotSha256": "982476b5b0d2e9ca94db27f65798ac0baaf72f12eab7720765e237b77f1b47eb",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/shift-change-request.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/shift-change-request.entity.ts",
+      "gitBlob": "db75f56fcc0194fd8f684bf8dfffdcfd2d6b3094",
+      "originalSha256": "ceb2c2e66f79eeefd3b7709b32d7d66ee098db629b86a21ed0890dedfc3c5b4e",
+      "snapshotSha256": "e619915a6d5276e53be38f2023847c1d3bda6aa8e854a2200981d61de36852fa",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/shift-swap-request.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/shift-swap-request.entity.ts",
+      "gitBlob": "03b3f4d883004cac0f518aa46cb2f98597d8ea34",
+      "originalSha256": "25ac345a034096bc132e2133129a9587a9c5151ff12cf2b3e3de1bfbebeedc63",
+      "snapshotSha256": "9097a09282bce790b202b6602fc2edd64c39c825b78f3bf30837c76be230e183",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/shift.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/shift.entity.ts",
+      "gitBlob": "a4040ba944034e0cde02e7d93df74352165ffb2b",
+      "originalSha256": "02d31b921eece973ea55fc62707e6e68066ea319768f79ffca22e2b6a9a49e80",
+      "snapshotSha256": "decc38d2e996a9070f3e4b5e2890dd784eb891e243fea7c6f47f02fa26937c65",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/site.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/site.entity.ts",
+      "gitBlob": "1ce10c8fc95464df06fcdfbfe91abc963097a913",
+      "originalSha256": "9bc6214843c939f60fa96cec68cf2387b1e1a0c967ef921bf993097bac067b01",
+      "snapshotSha256": "b2bd9f880a59ba6d5ed7de8c21aa5192b70c3aef970d333868a9863db920c56e",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/timesheet.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/timesheet.entity.ts",
+      "gitBlob": "c901fe9e3e59e9fd9536c438d0a24cc495d23b10",
+      "originalSha256": "966864d5aed4ce87fccacf067594cc3cee3f6a0b2c7a3ad9bba182616a39361d",
+      "snapshotSha256": "42c9a4360b7351945841d772d1d36472424e529f5a142768ed2d8b01dffd5d23",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/user-role-assignment.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/user-role-assignment.entity.ts",
+      "gitBlob": "47d084e9dc86be5a3f1e1148d6511fd600b59cb5",
+      "originalSha256": "1bc45a8d2283ef02f68834b08f95c70e9260e53e7181ec69a282262dbfb1ff86",
+      "snapshotSha256": "1112fa61e8a301e293194a8b068e0768d24afa6ed9a2176370b8638f999714e6",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/user.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/user.entity.ts",
+      "gitBlob": "17fdf2d0566f11b166c091f81ba6c80207b47866",
+      "originalSha256": "006e496a132c4815cfa0cc81dd028c366c637fdf20b21a683ea0a194e6cb2f9b",
+      "snapshotSha256": "2125fd856ea75dca07a735d3fdef34cf69f905feff9e63d43797eac0e9f6b2ec",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/worker-gate-permission.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/worker-gate-permission.entity.ts",
+      "gitBlob": "296e2e4cce60a3934c7989e48708e36be7ec93b0",
+      "originalSha256": "c1ddc89f27bc7a2a8205a811c930cf4326a8f027291b91360053ed32a9e4feeb",
+      "snapshotSha256": "7aec4ecb248f44ceddd5c4b30551cd8ff28503186ce0767e61c66c1e82c9f840",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/worker-schedule.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/worker-schedule.entity.ts",
+      "gitBlob": "66a9ca1a1dbc323b7fa8f60565b438ddb9268082",
+      "originalSha256": "53e7a73d1cb6441a15508a9f2d5e5b74cb1fbfda915ad0f9a3ac3b147ee124fc",
+      "snapshotSha256": "b1db4e014ee395e208211d21f6f01ec47afb71915bc69bdff5e8a4c96d0950e8",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/worker-site-zone-assignment.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/worker-site-zone-assignment.entity.ts",
+      "gitBlob": "5fc1d50b68eb277edf9def1619a8563e61a39750",
+      "originalSha256": "e677403cd377fc84998397a685a09c3b11e7f451069995ecb525f09c1e576d7e",
+      "snapshotSha256": "beffeec17b66edb1673e166c723775ed55aaac6aebf77df6705d118c325c580b",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/worker.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/worker.entity.ts",
+      "gitBlob": "15207dd9fbe89c1a034e21cc2f785ae650e35053",
+      "originalSha256": "2364e3e3d09f66235f4b96f0e33ae15a4f58cfd34c46437d76514bbaa47f06f3",
+      "snapshotSha256": "719b5d2800a1caae1086e74ef0948c7434c747b77f7fc072082962cdf68495eb",
+      "frozen": true,
+      "importPathsAdapted": false,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/zone-access-grant.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/zone-access-grant.entity.ts",
+      "gitBlob": "bf895c28c801c33ea89cb8f3e73b4270cbf878d1",
+      "originalSha256": "e8ffe706104344c1ecc69d8426522526fb33773f1d3d1ec949eb4a70b78708ad",
+      "snapshotSha256": "203c70c292365110b6af52060603696d9d877391d2ee187c77260d5cbfc9c738",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/zone-authority-command.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/zone-authority-command.entity.ts",
+      "gitBlob": "7edc8ade31f0cdfede880f83203d79f3f49be412",
+      "originalSha256": "b45f8584d035092e53382d5d14f4ff577c48bd0ea85a6a5f95d6456673473a02",
+      "snapshotSha256": "9fc97e4df5b257c1f54953ef1f098724965d1e34aa855dd7deee1c8f47b94dea",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/zone-authority-fact-revision.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/zone-authority-fact-revision.entity.ts",
+      "gitBlob": "ef5f5e2cfbbad2c99b8334533469fd65bc61418f",
+      "originalSha256": "7bb233942c66f983709a980cc26b8b67058f3117105b17f5b3937379381c3d0a",
+      "snapshotSha256": "cab6cfbb95866d600a3d93406467c22b789cdefef9b05dba432e9b7f0914d033",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/zone-authority-history-epoch.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/zone-authority-history-epoch.entity.ts",
+      "gitBlob": "4079210c20578b51d8a1a1a66c45cbe4fc0060f7",
+      "originalSha256": "00787831ea9c567050f03453e0c4d14ac2c5357fee0c72bafe4e3f4fabf916b7",
+      "snapshotSha256": "8c16639bf7d39d21feafdb5a57aa30b0762ae8a066c425b46310681e26063797",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/zone-entry-decision.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/zone-entry-decision.entity.ts",
+      "gitBlob": "9de912d541fad3ff6adcb819f79266ec78de7457",
+      "originalSha256": "1c171403f71deafa95dc025dafe0a29428f96da3817ea28780b8df7bdd674773",
+      "snapshotSha256": "5c58af2a9a70c539b3b56dcb5b97e5ad4bcb4d62f39825bb20a627ed4392adea",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/entities/zone.entity.ts",
+      "originalSource": "apps/backend/src/database/entities/zone.entity.ts",
+      "gitBlob": "869a76d9980e3aa3907a8b3ac0ccc0e60d1c1fcb",
+      "originalSha256": "106a259e66fb25f185b82411a7a7b7b796a730c31eba96215203f3ffe43bbd22",
+      "snapshotSha256": "e807781a1d8b9a945f325ad7451069b12d2694b375d08acb964cdac158ab9231",
+      "frozen": true,
+      "importPathsAdapted": false
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/workforce-configuration.fixture.ts",
+      "originalSource": "apps/backend/src/modules/workforce/workforce-configuration.service.ts",
+      "gitBlob": "218897224de7364ec00aa4a142b99d98667e4d29",
+      "originalSha256": "7730009b9aa32a36d2ffaf52bfd8761783e15c75c5fcdf4c4b20099677049e5f",
+      "snapshotSha256": "e99a414e75f22833cb360e640bb695c91244a9089f4666ba9df0d02477bbb0f0",
+      "frozen": true,
+      "importPathsAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/contractor-operations.fixture.ts",
+      "originalSource": "apps/backend/src/modules/workforce/contractor-operations.service.ts",
+      "gitBlob": "1ce3191eaa570d7bec31a47571eef1ee9ddc7a61",
+      "originalSha256": "6c951a774c294f4ac5b5564c8afe76a4d661b2c4d9be124a68d5b015ee3822e0",
+      "snapshotSha256": "14d91af1361d2bb18a5561f43673e72c5d3c56eff2ad112bf129dd1c7db7bbe8",
+      "frozen": true,
+      "importPathsAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/workforce-authority-history.fixture.ts",
+      "originalSource": "apps/backend/src/modules/workforce/workforce-authority-history.ts",
+      "gitBlob": "ede074848d1774b9798ebc602b38a2faeff6f6d6",
+      "originalSha256": "15c8435f0a08921c54b9260e56070ec2c3162dbf615a1b138e42264391a2670f",
+      "snapshotSha256": "e97cc54ff6aa09ab2525884afd6779d634f8629138079924493772782cc437fd",
+      "frozen": true,
+      "importPathsAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/contractor-participation.ts",
+      "originalSource": "apps/backend/src/modules/workforce/contractor-participation.ts",
+      "gitBlob": "95927dd7ee1dbe219e1d0987a3cc24003dbf2c90",
+      "originalSha256": "79e5188be81ae3cc3436c383dec9c2cb753a4059a977b702bca317be1bfc66d6",
+      "snapshotSha256": "389d5b9f86014bd31a37800bffa9e150e00072ae2f91e96f758a7e86aecdffa7",
+      "frozen": true,
+      "importPathsAdapted": true,
+      "formattingAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/dto/workforce.dto.ts",
+      "originalSource": "apps/backend/src/modules/workforce/dto/workforce.dto.ts",
+      "gitBlob": "eec56ff608fbbbeddaee5bcb7b3f4d8da859b502",
+      "originalSha256": "7e6f576c03f2deeaa517b9597ef053a2d678e814fa21c54fbe7512825d03736d",
+      "snapshotSha256": "572e062f71999132302034b02bfb3ff7a66cd97e17f359234b807c16e8d1dbd1",
+      "frozen": true,
+      "importPathsAdapted": true
+    },
+    {
+      "path": "apps/backend/test/support/legacy24/observation-identity.types.ts",
+      "originalSource": "apps/backend/src/modules/safety/identity/observation-identity.types.ts",
+      "gitBlob": "89bcc1de19b0a235f27d3bb020e1ebcf1fd72fe4",
+      "originalSha256": "014700216f5862a563738692aa5597e565de7dd3bfc171064f339e8705229140",
+      "snapshotSha256": "468a29f72272e9dcc2216daabfd2a07925956fe80a685f7fdc942afd72e1b573",
+      "frozen": true,
+      "importPathsAdapted": false
+    }
+  ]
+}

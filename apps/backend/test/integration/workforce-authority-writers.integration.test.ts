@@ -16,12 +16,12 @@ import {
   ZoneRestrictionPolicy,
   ZoneType,
   ZoneAccessGrantEntity,
-} from '../../src/database/entities/index.js';
+} from '../support/legacy24/entities/index.js';
 import {
   ContractorOperationsService,
   type WorkforceActor,
-} from '../../src/modules/workforce/directory/contractor-operations.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
+} from '../support/legacy24/contractor-operations.fixture.js';
+import { WorkforceConfigurationService } from '../support/legacy24/workforce-configuration.fixture.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 const isolated = createIsolatedTestDatabase({ legacy: true });

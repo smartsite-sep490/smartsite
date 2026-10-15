@@ -12,25 +12,25 @@ import {
   page,
   uuid,
 } from '../../src/common/configuration/commands.js';
-import { WorkerEntity } from '../../src/database/entities/worker.entity.js';
+import { WorkerEntity } from './legacy24/entities/worker.entity.js';
 import {
   ZoneAccessEffect,
   ZoneAccessGrantEntity,
-} from '../../src/database/entities/zone-access-grant.entity.js';
+} from './legacy24/entities/zone-access-grant.entity.js';
 import {
   ZoneEntryDecisionEntity,
   type ZoneEntryDecisionStatus,
-} from '../../src/database/entities/zone-entry-decision.entity.js';
-import { ZoneEntity } from '../../src/database/entities/zone.entity.js';
-import { UserRoleAssignmentEntity } from '../../src/database/entities/user-role-assignment.entity.js';
-import { UserRole } from '../../src/database/entities/user.entity.js';
-import { ZoneAuthoritySourceKind } from '../../src/database/entities/zone-authority-fact-revision.entity.js';
+} from './legacy24/entities/zone-entry-decision.entity.js';
+import { ZoneEntity } from './legacy24/entities/zone.entity.js';
+import { UserRoleAssignmentEntity } from './legacy24/entities/user-role-assignment.entity.js';
+import { UserRole } from './legacy24/entities/user.entity.js';
+import { ZoneAuthoritySourceKind } from './legacy24/entities/zone-authority-fact-revision.entity.js';
 import {
   executeZoneAuthorityCommand,
   type ZoneAuthorityActor,
 } from '../../src/modules/zones/zone-authority-history.js';
-import { ContractorZoneAccessGrantEntity } from '../../src/database/entities/contractor-zone-access-grant.entity.js';
-import { readZoneGrantWorkforcePrerequisites } from '../../src/modules/workforce/workforce-configuration.service.js';
+import { ContractorZoneAccessGrantEntity } from './legacy24/entities/contractor-zone-access-grant.entity.js';
+import { readZoneGrantWorkforcePrerequisites } from './legacy24/workforce-configuration.fixture.js';
 import { checkCurrentWorkerZoneAllowPrerequisites } from '../../src/modules/zones/zone-authority-chain.policy.js';
 
 export class CreateZoneAccessGrantCommand {

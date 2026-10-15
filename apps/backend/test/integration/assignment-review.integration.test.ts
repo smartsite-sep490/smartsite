@@ -11,14 +11,14 @@ import {
   UserRoleAssignmentEntity,
   WorkerEntity,
   ZoneEntity,
-} from '../../src/database/entities/index.js';
+} from '../support/legacy24/entities/index.js';
 import {
   WorkerSiteZoneAssignmentEntity,
   WorkerSiteZoneAssignmentStatus,
-} from '../../src/database/entities/worker-site-zone-assignment.entity.js';
-import { ZoneAccessGrantEntity } from '../../src/database/entities/zone-access-grant.entity.js';
-import { ZoneRestrictionPolicy, ZoneType } from '../../src/database/entities/enums.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+} from '../support/legacy24/entities/worker-site-zone-assignment.entity.js';
+import { ZoneAccessGrantEntity } from '../support/legacy24/entities/zone-access-grant.entity.js';
+import { ZoneRestrictionPolicy, ZoneType } from '../support/legacy24/entities/enums.js';
+import { ContractorOperationsService } from '../support/legacy24/contractor-operations.fixture.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 const database = createIsolatedTestDatabase({ legacy: true });

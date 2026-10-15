@@ -20,14 +20,14 @@ import {
   ZoneAccessEffect,
   ZoneAuthorityHistoryEpochEntity,
   ZoneAuthoritySourceKind,
-} from '../../src/database/entities/index.js';
+} from '../support/legacy24/entities/index.js';
 import { executeZoneAuthorityCommand } from '../../src/modules/zones/zone-authority-history.js';
 import {
   contractorFact,
   participationFact,
   workerMembershipFact,
   assignmentFact,
-} from '../../src/modules/workforce/workforce-authority-history.js';
+} from '../support/legacy24/workforce-authority-history.fixture.js';
 import { ZoneAuthoritySnapshotService } from '../../src/modules/zones/zone-authority-snapshot.service.js';
 import { decodeStoredAuthoritySnapshot } from '../../src/modules/zones/zone-authority-snapshot-codec.js';
 import { evaluateZoneAuthority } from '../../src/modules/zones/zone-authority-chain.policy.js';
