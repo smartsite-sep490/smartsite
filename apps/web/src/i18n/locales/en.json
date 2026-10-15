@@ -2867,6 +2867,7 @@
   "auth.error.validation": "Check the entered information and try again.",
   "auth.error.response": "The service returned an invalid response. Please try again.",
   "auth.error.details": "Error details",
+  "auth.error.requestId": "Request ID: {{id}}",
   "auth.password.required": "Change your password before continuing.",
   "auth.password.title": "Change password",
   "auth.password.description": "After saving, sign in again with your new password.",

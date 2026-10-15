@@ -22,7 +22,9 @@ export function AuthErrorNotice({ error, message }: { error: unknown; message?: 
             {details.backendError?.code ?? details.code}
             {details.status ? ` · HTTP ${details.status}` : ''}
           </p>
-          {details.backendError?.requestId && <p>Request ID: {details.backendError.requestId}</p>}
+          {details.backendError?.requestId && (
+            <p>{tr('auth.error.requestId', { id: details.backendError.requestId })}</p>
+          )}
         </details>
       )}
     </div>
