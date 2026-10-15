@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -36,30 +37,49 @@ const camera: CameraResponse = {
 };
 const client = new SmartSiteManagementClient('http://127.0.0.1:3000');
 const select = vi.fn();
+let queryClient: QueryClient;
+
 function tile() {
   return (
-    <FourSourceWallTile
-      apiUrl="http://127.0.0.1:3000"
-      client={client}
-      token="synthetic-token"
-      sessionScope="synthetic-scope"
-      credentialId={1}
-      siteId="site-one"
-      camera={camera}
-      isSelected={false}
-      onSelect={select}
-      enabled
-      showModelObjects={false}
-    />
+    <QueryClientProvider client={queryClient}>
+      <FourSourceWallTile
+        apiUrl="http://127.0.0.1:3000"
+        client={client}
+        token="synthetic-token"
+        sessionScope="synthetic-scope"
+        credentialId={1}
+        siteId="site-one"
+        camera={camera}
+        isSelected={false}
+        onSelect={select}
+        enabled
+        showModelObjects={false}
+      />
+    </QueryClientProvider>
   );
 }
 beforeEach(() => {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  vi.spyOn(client, 'getCameraObservationZones').mockResolvedValue({
+    siteId: camera.siteId,
+    cameraId: camera.id,
+    configurationVersion: camera.configurationVersion,
+    items: [],
+    total: 0,
+    unresolvedRegionCount: 0,
+  });
   state.errorStatus = null;
   state.isPolling = false;
   state.retry.mockReset();
   select.mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  queryClient.clear();
+  vi.restoreAllMocks();
+});
 
 describe('wall tile retry and keyboard recovery', () => {
   it.each([401, 403, 429])('prevents ineffective Retry interaction for HTTP %s', async (status) => {
@@ -71,9 +91,11 @@ describe('wall tile retry and keyboard recovery', () => {
     expect(state.retry).not.toHaveBeenCalled();
     expect(select).not.toHaveBeenCalled();
     if (status === 429)
-      expect(screen.getByRole('status').textContent).toContain(
-        'Automatic retry resumes after server cooldown.',
-      );
+      expect(
+        screen
+          .getAllByRole('status')
+          .some((el) => el.textContent?.includes('Automatic retry resumes after server cooldown.')),
+      ).toBe(true);
   });
 
   it('prevents a second manual request while the snapshot is fetching', async () => {
@@ -94,7 +116,11 @@ describe('wall tile retry and keyboard recovery', () => {
     );
     state.errorStatus = 503;
     rendered.rerender(tile());
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(
+      screen
+        .queryAllByRole('status')
+        .some((el) => el.textContent?.includes('Automatic retry resumes after server cooldown.')),
+    ).toBe(false);
     expect((screen.getByRole('button', { name: 'Retry' }) as HTMLButtonElement).disabled).toBe(
       false,
     );

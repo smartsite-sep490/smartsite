@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo } from 'react';
 import type { CameraResponse } from '@smartsite/contracts/management';
-import { useScopedCameraPreview, type ScopedPreviewStatus } from '../cameras/useScopedCameraPreview';
+import {
+  useScopedCameraPreview,
+  type ScopedPreviewStatus,
+} from '../cameras/useScopedCameraPreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import { IconAlertTriangle } from '../icons';
-import { formatClockTime, resolveCameraAndWorkArea } from '../cameras/monitoringUtils';
+import { formatClockTime } from '../cameras/monitoringUtils';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { CameraObservationZones } from './CameraObservationZones';
+import { useCameraObservationZones } from './useCameraObservationZones';
 
 export interface ScopedWallSnapshot {
   scope: {
@@ -32,6 +37,8 @@ export interface FourSourceWallTileProps {
   sessionScope: string;
   credentialId: number;
   siteId: string;
+  siteCode?: string;
+  siteName?: string;
   camera: CameraResponse;
   isSelected: boolean;
   onSelect: (cameraId: string) => void;
@@ -50,6 +57,8 @@ export function FourSourceWallTile({
   sessionScope,
   credentialId,
   siteId,
+  siteCode,
+  siteName,
   camera,
   isSelected,
   onSelect,
@@ -71,8 +80,21 @@ export function FourSourceWallTile({
     cadenceMs: isSelected ? 500 : 1000,
   });
 
+  const zonesState = useCameraObservationZones({
+    apiUrl,
+    client,
+    token,
+    sessionScope,
+    credentialId,
+    siteId,
+    cameraId: camera.id,
+    configurationVersion: camera.configurationVersion,
+  });
+
   const { preview, status, sourceKind, capturedAt, error, errorStatus, retry, isPolling } =
     scopedPreview;
+  const effectiveErrorStatus =
+    errorStatus === 401 || zonesState.errorStatus === 401 ? 401 : errorStatus;
   const retryDisabled =
     isPolling || errorStatus === 429 || errorStatus === 401 || errorStatus === 403;
 
@@ -92,7 +114,7 @@ export function FourSourceWallTile({
       status,
       sourceKind,
       capturedAt,
-      errorStatus,
+      errorStatus: effectiveErrorStatus,
       receivedAt: Date.now(),
     });
   }, [
@@ -107,7 +129,7 @@ export function FourSourceWallTile({
     status,
     sourceKind,
     capturedAt,
-    errorStatus,
+    effectiveErrorStatus,
     onPreviewUpdate,
   ]);
 
@@ -117,11 +139,6 @@ export function FourSourceWallTile({
       onTileUnmount?.(camera.id);
     };
   }, [camera.id, onTileUnmount]);
-
-  const cameraContext = useMemo(
-    () => resolveCameraAndWorkArea(camera.name || camera.code),
-    [camera.name, camera.code],
-  );
 
   const isLive = status === 'LIVE' || sourceKind === 'LIVE';
   const isReplay = status === 'REPLAY' || sourceKind === 'REPLAY';
@@ -141,30 +158,15 @@ export function FourSourceWallTile({
     >
       {/* Top Header Bar — Flat minimalist overlay without gradient */}
       <div className="relative z-10 px-3 py-2 bg-black/60 flex items-start justify-between text-white gap-2 pointer-events-none">
-        <div className="flex flex-col min-w-0 pr-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span
-              title={cameraContext.camera}
-              className="font-bold text-xs tracking-wide text-white truncate"
-            >
-              {cameraContext.camera}
-            </span>
-            {isSelected && (
-              <span
-                data-testid={`focused-badge-${camera.id}`}
-                className="bg-[#111111] text-white border border-white/20 text-[9px] font-bold px-1.5 py-0.2 rounded uppercase flex-shrink-0"
-              >
-                Focused
-              </span>
-            )}
-          </div>
-          <span
-            title={cameraContext.workArea}
-            className="text-white/70 font-medium text-[10px] tracking-wider uppercase truncate"
-          >
-            {cameraContext.workArea}
-          </span>
-        </div>
+        <CameraObservationZones
+          siteCode={siteCode}
+          siteName={siteName}
+          cameraId={camera.id}
+          cameraCode={camera.code}
+          cameraName={camera.name}
+          isSelected={isSelected}
+          zonesState={zonesState}
+        />
 
         {/* Factual Source Badge (LIVE / REPLAY / UNAVAILABLE) */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -178,16 +180,18 @@ export function FourSourceWallTile({
                   : 'bg-slate-700/40 text-slate-300 border-slate-600/40'
             }`}
           >
-            {isReplay ? 'REPLAY' : isLive ? 'LIVE' : status === 'CONNECTING' ? 'CONNECTING' : 'UNAVAILABLE'}
+            {isReplay
+              ? 'REPLAY'
+              : isLive
+                ? 'LIVE'
+                : status === 'CONNECTING'
+                  ? 'CONNECTING'
+                  : 'UNAVAILABLE'}
           </span>
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isLive
-                  ? 'bg-red-400'
-                  : isReplay
-                    ? 'bg-amber-400'
-                    : 'bg-slate-400'
+                isLive ? 'bg-red-400' : isReplay ? 'bg-amber-400' : 'bg-slate-400'
               }`}
             />
             <span className="font-mono text-[9px] font-semibold text-white/90">
@@ -218,7 +222,9 @@ export function FourSourceWallTile({
         ) : status === 'CONNECTING' ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center">
             <div className="w-6 h-6 rounded-full border-2 border-slate-400 border-t-transparent animate-spin mb-2" />
-            <p className="text-[11px] font-semibold">Connecting ({isSelected ? '500ms' : '1s'} snapshot)...</p>
+            <p className="text-[11px] font-semibold">
+              Connecting ({isSelected ? '500ms' : '1s'} snapshot)...
+            </p>
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center space-y-2">
@@ -265,7 +271,9 @@ export function FourSourceWallTile({
         <div className="flex items-center gap-2 text-white/70">
           <span>Cadence: {isSelected ? '500ms' : '1s'}</span>
           {detectionsCount > 0 ? (
-            <span className="text-emerald-300 font-semibold">{detectionsCount} Person detection(s)</span>
+            <span className="text-emerald-300 font-semibold">
+              {detectionsCount} Person detection(s)
+            </span>
           ) : (
             <span className="text-white/50">No Person detections</span>
           )}
@@ -283,9 +291,7 @@ export function FourSourceWallTile({
               onSelect(camera.id);
             }}
             className={`px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors cursor-pointer ${
-              isSelected
-                ? 'bg-white text-[#111111]'
-                : 'bg-white/20 text-white hover:bg-white/40'
+              isSelected ? 'bg-white text-[#111111]' : 'bg-white/20 text-white hover:bg-white/40'
             }`}
           >
             {isSelected ? 'Active' : 'Focus'}
@@ -303,6 +309,8 @@ export interface FourSourceWallProps {
   sessionScope: string;
   credentialId: number;
   siteId: string;
+  siteCode?: string;
+  siteName?: string;
   selectedCameraId: string;
   onSelectCamera: (cameraId: string) => void;
   cameras: CameraResponse[];
@@ -322,6 +330,8 @@ export function FourSourceWall({
   sessionScope,
   credentialId,
   siteId,
+  siteCode,
+  siteName,
   selectedCameraId,
   onSelectCamera,
   cameras,
@@ -369,6 +379,8 @@ export function FourSourceWall({
           sessionScope={sessionScope}
           credentialId={credentialId}
           siteId={siteId}
+          siteCode={siteCode}
+          siteName={siteName}
           camera={camera}
           isSelected={camera.id === selectedCameraId}
           onSelect={onSelectCamera}

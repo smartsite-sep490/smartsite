@@ -1833,6 +1833,8 @@ export function PpeMonitoringView({
               sessionScope={sessionScope}
               credentialId={credentialId}
               siteId={selectedSiteId}
+              siteCode={selectedSite?.code}
+              siteName={selectedSite?.name}
               selectedCameraId={selectedCameraId}
               onSelectCamera={(camId) => setSelectedCameraId(camId)}
               cameras={

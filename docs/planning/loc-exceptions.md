@@ -38,3 +38,15 @@ specific focus behavior, not general growth or browser/production acceptance.
 Counts use physical lines at the reviewed local snapshot after formatting.
 Baseline is local2dc598d. This is a bounded integration exception, not an
 acceptance of ongoing growth or evidence of runtime/production readiness.
+
+## Camera wall location context, 15 October
+
+| Path | Baseline | Current | Reason and follow-up |
+| --- | ---: | ---: | --- |
+| `apps/web/src/components/ppe/PpeMonitoringView.tsx` | 3354 | 3356 | Existing parent grows only by two authorized Site-name/code props; metadata hook and context UI are separate files. No media/evidence refactor is hidden in this task. Extract parent responsibilities in a separate reviewed task before further growth. |
+| `apps/web/src/i18n/ppe-catalog.ts` | 1485 | 1513 | Add fourteen vi/en context entries per language in the existing Safety catalog. User-entered names and machine payloads remain unchanged; do not create a second i18n runtime. |
+
+Root-reviewed baseline is local9cf35c0. The new boundary test is above the400-line
+soft target but below the700-line escalation threshold; preserve its four distinct
+scope/refetch/cancellation scenarios rather than compress assertions for a count.
+This exception is not browser, running-product or production acceptance.
