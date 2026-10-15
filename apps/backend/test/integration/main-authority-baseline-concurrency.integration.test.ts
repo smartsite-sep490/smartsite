@@ -17,7 +17,7 @@ import { AuthClientType } from '../../src/database/entities/auth-session.entity.
 import { MainAuthorityBaselineService } from '../../src/modules/zones/main-authority-baseline.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   await database.initialize();

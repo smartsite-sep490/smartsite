@@ -19,7 +19,7 @@ import { SiteConfigurationService } from '../../src/modules/sites/site-configura
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
 import { CameraConfigurationService } from '../../src/modules/cameras/camera-configuration.service.js';
 
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 
 before(async () => {
@@ -163,7 +163,12 @@ async function fixture() {
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-async function createAdmin(f: Fixture, label: string) {
+async function createActor(
+  f: Fixture,
+  label: string,
+  role: 'ADMIN' | 'SITE_MANAGER' = 'ADMIN',
+  siteId = f.site.id,
+) {
   const adminId = randomUUID();
   const uniqueHex = randomUUID().replaceAll('-', '').slice(0, 8);
   const username = `adm_${label}_${uniqueHex}`;
@@ -174,10 +179,12 @@ async function createAdmin(f: Fixture, label: string) {
     [adminId, username, `Admin ${label}`, passwordHash],
   );
 
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), adminId],
-  );
+  await db.query('INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)', [
+    randomUUID(),
+    adminId,
+    role,
+    role === 'ADMIN' ? null : siteId,
+  ]);
 
   return {
     id: adminId,
@@ -361,11 +368,11 @@ const REVOCATIONS: RevocationConfig[] = [
   },
   {
     type: 'role',
-    label: 'role demotion (ADMIN -> WORKER)',
+    label: 'authorized role revoked to WORKER',
     expectedStatus: 403,
     apply: async (db, adminId, f) => {
       await db.query(
-        "UPDATE user_role_assignment SET role = 'WORKER', site_id = $2 WHERE user_id = $1 AND role = 'ADMIN'",
+        "UPDATE user_role_assignment SET role = 'WORKER', site_id = $2 WHERE user_id = $1 AND role IN ('ADMIN','SITE_MANAGER')",
         [adminId, f.site.id],
       );
     },
@@ -386,11 +393,15 @@ const REVOCATIONS: RevocationConfig[] = [
 
 for (const route of ROUTES) {
   test(`[Route: ${route.kind}] Reauthorizes at entry against 4 revocation conditions during held execution`, async () => {
-    const f = await fixture();
-    await withApi(f, async (ctx) => {
-      for (const rev of REVOCATIONS) {
-        // Dedicated actor per case: avoids crosstalk and complies with login rate limits (4 logins <= 5 throttle)
-        const admin = await createAdmin(f, `${route.kind}_${rev.type}`);
+    for (const rev of REVOCATIONS) {
+      const f = await fixture();
+      await withApi(f, async (ctx) => {
+        // Dedicated actor and Site per case preserve the single Site Manager assignment invariant.
+        const admin = await createActor(
+          f,
+          `${route.kind}_${rev.type}`,
+          route.kind === 'zone' ? 'SITE_MANAGER' : 'ADMIN',
+        );
         const session = await ctx.login(admin.username);
         const barrier = createBarrier(5000);
         const service = route.getService(ctx);
@@ -419,8 +430,6 @@ for (const route of ROUTES) {
           const res = await reqPromise;
 
           // Expect 401 on logout/inactive, 403 on role demotion/temp password.
-          // Note: Current backend (HEAD 9c14751) returns 200 because it lacks configurationCommandContext;
-          // this assert will legitimately fail RED until Root fixes source.
           assert.equal(
             res.status,
             rev.expectedStatus,
@@ -438,8 +447,8 @@ for (const route of ROUTES) {
           restore();
           barrier.release();
         }
-      }
-    });
+      });
+    }
   });
 }
 
@@ -449,10 +458,12 @@ for (const route of ROUTES) {
 
 test('Label renames happy path trims Unicode, handles no-op, preserves invariants, and produces zero authority records', async () => {
   const f = await fixture();
-  const admin = await createAdmin(f, 'happy');
+  const admin = await createActor(f, 'happy');
 
   await withApi(f, async ({ call, login }) => {
     const session = await login(admin.username);
+    const manager = await createActor(f, 'zone_manager', 'SITE_MANAGER');
+    const zoneSession = await login(manager.username);
 
     // Measure baseline counts of authority tables (must not have any new records)
     const beforeCommands = (
@@ -493,11 +504,18 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
     // 2. Zone Rename with Unicode & surrounding whitespace
     const unicodeZoneName = '   Khu Vực Nguy Hiểm - Hạn Chế Vào \u{26A0}   ';
     const expectedTrimmedZoneName = 'Khu Vực Nguy Hiểm - Hạn Chế Vào \u{26A0}';
-    const zoneRes = await call(
+    const adminZoneAttempt = await call(
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
       { name: unicodeZoneName },
       session.accessToken,
+    );
+    assert.equal(adminZoneAttempt.status, 403, 'Admin does not bypass Site Manager writes');
+    const zoneRes = await call(
+      'PATCH',
+      `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
+      { name: unicodeZoneName },
+      zoneSession.accessToken,
     );
     assert.equal(zoneRes.status, 200);
     const zoneJson = (await zoneRes.json()) as { id: string; name: string };
@@ -585,7 +603,7 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
       { name: expectedTrimmedZoneName },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(zoneNoop.status, 200);
 
@@ -619,7 +637,7 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
 
 test('Same-name rename no-op preserves authorization checking during held execution', async () => {
   const f = await fixture();
-  const admin = await createAdmin(f, 'same_name_auth');
+  const admin = await createActor(f, 'same_name_auth');
 
   await withApi(f, async (ctx) => {
     const session = await ctx.login(admin.username);
@@ -662,10 +680,12 @@ test('Same-name rename no-op preserves authorization checking during held execut
 
 test('Label renames strictly enforce DTO validation against control characters, max length, empty names, and forbidden actor fields', async () => {
   const f = await fixture();
-  const admin = await createAdmin(f, 'dto_validation');
+  const admin = await createActor(f, 'dto_validation');
 
   await withApi(f, async ({ call, login }) => {
     const session = await login(admin.username);
+    const manager = await createActor(f, 'zone_manager', 'SITE_MANAGER');
+    const zoneSession = await login(manager.username);
 
     // 1. Control characters rejection (\u0000, \n, \u0007)
     const siteCtrl = await call(
@@ -680,7 +700,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
       { name: 'Invalid\nNewline' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(zoneCtrl.status, 400, 'Control character newline must be rejected with 400');
 
@@ -706,7 +726,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
       { name: tooLongName },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(zoneLong.status, 400, 'Zone name exceeding 255 chars must be rejected with 400');
 
@@ -735,7 +755,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
       { name: '    ' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(zoneSpaces.status, 400, 'Whitespace-only zone name must be rejected with 400');
 
@@ -760,7 +780,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${f.zone.id}`,
       { name: 'Valid Zone Name', actor_user_id: randomUUID() },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(zoneActor.status, 400, 'Forbidden actor_user_id field must be rejected with 400');
 
@@ -780,10 +800,12 @@ test('Label renames strictly enforce DTO validation against control characters, 
 
 test('Label renames enforce site scoping and missing resource 404 responses', async () => {
   const f = await fixture();
-  const admin = await createAdmin(f, 'scoping_404');
+  const admin = await createActor(f, 'scoping_404');
 
   await withApi(f, async ({ call, login }) => {
     const session = await login(admin.username);
+    const manager = await createActor(f, 'zone_manager', 'SITE_MANAGER');
+    const zoneSession = await login(manager.username);
     const nonExistentId = randomUUID();
 
     // 1. Missing Site
@@ -800,7 +822,7 @@ test('Label renames enforce site scoping and missing resource 404 responses', as
       'PATCH',
       `/api/v1/sites/${f.site.id}/zones/${nonExistentId}`,
       { name: 'Any Name' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(missingZone.status, 404, 'Missing zone must return 404');
 
@@ -809,9 +831,22 @@ test('Label renames enforce site scoping and missing resource 404 responses', as
       'PATCH',
       `/api/v1/sites/${f.otherSite.id}/zones/${f.zone.id}`,
       { name: 'Any Name' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
-    assert.equal(wrongSiteZone.status, 404, 'Zone requested under wrong site must return 404');
+    assert.equal(wrongSiteZone.status, 403, 'A Site Manager cannot inspect another Site');
+    const otherManager = await createActor(f, 'other_zone_manager', 'SITE_MANAGER', f.otherSite.id);
+    const otherSession = await login(otherManager.username);
+    const scopedWrongZone = await call(
+      'PATCH',
+      `/api/v1/sites/${f.otherSite.id}/zones/${f.zone.id}`,
+      { name: 'Any Name' },
+      otherSession.accessToken,
+    );
+    assert.equal(
+      scopedWrongZone.status,
+      404,
+      'An authorized target-Site manager cannot rename a foreign Zone',
+    );
 
     // 4. Missing Camera
     const missingCamera = await call(

@@ -17,7 +17,7 @@ import { MainAuthorityBaselineService } from '../../src/modules/zones/main-autho
 import type { MainConfigurationCommandContext } from '../../src/common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 
 before(async () => {

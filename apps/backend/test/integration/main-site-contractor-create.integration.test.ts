@@ -17,7 +17,7 @@ import { ContractorsController } from '../../src/modules/workforce/directory/con
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { installMainAuthorityCandidate } from '../support/main-authority-candidate.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   await database.initialize();
@@ -38,13 +38,13 @@ async function fixture() {
     "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic actor','not-login',false)",
     [f.actor],
   );
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
-  );
   await db.query("INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Site')", [
     f.site,
   ]);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), f.actor, f.site],
+  );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
     [f.contractor],
@@ -189,6 +189,10 @@ test('site Contractor reuse across Site creates only one participation source fa
     "INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic other Site')",
     [other],
   );
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), f.actor, other],
+  );
   await withApi(f, async (call) => {
     const response = await call(
       'CONTRACTOR',
@@ -284,13 +288,13 @@ for (const mode of ['OPEN', 'FINITE', 'EXPIRED', 'FUTURE', 'INACTIVE'] as const)
       assert.equal((await db.query('SELECT count(*)::int AS n FROM audit_log'))[0].n, audits);
     });
   });
-test('site Contractor strictDTO400/missingSite404/name or inactive409 do not create participation', async () => {
+test('site Contractor strictDTO400/unassignedSite403/name or inactive409 do not create participation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     for (const extra of [{ actorUserId: f.actor }, { commandId: randomUUID() }])
       assert.equal((await call('CONTRACTOR', { ...f.contractorInput, ...extra })).status, 400);
-    assert.equal((await call('CONTRACTOR', undefined, 'bad-id')).status, 400);
-    assert.equal((await call('CONTRACTOR', undefined, randomUUID())).status, 404);
+    assert.equal((await call('CONTRACTOR', undefined, 'bad-id')).status, 403);
+    assert.equal((await call('CONTRACTOR', undefined, randomUUID())).status, 403);
     assert.equal(
       (await call('CONTRACTOR', { code: f.contractor, name: 'Different name' })).status,
       409,
@@ -312,13 +316,13 @@ test('site Contractor strictDTO400/missingSite404/name or inactive409 do not cre
     );
   });
 });
-for (const role of ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'] as const)
-  test('site Contractor refuses ' + role + ' without global Admin', async () => {
+for (const role of ['ADMIN', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'] as const)
+  test('site Contractor refuses ' + role + ' without scoped Site Manager', async () => {
     const f = await fixture();
     await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
       f.actor,
       role,
-      f.site,
+      role === 'ADMIN' ? null : f.site,
     ]);
     await withApi(f, async (call) => {
       assert.equal((await call('CONTRACTOR')).status, 403);
@@ -358,8 +362,8 @@ for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const)
           if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
           if (change === 'ROLE')
             await db.query(
-              "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
-              [f.actor, f.site],
+              "UPDATE user_role_assignment SET role='ADMIN',site_id=NULL WHERE user_id=$1",
+              [f.actor],
             );
           if (change === 'DEACTIVATE')
             await db.query('UPDATE app_user SET is_active=false WHERE id=$1', [f.actor]);
