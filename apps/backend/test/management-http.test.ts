@@ -253,6 +253,12 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     {
       status: AlertStatus.PENDING_REVIEW,
       type: AlertType.PPE_VIOLATION,
+      zoneId: undefined,
+      cameraExternalId: undefined,
+      capturedFrom: undefined,
+      capturedUntil: undefined,
+      contextTeamId: undefined,
+      attentionOnly: undefined,
     },
   ]);
   assert.equal(((await alertList.json()) as { total: number }).total, 1);

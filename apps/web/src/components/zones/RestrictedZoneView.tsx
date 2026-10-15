@@ -1,3 +1,5 @@
+import { useManagementClient } from '../../features/auth/auth-session';
+import { useZoneApplicationSession } from './useZoneApplicationSession';
 import { localizedError, localizeMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
@@ -17,7 +19,7 @@ import React, {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useZoneMetadataPages } from './useZoneMetadataPages';
 import { ZoneMetadataPaging } from './ZoneMetadataPaging';
-import { ApiError, SmartSiteManagementClient, type LoginResponse } from '@smartsite/api-client';
+import { ApiError, type LoginResponse } from '@smartsite/api-client';
 import type { SharedSession } from '../../types/shared-session';
 import { useAuth } from '../../features/auth/auth-session';
 import { PpeDialog } from '../ppe/PpeDialog';
@@ -79,6 +81,8 @@ interface ZoneReviewItem {
 }
 
 export interface RestrictedZoneViewProps {
+  authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
+  onSignOut?: () => void;
   apiUrl?: string;
   onNavigate?: (
     tab: 'incidents',
@@ -98,14 +102,21 @@ type ScopedPolygonMutationVariables = SavePolygonMutationVariables & { metadataC
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
   onNavigate,
-  sharedSession,
+  sharedSession: providedSharedSession,
+  authenticatedSession,
+  onSignOut,
 }: RestrictedZoneViewProps) {
-  useTranslation();
+  const { t: localize } = useTranslation();
+  const sharedSession = useZoneApplicationSession(
+    providedSharedSession,
+    authenticatedSession,
+    onSignOut,
+  );
   const { t } = useLocale();
   const isAiWorkPaused =
     import.meta.env.VITE_AI_WORK_PAUSED === 'true' || import.meta.env.VITE_AI_WORK_PAUSED === true;
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const auth = useAuth();
   const triggerSessionExpired = auth?.triggerSessionExpired;
@@ -453,11 +464,11 @@ export function RestrictedZoneView({
     cameraId: selectedCameraId,
     enabled: Boolean(
       !isAiWorkPaused &&
-        canViewZone &&
-        apiToken &&
-        sessionScope &&
-        selectedSiteId &&
-        selectedCameraId,
+      canViewZone &&
+      apiToken &&
+      sessionScope &&
+      selectedSiteId &&
+      selectedCameraId,
     ),
   });
 
@@ -806,13 +817,13 @@ export function RestrictedZoneView({
       return resolveCameraAndWorkArea(
         preview.frame.cameraExternalId,
         testDetection?.regionId,
-        selectedCamera?.code || tr('monitoring_utils.chua_co_ma_camera'),
+        selectedCamera?.code || localize('monitoring_utils.chua_co_ma_camera'),
       );
     }
     if (selectedCamera) {
       const regionLabel = selectedRegion
-        ? tr('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
-        : tr('common.restricted_zone');
+        ? localize('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
+        : localize('common.restricted_zone');
       return {
         camera: `${selectedCamera.code} · ${selectedCamera.name}`,
         workArea: regionLabel,
@@ -822,7 +833,7 @@ export function RestrictedZoneView({
       camera: 'No Camera Selected',
       workArea: 'Restricted Zone',
     };
-  }, [preview, selectedCamera, selectedRegion, testDetection, t]);
+  }, [preview, selectedCamera, selectedRegion, testDetection, localize]);
 
   const exportZone = () => {
     const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
@@ -852,7 +863,7 @@ export function RestrictedZoneView({
         const context = resolveCameraAndWorkArea(
           preview.frame.cameraExternalId,
           det.regionId,
-          selectedCamera?.code || tr('common.cam_04'),
+          selectedCamera?.code || localize('common.cam_04'),
         );
         return {
           id: det.eventId || `SNAPSHOT-${det.trackId ?? 0}`,
@@ -861,16 +872,16 @@ export function RestrictedZoneView({
           time: timeStr,
           person:
             det.trackId !== null && det.trackId !== undefined
-              ? tr('messages.2c6bb8488230', { value1: det.trackId })
-              : tr('common.unknown_person'),
+              ? localize('messages.2c6bb8488230', { value1: det.trackId })
+              : localize('common.unknown_person'),
           zone: context.workArea,
           camera: context.camera,
-          identity: tr('common.unknown'),
+          identity: localize('common.unknown'),
           authorization: 'Backend evaluation required',
           result: 'Technical entry',
         };
       });
-  }, [preview, scopedPreview.capturedAt, clockTime, selectedCamera?.code, t]);
+  }, [preview, scopedPreview.capturedAt, clockTime, selectedCamera?.code, localize]);
 
   // Truly filters the loaded Zone events list
   const displayedEvents = useMemo(() => {
@@ -2156,11 +2167,11 @@ export function RestrictedZoneView({
 
             <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
-                {tr('restricted_zone_view.you_are_reviewing_a_restricted_zone_intrusion_at')}{' '}
+                {tr('restricted_zone_view.you_are_reviewing_a_technical_observation_at')}{' '}
                 <strong className="text-[#2F3437]">
                   {selectedIncident.zone} ({selectedIncident.camera})
                 </strong>
-                {tr('restricted_zone_view.ai_detected_worker')}{' '}
+                {tr('restricted_zone_view.ai_reported_a_track_candidate')}{' '}
                 <strong className="text-[#2F3437]">
                   {localizeMessage(selectedIncident.person)}
                 </strong>{' '}

@@ -1,3 +1,8 @@
+import { SafetyChecklistService } from './safety-checklist.service.js';
+import { SafetyChecklistController } from './safety-checklist.controller.js';
+import { SafetyOverviewService } from './safety-overview.service.js';
+import { SafetyOverviewController } from './safety-overview.controller.js';
+import { CamerasModule } from '../cameras/cameras.module.js';
 import { StorageModule } from '../../integrations/storage/storage.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
@@ -34,6 +39,7 @@ import { Mf06RequestStatusesController } from './assessments/mf06-request-status
 
 @Module({
   imports: [
+    CamerasModule,
     StorageModule,
     DatabaseModule,
     AuthModule,
@@ -42,6 +48,8 @@ import { Mf06RequestStatusesController } from './assessments/mf06-request-status
     UsersModule,
   ],
   controllers: [
+    SafetyChecklistController,
+    SafetyOverviewController,
     SafetyAlertsController,
     ObservationIdentityController,
     Mf06AssessmentsController,
@@ -49,6 +57,8 @@ import { Mf06RequestStatusesController } from './assessments/mf06-request-status
     SafetyWorkflowController,
   ],
   providers: [
+    SafetyChecklistService,
+    SafetyOverviewService,
     SafetyWorkflowService,
     SafetyUploadService,
     AlertCandidateEvaluator,
@@ -72,8 +82,7 @@ import { Mf06RequestStatusesController } from './assessments/mf06-request-status
         dataSource: DataSource,
         evidence: SafetyAlertEvidenceService,
         workers: WorkerReferenceReader,
-      ) =>
-        new ObservationIdentityResolutionService(dataSource, evidence, workers),
+      ) => new ObservationIdentityResolutionService(dataSource, evidence, workers),
     },
     {
       provide: ObservationIdentityContextService,
@@ -88,19 +97,9 @@ import { Mf06RequestStatusesController } from './assessments/mf06-request-status
         evidence: SafetyAlertEvidenceService,
         zones: ZoneAccessManagementService,
         workers: WorkerReferenceReader,
-      ) =>
-        new ObservationIdentityContextService(
-          resolutions,
-          evidence,
-          zones,
-          workers,
-        ),
+      ) => new ObservationIdentityContextService(resolutions, evidence, zones, workers),
     },
   ],
-  exports: [
-    AlertCandidateEvaluator,
-    DurableGroupingService,
-    Mf06IngestionEnqueueService,
-  ],
+  exports: [AlertCandidateEvaluator, DurableGroupingService, Mf06IngestionEnqueueService],
 })
 export class SafetyModule {}

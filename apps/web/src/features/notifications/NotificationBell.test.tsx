@@ -49,7 +49,7 @@ function Location() {
     </output>
   );
 }
-function mount(userId = 'worker-1') {
+function mount(userId = 'worker-1', onExpired = vi.fn()) {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -61,7 +61,7 @@ function mount(userId = 'worker-1') {
           sessionScope: 'synthetic-notification-session-scope',
           setAccessToken: vi.fn(),
           isSessionExpired: false,
-          triggerSessionExpired: vi.fn(),
+          triggerSessionExpired: onExpired,
           dismissSessionExpired: vi.fn(),
         }}
       >
@@ -348,6 +348,17 @@ describe('durable Web notification bell', () => {
     list.mockResolvedValue(page);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText(notification.title)).toBeTruthy();
+  });
+
+  it('leaves session expiry to the session transport instead of reacting to a stale 401', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockRejectedValue(
+      new ApiError('http', 'Unauthorized', 401),
+    );
+    const expired = vi.fn();
+    mount('worker-1', expired);
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications' }));
+    expect(await screen.findByText('Notifications are currently unavailable.')).toBeTruthy();
+    expect(expired).not.toHaveBeenCalled();
   });
 
   it('keeps the panel open with an error when marking read fails', async () => {

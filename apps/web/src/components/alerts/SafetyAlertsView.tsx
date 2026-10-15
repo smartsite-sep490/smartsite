@@ -1,3 +1,8 @@
+import { useManagementClient } from '../../features/auth/auth-session';
+import { SafetyOverviewView } from '../safety/SafetyOverviewView';
+import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
+import { AlertWorkContext } from '../safety/AlertWorkContext';
+import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
 import { SAFETY_NAMESPACE, translate as tr, uiLocale } from '../../i18n';
 import '../../i18n/ppe-catalog';
@@ -10,7 +15,6 @@ import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
-  SmartSiteManagementClient,
   type AccountResponse,
   type LoginResponse,
   type SafetyAlertResponse,
@@ -30,6 +34,7 @@ export interface SafetyAlertsViewProps {
   initialSiteId?: string;
   initialAlertId?: string;
   initialIncidentId?: string;
+  initialChecklistId?: string;
   initialActionId?: string;
   initialStatus?: 'ALL' | SafetyAlertStatus;
   initialType?: 'ALL' | SafetyAlertType;
@@ -165,12 +170,18 @@ function AlertRow({
   );
 }
 
-function initialWorkspaceTab(session: {
-  user: Pick<AccountResponse, 'roleAssignments'>;
-}): 'Alerts' | 'Incidents' | 'Safety Tasks' {
+type WorkspaceTab = 'Overview' | 'Alerts' | 'Incidents' | 'Checklists' | 'Safety Tasks';
+function initialWorkspaceTab(
+  session: {
+    user: Pick<AccountResponse, 'roleAssignments'>;
+  },
+  mainWorkspace = false,
+): WorkspaceTab {
   const roles = session.user.roleAssignments;
   return roles.some(({ role }) => role === 'SAFETY_OFFICER' || role === 'ADMIN')
-    ? 'Alerts'
+    ? mainWorkspace
+      ? 'Overview'
+      : 'Alerts'
     : roles.some(({ role }) => role === 'CONTRACTOR_REPRESENTATIVE')
       ? 'Incidents'
       : 'Safety Tasks';
@@ -183,6 +194,7 @@ export function SafetyAlertsView({
   initialSiteId,
   initialAlertId,
   initialIncidentId,
+  initialChecklistId,
   initialActionId,
   initialStatus,
   initialType,
@@ -191,24 +203,51 @@ export function SafetyAlertsView({
   useTranslation();
   const { t } = useLocale();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
-  const [workspaceTab, setWorkspaceTab] = useState<'Alerts' | 'Incidents' | 'Safety Tasks'>(
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(
     initialIncidentId
       ? 'Incidents'
-      : sharedSession !== undefined
-        ? sharedSession
-          ? initialWorkspaceTab({ user: sharedSession.user })
-          : 'Alerts'
-        : authenticatedSession
-          ? initialWorkspaceTab(authenticatedSession)
-          : 'Alerts',
+      : initialChecklistId
+        ? 'Checklists'
+        : initialAlertId || initialType || initialStatus
+          ? 'Alerts'
+          : sharedSession !== undefined
+            ? sharedSession
+              ? initialWorkspaceTab({ user: sharedSession.user })
+              : 'Alerts'
+            : authenticatedSession
+              ? initialWorkspaceTab(authenticatedSession, true)
+              : 'Alerts',
   );
+  const [relatedAlertFilter, setRelatedAlertFilter] = useState<RelatedAlertFilter>();
+  const [relatedChecklistFilter, setRelatedChecklistFilter] =
+    useState<import('../safety/safety-context').RelatedChecklistFilter>();
+  const [requestedChecklistId, setRequestedChecklistId] = useState(initialChecklistId ?? '');
+  const [createdIncidentId, setCreatedIncidentId] = useState('');
+  const [checklistDraft, setChecklistDraft] = useState<{ teamId: string; day: string }>();
+  const [incidentReturn, setIncidentReturn] = useState<'Overview' | 'Checklists'>();
+  const [previousChecklistLink, setPreviousChecklistLink] = useState(initialChecklistId);
+  if (previousChecklistLink !== initialChecklistId) {
+    setPreviousChecklistLink(initialChecklistId);
+    if (initialChecklistId) {
+      setRelatedChecklistFilter(undefined);
+      setChecklistDraft(undefined);
+      setRequestedChecklistId(initialChecklistId);
+      setWorkspaceTab('Checklists');
+    }
+  }
   const incidentLink = (initialIncidentId ?? '') + ':' + (initialActionId ?? '');
   const [previousIncidentLink, setPreviousIncidentLink] = useState(incidentLink);
   if (previousIncidentLink !== incidentLink) {
     setPreviousIncidentLink(incidentLink);
-    if (initialIncidentId) setWorkspaceTab('Incidents');
+    if (initialIncidentId) {
+      setCreatedIncidentId('');
+      setRelatedAlertFilter(undefined);
+      setRelatedChecklistFilter(undefined);
+      setIncidentReturn(undefined);
+      setWorkspaceTab('Incidents');
+    }
   }
   const [incidentSourceAlert, setIncidentSourceAlert] = useState('');
   const [mobileAlertDetail, setMobileAlertDetail] = useState(false);
@@ -325,6 +364,12 @@ export function SafetyAlertsView({
   const [prevInitialSiteId, setPrevInitialSiteId] = useState(initialSiteId);
   if (prevInitialSiteId !== initialSiteId) {
     setPrevInitialSiteId(initialSiteId);
+    setIncidentReturn(undefined);
+    setRelatedAlertFilter(undefined);
+    setChecklistDraft(undefined);
+    setRelatedChecklistFilter(undefined);
+    setRequestedChecklistId(initialChecklistId ?? '');
+    setCreatedIncidentId('');
     setRequestedSiteId(initialSiteId ?? '');
     setRequestedAlertId('');
     setMobileAlertDetail(false);
@@ -423,7 +468,13 @@ export function SafetyAlertsView({
     setIncidentSourceAlert('');
     if (incomingUser)
       setWorkspaceTab(
-        initialIncidentId ? 'Incidents' : initialWorkspaceTab({ user: incomingUser }),
+        initialIncidentId
+          ? 'Incidents'
+          : initialChecklistId
+            ? 'Checklists'
+            : initialAlertId || initialType || initialStatus
+              ? 'Alerts'
+              : initialWorkspaceTab({ user: incomingUser }, !hasSharedSession),
       );
   }
 
@@ -472,7 +523,11 @@ export function SafetyAlertsView({
         userId: result.user.id,
         sessionScope: freshScope,
       };
-      setWorkspaceTab(initialWorkspaceTab(result));
+      setWorkspaceTab(
+        initialAlertId || initialType || initialStatus
+          ? 'Alerts'
+          : initialWorkspaceTab(result, true),
+      );
       setSession(result);
       setSessionScope(freshScope);
       setIncidentSourceAlert('');
@@ -577,7 +632,16 @@ export function SafetyAlertsView({
   const canIncidents =
     Boolean(workflowUser) && (isGlobalAdmin || workflowSiteIds.has(selectedSiteId));
   const alerts = useQuery({
-    queryKey: ['safety-alerts', apiUrl, activeEffectiveScope, selectedSiteId, status, type, offset],
+    queryKey: [
+      'safety-alerts',
+      apiUrl,
+      activeEffectiveScope,
+      selectedSiteId,
+      status,
+      type,
+      offset,
+      relatedAlertFilter,
+    ],
     queryFn: ({ signal }) =>
       client.listSafetyAlerts(
         effectiveToken,
@@ -587,6 +651,7 @@ export function SafetyAlertsView({
           limit: alertPageSize,
           ...(status === 'ALL' ? {} : { status }),
           ...(type === 'ALL' ? {} : { type }),
+          ...(relatedAlertFilter ?? {}),
         },
         { signal },
       ),
@@ -836,6 +901,10 @@ export function SafetyAlertsView({
   }
 
   const handleLogout = useCallback(() => {
+    setIncidentReturn(undefined);
+    setRelatedAlertFilter(undefined);
+    setRelatedChecklistFilter(undefined);
+    setChecklistDraft(undefined);
     if (isControlled) {
       setControlled401Scope(activeEffectiveScope);
       if (activeEffectiveScope) removeSessionQueries(activeEffectiveScope);
@@ -1005,27 +1074,25 @@ export function SafetyAlertsView({
   }
 
   return (
-    <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-6 pb-10 text-[#2F3437]">
-      <header className="flex flex-wrap items-start justify-between gap-4 min-w-0">
+    <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-3 pb-10 text-[#2F3437]">
+      <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#6B6B6B]">
-            {tr('common.site_safety_workspace')}
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#111111]">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#111111]">
             {tr('common.safety_operations')}
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6B6B6B]">
-            {tr(
-              'safety_alerts_view.review_alerts_manage_corrective_work_and_verify_safety_tasks_for_your_site',
-            )}
-          </p>
         </div>
-        <div className="flex min-w-0 flex-wrap items-end gap-3">
-          <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
+        <div className="flex min-w-0 flex-wrap items-end gap-3 lg:max-w-[55%]">
+          <label className="min-w-0 w-full sm:w-72 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
             {tr('common.site_fa7955')}
             <select
               value={selectedSiteId}
               onChange={(event) => {
+                setRelatedAlertFilter(undefined);
+                setRelatedChecklistFilter(undefined);
+                setIncidentReturn(undefined);
+                setChecklistDraft(undefined);
+                setRequestedChecklistId('');
+                setCreatedIncidentId('');
                 setRequestedSiteId(event.target.value);
                 setMobileAlertDetail(false);
                 setIncidentSourceAlert('');
@@ -1058,7 +1125,7 @@ export function SafetyAlertsView({
         className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-2"
         aria-label={tr('common.safety_workspace')}
       >
-        {(['Alerts', 'Incidents', 'Safety Tasks'] as const).map((tab) => (
+        {(['Overview', 'Alerts', 'Incidents', 'Checklists', 'Safety Tasks'] as const).map((tab) => (
           <button
             type="button"
             key={'workspace-' + tab}
@@ -1066,7 +1133,8 @@ export function SafetyAlertsView({
             disabled={
               (tab === 'Alerts' && !canReviewSafetyAlerts) ||
               (tab === 'Incidents' && !canIncidents) ||
-              (tab === 'Safety Tasks' && (!canTasks || !workflowUser))
+              (tab === 'Checklists' && (!canIncidents || !workflowUser)) ||
+              ((tab === 'Safety Tasks' || tab === 'Overview') && (!canTasks || !workflowUser))
             }
             onClick={() => setWorkspaceTab(tab)}
             className={
@@ -1076,13 +1144,15 @@ export function SafetyAlertsView({
                 : 'text-[var(--text-secondary)] hover:bg-[var(--surface-bone)]')
             }
           >
-            {tr(
-              tab === 'Alerts'
-                ? 'common.alerts'
-                : tab === 'Incidents'
-                  ? 'common.incidents'
-                  : 'common.safety_tasks',
-            )}
+            {tab === 'Overview' || tab === 'Checklists'
+              ? localizedLabel(tab)
+              : tr(
+                  tab === 'Alerts'
+                    ? 'common.alerts'
+                    : tab === 'Incidents'
+                      ? 'common.incidents'
+                      : 'common.safety_tasks',
+                )}
           </button>
         ))}
       </nav>
@@ -1157,20 +1227,138 @@ export function SafetyAlertsView({
           </button>
         </div>
       )}
-      {!sites.error && !sites.isPending && sites.data && visibleSites.length === 0 && (
-        <p className="rounded-lg bg-white p-5 text-sm text-[#6B6B6B]">
-          {tr('safety_alerts_view.no_site_with_safety_workflow_access_is_assigned_to_this_account')}
-        </p>
-      )}
+      {!sites.error &&
+        !sites.isPending &&
+        sites.data &&
+        visibleSites.length === 0 &&
+        (workspaceTab === 'Alerts' || workflowUser) && (
+          <p className="rounded-lg bg-white p-5 text-sm text-[#6B6B6B]">
+            {tr(
+              'safety_alerts_view.no_site_with_safety_workflow_access_is_assigned_to_this_account',
+            )}
+          </p>
+        )}
 
       {workspaceTab !== 'Alerts' && !workflowUser && (
         <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
-          {t('ppe.sessionExpired.title')}. {t('ppe.error.metadata401')}
+          {tr('app.safety_full_account_required')}
         </p>
       )}
+      {selectedSiteId && canTasks && workflowUser && (
+        <section hidden={workspaceTab !== 'Overview'}>
+          <SafetyOverviewView
+            key={'overview' + activeEffectiveScope + selectedSiteId}
+            client={client}
+            apiUrl={apiUrl}
+            scope={activeEffectiveScope}
+            token={effectiveToken}
+            siteId={selectedSiteId}
+            user={workflowUser}
+            active={workspaceTab === 'Overview'}
+            canAlerts={!!canReviewSafetyAlerts}
+            canAssign={workflowUser.roleAssignments.some(
+              (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
+            )}
+            onAlerts={(filter) => {
+              setRelatedAlertFilter(filter);
+              setStatus('ALL');
+              setType('ALL');
+              setRequestedAlertId('');
+              setOffset(0);
+              setWorkspaceTab('Alerts');
+            }}
+            onViewChecklists={(teamId, day, name) => {
+              setRelatedChecklistFilter({
+                teamId,
+                fromDate: day,
+                toDate: day,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                caption: name + ' · ' + day,
+              });
+              setRequestedChecklistId('');
+              setWorkspaceTab('Checklists');
+            }}
+            onChecklist={(teamId, day) => {
+              setChecklistDraft({ teamId, day });
+              setWorkspaceTab('Checklists');
+            }}
+          />
+        </section>
+      )}
+      {selectedSiteId && canIncidents && workflowUser && (
+        <section hidden={workspaceTab !== 'Checklists'}>
+          <SafetyChecklistsView
+            key={JSON.stringify([
+              activeEffectiveScope,
+              selectedSiteId,
+              requestedChecklistId,
+              relatedChecklistFilter?.teamId,
+              relatedChecklistFilter?.fromDate,
+              relatedChecklistFilter?.toDate,
+              relatedChecklistFilter?.timezone,
+            ])}
+            client={client}
+            apiUrl={apiUrl}
+            scope={activeEffectiveScope}
+            token={effectiveToken}
+            siteId={selectedSiteId}
+            user={workflowUser}
+            active={workspaceTab === 'Checklists'}
+            context={relatedChecklistFilter}
+            onClearContext={() => setRelatedChecklistFilter(undefined)}
+            onBackToOverview={() => setWorkspaceTab('Overview')}
+            initialChecklistId={requestedChecklistId}
+            draft={checklistDraft}
+            onDraftConsumed={() => setChecklistDraft(undefined)}
+            onIncident={(id) => {
+              setIncidentReturn('Checklists');
+              setCreatedIncidentId(id);
+              setIncidentSourceAlert('');
+              setWorkspaceTab('Incidents');
+            }}
+          />
+        </section>
+      )}
+      {workspaceTab === 'Alerts' && relatedAlertFilter && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-bone)] p-3">
+          <p className="text-sm">
+            {tr('safety_workspace.related_alerts_value1', { value1: relatedAlertFilter.caption })}
+          </p>
+          <div className="flex gap-2">
+            <button
+              className="text-sm font-semibold underline"
+              onClick={() => setWorkspaceTab('Overview')}
+            >
+              {tr('safety_workspace.back_to_overview')}
+            </button>
+            <button
+              className="text-sm font-semibold underline"
+              onClick={() => {
+                setRelatedAlertFilter(undefined);
+                setOffset(0);
+              }}
+            >
+              {tr('safety_workspace.clear_context_filter')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {selectedSiteId && workspaceTab === 'Incidents' && canIncidents && workflowUser && (
         <IncidentView
-          initialIncidentId={initialIncidentId}
+          onBack={incidentReturn ? () => setWorkspaceTab(incidentReturn) : undefined}
+          backLabel={
+            incidentReturn === 'Overview'
+              ? tr('safety_workspace.back_to_overview')
+              : tr('safety_workspace.back_to_checklists')
+          }
+          onOpenChecklist={(id) => {
+            setRelatedChecklistFilter(undefined);
+            setChecklistDraft(undefined);
+            setRequestedChecklistId(id);
+            setWorkspaceTab('Checklists');
+          }}
+          initialIncidentId={createdIncidentId || initialIncidentId}
           initialActionId={initialActionId}
           key={activeEffectiveScope + selectedSiteId}
           client={client}
@@ -1410,6 +1598,18 @@ export function SafetyAlertsView({
                         <TechnicalDetails>
                           {tr('common.observation')} <span>{detection.eventId}</span>
                         </TechnicalDetails>
+                        {workflowUser && (
+                          <AlertWorkContext
+                            client={client}
+                            apiUrl={apiUrl}
+                            scope={activeEffectiveScope}
+                            token={effectiveToken}
+                            siteId={selectedSiteId}
+                            user={workflowUser}
+                            alertId={detail.data.id}
+                            revision={detail.data.revision}
+                          />
+                        )}
                         <SafetyAlertEvidencePanel
                           client={client}
                           apiUrl={apiUrl}
@@ -1559,6 +1759,7 @@ export function SafetyAlertsView({
                       type="button"
                       className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
                       onClick={() => {
+                        setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
                         setIncidentSourceAlert(detail.data!.id);
                         setWorkspaceTab('Incidents');
                       }}

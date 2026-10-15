@@ -41,3 +41,7 @@ R2 thật chưa được test trong đợt triển khai trước khi bạn cấp
 ## Kiểm chứng mới — 06/10/2026
 
 Neon/R2 đã smoke bằng một JPEG tổng hợp qua Report handling outcome trên Web: lưu R2, metadata Neon đúng provider/size/hash, ảnh đọc qua Backend có authentication; các test HTTP no-store/quyền/rollback trên PostgreSQL riêng đạt. Object tổng hợp và hồ sơ test của lượt mới đã dọn theo ID; ảnh/hồ sơ người dùng không bị xóa. Đây là kiểm chứng ảnh kết quả Incident, không thay đổi adapter camera/Face hoặc di chuyển ảnh Local cũ.
+
+## Checklist evidence
+
+Checklist dùng cùng adapter/storage metadata với Incident: JPEG/PNG/PDF tối đa 5 MiB/file, 3 file/mục, 20 MiB/lần nộp; Incident/SafetyTask vẫn JPEG 1 MiB. PDF tải qua Backend có authentication/no-store/nosniff, không public bucket. Xem kịch bản trong [Safety workflow](../../contracts/mf08-safety-workflow.md#test-tay-trên-web).

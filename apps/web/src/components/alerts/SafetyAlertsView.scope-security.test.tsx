@@ -322,6 +322,7 @@ describe('Safety Alerts suppress stale protected content after scope revalidatio
     await user.type(screen.getByLabelText('Username'), 'fixture');
     await user.type(screen.getByLabelText('Password'), 'fixture-password');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(await screen.findByRole('button', { name: 'Alerts' }));
     await screen.findByText(eventId);
     vi.mocked(SmartSiteManagementClient.prototype.getSafetyAlert).mockRejectedValue(
       new ApiError('http', 'Expired', 401),
@@ -553,6 +554,7 @@ describe('Safety Alerts suppress stale protected content after scope revalidatio
     await user.type(screen.getByLabelText(/Username/i), 'fixture.admin');
     await user.type(screen.getByLabelText(/Password/i), 'synthetic-password');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(await screen.findByRole('button', { name: 'Alerts' }));
     await screen.findByText(eventId);
     await user.click(screen.getByRole('button', { name: 'View Frame' }));
     await screen.findByRole('button', { name: 'Sign in' });

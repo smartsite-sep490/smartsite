@@ -445,6 +445,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               </div>
             </div>
 
+            <button type="button" onClick={() => navigate('/account/password')} className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2" title={tr('auth.password.title')} aria-label={tr('auth.password.title')}>
+              <IconKey className="w-4 h-4" />
+            </button>
             {/* Logout Button */}
             <button
               type="button"

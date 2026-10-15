@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 
 import { WorkforceScheduleTab } from './WorkforceScheduleTab';
 import { WorkforceManagerReviewTab } from './WorkforceManagerReviewTab';
@@ -60,6 +59,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const resolvedApiUrl = apiUrlProp || apiUrl;
+  const client = useManagementClient(resolvedApiUrl);
   const { accessToken } = useAuth();
 
   // 1. Fetch authenticated user profile via /auth/me
@@ -81,7 +81,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
   const sitesQuery = useQuery({
     queryKey: ['workforce', resolvedApiUrl, 'sites'],
     queryFn: () =>
-      new SmartSiteManagementClient(resolvedApiUrl).listSites(accessToken!, {
+      client.listSites(accessToken!, {
         limit: 100,
       }),
     enabled: !!accessToken && isGlobalAdmin && !userLoading,

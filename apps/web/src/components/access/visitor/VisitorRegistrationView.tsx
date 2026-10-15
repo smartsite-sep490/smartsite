@@ -1,11 +1,11 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../../i18n/messages';
 import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CreateVisitCommand } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import {
@@ -39,7 +39,7 @@ export function VisitorRegistrationView({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [reference, setReference] = useState(readReference);
   const [siteId, setSiteId] = useState('');
   const [message, setMessage] = useState('');

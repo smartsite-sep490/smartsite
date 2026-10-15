@@ -4,6 +4,7 @@ export { registerSessionCredential, unregisterSessionCredential } from './sessio
 export type { Mf05DemoStatus } from './mf05-demo';
 export { parseMf05DemoStatus } from './mf05-demo';
 export type {
+  ManagementSession,
   PageOptions,
   SafetyAlertListOptions,
   ZoneEntryDecisionListOptions,
@@ -134,6 +135,7 @@ export const BACKEND_ERROR_CODES = [
   'INTERNAL_SERVER_ERROR',
   'HTTP_ERROR',
   'VALIDATION_FAILED',
+  'PASSWORD_CHANGE_REQUIRED',
   'INVALID_JSON',
   'AI_EVENT_ID_CONFLICT',
   'AI_INGESTION_UNAVAILABLE',

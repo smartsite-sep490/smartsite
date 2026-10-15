@@ -6,7 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
 import { SiteSetupView } from './components/SiteSetupView';
 
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'admin-token' }),
   useCurrentUser: () => ({
     data: { id: 'admin', roleAssignments: [{ role: 'ADMIN', siteId: null }] },

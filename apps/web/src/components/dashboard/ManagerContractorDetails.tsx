@@ -2,10 +2,9 @@ import { localizedError } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../features/auth/auth-session';
 import { Dialog, SmartDatePicker } from '../ui';
 
 function today() {
@@ -28,7 +27,7 @@ export function ManagerContractorDetails({
 
   const { accessToken } = useAuth();
   const { data: user } = useCurrentUser(apiUrl);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [date, setDate] = useState(today);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const detail = useQuery({

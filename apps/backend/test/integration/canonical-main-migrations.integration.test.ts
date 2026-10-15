@@ -12,23 +12,41 @@ import { loadMainRecoveryMigrations } from '../support/main-recovery-profile.js'
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
-for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as const) {
+for (const profile of [
+  'fresh',
+  'populated-release54',
+  'populated-main35',
+  'populated-legacy24',
+] as const) {
   test(
-    `canonical MAIN39 ${profile}: preserve existing data/DENY, no consent or READY adoption`,
+    `canonical current Main plus Safety ${profile}: preserve existing data/DENY, no consent or READY adoption`,
     {
       timeout: 60_000,
-      skip: repository && snapshot ? false : 'Explicit approved MAIN snapshot required',
+      skip:
+        profile === 'populated-main35'
+          ? repository && snapshot
+            ? false
+            : 'Explicit approved MAIN snapshot required'
+          : !process.env.TEST_DATABASE_URL,
     },
     async (t) => {
-      assert.ok(repository && snapshot);
       const isolated = createIsolatedTestDatabase({ canonical: true });
       const db = isolated.dataSource;
       const production = db.options.migrations;
-      if (profile === 'populated-main35')
+      assert(Array.isArray(production));
+      if (profile === 'populated-release54')
+        db.setOptions({
+          migrations: production.filter(
+            (migration) =>
+              typeof migration !== 'function' || migration.name !== 'SafetyChecklists1792195200000',
+          ),
+        });
+      else if (profile === 'populated-main35') {
+        assert.ok(repository && snapshot);
         db.setOptions({
           migrations: (await loadMainRecoveryMigrations(repository, snapshot)).slice(0, 35),
         });
-      else if (profile === 'populated-legacy24')
+      } else if (profile === 'populated-legacy24')
         db.setOptions({ migrations: [...LEGACY_TEST_MIGRATIONS] });
       t.after(() => isolated.dispose());
       await isolated.initialize();
@@ -94,6 +112,12 @@ for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as con
                   profile === 'populated-legacy24' &&
                   table === 'face_profile' &&
                   ['status', 'revoked_at'].includes(c.column_name)
+                ) &&
+                // Current Main deliberately clears historical password-change requirements.
+                !(
+                  ['populated-main35', 'populated-legacy24'].includes(profile) &&
+                  table === 'app_user' &&
+                  c.column_name === 'must_change_password'
                 ),
             )
             .map((c) => c.column_name);
@@ -105,7 +129,10 @@ for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as con
         db.setOptions({ migrations: production });
         await db.initialize();
         const applied = await db.runMigrations();
-        assert.equal(applied.length, profile === 'populated-main35' ? 4 : 16);
+        assert.equal(
+          applied.length,
+          profile === 'populated-release54' ? 1 : profile === 'populated-main35' ? 20 : 32,
+        );
         for (const { table, fields, rows } of inventory)
           assert.deepEqual(
             await db.query(
@@ -115,7 +142,7 @@ for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as con
             table,
           );
       }
-      assert.equal(db.migrations.length, 39);
+      assert.equal(db.migrations.length, 55);
       assert.equal(await new DatabaseService(db).isReady(), true);
       assert.deepEqual(await db.runMigrations(), []);
       const applied: { name: string }[] = await db.query(
@@ -132,7 +159,7 @@ for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as con
           1,
         );
       }
-      assert.equal(applied.length, profile === 'populated-legacy24' ? 40 : 39);
+      assert.equal(applied.length, profile === 'populated-legacy24' ? 56 : 55);
       assert.equal(
         (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
           .epoch_id,
@@ -144,9 +171,32 @@ for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as con
         'mf06_authority_head',
         'safety_face_consent',
         'safety_face_consent_revocation',
-      ])
-        assert.equal(Number((await db.query(`SELECT count(*) n FROM ${table}`))[0].n), 0, table);
+      ]) {
+        const retained =
+          profile === 'populated-release54'
+            ? (inventory.find((entry) => entry.table === table)?.rows.length ?? 0)
+            : profile !== 'fresh' && ['mf06_authority_fact', 'mf06_authority_head'].includes(table)
+              ? 1
+              : 0;
+        assert.equal(
+          Number((await db.query(`SELECT count(*) n FROM ${table}`))[0].n),
+          retained,
+          table,
+        );
+      }
       if (profile !== 'fresh') {
+        if (profile !== 'populated-release54') {
+          const facts = await db.query(
+            'SELECT source_kind,source_id,operation,epoch_id,before_payload,after_payload FROM mf06_authority_fact',
+          );
+          assert.equal(facts.length, 1);
+          assert.equal(facts[0].source_kind, 'USER_ACCOUNT');
+          assert.equal(facts[0].source_id, actor);
+          assert.equal(facts[0].operation, 'UPDATE');
+          assert.equal(facts[0].epoch_id, null);
+          assert.equal(facts[0].before_payload.must_change_password, true);
+          assert.equal(facts[0].after_payload.must_change_password, false);
+        }
         const [metadata] = await db.query(
           'SELECT status,consent_method,consent_version,safety_revision FROM face_profile WHERE id=$1',
           [face],
@@ -156,6 +206,12 @@ for (const profile of ['fresh', 'populated-main35', 'populated-legacy24'] as con
         assert.equal(metadata.consent_version, 'legacy-only');
         assert.match(metadata.safety_revision, /^[0-9a-f-]{36}$/);
         if (profile === 'populated-legacy24') {
+          assert.equal(
+            (await db.query('SELECT must_change_password FROM app_user WHERE id=$1', [actor]))[0]
+              .must_change_password,
+            false,
+            'Retain Main optional-password migration',
+          );
           const [legacy] = await db.query(
             'SELECT revoked_at IS NOT NULL AND isfinite(revoked_at) AS revoked FROM face_profile WHERE id=$1',
             [face],

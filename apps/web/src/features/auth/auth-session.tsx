@@ -1,35 +1,33 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
-import {
-  SmartSiteManagementClient,
-  type AccountResponse,
-  ApiError,
-  registerSessionCredential,
-  unregisterSessionCredential,
-} from '@smartsite/api-client';
+import { useTranslation } from 'react-i18next';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { SmartSiteManagementClient, ApiError, type AccountResponse } from '@smartsite/api-client';
 import {
   createContext,
   useContext,
-  useState,
   useEffect,
   useLayoutEffect,
   useCallback,
+  useMemo,
   useRef,
   useId,
+  useSyncExternalStore,
 } from 'react';
+import { WebSession } from './web-session';
 
-// Create a context for the auth state so we don't have to prop-drill the token
 type AuthState = {
+  manager?: WebSession;
+  epoch?: number;
+  logoutUnconfirmed?: boolean;
+  passwordChanged?: boolean;
   accessToken: string | null;
-  sessionScope: string;
+  sessionScope?: string;
   mustChangePassword?: boolean;
   setAccessToken: (token: string | null) => void;
   isSessionExpired: boolean;
   triggerSessionExpired: (expiredScope?: string) => void;
   dismissSessionExpired: () => void;
 };
-
 export const AuthContext = createContext<AuthState>({
   accessToken: null,
   sessionScope: '',
@@ -39,161 +37,80 @@ export const AuthContext = createContext<AuthState>({
   dismissSessionExpired: () => {},
 });
 
-// Keep request ordering private to the auth feature, separate from the public
-// AuthContext used by feature tests and shared-session adapters.
-const AuthLifecycleContext = createContext<{
-  canRestoreSession: boolean;
-  beginChange: () => number;
-  beginLogin: () => number;
-  revision: () => number;
-  isCurrent: (revision: number) => boolean;
-}>({
-  canRestoreSession: true,
-  beginChange: () => 0,
-  beginLogin: () => 0,
-  revision: () => 0,
-  isCurrent: (revision: number) => revision === 0,
-});
-
-const logoutIntentKey = (apiUrl: string) => `smartsite:logout:${apiUrl.replace(/\/+$/, '')}`;
-function hasLogoutIntent(apiUrl: string): boolean {
-  try {
-    return sessionStorage.getItem(logoutIntentKey(apiUrl)) === '1';
-  } catch {
-    return false;
-  }
-}
-function rememberLogoutIntent(apiUrl: string, requested: boolean) {
-  try {
-    if (requested) sessionStorage.setItem(logoutIntentKey(apiUrl), '1');
-    else sessionStorage.removeItem(logoutIntentKey(apiUrl));
-  } catch {
-    // Storage can be unavailable; in-memory request ordering still applies.
-  }
-}
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children,
+  apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+}: {
+  children: React.ReactNode;
+  apiUrl?: string;
+}) {
   const queryClient = useQueryClient();
-  const [accessToken, setAccessTokenState] = useState<string | null>(null);
-  const [sessionScope, setSessionScope] = useState<string>('');
-  const [isSessionExpired, setIsSessionExpired] = useState(false);
-  const sessionScopeRef = useRef<string>('');
-  const tokenRef = useRef<string | null>(null);
-  const revisionRef = useRef(0);
-  const [canRestoreSession, setCanRestoreSession] = useState(true);
-  const revision = useCallback(() => revisionRef.current, []);
-  const isCurrent = useCallback(
-    (capturedRevision: number) => capturedRevision === revisionRef.current,
-    [],
-  );
-  const beginChange = useCallback(() => {
-    setCanRestoreSession(false);
-    return ++revisionRef.current;
-  }, []);
-  const clearPrivateQueries = useCallback(() => {
-    const filter = {
-      predicate: (query: { queryKey: readonly unknown[] }) =>
-        !(query.queryKey[0] === 'auth' && query.queryKey[1] === 'session'),
-    };
-    void queryClient.cancelQueries(filter);
-    queryClient.removeQueries(filter);
-  }, [queryClient]);
-
+  const manager = useMemo(() => new WebSession(apiUrl), [apiUrl]);
+  const state = useSyncExternalStore(manager.subscribe, manager.getSnapshot);
+  const sessionScope = state.sessionScope;
+  useEffect(() => {
+    let epoch = manager.getSnapshot().epoch;
+    const unsubscribe = manager.subscribe(() => {
+      if (epoch === manager.getSnapshot().epoch) return;
+      epoch = manager.getSnapshot().epoch;
+      void queryClient.cancelQueries();
+      queryClient.clear();
+    });
+    return unsubscribe;
+  }, [manager, queryClient]);
   const setAccessToken = useCallback(
-    (token: string | null) => {
-      beginChange();
-      clearPrivateQueries();
-      if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
-      tokenRef.current = token;
-      setAccessTokenState(token);
-      const newScope = token ? crypto.randomUUID() : '';
-      setSessionScope(newScope);
-      sessionScopeRef.current = newScope;
-      if (token) registerSessionCredential(token, newScope);
-    },
-    [beginChange, clearPrivateQueries],
+    (token: string | null) => manager.setAccessToken(token),
+    [manager],
   );
-
-  const beginLogin = useCallback(() => {
-    const nextRevision = beginChange();
-    clearPrivateQueries();
-    if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
-    tokenRef.current = null;
-    sessionScopeRef.current = '';
-    setAccessTokenState(null);
-    setSessionScope('');
-    return nextRevision;
-  }, [beginChange, clearPrivateQueries]);
-
   const triggerSessionExpired = useCallback(
-    (expiredScope?: string) => {
-      // Guard late previous-session 401: if an expiredScope was provided and it doesn't match the current active scope, ignore it!
-      if (expiredScope !== undefined && expiredScope !== sessionScopeRef.current) {
-        return;
-      }
-      if (tokenRef.current === null) return;
-      beginChange();
-      clearPrivateQueries();
-      queryClient.removeQueries({ queryKey: ['auth', 'session'] });
-      queryClient.getMutationCache().clear();
-      if (tokenRef.current !== null) setIsSessionExpired(true);
-      if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
-      tokenRef.current = null;
-      setAccessTokenState(null);
-      setSessionScope('');
-      sessionScopeRef.current = '';
+    (expiredScope = sessionScope) => {
+      const token = manager.getSnapshot().token;
+      if (!token || !expiredScope || expiredScope !== manager.getSnapshot().sessionScope) return;
+      manager.adapter().onUnauthorized(token);
     },
-    [beginChange, clearPrivateQueries, queryClient],
+    [manager, sessionScope],
   );
-
-  const dismissSessionExpired = useCallback(() => {
-    setIsSessionExpired(false);
-  }, []);
-
+  const dismissSessionExpired = useCallback(() => manager.dismissExpired(), [manager]);
   useLayoutEffect(() => {
-    const handleExpiredEvent = (event: Event) => {
-      if (!sessionScopeRef.current) return;
-      if (event instanceof CustomEvent && event.detail != null) {
-        const detail: unknown = event.detail;
-        if (detail === null || typeof detail !== 'object' || !('sessionScopes' in detail)) return;
-        const scopes = detail.sessionScopes;
-        if (!Array.isArray(scopes) || !scopes.includes(sessionScopeRef.current)) return;
-      }
-      triggerSessionExpired();
+    manager.connect();
+    const expired = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object')
+        return;
+      const scopes: unknown = event.detail.sessionScopes;
+      const currentScope = manager.getSnapshot().sessionScope;
+      const token = manager.getSnapshot().token;
+      if (token && currentScope && Array.isArray(scopes) && scopes.includes(currentScope))
+        manager.adapter().onUnauthorized(token);
     };
-    // Restore the binding after React's development StrictMode effect replay.
-    if (tokenRef.current) registerSessionCredential(tokenRef.current, sessionScopeRef.current);
-    window.addEventListener('smartsite:session-expired', handleExpiredEvent);
+    window.addEventListener('smartsite:session-expired', expired);
     return () => {
-      window.removeEventListener('smartsite:session-expired', handleExpiredEvent);
-      if (tokenRef.current) unregisterSessionCredential(tokenRef.current, sessionScopeRef.current);
+      window.removeEventListener('smartsite:session-expired', expired);
+      manager.dispose();
     };
-  }, [triggerSessionExpired]);
-
+  }, [manager]);
   return (
-    <AuthLifecycleContext.Provider
-      value={{ canRestoreSession, beginChange, beginLogin, revision, isCurrent }}
+    <AuthContext.Provider
+      value={{
+        manager,
+        epoch: state.epoch,
+        logoutUnconfirmed: state.logoutUnconfirmed,
+        passwordChanged: state.passwordChanged,
+        accessToken: state.token,
+        sessionScope,
+        setAccessToken,
+        isSessionExpired: state.expired,
+        triggerSessionExpired,
+        dismissSessionExpired,
+      }}
     >
-      <AuthContext.Provider
-        value={{
-          accessToken,
-          sessionScope,
-          setAccessToken,
-          isSessionExpired,
-          triggerSessionExpired,
-          dismissSessionExpired,
-        }}
-      >
-        {children}
-      </AuthContext.Provider>
-    </AuthLifecycleContext.Provider>
+      {children}
+    </AuthContext.Provider>
   );
 }
 export function useAuth() {
   return useContext(AuthContext);
 }
 
-// ── Session Expired Luxury Modal ──────────────────────────────────────────────
 export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLogin: () => void }) {
   useTranslation();
   const titleId = useId();
@@ -285,129 +202,110 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
 
 // Queries and Mutations
 
-export function useRestoreSession(apiUrl: string) {
-  const { setAccessToken } = useAuth();
-  const lifecycle = useContext(AuthLifecycleContext);
+export function useManagementClient(apiUrl: string) {
+  const { manager, epoch } = useAuth();
+  return useMemo(
+    () => new SmartSiteManagementClient(apiUrl, manager?.adapter(epoch)),
+    [apiUrl, manager, epoch],
+  );
+}
 
+export function useRestoreSession(apiUrl: string) {
+  const { manager, epoch, accessToken, setAccessToken } = useAuth();
   return useQuery({
-    queryKey: ['auth', 'session', apiUrl],
+    queryKey: ['auth', 'session', apiUrl, epoch ?? 0],
+    enabled: !accessToken && (!manager || manager.canRestore()),
     queryFn: async ({ signal }) => {
-      if (hasLogoutIntent(apiUrl)) {
-        setAccessToken(null);
-        return null;
-      }
-      const capturedRevision = lifecycle.revision();
-      const client = new SmartSiteManagementClient(apiUrl);
+      if (manager) return (await manager.restore()) ? true : null;
       try {
-        const response = await client.refresh('WEB');
-        if (signal.aborted || !lifecycle.isCurrent(capturedRevision)) return null;
-        setAccessToken(response.accessToken);
-        return true;
-      } catch (error) {
-        if (!signal.aborted && lifecycle.isCurrent(capturedRevision)) setAccessToken(null);
-        throw error;
+        if (
+          sessionStorage.getItem('smartsite:signed-out') ||
+          sessionStorage.getItem(`smartsite:logout:${apiUrl.replace(/\/+$/, '')}`)
+        )
+          return null;
+      } catch {
+        /* Storage may be disabled; the in-memory provider remains authoritative. */
       }
+      const response = await new SmartSiteManagementClient(apiUrl).refresh('WEB', undefined, {
+        signal,
+      });
+      if (signal.aborted) return null;
+      setAccessToken(response.accessToken);
+      return true;
     },
-    enabled: lifecycle.canRestoreSession,
-    retry: false, // Don't retry if the refresh token is missing or invalid
-    staleTime: Infinity, // Only run once on mount
-    refetchOnWindowFocus: false, // Prevent refetching on window tab focus when unauthenticated
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
 }
 
 export function useLogin(apiUrl: string) {
-  const { setAccessToken, dismissSessionExpired } = useAuth();
+  const { manager, setAccessToken, dismissSessionExpired } = useAuth();
   const queryClient = useQueryClient();
-  const lifecycle = useContext(AuthLifecycleContext);
-
   return useMutation({
     gcTime: 0,
     mutationFn: async ({ username, password }: { username: string; password: string }) => {
-      const capturedRevision = lifecycle.beginLogin();
-      await queryClient.cancelQueries({ queryKey: ['auth', 'session'] });
-      const client = new SmartSiteManagementClient(apiUrl);
-      const data = await client.login(username, password, 'WEB');
-      if (!lifecycle.isCurrent(capturedRevision))
-        throw new ApiError('cancelled', 'Sign-in cancelled.');
-      rememberLogoutIntent(apiUrl, false);
+      const response = manager
+        ? await manager.login(username, password)
+        : await new SmartSiteManagementClient(apiUrl).login(username, password, 'WEB');
+      try {
+        sessionStorage.removeItem('smartsite:signed-out');
+        sessionStorage.removeItem(`smartsite:logout:${apiUrl.replace(/\/+$/, '')}`);
+      } catch {
+        /* Authentication does not require browser storage. */
+      }
+      if (!manager) {
+        queryClient.clear();
+        setAccessToken(response.accessToken);
+      }
       dismissSessionExpired();
-      setAccessToken(data.accessToken);
-      // The bootstrap query needs only a marker, never a profile or token.
-      queryClient.setQueryData(['auth', 'session', apiUrl], true);
-      return data.user;
+      queryClient.setQueryData(
+        ['auth', 'session', apiUrl, manager?.getSnapshot().epoch ?? 0],
+        true,
+      );
+      return response.user;
     },
   });
 }
 
 export function useLogout(apiUrl: string) {
-  const { setAccessToken, dismissSessionExpired } = useAuth();
+  const { manager, setAccessToken, dismissSessionExpired } = useAuth();
   const queryClient = useQueryClient();
-  const lifecycle = useContext(AuthLifecycleContext);
-
   return useMutation({
     gcTime: 0,
-    onMutate: () => {
-      lifecycle.beginChange();
-      rememberLogoutIntent(apiUrl, true);
+    mutationFn: async () => {
+      if (manager) return manager.logout();
+      try {
+        sessionStorage.setItem('smartsite:signed-out', 'true');
+        sessionStorage.setItem(`smartsite:logout:${apiUrl.replace(/\/+$/, '')}`, '1');
+      } catch {
+        /* Local credentials still clear synchronously below. */
+      }
       dismissSessionExpired();
       setAccessToken(null);
+      void queryClient.cancelQueries();
       queryClient.clear();
-      queryClient.setQueryData(['auth', 'session', apiUrl], null);
-    },
-    mutationFn: async () => {
-      const client = new SmartSiteManagementClient(apiUrl);
-      return client.logout('WEB');
+      return new SmartSiteManagementClient(apiUrl).logout('WEB');
     },
   });
 }
 
-/**
- * useCurrentUser — fetches the authenticated user profile via GET /auth/me.
- *
- * Use this anywhere you need the user's role assignments or display name.
- * It will correctly re-fetch after a hard refresh once the accessToken is restored
- * by useRestoreSession. Never use useQuery(['auth','session']) without a queryFn
- * to read user data.
- */
 export function useCurrentUser(apiUrl: string) {
   const { accessToken, sessionScope, triggerSessionExpired } = useAuth();
-  const queryClient = useQueryClient();
-  const prevScopeRef = useRef(sessionScope);
-
-  useEffect(() => {
-    if (prevScopeRef.current && prevScopeRef.current !== sessionScope) {
-      queryClient.removeQueries({ queryKey: ['auth', 'me', apiUrl, prevScopeRef.current] });
-    }
-    prevScopeRef.current = sessionScope;
-  }, [apiUrl, sessionScope, queryClient]);
-
+  const client = useManagementClient(apiUrl);
   return useQuery<AccountResponse>({
     queryKey: ['auth', 'me', apiUrl, sessionScope],
-    queryFn: async () => {
-      const scopeAtCall = sessionScope;
+    queryFn: async ({ signal }) => {
       try {
-        return await new SmartSiteManagementClient(apiUrl).me(accessToken!);
-      } catch (err: unknown) {
-        if (err instanceof ApiError && err.status === 401) {
-          triggerSessionExpired(scopeAtCall);
-        } else if (
-          typeof err === 'object' &&
-          err !== null &&
-          ('status' in err || 'statusCode' in err)
-        ) {
-          const status =
-            (err as { status?: number; statusCode?: number }).status ??
-            (err as { statusCode?: number }).statusCode;
-          if (status === 401) {
-            triggerSessionExpired(scopeAtCall);
-          }
-        }
-        throw err;
+        return await client.me(accessToken!, { signal });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) triggerSessionExpired(sessionScope);
+        throw error;
       }
     },
-    enabled: !!accessToken && !!sessionScope,
-    staleTime: 5 * 60 * 1000, // 5 min — role assignments rarely change during a session
+    enabled: !!accessToken,
+    staleTime: 5 * 60 * 1000,
     retry: false,
   });
 }

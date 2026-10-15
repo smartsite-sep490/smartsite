@@ -1,9 +1,10 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
+import { ApiError } from '@smartsite/api-client';
 import { IconCamera, IconCheck, IconShield, IconUsers } from '../../icons';
 import { captureFrameBlob, createSafePreviewUrl, revokeSafePreviewUrl } from './faceGateUtils';
 import { GateCameraSession } from './gateCameraSession';
@@ -136,7 +137,7 @@ export function WorkerEnrollmentView({
 }: WorkerEnrollmentViewProps) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const [accountId, setAccountId] = useState('');
   const [directWorkerId, setDirectWorkerId] = useState('');

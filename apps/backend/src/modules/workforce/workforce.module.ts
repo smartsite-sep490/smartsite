@@ -32,6 +32,7 @@ import { SiteAccessSetupQueryService } from './site-access-setup-query.service.j
     WorkforceIdentityModule,
     MainZonePermissionCommandService,
     SiteAccessSetupQueryService,
+    WorkforceManagementModule,
   ],
 })
 export class WorkforceModule {}

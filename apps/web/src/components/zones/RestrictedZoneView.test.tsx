@@ -513,6 +513,18 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     });
   }
 
+  it('uses the application session and does not log out when leaving zone configuration', async () => {
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <RestrictedZoneView authenticatedSession={mockAdminLogin} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(listRegionsSpy).toHaveBeenCalled());
+    expect(SmartSiteManagementClient.prototype.login).not.toHaveBeenCalled();
+    view.unmount();
+    expect(SmartSiteManagementClient.prototype.logout).not.toHaveBeenCalled();
+  });
+
   it('Admin login loads real-shaped Site/Camera/Region responses and displays server synced state', async () => {
     const user = userEvent.setup();
 

@@ -159,6 +159,31 @@ export class SafetyWorkflowService {
     });
     return value ?? missing();
   }
+  async checklistIncidentReferences(
+    manager: EntityManager,
+    actor: AuthenticatedUser,
+    siteId: string,
+    resultIds: string[],
+  ) {
+    if (!resultIds.length) return [];
+    const full = this.fullIncident(actor, siteId);
+    const contractors = full
+      ? []
+      : await this.workforce.incidentRepresentativeContractors(manager, siteId, actor.id);
+    if (!full && !contractors.length) return [];
+    return manager.query(
+      `SELECT i.source_checklist_result_id AS "resultId",i.id,i.title,i.status FROM incident i
+      WHERE i.site_id=$1 AND i.source_checklist_result_id=ANY($2::uuid[]) AND ($3::boolean OR (i.contractor_id=ANY($4::uuid[]) AND EXISTS(SELECT 1 FROM corrective_action a WHERE a.incident_id=i.id AND a.assigned_to=$5 AND a.superseded_at IS NULL)))`,
+      [siteId, resultIds, full, contractors, actor.id],
+    ) as Promise<
+      {
+        resultId: string;
+        id: string;
+        title: string;
+        status: import('@smartsite/contracts').IncidentStatus;
+      }[]
+    >;
+  }
   private async task(
     manager: EntityManager,
     siteId: string,
@@ -297,10 +322,19 @@ export class SafetyWorkflowService {
       workerIds,
     );
     const zoneName = await this.zones.referenceName(incident.siteId, incident.zoneId);
+    const sourceRows =
+      full && incident.sourceChecklistResultId
+        ? ((await manager.query(
+            `SELECT a.id AS "assignmentId",a.description,item.text AS "itemText",r.note FROM safety_checklist_item_result r JOIN safety_checklist_item item ON item.id=r.item_id JOIN safety_checklist_assignment a ON a.id=r.assignment_id WHERE r.id=$1 AND a.site_id=$2`,
+            [incident.sourceChecklistResultId, incident.siteId],
+          )) as { assignmentId: string; description: string; itemText: string; note: string }[])
+        : [];
+    const sourceChecklist = sourceRows[0] ?? null;
     return json({
       ...incident,
       ...labels,
       zoneName,
+      sourceChecklist,
       workerIds,
       reportedByName: names[incident.reportedBy] ?? null,
       closedByName: incident.closedBy ? (names[incident.closedBy] ?? null) : null,
@@ -435,6 +469,19 @@ export class SafetyWorkflowService {
           ...json<Record<string, unknown>>(input),
           version: resource.version,
         };
+        if (
+          resourceType === 'INCIDENT' &&
+          ['create', 'link', 'responsibility', 'correct-responsibility'].includes(action)
+        ) {
+          const alerts = await manager
+            .getRepository(SafetyAlertEntity)
+            .findBy({ siteId, incidentId: resource.id });
+          changes.sourceIdentityWorkerIds = await this.confirmedAlertWorkers(
+            manager,
+            siteId,
+            alerts,
+          );
+        }
         // Store only evidence references; never file bytes or private storage keys.
         Object.assign(changes, stage.changes, { actorName: actor.displayName });
         const audit = manager.getRepository(SafetyWorkflowAuditEntity).create({
@@ -564,11 +611,7 @@ export class SafetyWorkflowService {
       .save({ id: randomUUID(), siteId, uploadedBy: actorId, ...saved });
     return evidence.id;
   }
-  private async confirmedAlertWorkers(
-    manager: EntityManager,
-    siteId: string,
-    alerts: SafetyAlertEntity[],
-  ) {
+  async confirmedAlertWorkers(manager: EntityManager, siteId: string, alerts: SafetyAlertEntity[]) {
     if (!alerts.length) return [];
     const mappings = await manager
       .getRepository(AlertDetectionMappingEntity)
@@ -615,7 +658,18 @@ export class SafetyWorkflowService {
     }
     return [...ids].sort();
   }
+
+  private async requireChecklistSource(manager: EntityManager, incident: IncidentEntity) {
+    if (!incident.sourceChecklistResultId) return;
+    const [source] = (await manager.query(
+      "SELECT a.contractor_id AS contractor FROM safety_checklist_item_result r JOIN safety_checklist_submission s ON s.id=r.submission_id JOIN safety_checklist_assignment a ON a.id=s.assignment_id WHERE r.id=$1 AND a.site_id=$2 AND r.answer='FAIL' AND s.status='ACCEPTED'",
+      [incident.sourceChecklistResultId, incident.siteId],
+    )) as { contractor: string }[];
+    if (!source || (incident.contractorId && incident.contractorId !== source.contractor))
+      conflict('Incident responsibility must match its recorded checklist source');
+  }
   private async validateLinkedSubjects(manager: EntityManager, incident: IncidentEntity) {
+    await this.requireChecklistSource(manager, incident);
     const alerts = await manager
       .getRepository(SafetyAlertEntity)
       .findBy({ incidentId: incident.id, siteId: incident.siteId });
@@ -636,6 +690,37 @@ export class SafetyWorkflowService {
       await this.workforce.requireSingleIncidentContractor(manager, incident.siteId, workerIds);
     return workerIds;
   }
+  private async requireCurrentLinkedSubjects(manager: EntityManager, incident: IncidentEntity) {
+    await this.requireChecklistSource(manager, incident);
+    const alerts = await manager
+      .getRepository(SafetyAlertEntity)
+      .findBy({ siteId: incident.siteId, incidentId: incident.id });
+    const current = await this.confirmedAlertWorkers(manager, incident.siteId, alerts);
+    const audits = await this.audits(manager, incident.siteId, 'INCIDENT', incident.id);
+    const baseline = audits
+      .filter((a) => Array.isArray(a.changes.sourceIdentityWorkerIds))
+      .sort((a, b) => Number(b.changes.version) - Number(a.changes.version))[0];
+    if (
+      baseline &&
+      JSON.stringify(current) !== JSON.stringify(baseline.changes.sourceIdentityWorkerIds)
+    )
+      conflict(
+        'Source identity changed. Verify and confirm or correct contractor responsibility before continuing.',
+      );
+    if (incident.contractorId)
+      await this.workforce.requireIncidentWorkers(
+        manager,
+        incident.siteId,
+        incident.contractorId,
+        current,
+      );
+    const recorded = await manager
+      .getRepository(IncidentWorkerEntity)
+      .findBy({ incidentId: incident.id });
+    if (current.some((id) => !recorded.some((w) => w.workerId === id)))
+      conflict('Source identity needs Safety confirmation before continuing');
+  }
+
   private async link(manager: EntityManager, siteId: string, incidentId: string, ids: string[]) {
     for (const id of [...new Set(ids.map((id) => uuid(id).toLowerCase()))].sort()) {
       const alert = await manager
@@ -661,6 +746,33 @@ export class SafetyWorkflowService {
       UserRole.SAFETY_OFFICER,
       undefined,
       async (manager, actor) => {
+        if (value.sourceChecklistResultId) {
+          await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+            'checklist-result:' + value.sourceChecklistResultId,
+          ]);
+          const [source] = (await manager.query(
+            `SELECT r.answer,s.status,a.site_id AS "siteId",a.contractor_id AS "contractorId",a.zone_id AS "zoneId" FROM safety_checklist_item_result r JOIN safety_checklist_submission s ON s.id=r.submission_id JOIN safety_checklist_assignment a ON a.id=r.assignment_id WHERE r.id=$1 FOR SHARE OF r,s,a`,
+            [value.sourceChecklistResultId],
+          )) as {
+            answer: string;
+            status: string;
+            siteId: string;
+            contractorId: string;
+            zoneId: string;
+          }[];
+          if (!source || source.siteId !== siteId) missing();
+          if (source.answer !== 'FAIL' || source.status !== 'ACCEPTED')
+            conflict('Record a failed checklist result before creating an Incident');
+          if (value.contractorId && value.contractorId !== source.contractorId)
+            conflict('Confirmed contractor does not match the checklist source');
+          if (value.zoneId && value.zoneId !== source.zoneId)
+            conflict('Incident Zone does not match the checklist source');
+          const existing = await manager
+            .getRepository(IncidentEntity)
+            .findOneBy({ sourceChecklistResultId: value.sourceChecklistResultId });
+          if (existing) conflict('This checklist result already has an Incident');
+        }
+
         if (value.contractorId) {
           if (!value.responsibilityReason)
             invalid('A reason is required to confirm responsibility');
@@ -680,6 +792,7 @@ export class SafetyWorkflowService {
           responsibilityReason: value.responsibilityReason ?? null,
           responsibilityConfirmedBy: value.contractorId ? actor.id : null,
           responsibilityConfirmedAt: value.contractorId ? new Date() : null,
+          sourceChecklistResultId: value.sourceChecklistResultId ?? null,
           title: value.title,
           description: value.description,
           severity: value.severity,
@@ -873,6 +986,7 @@ export class SafetyWorkflowService {
           await this.validateLinkedSubjects(manager, incident);
         }
         if (operation === 'assign' || operation === 'reopen') {
+          await this.requireCurrentLinkedSubjects(manager, incident);
           const assignment = value as AssignActionDto;
           if (operation === 'reopen' && incident.status !== 'CLOSED')
             conflict('Only closed incidents may be reopened');
@@ -945,6 +1059,7 @@ export class SafetyWorkflowService {
         }
         const currentActions = actions.filter((a) => !a.supersededAt);
         if (operation === 'close') {
+          await this.requireCurrentLinkedSubjects(manager, incident);
           if (!incident.contractorId) conflict('Confirm Incident responsibility before closing');
           const pending = currentActions.length
             ? await manager.getRepository(CorrectiveActionSubmissionEntity).existsBy({

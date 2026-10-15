@@ -1,11 +1,11 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { AttendanceView } from '../attendance/AttendanceView';
 
 function localTime(offset: number) {
@@ -25,7 +25,7 @@ export function SiteAccessSetupView({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, sessionScope, siteId, 'access-setup'];
   const setup = useQuery({ queryKey: key, queryFn: () => client.accessSetup(token, siteId) });

@@ -19,6 +19,7 @@ import {
 // cookies, AI service or production credential is involved in these tests.
 let server: Server;
 let baseUrl: string;
+let providerApiUrl: string;
 let queryClient: QueryClient;
 let handle: (request: IncomingMessage, response: ServerResponse, body: string) => void;
 const responseFor = (name: string) => ({
@@ -41,7 +42,7 @@ function reply(response: ServerResponse, status: number, data: unknown) {
 }
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>{children}</AuthProvider>
+    <AuthProvider apiUrl={providerApiUrl}>{children}</AuthProvider>
   </QueryClientProvider>
 );
 const credentials = { username: 'new-account', password: 'Synthetic1!' };
@@ -70,6 +71,7 @@ beforeEach(async () => {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  providerApiUrl = baseUrl;
 });
 afterEach(async () => {
   cleanup();
@@ -105,6 +107,7 @@ it('does not silently restore the cookie session after failed logout and a fresh
 });
 
 it('isolates restore requests across API endpoints and ignores a late prior endpoint response', async () => {
+  providerApiUrl = `${baseUrl}/old`;
   const refreshObserver = vi.spyOn(SmartSiteManagementClient.prototype, 'refresh');
   let oldRefresh: ServerResponse | undefined;
   handle = (request, response) => {
@@ -119,6 +122,7 @@ it('isolates restore requests across API endpoints and ignores a late prior endp
     },
   );
   await waitFor(() => expect(oldRefresh).toBeDefined());
+  providerApiUrl = `${baseUrl}/new`;
   rerender({ apiUrl: `${baseUrl}/new` });
   await waitFor(() =>
     expect(result.current.auth.accessToken).toBe(responseFor('new-account').accessToken),
@@ -304,8 +308,9 @@ it('keeps access tokens out of query and mutation response data', async () => {
 
 it('expires a current profile401 and removes other sensitive cached data', async () => {
   let pendingMe: ServerResponse | undefined;
-  handle = (_request, response) => {
-    pendingMe = response;
+  handle = (request, response) => {
+    if (request.url?.endsWith('/auth/refresh')) reply(response, 401, { message: 'Unauthorized' });
+    else pendingMe = response;
   };
   const { result } = renderHook(() => ({ auth: useAuth(), user: useCurrentUser(baseUrl) }), {
     wrapper,
@@ -432,6 +437,14 @@ it('does not treat an explicitly captured empty scope as the current later sessi
   expect(result.current.accessToken).toBe('synthetic-later-session');
 });
 
+it('does not let an unscoped callback captured by an old render expire a later account', () => {
+  const { result } = renderHook(() => useAuth(), { wrapper });
+  const oldExpire = result.current.triggerSessionExpired;
+  act(() => result.current.setAccessToken('synthetic-later-callback-session'));
+  act(() => oldExpire());
+  expect(result.current.accessToken).toBe('synthetic-later-callback-session');
+});
+
 it('expires a current401 started by a child passive effect during StrictMode replay', async () => {
   const responses: ServerResponse[] = [];
   handle = (_request, response) => {
@@ -440,7 +453,7 @@ it('expires a current401 started by a child passive effect during StrictMode rep
   const strictWrapper = ({ children }: { children: React.ReactNode }) => (
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider apiUrl={baseUrl}>{children}</AuthProvider>
       </QueryClientProvider>
     </StrictMode>
   );
@@ -448,12 +461,13 @@ it('expires a current401 started by a child passive effect during StrictMode rep
     () => {
       const auth = useAuth();
       const seeded = useRef(false);
+      const setAccessToken = auth.setAccessToken;
       useLayoutEffect(() => {
         if (!seeded.current) {
           seeded.current = true;
-          auth.setAccessToken('synthetic-strict-token');
+          setAccessToken('synthetic-strict-token');
         }
-      }, [auth.setAccessToken]);
+      }, [setAccessToken]);
       useEffect(() => {
         void new SmartSiteManagementClient(baseUrl)
           .listSites('synthetic-strict-token')

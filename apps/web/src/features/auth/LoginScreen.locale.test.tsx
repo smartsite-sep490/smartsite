@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
 import { LocaleProvider } from '../../i18n/locale';
 import { LoginScreen } from './LoginScreen';
-import i18n from '../../i18n';
+import i18n, { translate as tr } from '../../i18n';
 import { AuthProvider } from './auth-session';
 
 beforeEach(async () => {
@@ -39,7 +39,7 @@ describe('localized login preserves the authentication command', () => {
   it('switches language without losing credentials and submits the unchanged input', async () => {
     const login = vi
       .spyOn(SmartSiteManagementClient.prototype, 'login')
-      .mockRejectedValue({ status: 401 });
+      .mockRejectedValue(new ApiError('http', 'Synthetic unauthorized', 401));
     const user = userEvent.setup();
     mountLogin();
     const username = screen.getByLabelText(/^Tên đăng nhập$/i) as HTMLInputElement;
@@ -48,7 +48,7 @@ describe('localized login preserves the authentication command', () => {
     await user.type(password, 'synthetic-test-password');
     await user.click(screen.getByRole('button', { name: 'Chọn ngôn ngữ' }));
     await user.click(screen.getByRole('button', { name: 'English' }));
-    expect(screen.getByRole('heading', { name: /sign in/i })).toBeDefined();
+    expect(screen.getByRole('heading', { name: /welcome back/i })).toBeDefined();
     expect(username.value).toBe('synthetic-demo-user');
     expect(password.value).toBe('synthetic-test-password');
     await user.click(screen.getByRole('button', { name: /^sign in$/i }));
@@ -60,18 +60,16 @@ describe('localized login preserves the authentication command', () => {
   it('translates a retained failed-login state without issuing another request', async () => {
     const login = vi
       .spyOn(SmartSiteManagementClient.prototype, 'login')
-      .mockRejectedValue({ status: 401 });
+      .mockRejectedValue(new ApiError('http', 'Synthetic unauthorized', 401));
     const user = userEvent.setup();
     mountLogin();
     await user.type(screen.getByLabelText(/^Tên đăng nhập$/i), 'invalid-test-user');
     await user.type(screen.getByLabelText(/^Mật khẩu$/i), 'invalid-test-password');
     await user.click(screen.getByRole('button', { name: /^Đăng nhập$/i }));
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'Thông tin đăng nhập không hợp lệ.',
-    );
+    expect((await screen.findByRole('alert')).textContent).toContain(tr('auth.error.credentials'));
     await user.click(screen.getByRole('button', { name: 'Chọn ngôn ngữ' }));
     await user.click(screen.getByRole('button', { name: 'English' }));
-    expect(screen.getByRole('alert').textContent).toContain('Invalid credentials.');
+    expect(screen.getByRole('alert').textContent).toContain(tr('auth.error.credentials'));
     expect(login).toHaveBeenCalledTimes(1);
   });
 });

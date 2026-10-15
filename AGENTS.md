@@ -113,7 +113,9 @@ When persistence or integration behavior changes, also run the relevant PostgreS
 
 - Start from current `main`; do not commit directly to `main`.
 - One issue describes one reviewable behavior with MF/FR/UC references when applicable, scope, acceptance criteria, and affected contracts.
-- Use short-lived branches such as `feat/mf05-ppe-events`, `fix/mf06-stale-geometry`, or `docs/contract-versioning`. Coding agents may use their required prefix.
+- Use short-lived branches such as `feat/mf05-ppe-events`, `fix/mf06-stale-geometry`, or `docs/contract-versioning`. The project owner prohibits the `codex/` prefix.
+- Before starting a new feature slice or finalizing an integration, fetch `origin/main`, record the exact upstream SHA, and integrate the current Main changes into the working feature branch. Preserve uncommitted work first and resolve conflicts explicitly; do not overwrite owner changes or use a blind reset/pull to hide divergence. If fetching fails, report that the upstream state is unverified rather than claiming to use the latest Main.
+- Main owns the login screen. Keep its current UI and authentication flow when integrating MF05/MF06; coordinate necessary compatibility fixes and regression tests instead of maintaining a separate login redesign without the owner's approval.
 - One person owns a branch. Other members contribute through review or explicitly coordinated commits; never share an uncoordinated working tree.
 - Keep a PR focused. Do not combine dependency upgrades, formatting sweeps, refactors, and product behavior unless inseparable.
 - Use Conventional Commit-style messages. Explain behavior, migration/deployment order, security impact, and verification in the PR.

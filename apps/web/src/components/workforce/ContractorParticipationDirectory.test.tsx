@@ -7,7 +7,8 @@ import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { ContractorParticipationDirectory } from './components/ContractorParticipationDirectory';
 
 const auth = vi.hoisted(() => ({ admin: true }));
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'token' }),
   useCurrentUser: () => ({
     data: {

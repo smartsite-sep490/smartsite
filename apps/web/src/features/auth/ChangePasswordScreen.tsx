@@ -1,24 +1,27 @@
-import { localizeMessage } from '../../i18n/messages';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useLogout } from './auth-session';
+import { ApiError } from '@smartsite/api-client';
+import { AuthErrorNotice } from './AuthErrorNotice';
+import { authErrorMessage } from './auth-errors';
+import { useManagementClient, useAuth, useLogout } from './auth-session';
 
 export function ChangePasswordScreen({
   apiUrl,
   onComplete,
+  onCancel,
 }: {
   apiUrl: string;
   onComplete: () => void;
+  onCancel?: () => void;
 }) {
   useTranslation();
 
-  const { accessToken, setAccessToken, dismissSessionExpired } = useAuth();
+  const { manager, accessToken, setAccessToken, dismissSessionExpired } = useAuth();
   const cache = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const logout = useLogout(apiUrl);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -31,22 +34,27 @@ export function ChangePasswordScreen({
       setCurrentPassword('');
       setNewPassword('');
       setConfirmation('');
-      setAccessToken(null);
+      if (manager) manager.signOutLocally(true);
+      else {
+        sessionStorage.setItem('smartsite:signed-out', 'true');
+        setAccessToken(null);
+      }
       dismissSessionExpired();
       cache.clear();
       cache.setQueryData(['auth', 'session'], null);
       onComplete();
     },
   });
-  const error =
+  const errorMessage =
     validationError ||
     (change.error instanceof ApiError && change.error.status === 401
-      ? tr(
-          'change_password_screen.your_current_password_is_incorrect_or_your_session_has_expired_try_again_or_sign_o',
-        )
-      : change.error instanceof Error
-        ? change.error.message
-        : '');
+      ? tr('auth.password.rejected')
+      : change.error instanceof ApiError &&
+          (change.error.code === 'network' ||
+            change.error.code === 'timeout' ||
+            (change.error.status !== undefined && change.error.status >= 500))
+        ? `${tr('auth.password.unverified')} ${authErrorMessage(change.error)}`
+        : undefined);
   const busy = change.isPending || logout.isPending;
 
   return (
@@ -63,18 +71,15 @@ export function ChangePasswordScreen({
             {tr('change_password_screen.smartsite_account_setup')}
           </p>
           <h1 id="change-password-heading" className="text-2xl font-bold text-[#071A2B]">
-            {tr('change_password_screen.change_your_temporary_password')}
+            {tr('auth.password.title')}
           </h1>
-          <p className="text-sm text-slate-600">
-            {tr(
-              'change_password_screen.set_your_own_password_before_accessing_your_site_after_saving_sign_in_again_with_y',
-            )}
-          </p>
+          <p className="text-sm text-slate-600">{tr('auth.password.description')}</p>
         </div>
         <form
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
+            if (busy) return;
             change.reset();
             if (newPassword !== confirmation) {
               setValidationError(tr('change_password_screen.new_passwords_do_not_match'));
@@ -89,7 +94,7 @@ export function ChangePasswordScreen({
               htmlFor="current-password"
               className="block text-sm font-semibold text-slate-700 mb-1"
             >
-              {tr('common.current_temporary_password')}
+              {tr('auth.password.current')}
             </label>
             <input
               id="current-password"
@@ -148,14 +153,7 @@ export function ChangePasswordScreen({
               className="w-full rounded-lg border border-slate-300 p-3 text-sm"
             />
           </div>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800"
-            >
-              {localizeMessage(error)}
-            </p>
-          )}
+          <AuthErrorNotice error={change.error} message={errorMessage} />
           <button
             type="submit"
             disabled={busy}
@@ -177,6 +175,11 @@ export function ChangePasswordScreen({
         >
           {tr('common.sign_out')}
         </button>
+        {onCancel && (
+          <button type="button" disabled={busy} onClick={onCancel} className="text-sm underline">
+            {tr('auth.password.cancel')}
+          </button>
+        )}
       </section>
     </main>
   );

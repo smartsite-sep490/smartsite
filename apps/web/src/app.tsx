@@ -20,6 +20,7 @@ import {
 } from './features/auth/auth-session';
 import type { SharedSession } from './types/shared-session';
 import { LoginScreen } from './features/auth/LoginScreen';
+import { AuthErrorNotice } from './features/auth/AuthErrorNotice';
 
 // Code-split page components with React.lazy to avoid eagerly loading all views into the entry bundle.
 // Static shell: LoginScreen, AppLayout, auth session hooks, and SessionExpiredModal remain static.
@@ -28,6 +29,9 @@ const LandingPage = React.lazy(() =>
 );
 const RegisterScreen = React.lazy(() =>
   import('./features/auth/RegisterScreen').then((m) => ({ default: m.RegisterScreen })),
+);
+const ChangePasswordScreen = React.lazy(() =>
+  import('./features/auth/ChangePasswordScreen').then((m) => ({ default: m.ChangePasswordScreen })),
 );
 const DashboardView = React.lazy(() =>
   import('./components/dashboard/DashboardView').then((m) => ({ default: m.DashboardView })),
@@ -192,17 +196,21 @@ function profileRecoveryMessage(error: unknown): string {
       return tr('safety_alert_evidence_utils.your_session_is_no_longer_valid_sign_in_again');
     }
     if (error.status === 403) {
-      return tr('scheduling-error.you_no_longer_have_permission_to_perform_this_action');
+      return tr('app.profile_recovery.forbidden');
     }
     if (error.code === 'network') {
-      return tr('common.connection_failed');
+      return tr('app.profile_recovery.network');
     }
+    if (error.code === 'timeout') return tr('app.profile_recovery.timeout');
+    if (error.status === 503) return tr('app.profile_recovery.unavailable');
+    if (error.code === 'invalid-response') return tr('app.profile_recovery.invalid_response');
   }
-  return tr('app.your_permissions_could_not_be_loaded_please_try_again');
+  return tr('app.profile_recovery.default');
 }
 
 function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
   useTranslation();
+  const navigate = useNavigate();
 
   const location = useLocation();
   const incidentLink = new URLSearchParams(location.search);
@@ -269,7 +277,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               }}
               className="rounded-xl bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isUserFetching ? tr('common.loading') : tr('common.retry')}
+              {isUserFetching ? tr('app.profile_recovery.retrying') : tr('common.retry')}
             </button>
             <button
               type="button"
@@ -330,6 +338,18 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 )
               }
             />
+            <Route
+              path="/account/password"
+              element={
+                <ChangePasswordScreen
+                  apiUrl={apiUrl}
+                  onCancel={() => navigate(`/${defaultAuthTab}`)}
+                  onComplete={() =>
+                    navigate('/login', { state: { passwordChanged: true }, replace: true })
+                  }
+                />
+              }
+            />
             <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
             <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
             <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
@@ -370,6 +390,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                   onSignOut={handleSignOut}
                   initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
                   initialIncidentId={incidentLink.get('incidentId') ?? undefined}
+                  initialChecklistId={incidentLink.get('checklistId') ?? undefined}
                   initialActionId={incidentLink.get('actionId') ?? undefined}
                   initialAlertId={alertsContext?.alertId}
                   initialStatus={alertsContext?.status}
@@ -441,8 +462,16 @@ export function App() {
   useTranslation();
 
   const navigate = useNavigate();
-  const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
-  const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
+  const location = useLocation();
+  const {
+    accessToken,
+    isSessionExpired,
+    dismissSessionExpired,
+    logoutUnconfirmed,
+    passwordChanged,
+  } = useAuth();
+  const restoringSession = useRestoreSession(apiUrl);
+  const isRestoringSession = restoringSession.isLoading;
   const { data: currentUser } = useCurrentUser(apiUrl);
 
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
@@ -477,6 +506,25 @@ export function App() {
     );
   }
 
+  if (restoringSession.isError && !accessToken) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <section className="max-w-md space-y-4 rounded-xl border bg-white p-6">
+          <h1 className="font-bold">{tr('auth.session.restore')}</h1>
+          <AuthErrorNotice error={restoringSession.error} />
+          <button
+            type="button"
+            disabled={restoringSession.isFetching}
+            onClick={() => void restoringSession.refetch()}
+            className="rounded-lg bg-[#071A2B] text-white px-4 py-2"
+          >
+            {tr('common.retry')}
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <>
       <Routes>
@@ -504,6 +552,13 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
+                notice={
+                  logoutUnconfirmed
+                    ? tr('auth.session.logoutWarning')
+                    : passwordChanged || location.state?.passwordChanged
+                      ? tr('auth.password.success')
+                      : undefined
+                }
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />

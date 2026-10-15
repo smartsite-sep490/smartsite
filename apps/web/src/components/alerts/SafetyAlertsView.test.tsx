@@ -367,6 +367,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     // Đăng nhập thành công, hàng đợi cảnh báo hiển thị
     await screen.findByRole('heading', { name: 'Safety operations' });
     await screen.findByText(/Công trường Alpha/i);
+    await user.click(screen.getByRole('button', { name: 'Alerts' }));
 
     // Chờ chi tiết cảnh báo được tải
     await screen.findByText('00000000-0000-4000-8000-000000000001');
@@ -814,6 +815,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.type(screen.getByLabelText('Username'), 'admin');
     await user.type(screen.getByLabelText('Password'), 'Fake123!');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(await screen.findByRole('button', { name: 'Alerts' }));
     await user.click(await screen.findByRole('button', { name: /First Alert/ }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByRole('button', { name: /Second Alert/ });

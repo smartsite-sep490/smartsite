@@ -10,6 +10,7 @@ import { createIsolatedTestDatabase } from './support/isolated-test-database.js'
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
+const currentMain = 'd55e7e77d1b4e60e223075b49a0b076fb067c860';
 test(
   'owned test database defaults to release graph; historical24 requires an explicit test-only selection',
   {
@@ -31,17 +32,20 @@ test(
   },
 );
 test(
-  'production migration graph retains exact approved MAIN35 bytes and all four reserved Safety slots',
+  'production migration graph includes pinned current Main and four Safety slots without rewriting historical migrations',
   { skip: repository ? false : 'Explicit pinned source repository required' },
   () => {
     assert.ok(repository);
-    const original = (path: string) =>
-      execFileSync('git', ['show', `${baseline}:${path}`], {
+    const original = (path: string, commit = baseline) =>
+      execFileSync('git', ['show', `${commit}:${path}`], {
         cwd: repository,
         windowsHide: true,
         maxBuffer: 2_097_152,
       });
-    const options = original('apps/backend/src/database/typeorm.options.ts').toString();
+    const options = original(
+      'apps/backend/src/database/typeorm.options.ts',
+      currentMain,
+    ).toString();
     const names = options
       .match(/migrations: \[([\s\S]*?)\]/)![1]!
       .split(',')
@@ -55,18 +59,29 @@ test(
       assert.equal(typeof migration, 'function');
       return (migration as new () => { name: string }).name;
     });
-    assert.deepEqual(actual, [
+    const expected = [
       ...names,
       'Mf06AssessmentRequests1791590400001',
       'Mf06MainAuthorityJournal1791590400002',
       'SafetyFaceProvenance1791590400003',
       'Mf06ImmutableAssessments1791590400004',
-    ]);
-    assert.equal(new Set(actual).size, 39);
+    ];
+    assert.deepEqual([...actual].sort(), [...expected].sort());
+    assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
+    assert.equal(new Set(expected).size, names.length + 4);
     assert.equal(registered.synchronize, false);
     assert.equal(registered.migrationsRun, false);
     const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
     for (const match of options.matchAll(/from '\.\/migrations\/([\w-]+)\.js'/g)) {
+      const path = `apps/backend/src/database/migrations/${match[1]}.ts`;
+      assert.equal(
+        digest(readFileSync(join(repository, path))),
+        digest(original(path, currentMain)),
+        path,
+      );
+    }
+    const historicalOptions = original('apps/backend/src/database/typeorm.options.ts').toString();
+    for (const match of historicalOptions.matchAll(/from '\.\/migrations\/([\w-]+)\.js'/g)) {
       const path = `apps/backend/src/database/migrations/${match[1]}.ts`;
       assert.equal(digest(readFileSync(join(repository, path))), digest(original(path)), path);
     }

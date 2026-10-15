@@ -48,14 +48,15 @@ export const deadline = (form: FormData) =>
 type CommandRun = {
   fingerprint: string;
   file?: File;
+  files?: File[];
   run: (commandId: string, signal: AbortSignal) => Promise<{ resource: { id: string } }>;
 };
 export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) => void) {
   const cache = useQueryClient();
   const lifecycle = useRef<{ active: boolean; controller?: AbortController }>({ active: true });
-  const receipt = useRef<{ fingerprint: string; file?: File; commandId: string } | undefined>(
-    undefined,
-  );
+  const receipt = useRef<
+    { fingerprint: string; file?: File; files?: File[]; commandId: string } | undefined
+  >(undefined);
   useEffect(() => {
     const current = lifecycle.current;
     current.active = true;
@@ -70,13 +71,20 @@ export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) =>
   return useMutation({
     meta: { safetySession: p.scope },
     retry: false,
-    mutationFn: async ({ fingerprint, file, run }: CommandRun) => {
+    mutationFn: async ({ fingerprint, file, files, run }: CommandRun) => {
       if (
         !receipt.current ||
         receipt.current.fingerprint !== fingerprint ||
-        receipt.current.file !== file
+        receipt.current.file !== file ||
+        (receipt.current.files?.length ?? 0) !== (files?.length ?? 0) ||
+        (files ?? []).some((f, index) => f !== receipt.current?.files?.[index])
       )
-        receipt.current = { fingerprint, file, commandId: crypto.randomUUID() };
+        receipt.current = {
+          fingerprint,
+          file,
+          files: files ? [...files] : undefined,
+          commandId: crypto.randomUUID(),
+        };
       const controller = new AbortController();
       lifecycle.current.controller = controller;
       const result = await run(receipt.current.commandId, controller.signal);
@@ -85,6 +93,7 @@ export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) =>
       onSuccess?.(result.resource.id);
       await Promise.all([
         cache.invalidateQueries({ queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId] }),
+        cache.invalidateQueries({ queryKey: ['notifications', p.apiUrl] }),
         cache.invalidateQueries({ queryKey: ['safety-alerts', p.apiUrl, p.scope] }),
         cache.invalidateQueries({ queryKey: ['safety-alert', p.apiUrl, p.scope] }),
       ]);

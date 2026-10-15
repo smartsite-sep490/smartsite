@@ -5,14 +5,13 @@ import React, { useState, useMemo, useRef } from 'react';
 import { TeamZoneDialog } from './TeamZoneDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  SmartSiteManagementClient,
   type ContractorDashboardScope,
   type ContractorTeamResponse,
   type ContractorTeamWorkerResponse,
   type SafetyAlertStatus,
   type SafetyAlertType,
 } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../features/auth/auth-session';
 import { loadAllPages } from '../workforce/load-all-pages';
 import {
   IconUsers,
@@ -78,7 +77,7 @@ export function ContractorDashboardView({
   const currentUser = useCurrentUser(resolvedApiUrl);
   const sessionScope = sessionScopeProp || currentUser.data?.id || 'contractor-session';
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(resolvedApiUrl), [resolvedApiUrl]);
+  const client = useManagementClient(resolvedApiUrl);
 
   // ── 1. Scopes Discovery ────────────────────────────────────────────────────────
   const scopesQuery = useQuery({

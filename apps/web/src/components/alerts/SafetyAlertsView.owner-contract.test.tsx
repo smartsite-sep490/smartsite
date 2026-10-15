@@ -128,7 +128,7 @@ describe('Owner-approved real-account boundary without modifying MF08', () => {
     mount({ ...base, sharedSession: shared(manager), authenticatedSession: undefined });
     await waitFor(() => expect(SmartSiteManagementClient.prototype.listSites).toHaveBeenCalled());
     await waitFor(() =>
-      expect(screen.getByRole('status').textContent).toContain('Session pending or expired'),
+      expect(screen.getByRole('status').textContent).toContain('Full account details are required'),
     );
     expect(
       screen.queryByText('No Site with Safety workflow access is assigned to this account.'),

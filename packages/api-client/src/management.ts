@@ -222,6 +222,24 @@ const AUTH_SESSION_PATHS = new Set(['/auth/login', '/auth/refresh', '/auth/logou
 const validTimeout = (timeoutMs: number) =>
   Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
 
+export interface ManagementSession {
+  getAccessToken(presentedToken: string): string;
+  refreshAccessToken(failedToken: string): Promise<string>;
+  onUnauthorized(failedToken: string): void;
+  signal: AbortSignal;
+}
+
+function retryAfter(response: Response, clampMaxSeconds?: number): number | undefined {
+  const value = response.headers.get('Retry-After');
+  if (!value) return undefined;
+  const seconds = /^\d+$/.test(value)
+    ? Number(value)
+    : Math.ceil((Date.parse(value) - Date.now()) / 1000);
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) return undefined;
+  if (clampMaxSeconds !== undefined) return Math.min(seconds, clampMaxSeconds);
+  return seconds <= 86400 ? seconds : undefined;
+}
+
 export class SmartSiteManagementClient {
   updateTeamZone(
     token: string,
@@ -576,7 +594,10 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly session?: ManagementSession,
+  ) {}
   listVisitorSites() {
     return this.request<{
       items: Array<{ id: string; name: string; code: string }>;
@@ -819,6 +840,127 @@ export class SmartSiteManagementClient {
     }
   }
 
+  private requestOptions(
+    token: string | undefined,
+    options?: RequestOptions,
+  ): RequestOptions | undefined {
+    if (!token || !this.session) return options;
+    return {
+      ...options,
+      signal: options?.signal
+        ? AbortSignal.any([options.signal, this.session.signal])
+        : this.session.signal,
+    };
+  }
+
+  private async fetchAuthenticated(
+    path: string,
+    token: string | undefined,
+    init: RequestInit,
+    signal?: AbortSignal,
+    discardOnAbort = false,
+  ): Promise<Response> {
+    const session = token ? this.session : undefined;
+    let current = session && token ? session.getAccessToken(token) : token;
+    const send = (accessToken: string | undefined) =>
+      this.readBody(() => {
+        const pending = fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+          ...init,
+          headers: {
+            ...init.headers,
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          ...(signal ? { signal } : {}),
+        });
+        if (discardOnAbort) {
+          void pending.then(
+            (response) => discardAbortedResponse(response, signal),
+            () => {},
+          );
+        }
+        return pending;
+      }, signal);
+    const checkPasswordSession = async (response: Response): Promise<boolean> => {
+      if (path !== '/auth/change-password' || response.status !== 401) return false;
+      const check = await this.readBody(
+        () =>
+          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1/auth/me`, {
+            headers: { Accept: 'application/json', Authorization: `Bearer ${current}` },
+            ...(signal ? { signal } : {}),
+          }),
+        signal,
+      );
+      if (check.ok) return true;
+      if (check.status !== 401)
+        throw new ApiError(
+          'http',
+          'Could not verify the current session.',
+          check.status,
+          undefined,
+          retryAfter(check),
+        );
+      return false;
+    };
+    let response = await send(current);
+    if (session && token) session.getAccessToken(token);
+    if (response.status !== 401 || !session || !current || (await checkPasswordSession(response)))
+      return response;
+    try {
+      current = await this.readBody(() => session.refreshAccessToken(current!), signal);
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403))
+        session.onUnauthorized(current);
+      throw error;
+    }
+    response = await send(current);
+    session.getAccessToken(token!);
+    if (response.status === 401 && !(await checkPasswordSession(response)))
+      session.onUnauthorized(current);
+    return response;
+  }
+
+  private async responseError(
+    response: Response,
+    signal?: AbortSignal,
+    requireJson = false,
+    maxResponseBytes?: number,
+    clampRetryAfterSeconds?: number,
+  ): Promise<never> {
+    let payload: unknown;
+    try {
+      payload =
+        maxResponseBytes !== undefined
+          ? await readBoundedResponseJson(
+              response,
+              maxResponseBytes,
+              (read, s) => this.readBody(read, s),
+              signal,
+            )
+          : await this.readBody(() => response.json(), signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (requireJson) {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned invalid JSON.',
+          response.status,
+          undefined,
+          retryAfter(response, clampRetryAfterSeconds),
+        );
+      }
+    }
+    // Auth hooks handle their own request ordering. Protected requests use
+    // captured scopes; an HTTP error does not require a valid JSON envelope.
+    const error = parseBackendErrorEnvelope(payload, response.status);
+    throw new ApiError(
+      'http',
+      error?.message ?? `Backend returned HTTP ${response.status}.`,
+      response.status,
+      error,
+      retryAfter(response, clampRetryAfterSeconds),
+    );
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -829,41 +971,58 @@ export class SmartSiteManagementClient {
     transport?: { cache: 'no-store'; redirect: 'error' },
     maxResponseBytes?: number,
   ): Promise<T> {
-    const requestOptions = AUTH_SESSION_PATHS.has(path)
-      ? { ...options, timeoutMs: options?.timeoutMs ?? AUTH_REQUEST_TIMEOUT_MS }
-      : options;
+    const defaultTimeoutMs =
+      AUTH_SESSION_PATHS.has(path) && (credentials === 'include' || path === '/auth/me')
+        ? AUTH_REQUEST_TIMEOUT_MS
+        : this.session && path.startsWith('/auth/')
+          ? 15_000
+          : undefined;
+    const requestOptions = this.requestOptions(
+      token,
+      defaultTimeoutMs !== undefined
+        ? { ...options, timeoutMs: options?.timeoutMs ?? defaultTimeoutMs }
+        : options,
+    );
     const sessionScopes = captureSessionScopes(token);
     return this.runRequest(requestOptions, async (signal) => {
       // Race headers as well as the body; some fetch adapters ignore abort.
-      const response = await this.readBody(() => {
-        const pending = fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
           method,
           headers: {
             Accept: 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           ...(credentials ? { credentials } : {}),
           ...(AUTH_SESSION_PATHS.has(path) ? { cache: 'no-store' as const } : {}),
           ...(transport ? { cache: transport.cache, redirect: transport.redirect } : {}),
-          ...(signal ? { signal } : {}),
-        });
-        if (maxResponseBytes !== undefined) {
-          void pending.then(
-            (response) => discardAbortedResponse(response, signal),
-            () => {},
-          );
-        }
-        return pending;
-      }, signal);
+        },
+        signal,
+        maxResponseBytes !== undefined,
+      );
       if (response.status === 204) return undefined as T;
-      if (response.status === 401 && !AUTH_SESSION_PATHS.has(path) && sessionScopes.length > 0) {
-        dispatchSessionExpired(sessionScopes);
+      if (!response.ok) {
+        if (
+          response.status === 401 &&
+          !AUTH_SESSION_PATHS.has(path) &&
+          path !== '/auth/change-password' &&
+          sessionScopes.length > 0
+        ) {
+          dispatchSessionExpired(sessionScopes);
+        }
+        return this.responseError(
+          response,
+          signal,
+          false,
+          maxResponseBytes,
+          maxResponseBytes !== undefined || transport !== undefined ? 60 : undefined,
+        );
       }
-      let payload: unknown;
       try {
-        payload =
+        return (
           maxResponseBytes !== undefined
             ? await readBoundedResponseJson(
                 response,
@@ -871,33 +1030,12 @@ export class SmartSiteManagementClient {
                 (read, s) => this.readBody(read, s),
                 signal,
               )
-            : await this.readBody(() => response.json(), signal);
+            : await this.readBody(() => response.json(), signal)
+        ) as T;
       } catch (error) {
-        if (signal?.aborted || (response.ok && error instanceof ApiError)) throw error;
-        if (response.ok)
-          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+        if (signal?.aborted || error instanceof ApiError) throw error;
+        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
-      if (!response.ok) {
-        // Auth hooks handle their own request ordering. Protected requests use
-        // captured scopes; an HTTP error does not require a valid JSON envelope.
-        const error = parseBackendErrorEnvelope(payload, response.status);
-        const retryAfterHeader = response.headers.get('Retry-After');
-        let retryAfterSeconds: number | undefined;
-        if (retryAfterHeader) {
-          const parsed = parseInt(retryAfterHeader, 10);
-          if (Number.isFinite(parsed) && parsed >= 0) {
-            retryAfterSeconds = Math.min(parsed, 60);
-          }
-        }
-        throw new ApiError(
-          'http',
-          error?.message ?? `Backend returned HTTP ${response.status}.`,
-          response.status,
-          error,
-          retryAfterSeconds,
-        );
-      }
-      return payload as T;
     });
   }
 
@@ -909,41 +1047,25 @@ export class SmartSiteManagementClient {
     options?: RequestOptions,
   ): Promise<T> {
     const sessionScopes = captureSessionScopes(token);
-    return this.runRequest(options, async (signal) => {
-      const response = await this.readBody(
-        () =>
-          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-            method,
-            headers: {
-              Accept: 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body,
-            signal,
-          }),
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        { method, headers: { Accept: 'application/json' }, body },
         signal,
       );
       if (response.status === 204) return undefined as T;
-      if (response.status === 401 && sessionScopes.length > 0)
-        dispatchSessionExpired(sessionScopes);
-      let payload: unknown;
+      if (!response.ok) {
+        if (response.status === 401 && sessionScopes.length > 0)
+          dispatchSessionExpired(sessionScopes);
+        return this.responseError(response, signal);
+      }
       try {
-        payload = await this.readBody(() => response.json(), signal);
+        return (await this.readBody(() => response.json(), signal)) as T;
       } catch (error) {
         if (signal?.aborted) throw error;
-        if (response.ok)
-          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
+        throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
-      if (!response.ok) {
-        const error = parseBackendErrorEnvelope(payload, response.status);
-        throw new ApiError(
-          'http',
-          error?.message ?? `Backend returned HTTP ${response.status}.`,
-          response.status,
-          error,
-        );
-      }
-      return payload as T;
     });
   }
 
@@ -954,37 +1076,26 @@ export class SmartSiteManagementClient {
     mediaTypes: readonly string[] = ['image/jpeg'],
     maxBytes: number = MAX_EVIDENCE_JPEG_BYTES,
   ): Promise<Blob> {
+    const sessionScopes = captureSessionScopes(token);
     return this.runRequest(
-      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
+      this.requestOptions(token, { ...options, timeoutMs: options?.timeoutMs ?? 5000 }),
       async (signal) => {
-        const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-          headers: {
-            Accept: mediaTypes.join(', '),
-            Authorization: `Bearer ${token}`,
+        const response = await this.fetchAuthenticated(
+          path,
+          token,
+          {
+            headers: {
+              Accept: mediaTypes.join(', '),
+            },
+            cache: 'no-store',
+            redirect: 'error',
           },
-          cache: 'no-store',
-          redirect: 'error',
-          ...(signal ? { signal } : {}),
-        });
+          signal,
+        );
         if (!response.ok) {
-          let payload: unknown;
-          try {
-            payload = await this.readBody(() => response.json(), signal);
-          } catch (error) {
-            if (signal?.aborted) throw error;
-            throw new ApiError(
-              'invalid-response',
-              'Backend returned invalid JSON.',
-              response.status,
-            );
-          }
-          const error = parseBackendErrorEnvelope(payload, response.status);
-          throw new ApiError(
-            'http',
-            error?.message ?? `Backend returned HTTP ${response.status}.`,
-            response.status,
-            error,
-          );
+          if (response.status === 401 && sessionScopes.length > 0)
+            dispatchSessionExpired(sessionScopes);
+          return this.responseError(response, signal, true);
         }
         const cancelUnreadBody = () => {
           // Cancellation must not delay reporting a limit/type failure.
@@ -1647,26 +1758,33 @@ export class SmartSiteManagementClient {
     );
   }
 
-  login(username: string, password: string, clientType: AuthClientType = 'WEB') {
+  login(
+    username: string,
+    password: string,
+    clientType: AuthClientType = 'WEB',
+    options?: RequestOptions,
+  ) {
     return this.request<LoginResponse>(
       'POST',
       '/auth/login',
       undefined,
       { username, password, clientType },
       clientType === 'WEB' ? 'include' : undefined,
+      options,
     );
   }
-  refresh(clientType: AuthClientType, refreshToken?: string) {
+  refresh(clientType: AuthClientType, refreshToken?: string, options?: RequestOptions) {
     return this.request<LoginResponse>(
       'POST',
       '/auth/refresh',
       undefined,
       { clientType, ...(refreshToken ? { refreshToken } : {}) },
       clientType === 'WEB' ? 'include' : undefined,
+      options,
     );
   }
-  me(token: string) {
-    return this.request<AccountResponse>('GET', '/auth/me', token);
+  me(token: string, options?: RequestOptions) {
+    return this.request<AccountResponse>('GET', '/auth/me', token, undefined, undefined, options);
   }
   changePassword(token: string, currentPassword: string, newPassword: string) {
     return this.request<void>(
@@ -1680,13 +1798,14 @@ export class SmartSiteManagementClient {
       'include',
     );
   }
-  logout(clientType: AuthClientType = 'WEB', refreshToken?: string) {
+  logout(clientType: AuthClientType = 'WEB', refreshToken?: string, options?: RequestOptions) {
     return this.request<void>(
       'POST',
       '/auth/logout',
       undefined,
       { clientType, ...(refreshToken ? { refreshToken } : {}) },
       clientType === 'WEB' ? 'include' : undefined,
+      options,
     );
   }
 

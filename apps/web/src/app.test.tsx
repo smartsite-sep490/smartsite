@@ -347,13 +347,13 @@ describe('App Navigation and Context Lifecycle', () => {
       </MemoryRouter>,
     );
     await user.click(await screen.findByRole('button', { name: 'Get an account' }));
-    expect(await screen.findByRole('heading', { name: 'Get access to SmartSite' })).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Need an account?' })).toBeDefined();
     expect(document.querySelector('input[type="password"]')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeDefined();
     await user.click(screen.getByRole('button', { name: 'Get an account' }));
-    await screen.findByRole('heading', { name: 'Get access to SmartSite' });
-    await user.click(screen.getByRole('button', { name: 'Back to homepage' }));
+    await screen.findByRole('heading', { name: 'Need an account?' });
+    await user.click(screen.getByRole('button', { name: /back to site/i }));
     expect(await screen.findByRole('heading', { name: 'Landing Page' })).toBeDefined();
   });
 

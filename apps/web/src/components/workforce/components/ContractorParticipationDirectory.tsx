@@ -2,17 +2,17 @@ import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { ApiError } from '@smartsite/api-client';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 
 export function ContractorParticipationDirectory({ apiUrl }: { apiUrl: string }) {
   useTranslation();
 
   const { accessToken } = useAuth();
   const { data: user } = useCurrentUser(apiUrl);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [contractorPage, setContractorPage] = useState(0);
   const [selection, setSelection] = useState({ contractorId: '', offset: 0 });
   const isAdmin = user?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null);

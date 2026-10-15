@@ -13,7 +13,8 @@ import i18n, { translate as tr } from '../../../i18n';
 import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
 
 const session = vi.hoisted(() => ({ user: null as AccountResponse | null }));
-vi.mock('../../../features/auth/auth-session', () => ({
+vi.mock('../../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'representative-token' }),
   useCurrentUser: () => ({ data: session.user, isPending: false, isError: false }),
 }));

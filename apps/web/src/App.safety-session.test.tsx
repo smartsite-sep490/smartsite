@@ -46,7 +46,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  cache.setQueryData(['auth', 'session', 'http://localhost:3000'], true);
+  cache.setQueryData(['auth', 'session', 'http://localhost:3000', 0], true);
   vi.spyOn(api, 'getBackendHealth').mockResolvedValue({
     status: 'ok',
     service: 'smartsite-backend',
@@ -129,7 +129,7 @@ it('an account refresh after sign-in cannot navigate back to Dashboard after ope
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  cache.setQueryData(['auth', 'session', 'http://localhost:3000'], null);
+  cache.setQueryData(['auth', 'session', 'http://localhost:3000', 0], null);
   vi.spyOn(api, 'getBackendHealth').mockResolvedValue({
     status: 'ok',
     service: 'smartsite-backend',

@@ -1,4 +1,12 @@
 import {
+  SafetyChecklistAssignmentEntity,
+  SafetyChecklistItemEntity,
+  SafetyChecklistSubmissionEntity,
+  SafetyChecklistItemResultEntity,
+  SafetyChecklistResultEvidenceEntity,
+} from './safety-checklist.entity.js';
+export * from './safety-checklist.entity.js';
+import {
   IncidentEntity,
   IncidentWorkerEntity,
   CorrectiveActionEntity,
@@ -143,6 +151,11 @@ export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
 export const ENTITIES = [
+  SafetyChecklistAssignmentEntity,
+  SafetyChecklistItemEntity,
+  SafetyChecklistSubmissionEntity,
+  SafetyChecklistItemResultEntity,
+  SafetyChecklistResultEvidenceEntity,
   ScheduleAssignmentBatchEntity,
   ContractorTeamEntity,
   ContractorTeamMembershipEntity,
