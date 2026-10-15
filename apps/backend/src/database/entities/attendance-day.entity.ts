@@ -19,7 +19,10 @@ import { ShiftEntity } from './shift.entity.js';
 @Entity({ name: 'attendance_day' })
 @Unique('uq_attendance_day_worker_date', ['siteId', 'workerId', 'workDate'])
 @Index('idx_attendance_day_due', ['status', 'endsAt'])
-@Check('attendance_day_status_check', "status IN ('IN_PROGRESS','NEEDS_REVIEW','CONFIRMED')")
+@Check(
+  'attendance_day_status_check',
+  "status IN ('IN_PROGRESS','NEEDS_REVIEW','CONFIRMED','ABSENT')",
+)
 @Check('attendance_day_regular_minutes_check', 'regular_minutes >= 0')
 @Check('attendance_day_overtime_minutes_check', 'overtime_minutes >= 0')
 @Check('attendance_day_provisional_minutes_check', 'provisional_minutes >= 0')

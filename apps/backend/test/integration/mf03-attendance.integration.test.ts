@@ -135,6 +135,98 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       workDate: date,
       isActive: true,
     });
+    // A scheduled worker without any passage must still get an attendance day.
+    await reconciliation.runDue(at('16:59'));
+    assert.equal(await dataSource.getRepository(AttendanceDayEntity).countBy({ siteId }), 0);
+    await Promise.all([
+      reconciliation.runDue(at('17:00')),
+      new AttendanceReconciliationService(dataSource, notifications).runDue(at('17:00')),
+    ]);
+    const absentDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ siteId, workerId, workDate: date });
+    assert.equal(absentDay.status, 'ABSENT');
+    assert.equal(absentDay.regularMinutes, 0);
+    assert.equal(absentDay.confirmedMinutes, null);
+    await reconciliation.runDue(at('18:00'));
+    const absenceNotifications = await dataSource
+      .getRepository(UserNotificationEntity)
+      .findBy({ siteId, event: 'ABSENT' });
+    assert.deepEqual(
+      absenceNotifications.map((n) => n.recipientUserId).sort(),
+      [userId, repId].sort(),
+    );
+    assert.equal(
+      (await days.list(workerActor, siteId, { status: 'ABSENT' })).items[0]?.status,
+      'ABSENT',
+    );
+    assert.equal(
+      (await days.list(repActor, siteId, { status: 'ABSENT' })).items[0]?.id,
+      absentDay.id,
+    );
+    assert.equal((await days.list(actor(outsiderId, UserRole.WORKER), siteId, {})).items.length, 0);
+    await assert.rejects(() =>
+      days.detail(actor(outsiderId, UserRole.WORKER), siteId, absentDay.id),
+    );
+    const approvedLeave = await dataSource.getRepository(AbsenceRequestEntity).save({
+      id: randomUUID(),
+      siteId,
+      workerId,
+      workerScheduleId: schedule.id,
+      shiftId: shift.id,
+      expectedScheduleVersionId: version.id,
+      requestedByUserId: userId,
+      status: AbsenceRequestStatus.APPROVED,
+      reason: 'Synthetic approved full shift leave',
+    });
+    await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
+    await reconciliation.runDue(at('18:00'));
+    assert.equal(
+      (await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({ id: absentDay.id }))
+        .status,
+      'CONFIRMED',
+    );
+    assert.equal(
+      await dataSource.getRepository(UserNotificationEntity).countBy({ siteId, event: 'ABSENT' }),
+      0,
+    );
+    await dataSource.getRepository(AbsenceRequestEntity).delete(approvedLeave.id);
+    await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
+    await dataSource.query('DELETE FROM timesheet WHERE attendance_day_id=$1', [absentDay.id]);
+    await dataSource.getRepository(AttendanceDayEntity).delete(absentDay.id);
+    await dataSource.getRepository(WorkerScheduleEntity).update(schedule.id, { isActive: false });
+    await reconciliation.runDue(at('18:00'));
+    assert.equal(await dataSource.getRepository(AttendanceDayEntity).countBy({ siteId }), 0);
+    const absentNightShift = await dataSource.getRepository(ShiftEntity).save({
+      id: randomUUID(),
+      siteId,
+      name: 'Synthetic overnight shift',
+      startsAt: new Date('2026-09-01T15:00:00Z'),
+      endsAt: new Date('2026-09-01T23:00:00Z'),
+      timezone: 'Asia/Ho_Chi_Minh',
+    });
+    const nightSchedule = await dataSource.getRepository(WorkerScheduleEntity).save({
+      id: randomUUID(),
+      siteId,
+      workerId,
+      shiftId: absentNightShift.id,
+      scheduleVersionId: version.id,
+      workDate: '2026-10-02',
+      isActive: true,
+    });
+    await reconciliation.runDue(new Date('2026-10-03T05:59:00+07:00'));
+    assert.equal(await dataSource.getRepository(AttendanceDayEntity).countBy({ siteId }), 0);
+    await reconciliation.runDue(new Date('2026-10-03T06:00:00+07:00'));
+    const absentNightDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ siteId });
+    assert.equal(absentNightDay.workDate, '2026-10-02');
+    assert.equal(absentNightDay.status, 'ABSENT');
+    await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
+    await dataSource.getRepository(AttendanceDayEntity).delete(absentNightDay.id);
+    await dataSource.getRepository(WorkerScheduleEntity).delete(nightSchedule.id);
+    await dataSource.getRepository(ShiftEntity).delete(absentNightShift.id);
+    await dataSource.getRepository(WorkerScheduleEntity).update(schedule.id, { isActive: true });
     const passage = async (
       direction: 'IN' | 'OUT',
       time: string | Date,

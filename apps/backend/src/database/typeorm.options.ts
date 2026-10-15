@@ -1,4 +1,5 @@
 import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
+import { AttendanceAbsence1792022400000 } from './migrations/1792022400000-AttendanceAbsence.js';
 import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
 import { ContractorZoneRegrant1791940000001 } from './migrations/1791940000001-ContractorZoneRegrant.js';
 import { SingleTeamZone1791940000002 } from './migrations/1791940000002-SingleTeamZone.js';
@@ -115,6 +116,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       GateScheduleDenial1791849600000,
       ScheduleAssignmentBatches1791849600001,
       ScheduleChangeNotifications1791849600002,
+      AttendanceAbsence1792022400000,
       WorkerCodeSequence1791676800000,
     ],
     logging: false,

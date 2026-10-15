@@ -42,6 +42,7 @@ import {
   SpeakerHigh as PhVolume,
   ArrowsOut as PhMaximize,
   GridFour as PhGrid,
+  Export as PhExport,
 } from '@phosphor-icons/react';
 
 /* ── Shared prop type ──────────────────────────────────────────────── */
@@ -137,6 +138,9 @@ export function IconMaximize({ className = 'w-4 h-4' }: IconProps) {
 }
 export function IconGrid({ className = 'w-4 h-4' }: IconProps) {
   return <PhGrid className={className} weight="bold" aria-hidden="true" />;
+}
+export function IconExport({ className = 'w-4 h-4' }: IconProps) {
+  return <PhExport className={className} weight="bold" aria-hidden="true" />;
 }
 
 export function IconRefresh({ className = 'w-4 h-4' }: { className?: string }) {

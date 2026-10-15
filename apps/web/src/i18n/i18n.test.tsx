@@ -39,6 +39,37 @@ it('has complete, nonempty catalogs with matching interpolation variables', () =
   }
 });
 
+it.each(['en', 'vi'] as const)(
+  'translates attendance report errors, states and absence notifications in %s',
+  async (language) => {
+    await i18n.changeLanguage(language);
+    const catalog = language === 'vi' ? vi : en;
+    for (const key of [
+      'errors.attendance_reports_scope',
+      'errors.attendance_reports_range',
+      'errors.attendance_reports_timezone',
+      'errors.configuration_input',
+      'errors.configuration_not_found',
+    ] as const) {
+      expect(localizedError(en[key])).toBe(catalog[key]);
+      expect(localizedError(en[key])).not.toBe(catalog['errors.unexpected']);
+    }
+    for (const status of ['NOT_ARRIVED', 'OFF', 'APPROVED_LEAVE'] as const)
+      expect(localizedLabel(status)).toBe(catalog[`labels.${status}`]);
+    const workerName = 'Nguyễn Văn Test & Demo 01';
+    const workDate = '2026-10-14';
+    const message = `No check-in was recorded for ${workerName} on ${workDate}. The assigned shift has ended.`;
+    const notification = { event: 'ABSENT' as const, message, workDate };
+    expect(formatNotificationDisplayMessage(notification)).toBe(
+      catalog['notifications.absent_message']
+        .replace('{{workerName}}', workerName)
+        .replace('{{workDate}}', workDate),
+    );
+    expect(formatNotificationDisplayMessage(notification)).toContain(workerName);
+    expect(formatNotificationDisplayMessage(notification)).toContain(workDate);
+  },
+);
+
 it('switches with keyboard, persists the choice, updates document metadata and keeps a draft', async () => {
   function Draft() {
     useTranslation();

@@ -1,7 +1,7 @@
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useCallback, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import {
   IconAlertTriangle,
@@ -20,7 +20,7 @@ import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
 import { ZoneDecisionHistory } from './permissions/ZoneDecisionHistory';
 import { WorkerMobileQrView } from './gate/WorkerMobileQrView';
 import { AttendanceView } from './attendance/AttendanceView';
-import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
+import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
 
 type AccessSubTab =
   | 'attendance'
@@ -165,10 +165,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   useTranslation();
 
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
-  const queryClient = useQueryClient();
   const { accessToken } = useAuth();
   const currentUserQuery = useCurrentUser(apiUrl);
-  const logoutMutation = useLogout(apiUrl);
   const [requestedSiteId, setRequestedSiteId] = useState(
     () => new URLSearchParams(window.location.search).get('siteId') ?? '',
   );
@@ -176,14 +174,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     new URLSearchParams(window.location.search).get('tab') === 'attendance'
       ? 'attendance'
       : 'zone-permissions',
-  );
-
-  const removeSessionQueries = useCallback(
-    (userId: string) => {
-      queryClient.removeQueries({ queryKey: ['access-control', apiUrl, userId] });
-      queryClient.removeQueries({ queryKey: ['gate-access-logs', apiUrl, userId] });
-    },
-    [apiUrl, queryClient],
   );
 
   // Site Access uses the authenticated app session. It must not create a second
@@ -239,12 +229,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           ? 'visitor-passes'
           : visibleTabs[0]?.id;
 
-  const logout = () => {
-    setRequestedSiteId('');
-    setAccessSubTab('zone-permissions');
-    if (sessionScope) removeSessionQueries(sessionScope);
-    logoutMutation.mutate();
-  };
 
   if (!accessToken || currentUserQuery.isPending) {
     return (
@@ -326,7 +310,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             </h1>
           </div>
 
-          {/* User Profile Chip & Session Actions */}
+          {/* User Profile Chip */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3 rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-3.5 py-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#111111] text-xs font-bold text-white">
@@ -336,20 +320,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 <span className="block text-xs font-bold text-[#2F3437] leading-tight">
                   {currentUser.displayName}
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                  {isGlobalAdmin ? tr('common.global_admin') : siteRoles.join(' · ')}
-                </span>
               </div>
             </div>
-            <button
-              onClick={logout}
-              type="button"
-              disabled={logoutMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3.5 py-2 text-xs font-bold text-[#2F3437] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-            >
-              <span>{tr('common.sign_out')}</span>
-            </button>
           </div>
         </div>
       </header>

@@ -44,3 +44,10 @@ export function attendanceTime(value: string | null | undefined, timezone: strin
       }).format(new Date(value))
     : '—';
 }
+
+export function formatWorkDate(value?: string | null): string {
+  if (!value) return tr('common.date_unavailable');
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}

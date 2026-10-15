@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
-import { DataSource, In, MoreThan, type EntityManager } from 'typeorm';
+import { DataSource, In, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
 import type { AttendanceDayResponse, AttendanceNotificationEvent } from '@smartsite/contracts';
 import {
   AttendanceDayEntity,
@@ -45,6 +45,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     if (this.running) return;
     this.running = true;
     try {
+      await this.ensureScheduledDays(now);
       let cursor: string | undefined;
       while (true) {
         const days = await this.source.getRepository(AttendanceDayEntity).find({
@@ -76,6 +77,55 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       this.logger.error({ action: 'attendance.reconcile.failed' });
     } finally {
       this.running = false;
+    }
+  }
+  private async ensureScheduledDays(now: Date) {
+    let cursor: string | undefined;
+    // Include UTC's next date for sites east of UTC; the actual shift window
+    // decides whether a shift has ended, including overnight shifts and DST.
+    const latestDate = new Date(+now + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    while (true) {
+      const schedules = await this.source.getRepository(WorkerScheduleEntity).find({
+        where: {
+          isActive: true,
+          workDate: LessThanOrEqual(latestDate),
+          ...(cursor ? { id: MoreThan(cursor) } : {}),
+        },
+        order: { id: 'ASC' },
+        take: 500,
+      });
+      if (!schedules.length) break;
+      for (const candidate of schedules) {
+        try {
+          await this.source.transaction(async (manager) => {
+            await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+              `mf03:${candidate.siteId}:${candidate.workerId}`,
+            ]);
+            const schedule = await manager.getRepository(WorkerScheduleEntity).findOne({
+              where: { id: candidate.id, siteId: candidate.siteId, isActive: true },
+              lock: { mode: 'pessimistic_read' },
+            });
+            if (!schedule) return;
+            const worker = await manager
+              .getRepository(WorkerEntity)
+              .findOneBy({ id: schedule.workerId, siteId: schedule.siteId, isActive: true });
+            const shift = await manager
+              .getRepository(ShiftEntity)
+              .findOneBy({ id: schedule.shiftId, siteId: schedule.siteId });
+            if (!worker || !shift || scheduledShiftWindow(shift, schedule.workDate).endsAt > now)
+              return;
+            await this.ensureDay(manager, worker, now, schedule, shift);
+          });
+        } catch {
+          this.logger.error({
+            action: 'attendance.reconcile.schedule_failed',
+            scheduleId: candidate.id,
+            siteId: candidate.siteId,
+          });
+        }
+      }
+      cursor = schedules[schedules.length - 1]!.id;
+      if (schedules.length < 500) break;
     }
   }
   async notify(
@@ -493,7 +543,14 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     const requiredEnd = [...leave]
       .sort((a, b) => b.end - a.end)
       .reduce((last, l) => (l.end >= last && l.start < last ? l.start : last), end);
-    if (day.scheduleId && +now >= end && !open && !fullLeave && finalOut < requiredEnd)
+    const absent =
+      !!currentSchedule?.isActive &&
+      schedules.length === 1 &&
+      !!day.endsAt &&
+      +now >= +day.endsAt &&
+      !fullLeave &&
+      sessions.every((s) => s.status === 'IGNORED');
+    if (day.scheduleId && +now >= end && !open && !fullLeave && !absent && finalOut < requiredEnd)
       anomalies.push('EARLY_CHECKOUT');
     const correctionPending = sessions.length
       ? await manager
@@ -508,7 +565,13 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       anomalies.push('PENDING_REQUEST');
     day.anomalies = anomalies;
     const blocking = anomalies.filter((a) => !(a === 'EARLY_CHECKOUT' && day.reviewedBy));
-    day.status = blocking.length ? 'NEEDS_REVIEW' : +now < end ? 'IN_PROGRESS' : 'CONFIRMED';
+    day.status = blocking.length
+      ? 'NEEDS_REVIEW'
+      : absent
+        ? 'ABSENT'
+        : +now < end
+          ? 'IN_PROGRESS'
+          : 'CONFIRMED';
     day.confirmedMinutes =
       day.status === 'CONFIRMED' ? Math.floor((regularMs + overtimeMs) / 60000) : null;
     const after = JSON.stringify([
@@ -531,6 +594,17 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       await manager.query(
         "UPDATE timesheet SET total_minutes=0,status='DRAFT' WHERE attendance_day_id=$1",
         [day.id],
+      );
+    if (day.status === 'ABSENT')
+      await this.notify(
+        manager,
+        worker,
+        day.id,
+        'ABSENT',
+        `No check-in was recorded for ${worker.displayName} on ${day.workDate}. The assigned shift has ended.`,
+        true,
+        day.workDate,
+        day.id,
       );
     if (open && day.endsAt && +now >= end + 5 * 60000)
       await this.notify(

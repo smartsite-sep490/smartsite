@@ -11,6 +11,13 @@ import { WorkforceScheduleTab } from '../components/WorkforceScheduleTab';
 let queries: QueryClient;
 
 beforeEach(() => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'attendanceDays').mockResolvedValue({
+    items: [],
+    total: 0,
+    requests: [],
+    canReview: false,
+    canRequest: true,
+  });
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2030-01-01T10:00:00Z'));
   for (const method of ['listShifts', 'listWorkers', 'listCoworkers'] as const) {
@@ -94,6 +101,47 @@ function mount(siteId = 'site-1') {
   const result = render(view(siteId));
   return { changeSite: (id: string) => result.rerender(view(id)) };
 }
+
+it.each(['timetable', 'list'])('shows backend ABSENT in the %s schedule view', async (mode) => {
+  vi.mocked(SmartSiteManagementClient.prototype.attendanceDays).mockResolvedValue({
+    items: [
+      {
+        id: 'absent-day',
+        workerId: 'worker-a',
+        workerName: 'Worker A',
+        workDate: '2030-01-01',
+        timezone: 'Asia/Ho_Chi_Minh',
+        scheduleId: 'site-1-morning',
+        shiftName: 'Morning',
+        startsAt: '2030-01-01T01:00:00Z',
+        endsAt: '2030-01-01T10:00:00Z',
+        breakStartsAt: null,
+        breakEndsAt: null,
+        status: 'ABSENT',
+        regularMinutes: 0,
+        overtimeMinutes: 0,
+        provisionalMinutes: 0,
+        confirmedMinutes: null,
+        presence: 'OUTSIDE',
+        anomalies: [],
+        version: 1,
+        canRequest: false,
+      },
+    ],
+    total: 1,
+    requests: [],
+    canReview: false,
+    canRequest: true,
+  });
+  mount();
+  if (mode === 'list') fireEvent.click(await screen.findByRole('button', { name: 'List' }));
+  expect(await screen.findByText('ABSENT')).toBeTruthy();
+  expect(SmartSiteManagementClient.prototype.attendanceDays).toHaveBeenCalledWith(
+    'synthetic-token',
+    'site-1',
+    expect.objectContaining({ workerId: 'worker-a' }),
+  );
+});
 
 it.each([
   ['site-1', 'Demo Construction Site', 'timetable'],

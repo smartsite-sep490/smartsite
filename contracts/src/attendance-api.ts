@@ -19,10 +19,11 @@ export interface IgnoreDuplicateAttendanceCommand {
   expectedSessionVersion: number;
   reason: string;
 }
-export type AttendanceDayStatus = 'IN_PROGRESS' | 'NEEDS_REVIEW' | 'CONFIRMED';
+export type AttendanceDayStatus = 'IN_PROGRESS' | 'NEEDS_REVIEW' | 'CONFIRMED' | 'ABSENT';
 export type AttendanceNotificationEvent =
   | 'EARLY_EXIT'
   | 'MISSING_CHECKOUT'
+  | 'ABSENT'
   | 'UNSCHEDULED_ENTRY'
   | 'ENTRY_DENIED_NO_SCHEDULE'
   | 'TIME_REQUESTED'

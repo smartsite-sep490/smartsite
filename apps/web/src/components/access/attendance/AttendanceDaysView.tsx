@@ -7,8 +7,8 @@ import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { loadAllPages } from '../../workforce/load-all-pages';
-import { attendanceLabel, attendanceHours } from './attendance-display';
-import { attendanceDate } from './attendance-display';
+import { attendanceLabel, attendanceHours, attendanceDate, formatWorkDate } from './attendance-display';
+import { SmartDatePicker } from '../../ui';
 import { requestTimeInstant, requestShiftTimes, requestWallTime } from './attendance-request-time';
 import type {
   AttendanceDayResponse,
@@ -40,6 +40,12 @@ function StatusBadge({ status }: { status: string }) {
   useTranslation();
 
   const map: Record<string, { label: string; cls: string }> = {
+    ABSENT: {
+      get label() {
+        return localizedLabel('ABSENT');
+      },
+      cls: 'bg-rose-50 text-rose-700 border-rose-200',
+    },
     IN_PROGRESS: {
       get label() {
         return tr('common.in_progress');
@@ -114,6 +120,8 @@ export function AttendanceDaysView({
   onSelectDay,
   isWorker,
   children,
+  activeSubTab,
+  workerId,
 }: {
   apiUrl: string;
   token: string;
@@ -123,6 +131,8 @@ export function AttendanceDaysView({
   onSelectDay?: (id: string) => void;
   isWorker?: boolean;
   children?: React.ReactNode;
+  activeSubTab?: 'timesheet' | 'requests';
+  workerId?: string;
 }) {
   useTranslation();
 
@@ -130,7 +140,8 @@ export function AttendanceDaysView({
   const cache = useQueryClient();
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [workerFilter, setWorkerFilter] = useState('');
+  const [workerSelection, setWorkerFilter] = useState('');
+  const workerFilter = workerId ?? workerSelection;
   const [statusFilter, setStatusFilter] = useState<AttendanceDayStatus | ''>('');
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<AttendanceDayResponse | null>(null);
@@ -474,1180 +485,1217 @@ export function AttendanceDaysView({
 
   return (
     <section className="space-y-5">
-      {/* ── KPI METRICS CARDS ───────────────────────────────────── */}
-      {!isWorker && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0">
-              <IconClock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('common.total_days')}
-              </p>
-              <p className="text-lg font-extrabold text-[#071A2B]">{data.total}</p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <IconCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('attendance_days_view.confirmed_this_page')}
-              </p>
-              <p className="text-lg font-extrabold text-[#071A2B]">
-                {data.items.filter((d) => d.status === 'CONFIRMED').length}
-              </p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <IconAlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('attendance_days_view.needs_review_this_page')}
-              </p>
-              <p className="text-lg font-extrabold text-[#071A2B]">
-                {data.items.filter((d) => d.status === 'NEEDS_REVIEW').length}
-              </p>
-            </div>
-          </div>
-          {!isWorker && (
+      <div className={activeSubTab === 'requests' ? 'hidden' : 'space-y-5'}>
+        {/* ── KPI METRICS CARDS ───────────────────────────────────── */}
+        {!isWorker && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <IconUsers className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0">
+                <IconClock className="w-5 h-5" />
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  {tr('attendance_days_view.workers_this_page')}
+                  {tr('common.total_days')}
+                </p>
+                <p className="text-lg font-extrabold text-[#071A2B]">{data.total}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <IconCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  {tr('attendance_days_view.confirmed_this_page')}
                 </p>
                 <p className="text-lg font-extrabold text-[#071A2B]">
-                  {new Set(data.items.map((d) => d.workerId)).size}
+                  {data.items.filter((d) => d.status === 'CONFIRMED').length}
                 </p>
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {children}
-
-      {/* ── MAIN ATTENDANCE TABLE ──────────────────────────────── */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
-        {/* Card Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center">
-              <IconClock className="w-4 h-4" />
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <IconAlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  {tr('attendance_days_view.needs_review_this_page')}
+                </p>
+                <p className="text-lg font-extrabold text-[#071A2B]">
+                  {data.items.filter((d) => d.status === 'NEEDS_REVIEW').length}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-[#071A2B]">{tr('common.daily_work_hours')}</h2>
-              <p className="text-[11px] text-slate-400 font-medium">
-                {tr('attendance_days_view.mf03_attendance_timesheets')}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
             {!isWorker && (
-              <a
-                href={`/access?siteId=${encodeURIComponent(siteId)}&tab=worker-enrollment`}
-                className="flex items-center gap-1.5 rounded-lg bg-[#071A2B] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition-colors"
-              >
-                <IconUsers className="w-3.5 h-3.5 text-orange-400" />
-                <span>{tr('common.enrol_worker')}</span>
-              </a>
-            )}
-            <button
-              onClick={handleRefresh}
-              title={tr('common.refresh')}
-              aria-label={tr('common.refresh')}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-all"
-            >
-              <IconRefresh className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{tr('common.refresh')}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Bar */}
-        <div className="px-6 py-4 bg-slate-50/60 border-b border-slate-100">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <label
-                htmlFor="filter-from-date"
-                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >
-                {tr('common.from')}
-              </label>
-              <div className="relative">
-                <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  id="filter-from-date"
-                  type="date"
-                  className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
-                  value={fromDate}
-                  onChange={(e) => {
-                    setFromDate(e.target.value);
-                    setOffset(0);
-                  }}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label
-                htmlFor="filter-to-date"
-                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >
-                {tr('common.to')}
-              </label>
-              <div className="relative">
-                <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  id="filter-to-date"
-                  type="date"
-                  className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
-                  value={toDate}
-                  onChange={(e) => {
-                    setToDate(e.target.value);
-                    setOffset(0);
-                  }}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label
-                htmlFor="filter-status"
-                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >
-                {tr('common.status')}
-              </label>
-              <div className="relative">
-                <IconFilter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <select
-                  id="filter-status"
-                  className="pl-8 pr-8 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none appearance-none cursor-pointer"
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value as AttendanceDayStatus | '');
-                    setOffset(0);
-                  }}
-                >
-                  <option value="">{tr('common.all_statuses')}</option>
-                  <option value="IN_PROGRESS">{tr('common.in_progress')}</option>
-                  <option value="NEEDS_REVIEW">{tr('common.needs_review')}</option>
-                  <option value="CONFIRMED">{tr('common.confirmed')}</option>
-                </select>
-              </div>
-            </div>
-            {data.canReview && (
-              <div className="space-y-1">
-                <label
-                  htmlFor="filter-worker"
-                  className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                >
-                  {tr('common.worker')}
-                </label>
-                <div className="relative">
-                  <IconUsers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <select
-                    id="filter-worker"
-                    className="pl-8 pr-8 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none appearance-none cursor-pointer"
-                    value={workerFilter}
-                    onChange={(e) => {
-                      setWorkerFilter(e.target.value);
-                      setOffset(0);
-                      setRequestOffset(0);
-                    }}
-                  >
-                    <option value="">{tr('common.all_workers')}</option>
-                    {workers.data?.items.map((worker) => (
-                      <option key={worker.id} value={worker.id}>
-                        {worker.displayName}
-                      </option>
-                    ))}
-                  </select>
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <IconUsers className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {tr('attendance_days_view.workers_this_page')}
+                  </p>
+                  <p className="text-lg font-extrabold text-[#071A2B]">
+                    {new Set(data.items.map((d) => d.workerId)).size}
+                  </p>
                 </div>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Table */}
-        {!data.items.length ? (
-          <div className="px-6 py-12 text-center">
-            <div className="mx-auto w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-              <IconCalendar className="w-5 h-5" />
-            </div>
-            <p className="text-sm font-semibold text-slate-500">
-              {tr('attendance_days_view.no_attendance_days_in_this_range')}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  {(isWorker
-                    ? [
-                        tr('common.date_99c40a'),
-                        tr('common.shift'),
-                        tr('common.recorded_hours'),
-                        tr('common.confirmed_hours'),
-                      ]
-                    : [
-                        tr('common.worker_date'),
-                        tr('common.shift'),
-                        tr('common.presence'),
-                        tr('common.regular'),
-                        tr('common.overtime'),
-                        tr('common.provisional'),
-                        tr('common.confirmed'),
-                        tr('common.status'),
-                        '',
-                      ]
-                  ).map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {data.items.map((day) => {
-                  const isSelected = selected?.id === day.id;
-                  return (
-                    <tr
-                      key={day.id}
-                      className={`transition-colors ${isSelected ? 'bg-orange-50/60' : 'hover:bg-slate-50/70'}`}
-                    >
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          {!isWorker && (
-                            <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
-                              {day.workerName.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            {!isWorker && (
-                              <p className="text-xs font-bold text-[#071A2B]">{day.workerName}</p>
-                            )}
-                            <p className="text-[11px] text-slate-400">{day.workDate}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">
-                        {day.shiftName ?? (
-                          <span className="text-slate-400 italic">{tr('common.unassigned')}</span>
-                        )}
-                        {day.breakStartsAt && day.breakEndsAt && (
-                          <p className="text-[11px] text-slate-500">
-                            {tr('common.unpaid_break_value_value', {
-                              value1: shiftTime(day.breakStartsAt, day.timezone),
-                              value2: shiftTime(day.breakEndsAt, day.timezone),
-                            })}
-                          </p>
-                        )}
-                      </td>
-                      {!isWorker && (
-                        <>
-                          <td className="px-4 py-3.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
-                            {day.presence === 'INSIDE'
-                              ? tr('common.open_session')
-                              : tr('common.no_open_session')}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
-                            {hours(day.regularMinutes)}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
-                            {hours(day.overtimeMinutes)}
-                          </td>
-                        </>
-                      )}
-                      <td className="px-4 py-3.5 text-xs font-mono text-slate-500 whitespace-nowrap">
-                        {hours(day.provisionalMinutes)}
-                      </td>
-                      <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
-                        {day.confirmedMinutes === null ? (
-                          <span className="text-slate-400 italic">
-                            {tr('common.awaiting_confirmation')}
-                          </span>
-                        ) : (
-                          <span className="text-emerald-700">{hours(day.confirmedMinutes)}</span>
-                        )}
-                      </td>
-                      {!isWorker && (
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="space-y-1">
-                            <StatusBadge status={day.status} />
-                            {day.anomalies.length > 0 && (
-                              <p className="text-[10px] text-amber-600 font-medium">
-                                {day.anomalies.map(attendanceLabel).join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                      {!isWorker && (
-                        <td className="px-4 py-3.5">
-                          <button
-                            aria-label={tr('common.view')}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                              isSelected
-                                ? 'bg-[#F66B17] text-white'
-                                : 'border border-slate-200 text-slate-600 hover:border-[#F66B17] hover:text-[#F66B17]'
-                            }`}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelected(null);
-                                onSelectDay?.('');
-                              } else {
-                                setSelected(day);
-                                onSelectDay?.(day.id);
-                                setScheduleId(day.scheduleId ?? '');
-                              }
-                            }}
-                          >
-                            <IconEye className="w-3 h-3" />
-                            {isSelected ? tr('common.hide') : tr('common.view')}
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         )}
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50/40">
-          <button
-            disabled={offset === 0}
-            onClick={() => setOffset(Math.max(0, offset - 20))}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
-          >
-            <IconChevronLeft className="w-3.5 h-3.5" /> {tr('common.previous')}
-          </button>
-          <span className="text-xs text-slate-500 font-medium">
-            {tr('common.value_days_total', { value1: data.total })}
-          </span>
-          <button
-            disabled={offset + 20 >= data.total}
-            onClick={() => setOffset(offset + 20)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
-          >
-            {tr('common.next')} <IconChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+        {children}
 
-      {/* ── DETAIL PANEL (shown only when a row is selected) ───── */}
-      {activeDay && (
-        <div className="rounded-2xl border border-[#F66B17]/30 bg-white shadow-xs overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-orange-50/40">
+        {/* ── MAIN ATTENDANCE TABLE ──────────────────────────────── */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
+          {/* Card Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center">
-                <IconEye className="w-4 h-4" />
+              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-100/60 shadow-2xs">
+                <IconClock className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[#071A2B]">
-                  {activeDay.workerName}
-                  <span className="ml-2 text-slate-400 font-normal">·</span>
-                  <span className="ml-2 text-slate-500 font-semibold">{activeDay.workDate}</span>
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  {activeDay.startsAt
-                    ? new Date(activeDay.startsAt).toLocaleString(uiLocale())
-                    : '—'}
-                  {' → '}
-                  {activeDay.endsAt ? new Date(activeDay.endsAt).toLocaleString(uiLocale()) : '—'} (
-                  {activeDay.timezone})
-                </p>
-                {activeDay.breakStartsAt && activeDay.breakEndsAt && (
-                  <p className="text-xs text-slate-500">
-                    {tr(
-                      'attendance_days_view.unpaid_break_value_value_only_time_overlapping_presence_is_deducted',
-                      {
-                        value1: shiftTime(activeDay.breakStartsAt, activeDay.timezone),
-                        value2: shiftTime(activeDay.breakEndsAt, activeDay.timezone),
-                      },
-                    )}
+                <h2 className="text-base font-bold text-[#071A2B]">
+                  {tr('common.daily_work_hours')}
+                </h2>
+                {!isWorker && (
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    {tr('attendance_days_view.mf03_attendance_timesheets')}
                   </p>
                 )}
               </div>
             </div>
-            <button
-              onClick={() => {
-                setSelected(null);
-                onSelectDay?.('');
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:border-slate-300 transition-colors"
-            >
-              <IconX className="w-3.5 h-3.5" /> {tr('common.close')}
-            </button>
-          </div>
-
-          <div className="p-6 space-y-5">
-            {/* Schedule Changed Warning */}
-            {activeDay.anomalies.includes('SCHEDULE_CHANGED') && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <IconAlertTriangle className="w-4 h-4 text-amber-600" />
-                  <h4 className="text-sm font-bold text-amber-800">
-                    {tr('common.resolve_changed_schedule')}
-                  </h4>
-                </div>
-                <p className="text-xs text-amber-800">
-                  {tr('attendance_days_view.original_shift_used_for_attendance')}
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-lg border border-amber-200 bg-white p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
-                      {tr('common.original_shift')}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-700">{activeDay.shiftName}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {shiftTime(activeDay.startsAt, activeDay.timezone)} →{' '}
-                      {shiftTime(activeDay.endsAt, activeDay.timezone)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      {tr('common.current_assigned_shift')}
-                    </p>
-                    {detail.data?.currentSchedule ? (
-                      <>
-                        <p className="text-xs font-semibold text-slate-700">
-                          {detail.data.currentSchedule.shiftName}
-                        </p>
-                        {detail.data.currentSchedule.isActive === false && (
-                          <p className="text-[11px] text-red-600 font-bold">
-                            {tr('common.inactive_schedule')}
-                          </p>
-                        )}
-                        <p className="text-[11px] text-slate-500">
-                          {shiftTime(
-                            detail.data.currentSchedule.startsAt,
-                            detail.data.currentSchedule.timezone,
-                          )}
-                          {' → '}
-                          {shiftTime(
-                            detail.data.currentSchedule.endsAt,
-                            detail.data.currentSchedule.timezone,
-                          )}
-                        </p>
-                      </>
-                    ) : detail.isPending ? (
-                      <p className="text-[11px] text-slate-400">{tr('common.loading')}</p>
-                    ) : (
-                      <p className="text-[11px] text-slate-400">{tr('common.unavailable')}</p>
-                    )}
-                  </div>
-                </div>
-                {data.canReview && (
-                  <a
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#F66B17] hover:underline"
-                    href={`/workforce?siteId=${encodeURIComponent(siteId)}&tab=schedule`}
-                  >
-                    {tr('common.open_workforce_schedule')} <IconChevronRight className="w-3 h-3" />
-                  </a>
-                )}
-              </div>
-            )}
-
-            {/* Work Intervals */}
-            <div className="space-y-2">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('common.work_intervals')}
-              </h4>
-              {detail.isPending && (
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-                  {tr('common.loading_intervals')}
-                </div>
-              )}
-              {detail.data?.sessions.some((s) => s.status === 'MISSING_IN') && (
-                <div className="flex items-start justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                  <div className="flex items-start gap-2">
-                    <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-xs text-amber-700">
-                      {tr(
-                        'attendance_days_view.missing_in_request_a_correction_with_the_actual_entry_time',
-                      )}
-                    </p>
-                  </div>
-                  {isWorker && (
-                    <a
-                      href="#attendance-correction-form"
-                      className="text-xs font-bold text-amber-800 underline hover:text-amber-900 shrink-0"
-                    >
-                      {tr('common.request_correction')}
-                    </a>
-                  )}
-                </div>
-              )}
-              {detail.data?.sessions.some((s) => s.effectiveInAt && !s.effectiveOutAt) && (
-                <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
-                  <IconClock className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" />
-                  <p className="text-xs text-blue-700">
-                    {tr('attendance_days_view.open_session_checkout_not_recorded')}
-                  </p>
-                </div>
-              )}
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
-                {detail.data?.sessions.map((s) => (
-                  <div key={s.id} className="px-4 py-3 bg-white">
-                    {s.status === 'IGNORED' || (s.status === 'NEEDS_REVIEW' && !s.effectiveInAt) ? (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-slate-600">
-                            {tr('common.duplicate_in_value', {
-                              value1: s.rawInAt
-                                ? new Date(s.rawInAt).toLocaleString(uiLocale())
-                                : tr('common.recorded_entry'),
-                            })}
-                          </p>
-                          <p className="text-[11px] text-slate-400">
-                            {s.status === 'IGNORED'
-                              ? tr('attendance_days_view.ignored_no_work_hours_added')
-                              : tr('common.needs_representative_review')}
-                          </p>
-                          {s.ignoreReason && (
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              {tr('common.reason_value', { value1: s.ignoreReason })}
-                            </p>
-                          )}
-                        </div>
-                        <StatusBadge status={s.status} />
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-slate-700">
-                            {s.effectiveInAt
-                              ? new Date(s.effectiveInAt).toLocaleString(uiLocale())
-                              : tr('common.missing_entry')}
-                            {' → '}
-                            {s.effectiveOutAt
-                              ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
-                              : tr('common.awaiting_checkout')}
-                          </p>
-                          {s.effectiveInAt && !s.effectiveOutAt && (
-                            <p className="text-[11px] text-blue-600">
-                              {tr('attendance_days_view.open_session_checkout_not_recorded')}
-                            </p>
-                          )}
-                          {!s.effectiveInAt && s.status !== 'IGNORED' && (
-                            <p className="text-[11px] text-amber-600">
-                              {tr('attendance_days_view.incomplete_evidence_hours_not_counted')}
-                            </p>
-                          )}
-                        </div>
-                        <StatusBadge status={s.status} />
-                      </div>
-                    )}
-                    {s.canIgnoreDuplicate && (
-                      <button
-                        className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:border-[#F66B17] hover:text-[#F66B17] transition-colors disabled:opacity-50"
-                        disabled={ignoreDuplicate.isPending || reviewNote.trim().length < 5}
-                        onClick={() => ignoreDuplicate.mutate(s)}
-                      >
-                        {tr('common.ignore_duplicate_in')}
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {detail.isSuccess && !detail.data?.sessions.length && (
-                  <div className="px-4 py-6 text-center text-xs text-slate-400">
-                    {tr('attendance_days_view.no_work_intervals_recorded')}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Review note & Confirm early departure */}
-            {(() => {
-              const canConfirmEarly =
-                data.canReview &&
-                activeDay.anomalies.includes('EARLY_CHECKOUT') &&
-                !activeDay.anomalies.includes('SCHEDULE_CHANGED');
-              const hasDuplicateToIgnore =
-                data.canReview &&
-                (detail.data?.sessions.some((s) => s.canIgnoreDuplicate) ?? false);
-              const hasActionableReview = canConfirmEarly || hasDuplicateToIgnore;
-
-              if (!data.canReview || !hasActionableReview) return null;
-
-              return (
-                <div className="space-y-3 pt-2">
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="review-note-input"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                    >
-                      {tr('common.review_note')}
-                    </label>
-                    <input
-                      id="review-note-input"
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
-                      maxLength={1000}
-                      placeholder={tr('attendance_days_view.add_a_note_for_your_review_decision')}
-                      value={reviewNote}
-                      onChange={(e) => setReviewNote(e.target.value)}
-                    />
-                  </div>
-
-                  {canConfirmEarly && (
-                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-xs text-slate-600">
-                        {tr('attendance_days_view.confirm_actual_hours_for_early_departure')}
-                      </p>
-                      <button
-                        disabled={confirm.isPending || !reviewNote.trim()}
-                        onClick={() => confirm.mutate(activeDay)}
-                        aria-label={tr(
-                          'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
-                        )}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
-                      >
-                        <IconCheck className="w-3.5 h-3.5" />{' '}
-                        {tr('attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* ── REQUEST OVERTIME / LEAVE ─────────────────────────── */}
-      {data.canRequest && submittedRequest && (
-        <section
-          className="rounded-2xl border border-emerald-200 bg-white p-6 space-y-3"
-          aria-label={tr('common.submitted_request')}
-        >
-          <h3 className="font-bold text-[#071A2B]">{tr('common.request_submitted')}</h3>
-          <p className="text-sm text-slate-600">
-            {tr(
-              'attendance_days_view.your_value_request_was_sent_to_your_contractor_representative',
-              { value1: submittedRequest.kind === 'OVERTIME' ? 'overtime' : 'leave' },
-            )}
-          </p>
-          <div aria-live="polite">
-            {submittedStatus.isPending ? (
-              <p>{tr('common.loading_request_status')}</p>
-            ) : submittedStatus.isError || !submittedStatus.data ? (
-              <div role="alert">
-                {tr('common.status_unavailable')}{' '}
-                <button className="underline" onClick={() => void submittedStatus.refetch()}>
-                  {tr('common.retry_request_status')}
-                </button>
-              </div>
-            ) : (
-              <>
-                <StatusBadge status={submittedStatus.data.status} />
-                <p className="mt-2 text-sm">
-                  {new Date(submittedStatus.data.startsAt).toLocaleString(uiLocale(), {
-                    hour12: false,
-                  })}{' '}
-                  →{' '}
-                  {new Date(submittedStatus.data.endsAt).toLocaleString(uiLocale(), {
-                    hour12: false,
-                  })}
-                </p>
-                <p className="text-sm text-slate-600">{submittedStatus.data.reason}</p>
-                {submittedStatus.data.reviewNote && (
-                  <p className="text-sm">
-                    {tr('common.review_value', { value1: submittedStatus.data.reviewNote })}
-                  </p>
-                )}
-                {['PENDING', 'PENDING_MANAGER'].includes(submittedStatus.data.status) && (
-                  <p className="mt-2 text-sm text-amber-700">
-                    {tr(
-                      'attendance_days_view.waiting_for_your_contractor_representative_to_review_this_request',
-                    )}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-          <button
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold"
-            onClick={() => {
-              setSubmittedRequest(null);
-              request.reset();
-            }}
-          >
-            {tr('common.new_request')}
-          </button>
-        </section>
-      )}
-      {data.canRequest && !submittedRequest ? (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-[#071A2B]">
-              {tr('attendance_days_view.request_overtime_or_leave')}
-            </h3>
-          </div>
-          {(schedules.isPending || requestShifts.isPending) && (
-            <p role="status" className="p-6">
-              {tr('common.loading_assigned_shifts')}
-            </p>
-          )}
-          {(schedules.isError || requestShifts.isError) && (
-            <div role="alert" className="p-6">
-              {tr('common.assigned_shifts_unavailable')}{' '}
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => {
-                  void schedules.refetch();
-                  void requestShifts.refetch();
-                }}
+                onClick={handleRefresh}
+                title={tr('common.refresh')}
+                aria-label={tr('common.refresh')}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all shadow-2xs active:scale-[0.98]"
               >
-                {tr('common.retry_assigned_shifts')}
+                <IconRefresh className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{tr('common.refresh')}</span>
               </button>
             </div>
-          )}
-          {schedules.isSuccess && requestShifts.isSuccess && !availableSchedules.length && (
-            <p className="p-6">
-              {tr(
-                'attendance_days_view.no_current_or_upcoming_assigned_shifts_contact_your_contractor_representative',
-              )}
-            </p>
-          )}
-          {availableSchedules.length > 0 && !schedules.isError && !requestShifts.isError && (
-            <form
-              className="p-6 space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                request.mutate();
-              }}
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label
-                    htmlFor="assigned-shift"
-                    className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    {tr('common.assigned_shift')}
-                  </label>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="px-6 py-4 bg-slate-50/70 border-b border-slate-100/80">
+            <div className="flex flex-wrap items-end gap-3.5">
+              <div className="space-y-1">
+                <SmartDatePicker
+                  id="filter-from-date"
+                  label={tr('common.from')}
+                  value={fromDate}
+                  onChange={(val) => {
+                    setFromDate(val);
+                    setOffset(0);
+                  }}
+                  placeholder={tr('common.day_month_year')}
+                  disablePast={false}
+                  clearable
+                  compact
+                />
+              </div>
+              <div className="space-y-1">
+                <SmartDatePicker
+                  id="filter-to-date"
+                  label={tr('common.to')}
+                  value={toDate}
+                  onChange={(val) => {
+                    setToDate(val);
+                    setOffset(0);
+                  }}
+                  placeholder={tr('common.day_month_year')}
+                  disablePast={false}
+                  clearable
+                  compact
+                />
+              </div>
+              <div className="space-y-1">
+                <label
+                  htmlFor="filter-status"
+                  className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                >
+                  {tr('common.status')}
+                </label>
+                <div className="relative">
+                  <IconFilter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                   <select
-                    id="assigned-shift"
-                    required
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                    value={selectedRequestSchedule ? scheduleId : ''}
-                    onChange={(e) => suggestTimes(e.target.value, kind, new Date())}
-                  >
-                    <option value="">{tr('common.select_shift')}</option>
-                    {availableSchedules.map(({ schedule, shift, startsAt, endsAt }) => (
-                      <option key={schedule.id} value={schedule.id}>
-                        {schedule.workDate} · {shift.name} · {startsAt.slice(11)}–{endsAt.slice(11)}{' '}
-                        ({shift.timezone})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label
-                    htmlFor="request-kind"
-                    className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    {tr('common.request_type')}
-                  </label>
-                  <select
-                    id="request-kind"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                    value={kind}
+                    id="filter-status"
+                    className="pl-8 pr-8 py-2 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none appearance-none cursor-pointer transition-all"
+                    value={statusFilter}
                     onChange={(e) => {
-                      const next = e.target.value as 'OVERTIME' | 'LEAVE';
-                      setKind(next);
-                      suggestTimes(scheduleId, next, new Date());
+                      setStatusFilter(e.target.value as AttendanceDayStatus | '');
+                      setOffset(0);
                     }}
                   >
-                    <option value="OVERTIME">{tr('common.overtime')}</option>
-                    <option value="LEAVE">
-                      {tr('attendance_days_view.leave_whole_or_partial_shift')}
-                    </option>
+                    <option value="">{tr('common.all_statuses')}</option>
+                    <option value="IN_PROGRESS">{tr('common.in_progress')}</option>
+                    <option value="NEEDS_REVIEW">{tr('common.needs_review')}</option>
+                    <option value="CONFIRMED">{tr('common.confirmed')}</option>
+                    <option value="ABSENT">{localizedLabel('ABSENT')}</option>
                   </select>
                 </div>
-
+              </div>
+              {data.canReview && (
                 <div className="space-y-1">
                   <label
-                    htmlFor="request-start"
+                    htmlFor="filter-worker"
                     className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    {tr('attendance_days_view.start_date_time')}
+                    {tr('common.worker')}
                   </label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        id="request-start-date"
-                        aria-label={tr('common.start_date')}
-                        type="date"
-                        required
-                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                        value={startsAt.slice(0, 10)}
-                        onChange={(e) =>
-                          setStartsAt(`${e.target.value}T${startsAt.split('T')[1] ?? ''}`)
-                        }
-                      />
-                    </div>
-                    <div className="relative flex-1">
-                      <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        id="request-start"
-                        aria-label={tr('common.start_time')}
-                        type="time"
-                        required
-                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                        value={startsAt.split('T')[1] ?? ''}
-                        onChange={(e) => setStartsAt(`${startsAt.slice(0, 10)}T${e.target.value}`)}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label
-                    htmlFor="request-end"
-                    className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    {tr('attendance_days_view.end_date_time')}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        id="request-end-date"
-                        aria-label={tr('common.end_date')}
-                        type="date"
-                        required
-                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                        value={endsAt.slice(0, 10)}
-                        onChange={(e) =>
-                          setEndsAt(`${e.target.value}T${endsAt.split('T')[1] ?? ''}`)
-                        }
-                      />
-                    </div>
-                    <div className="relative flex-1">
-                      <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        id="request-end"
-                        aria-label={tr('common.end_time')}
-                        type="time"
-                        required
-                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                        value={endsAt.split('T')[1] ?? ''}
-                        onChange={(e) => setEndsAt(`${endsAt.slice(0, 10)}T${e.target.value}`)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1 sm:col-span-2">
-                  <label
-                    htmlFor="request-reason"
-                    className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    {tr('common.reason')}
-                  </label>
-                  <input
-                    id="request-reason"
-                    required
-                    minLength={5}
-                    maxLength={1000}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:outline-none"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="submit"
-                  aria-label={tr('common.submit_request')}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors"
-                  disabled={request.isPending || !selectedRequestSchedule}
-                >
-                  {tr('common.submit_request')}
-                </button>
-                {request.isSuccess && (
-                  <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-                    <IconCheck className="w-3.5 h-3.5" /> {tr('common.request_submitted')}
-                  </span>
-                )}
-              </div>
-              {request.error && (
-                <p role="alert" className="text-xs text-red-600">
-                  {localizedError(request.error.message)}
-                </p>
-              )}
-            </form>
-          )}
-        </div>
-      ) : null}
-
-      {/* ── TIME REQUESTS QUEUE ─────────────────────────────── */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-[#071A2B]">{tr('common.time_requests')}</h3>
-          <div className="flex items-center gap-2">
-            <label htmlFor="queue-kind" className="sr-only">
-              {tr('common.queue_type')}
-            </label>
-            <select
-              id="queue-kind"
-              aria-label={tr('common.queue_type')}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
-              value={requestKind}
-              onChange={(e) => {
-                setRequestKind(e.target.value as 'OVERTIME' | 'LEAVE');
-                setRequestOffset(0);
-              }}
-            >
-              <option value="OVERTIME">{tr('common.overtime')}</option>
-              <option value="LEAVE">{tr('common.leave')}</option>
-            </select>
-            <label htmlFor="queue-status" className="sr-only">
-              {tr('common.request_status')}
-            </label>
-            <select
-              id="queue-status"
-              aria-label={tr('common.request_status')}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
-              value={requestStatus}
-              onChange={(e) => {
-                setRequestStatus(e.target.value as typeof requestStatus);
-                setRequestOffset(0);
-              }}
-            >
-              <option value="">{tr('common.all_statuses')}</option>
-              <option value="PENDING">{tr('common.pending')}</option>
-              <option value="APPROVED">{tr('common.approved')}</option>
-              <option value="REJECTED">{tr('common.rejected')}</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="divide-y divide-slate-50">
-          {timeRequests.isPending && (
-            <div className="flex items-center gap-2 p-5 text-xs text-slate-400">
-              <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
-              {tr('common.loading_time_requests')}
-            </div>
-          )}
-          {timeRequests.error && (
-            <div
-              role="alert"
-              className="flex items-center justify-between p-5 text-xs text-red-600"
-            >
-              <span>{localizedError(timeRequests.error.message)}</span>
-              <button
-                aria-label={tr('common.retry_time_requests')}
-                onClick={() => void timeRequests.refetch()}
-                className="font-bold underline"
-              >
-                {tr('common.retry_time_requests')}
-              </button>
-            </div>
-          )}
-          {timeRequests.data?.items.length === 0 && (
-            <div className="px-6 py-8 text-center text-xs text-slate-400">
-              {tr('common.no_time_requests')}
-            </div>
-          )}
-          {!timeRequests.isError &&
-            timeRequests.data?.items.map((r) => (
-              <div key={`${localizedLabel(r.kind)}:${r.id}`} className="px-6 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-[#071A2B]">{r.workerName}</span>
-                      <StatusBadge status={r.status} />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {r.kind}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {new Date(r.startsAt).toLocaleString(uiLocale())} →{' '}
-                      {new Date(r.endsAt).toLocaleString(uiLocale())}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{r.reason}</p>
-                    {r.reviewNote && (
-                      <p className="text-[11px] text-emerald-700 mt-0.5">
-                        {tr('common.review_value', { value1: r.reviewNote })}
-                      </p>
-                    )}
-                  </div>
-                  {data.canReview && ['PENDING', 'PENDING_MANAGER'].includes(r.status) && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        disabled={review.isPending}
-                        onClick={() => review.mutate({ r, approve: true })}
-                        title={tr('common.approve_this_request')}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
-                      >
-                        <IconCheck className="w-3 h-3" /> {tr('common.approve')}
-                      </button>
-                      <button
-                        disabled={review.isPending}
-                        onClick={() => {
-                          setRejectingRequest(`${r.kind}:${r.id}`);
-                          setRejectionReason('');
-                        }}
-                        title={tr('attendance_days_view.enter_a_reason_to_reject_this_request')}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold disabled:opacity-50 hover:bg-red-50 transition-colors"
-                      >
-                        <IconX className="w-3 h-3" /> {tr('common.reject')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {data.canReview &&
-                  ['PENDING', 'PENDING_MANAGER'].includes(r.status) &&
-                  rejectingRequest === `${r.kind}:${r.id}` && (
-                    <form
-                      className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 space-y-3"
-                      aria-label={tr('common.reject_request')}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        if (rejectionReason.trim())
-                          review.mutate({ r, approve: false, reason: rejectionReason });
+                  <div className="relative">
+                    <IconUsers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      id="filter-worker"
+                      className="pl-8 pr-8 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none appearance-none cursor-pointer"
+                      value={workerFilter}
+                      disabled={Boolean(workerId)}
+                      onChange={(e) => {
+                        setWorkerFilter(e.target.value);
+                        setOffset(0);
+                        setRequestOffset(0);
                       }}
                     >
-                      <label
-                        htmlFor={`rejection-${r.id}`}
-                        className="block text-sm font-semibold text-red-800"
-                      >
-                        {tr('common.reason_for_rejection')}
-                      </label>
-                      <textarea
-                        id={`rejection-${r.id}`}
-                        required
-                        maxLength={1000}
-                        value={rejectionReason}
-                        onChange={(event) => setRejectionReason(event.target.value)}
-                        className="w-full rounded-lg border border-red-200 bg-white p-3 text-sm"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={review.isPending || !rejectionReason.trim()}
-                          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                        >
-                          {tr('common.confirm_rejection')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={review.isPending}
-                          onClick={() => {
-                            setRejectingRequest('');
-                            setRejectionReason('');
-                          }}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                        >
-                          {tr('common.cancel_rejection')}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-              </div>
-            ))}
-        </div>
+                      <option value="">{tr('common.all_workers')}</option>
+                      {workers.data?.items.map((worker) => (
+                        <option key={worker.id} value={worker.id}>
+                          {worker.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-        {(timeRequests.data?.total ?? 0) > 0 && (
-          <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-slate-50/40">
+          {/* Table */}
+          {!data.items.length ? (
+            <div className="px-6 py-12 text-center">
+              <div className="mx-auto w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+                <IconCalendar className="w-5 h-5" />
+              </div>
+              <p className="text-sm font-semibold text-slate-500">
+                {tr('attendance_days_view.no_attendance_days_in_this_range')}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    {(isWorker
+                      ? [
+                          tr('common.date_99c40a'),
+                          tr('common.shift'),
+                          tr('common.recorded_hours'),
+                          tr('common.confirmed_hours'),
+                        ]
+                      : [
+                          tr('common.worker_date'),
+                          tr('common.shift'),
+                          tr('common.presence'),
+                          tr('common.regular'),
+                          tr('common.overtime'),
+                          tr('common.provisional'),
+                          tr('common.confirmed'),
+                          tr('common.status'),
+                          '',
+                        ]
+                    ).map((h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {data.items.map((day) => {
+                    const isSelected = selected?.id === day.id;
+                    return (
+                      <tr
+                        key={day.id}
+                        className={`transition-colors ${isSelected ? 'bg-orange-50/60' : 'hover:bg-slate-50/70'}`}
+                      >
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            {!isWorker && (
+                              <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                {day.workerName.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <div>
+                              {!isWorker && (
+                                <p className="text-xs font-bold text-[#071A2B]">{day.workerName}</p>
+                              )}
+                              <p className="text-xs font-semibold text-slate-700">{formatWorkDate(day.workDate)}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">
+                          {day.shiftName ? (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border shadow-2xs ${
+                                day.shiftName.toLowerCase().includes('morning')
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200/60'
+                                  : day.shiftName.toLowerCase().includes('evening') ||
+                                      day.shiftName.toLowerCase().includes('night')
+                                    ? 'bg-indigo-50 text-indigo-800 border-indigo-200/60'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200/60'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  day.shiftName.toLowerCase().includes('morning')
+                                    ? 'bg-amber-500'
+                                    : day.shiftName.toLowerCase().includes('evening') ||
+                                        day.shiftName.toLowerCase().includes('night')
+                                      ? 'bg-indigo-500'
+                                      : 'bg-slate-400'
+                                }`}
+                              />
+                              {day.shiftName}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic text-xs">
+                              {tr('common.unassigned')}
+                            </span>
+                          )}
+                          {day.breakStartsAt && day.breakEndsAt && (
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              {tr('common.unpaid_break_value_value', {
+                                value1: shiftTime(day.breakStartsAt, day.timezone),
+                                value2: shiftTime(day.breakEndsAt, day.timezone),
+                              })}
+                            </p>
+                          )}
+                        </td>
+                        {!isWorker && (
+                          <>
+                            <td className="px-4 py-3.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
+                              {day.presence === 'INSIDE'
+                                ? tr('common.open_session')
+                                : tr('common.no_open_session')}
+                            </td>
+                            <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
+                              {hours(day.regularMinutes)}
+                            </td>
+                            <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
+                              {hours(day.overtimeMinutes)}
+                            </td>
+                          </>
+                        )}
+                        <td className="px-4 py-3.5 text-xs font-mono text-slate-700 font-semibold whitespace-nowrap">
+                          {hours(day.provisionalMinutes)}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
+                          {day.confirmedMinutes === null ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium border border-slate-200/60">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                              {tr('common.awaiting_confirmation')}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/60 font-mono shadow-2xs">
+                              <IconCheck className="w-3 h-3 text-emerald-600" />
+                              {hours(day.confirmedMinutes)}
+                            </span>
+                          )}
+                        </td>
+                        {!isWorker && (
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <div className="space-y-1">
+                              <StatusBadge status={day.status} />
+                              {day.anomalies.length > 0 && (
+                                <p className="text-[10px] text-amber-600 font-medium">
+                                  {day.anomalies.map(attendanceLabel).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                        {!isWorker && (
+                          <td className="px-4 py-3.5">
+                            <button
+                              aria-label={tr('common.view')}
+                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all shadow-2xs active:scale-[0.98] ${
+                                isSelected
+                                  ? 'bg-[#F66B17] text-white'
+                                  : 'border border-slate-200/90 text-slate-600 hover:border-[#F66B17] hover:text-[#F66B17] bg-white'
+                              }`}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelected(null);
+                                  onSelectDay?.('');
+                                } else {
+                                  setSelected(day);
+                                  onSelectDay?.(day.id);
+                                  setScheduleId(day.scheduleId ?? '');
+                                }
+                              }}
+                            >
+                              <IconEye className="w-3 h-3" />
+                              {isSelected ? tr('common.hide') : tr('common.view')}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-100 bg-slate-50/50">
             <button
-              aria-label={tr('common.previous_requests')}
-              disabled={timeRequests.isFetching || requestOffset === 0}
-              onClick={() => setRequestOffset(Math.max(0, requestOffset - 20))}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
+              disabled={offset === 0}
+              onClick={() => setOffset(Math.max(0, offset - 20))}
+              className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition-all active:scale-[0.98]"
             >
               <IconChevronLeft className="w-3.5 h-3.5" /> {tr('common.previous')}
             </button>
-            <span className="text-xs text-slate-500">
-              {tr('common.value_requests', { value1: timeRequests.data?.total ?? 0 })}
+            <span className="text-xs text-slate-500 font-medium">
+              {tr('common.value_days_total', { value1: data.total })}
             </span>
             <button
-              aria-label={tr('common.next_requests')}
-              disabled={
-                timeRequests.isFetching ||
-                !timeRequests.data ||
-                requestOffset + 20 >= timeRequests.data.total
-              }
-              onClick={() => setRequestOffset(requestOffset + 20)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
+              disabled={offset + 20 >= data.total}
+              onClick={() => setOffset(offset + 20)}
+              className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition-all active:scale-[0.98]"
             >
               {tr('common.next')} <IconChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+
+        {/* ── DETAIL PANEL (shown only when a row is selected) ───── */}
+        {activeDay && (
+          <div className="rounded-2xl border border-[#F66B17]/30 bg-white shadow-xs overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-orange-50/40">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 text-[#F66B17] flex items-center justify-center">
+                  <IconEye className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#071A2B]">
+                    {activeDay.workerName}
+                    <span className="ml-2 text-slate-400 font-normal">·</span>
+                    <span className="ml-2 text-slate-500 font-semibold">{formatWorkDate(activeDay.workDate)}</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {activeDay.startsAt
+                      ? new Date(activeDay.startsAt).toLocaleString(uiLocale())
+                      : '—'}
+                    {' → '}
+                    {activeDay.endsAt
+                      ? new Date(activeDay.endsAt).toLocaleString(uiLocale())
+                      : '—'}{' '}
+                    ({activeDay.timezone})
+                  </p>
+                  {activeDay.breakStartsAt && activeDay.breakEndsAt && (
+                    <p className="text-xs text-slate-500">
+                      {tr(
+                        'attendance_days_view.unpaid_break_value_value_only_time_overlapping_presence_is_deducted',
+                        {
+                          value1: shiftTime(activeDay.breakStartsAt, activeDay.timezone),
+                          value2: shiftTime(activeDay.breakEndsAt, activeDay.timezone),
+                        },
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setSelected(null);
+                  onSelectDay?.('');
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:border-slate-300 transition-colors"
+              >
+                <IconX className="w-3.5 h-3.5" /> {tr('common.close')}
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Schedule Changed Warning */}
+              {activeDay.anomalies.includes('SCHEDULE_CHANGED') && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <IconAlertTriangle className="w-4 h-4 text-amber-600" />
+                    <h4 className="text-sm font-bold text-amber-800">
+                      {tr('common.resolve_changed_schedule')}
+                    </h4>
+                  </div>
+                  <p className="text-xs text-amber-800">
+                    {tr('attendance_days_view.original_shift_used_for_attendance')}
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-lg border border-amber-200 bg-white p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">
+                        {tr('common.original_shift')}
+                      </p>
+                      <p className="text-xs font-semibold text-slate-700">{activeDay.shiftName}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {shiftTime(activeDay.startsAt, activeDay.timezone)} →{' '}
+                        {shiftTime(activeDay.endsAt, activeDay.timezone)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        {tr('common.current_assigned_shift')}
+                      </p>
+                      {detail.data?.currentSchedule ? (
+                        <>
+                          <p className="text-xs font-semibold text-slate-700">
+                            {detail.data.currentSchedule.shiftName}
+                          </p>
+                          {detail.data.currentSchedule.isActive === false && (
+                            <p className="text-[11px] text-red-600 font-bold">
+                              {tr('common.inactive_schedule')}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-slate-500">
+                            {shiftTime(
+                              detail.data.currentSchedule.startsAt,
+                              detail.data.currentSchedule.timezone,
+                            )}
+                            {' → '}
+                            {shiftTime(
+                              detail.data.currentSchedule.endsAt,
+                              detail.data.currentSchedule.timezone,
+                            )}
+                          </p>
+                        </>
+                      ) : detail.isPending ? (
+                        <p className="text-[11px] text-slate-400">{tr('common.loading')}</p>
+                      ) : (
+                        <p className="text-[11px] text-slate-400">{tr('common.unavailable')}</p>
+                      )}
+                    </div>
+                  </div>
+                  {data.canReview && (
+                    <a
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#F66B17] hover:underline"
+                      href={`/workforce?siteId=${encodeURIComponent(siteId)}&tab=schedule`}
+                    >
+                      {tr('common.open_workforce_schedule')}{' '}
+                      <IconChevronRight className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Work Intervals */}
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  {tr('common.work_intervals')}
+                </h4>
+                {detail.isPending && (
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
+                    {tr('common.loading_intervals')}
+                  </div>
+                )}
+                {detail.data?.sessions.some((s) => s.status === 'MISSING_IN') && (
+                  <div className="flex items-start justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div className="flex items-start gap-2">
+                      <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700">
+                        {tr(
+                          'attendance_days_view.missing_in_request_a_correction_with_the_actual_entry_time',
+                        )}
+                      </p>
+                    </div>
+                    {isWorker && (
+                      <a
+                        href="#attendance-correction-form"
+                        className="text-xs font-bold text-amber-800 underline hover:text-amber-900 shrink-0"
+                      >
+                        {tr('common.request_correction')}
+                      </a>
+                    )}
+                  </div>
+                )}
+                {detail.data?.sessions.some((s) => s.effectiveInAt && !s.effectiveOutAt) && (
+                  <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <IconClock className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-blue-700">
+                      {tr('attendance_days_view.open_session_checkout_not_recorded')}
+                    </p>
+                  </div>
+                )}
+                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                  {detail.data?.sessions.map((s) => (
+                    <div key={s.id} className="px-4 py-3 bg-white">
+                      {s.status === 'IGNORED' ||
+                      (s.status === 'NEEDS_REVIEW' && !s.effectiveInAt) ? (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-600">
+                              {tr('common.duplicate_in_value', {
+                                value1: s.rawInAt
+                                  ? new Date(s.rawInAt).toLocaleString(uiLocale())
+                                  : tr('common.recorded_entry'),
+                              })}
+                            </p>
+                            <p className="text-[11px] text-slate-400">
+                              {s.status === 'IGNORED'
+                                ? tr('attendance_days_view.ignored_no_work_hours_added')
+                                : tr('common.needs_representative_review')}
+                            </p>
+                            {s.ignoreReason && (
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                {tr('common.reason_value', { value1: s.ignoreReason })}
+                              </p>
+                            )}
+                          </div>
+                          <StatusBadge status={s.status} />
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700">
+                              {s.effectiveInAt
+                                ? new Date(s.effectiveInAt).toLocaleString(uiLocale())
+                                : tr('common.missing_entry')}
+                              {' → '}
+                              {s.effectiveOutAt
+                                ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
+                                : tr('common.awaiting_checkout')}
+                            </p>
+                            {s.effectiveInAt && !s.effectiveOutAt && (
+                              <p className="text-[11px] text-blue-600">
+                                {tr('attendance_days_view.open_session_checkout_not_recorded')}
+                              </p>
+                            )}
+                            {!s.effectiveInAt && s.status !== 'IGNORED' && (
+                              <p className="text-[11px] text-amber-600">
+                                {tr('attendance_days_view.incomplete_evidence_hours_not_counted')}
+                              </p>
+                            )}
+                          </div>
+                          <StatusBadge status={s.status} />
+                        </div>
+                      )}
+                      {s.canIgnoreDuplicate && (
+                        <button
+                          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:border-[#F66B17] hover:text-[#F66B17] transition-colors disabled:opacity-50"
+                          disabled={ignoreDuplicate.isPending || reviewNote.trim().length < 5}
+                          onClick={() => ignoreDuplicate.mutate(s)}
+                        >
+                          {tr('common.ignore_duplicate_in')}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {detail.isSuccess && !detail.data?.sessions.length && (
+                    <div className="px-4 py-6 text-center text-xs text-slate-400">
+                      {tr('attendance_days_view.no_work_intervals_recorded')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Review note & Confirm early departure */}
+              {(() => {
+                const canConfirmEarly =
+                  data.canReview &&
+                  activeDay.anomalies.includes('EARLY_CHECKOUT') &&
+                  !activeDay.anomalies.includes('SCHEDULE_CHANGED');
+                const hasDuplicateToIgnore =
+                  data.canReview &&
+                  (detail.data?.sessions.some((s) => s.canIgnoreDuplicate) ?? false);
+                const hasActionableReview = canConfirmEarly || hasDuplicateToIgnore;
+
+                if (!data.canReview || !hasActionableReview) return null;
+
+                return (
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="review-note-input"
+                        className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      >
+                        {tr('common.review_note')}
+                      </label>
+                      <input
+                        id="review-note-input"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
+                        maxLength={1000}
+                        placeholder={tr('attendance_days_view.add_a_note_for_your_review_decision')}
+                        value={reviewNote}
+                        onChange={(e) => setReviewNote(e.target.value)}
+                      />
+                    </div>
+
+                    {canConfirmEarly && (
+                      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs text-slate-600">
+                          {tr('attendance_days_view.confirm_actual_hours_for_early_departure')}
+                        </p>
+                        <button
+                          disabled={confirm.isPending || !reviewNote.trim()}
+                          onClick={() => confirm.mutate(activeDay)}
+                          aria-label={tr(
+                            'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
+                          )}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
+                        >
+                          <IconCheck className="w-3.5 h-3.5" />{' '}
+                          {tr(
+                            'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         )}
       </div>
 
-      {/* ── CONFIRMED TIMESHEET ──────────────────────────────── */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-[#071A2B]">
-            {tr('attendance_days_view.confirmed_timesheet_selected_date_range')}
-          </h3>
-        </div>
-        <div className="divide-y divide-slate-50">
-          {timesheets.isPending && (
-            <div className="p-5 text-xs text-slate-400">{tr('common.loading_timesheet')}</div>
-          )}
-          {timesheets.isError && (
-            <div role="alert" className="p-5 text-sm text-red-700">
-              {tr('common.timesheet_unavailable')}{' '}
-              <button onClick={() => void timesheets.refetch()}>
-                {tr('common.retry_timesheet')}
+      {/* ── REQUEST OVERTIME / LEAVE ─────────────────────────── */}
+      <div className={activeSubTab === 'timesheet' ? 'hidden' : 'space-y-6'}>
+        {data.canRequest && submittedRequest && (
+          <section
+            className="rounded-2xl border border-emerald-200 bg-white p-6 space-y-3"
+            aria-label={tr('common.submitted_request')}
+          >
+            <h3 className="font-bold text-[#071A2B]">{tr('common.request_submitted')}</h3>
+            <p className="text-sm text-slate-600">
+              {tr(
+                'attendance_days_view.your_value_request_was_sent_to_your_contractor_representative',
+                { value1: submittedRequest.kind === 'OVERTIME' ? 'overtime' : 'leave' },
+              )}
+            </p>
+            <div aria-live="polite">
+              {submittedStatus.isPending ? (
+                <p>{tr('common.loading_request_status')}</p>
+              ) : submittedStatus.isError || !submittedStatus.data ? (
+                <div role="alert">
+                  {tr('common.status_unavailable')}{' '}
+                  <button className="underline" onClick={() => void submittedStatus.refetch()}>
+                    {tr('common.retry_request_status')}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <StatusBadge status={submittedStatus.data.status} />
+                  <p className="mt-2 text-sm">
+                    {new Date(submittedStatus.data.startsAt).toLocaleString(uiLocale(), {
+                      hour12: false,
+                    })}{' '}
+                    →{' '}
+                    {new Date(submittedStatus.data.endsAt).toLocaleString(uiLocale(), {
+                      hour12: false,
+                    })}
+                  </p>
+                  <p className="text-sm text-slate-600">{submittedStatus.data.reason}</p>
+                  {submittedStatus.data.reviewNote && (
+                    <p className="text-sm">
+                      {tr('common.review_value', { value1: submittedStatus.data.reviewNote })}
+                    </p>
+                  )}
+                  {['PENDING', 'PENDING_MANAGER'].includes(submittedStatus.data.status) && (
+                    <p className="mt-2 text-sm text-amber-700">
+                      {tr(
+                        'attendance_days_view.waiting_for_your_contractor_representative_to_review_this_request',
+                      )}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold"
+              onClick={() => {
+                setSubmittedRequest(null);
+                request.reset();
+              }}
+            >
+              {tr('common.new_request')}
+            </button>
+          </section>
+        )}
+        {data.canRequest && !submittedRequest ? (
+          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden mt-6">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-100/60 shadow-2xs">
+                <IconClock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#071A2B]">
+                  {tr('attendance_days_view.request_overtime_or_leave')}
+                </h3>
+              </div>
+            </div>
+            {(schedules.isPending || requestShifts.isPending) && (
+              <p role="status" className="p-6 text-xs text-slate-500 font-medium">
+                {tr('common.loading_assigned_shifts')}
+              </p>
+            )}
+            {(schedules.isError || requestShifts.isError) && (
+              <div
+                role="alert"
+                className="p-6 text-xs text-red-600 font-semibold flex items-center justify-between"
+              >
+                <span>{tr('common.assigned_shifts_unavailable')}</span>
+                <button
+                  onClick={() => {
+                    void schedules.refetch();
+                    void requestShifts.refetch();
+                  }}
+                  className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50"
+                >
+                  {tr('common.retry_assigned_shifts')}
+                </button>
+              </div>
+            )}
+            {schedules.isSuccess && requestShifts.isSuccess && !availableSchedules.length && (
+              <p className="p-6 text-xs text-slate-500">
+                {tr(
+                  'attendance_days_view.no_current_or_upcoming_assigned_shifts_contact_your_contractor_representative',
+                )}
+              </p>
+            )}
+            {availableSchedules.length > 0 && !schedules.isError && !requestShifts.isError && (
+              <form
+                className="p-6 space-y-5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  request.mutate();
+                }}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="assigned-shift"
+                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      {tr('common.assigned_shift')}
+                    </label>
+                    <select
+                      id="assigned-shift"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all cursor-pointer"
+                      value={selectedRequestSchedule ? scheduleId : ''}
+                      onChange={(e) => suggestTimes(e.target.value, kind, new Date())}
+                    >
+                      <option value="">{tr('common.select_shift')}</option>
+                      {availableSchedules.map(({ schedule, shift, startsAt, endsAt }) => (
+                        <option key={schedule.id} value={schedule.id}>
+                          {schedule.workDate} · {shift.name} · {startsAt.slice(11)}–
+                          {endsAt.slice(11)} ({shift.timezone})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="request-kind"
+                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      {tr('common.request_type')}
+                    </label>
+                    <select
+                      id="request-kind"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all cursor-pointer"
+                      value={kind}
+                      onChange={(e) => {
+                        const next = e.target.value as 'OVERTIME' | 'LEAVE';
+                        setKind(next);
+                        suggestTimes(scheduleId, next, new Date());
+                      }}
+                    >
+                      <option value="OVERTIME">{tr('common.overtime')}</option>
+                      <option value="LEAVE">
+                        {tr('attendance_days_view.leave_whole_or_partial_shift')}
+                      </option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="request-start"
+                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      {tr('attendance_days_view.start_date_time')}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          id="request-start-date"
+                          aria-label={tr('common.start_date')}
+                          type="date"
+                          required
+                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          value={startsAt.slice(0, 10)}
+                          onChange={(e) =>
+                            setStartsAt(`${e.target.value}T${startsAt.split('T')[1] ?? ''}`)
+                          }
+                        />
+                      </div>
+                      <div className="relative flex-1">
+                        <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          id="request-start"
+                          aria-label={tr('common.start_time')}
+                          type="time"
+                          required
+                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          value={startsAt.split('T')[1] ?? ''}
+                          onChange={(e) =>
+                            setStartsAt(`${startsAt.slice(0, 10)}T${e.target.value}`)
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="request-end"
+                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      {tr('attendance_days_view.end_date_time')}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          id="request-end-date"
+                          aria-label={tr('common.end_date')}
+                          type="date"
+                          required
+                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          value={endsAt.slice(0, 10)}
+                          onChange={(e) =>
+                            setEndsAt(`${e.target.value}T${endsAt.split('T')[1] ?? ''}`)
+                          }
+                        />
+                      </div>
+                      <div className="relative flex-1">
+                        <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          id="request-end"
+                          aria-label={tr('common.end_time')}
+                          type="time"
+                          required
+                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          value={endsAt.split('T')[1] ?? ''}
+                          onChange={(e) => setEndsAt(`${endsAt.slice(0, 10)}T${e.target.value}`)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label
+                      htmlFor="request-reason"
+                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      {tr('common.reason')}
+                    </label>
+                    <input
+                      id="request-reason"
+                      required
+                      minLength={5}
+                      maxLength={1000}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="submit"
+                    aria-label={tr('common.submit_request')}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-50 hover:bg-slate-800 transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
+                    disabled={request.isPending || !selectedRequestSchedule}
+                  >
+                    {tr('common.submit_request')}
+                  </button>
+                  {request.isSuccess && (
+                    <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
+                      <IconCheck className="w-3.5 h-3.5" /> {tr('common.request_submitted')}
+                    </span>
+                  )}
+                </div>
+                {request.error && (
+                  <p role="alert" className="text-xs text-red-600 font-semibold">
+                    {localizedError(request.error.message)}
+                  </p>
+                )}
+              </form>
+            )}
+          </div>
+        ) : null}
+
+        {/* ── TIME REQUESTS QUEUE ─────────────────────────────── */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-[#071A2B]">{tr('common.time_requests')}</h3>
+            <div className="flex items-center gap-2">
+              <label htmlFor="queue-kind" className="sr-only">
+                {tr('common.queue_type')}
+              </label>
+              <select
+                id="queue-kind"
+                aria-label={tr('common.queue_type')}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
+                value={requestKind}
+                onChange={(e) => {
+                  setRequestKind(e.target.value as 'OVERTIME' | 'LEAVE');
+                  setRequestOffset(0);
+                }}
+              >
+                <option value="OVERTIME">{tr('common.overtime')}</option>
+                <option value="LEAVE">{tr('common.leave')}</option>
+              </select>
+              <label htmlFor="queue-status" className="sr-only">
+                {tr('common.request_status')}
+              </label>
+              <select
+                id="queue-status"
+                aria-label={tr('common.request_status')}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
+                value={requestStatus}
+                onChange={(e) => {
+                  setRequestStatus(e.target.value as typeof requestStatus);
+                  setRequestOffset(0);
+                }}
+              >
+                <option value="">{tr('common.all_statuses')}</option>
+                <option value="PENDING">{tr('common.pending')}</option>
+                <option value="APPROVED">{tr('common.approved')}</option>
+                <option value="REJECTED">{tr('common.rejected')}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-50">
+            {timeRequests.isPending && (
+              <div className="flex items-center gap-2 p-5 text-xs text-slate-400">
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
+                {tr('common.loading_time_requests')}
+              </div>
+            )}
+            {timeRequests.error && (
+              <div
+                role="alert"
+                className="flex items-center justify-between p-5 text-xs text-red-600"
+              >
+                <span>{localizedError(timeRequests.error.message)}</span>
+                <button
+                  aria-label={tr('common.retry_time_requests')}
+                  onClick={() => void timeRequests.refetch()}
+                  className="font-bold underline"
+                >
+                  {tr('common.retry_time_requests')}
+                </button>
+              </div>
+            )}
+            {timeRequests.data?.items.length === 0 && (
+              <div className="px-6 py-8 text-center text-xs text-slate-400">
+                {tr('common.no_time_requests')}
+              </div>
+            )}
+            {!timeRequests.isError &&
+              timeRequests.data?.items.map((r) => (
+                <div key={`${localizedLabel(r.kind)}:${r.id}`} className="px-6 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-[#071A2B]">{r.workerName}</span>
+                        <StatusBadge status={r.status} />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {r.kind}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {new Date(r.startsAt).toLocaleString(uiLocale())} →{' '}
+                        {new Date(r.endsAt).toLocaleString(uiLocale())}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{r.reason}</p>
+                      {r.reviewNote && (
+                        <p className="text-[11px] text-emerald-700 mt-0.5">
+                          {tr('common.review_value', { value1: r.reviewNote })}
+                        </p>
+                      )}
+                    </div>
+                    {data.canReview && ['PENDING', 'PENDING_MANAGER'].includes(r.status) && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          disabled={review.isPending}
+                          onClick={() => review.mutate({ r, approve: true })}
+                          title={tr('common.approve_this_request')}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
+                        >
+                          <IconCheck className="w-3 h-3" /> {tr('common.approve')}
+                        </button>
+                        <button
+                          disabled={review.isPending}
+                          onClick={() => {
+                            setRejectingRequest(`${r.kind}:${r.id}`);
+                            setRejectionReason('');
+                          }}
+                          title={tr('attendance_days_view.enter_a_reason_to_reject_this_request')}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold disabled:opacity-50 hover:bg-red-50 transition-colors"
+                        >
+                          <IconX className="w-3 h-3" /> {tr('common.reject')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {data.canReview &&
+                    ['PENDING', 'PENDING_MANAGER'].includes(r.status) &&
+                    rejectingRequest === `${r.kind}:${r.id}` && (
+                      <form
+                        className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 space-y-3"
+                        aria-label={tr('common.reject_request')}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          if (rejectionReason.trim())
+                            review.mutate({ r, approve: false, reason: rejectionReason });
+                        }}
+                      >
+                        <label
+                          htmlFor={`rejection-${r.id}`}
+                          className="block text-sm font-semibold text-red-800"
+                        >
+                          {tr('common.reason_for_rejection')}
+                        </label>
+                        <textarea
+                          id={`rejection-${r.id}`}
+                          required
+                          maxLength={1000}
+                          value={rejectionReason}
+                          onChange={(event) => setRejectionReason(event.target.value)}
+                          className="w-full rounded-lg border border-red-200 bg-white p-3 text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            disabled={review.isPending || !rejectionReason.trim()}
+                            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                          >
+                            {tr('common.confirm_rejection')}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={review.isPending}
+                            onClick={() => {
+                              setRejectingRequest('');
+                              setRejectionReason('');
+                            }}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                          >
+                            {tr('common.cancel_rejection')}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                </div>
+              ))}
+          </div>
+
+          {(timeRequests.data?.total ?? 0) > 0 && (
+            <div className="flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-slate-50/40">
+              <button
+                aria-label={tr('common.previous_requests')}
+                disabled={timeRequests.isFetching || requestOffset === 0}
+                onClick={() => setRequestOffset(Math.max(0, requestOffset - 20))}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
+              >
+                <IconChevronLeft className="w-3.5 h-3.5" /> {tr('common.previous')}
+              </button>
+              <span className="text-xs text-slate-500">
+                {tr('common.value_requests', { value1: timeRequests.data?.total ?? 0 })}
+              </span>
+              <button
+                aria-label={tr('common.next_requests')}
+                disabled={
+                  timeRequests.isFetching ||
+                  !timeRequests.data ||
+                  requestOffset + 20 >= timeRequests.data.total
+                }
+                onClick={() => setRequestOffset(requestOffset + 20)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 disabled:opacity-40 hover:bg-white transition-colors"
+              >
+                {tr('common.next')} <IconChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
-          {timesheets.isSuccess && timesheets.data.items.length === 0 && (
-            <div className="p-5 text-xs text-slate-400">
-              {tr('attendance_days_view.no_confirmed_hours_in_this_range')}
-            </div>
-          )}
-          {timesheets.data?.items?.map((row) => (
-            <div key={row.workerId} className="flex items-center justify-between px-6 py-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold">
-                  {row.workerName.slice(0, 2).toUpperCase()}
-                </div>
-                <span className="text-xs font-bold text-[#071A2B]">{row.workerName}</span>
-                <span className="text-[11px] text-slate-400">
-                  {tr('common.value_confirmed_days', { value1: row.confirmedDays })}
-                </span>
+        </div>
+      </div>
+
+      {/* ── CONFIRMED TIMESHEET ──────────────────────────────── */}
+      <div className={activeSubTab === 'requests' ? 'hidden' : 'space-y-5'}>
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-[#071A2B]">
+              {tr('attendance_days_view.confirmed_timesheet_selected_date_range')}
+            </h3>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {timesheets.isPending && (
+              <div className="p-5 text-xs text-slate-400">{tr('common.loading_timesheet')}</div>
+            )}
+            {timesheets.isError && (
+              <div role="alert" className="p-5 text-sm text-red-700">
+                {tr('common.timesheet_unavailable')}{' '}
+                <button onClick={() => void timesheets.refetch()}>
+                  {tr('common.retry_timesheet')}
+                </button>
               </div>
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                    {tr('common.regular')}
-                  </p>
-                  <p className="font-semibold text-slate-700">{hours(row.regularMinutes)}</p>
+            )}
+            {timesheets.isSuccess && timesheets.data.items.length === 0 && (
+              <div className="p-5 text-xs text-slate-400">
+                {tr('attendance_days_view.no_confirmed_hours_in_this_range')}
+              </div>
+            )}
+            {timesheets.data?.items?.map((row) => (
+              <div key={row.workerId} className="flex items-center justify-between px-6 py-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold">
+                    {row.workerName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-xs font-bold text-[#071A2B]">{row.workerName}</span>
+                  <span className="text-[11px] text-slate-400">
+                    {tr('common.value_confirmed_days', { value1: row.confirmedDays })}
+                  </span>
                 </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                    {tr('common.overtime')}
-                  </p>
-                  <p className="font-semibold text-slate-700">{hours(row.overtimeMinutes)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                    {tr('common.total')}
-                  </p>
-                  <p className="font-bold text-[#071A2B]">{hours(row.totalMinutes)}</p>
+                <div className="flex items-center gap-4 text-xs font-mono">
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                      {tr('common.regular')}
+                    </p>
+                    <p className="font-semibold text-slate-700">{hours(row.regularMinutes)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                      {tr('common.overtime')}
+                    </p>
+                    <p className="font-semibold text-slate-700">{hours(row.overtimeMinutes)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                      {tr('common.total')}
+                    </p>
+                    <p className="font-bold text-[#071A2B]">{hours(row.totalMinutes)}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 

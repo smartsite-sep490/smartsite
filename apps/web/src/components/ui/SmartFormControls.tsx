@@ -15,6 +15,7 @@ import * as Popover from '@radix-ui/react-popover';
 import { DayPicker, type Labels } from 'react-day-picker';
 import { format, parse, isValid } from 'date-fns';
 import 'react-day-picker/style.css';
+import { IconX } from '../icons';
 
 function calendarLabels(): Partial<Labels> {
   if (uiLanguage() !== 'vi') return {};
@@ -520,6 +521,9 @@ export interface SmartDatePickerProps {
   disabledWeekdays?: number[];
   min?: string;
   max?: string;
+  clearable?: boolean;
+  compact?: boolean;
+  className?: string;
 }
 
 export function SmartDatePicker({
@@ -534,6 +538,9 @@ export function SmartDatePicker({
   disabledWeekdays = [],
   min,
   max,
+  clearable = false,
+  compact = false,
+  className = '',
 }: SmartDatePickerProps) {
   useTranslation();
 
@@ -548,6 +555,11 @@ export function SmartDatePicker({
   const displayValue = validDate ? format(validDate, 'dd/MM/yyyy') : '';
 
   const handleSelect = (day: Date | undefined) => {
+    if (!day && clearable) {
+      onChange('');
+      setOpen(false);
+      return;
+    }
     if (
       day &&
       (!disablePast || day >= today) &&
@@ -560,12 +572,24 @@ export function SmartDatePicker({
     }
   };
 
+  const triggerClass = className
+    ? className
+    : compact
+      ? `w-full min-w-[140px] px-3 py-2 rounded-xl border bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 transition-all ${
+          error ? 'border-red-300' : 'border-slate-200/90'
+        }`
+      : `${FIELD_BASE} ${error ? 'border-red-300' : ''}`;
+
   return (
-    <div className="space-y-1.5">
+    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
       {label && (
         <label
           htmlFor={id}
-          className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]"
+          className={
+            compact
+              ? 'block text-[10px] font-bold uppercase tracking-wider text-slate-500'
+              : 'block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96]'
+          }
         >
           {label}
           {fieldRequired && <span className="text-red-400 ml-1">*</span>}
@@ -577,15 +601,38 @@ export function SmartDatePicker({
             id={id}
             type="button"
             aria-label={label}
-            className={`${FIELD_BASE} flex items-center justify-between text-left cursor-pointer ${
-              error ? 'border-red-300' : ''
-            } ${!displayValue ? 'text-[#94A3B8] font-normal' : ''}`}
+            className={`${triggerClass} flex items-center justify-between text-left cursor-pointer ${
+              !displayValue ? 'text-[#94A3B8] font-normal' : ''
+            }`}
           >
             <span className="flex items-center gap-2">
               <IconCalSm />
-              {displayValue || placeholder}
+              <span>{displayValue || placeholder}</span>
             </span>
-            <IconChevDown open={open} />
+            <div className="flex items-center gap-1">
+              {clearable && Boolean(value) && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={tr('common.clear')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onChange('');
+                    }
+                  }}
+                  className="p-0.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <IconX className="w-3.5 h-3.5" />
+                </span>
+              )}
+              <IconChevDown open={open} />
+            </div>
           </button>
         </Popover.Trigger>
         <Popover.Portal>

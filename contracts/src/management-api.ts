@@ -1,4 +1,5 @@
 import type { WorkerSiteZoneAssignmentStatus } from './identity-access-api.js';
+export type * from './attendance-reports-api.js';
 
 export type UserRole =
   | 'ADMIN'

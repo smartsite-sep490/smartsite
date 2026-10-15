@@ -40,46 +40,51 @@ export function ManagerDashboardView({
     enabled: Boolean(accessToken && siteId),
   });
   const data = overview.data;
-  const button =
-    'rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-orange-300 disabled:opacity-40';
+
+  const btnOutline =
+    'rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#041D2E] hover:bg-slate-50 focus:ring-2 focus:ring-[#F66B17]/30 disabled:opacity-40 transition-all active:scale-[0.98] cursor-pointer shadow-2xs';
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[#071A2B]">
-            {tr('common.site_management_overview')}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {tr('manager_dashboard_view.contractors_zones_and_workforce_in_your_managed_site')}
-          </p>
-        </div>
-        <button type="button" className={button} onClick={() => onNavigate('site-setup')}>
+        <h1 className="text-2xl font-black text-[#041D2E]">
+          {tr('common.site_management_overview')}
+        </h1>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#041D2E] px-4 py-2.5 text-sm font-bold text-white shadow-xs hover:bg-[#071A2B]/90 focus:ring-2 focus:ring-[#F66B17]/40 disabled:opacity-40 transition-all active:scale-[0.98] cursor-pointer"
+          onClick={() => onNavigate('site-setup')}
+        >
           {tr('manager_dashboard_view.manage_contractors_zones')}
         </button>
       </div>
+
+      {/* Site selector / content */}
       {sites.isPending ? (
-        <p role="status">{tr('common.loading_managed_sites')}</p>
+        <p role="status" className="text-sm text-slate-500">{tr('common.loading_managed_sites')}</p>
       ) : sites.isError ? (
-        <div role="alert">
+        <div role="alert" className="text-sm text-red-600">
           {tr('common.managed_sites_unavailable')}{' '}
-          <button type="button" onClick={() => void sites.refetch()}>
+          <button type="button" onClick={() => void sites.refetch()} className="underline font-semibold">
             {tr('common.retry')}
           </button>
         </div>
       ) : !managed.length ? (
-        <p>{tr('manager_dashboard_view.no_site_manager_assignment_available')}</p>
+        <p className="text-sm text-slate-500">{tr('manager_dashboard_view.no_site_manager_assignment_available')}</p>
       ) : (
         <>
+          {/* Site selector bar */}
           <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm font-semibold">
-              {tr('common.managed_site')}{' '}
+            <label className="flex items-center gap-2 text-sm font-bold text-[#041D2E]">
+              {tr('common.managed_site')}
               <select
                 value={siteId}
                 onChange={(e) => {
                   setSelection({ siteId: e.target.value, offset: 0 });
                   setContractorId(null);
                 }}
-                className="ml-2 rounded-xl border border-slate-200 p-2"
+                className="ml-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#041D2E] focus:ring-2 focus:ring-[#F66B17]/30 transition-colors"
               >
                 {managed.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -90,51 +95,61 @@ export function ManagerDashboardView({
             </label>
             <button
               type="button"
-              className={button}
+              className={btnOutline}
               disabled={overview.isFetching}
               onClick={() => void overview.refetch()}
             >
               {tr('common.refresh')}
             </button>
           </div>
+
+          {/* Overview content */}
           {overview.isPending ? (
-            <p role="status">{tr('common.loading_management_overview')}</p>
+            <p role="status" className="text-sm text-slate-500">{tr('common.loading_management_overview')}</p>
           ) : overview.isError ? (
-            <div role="alert">
+            <div role="alert" className="text-sm text-red-600">
               {tr('common.management_overview_unavailable')}{' '}
               {localizedError(overview.error.message)}{' '}
-              <button type="button" onClick={() => void overview.refetch()}>
+              <button type="button" onClick={() => void overview.refetch()} className="underline font-semibold">
                 {tr('common.retry')}
               </button>
             </div>
           ) : (
             data && (
               <>
+                {/* KPI Cards */}
                 <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    [tr('common.managed_contractors'), data.contractorCount],
-                    [tr('common.configured_zones'), data.zoneCount],
-                    [tr('common.active_teams_82c339'), data.teamCount],
-                    [tr('common.active_workers_3adad5'), data.workerCount],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5">
-                      <dt className="text-sm text-slate-500">{label}</dt>
-                      <dd className="mt-2 text-3xl font-bold text-[#071A2B]">{value}</dd>
+                  {([
+                    [tr('common.managed_contractors'), data.contractorCount, 'text-[#041D2E]'],
+                    [tr('common.configured_zones'), data.zoneCount, 'text-[#041D2E]'],
+                    [tr('common.active_teams_82c339'), data.teamCount, 'text-[#008C47]'],
+                    [tr('common.active_workers_3adad5'), data.workerCount, 'text-[#F66B17]'],
+                  ] as [string, number, string][]).map(([label, value, color]) => (
+                    <div
+                      key={label}
+                      className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:shadow-sm transition-shadow space-y-2"
+                    >
+                      <dt className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</dt>
+                      <dd className={`text-3xl font-black tracking-tight ${color}`}>{value}</dd>
                     </div>
                   ))}
                 </dl>
-                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <h2 className="border-b border-slate-100 p-5 text-lg font-bold">
-                    {tr('common.contractors_value', { value1: data.contractors.total })}
-                  </h2>
+
+                {/* Contractors table */}
+                <section className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+                  <div className="flex items-center border-b border-slate-100 px-5 py-4">
+                    <h2 className="text-base font-black text-[#041D2E]">
+                      {tr('common.contractors_value', { value1: data.contractors.total })}
+                    </h2>
+                  </div>
                   {!data.contractors.items.length ? (
-                    <p className="p-5">
+                    <p className="p-5 text-sm text-slate-500">
                       {tr('manager_dashboard_view.no_active_contractors_on_this_site')}
                     </p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-500">
+                        <thead className="bg-slate-50">
                           <tr>
                             {[
                               tr('common.contractor'),
@@ -142,7 +157,7 @@ export function ManagerDashboardView({
                               tr('common.workers'),
                               tr('common.details'),
                             ].map((label) => (
-                              <th key={label} className="p-4">
+                              <th key={label} className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
                                 {label}
                               </th>
                             ))}
@@ -150,19 +165,22 @@ export function ManagerDashboardView({
                         </thead>
                         <tbody>
                           {data.contractors.items.map((contractor) => (
-                            <tr key={contractor.id} className="border-t border-slate-100">
+                            <tr
+                              key={contractor.id}
+                              className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors"
+                            >
                               <td className="p-4">
-                                <p className="font-semibold">{contractor.name}</p>
-                                <p className="mt-1 break-all text-xs text-slate-500">
+                                <p className="font-bold text-[#041D2E]">{contractor.name}</p>
+                                <p className="mt-0.5 text-xs font-semibold text-[#F66B17]">
                                   {contractor.code}
                                 </p>
                               </td>
-                              <td className="p-4">{contractor.teamCount}</td>
-                              <td className="p-4">{contractor.workerCount}</td>
+                              <td className="p-4 font-semibold text-[#041D2E]">{contractor.teamCount}</td>
+                              <td className="p-4 font-semibold text-[#041D2E]">{contractor.workerCount}</td>
                               <td className="p-4">
                                 <button
                                   type="button"
-                                  className={button}
+                                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-[#041D2E] hover:bg-slate-50 hover:border-slate-300 focus:ring-2 focus:ring-[#F66B17]/30 transition-all active:scale-[0.98] cursor-pointer shadow-2xs"
                                   aria-label={tr('manager_dashboard_view.view_details_for_value', {
                                     value1: contractor.name,
                                   })}
@@ -178,10 +196,10 @@ export function ManagerDashboardView({
                     </div>
                   )}
                   {data.contractors.total > 20 && (
-                    <div className="flex justify-between border-t border-slate-100 p-4">
+                    <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
                       <button
                         type="button"
-                        className={button}
+                        className={btnOutline}
                         disabled={!selection.offset}
                         onClick={() =>
                           setSelection({ siteId, offset: Math.max(0, selection.offset - 20) })
@@ -189,7 +207,7 @@ export function ManagerDashboardView({
                       >
                         {tr('common.previous')}
                       </button>
-                      <span>
+                      <span className="text-xs font-semibold text-slate-500">
                         {tr('common.value_value_of_value', {
                           value1: selection.offset + 1,
                           value2: Math.min(selection.offset + 20, data.contractors.total),
@@ -198,7 +216,7 @@ export function ManagerDashboardView({
                       </span>
                       <button
                         type="button"
-                        className={button}
+                        className={btnOutline}
                         disabled={selection.offset + 20 >= data.contractors.total}
                         onClick={() => setSelection({ siteId, offset: selection.offset + 20 })}
                       >

@@ -19,6 +19,8 @@ import {
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import { useEffect } from 'react';
 import { isShiftEnded } from '@smartsite/contracts/management';
+import { loadAllPages } from '../load-all-pages';
+import { WorkerAbsenceSummary } from './WorkerAbsenceSummary';
 import { useShiftRequests } from '../hooks/useShiftRequests';
 import { RequestPagination } from './RequestPagination';
 import { schedulingError } from '../utils/scheduling-error';
@@ -316,6 +318,35 @@ export function WorkforceScheduleTab({
     retry: false,
   });
   const myTeam = myTeamQuery.data;
+  const attendanceQuery = useQuery({
+    queryKey: [
+      'schedule-attendance',
+      apiUrl,
+      sessionScope,
+      siteId,
+      myTeam?.workerId,
+      scheduleDateRange.fromDate,
+      scheduleDateRange.toDate,
+    ],
+    enabled: !!myTeam?.workerId,
+    queryFn: async ({ signal }) => {
+      const result = await loadAllPages(
+        (pagination) =>
+          client.attendanceDays(token, siteId, {
+            workerId: myTeam!.workerId,
+            fromDate: scheduleDateRange.fromDate,
+            toDate: scheduleDateRange.toDate,
+            ...pagination,
+          }),
+        signal,
+      );
+      return result.items;
+    },
+    refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
+    retry: false,
+  });
+  const scheduleAttendance = (id: string) =>
+    attendanceQuery.data?.find((day) => day.scheduleId === id)?.status;
   const isSwapEligible = myTeamQuery.isSuccess && !!myTeam?.teamId;
   const isWorkerUnassigned = myTeamQuery.isSuccess && !myTeam?.teamId;
 
@@ -554,6 +585,22 @@ export function WorkforceScheduleTab({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
+      {attendanceQuery.isLoading && <p role="status">{tr('schedule.attendance_loading')}</p>}
+      {attendanceQuery.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          {tr('schedule.attendance_unavailable')}{' '}
+          <button
+            type="button"
+            onClick={() => void attendanceQuery.refetch()}
+            className="underline"
+          >
+            {tr('common.retry')}
+          </button>
+        </div>
+      )}
       {target.isLoading && <p role="status">{tr('common.loading_selected_request')}</p>}
       {target.isError && (
         <div
@@ -586,6 +633,15 @@ export function WorkforceScheduleTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <WorkerAbsenceSummary
+            apiUrl={apiUrl}
+            token={token}
+            siteId={siteId}
+            workerId={myTeam?.workerId}
+            sessionScope={sessionScope}
+            fromDate={scheduleDateRange.fromDate}
+            toDate={scheduleDateRange.toDate}
+          />
           {/* Card 1 */}
           <button
             type="button"
@@ -1097,20 +1153,24 @@ export function WorkforceScheduleTab({
                                     </div>
                                     <span
                                       className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tight uppercase shrink-0 ${
-                                        isPast
-                                          ? 'bg-slate-100 text-slate-500 border border-slate-200/60'
-                                          : hasPendingRequest
-                                            ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                                            : isToday
-                                              ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                        scheduleAttendance(sched.id) === 'ABSENT'
+                                          ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                          : isPast
+                                            ? 'bg-slate-100 text-slate-500 border border-slate-200/60'
+                                            : hasPendingRequest
+                                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                              : isToday
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
                                       }`}
                                     >
-                                      {isPast
-                                        ? 'PAST'
-                                        : hasPendingRequest
-                                          ? 'PENDING'
-                                          : 'SCHEDULED'}
+                                      {scheduleAttendance(sched.id) === 'ABSENT'
+                                        ? 'ABSENT'
+                                        : isPast
+                                          ? 'PAST'
+                                          : hasPendingRequest
+                                            ? 'PENDING'
+                                            : 'SCHEDULED'}
                                     </span>
                                   </div>
 
@@ -1255,18 +1315,22 @@ export function WorkforceScheduleTab({
 
                                     <Badge
                                       variant={
-                                        isPast
-                                          ? 'neutral'
-                                          : hasPendingRequest
-                                            ? 'warning'
-                                            : 'success'
+                                        scheduleAttendance(sched.id) === 'ABSENT'
+                                          ? 'danger'
+                                          : isPast
+                                            ? 'neutral'
+                                            : hasPendingRequest
+                                              ? 'warning'
+                                              : 'success'
                                       }
                                     >
-                                      {isPast
-                                        ? 'PAST'
-                                        : hasPendingRequest
-                                          ? tr('common.pending_review_ac9bf8')
-                                          : 'SCHEDULED'}
+                                      {scheduleAttendance(sched.id) === 'ABSENT'
+                                        ? 'ABSENT'
+                                        : isPast
+                                          ? 'PAST'
+                                          : hasPendingRequest
+                                            ? tr('common.pending_review_ac9bf8')
+                                            : 'SCHEDULED'}
                                     </Badge>
                                   </div>
 
