@@ -40,7 +40,6 @@ function allowGrant(overrides: Partial<ZoneAccessGrantEntity> = {}): ZoneAccessG
     zoneId,
     workerId,
     effect: ZoneAccessEffect.ALLOW,
-    contractorId: null,
     validFrom: new Date('2026-09-28T07:00:00.000Z'),
     validUntil: new Date('2026-09-28T09:00:00.000Z'),
     revokedAt: null,
@@ -120,8 +119,7 @@ function createManager(
       assert.doesNotMatch(sql, /mf06_authority_/);
       const [verifiedWorkerId, requestedSite, requestedZone, verifiedContractorId, rawEvaluatedAt] =
         parameters;
-      const evaluatedTime =
-        rawEvaluatedAt instanceof Date ? rawEvaluatedAt.getTime() : Number.NaN;
+      const evaluatedTime = rawEvaluatedAt instanceof Date ? rawEvaluatedAt.getTime() : Number.NaN;
       const teamEffects = teamBindings
         .filter(
           (binding) =>

@@ -53,6 +53,9 @@ export type OriginalZoneDecisionSummary = Pick<
   'id' | 'zoneId' | 'status' | 'reasonCode' | 'evaluatedAt'
 >;
 
+/** SQL-only compatibility projection; Main has no persisted Contractor column. */
+export type MainZoneAccessGrantProjection = ZoneAccessGrantEntity & { contractorId: null };
+
 // Explicit retained-main columns: the old branch entity's contractor_id does not exist on main.
 const grantColumns =
   'id,site_id AS "siteId",zone_id AS "zoneId",worker_id AS "workerId",NULL::uuid AS "contractorId",effect,valid_from AS "validFrom",valid_until AS "validUntil",revoked_at AS "revokedAt",created_at AS "createdAt"';
@@ -103,7 +106,7 @@ export class ZoneAccessManagementService {
     zoneId: string,
     input: CreateZoneAccessGrantCommand,
     context?: MainConfigurationCommandContext,
-  ): Promise<ZoneAccessGrantEntity> {
+  ): Promise<MainZoneAccessGrantProjection> {
     const scopedSiteId = uuid(siteId),
       scopedZoneId = uuid(zoneId);
     const value = command(CreateZoneAccessGrantCommand, input);
@@ -145,7 +148,7 @@ export class ZoneAccessManagementService {
         if (!zones.length || !workers.length) missing();
         if (value.effect === ZoneAccessEffect.ALLOW)
           conflict('Use Contractor and Worker Zone permissions within approved assignment bounds');
-        const rows: ZoneAccessGrantEntity[] = await manager.query(
+        const rows: MainZoneAccessGrantProjection[] = await manager.query(
           `INSERT INTO zone_access_grant(id,site_id,zone_id,worker_id,effect,valid_from,valid_until,revoked_at) VALUES($1,$2,$3,$4,'DENY',$5::timestamptz,$6::timestamptz,NULL) RETURNING ${grantColumns}`,
           [
             randomUUID(),
@@ -166,10 +169,10 @@ export class ZoneAccessManagementService {
     zoneId: string,
     offset = 0,
     limit = 20,
-  ): Promise<{ items: ZoneAccessGrantEntity[]; total: number }> {
+  ): Promise<{ items: MainZoneAccessGrantProjection[]; total: number }> {
     const pagination = page(offset, limit),
       scope = [uuid(siteId), uuid(zoneId)];
-    const items: ZoneAccessGrantEntity[] = await this.dataSource.query(
+    const items: MainZoneAccessGrantProjection[] = await this.dataSource.query(
       `SELECT ${grantColumns} FROM zone_access_grant WHERE site_id=$1 AND zone_id=$2 ORDER BY created_at DESC,id DESC OFFSET $3 LIMIT $4`,
       [...scope, pagination.offset, pagination.limit],
     );
@@ -186,7 +189,7 @@ export class ZoneAccessManagementService {
     grantId: string,
     revokedAt?: Date,
     context?: MainConfigurationCommandContext,
-  ): Promise<ZoneAccessGrantEntity> {
+  ): Promise<MainZoneAccessGrantProjection> {
     if (
       revokedAt !== undefined &&
       (!(revokedAt instanceof Date) || !Number.isFinite(revokedAt.getTime()))
@@ -202,7 +205,7 @@ export class ZoneAccessManagementService {
         revokedAt: revokedAt?.toISOString() ?? null,
       },
       async (manager) => {
-        const rows: ZoneAccessGrantEntity[] = await manager.query(
+        const rows: MainZoneAccessGrantProjection[] = await manager.query(
           `SELECT ${grantColumns} FROM zone_access_grant WHERE id=$1 AND site_id=$2 AND zone_id=$3 FOR UPDATE`,
           [scope.id, scope.siteId, scope.zoneId],
         );
@@ -210,7 +213,7 @@ export class ZoneAccessManagementService {
         if (!grant) missing();
         // A retry/no-op confirms the first persisted revocation without rewriting it.
         if (grant.revokedAt !== null) return grant;
-        const updated: ZoneAccessGrantEntity[] = await manager.query(
+        const updated: MainZoneAccessGrantProjection[] = await manager.query(
           `WITH changed AS (UPDATE zone_access_grant SET revoked_at=COALESCE($4::timestamptz,statement_timestamp()) WHERE id=$1 AND site_id=$2 AND zone_id=$3 RETURNING *) SELECT ${grantColumns} FROM changed`,
           [scope.id, scope.siteId, scope.zoneId, revokedAt?.toISOString() ?? null],
         );
