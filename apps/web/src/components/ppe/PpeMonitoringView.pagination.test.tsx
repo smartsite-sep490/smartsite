@@ -14,15 +14,17 @@ const sites = Array.from({ length: 20 }, (_, n) => site(n + 1));
 const cameras = Array.from({ length: 20 }, (_, n) => camera(n + 1));
 let queries: QueryClient;
 let session: SharedSession;
-function mount() {
-  const element = (next: SharedSession | null = session) => <QueryClientProvider client={queries}><PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={next} /></QueryClientProvider>;
-  const view = render(element());
+let siteManagerSession: SharedSession;
+function mount(initial: SharedSession | null = session) {
+  const element = (next: SharedSession | null = initial) => <QueryClientProvider client={queries}><PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={next} /></QueryClientProvider>;
+  const view = render(element(initial));
   return { ...view, changeSession: (next: SharedSession | null) => view.rerender(element(next)) };
 }
 beforeEach(() => {
   vi.stubEnv('VITE_AI_WORK_PAUSED', 'true');
   queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   session = { accessToken: 'token-a', sessionScope: 'session-a', user: { id: 'admin', displayName: 'Administrator', roleAssignments: [{ role: 'ADMIN', siteId: null }] }, onSignOut: vi.fn() };
+  siteManagerSession = { accessToken: 'token-sm-a', sessionScope: 'session-sm-a', user: { id: 'site-manager-1', displayName: 'Site Manager 1', roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-1' }, { role: 'SITE_MANAGER', siteId: 'site-2' }] }, onSignOut: vi.fn() };
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({ items: [site(1)], total: 1 });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockImplementation(async (_t, s) => ({ items: [camera(1, s)], total: 1 }));
   vi.spyOn(SmartSiteManagementClient.prototype, 'listZones').mockResolvedValue({ items: [], total: 0 });
@@ -56,7 +58,7 @@ it('loads later authorized cameras explicitly while preserving camera selection 
 it('keeps the actual open Zone form draft when a pending site page finishes', async () => {
   let resolve!: (value: { items: SiteResponse[]; total: number }) => void;
   vi.mocked(SmartSiteManagementClient.prototype.listSites).mockResolvedValueOnce({ items: sites, total: 21 }).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-  mount(); fireEvent.click(await screen.findByRole('button', { name: 'Load more sites' }));
+  mount(siteManagerSession); fireEvent.click(await screen.findByRole('button', { name: 'Load more sites' }));
   await waitFor(() => expect(resolve).toBeDefined());
   fireEvent.click(screen.getByRole('button', { name: 'Configure PPE by Zone' }));
   const input = await screen.findByRole('textbox', { name: /Zone Name/i });
@@ -83,7 +85,7 @@ it.each([401, 403, 404])('revokes cached Site/camera scope on next Site page err
   await screen.findByRole('button', { name: 'Retry loading sites' });
   expect(screen.queryByRole('option', { name: 'SITE-1 · Worksite 1' })).toBeNull();
   expect(screen.queryByTestId('camera-chip-site-1-cam-1')).toBeNull();
-  expect((screen.getByRole('button', { name: 'Configure PPE by Zone' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
   expect(session.onSignOut).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
 });
 
@@ -175,7 +177,7 @@ it('does not claim an empty authorized Site list when the controlled session is 
 
 it('closes and discards a Zone draft when a base refresh changes the selected Site', async () => {
   vi.mocked(SmartSiteManagementClient.prototype.listSites).mockResolvedValueOnce({ items: [site(1)], total: 1 }).mockResolvedValueOnce({ items: [site(2)], total: 1 });
-  mount(); await screen.findByRole('option', { name: 'SITE-1 · Worksite 1' });
+  mount(siteManagerSession); await screen.findByRole('option', { name: 'SITE-1 · Worksite 1' });
   fireEvent.click(screen.getByRole('button', { name: 'Configure PPE by Zone' }));
   const input = await screen.findByRole('textbox', { name: /Zone Name/i });
   fireEvent.change(input, { target: { value: 'Old Site draft' } });

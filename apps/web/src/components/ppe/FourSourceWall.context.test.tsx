@@ -107,6 +107,17 @@ describe('FourSourceWall Site/Camera/Zone Context (P0)', () => {
   let queryClient: QueryClient;
   let client: SmartSiteManagementClient;
 
+  it('explains an intentional pause without an offline error or a dead retry action', async () => {
+    render(buildWallTree({ locale: 'en', isAiWorkPaused: true }));
+    await screen.findByText('Camera preview paused');
+    expect(screen.getByTestId(`wall-source-badge-${CAM_1_ID}`).textContent).toBe('AI WORK PAUSED');
+    expect(screen.queryByText('Snapshot Unavailable')).toBeNull();
+    expect(screen.queryByText('No Person detections')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.getByTestId(`focus-btn-${CAM_1_ID}`).textContent).toBe('Selected');
+    expect(previewCalls.every((call) => call.enabled === false)).toBe(true);
+  });
+
   function buildWallTree({
     configurationVersion = 3,
     cameraOverrides,

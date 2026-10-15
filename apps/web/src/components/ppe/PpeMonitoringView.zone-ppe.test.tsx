@@ -152,6 +152,20 @@ const mockGlobalAdminSession: SharedSession = {
   onSignOut: vi.fn(),
 };
 
+const mockSiteManagerSession: SharedSession = {
+  accessToken: 'mock-site-manager-token-xyz',
+  sessionScope: 'scope-site-manager-01',
+  user: {
+    id: 'site-manager-user-01',
+    displayName: 'Site Manager Alpha',
+    roleAssignments: [
+      { role: 'SITE_MANAGER', siteId: 'site-alpha' },
+      { role: 'SITE_MANAGER', siteId: 'site-beta' },
+    ],
+  },
+  onSignOut: vi.fn(),
+};
+
 const mockSiteAdminSession: SharedSession = {
   accessToken: 'mock-site-admin-token',
   sessionScope: 'scope-site-admin-01',
@@ -207,9 +221,9 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
   });
 
   // --------------------------------------------------------------------------
-  // 1. BEHAVIORAL ENTRY: GLOBAL ADMIN SEES ENTRY AND OPENS/CLOSES PANEL
+  // 1. BEHAVIORAL ENTRY: GLOBAL ADMIN SEES ENTRY AND OPENS/CLOSES PANEL (READ-ONLY ZONES)
   // --------------------------------------------------------------------------
-  it('renders "Configure PPE by Zone" entry button for Global Admin and toggles panel visibility', async () => {
+  it('renders "Configure PPE by Zone" entry button for Global Admin, shows read-only zone notice without zone creation controls, and toggles panel visibility', async () => {
     const user = userEvent.setup();
 
     render(
@@ -229,6 +243,16 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
     // Open panel
     await user.click(configureBtn);
     expect(await screen.findByRole('heading', { name: 'Zone PPE configuration' })).toBeDefined();
+
+    // Global Admin manages camera observation regions only; Zone creation controls must not render
+    expect(
+      screen.getByText(
+        /Zone catalog is read-only for your role\. Only the assigned Site Manager can create or rename zones for this site\./i,
+      ),
+    ).toBeDefined();
+    expect(screen.queryByLabelText(/Zone Code/i)).toBeNull();
+    expect(screen.queryByLabelText(/Zone Name/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Save Zone PPE/i })).toBeNull();
 
     // Close panel via Close (X) button
     const closeBtn = screen.getByRole('button', { name: 'Close dialog' });
@@ -262,7 +286,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
     const user = userEvent.setup();
     const result = render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
     await screen.findByRole('option', { name: /Công trường Alpha/i });
@@ -272,7 +296,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
       <QueryClientProvider client={queryClient}>
         <PpeMonitoringView
           sharedSession={{
-            ...mockGlobalAdminSession,
+            ...mockSiteManagerSession,
             sessionScope: 'changed-scope',
             accessToken: 'changed-token',
           }}
@@ -287,7 +311,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
   // --------------------------------------------------------------------------
   // 2. FOCUSED BEHAVIOR: ZONE CREATION WITH TRIMMING, INVARIANTS & TRUTHFUL FEEDBACK
   // --------------------------------------------------------------------------
-  it('allows Global Admin to create a HAZARDOUS zone scoped to selected site with trimmed inputs and core PPE', async () => {
+  it('allows assigned Site Manager to create a HAZARDOUS zone scoped to selected site with trimmed inputs and core PPE', async () => {
     const user = userEvent.setup();
     const createZoneSpy = vi
       .spyOn(SmartSiteManagementClient.prototype, 'createZone')
@@ -305,7 +329,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 
@@ -340,7 +364,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     // Invariant assertions on createZone call
     expect(createZoneSpy).toHaveBeenCalledTimes(1);
-    expect(createZoneSpy).toHaveBeenCalledWith('mock-admin-token-xyz', 'site-alpha', {
+    expect(createZoneSpy).toHaveBeenCalledWith('mock-site-manager-token-xyz', 'site-alpha', {
       code: 'PPE-HAZ-01',
       name: 'Scaffold Work Area',
       type: 'HAZARDOUS',
@@ -395,7 +419,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 
@@ -461,7 +485,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 
@@ -510,7 +534,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 
@@ -574,7 +598,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 
@@ -618,9 +642,9 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
       accessToken: 'token-rotation-1',
       sessionScope: 'scope-token-1',
       user: {
-        id: 'admin-1',
-        displayName: 'Admin User',
-        roleAssignments: [{ role: 'ADMIN', siteId: null }],
+        id: 'site-manager-1',
+        displayName: 'Site Manager User',
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
       },
     };
 
@@ -628,9 +652,9 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
       accessToken: 'token-rotation-2',
       sessionScope: 'scope-token-2',
       user: {
-        id: 'admin-1',
-        displayName: 'Admin User',
-        roleAssignments: [{ role: 'ADMIN', siteId: null }],
+        id: 'site-manager-1',
+        displayName: 'Site Manager User',
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
       },
     };
 
@@ -774,7 +798,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 
@@ -808,7 +832,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <PpeMonitoringView sharedSession={mockGlobalAdminSession} />
+        <PpeMonitoringView sharedSession={mockSiteManagerSession} />
       </QueryClientProvider>,
     );
 

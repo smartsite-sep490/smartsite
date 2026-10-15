@@ -40,12 +40,19 @@ export const PPE_EN_CATALOG = {
   'ppe.header.status.standby': 'Feed Standby',
 
   'ppe.pausedBanner.title': 'AI Work Paused by Human Operator',
+  'ppe.pausedBanner.summary':
+    'Inference and camera analysis paused; zone and region setup remains active.',
+  'ppe.pausedBanner.detailsToggle': 'Operational details',
   'ppe.pausedBanner.description':
     'All AI model inference, camera stream analysis, and demo source deployment actions are temporarily paused by human directive. Zone and region configuration remains active and can be saved.',
 
   'ppe.sessionExpired.title': 'Session pending or expired',
   'ppe.sessionExpired.description':
     'PPE monitoring session is pending or expired. Please sign in to the application to monitor camera feeds.',
+
+  'ppe.layout.monitoringScope': 'Monitoring scope',
+  'ppe.layout.configuration': 'Configuration',
+  'ppe.check.notesSummary': 'Observation scope & experimental notes',
 
   'ppe.scope.siteLabel': 'Site',
   'ppe.scope.loadedCount': '({loaded}/{total} loaded)',
@@ -201,6 +208,9 @@ export const PPE_EN_CATALOG = {
   'ppe.card.recordedUnanalyzedBadge': 'RECORDED RAW · NOT SYNCED TO AI',
   'ppe.card.noDetectionBadge': 'NO-DETECTION',
   'ppe.card.evidenceUnavailableBadge': 'AI EVIDENCE UNAVAILABLE',
+  'ppe.card.pausedEmptyTitle': 'AI inspection paused — no current evidence',
+  'ppe.card.pausedEmptyDesc':
+    'Camera stream analysis and snapshot PPE checks are paused. No live detections are being evaluated.',
 
   'ppe.card.fieldIdentity': 'Identity',
   'ppe.card.identitySnapshotUnavailable': 'AI snapshot unavailable',
@@ -805,12 +815,19 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'ppe.header.status.standby': 'Nguồn phát chờ',
 
   'ppe.pausedBanner.title': 'Tác vụ AI đang tạm dừng theo lệnh vận hành',
+  'ppe.pausedBanner.summary':
+    'Suy luận AI và phân tích camera đang tạm dừng; cấu hình khu vực và vùng quan sát vẫn hoạt động.',
+  'ppe.pausedBanner.detailsToggle': 'Chi tiết vận hành',
   'ppe.pausedBanner.description':
     'Toàn bộ suy luận mô hình AI, phân tích luồng camera và thao tác triển khai nguồn demo đang tạm dừng theo chỉ thị của người vận hành. Cấu hình Khu vực (Zone) và vùng quan sát của camera vẫn hoạt động và có thể lưu.',
 
   'ppe.sessionExpired.title': 'Phiên làm việc đang chờ hoặc đã hết hạn',
   'ppe.sessionExpired.description':
     'Phiên giám sát PPE đang chờ hoặc đã hết hạn. Vui lòng đăng nhập lại ứng dụng để giám sát nguồn camera.',
+
+  'ppe.layout.monitoringScope': 'Phạm vi giám sát',
+  'ppe.layout.configuration': 'Cấu hình',
+  'ppe.check.notesSummary': 'Phạm vi quan sát & lưu ý thử nghiệm',
 
   'ppe.scope.siteLabel': 'Công trường',
   'ppe.scope.loadedCount': '({loaded}/{total} đã tải)',
@@ -970,6 +987,9 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'ppe.card.recordedUnanalyzedBadge': 'VIDEO GHI SẴN · KHÔNG ĐỒNG BỘ AI',
   'ppe.card.noDetectionBadge': 'NO-DETECTION',
   'ppe.card.evidenceUnavailableBadge': 'KHÔNG CÓ BẰNG CHỨNG AI',
+  'ppe.card.pausedEmptyTitle': 'Đã tạm dừng kiểm tra AI — không có bằng chứng hiện tại',
+  'ppe.card.pausedEmptyDesc':
+    'Phân tích luồng camera và kiểm tra ảnh chụp PPE đang tạm dừng. Không có nhận diện trực tiếp nào đang được đánh giá.',
 
   'ppe.card.fieldIdentity': 'Danh tính',
   'ppe.card.identitySnapshotUnavailable': 'Ảnh chụp AI không khả dụng',

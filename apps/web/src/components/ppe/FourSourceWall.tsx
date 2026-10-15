@@ -6,9 +6,10 @@ import {
 } from '../cameras/useScopedCameraPreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import type { DecodedPreview } from '../cameras/useRealtimePreview';
-import { IconAlertTriangle } from '../icons';
+import { IconAlertTriangle, IconCamera } from '../icons';
 import { formatClockTime } from '../cameras/monitoringUtils';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { useLocale } from '../../i18n/ppe-locale';
 import { CameraObservationZones } from './CameraObservationZones';
 import { useCameraObservationZones } from './useCameraObservationZones';
 
@@ -43,6 +44,7 @@ export interface FourSourceWallTileProps {
   isSelected: boolean;
   onSelect: (cameraId: string) => void;
   enabled: boolean;
+  isAiWorkPaused?: boolean;
   showModelObjects: boolean;
   filterClasses?: readonly string[];
   isApplying?: boolean;
@@ -63,12 +65,15 @@ export function FourSourceWallTile({
   isSelected,
   onSelect,
   enabled,
+  isAiWorkPaused = false,
   showModelObjects,
   filterClasses,
   isApplying,
   onPreviewUpdate,
   onTileUnmount,
 }: FourSourceWallTileProps) {
+  const { t } = useLocale();
+
   const scopedPreview = useScopedCameraPreview({
     apiUrl,
     client,
@@ -76,7 +81,7 @@ export function FourSourceWallTile({
     sessionScope,
     siteId,
     cameraId: camera.id,
-    enabled: enabled && Boolean(token && sessionScope && siteId && camera.id),
+    enabled: !isAiWorkPaused && enabled && Boolean(token && sessionScope && siteId && camera.id),
     cadenceMs: isSelected ? 500 : 1000,
   });
 
@@ -91,8 +96,20 @@ export function FourSourceWallTile({
     configurationVersion: camera.configurationVersion,
   });
 
-  const { preview, status, sourceKind, capturedAt, error, errorStatus, retry, isPolling } =
-    scopedPreview;
+  const {
+    preview: rawPreview,
+    status: rawStatus,
+    sourceKind: rawSourceKind,
+    capturedAt: rawCapturedAt,
+    error,
+    errorStatus,
+    retry,
+    isPolling,
+  } = scopedPreview;
+  const preview = isAiWorkPaused ? null : rawPreview;
+  const status: ScopedPreviewStatus = isAiWorkPaused ? 'UNAVAILABLE' : rawStatus;
+  const sourceKind = isAiWorkPaused ? null : rawSourceKind;
+  const capturedAt = isAiWorkPaused ? null : rawCapturedAt;
   const effectiveErrorStatus =
     errorStatus === 401 || zonesState.errorStatus === 401 ? 401 : errorStatus;
   const retryDisabled =
@@ -168,25 +185,29 @@ export function FourSourceWallTile({
           zonesState={zonesState}
         />
 
-        {/* Factual Source Badge (LIVE / REPLAY / UNAVAILABLE) */}
+        {/* Factual Source Badge (LIVE / REPLAY / UNAVAILABLE / AI WORK PAUSED) */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span
             data-testid={`wall-source-badge-${camera.id}`}
             className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase border ${
-              isLive
-                ? 'bg-red-500/20 text-red-200 border-red-500/40'
-                : isReplay
-                  ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
-                  : 'bg-slate-700/40 text-slate-300 border-slate-600/40'
+              isAiWorkPaused
+                ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
+                : isLive
+                  ? 'bg-red-500/20 text-red-200 border-red-500/40'
+                  : isReplay
+                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
+                    : 'bg-slate-700/40 text-slate-300 border-slate-600/40'
             }`}
           >
-            {isReplay
-              ? 'REPLAY'
-              : isLive
-                ? 'LIVE'
-                : status === 'CONNECTING'
-                  ? 'CONNECTING'
-                  : 'UNAVAILABLE'}
+            {isAiWorkPaused
+              ? t('ppe.badge.aiPaused')
+              : isReplay
+                ? 'REPLAY'
+                : isLive
+                  ? 'LIVE'
+                  : status === 'CONNECTING'
+                    ? 'CONNECTING'
+                    : 'UNAVAILABLE'}
           </span>
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60">
             <span
@@ -203,7 +224,18 @@ export function FourSourceWallTile({
 
       {/* Video Canvas Viewport */}
       <div className="relative aspect-video w-full flex-1 min-h-[160px] bg-[#0F141C]">
-        {isApplying && isSelected ? (
+        {isAiWorkPaused ? (
+          <div
+            data-testid={`wall-paused-${camera.id}`}
+            className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center space-y-2"
+          >
+            <IconCamera className="w-6 h-6 text-slate-400" />
+            <p className="text-[11px] font-semibold text-white">{t('ppe.viewport.pausedTitle')}</p>
+            <p className="text-[10px] text-slate-300 max-w-[240px] leading-relaxed">
+              {t('ppe.viewport.pausedDesc')}
+            </p>
+          </div>
+        ) : isApplying && isSelected ? (
           <div
             data-testid={`wall-applying-${camera.id}`}
             className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center space-y-2"
@@ -269,16 +301,22 @@ export function FourSourceWallTile({
       {/* Bottom Summary Bar — Flat minimalist overlay without gradient */}
       <div className="relative z-10 px-3 py-1.5 bg-black/60 flex items-center justify-between text-white text-[10px] pointer-events-none">
         <div className="flex items-center gap-2 text-white/70">
-          <span>Cadence: {isSelected ? '500ms' : '1s'}</span>
-          {detectionsCount > 0 ? (
-            <span className="text-emerald-300 font-semibold">
-              {detectionsCount} Person detection(s)
-            </span>
-          ) : (
-            <span className="text-white/50">No Person detections</span>
-          )}
-          {showModelObjects && modelObjectsCount > 0 && (
-            <span className="text-sky-300 font-semibold">{modelObjectsCount} raw object(s)</span>
+          {!isAiWorkPaused && (
+            <>
+              <span>Cadence: {isSelected ? '500ms' : '1s'}</span>
+              {detectionsCount > 0 ? (
+                <span className="text-emerald-300 font-semibold">
+                  {detectionsCount} Person detection(s)
+                </span>
+              ) : (
+                <span className="text-white/50">No Person detections</span>
+              )}
+              {showModelObjects && modelObjectsCount > 0 && (
+                <span className="text-sky-300 font-semibold">
+                  {modelObjectsCount} raw object(s)
+                </span>
+              )}
+            </>
           )}
         </div>
 
@@ -294,7 +332,7 @@ export function FourSourceWallTile({
               isSelected ? 'bg-white text-[#111111]' : 'bg-white/20 text-white hover:bg-white/40'
             }`}
           >
-            {isSelected ? 'Active' : 'Focus'}
+            {isSelected ? t('ppe.overview.selectedAria') : t('ppe.overview.selectTitle')}
           </button>
         </div>
       </div>
@@ -315,6 +353,7 @@ export interface FourSourceWallProps {
   onSelectCamera: (cameraId: string) => void;
   cameras: CameraResponse[];
   enabled: boolean;
+  isAiWorkPaused?: boolean;
   showModelObjects: boolean;
   filterClasses?: readonly string[];
   getFilterClassesForCamera?: (camera: CameraResponse) => readonly string[] | undefined;
@@ -336,6 +375,7 @@ export function FourSourceWall({
   onSelectCamera,
   cameras,
   enabled,
+  isAiWorkPaused = false,
   showModelObjects,
   filterClasses,
   getFilterClassesForCamera,
@@ -384,7 +424,8 @@ export function FourSourceWall({
           camera={camera}
           isSelected={camera.id === selectedCameraId}
           onSelect={onSelectCamera}
-          enabled={enabled}
+          enabled={enabled && !isAiWorkPaused}
+          isAiWorkPaused={isAiWorkPaused}
           showModelObjects={showModelObjects}
           filterClasses={
             getFilterClassesForCamera ? getFilterClassesForCamera(camera) : filterClasses

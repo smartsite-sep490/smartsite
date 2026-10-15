@@ -6,10 +6,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { Page, SiteResponse, CameraResponse } from '@smartsite/contracts/management';
 import { PpeMonitoringView } from './PpeMonitoringView';
-import {
-  type CameraPreviewModelObjects,
-  type RealtimePreview,
-} from '../cameras/realtimePreview';
+import { type CameraPreviewModelObjects, type RealtimePreview } from '../cameras/realtimePreview';
 import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import type { SharedSession } from '../../types/shared-session';
 
@@ -48,13 +45,7 @@ const cameraStatuses = new Map<string, 'LIVE' | 'REPLAY' | 'UNAVAILABLE' | 'CONN
 const cameraErrorStatuses = new Map<string, number | null>();
 
 vi.mock('../cameras/useScopedCameraPreview', () => ({
-  useScopedCameraPreview: ({
-    cameraId,
-    siteId,
-  }: {
-    cameraId?: string;
-    siteId?: string;
-  }) => {
+  useScopedCameraPreview: ({ cameraId, siteId }: { cameraId?: string; siteId?: string }) => {
     const cid = cameraId ?? 'default';
     const sid = siteId ?? 'site-alpha';
     const preview = cameraPreviews.get(cid) ?? null;
@@ -151,10 +142,7 @@ const mockCamerasList4: Page<CameraResponse> = {
 
 // Only 2 cameras available scenario
 const mockCamerasList2: Page<CameraResponse> = {
-  items: [
-    mockCamerasList4.items[0]!,
-    mockCamerasList4.items[1]!,
-  ],
+  items: [mockCamerasList4.items[0]!, mockCamerasList4.items[1]!],
   total: 2,
 };
 
@@ -246,12 +234,53 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     });
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(mockCamerasList4);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
+      mockCamerasList4,
+    );
   });
 
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it('groups monitoring scope separately from setup actions and the viewing controls', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+
+    const scope = await screen.findByRole('region', { name: 'Monitoring scope' });
+    const setup = screen.getByRole('region', { name: 'Configuration' });
+    expect(within(scope).getByRole('combobox', { name: 'Site' })).not.toBeNull();
+    expect(within(scope).getByRole('combobox', { name: 'Camera' })).not.toBeNull();
+    expect(
+      await within(setup).findByRole('button', { name: 'Configure PPE by Zone' }),
+    ).not.toBeNull();
+    expect(within(setup).queryByRole('combobox')).toBeNull();
+    expect(within(scope).queryByTestId('toggle-view-wall')).toBeNull();
+    expect(within(setup).queryByTestId('toggle-view-wall')).toBeNull();
+    expect(screen.getByTestId('toggle-view-wall')).not.toBeNull();
+  });
+
+  it('uses a concise paused evidence state instead of empty observation fields', async () => {
+    vi.stubEnv('VITE_AI_WORK_PAUSED', 'true');
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+    try {
+      const panel = await screen.findByTestId('ai-detection-panel');
+      expect(within(panel).queryByText('Track ID')).toBeNull();
+      expect(within(panel).queryByText('Identity')).toBeNull();
+      expect(within(panel).getByTestId('ai-evidence-badge').textContent).toContain('PAUSED');
+      expect(screen.queryByText(/NO TARGETS/)).toBeNull();
+    } finally {
+      view.unmount();
+      vi.unstubAllEnvs();
+    }
   });
 
   it('renders View Mode switcher with Single Focus (default) and 4-Source Wall options', async () => {
@@ -317,7 +346,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
   });
 
   it('bounds wall view when site only has 2 cameras: renders 2 real tiles and 2 unassigned placeholders, no fake sources', async () => {
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(mockCamerasList2);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
+      mockCamerasList2,
+    );
 
     cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
     cameraStatuses.set('cam-1', 'LIVE');
@@ -427,13 +458,25 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
           classId: 10,
           className: 'Goggles',
           confidence: 0.85,
-          boundingBox: { x1: 0.15, y1: 0.15, x2: 0.25, y2: 0.25, coordinateSpace: 'NORMALIZED_0_1' },
+          boundingBox: {
+            x1: 0.15,
+            y1: 0.15,
+            x2: 0.25,
+            y2: 0.25,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
         },
         {
           classId: 11,
           className: 'Mask',
           confidence: 0.82,
-          boundingBox: { x1: 0.16, y1: 0.22, x2: 0.26, y2: 0.28, coordinateSpace: 'NORMALIZED_0_1' },
+          boundingBox: {
+            x1: 0.16,
+            y1: 0.22,
+            x2: 0.26,
+            y2: 0.28,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
         },
         {
           classId: 13,
@@ -579,7 +622,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     const scoped1 = within(tile1);
 
     // Strictly 'No Person detections', never 'No workers in frame' or '0 workers'
-    expect(scoped1.getByText(/No Person detections · Zero detections do not certify safety clearance/i)).not.toBeNull();
+    expect(
+      scoped1.getByText(/No Person detections · Zero detections do not certify safety clearance/i),
+    ).not.toBeNull();
     expect(scoped1.queryByText(/No workers in frame/i)).toBeNull();
     expect(scoped1.queryByText(/0 workers/i)).toBeNull();
     expect(scoped1.queryByText(/worker\(s\)/i)).toBeNull();
@@ -600,8 +645,18 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
   it('synchronously guards against stale wall snapshots across site switch and rejects late callbacks', async () => {
     const mockSitesListMultiple: Page<SiteResponse> = {
       items: [
-        { id: 'site-alpha', code: 'SITE-A', name: 'Công trường Alpha', createdAt: '2026-09-30T00:00:00Z' },
-        { id: 'site-beta', code: 'SITE-B', name: 'Công trường Beta', createdAt: '2026-09-30T00:00:00Z' },
+        {
+          id: 'site-alpha',
+          code: 'SITE-A',
+          name: 'Công trường Alpha',
+          createdAt: '2026-09-30T00:00:00Z',
+        },
+        {
+          id: 'site-beta',
+          code: 'SITE-B',
+          name: 'Công trường Beta',
+          createdAt: '2026-09-30T00:00:00Z',
+        },
       ],
       total: 2,
     };
@@ -622,7 +677,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       total: 1,
     };
 
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesListMultiple);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(
+      mockSitesListMultiple,
+    );
     vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockImplementation(
       async (_token, siteId) => {
         if (siteId === 'site-beta') return mockCamerasBeta;
@@ -696,7 +753,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
 
   it('cleans up tile snapshot immediately when camera tile is unmounted', async () => {
     // Start with 4 cameras
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(mockCamerasList4);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
+      mockCamerasList4,
+    );
 
     cameraPreviews.set('cam-4', createDecodedPreview(createMockFrame('CAM-04')));
     cameraStatuses.set('cam-4', 'LIVE');
@@ -713,7 +772,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     expect(await screen.findByTestId('wall-tile-cam-4')).not.toBeNull();
 
     // Now cameras drop to 2 (cam-4 is unmounted)
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(mockCamerasList2);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
+      mockCamerasList2,
+    );
     await queryClient.refetchQueries();
 
     rerender(
@@ -760,8 +821,18 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
   it('assigns camera-specific default presets, modifies selected camera preset only, and clears preset overrides on scope change', async () => {
     const mockSitesListMultiple: Page<SiteResponse> = {
       items: [
-        { id: 'site-alpha', code: 'SITE-A', name: 'Công trường Alpha', createdAt: '2026-09-30T00:00:00Z' },
-        { id: 'site-beta', code: 'SITE-B', name: 'Công trường Beta', createdAt: '2026-09-30T00:00:00Z' },
+        {
+          id: 'site-alpha',
+          code: 'SITE-A',
+          name: 'Công trường Alpha',
+          createdAt: '2026-09-30T00:00:00Z',
+        },
+        {
+          id: 'site-beta',
+          code: 'SITE-B',
+          name: 'Công trường Beta',
+          createdAt: '2026-09-30T00:00:00Z',
+        },
       ],
       total: 2,
     };
@@ -829,7 +900,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       total: 1,
     };
 
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesListMultiple);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(
+      mockSitesListMultiple,
+    );
     vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockImplementation(
       async (_token, siteId) => {
         if (siteId === 'site-beta') return mockCamerasBeta;
@@ -844,11 +917,48 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       artifactId: 'weights-test',
       artifactSha256: 'a'.repeat(64),
       detections: [
-        { classId: 1, className: 'Hardhat', confidence: 0.95, boundingBox: { x1: 0.1, y1: 0.1, x2: 0.3, y2: 0.3, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 3, className: 'Safety Vest', confidence: 0.91, boundingBox: { x1: 0.1, y1: 0.3, x2: 0.4, y2: 0.6, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 10, className: 'Goggles', confidence: 0.85, boundingBox: { x1: 0.15, y1: 0.15, x2: 0.25, y2: 0.25, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 11, className: 'Mask', confidence: 0.82, boundingBox: { x1: 0.16, y1: 0.22, x2: 0.26, y2: 0.28, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 13, className: 'fullbody-Harness', confidence: 0.89, boundingBox: { x1: 0.2, y1: 0.2, x2: 0.5, y2: 0.7, coordinateSpace: 'NORMALIZED_0_1' } },
+        {
+          classId: 1,
+          className: 'Hardhat',
+          confidence: 0.95,
+          boundingBox: { x1: 0.1, y1: 0.1, x2: 0.3, y2: 0.3, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 3,
+          className: 'Safety Vest',
+          confidence: 0.91,
+          boundingBox: { x1: 0.1, y1: 0.3, x2: 0.4, y2: 0.6, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 10,
+          className: 'Goggles',
+          confidence: 0.85,
+          boundingBox: {
+            x1: 0.15,
+            y1: 0.15,
+            x2: 0.25,
+            y2: 0.25,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
+        {
+          classId: 11,
+          className: 'Mask',
+          confidence: 0.82,
+          boundingBox: {
+            x1: 0.16,
+            y1: 0.22,
+            x2: 0.26,
+            y2: 0.28,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
+        {
+          classId: 13,
+          className: 'fullbody-Harness',
+          confidence: 0.89,
+          boundingBox: { x1: 0.2, y1: 0.2, x2: 0.5, y2: 0.7, coordinateSpace: 'NORMALIZED_0_1' },
+        },
       ],
     });
 
