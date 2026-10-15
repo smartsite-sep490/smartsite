@@ -1,3 +1,4 @@
+import { useManagementClient } from '../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
@@ -6,7 +7,7 @@ import { useRealtimePreview } from '../cameras/useRealtimePreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type LoginResponse } from '@smartsite/api-client';
+import { type LoginResponse } from '@smartsite/api-client';
 import {
   IconX,
   IconAlertTriangle,
@@ -69,6 +70,8 @@ interface ZoneReviewItem {
 }
 
 export interface RestrictedZoneViewProps {
+  authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
+  onSignOut?: () => void;
   apiUrl?: string;
   onNavigate?: (
     tab: 'incidents',
@@ -83,15 +86,22 @@ export interface RestrictedZoneViewProps {
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
   onNavigate,
+  authenticatedSession,
+  onSignOut,
 }: RestrictedZoneViewProps) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const activeSession = useRef<{ token: string; userId: string } | null>(null);
   const lifecycleGeneration = useRef(0);
 
-  const [session, setSession] = useState<LoginResponse | null>(null);
+  const [localSession, setSession] = useState<LoginResponse | null>(null);
+  const session = authenticatedSession ?? localSession;
+  const externalSession = authenticatedSession !== undefined;
+  const canConfigure =
+    !externalSession ||
+    session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -300,6 +310,14 @@ export function RestrictedZoneView({
   });
 
   useEffect(() => {
+    if (authenticatedSession)
+      activeSession.current = {
+        token: authenticatedSession.accessToken,
+        userId: authenticatedSession.user.id,
+      };
+  }, [authenticatedSession]);
+
+  useEffect(() => {
     lifecycleGeneration.current += 1;
     return () => {
       lifecycleGeneration.current += 1;
@@ -307,11 +325,15 @@ export function RestrictedZoneView({
       activeSession.current = null;
       if (!current) return;
       removeSessionQueries(current.userId);
-      void client.logout('WEB').catch(() => undefined);
+      if (!externalSession) void client.logout('WEB').catch(() => undefined);
     };
-  }, [client, removeSessionQueries]);
+  }, [client, removeSessionQueries, externalSession]);
 
   const handleLogout = () => {
+    if (externalSession) {
+      onSignOut?.();
+      return;
+    }
     const current = activeSession.current;
     activeSession.current = null;
     activeScopeRef.current = { userId: null, siteId: '', cameraId: '', regionId: '' };
@@ -333,7 +355,7 @@ export function RestrictedZoneView({
   const sites = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, 'sites'],
     queryFn: () => client.listSites(apiToken, { limit: 100 }),
-    enabled: apiToken.length > 0,
+    enabled: !!canConfigure && apiToken.length > 0,
   });
 
   const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
@@ -343,7 +365,7 @@ export function RestrictedZoneView({
   const cameras = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
     queryFn: () => client.listCameras(apiToken, selectedSiteId, { limit: 100 }),
-    enabled: apiToken.length > 0 && selectedSiteId.length > 0,
+    enabled: !!canConfigure && apiToken.length > 0 && selectedSiteId.length > 0,
   });
 
   const selectedCameraId = cameras.data?.items.some((cam) => cam.id === requestedCameraId)
@@ -358,7 +380,11 @@ export function RestrictedZoneView({
   const regions = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
     queryFn: () => client.listRegions(apiToken, selectedSiteId, selectedCameraId, { limit: 100 }),
-    enabled: apiToken.length > 0 && selectedSiteId.length > 0 && selectedCameraId.length > 0,
+    enabled:
+      !!canConfigure &&
+      apiToken.length > 0 &&
+      selectedSiteId.length > 0 &&
+      selectedCameraId.length > 0,
   });
 
   const activeRegions = useMemo(
@@ -697,7 +723,11 @@ export function RestrictedZoneView({
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Admin Session & Backend Camera/Region Configuration Bar */}
-      {!session ? (
+      {!canConfigure ? (
+        <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+          {tr('auth.error.forbidden')}
+        </p>
+      ) : !session ? (
         <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>

@@ -31,6 +31,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   sessionStorage.clear();
+  localStorage.clear();
   animations.callbacks.length = 0;
 });
 
@@ -111,6 +112,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
 });
 
 it('login animation cannot navigate back to Dashboard after opening Safety', async () => {
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'refresh').mockRejectedValue(new api.ApiError('http', 'Unauthorized', 401));
   const user = {
     id: 'representative',
     username: 'rep',

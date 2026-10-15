@@ -1,9 +1,10 @@
+import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { type WorkerResponse, type WorkerGatePermissionsResponse } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import {
@@ -204,7 +205,7 @@ export function WorkerGatePermissionsView({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [workerId, setWorkerId] = useState('');

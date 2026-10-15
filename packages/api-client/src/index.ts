@@ -1,5 +1,6 @@
 export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
 export { SmartSiteManagementClient } from './management';
+export type { ManagementSession } from './management';
 export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
 export type {
   ObservationIdentityContextResponse,
@@ -80,6 +81,7 @@ export const BACKEND_ERROR_CODES = [
   'INTERNAL_SERVER_ERROR',
   'HTTP_ERROR',
   'VALIDATION_FAILED',
+  'PASSWORD_CHANGE_REQUIRED',
   'INVALID_JSON',
   'AI_EVENT_ID_CONFLICT',
   'AI_INGESTION_UNAVAILABLE',
@@ -189,6 +191,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status?: number,
     public readonly backendError?: BackendErrorEnvelope,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';

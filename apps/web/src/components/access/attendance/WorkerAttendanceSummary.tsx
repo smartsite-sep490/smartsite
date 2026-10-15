@@ -1,9 +1,9 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronDown, IconChevronRight } from '../../icons';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import {
   attendanceDate,
   attendanceHours,
@@ -27,7 +27,7 @@ export function WorkerAttendanceSummary({
   useTranslation();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const scope = [apiUrl, sessionScope, siteId];
   const context = useQuery({
     queryKey: ['attendance-worker-context', ...scope],

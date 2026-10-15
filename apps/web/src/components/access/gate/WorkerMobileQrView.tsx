@@ -1,9 +1,9 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { IconAlertTriangle, IconKey, IconLoader, IconShield } from '../../icons';
 import { QrPassCard } from './QrPassCard';
 
@@ -20,7 +20,7 @@ export function WorkerMobileQrView({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [fallbackId, setFallbackId] = useState('');
   const pass = useMutation({
     mutationFn: (id: string) => client.issueWorkerQr(token, siteId, id),

@@ -1,11 +1,11 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { zoneDecisionLabel } from './accessControlUtils';
 
 export function ZoneDecisionHistory({
@@ -21,7 +21,7 @@ export function ZoneDecisionHistory({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [offset, setOffset] = useState(0);
   const decisions = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, siteId, 'zone-history', offset],

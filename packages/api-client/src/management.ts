@@ -179,6 +179,22 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 const validTimeout = (timeoutMs: number) =>
   Number.isSafeInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_TIMEOUT_MS;
 
+export interface ManagementSession {
+  getAccessToken(presentedToken: string): string;
+  refreshAccessToken(failedToken: string): Promise<string>;
+  onUnauthorized(failedToken: string): void;
+  signal: AbortSignal;
+}
+
+function retryAfter(response: Response): number | undefined {
+  const value = response.headers.get('Retry-After');
+  if (!value) return undefined;
+  const seconds = /^\d+$/.test(value)
+    ? Number(value)
+    : Math.ceil((Date.parse(value) - Date.now()) / 1000);
+  return Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 86400 ? seconds : undefined;
+}
+
 export class SmartSiteManagementClient {
   updateTeamZone(
     token: string,
@@ -559,7 +575,10 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly session?: ManagementSession,
+  ) {}
   listVisitorSites() {
     return this.request<{ items: Array<{ id: string; name: string; code: string }> }>(
       'GET',
@@ -756,6 +775,103 @@ export class SmartSiteManagementClient {
     }
   }
 
+  private requestOptions(
+    token: string | undefined,
+    options?: RequestOptions,
+  ): RequestOptions | undefined {
+    if (!token || !this.session) return options;
+    return {
+      ...options,
+      signal: options?.signal
+        ? AbortSignal.any([options.signal, this.session.signal])
+        : this.session.signal,
+    };
+  }
+
+  private async fetchAuthenticated(
+    path: string,
+    token: string | undefined,
+    init: RequestInit,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    const session = token ? this.session : undefined;
+    let current = session && token ? session.getAccessToken(token) : token;
+    const send = (accessToken: string | undefined) =>
+      this.readBody(
+        () =>
+          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+            ...init,
+            headers: {
+              ...init.headers,
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            },
+            ...(signal ? { signal } : {}),
+          }),
+        signal,
+      );
+    const checkPasswordSession = async (response: Response): Promise<boolean> => {
+      if (path !== '/auth/change-password' || response.status !== 401) return false;
+      const check = await this.readBody(
+        () =>
+          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1/auth/me`, {
+            headers: { Accept: 'application/json', Authorization: `Bearer ${current}` },
+            ...(signal ? { signal } : {}),
+          }),
+        signal,
+      );
+      if (check.ok) return true;
+      if (check.status !== 401)
+        throw new ApiError(
+          'http',
+          'Could not verify the current session.',
+          check.status,
+          undefined,
+          retryAfter(check),
+        );
+      return false;
+    };
+    let response = await send(current);
+    if (session && token) session.getAccessToken(token);
+    if (response.status !== 401 || !session || !current || (await checkPasswordSession(response)))
+      return response;
+    try {
+      current = await this.readBody(() => session.refreshAccessToken(current!), signal);
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403))
+        session.onUnauthorized(current);
+      throw error;
+    }
+    response = await send(current);
+    session.getAccessToken(token!);
+    if (response.status === 401 && !(await checkPasswordSession(response)))
+      session.onUnauthorized(current);
+    return response;
+  }
+
+  private async responseError(response: Response, signal?: AbortSignal): Promise<never> {
+    let payload: unknown;
+    try {
+      payload = await this.readBody(() => response.json(), signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned invalid JSON.',
+        response.status,
+        undefined,
+        retryAfter(response),
+      );
+    }
+    const error = parseBackendErrorEnvelope(payload, response.status);
+    throw new ApiError(
+      'http',
+      error?.message ?? `Backend returned HTTP ${response.status}.`,
+      response.status,
+      error,
+      retryAfter(response),
+    );
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -764,39 +880,44 @@ export class SmartSiteManagementClient {
     credentials?: RequestCredentials,
     options?: RequestOptions,
   ): Promise<T> {
-    return this.runRequest(options, async (signal) => {
-      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-        method,
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    const requestOptions = this.requestOptions(
+      token,
+      options ?? (this.session && path.startsWith('/auth/') ? { timeoutMs: 15_000 } : undefined),
+    );
+    return this.runRequest(requestOptions, async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method,
+          headers: {
+            Accept: 'application/json',
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          ...(credentials ? { credentials } : {}),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        ...(credentials ? { credentials } : {}),
-        ...(signal ? { signal } : {}),
-      });
+        signal,
+      );
+      if (!response.ok) {
+        if (
+          !this.session &&
+          token &&
+          path !== '/auth/change-password' &&
+          response.status === 401 &&
+          typeof window !== 'undefined'
+        ) {
+          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+        }
+        return this.responseError(response, signal);
+      }
       if (response.status === 204) return undefined as T;
-      let payload: unknown;
       try {
-        payload = await this.readBody(() => response.json(), signal);
+        return (await this.readBody(() => response.json(), signal)) as T;
       } catch (error) {
         if (signal?.aborted) throw error;
         throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
-      if (!response.ok) {
-        if (response.status === 401 && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
-        }
-        const error = parseBackendErrorEnvelope(payload, response.status);
-        throw new ApiError(
-          'http',
-          error?.message ?? `Backend returned HTTP ${response.status}.`,
-          response.status,
-          error,
-        );
-      }
-      return payload as T;
     });
   }
 
@@ -807,34 +928,25 @@ export class SmartSiteManagementClient {
     body: FormData,
     options?: RequestOptions,
   ): Promise<T> {
-    return this.runRequest(options, async (signal) => {
-      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-        method,
-        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-        body,
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        { method, headers: { Accept: 'application/json' }, body },
         signal,
-      });
+      );
+      if (!response.ok) {
+        if (!this.session && response.status === 401 && typeof window !== 'undefined')
+          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+        return this.responseError(response, signal);
+      }
       if (response.status === 204) return undefined as T;
-      let payload: unknown;
       try {
-        payload = await this.readBody(() => response.json(), signal);
+        return (await this.readBody(() => response.json(), signal)) as T;
       } catch (error) {
         if (signal?.aborted) throw error;
         throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
       }
-      if (!response.ok) {
-        if (response.status === 401 && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
-        }
-        const error = parseBackendErrorEnvelope(payload, response.status);
-        throw new ApiError(
-          'http',
-          error?.message ?? `Backend returned HTTP ${response.status}.`,
-          response.status,
-          error,
-        );
-      }
-      return payload as T;
     });
   }
 
@@ -844,38 +956,21 @@ export class SmartSiteManagementClient {
     options?: RequestOptions,
     mediaTypes: readonly string[] = ['image/jpeg'],
   ): Promise<Blob> {
-    return this.runRequest(options, async (signal) => {
-      const response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-        headers: {
-          Accept: mediaTypes.join(', '),
-          Authorization: `Bearer ${token}`,
-        },
-        ...(signal ? { signal } : {}),
-      });
-      if (!response.ok) {
-        let payload: unknown;
-        try {
-          payload = await this.readBody(() => response.json(), signal);
-        } catch (error) {
-          if (signal?.aborted) throw error;
-          throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
-        }
-        const error = parseBackendErrorEnvelope(payload, response.status);
-        throw new ApiError(
-          'http',
-          error?.message ?? `Backend returned HTTP ${response.status}.`,
-          response.status,
-          error,
-        );
-      }
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        { headers: { Accept: mediaTypes.join(', ') } },
+        signal,
+      );
+      if (!response.ok) return this.responseError(response, signal);
       const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
-      if (!contentType || !mediaTypes.includes(contentType)) {
+      if (!contentType || !mediaTypes.includes(contentType))
         throw new ApiError(
           'invalid-response',
           'Backend returned an invalid evidence type.',
           response.status,
         );
-      }
       return this.readBody(() => response.blob(), signal);
     });
   }
@@ -1383,22 +1478,29 @@ export class SmartSiteManagementClient {
     );
   }
 
-  login(username: string, password: string, clientType: AuthClientType = 'WEB') {
+  login(
+    username: string,
+    password: string,
+    clientType: AuthClientType = 'WEB',
+    options?: RequestOptions,
+  ) {
     return this.request<LoginResponse>(
       'POST',
       '/auth/login',
       undefined,
       { username, password, clientType },
       clientType === 'WEB' ? 'include' : undefined,
+      options,
     );
   }
-  refresh(clientType: AuthClientType, refreshToken?: string) {
+  refresh(clientType: AuthClientType, refreshToken?: string, options?: RequestOptions) {
     return this.request<LoginResponse>(
       'POST',
       '/auth/refresh',
       undefined,
       { clientType, ...(refreshToken ? { refreshToken } : {}) },
       clientType === 'WEB' ? 'include' : undefined,
+      options,
     );
   }
   me(token: string) {
@@ -1416,13 +1518,14 @@ export class SmartSiteManagementClient {
       'include',
     );
   }
-  logout(clientType: AuthClientType = 'WEB', refreshToken?: string) {
+  logout(clientType: AuthClientType = 'WEB', refreshToken?: string, options?: RequestOptions) {
     return this.request<void>(
       'POST',
       '/auth/logout',
       undefined,
       { clientType, ...(refreshToken ? { refreshToken } : {}) },
       clientType === 'WEB' ? 'include' : undefined,
+      options,
     );
   }
 

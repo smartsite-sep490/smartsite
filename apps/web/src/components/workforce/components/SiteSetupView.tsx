@@ -8,8 +8,8 @@ import { ManagerContractorDetails } from '../../dashboard/ManagerContractorDetai
 import { ContractorParticipationDirectory } from './ContractorParticipationDirectory';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { ApiError } from '@smartsite/api-client';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import {
   IconBuilding,
   IconBuilding2,
@@ -47,7 +47,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const { accessToken } = useAuth();
   const { data: currentUser } = useCurrentUser(apiUrl);
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
 
   const isAdmin =
     currentUser?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null) ?? false;
