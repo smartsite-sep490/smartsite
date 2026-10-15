@@ -153,3 +153,12 @@ A change is done only when all applicable statements are true:
 - Do not suppress type, lint, migration, or test errors merely to obtain a green check.
 - Do not report completion from code inspection alone. Run the required commands and cite the actual results.
 - AI output always requires human review. Never provide production credentials or unrestricted personal/site data to a coding assistant.
+
+## 12. Feature-sized tasks, context and file size
+
+- Follow [Feature task workflow](docs/planning/feature-context-workflow.md). Start from one feature pack and one task brief; do not load the whole project ledger or inherit an entire long conversation into a worker.
+- New or substantially rewritten handwritten code targets at most 300 physical lines per file. Above 500 lines, split by responsibility or record a reviewed exception with a reason, owner and follow-up. Tests target 400 lines, with the same exception process above 700. Do not compress formatting or remove tests to satisfy a count.
+- Existing oversized files are grandfathered, not automatically accepted for further growth. A change that grows one needs a scoped exception or a justified extraction. Generated code, immutable migration history, vendored contracts and provenance-checked frozen fixtures are counted separately; never rewrite them just for size.
+- New feature documents target 150 lines and must stay within 250 unless a specific audit/spec exception is recorded. Link to canonical contracts, decisions and evidence instead of duplicating histories.
+- Aim for at least 80% of implementation/review tasks to finish below 100,000 context tokens. Give fresh workers only the bounded brief and required references. Target 60,000; checkpoint and hand off before 80,000 when actual usage is available. This is an operational target, not a guarantee or an enforced token limit.
+- If token telemetry is unavailable, label usage unknown. Do not present file size, a token estimate, process memory or a short prompt as measured context usage. Record worker type and actual task evidence, not invented Agy activity.
