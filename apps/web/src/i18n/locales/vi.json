@@ -2867,6 +2867,7 @@
   "auth.error.validation": "Kiểm tra thông tin đã nhập rồi thử lại.",
   "auth.error.response": "Dịch vụ trả về dữ liệu không hợp lệ. Vui lòng thử lại.",
   "auth.error.details": "Thông tin lỗi",
+  "auth.error.requestId": "Mã yêu cầu: {{id}}",
   "auth.password.required": "Vui lòng đổi mật khẩu trước khi tiếp tục.",
   "auth.password.title": "Đổi mật khẩu",
   "auth.password.description": "Sau khi lưu, đăng nhập lại bằng mật khẩu mới.",

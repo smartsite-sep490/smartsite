@@ -18,4 +18,3 @@ export function authErrorMessage(error: unknown): string {
   if (error.code === 'invalid-response') return tr('auth.error.response');
   return tr('auth.error.unexpected');
 }
-

@@ -56,7 +56,8 @@ const mockCurrentUser: MockUser = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({
     accessToken: 'synthetic-jwt-token',
   }),
