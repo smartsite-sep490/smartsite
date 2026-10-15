@@ -3,6 +3,7 @@ import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import { useLocale } from '../../i18n/ppe-locale';
 import { PpeDialog } from '../ppe/PpeDialog';
+import { CameraDiscardBanner } from './CameraDialogPrimitives';
 import { CameraRegistrationForm } from './CameraRegistrationForm';
 
 export interface CameraRegistrationDialogProps {
@@ -78,36 +79,20 @@ export function CameraRegistrationDialog({
       description={t('cameraSetup.register.dialogDescription')}
       closeDisabled={draftState.saving}
     >
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         {confirmDiscard && (
-          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-sm text-slate-700">{t('cameraSetup.discardPrompt')}</p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                disabled={draftState.saving}
-                onClick={() => {
-                  if (draftState.saving) return;
-                  setConfirmDiscard(false);
-                }}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {t('zoneSetup.dialog.keepEditing')}
-              </button>
-              <button
-                type="button"
-                disabled={draftState.saving}
-                onClick={() => {
-                  if (draftState.saving) return;
-                  setConfirmDiscard(false);
-                  onClose();
-                }}
-                className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-              >
-                {t('zoneSetup.dialog.discardChanges')}
-              </button>
-            </div>
-          </div>
+          <CameraDiscardBanner
+            disabled={draftState.saving}
+            onKeepEditing={() => {
+              if (draftState.saving) return;
+              setConfirmDiscard(false);
+            }}
+            onDiscardChanges={() => {
+              if (draftState.saving) return;
+              setConfirmDiscard(false);
+              onClose();
+            }}
+          />
         )}
 
         <fieldset disabled={confirmDiscard} className="contents m-0 border-0 p-0 min-w-0">

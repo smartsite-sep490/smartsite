@@ -5,6 +5,8 @@ import type { CameraResponse } from '@smartsite/contracts/management';
 import type { PpeTranslationKey } from '../../i18n/ppe-catalog';
 import { useLocale } from '../../i18n/ppe-locale';
 import { getZonePpeScopeKey } from '../ppe/zone-ppe-scope';
+import { CameraDiscardBanner, CameraFeedbackNotice } from './CameraDialogPrimitives';
+import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
 
 export interface CameraRegistrationFormProps {
   apiUrl: string;
@@ -63,7 +65,11 @@ export function CameraRegistrationForm(props: CameraRegistrationFormProps) {
     siteId: props.siteId ?? '',
   });
   if (!props.isAdmin || !props.token || !props.sessionScope || !props.siteId) {
-    return <p className="text-sm text-slate-600">{t('cameraSetup.register.authRequired')}</p>;
+    return (
+      <p className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 px-3.5 py-2.5 text-xs leading-relaxed text-[#6B6B6B] break-words">
+        {t('cameraSetup.register.authRequired')}
+      </p>
+    );
   }
   return (
     <ScopedCameraRegistrationForm
@@ -244,15 +250,16 @@ function ScopedCameraRegistrationForm(
       aria-label={t('ppe.admin.registerCamera')}
       noValidate
       onSubmit={submit}
-      className="space-y-4"
+      className="min-w-0 space-y-4"
     >
-      <p className="text-sm text-slate-600">
-        {t('cameraSetup.register.introPrefix')} <strong>{props.siteName}</strong>.{' '}
+      <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs leading-relaxed text-[#6B6B6B] shadow-xs break-words">
+        {t('cameraSetup.register.introPrefix')}{' '}
+        <strong className="font-semibold text-[#111111] break-words">{props.siteName}</strong>.{' '}
         {t('cameraSetup.register.introSuffix')}
-      </p>
+      </div>
       {fields.map((field) => (
-        <div key={field} className="space-y-1.5">
-          <label htmlFor={`${id}-${field}`} className="block text-sm font-semibold text-slate-800">
+        <div key={field} className="min-w-0 space-y-1.5">
+          <label htmlFor={`${id}-${field}`} className={CAMERA_FIELD_STYLES.label}>
             {t(labelKeys[field])}
           </label>
           <input
@@ -275,64 +282,43 @@ function ScopedCameraRegistrationForm(
               setErrors((previous) => ({ ...previous, [field]: undefined }));
               setFeedback(null);
             }}
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:bg-slate-100"
+            className={CAMERA_FIELD_STYLES.input}
           />
           {field === 'externalId' && (
-            <p id={`${id}-source-help`} className="text-xs text-slate-600">
+            <p id={`${id}-source-help`} className={CAMERA_FIELD_STYLES.help}>
               {t('cameraSetup.register.sourceHelp')}
             </p>
           )}
           {errors[field] && (
-            <p id={`${id}-${field}-error`} className="text-sm text-rose-700">
+            <p id={`${id}-${field}-error`} className={CAMERA_FIELD_STYLES.error}>
               {t(errors[field]!)}
             </p>
           )}
         </div>
       ))}
-      {feedback && (
-        <p
-          role={feedback.kind === 'error' ? 'alert' : 'status'}
-          className="text-sm break-words text-slate-800"
-        >
-          {t(feedback.key)}
-        </p>
-      )}
+      {feedback && <CameraFeedbackNotice kind={feedback.kind} messageKey={feedback.key} />}
       {confirmDiscard && (
-        <div className="space-y-2 rounded-xl border border-slate-200 p-3">
-          <p className="text-sm text-slate-700">{t('cameraSetup.discardPrompt')}</p>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmDiscard(false);
-                document.getElementById(`${id}-cancel`)?.focus();
-              }}
-              className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold"
-            >
-              {t('zoneSetup.dialog.keepEditing')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDraft({ code: '', name: '', externalId: '' });
-                setConfirmDiscard(false);
-                props.onCancel?.();
-              }}
-              className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-            >
-              {t('zoneSetup.dialog.discardChanges')}
-            </button>
-          </div>
-        </div>
+        <CameraDiscardBanner
+          disabled={create.isPending}
+          onKeepEditing={() => {
+            setConfirmDiscard(false);
+            document.getElementById(`${id}-cancel`)?.focus();
+          }}
+          onDiscardChanges={() => {
+            setDraft({ code: '', name: '', externalId: '' });
+            setConfirmDiscard(false);
+            props.onCancel?.();
+          }}
+        />
       )}
-      <div className="flex flex-wrap justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-200 pt-3.5">
         {(props.onCancel || props.onCancelRequest) && (
           <button
             id={`${id}-cancel`}
             type="button"
             disabled={create.isPending}
             onClick={cancel}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold"
+            className={CAMERA_BUTTON_STYLES.secondary}
           >
             {t('zoneSetup.action.cancel')}
           </button>
@@ -340,7 +326,7 @@ function ScopedCameraRegistrationForm(
         <button
           type="submit"
           disabled={create.isPending || blocked}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          className={CAMERA_BUTTON_STYLES.primary}
         >
           {create.isPending ? t('cameraSetup.register.submitting') : t('ppe.admin.registerCamera')}
         </button>
