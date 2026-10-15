@@ -18,6 +18,7 @@ import {
   type CameraConfigurationReference,
 } from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionDrawer } from './ZonePpeCameraRegionDrawer';
+import { useCameraRegionMutationScope } from './useCameraRegionMutationScope';
 
 export interface ZonePpeCameraRegionPanelProps {
   apiUrl: string;
@@ -327,7 +328,9 @@ function ZonePpeCameraRegionPanelContent({
   const regionServerTotal = regionsInfiniteQuery.data?.pages.at(-1)?.total ?? 0;
 
   // 4. Explicit Scoped Camera Configuration Reference
-  const [mutationScopeError, setMutationScopeError] = useState<ApiError | null>(null);
+  const { error: activeMutationScopeError, revoke: revokeMutationScope } =
+    useCameraRegionMutationScope(selectedCameraId);
+
   const configReference = useCameraConfigurationReference({
     apiUrl,
     token,
@@ -340,7 +343,7 @@ function ZonePpeCameraRegionPanelContent({
       token &&
       sessionScope &&
       siteId &&
-      !mutationScopeError &&
+      !activeMutationScopeError &&
       selectedCamera &&
       selectedCamera.status === 'ACTIVE' &&
       !isCameraBaseError &&
@@ -357,18 +360,16 @@ function ZonePpeCameraRegionPanelContent({
     version: number;
   } | null>(null);
 
-  const isHookReferenceScopeValid = isConfigurationReferenceScopeMatched(
-    configReference.reference,
-    siteId,
-    selectedCamera,
-  );
+  const isHookReferenceScopeValid =
+    !activeMutationScopeError &&
+    isConfigurationReferenceScopeMatched(configReference.reference, siteId, selectedCamera);
   const isHookReferenceExpired = useConfigurationReferenceExpired(configReference.reference);
   const validHookReference =
     isHookReferenceScopeValid && !isHookReferenceExpired ? configReference.reference : null;
 
   const canRequestReference = Boolean(
     token &&
-    !mutationScopeError &&
+    !activeMutationScopeError &&
     sessionScope &&
     siteId &&
     selectedCamera &&
@@ -780,15 +781,15 @@ function ZonePpeCameraRegionPanelContent({
 
       {/* Explicit Configuration Reference Card & Drawing Trigger */}
       <div className="space-y-3">
-        {mutationScopeError && (
+        {activeMutationScopeError && (
           <p
             role="alert"
             className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800"
           >
             {t(
-              mutationScopeError.status === 401
+              activeMutationScopeError.status === 401
                 ? 'regionSetup.error.401'
-                : mutationScopeError.status === 403
+                : activeMutationScopeError.status === 403
                   ? 'regionSetup.error.403'
                   : 'regionSetup.reference.error.404',
             )}
@@ -841,9 +842,7 @@ function ZonePpeCameraRegionPanelContent({
             lastSavedDraft={lastSavedDraft}
             onAcceptCandidateReference={handleAcceptCandidateReference}
             onScopeRevoked={(status) => {
-              setMutationScopeError(
-                new ApiError('http', 'Camera configuration scope revoked.', status),
-              );
+              revokeMutationScope(status, drawingScope.cameraId);
               setDrawingScope(null);
               setIsCandidateReviewOpen(false);
               setLastSavedDraft(null);
