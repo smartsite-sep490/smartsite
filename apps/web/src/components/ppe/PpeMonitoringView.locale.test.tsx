@@ -5,6 +5,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
+import i18n from '../../i18n';
 import { LocaleProvider, LocaleSwitcher, useLocale, type Locale } from '../../i18n/locale';
 import { PpeMonitoringView } from './PpeMonitoringView';
 import type { SharedSession } from '../../types/shared-session';
@@ -113,6 +114,11 @@ function LocaleControlFixture() {
   return null;
 }
 
+async function switchToEnglishViaPopover(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Chọn ngôn ngữ' }));
+  await user.click(screen.getByRole('button', { name: 'English' }));
+}
+
 function preview(confirmed: boolean): DecodedPreview {
   return {
     image: {} as HTMLImageElement,
@@ -155,7 +161,8 @@ function View() {
     </LocaleProvider>
   );
 }
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('vi');
   localStorage.clear();
   vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
   fixture.preview = null;
@@ -180,11 +187,12 @@ beforeEach(() => {
     total: cameras.length,
   });
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   queryClient.clear();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  await i18n.changeLanguage('vi');
   localStorage.clear();
 });
 
@@ -198,7 +206,7 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     const siteCalls = vi.mocked(SmartSiteManagementClient.prototype.listSites).mock.calls.length;
     const cameraCalls = vi.mocked(SmartSiteManagementClient.prototype.listPreviewCameras).mock.calls
       .length;
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await switchToEnglishViaPopover(user);
     expect(camera.value).toBe('cam-second');
     expect(screen.getByRole('option', { name: /Synthetic Camera B/ })).toBeDefined();
     expect(vi.mocked(SmartSiteManagementClient.prototype.listSites).mock.calls.length).toBe(
@@ -217,7 +225,7 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     const episode = await screen.findByTestId('confirmed-episode-warning-7-GLOVES');
     expect(episode.textContent).toContain('Đợt thiếu PPE đã xác nhận đang mở');
     expect(episode.textContent).toContain('Ảnh chụp hiện tại: Chưa xác định');
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await switchToEnglishViaPopover(user);
     await screen.findByText('Gloves · Unknown');
     expect(episode.textContent).toContain('Active confirmed episode: Missing · confirmed');
     expect(episode.textContent).toContain('Current snapshot: Unknown');
@@ -237,7 +245,7 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     render(<View />);
     await screen.findByText('Đã tạm dừng xem trước camera');
     expect(screen.queryByTestId('confirmed-episode-warning-7-GLOVES')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await switchToEnglishViaPopover(user);
     await screen.findByText('Camera preview paused');
     expect(fixture.previewEnabled.length).toBeGreaterThan(0);
     expect(
@@ -255,7 +263,7 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     render(<View />);
     await screen.findByText('Bạn không có quyền truy cập tài nguyên này.');
     expect(screen.queryByText('private-driver-diagnostic')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await switchToEnglishViaPopover(user);
     await screen.findByText('You do not have permission to access this resource.');
     expect(screen.queryByText('private-driver-diagnostic')).toBeNull();
   });
@@ -294,7 +302,7 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     render(<View />);
     await screen.findByText('Không có luồng video gốc đang hoạt động cho camera đã chọn.');
     expect(screen.queryByText('private-transport-detail')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await switchToEnglishViaPopover(user);
     await screen.findByText('No active raw video stream available for the selected camera.');
     expect(screen.queryByText('private-transport-detail')).toBeNull();
   });
