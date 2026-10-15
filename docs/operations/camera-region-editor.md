@@ -47,12 +47,31 @@ not draft state read after a request finishes.
 
 ## Current limits and acceptance
 
-The configuration editor still obtains pixels from the existing authorized AI
-preview. During the explicit AI pause, metadata and saved Regions remain visible,
-but fresh drawing is unavailable. Do not remove pause or five-second evidence-pixel
-guards to manufacture an available image. An independent configuration-image
-contract and a manual camera-viewpoint review workflow remain open requirements.
-Model training or capture must not start merely to test configuration UI.
+The editor requests an explicit configuration image through the shared Backend
+client. It does not poll analyzed previews, start capture or require AI to run.
+The frozen image is a Region-authoring reference, never monitoring evidence.
+Before drawing, its camera identity and configuration revision must match the
+selected metadata. The reference expires at the earlier of its server expiry
+and five minutes from capture. Monitoring/evidence still uses its five-second TTL.
+
+Expiry removes image pixels and disables editing/saving while preserving points
+and undo history; Escape and explicit discard remain usable. Refreshing a draft
+opens a read-only candidate image with its proposed points. Only explicit acceptance
+rebinds the draft and reference revision; cancellation keeps the old reference.
+A transient source error can preserve an unexpired frozen draft. Authorization
+or scope failure clears both images and disables actions for that scoped instance.
+A rejected mutation is not proof the same bearer can keep trying indefinitely.
+
+Both create and update use the frozen reference revision through a cancellable
+camera preflight. They recheck identity, active status, expiry and revision before
+writing. A conflict retains the draft without automatic retry, rebase or create
+fallback. Acknowledged own saves can advance the revision for subsequent edits.
+
+An already-owned capture-only source is still required for real configuration
+pixels. Physical-source ownership, manual viewpoint review and browser interaction
+remain separate gates. Source presence and synthetic DOM tests do not mean this
+code has been adopted by the currently running immutable local demo. AI/capture
+must not be started merely to supply editor pixels.
 
 Component/API checks are bounded software evidence. They do not prove real camera
 rendering, pointer behavior on a physical browser, accessibility with assistive

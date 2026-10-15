@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  CONFIGURATION_REFERENCE_LIFETIME_MS,
   SmartSiteManagementClient,
   type Page,
   type ZoneResponse,
 } from '@smartsite/api-client';
 import type { CameraResponse, RegionResponse } from '@smartsite/contracts';
 import { LocaleProvider, useLocale } from '../../i18n/locale';
-import type { DecodedPreview } from '../cameras/useRealtimePreview';
+import type {
+  CameraConfigurationReference,
+  UseCameraConfigurationReferenceOptions,
+  UseCameraConfigurationReferenceResult,
+} from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
 
 if (typeof globalThis.ResizeObserver !== 'function') {
@@ -36,36 +41,25 @@ if (typeof SVGElement !== 'undefined') {
   });
 }
 
-const previewState = vi.hoisted(() => ({
-  preview: null as DecodedPreview | null,
-  status: 'LIVE' as 'LIVE' | 'REPLAY' | 'UNAVAILABLE' | 'CONNECTING' | null,
-  sourceKind: 'LIVE' as 'LIVE' | 'REPLAY' | null,
-  errorStatus: null as number | null,
-  enabled: undefined as boolean | undefined,
+const refState = vi.hoisted(() => ({
+  reference: null as CameraConfigurationReference | null,
+  isLoading: false,
+  error: null as ApiError | null,
+  lastOptions: null as UseCameraConfigurationReferenceOptions | null,
+  requestImpl: null as (() => Promise<void>) | null,
+  requestSpy: vi.fn<() => Promise<void>>(),
 }));
 
-vi.mock('../cameras/useScopedCameraPreview', () => ({
-  useScopedCameraPreview: (options: {
-    apiUrl?: string;
-    token?: string | null;
-    sessionScope?: string | null;
-    siteId?: string | null;
-    cameraId?: string | null;
-    enabled?: boolean;
-  }) => {
-    previewState.enabled = options.enabled;
+vi.mock('./useCameraConfigurationReference', () => ({
+  useCameraConfigurationReference: (
+    options: UseCameraConfigurationReferenceOptions,
+  ): UseCameraConfigurationReferenceResult => {
+    refState.lastOptions = options;
     return {
-      preview: previewState.preview,
-      status: previewState.status ?? (previewState.preview ? 'LIVE' : 'UNAVAILABLE'),
-      sourceKind: previewState.sourceKind ?? 'LIVE',
-      error: null,
-      errorStatus: previewState.errorStatus ?? null,
-      isError: previewState.errorStatus !== null,
-      isLoading: false,
-      isPolling: Boolean(previewState.preview),
-      retry: vi.fn(),
-      cameraExternalId: previewState.preview?.frame.cameraExternalId ?? null,
-      capturedAt: previewState.preview?.frame.capturedAt ?? null,
+      reference: options.enabled ? refState.reference : null,
+      isLoading: refState.isLoading,
+      error: refState.error,
+      request: refState.requestSpy,
     };
   },
 }));
@@ -85,24 +79,39 @@ function LocaleToggle() {
   );
 }
 
-function mockPreview(
-  cameraExternalId = 'CAM-EXT-01',
-  capturedAt = new Date().toISOString(),
-): DecodedPreview {
+function mockConfigurationReference(
+  overrides: Partial<Omit<CameraConfigurationReference, 'frame' | 'image'>> = {},
+  frameOverrides: Partial<CameraConfigurationReference['frame']> = {},
+): CameraConfigurationReference {
+  const nowMs = Date.now();
+  const capturedAt = frameOverrides.capturedAt ?? new Date(nowMs).toISOString();
+  const capturedMs = Date.parse(capturedAt);
+  const referenceExpiresAt =
+    overrides.referenceExpiresAt ??
+    new Date(
+      (Number.isFinite(capturedMs) ? capturedMs : nowMs) + CONFIGURATION_REFERENCE_LIFETIME_MS,
+    ).toISOString();
   return {
-    image: {} as HTMLImageElement,
+    schemaVersion: 1,
+    purpose: 'REGION_CONFIGURATION',
+    siteId: 'site-alpha',
+    cameraId: 'cam-1',
+    configurationVersion: 3,
+    sourceKind: 'LIVE',
+    referenceExpiresAt,
+    ...overrides,
     frame: {
       sessionId: '00000000-0000-4000-8000-000000000001',
       sequenceNumber: '1',
-      cameraExternalId,
+      cameraExternalId: 'CAM-EXT-01',
       capturedAt,
       width: 640,
       height: 480,
       imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      zonePolygons: [],
-      detections: [],
-      zoneDetections: [],
+      imageSha256: 'a'.repeat(64),
+      ...frameOverrides,
     },
+    image: {} as HTMLImageElement,
   };
 }
 
@@ -191,11 +200,14 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
         mutations: { retry: false },
       },
     });
-    previewState.preview = mockPreview('CAM-EXT-01');
-    previewState.status = 'LIVE';
-    previewState.sourceKind = 'LIVE';
-    previewState.errorStatus = null;
-    previewState.enabled = undefined;
+    refState.reference = mockConfigurationReference();
+    refState.isLoading = false;
+    refState.error = null;
+    refState.lastOptions = null;
+    refState.requestImpl = null;
+    refState.requestSpy = vi.fn(async () => {
+      await refState.requestImpl?.();
+    });
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue(mockCamerasPage);
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockResolvedValue(
@@ -210,11 +222,11 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     window.localStorage.clear();
-    previewState.preview = null;
-    previewState.status = null;
-    previewState.sourceKind = null;
-    previewState.errorStatus = null;
-    previewState.enabled = undefined;
+    refState.reference = null;
+    refState.isLoading = false;
+    refState.error = null;
+    refState.lastOptions = null;
+    refState.requestImpl = null;
   });
 
   it('renders selectors, linked region metadata, and Load more controls in Vietnamese and switches to English while preserving selected IDs and raw enums without refetching', async () => {
@@ -275,8 +287,16 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     expect(listRegionsSpy).toHaveBeenCalledTimes(regionCallsBeforeSwitch);
   });
 
-  it('localizes AI-paused, unavailable, and mismatched preview warnings across vi and en without starting preview polling while paused', async () => {
+  it('localizes explicit configuration reference controls, missing-reference hints, and unavailable/invalid reference errors across vi and en while AI is paused without preview/AI calls', async () => {
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'true');
+    const user = userEvent.setup();
+    refState.reference = null;
+
+    const previewSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraPreview');
+    const streamSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'streamCameraVideo');
+    const recordSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'readRecordedCameraVideo');
+    const demoStatusSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getMf05DemoStatus');
+    const demoApplySpy = vi.spyOn(SmartSiteManagementClient.prototype, 'applyMf05DemoRegion');
 
     const { unmount } = render(
       <LocaleProvider defaultLocale="vi">
@@ -295,33 +315,62 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     );
 
     const startBtnVi = await screen.findByRole('button', { name: 'Bắt đầu vẽ vùng quan sát' });
-    expect(previewState.enabled).toBe(false);
+    await waitFor(() => {
+      expect(refState.lastOptions).toEqual({
+        apiUrl: 'http://localhost:3000',
+        token: 'mock-token-xyz',
+        sessionScope: 'scope-01',
+        credentialId: 1,
+        siteId: 'site-alpha',
+        cameraId: 'cam-1',
+        cameraExternalId: 'CAM-EXT-01',
+        enabled: true,
+      });
+    });
+    expect(refState.requestSpy).not.toHaveBeenCalled();
     expect((startBtnVi as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Ảnh tham chiếu cấu hình vùng quan sát')).toBeDefined();
     expect(
       screen.getByText(
-        'Tác vụ AI đang tạm dừng. Các vùng quan sát đã lưu vẫn khả dụng; thao tác vẽ mới cần ảnh chụp camera hiện thời được cấp quyền.',
+        'Hãy lấy ảnh cấu hình cho camera đang hoạt động đã chọn trước khi vẽ hoặc sửa vùng quan sát.',
       ),
     ).toBeDefined();
+    const getRefBtnVi = screen.getByRole('button', { name: 'Lấy ảnh cấu hình' });
+    expect((getRefBtnVi as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByText('switch-en'));
 
+    expect(await screen.findByText('Authoring Reference Image')).toBeDefined();
     expect(
-      await screen.findByText(
-        'AI is paused. Saved camera regions remain available; drawing requires a fresh authorized snapshot.',
+      screen.getByText(
+        'Request a configuration image for the selected active camera before drawing or editing a region.',
       ),
     ).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Start Drawing Region' })).toBeDefined();
+    const getRefBtnEn = screen.getByRole('button', { name: 'Get configuration image' });
+    expect((getRefBtnEn as HTMLButtonElement).disabled).toBe(false);
+    expect(
+      (screen.getByRole('button', { name: 'Start Drawing Region' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await user.click(getRefBtnEn);
+    expect(refState.requestSpy).toHaveBeenCalledTimes(1);
+    expect(previewSpy).not.toHaveBeenCalled();
+    expect(streamSpy).not.toHaveBeenCalled();
+    expect(recordSpy).not.toHaveBeenCalled();
+    expect(demoStatusSpy).not.toHaveBeenCalled();
+    expect(demoApplySpy).not.toHaveBeenCalled();
     unmount();
     window.localStorage.clear();
 
-    // Verify unavailable and mismatched preview copy in Vietnamese when AI is not paused
+    // Verify unavailable (503) and invalid-response configuration reference error copy across vi and en
     vi.unstubAllEnvs();
-    previewState.preview = null;
-    previewState.status = 'UNAVAILABLE';
+    refState.reference = null;
+    refState.error = new ApiError('http', 'raw-503-source-diag', 503);
 
     const { unmount: unmountUnavailable } = render(
       <LocaleProvider defaultLocale="vi">
         <QueryClientProvider client={queryClient}>
+          <LocaleToggle />
           <ZonePpeCameraRegionPanel
             apiUrl="http://localhost:3000"
             token="mock-token-xyz"
@@ -336,17 +385,26 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
 
     expect(
       await screen.findByText(
-        'Ảnh chụp xem trước camera không khả dụng. Cần có luồng trực tiếp hoặc phát lại để vẽ vùng quan sát.',
+        'Nguồn ảnh cấu hình camera hiện không khả dụng. Hãy kiểm tra tiến trình thu hình và thử lại.',
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText('raw-503-source-diag')).toBeNull();
+    fireEvent.click(screen.getByText('switch-en'));
+    expect(
+      await screen.findByText(
+        'Camera configuration image source is currently unavailable. Verify that the capture observer is active and try again.',
       ),
     ).toBeDefined();
     unmountUnavailable();
+    window.localStorage.clear();
 
-    previewState.preview = mockPreview('CAM-EXT-MISMATCH');
-    previewState.status = 'LIVE';
+    refState.reference = null;
+    refState.error = new ApiError('invalid-response', 'raw-external-id-mismatch-diag');
 
     render(
       <LocaleProvider defaultLocale="vi">
         <QueryClientProvider client={queryClient}>
+          <LocaleToggle />
           <ZonePpeCameraRegionPanel
             apiUrl="http://localhost:3000"
             token="mock-token-xyz"
@@ -360,9 +418,12 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     );
 
     expect(
-      await screen.findByText(
-        'Mã định danh ngoài của ảnh xem trước không khớp với camera đã chọn.',
-      ),
+      await screen.findByText('Không thể tải ảnh cấu hình camera. Vui lòng thử lại.'),
+    ).toBeDefined();
+    expect(screen.queryByText('raw-external-id-mismatch-diag')).toBeNull();
+    fireEvent.click(screen.getByText('switch-en'));
+    expect(
+      await screen.findByText('Could not load camera configuration image. Please try again.'),
     ).toBeDefined();
   });
 
@@ -447,17 +508,23 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     await user.click(saveBtnVi);
 
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
-    expect(createRegionSpy).toHaveBeenCalledWith('mock-token-xyz', 'site-alpha', 'cam-1', {
-      zoneId: 'zone-1',
-      polygon: {
-        coordinates: [
-          [0.1, 0.1],
-          [0.8, 0.1],
-          [0.8, 0.8],
-        ],
+    expect(createRegionSpy).toHaveBeenCalledWith(
+      'mock-token-xyz',
+      'site-alpha',
+      'cam-1',
+      {
+        zoneId: 'zone-1',
+        polygon: {
+          coordinates: [
+            [0.1, 0.1],
+            [0.8, 0.1],
+            [0.8, 0.8],
+          ],
+        },
+        expectedConfigurationVersion: 3,
       },
-      expectedConfigurationVersion: 3,
-    });
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
 
     expect(
       await screen.findByText(

@@ -8,7 +8,7 @@ import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import type { Page, ZoneResponse } from '@smartsite/api-client';
 import type { CameraResponse, RegionMutationResponse, RegionResponse } from '@smartsite/contracts';
 import { LocaleProvider } from '../../i18n/LocaleProvider';
-import type { DecodedPreview } from '../cameras/useRealtimePreview';
+import type { CameraConfigurationReference } from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
 
 if (typeof globalThis.ResizeObserver !== 'function') {
@@ -32,44 +32,46 @@ if (typeof SVGElement !== 'undefined') {
   });
 }
 
-const previewState = vi.hoisted(() => ({
-  preview: null as DecodedPreview | null,
-  status: 'LIVE' as 'LIVE' | 'REPLAY' | 'UNAVAILABLE' | 'CONNECTING' | null,
-  sourceKind: 'LIVE' as 'LIVE' | 'REPLAY' | null,
-  errorStatus: null as number | null,
+const referenceState = vi.hoisted(() => ({
+  reference: null as CameraConfigurationReference | null,
+  isLoading: false,
+  error: null as ApiError | null,
+  request: vi.fn(async () => {}),
 }));
 
-vi.mock('../cameras/useScopedCameraPreview', () => ({
-  useScopedCameraPreview: () => ({
-    preview: previewState.preview,
-    status: previewState.status ?? (previewState.preview ? 'LIVE' : 'UNAVAILABLE'),
-    sourceKind: previewState.sourceKind ?? 'LIVE',
-    error: null,
-    errorStatus: previewState.errorStatus ?? null,
-    isError: previewState.errorStatus !== null,
-    isLoading: false,
-    isPolling: Boolean(previewState.preview),
-    retry: vi.fn(),
-    cameraExternalId: previewState.preview?.frame.cameraExternalId ?? null,
-    capturedAt: previewState.preview?.frame.capturedAt ?? null,
+vi.mock('./useCameraConfigurationReference', () => ({
+  useCameraConfigurationReference: () => ({
+    reference: referenceState.reference,
+    isLoading: referenceState.isLoading,
+    error: referenceState.error,
+    request: referenceState.request,
   }),
 }));
 
-function createFreshPreview(cameraExternalId = 'CAM-EXT-01'): DecodedPreview {
+function createFreshReference(
+  overrides: Partial<CameraConfigurationReference> = {},
+): CameraConfigurationReference {
+  const nowMs = Date.now();
   return {
-    image: {} as HTMLImageElement,
+    siteId: 'site-alpha',
+    cameraId: 'cam-1',
+    schemaVersion: 1,
+    purpose: 'REGION_CONFIGURATION',
+    configurationVersion: 3,
+    sourceKind: 'LIVE',
+    referenceExpiresAt: new Date(nowMs + 300_000).toISOString(),
     frame: {
       sessionId: '00000000-0000-4000-8000-000000000001',
       sequenceNumber: '1',
-      cameraExternalId,
-      capturedAt: new Date().toISOString(),
+      cameraExternalId: 'CAM-EXT-01',
+      capturedAt: new Date(nowMs).toISOString(),
       width: 640,
       height: 480,
       imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      zonePolygons: [],
-      detections: [],
-      zoneDetections: [],
+      imageSha256: 'a'.repeat(64),
     },
+    image: {} as HTMLImageElement,
+    ...overrides,
   };
 }
 
@@ -102,16 +104,15 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, gcTime: 0 },
       },
     });
-    previewState.preview = createFreshPreview('CAM-EXT-01');
-    previewState.status = 'LIVE';
-    previewState.sourceKind = 'LIVE';
-    previewState.errorStatus = null;
+    referenceState.reference = createFreshReference();
+    referenceState.isLoading = false;
+    referenceState.error = null;
+    referenceState.request.mockClear();
   });
 
   afterEach(() => {
@@ -119,7 +120,9 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
     queryClient.clear();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
-    previewState.preview = null;
+    referenceState.reference = null;
+    referenceState.isLoading = false;
+    referenceState.error = null;
   });
 
   it('transitions a newly created Region into in-place editing so modifying and saving again calls updatePolygon with the returned region id and configurationVersion instead of creating a second Region', async () => {
@@ -157,6 +160,7 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
           createdAt: '2026-10-15T12:00:00Z',
         };
         currentCamera = { ...currentCamera, configurationVersion: 4 };
+        referenceState.reference = createFreshReference({ configurationVersion: 4 });
         storedRegions = [createdRegion];
         return {
           region: createdRegion,
@@ -178,6 +182,7 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
           createdAt: '2026-10-15T12:00:00Z',
         };
         currentCamera = { ...currentCamera, configurationVersion: 5 };
+        referenceState.reference = createFreshReference({ configurationVersion: 5 });
         storedRegions = [updatedRegion];
         return {
           region: updatedRegion,
@@ -214,17 +219,23 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
 
     expect(await screen.findByText(/Saved region "reg-created-101" \(v1\)/i)).toBeDefined();
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
-    expect(createRegionSpy).toHaveBeenCalledWith('mock-token-xyz', 'site-alpha', 'cam-1', {
-      zoneId: 'zone-1',
-      polygon: {
-        coordinates: [
-          [0.1, 0.1],
-          [0.8, 0.1],
-          [0.8, 0.8],
-        ],
+    expect(createRegionSpy).toHaveBeenCalledWith(
+      'mock-token-xyz',
+      'site-alpha',
+      'cam-1',
+      {
+        zoneId: 'zone-1',
+        polygon: {
+          coordinates: [
+            [0.1, 0.1],
+            [0.8, 0.1],
+            [0.8, 0.8],
+          ],
+        },
+        expectedConfigurationVersion: 3,
       },
-      expectedConfigurationVersion: 3,
-    });
+      { signal: expect.any(AbortSignal) },
+    );
     expect(updatePolygonSpy).not.toHaveBeenCalled();
 
     // 3. Modify the just-saved polygon in the same open editor (append 4th vertex at [0.1, 0.8])
@@ -254,6 +265,7 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
         },
         expectedConfigurationVersion: 4,
       },
+      { signal: expect.any(AbortSignal) },
     );
 
     // 5. Just-saved 4-point geometry is now clean: single Escape closes editor without discard prompt, and reopen shows v2 with 4 vertices

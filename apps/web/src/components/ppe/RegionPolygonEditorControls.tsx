@@ -79,14 +79,14 @@ export function RegionPolygonEditorToolbar({
             <button
               type="button"
               onClick={onKeepEditing}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
             >
               {t('regionSetup.drawer.keepEditing')}
             </button>
             <button
               type="button"
               onClick={onConfirmDiscard}
-              className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer"
+              className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
             >
               {t('regionSetup.drawer.confirmDiscard')}
             </button>
@@ -100,7 +100,7 @@ export function RegionPolygonEditorToolbar({
             type="button"
             onClick={onUndo}
             disabled={!canUndo || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           >
             {t('regionSetup.drawer.undoPoint')}
           </button>
@@ -108,7 +108,7 @@ export function RegionPolygonEditorToolbar({
             type="button"
             onClick={onReset}
             disabled={pointsCount === 0 || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           >
             {t('regionSetup.drawer.resetDrawing')}
           </button>
@@ -116,7 +116,7 @@ export function RegionPolygonEditorToolbar({
             type="button"
             onClick={onDeleteSelectedVertex}
             disabled={!hasSelectedVertex || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           >
             {t('regionSetup.drawer.deletePoint')}
           </button>
@@ -124,7 +124,7 @@ export function RegionPolygonEditorToolbar({
             type="button"
             onClick={() => onZoomStep(1)}
             disabled={zoomIdx >= ZOOM_STEPS.length - 1 || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           >
             {t('regionSetup.drawer.zoomIn')}
           </button>
@@ -132,7 +132,7 @@ export function RegionPolygonEditorToolbar({
             type="button"
             onClick={() => onZoomStep(-1)}
             disabled={zoomIdx <= 0 || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           >
             {t('regionSetup.drawer.zoomOut')}
           </button>
@@ -141,7 +141,11 @@ export function RegionPolygonEditorToolbar({
             onClick={onTogglePanMode}
             disabled={zoom <= 1 || isSaving}
             aria-pressed={isPanMode}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40"
+            className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] ${
+              isPanMode
+                ? 'border-[#0F172A] bg-[#0F172A] text-white hover:bg-slate-800'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
           >
             {t('regionSetup.drawer.panMode')}
           </button>
@@ -149,20 +153,20 @@ export function RegionPolygonEditorToolbar({
             type="button"
             onClick={onResetView}
             disabled={zoom === 1 && pan[0] === 0 && pan[1] === 0}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40"
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           >
             {t('regionSetup.drawer.resetView')}
           </button>
           <span
             data-testid="region-zoom-level"
-            className="text-[11px] font-mono text-slate-600 px-1"
+            className="text-[11px] font-mono tabular-nums text-slate-600 px-1"
           >
             {zoom}x
           </span>
         </div>
 
         <div className="text-xs text-slate-500 flex items-center gap-3">
-          <span className="font-semibold text-slate-800">
+          <span className="font-semibold tabular-nums text-slate-800">
             {t('regionSetup.drawer.pointsCount', { count: pointsCount })}
           </span>
         </div>
@@ -179,7 +183,7 @@ export function RegionPolygonEditorToolbar({
             aria-label={t('regionSetup.drawer.coordXLabel')}
             value={coordXInput}
             onChange={(e) => onChangeCoordX(e.target.value)}
-            className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-800"
+            className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono tabular-nums text-slate-800 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           />
         </label>
         <label className="flex items-center gap-1 text-slate-600">
@@ -192,14 +196,14 @@ export function RegionPolygonEditorToolbar({
             aria-label={t('regionSetup.drawer.coordYLabel')}
             value={coordYInput}
             onChange={(e) => onChangeCoordY(e.target.value)}
-            className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-800"
+            className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono tabular-nums text-slate-800 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
           />
         </label>
         <button
           type="button"
           onClick={onAddCoordinatePoint}
           disabled={isSaving}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-40"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
         >
           {t('regionSetup.drawer.addPoint')}
         </button>
@@ -211,6 +215,7 @@ export function RegionPolygonEditorToolbar({
 export interface RegionPolygonEditorFooterProps {
   pointsCount: number;
   isSaving: boolean;
+  isImageStale?: boolean;
   onRequestCancel: () => void;
   onSaveRegion: () => void;
 }
@@ -218,13 +223,14 @@ export interface RegionPolygonEditorFooterProps {
 export function RegionPolygonEditorFooter({
   pointsCount,
   isSaving,
+  isImageStale = false,
   onRequestCancel,
   onSaveRegion,
 }: RegionPolygonEditorFooterProps) {
   const { t } = useLocale();
 
   return (
-    <div className="flex items-center justify-between border-t border-slate-200/80 pt-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
       <div className="text-[11px] text-slate-500">
         {t('regionSetup.drawer.shortcutsLabel')}{' '}
         <kbd className="px-1.5 py-0.5 bg-slate-100 rounded-md text-[10px] font-mono border border-slate-200">
@@ -236,20 +242,20 @@ export function RegionPolygonEditorFooter({
         </kbd>{' '}
         {t('regionSetup.drawer.shortcutCancel')}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={onRequestCancel}
           disabled={isSaving}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
         >
           {t('regionSetup.drawer.cancelDrawing')}
         </button>
         <button
           type="button"
           onClick={onSaveRegion}
-          disabled={pointsCount < 3 || isSaving}
-          className="rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shadow-xs"
+          disabled={pointsCount < 3 || isSaving || isImageStale}
+          className="rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
         >
           {isSaving ? (
             <>

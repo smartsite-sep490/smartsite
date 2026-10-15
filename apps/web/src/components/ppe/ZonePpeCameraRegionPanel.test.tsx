@@ -4,12 +4,20 @@ import { render, screen, cleanup, act, fireEvent, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
+import {
+  SmartSiteManagementClient,
+  ApiError,
+  CONFIGURATION_REFERENCE_LIFETIME_MS,
+} from '@smartsite/api-client';
 import type { Page, ZoneResponse } from '@smartsite/api-client';
 import type { CameraResponse, RegionResponse, RegionMutationResponse } from '@smartsite/contracts';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
 import { PpeDialog } from './PpeDialog';
-import type { DecodedPreview } from '../cameras/useRealtimePreview';
+import type {
+  CameraConfigurationReference,
+  UseCameraConfigurationReferenceOptions,
+  UseCameraConfigurationReferenceResult,
+} from './useCameraConfigurationReference';
 
 if (typeof globalThis.ResizeObserver !== 'function') {
   globalThis.ResizeObserver = class {
@@ -48,61 +56,62 @@ if (typeof SVGElement !== 'undefined') {
   });
 }
 
-const previewState = vi.hoisted(() => ({
-  preview: null as DecodedPreview | null,
-  status: 'LIVE' as 'LIVE' | 'REPLAY' | 'UNAVAILABLE' | 'CONNECTING' | null,
-  sourceKind: 'LIVE' as 'LIVE' | 'REPLAY' | null,
-  errorStatus: null as number | null,
-  enabled: undefined as boolean | undefined,
+const refState = vi.hoisted(() => ({
+  reference: null as CameraConfigurationReference | null,
+  isLoading: false,
+  error: null as ApiError | null,
+  lastOptions: null as UseCameraConfigurationReferenceOptions | null,
+  requestImpl: null as (() => Promise<void>) | null,
+  requestSpy: vi.fn<() => Promise<void>>(),
 }));
 
-vi.mock('../cameras/useScopedCameraPreview', () => ({
-  useScopedCameraPreview: (options: {
-    apiUrl?: string;
-    token?: string | null;
-    sessionScope?: string | null;
-    siteId?: string | null;
-    cameraId?: string | null;
-    enabled?: boolean;
-  }) => {
-    // Assert no credentialId is passed to useScopedCameraPreview
-    expect((options as Record<string, unknown>).credentialId).toBeUndefined();
-    previewState.enabled = options.enabled;
-
+vi.mock('./useCameraConfigurationReference', () => ({
+  useCameraConfigurationReference: (
+    options: UseCameraConfigurationReferenceOptions,
+  ): UseCameraConfigurationReferenceResult => {
+    refState.lastOptions = options;
     return {
-      preview: previewState.preview,
-      status: previewState.status ?? (previewState.preview ? 'LIVE' : 'UNAVAILABLE'),
-      sourceKind: previewState.sourceKind ?? 'LIVE',
-      error: null,
-      errorStatus: previewState.errorStatus ?? null,
-      isError: previewState.errorStatus !== null,
-      isLoading: false,
-      isPolling: Boolean(previewState.preview),
-      retry: vi.fn(),
-      cameraExternalId: previewState.preview?.frame.cameraExternalId ?? null,
-      capturedAt: previewState.preview?.frame.capturedAt ?? null,
+      reference: options.enabled ? refState.reference : null,
+      isLoading: refState.isLoading,
+      error: refState.error,
+      request: refState.requestSpy,
     };
   },
 }));
 
-function mockPreview(
-  cameraExternalId = 'CAM-EXT-01',
-  capturedAt = new Date().toISOString(),
-): DecodedPreview {
+function mockConfigurationReference(
+  overrides: Partial<Omit<CameraConfigurationReference, 'frame' | 'image'>> = {},
+  frameOverrides: Partial<CameraConfigurationReference['frame']> = {},
+): CameraConfigurationReference {
+  const nowMs = Date.now();
+  const capturedAt = frameOverrides.capturedAt ?? new Date(nowMs).toISOString();
+  const capturedMs = Date.parse(capturedAt);
+  const referenceExpiresAt =
+    overrides.referenceExpiresAt ??
+    new Date(
+      (Number.isFinite(capturedMs) ? capturedMs : nowMs) + CONFIGURATION_REFERENCE_LIFETIME_MS,
+    ).toISOString();
   return {
-    image: {} as HTMLImageElement,
+    schemaVersion: 1,
+    purpose: 'REGION_CONFIGURATION',
+    siteId: 'site-alpha',
+    cameraId: 'cam-1',
+    configurationVersion: 3,
+    sourceKind: 'LIVE',
+    referenceExpiresAt,
+    ...overrides,
     frame: {
       sessionId: '00000000-0000-4000-8000-000000000001',
       sequenceNumber: '1',
-      cameraExternalId,
+      cameraExternalId: 'CAM-EXT-01',
       capturedAt,
       width: 640,
       height: 480,
       imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      zonePolygons: [],
-      detections: [],
-      zoneDetections: [],
+      imageSha256: 'a'.repeat(64),
+      ...frameOverrides,
     },
+    image: {} as HTMLImageElement,
   };
 }
 
@@ -199,9 +208,14 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
         queries: { retry: false, gcTime: 0 },
       },
     });
-    previewState.preview = mockPreview('CAM-EXT-01');
-    previewState.status = 'LIVE';
-    previewState.sourceKind = 'LIVE';
+    refState.reference = mockConfigurationReference();
+    refState.isLoading = false;
+    refState.error = null;
+    refState.lastOptions = null;
+    refState.requestImpl = null;
+    refState.requestSpy = vi.fn(async () => {
+      await refState.requestImpl?.();
+    });
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue(mockCamerasList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockResolvedValue(
@@ -213,17 +227,27 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   afterEach(() => {
     cleanup();
     queryClient.clear();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
-    previewState.preview = null;
-    previewState.status = null;
-    previewState.sourceKind = null;
-    previewState.errorStatus = null;
-    previewState.enabled = undefined;
+    refState.reference = null;
+    refState.isLoading = false;
+    refState.error = null;
+    refState.lastOptions = null;
+    refState.requestImpl = null;
   });
 
-  it('keeps region metadata usable without starting preview polling or drawing while AI is paused', async () => {
+  it('keeps region metadata and explicit configuration reference request usable without auto-fetching or making preview/AI calls while AI is paused', async () => {
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'true');
+    const user = userEvent.setup();
+    refState.reference = null;
+
+    const previewSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraPreview');
+    const streamSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'streamCameraVideo');
+    const recordSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'readRecordedCameraVideo');
+    const demoStatusSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getMf05DemoStatus');
+    const demoApplySpy = vi.spyOn(SmartSiteManagementClient.prototype, 'applyMf05DemoRegion');
+
     render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeCameraRegionPanel
@@ -237,11 +261,33 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       </QueryClientProvider>,
     );
     const start = await screen.findByRole('button', { name: /Start Drawing Region/i });
-    expect(previewState.enabled).toBe(false);
+    await waitFor(() => {
+      expect(refState.lastOptions).toEqual({
+        apiUrl: 'http://localhost:3000',
+        token: 'mock-token-xyz',
+        sessionScope: 'scope-01',
+        credentialId: 1,
+        siteId: 'site-alpha',
+        cameraId: 'cam-1',
+        cameraExternalId: 'CAM-EXT-01',
+        enabled: true,
+      });
+    });
+    expect(refState.requestSpy).not.toHaveBeenCalled();
     expect((start as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
     expect(SmartSiteManagementClient.prototype.listCameras).toHaveBeenCalled();
     await waitFor(() => expect(SmartSiteManagementClient.prototype.listRegions).toHaveBeenCalled());
+
+    const getRefBtn = screen.getByRole('button', { name: /Get configuration image/i });
+    expect((getRefBtn as HTMLButtonElement).disabled).toBe(false);
+    await user.click(getRefBtn);
+    expect(refState.requestSpy).toHaveBeenCalledTimes(1);
+    expect(previewSpy).not.toHaveBeenCalled();
+    expect(streamSpy).not.toHaveBeenCalled();
+    expect(recordSpy).not.toHaveBeenCalled();
+    expect(demoStatusSpy).not.toHaveBeenCalled();
+    expect(demoApplySpy).not.toHaveBeenCalled();
   });
 
   it('cancels only the inline region editor with Escape and keeps the parent configuration popup open', async () => {
@@ -288,9 +334,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // 1. SCOPED DROPDOWNS & ALLOW REPLAY AS WELL AS LIVE
   // --------------------------------------------------------------------------
   it('renders selectors, excludes inactive/cross-site cameras, and allows REPLAY status for demo', async () => {
-    // Demo runs in REPLAY mode!
-    previewState.status = 'REPLAY';
-    previewState.sourceKind = 'REPLAY';
+    refState.reference = mockConfigurationReference({ sourceKind: 'REPLAY' });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -339,12 +383,12 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   });
 
   // --------------------------------------------------------------------------
-  // 2. PREVIEW GUARD: UNAVAILABLE OR MISMATCHED CAMERA PREVENTS DRAWING
+  // 2. REFERENCE GUARD: UNAVAILABLE OR MISMATCHED CAMERA PREVENTS DRAWING
   // --------------------------------------------------------------------------
-  it('disables drawing when camera snapshot preview is unavailable or externalId mismatches', async () => {
-    // 2A: Preview UNAVAILABLE
-    previewState.preview = null;
-    previewState.status = 'UNAVAILABLE';
+  it('disables drawing when camera configuration reference is unavailable or externalId mismatches', async () => {
+    // 2A: Reference source UNAVAILABLE (503)
+    refState.reference = null;
+    refState.error = new ApiError('http', 'Source unavailable', 503);
 
     const { unmount } = render(
       <QueryClientProvider client={queryClient}>
@@ -361,12 +405,14 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     const startBtn = await screen.findByRole('button', { name: /Start Drawing Region/i });
     expect((startBtn as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/Camera snapshot preview unavailable/i)).toBeDefined();
+    expect(
+      screen.getByText(/Camera configuration image source is currently unavailable/i),
+    ).toBeDefined();
     unmount();
 
-    // 2B: Preview belongs to a different camera externalId (CAM-EXT-MISMATCH !== CAM-EXT-01)
-    previewState.preview = mockPreview('CAM-EXT-MISMATCH');
-    previewState.status = 'LIVE';
+    // 2B: Reference belongs to a different camera externalId (CAM-EXT-MISMATCH !== CAM-EXT-01)
+    refState.reference = mockConfigurationReference({}, { cameraExternalId: 'CAM-EXT-MISMATCH' });
+    refState.error = new ApiError('invalid-response', 'Invalid configuration reference');
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -383,7 +429,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     const startBtnMismatch = await screen.findByRole('button', { name: /Start Drawing Region/i });
     expect((startBtnMismatch as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/Preview external ID does not match selected camera/i)).toBeDefined();
+    expect(screen.getByText(/Could not load camera configuration image/i)).toBeDefined();
   });
 
   // --------------------------------------------------------------------------
@@ -584,6 +630,13 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // --------------------------------------------------------------------------
   it('checks fresh getCamera active status before POST, invalidates queries and displays regionId and version', async () => {
     const user = userEvent.setup();
+    refState.reference = mockConfigurationReference({ configurationVersion: 7 });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue({
+      ...mockCamerasList,
+      items: mockCamerasList.items.map((camera) =>
+        camera.id === 'cam-1' ? { ...camera, configurationVersion: 7 } : camera,
+      ),
+    });
 
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -591,6 +644,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockResolvedValueOnce({
       ...mockCamerasList.items[0]!,
       status: 'INACTIVE', // Inactive camera!
+      configurationVersion: 7,
     });
     const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
 
@@ -621,7 +675,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(createRegionSpy).not.toHaveBeenCalled();
     expect(await screen.findByText(/Camera metadata changed or became inactive/i)).toBeDefined();
 
-    // 6B: Valid fresh camera saves and shows regionId and version
+    // 6B: Valid fresh camera matching frozen reference revision 7 saves and shows regionId and version
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockResolvedValueOnce({
       ...mockCamerasList.items[0]!,
       status: 'ACTIVE',
@@ -650,17 +704,23 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     await user.click(saveBtn);
 
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
-    expect(createRegionSpy).toHaveBeenCalledWith('mock-token-xyz', 'site-alpha', 'cam-1', {
-      zoneId: 'zone-1',
-      polygon: {
-        coordinates: [
-          [0.1, 0.1],
-          [0.8, 0.1],
-          [0.8, 0.8],
-        ],
+    expect(createRegionSpy).toHaveBeenCalledWith(
+      'mock-token-xyz',
+      'site-alpha',
+      'cam-1',
+      {
+        zoneId: 'zone-1',
+        polygon: {
+          coordinates: [
+            [0.1, 0.1],
+            [0.8, 0.1],
+            [0.8, 0.8],
+          ],
+        },
+        expectedConfigurationVersion: 7,
       },
-      expectedConfigurationVersion: 7,
-    });
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
 
     // Visible regionId and version in success feedback
     expect(
@@ -847,7 +907,6 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     const svgCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
 
     fireEvent.click(svgCanvas, { clientX: 64, clientY: 48 });
-    expect(await screen.findByText(/Points: 1 \/ 32/i)).toBeDefined();
 
     // User switches Zone
     const zoneSelect = screen.getByLabelText(/Select Zone/i);
@@ -858,9 +917,9 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   });
 
   // --------------------------------------------------------------------------
-  // 10. TRANSIENT STREAM LOSS: HIDES STALE IMAGE, RETAINS DRAFT POINTS & SAVES
+  // 10. TRANSIENT SOURCE FAILURE: PRESERVES VALID FROZEN REFERENCE & DRAFT POINTS
   // --------------------------------------------------------------------------
-  it('hides stale image but retains numeric draft points and save capability during transient preview loss', async () => {
+  it('preserves valid frozen reference image, numeric draft points, and save capability during transient source failure (503)', async () => {
     const user = userEvent.setup();
     const createRegionSpy = vi
       .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
@@ -908,9 +967,9 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
 
-    // Stream drops to UNAVAILABLE (e.g. transient 503 or polling gap)
-    previewState.preview = null;
-    previewState.status = 'UNAVAILABLE';
+    // Transient source failure (503) while frozen reference is still within 5-minute referenceExpiresAt
+    refState.reference = null;
+    refState.error = new ApiError('http', 'Configuration reference source unavailable', 503);
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -925,14 +984,15 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       </QueryClientProvider>,
     );
 
-    // Canvas is NOT reset! Safe numeric draft is retained!
+    // Canvas is NOT reset; valid frozen reference and numeric draft points are retained
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).not.toBeNull();
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
+    expect(svgCanvas.querySelector('image')).not.toBeNull();
+    expect(
+      screen.getByText(/Camera configuration image source is currently unavailable/i),
+    ).toBeDefined();
 
-    // Stale image element is hidden to never display expired frozen pixels
-    expect(svgCanvas.querySelector('image')).toBeNull();
-
-    // User can still save region without drawer reset or abort
+    // User can still save region against the unexpired frozen reference
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
     await user.click(saveBtn);
@@ -1013,27 +1073,33 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       configurationVersion: 4,
     });
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ZonePpeCameraRegionPanel
-          apiUrl="http://localhost:3000"
-          token="mock-token-xyz"
-          sessionScope="scope-01"
-          credentialId={1}
-          siteId="site-alpha"
-          zones={mockZones}
-        />
-      </QueryClientProvider>,
-    );
+    async function openDraft() {
+      const view = render(
+        <QueryClientProvider client={queryClient}>
+          <ZonePpeCameraRegionPanel
+            apiUrl="http://localhost:3000"
+            token="mock-token-xyz"
+            sessionScope="scope-01"
+            credentialId={1}
+            siteId="site-alpha"
+            zones={mockZones}
+          />
+        </QueryClientProvider>,
+      );
 
-    await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
-    const svgCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
+      await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
+      const svgCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
 
-    fireEvent.click(svgCanvas, { clientX: 64, clientY: 48 });
-    fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
-    fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
+      fireEvent.click(svgCanvas, { clientX: 64, clientY: 48 });
+      fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
+      fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
-    const saveBtn = screen.getByRole('button', { name: /Save Region/i });
+      return {
+        saveBtn: screen.getByRole('button', { name: /Save Region/i }),
+        unmount: view.unmount,
+      };
+    }
+    let { saveBtn, unmount } = await openDraft();
     await user.click(saveBtn);
 
     expect(screen.queryByText(/Saved region/i)).toBeNull();
@@ -1051,6 +1117,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     ).toBeDefined();
     expect(screen.queryByText(/Secret auth token leak/i)).toBeNull();
 
+    unmount();
+    ({ saveBtn, unmount } = await openDraft());
     // 12C: 403 Forbidden safe text
     vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValueOnce(
       new ApiError('http', 'Secret RBAC denial trace at internal/auth', 403),
@@ -1061,6 +1129,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     ).toBeDefined();
     expect(screen.queryByText(/Secret RBAC denial trace/i)).toBeNull();
 
+    unmount();
+    ({ saveBtn } = await openDraft());
     // 12D: Network raw error leakage prevented
     vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValueOnce(
       new Error('fetch failed at http://192.168.1.99:8080/private-internal-route'),
@@ -1097,8 +1167,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).not.toBeNull();
 
     // 13A: 401 Unauthorized revocation
-    previewState.errorStatus = 401;
-    previewState.status = 'UNAVAILABLE';
+    refState.reference = null;
+    refState.error = new ApiError('http', 'Unauthorized', 401);
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -1117,9 +1187,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
 
     // 13B: 403 Forbidden revocation
-    previewState.errorStatus = null;
-    previewState.status = 'LIVE';
-    previewState.preview = mockPreview('CAM-EXT-01');
+    refState.error = null;
+    refState.reference = mockConfigurationReference();
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -1137,7 +1206,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).not.toBeNull();
 
-    previewState.errorStatus = 403;
+    refState.reference = null;
+    refState.error = new ApiError('http', 'Forbidden', 403);
     rerender(
       <QueryClientProvider client={queryClient}>
         <ZonePpeCameraRegionPanel
@@ -1153,8 +1223,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
 
     // 13C: 404 Not Found revocation
-    previewState.errorStatus = null;
-    previewState.status = 'LIVE';
+    refState.error = null;
+    refState.reference = mockConfigurationReference();
     rerender(
       <QueryClientProvider client={queryClient}>
         <ZonePpeCameraRegionPanel
@@ -1171,7 +1241,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).not.toBeNull();
 
-    previewState.errorStatus = 404;
+    refState.reference = null;
+    refState.error = new ApiError('http', 'Not found', 404);
     rerender(
       <QueryClientProvider client={queryClient}>
         <ZonePpeCameraRegionPanel
@@ -1190,7 +1261,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // --------------------------------------------------------------------------
   // 14. SECOND START DRAWING DOES NOT IMMEDIATELY DISAPPEAR ON JITTER
   // --------------------------------------------------------------------------
-  it('preserves drawing mode when second Start Drawing is initiated despite transient status jitter', async () => {
+  it('preserves drawing mode when second Start Drawing is initiated despite transient loading state', async () => {
     const user = userEvent.setup();
 
     const { rerender } = render(
@@ -1217,8 +1288,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     await user.click(startBtn);
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).not.toBeNull();
 
-    // Transient jitter in preview stream (e.g. CONNECTING)
-    previewState.status = 'CONNECTING';
+    // Transient loading state while candidate reference is being requested
+    refState.isLoading = true;
 
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -1238,15 +1309,18 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   });
 
   // --------------------------------------------------------------------------
-  // 15. EXPIRED FROZEN PIXELS (>5s) HIDDEN WHILE RETAINING NUMERIC DRAFT
+  // 15. EXPIRED FROZEN PIXELS (referenceExpiresAt) HIDDEN WHILE RETAINING DRAFT
   // --------------------------------------------------------------------------
-  it('hides expired frozen frame pixels (>5s) while retaining safe vector draft points', async () => {
-    const user = userEvent.setup();
+  it('hides expired frozen reference pixels after referenceExpiresAt while retaining safe vector draft points and disabling Save Region', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const baseNow = Date.parse('2026-10-15T09:00:00.000Z');
+    vi.setSystemTime(baseNow);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    // Preview frame with capturedAt 10 seconds ago
-    const staleFrame = mockPreview('CAM-EXT-01');
-    staleFrame.frame.capturedAt = new Date(Date.now() - 10000).toISOString();
-    previewState.preview = staleFrame;
+    refState.reference = mockConfigurationReference(
+      { referenceExpiresAt: '2026-10-15T09:05:00.000Z' },
+      { capturedAt: '2026-10-15T09:00:00.000Z' },
+    );
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1265,21 +1339,47 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     const svgCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
     expect(svgCanvas).not.toBeNull();
 
-    // Image must NOT be displayed because pixels are expired (>5s)
-    expect(svgCanvas.querySelector('image')).toBeNull();
-
-    // But vector drawing and clicks still function safely
     fireEvent.click(svgCanvas, { clientX: 64, clientY: 48 });
-    expect(screen.getByText(/Points: 1 \/ 32/i)).toBeDefined();
+    fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
+    fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
+    expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
+
+    // Still valid after 10s (beyond 5s monitoring preview TTL, within 5-minute referenceExpiresAt)
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(svgCanvas.querySelector('image')).not.toBeNull();
+    expect(
+      (screen.getByRole('button', { name: /Save Region/i }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+
+    // Advance past 5-minute referenceExpiresAt
+    act(() => {
+      vi.advanceTimersByTime(CONFIGURATION_REFERENCE_LIFETIME_MS);
+    });
+
+    // Image must NOT be displayed once referenceExpiresAt has passed
+    expect(svgCanvas.querySelector('image')).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: /Save Region/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    // Vector geometry draft points are retained
+    expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
   });
 
   // --------------------------------------------------------------------------
   // 16. WRONG SOURCE WHILE DRAWING: IMMEDIATE REVOCATION ON EXTERNAL ID MISMATCH
   // --------------------------------------------------------------------------
-  it('immediately revokes drawing scope and unmounts drawer when fresh preview externalId mismatches selected camera', async () => {
+  it('immediately revokes drawing scope and unmounts drawer when camera externalId changes and mismatches frozen reference', async () => {
     const user = userEvent.setup();
 
-    const { rerender } = render(
+    let currentCamerasPage: Page<CameraResponse> = mockCamerasList;
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(
+      async () => currentCamerasPage,
+    );
+
+    render(
       <QueryClientProvider client={queryClient}>
         <ZonePpeCameraRegionPanel
           apiUrl="http://localhost:3000"
@@ -1301,25 +1401,27 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     expect(screen.getByText(/Points: 2 \/ 32/i)).toBeDefined();
 
-    // Fresh preview arrives with wrong source cameraExternalId (CAM-EXT-WRONG !== CAM-EXT-01)
-    previewState.preview = mockPreview('CAM-EXT-WRONG');
-    previewState.status = 'LIVE';
+    // Camera externalId changes on backend (CAM-EXT-WRONG !== frozen CAM-EXT-01)
+    currentCamerasPage = {
+      items: [
+        {
+          ...mockCamerasList.items[0]!,
+          externalId: 'CAM-EXT-WRONG',
+        },
+      ],
+      total: 1,
+    };
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <ZonePpeCameraRegionPanel
-          apiUrl="http://localhost:3000"
-          token="mock-token-xyz"
-          sessionScope="scope-01"
-          credentialId={1}
-          siteId="site-alpha"
-          zones={mockZones}
-        />
-      </QueryClientProvider>,
+    await act(async () => {
+      await queryClient.refetchQueries({
+        predicate: (query) => query.queryKey.includes('cameras-for-region'),
+      });
+    });
+
+    // Query notifications must deliver the changed metadata before the DOM assertion.
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull(),
     );
-
-    // Drawing canvas is immediately revoked and unmounted
-    expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
   });
 
   // --------------------------------------------------------------------------
@@ -1520,6 +1622,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
         polygon: { coordinates: updatedCoords },
         expectedConfigurationVersion: 3,
       },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(createRegionSpy).not.toHaveBeenCalled();
     expect(await screen.findByText(/Saved region "reg-1" \(v3\)/i)).toBeDefined();
@@ -1538,6 +1641,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   it('existing-region optimistic revision: blocks updatePolygon and shows safe 409 conflict while retaining draft when getCamera preflight returns cfg2 after opening at cfg1', async () => {
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
     const user = userEvent.setup();
+    refState.reference = mockConfigurationReference({ configurationVersion: 1 });
 
     const camCfg1: CameraResponse = {
       ...mockCamerasList.items[0]!,
@@ -1616,6 +1720,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   it('existing-region optimistic revision: sends expectedConfigurationVersion 1 on updatePolygon and does not auto-retry or fallback to createRegion when PATCH rejects with 409 and refetch sees cfg2', async () => {
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
     const user = userEvent.setup();
+    refState.reference = mockConfigurationReference({ configurationVersion: 1 });
 
     const camCfg1: CameraResponse = {
       ...mockCamerasList.items[0]!,
@@ -1702,6 +1807,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
         },
         expectedConfigurationVersion: 1,
       },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(createRegionSpy).not.toHaveBeenCalled();
     expect(screen.queryByText(/Saved region/i)).toBeNull();

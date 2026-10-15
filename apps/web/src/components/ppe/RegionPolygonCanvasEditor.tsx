@@ -59,6 +59,7 @@ export function RegionPolygonCanvasEditor({
   const [coordYInput, setCoordYInput] = useState('0.5');
   const [isConfirmingDiscard, setIsConfirmingDiscard] = useState(false);
 
+  const isEditingLocked = isSaving || isImageStale;
   const zoom = ZOOM_STEPS[zoomIdx] ?? 1;
   const currentDraftKey = JSON.stringify(points);
   const initialDraftKey = JSON.stringify(initialPoints);
@@ -78,7 +79,7 @@ export function RegionPolygonCanvasEditor({
   }, []);
 
   const commitPoints = (next: NormalizedPoint[]) => {
-    if (isSaving) return;
+    if (isEditingLocked) return;
     setUndoStack((prev) => [...prev.slice(-49), points]);
     onChangePoints(next);
     onValidationError(null);
@@ -87,7 +88,7 @@ export function RegionPolygonCanvasEditor({
   };
 
   const handleUndo = () => {
-    if (isSaving) return;
+    if (isEditingLocked) return;
     if (undoStack.length > 0) {
       const previous = undoStack[undoStack.length - 1]!;
       setUndoStack((prev) => prev.slice(0, -1));
@@ -99,14 +100,14 @@ export function RegionPolygonCanvasEditor({
   };
 
   const handleReset = () => {
-    if (isSaving || points.length === 0) return;
+    if (isEditingLocked || points.length === 0) return;
     commitPoints([]);
     setSelectedVertexIndex(null);
     svgRef.current?.focus();
   };
 
   const handleDeleteSelectedVertex = () => {
-    if (isSaving || activeSelectedIdx === null) return;
+    if (isEditingLocked || activeSelectedIdx === null) return;
     const next = points.filter((_, idx) => idx !== activeSelectedIdx);
     commitPoints(next);
     setSelectedVertexIndex(next.length > 0 ? Math.min(activeSelectedIdx, next.length - 1) : null);
@@ -171,6 +172,8 @@ export function RegionPolygonCanvasEditor({
       }
       return;
     }
+
+    if (isImageStale) return;
 
     const target = e.target as HTMLElement | null;
     const tagName = target?.tagName?.toLowerCase();
@@ -249,7 +252,7 @@ export function RegionPolygonCanvasEditor({
     zoom,
     pan,
     isPanMode,
-    isSaving,
+    isSaving: isEditingLocked,
     onSelectVertex: setSelectedVertexIndex,
     onPan: setPan,
     onRecordUndo: (previous) => setUndoStack((stack) => [...stack.slice(-49), previous]),
@@ -259,7 +262,7 @@ export function RegionPolygonCanvasEditor({
     onChanged: () => setIsConfirmingDiscard(false),
   });
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (isSaving || gesture.consumeSuppressedClick()) return;
+    if (isEditingLocked || gesture.consumeSuppressedClick()) return;
     if (isPanMode || (e.target as Element | null)?.closest?.('[data-vertex-index]')) {
       return;
     }
@@ -307,7 +310,7 @@ export function RegionPolygonCanvasEditor({
         isPanMode={isPanMode}
         coordXInput={coordXInput}
         coordYInput={coordYInput}
-        isSaving={isSaving}
+        isSaving={isEditingLocked}
         onKeepEditing={() => {
           setIsConfirmingDiscard(false);
           svgRef.current?.focus();
@@ -410,6 +413,7 @@ export function RegionPolygonCanvasEditor({
       <RegionPolygonEditorFooter
         pointsCount={points.length}
         isSaving={isSaving}
+        isImageStale={isImageStale}
         onRequestCancel={handleRequestCancel}
         onSaveRegion={onSaveRegion}
       />

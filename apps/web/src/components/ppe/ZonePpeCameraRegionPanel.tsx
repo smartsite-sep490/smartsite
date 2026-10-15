@@ -1,23 +1,23 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-  type QueryClient,
-} from '@tanstack/react-query';
-import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
-import type { ZoneResponse } from '@smartsite/api-client';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useInfiniteQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { SmartSiteManagementClient, ApiError, type ZoneResponse } from '@smartsite/api-client';
 import type { CameraResponse, RegionResponse, RegionMutationResponse } from '@smartsite/contracts';
-import { useScopedCameraPreview } from '../cameras/useScopedCameraPreview';
-import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import { IconCamera, IconAlertTriangle, IconCheck, IconX } from '../icons';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
-import { RegionPolygonCanvasEditor } from './RegionPolygonCanvasEditor';
+import { CameraRegionReferenceStatusCard } from './CameraRegionReferenceControls';
 import {
-  extractRegionPolygonCoordinates,
-  validatePolygonGeometry,
-  type NormalizedPoint,
-} from './region-polygon-geometry';
+  isConfigurationReferenceScopeMatched,
+  isConfigurationReferenceExpiredAt,
+  isSameConfigurationReference,
+  useConfigurationReferenceExpired,
+  type EditingRegionScope,
+} from './cameraRegionReferenceUtils';
+import { extractRegionPolygonCoordinates, type NormalizedPoint } from './region-polygon-geometry';
+import {
+  useCameraConfigurationReference,
+  type CameraConfigurationReference,
+} from './useCameraConfigurationReference';
+import { ZonePpeCameraRegionDrawer } from './ZonePpeCameraRegionDrawer';
 
 export interface ZonePpeCameraRegionPanelProps {
   apiUrl: string;
@@ -27,16 +27,6 @@ export interface ZonePpeCameraRegionPanelProps {
   siteId: string;
   zones: ZoneResponse[];
   onClose?: () => void;
-}
-
-class LocalRegionValidationError extends Error {
-  readonly errorKey: TranslationKey;
-
-  constructor(errorKey: TranslationKey) {
-    super(errorKey);
-    this.name = 'LocalRegionValidationError';
-    this.errorKey = errorKey;
-  }
 }
 
 function isAuthOrScopeError(err: unknown): boolean {
@@ -81,8 +71,6 @@ function getSafePublicErrorMessage(
     : t('regionSetup.region.error.default');
 }
 
-// ── Internal Opaque Nonce Generator (Never serialize token in query keys) ────
-
 const tokenNonces = new WeakMap<QueryClient, { token: string; nonce: number }>();
 let nextTokenNonce = 1;
 function getOpaqueTokenNonce(client: QueryClient, token: string): number {
@@ -97,308 +85,6 @@ function getOpaqueTokenNonce(client: QueryClient, token: string): number {
   return nonce;
 }
 
-// ── Inner Drawing & Mutation Component (Remounted on Scope Changes) ──────────
-
-interface EditingRegionScope {
-  id: string;
-  version: number;
-  expectedConfigurationVersion: number;
-  initialPoints: NormalizedPoint[];
-}
-
-interface ZonePpeCameraRegionDrawerProps {
-  apiUrl: string;
-  token: string;
-  sessionScope: string;
-  credentialId: number;
-  internalNonce: number;
-  siteId: string;
-  selectedCamera: CameraResponse;
-  selectedZone: ZoneResponse;
-  frozenPreview: DecodedPreview;
-  editingRegion?: EditingRegionScope | null;
-  isStreamUnavailable?: boolean;
-  lastSavedDraft: string | null;
-  onSaveSuccess: (
-    data: RegionMutationResponse,
-    savedDraftKey: string,
-    savedPoints: NormalizedPoint[],
-  ) => void;
-  onClose: () => void;
-}
-
-function ZonePpeCameraRegionDrawer({
-  apiUrl,
-  token,
-  sessionScope,
-  credentialId,
-  internalNonce,
-  siteId,
-  selectedCamera,
-  selectedZone,
-  frozenPreview,
-  editingRegion,
-  isStreamUnavailable,
-  lastSavedDraft,
-  onSaveSuccess,
-  onClose,
-}: ZonePpeCameraRegionDrawerProps) {
-  const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
-
-  const initialPoints = useMemo(() => editingRegion?.initialPoints ?? [], [editingRegion]);
-  const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>(() =>
-    initialPoints.map(([x, y]) => [x, y]),
-  );
-  const [validationErrorKey, setValidationErrorKey] = useState<TranslationKey | null>(null);
-  const [serverErrorKey, setServerErrorKey] = useState<TranslationKey | null>(null);
-
-  const validationError = validationErrorKey ? t(validationErrorKey) : null;
-  const serverError = serverErrorKey ? t(serverErrorKey) : null;
-
-  // TTL expiration check: never display expired frozen pixels (>5s old)
-  const [isSnapshotExpired, setIsSnapshotExpired] = useState(() => {
-    const capturedTime = Date.parse(frozenPreview.frame.capturedAt);
-    return Number.isFinite(capturedTime) ? Date.now() - capturedTime > 5000 : true;
-  });
-
-  useEffect(() => {
-    const capturedTime = Date.parse(frozenPreview.frame.capturedAt);
-    const remaining = Number.isFinite(capturedTime)
-      ? Math.max(0, 5000 - (Date.now() - capturedTime))
-      : 0;
-    const timer = setTimeout(() => {
-      setIsSnapshotExpired(true);
-    }, remaining);
-    return () => clearTimeout(timer);
-  }, [frozenPreview.frame.capturedAt]);
-
-  const isImageStale = isSnapshotExpired || Boolean(isStreamUnavailable);
-
-  const isMountedRef = useRef(true);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      abortControllerRef.current?.abort();
-    };
-  }, []);
-
-  const createRegionMutation = useMutation({
-    mutationFn: async (submittedPoints: NormalizedPoint[]) => {
-      // 1. Client-side geometry validation
-      const geoErrorKey = validatePolygonGeometry(submittedPoints);
-      if (geoErrorKey) {
-        throw new LocalRegionValidationError(geoErrorKey);
-      }
-
-      // 2. Duplicate draft block
-      const draftKey = JSON.stringify(submittedPoints);
-      if (draftKey === lastSavedDraft) {
-        throw new LocalRegionValidationError('regionSetup.validation.alreadySaved');
-      }
-
-      // 3. AbortController for fresh getCamera query
-      abortControllerRef.current = new AbortController();
-      const freshCamera = await client.getCamera(token, siteId, selectedCamera.id, {
-        signal: abortControllerRef.current.signal,
-      });
-
-      // 4. Late active guard after await: check mount and metadata matching
-      if (!isMountedRef.current || abortControllerRef.current.signal.aborted) {
-        throw new LocalRegionValidationError('regionSetup.error.cancelled');
-      }
-      if (
-        freshCamera.id !== selectedCamera.id ||
-        freshCamera.siteId !== siteId ||
-        freshCamera.status !== 'ACTIVE' ||
-        freshCamera.externalId !== selectedCamera.externalId
-      ) {
-        throw new LocalRegionValidationError('regionSetup.error.cameraChangedOrInactive');
-      }
-
-      // 5. PATCH updatePolygon when editing an existing region (never fallback to createRegion), else POST createRegion
-      if (editingRegion) {
-        if (freshCamera.configurationVersion !== editingRegion.expectedConfigurationVersion) {
-          throw new ApiError('http', 'Configuration version conflict', 409);
-        }
-        return client.updatePolygon(token, siteId, selectedCamera.id, editingRegion.id, {
-          polygon: {
-            coordinates: submittedPoints,
-          },
-          expectedConfigurationVersion: editingRegion.expectedConfigurationVersion,
-        });
-      }
-
-      return client.createRegion(token, siteId, selectedCamera.id, {
-        zoneId: selectedZone.id,
-        polygon: {
-          coordinates: submittedPoints,
-        },
-        expectedConfigurationVersion: freshCamera.configurationVersion,
-      });
-    },
-    onSuccess: (data: RegionMutationResponse, submittedPoints: NormalizedPoint[]) => {
-      if (!isMountedRef.current) return;
-
-      // Wrong-scope response guard
-      if (
-        data.region.cameraId !== selectedCamera.id ||
-        data.region.zoneId !== selectedZone.id ||
-        (editingRegion && data.region.id !== editingRegion.id)
-      ) {
-        setServerErrorKey('regionSetup.error.wrongScope');
-        return;
-      }
-
-      // Invalidate queries:
-      // 1. Camera observation regions
-      queryClient.invalidateQueries({
-        queryKey: [
-          'ppe-monitoring',
-          apiUrl,
-          sessionScope,
-          internalNonce,
-          siteId,
-          'cameras',
-          selectedCamera.id,
-          'regions',
-        ],
-      });
-      // 2. Actual cameras-for-region key
-      queryClient.invalidateQueries({
-        queryKey: [
-          'ppe-monitoring',
-          apiUrl,
-          sessionScope,
-          internalNonce,
-          siteId,
-          'cameras-for-region',
-        ],
-      });
-      // 3. Zone-admin prefix and zones
-      queryClient.invalidateQueries({
-        queryKey: ['ppe-monitoring', apiUrl, sessionScope, credentialId, siteId, 'zones'],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['zone-admin', apiUrl, sessionScope, siteId, selectedCamera.id],
-      });
-
-      onSaveSuccess(
-        data,
-        JSON.stringify(submittedPoints),
-        submittedPoints.map(([x, y]) => [x, y]),
-      );
-    },
-    onError: (err: unknown) => {
-      if (!isMountedRef.current) return;
-
-      if (err instanceof ApiError) {
-        if (err.status === 401) {
-          setServerErrorKey('regionSetup.error.401');
-          return;
-        }
-        if (err.status === 403) {
-          setServerErrorKey('regionSetup.error.403');
-          return;
-        }
-        if (err.status === 409) {
-          setServerErrorKey(editingRegion ? 'regionSetup.error.409Edit' : 'regionSetup.error.409');
-          // Invalidate cameras-for-region to refresh configuration version (NO auto-POST/PATCH retry!)
-          queryClient.invalidateQueries({
-            queryKey: [
-              'ppe-monitoring',
-              apiUrl,
-              sessionScope,
-              internalNonce,
-              siteId,
-              'cameras-for-region',
-            ],
-          });
-          return;
-        }
-      }
-
-      // Safe error messages: never leak raw network err.message or upstream private text
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
-      if (err instanceof LocalRegionValidationError) {
-        setServerErrorKey(err.errorKey);
-      } else {
-        setServerErrorKey('regionSetup.error.saveDefault');
-      }
-    },
-  });
-
-  const handleSaveRegion = () => {
-    if (createRegionMutation.isPending) return;
-
-    const geoErrorKey = validatePolygonGeometry(draftPoints);
-    if (geoErrorKey) {
-      setValidationErrorKey(geoErrorKey);
-      return;
-    }
-
-    const draftKey = JSON.stringify(draftPoints);
-    if (draftKey === lastSavedDraft) {
-      setValidationErrorKey('regionSetup.validation.alreadySaved');
-      return;
-    }
-
-    setValidationErrorKey(null);
-    setServerErrorKey(null);
-    createRegionMutation.mutate(draftPoints.map(([x, y]) => [x, y]));
-  };
-
-  return (
-    <div className="space-y-3">
-      {/* Validation & Server Error Notices */}
-      {validationError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 flex items-center gap-2"
-        >
-          <IconAlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-          <span>{validationError}</span>
-        </div>
-      )}
-
-      {serverError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 flex items-center gap-2"
-        >
-          <IconAlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-          <span>{serverError}</span>
-        </div>
-      )}
-
-      <RegionPolygonCanvasEditor
-        points={draftPoints}
-        initialPoints={initialPoints}
-        lastSavedDraft={lastSavedDraft}
-        editingRegion={
-          editingRegion ? { id: editingRegion.id, version: editingRegion.version } : null
-        }
-        frame={frozenPreview.frame}
-        isImageStale={isImageStale}
-        isSaving={createRegionMutation.isPending}
-        onChangePoints={setDraftPoints}
-        onValidationError={setValidationErrorKey}
-        onClearServerError={() => setServerErrorKey(null)}
-        onSaveRegion={handleSaveRegion}
-        onClose={onClose}
-      />
-    </div>
-  );
-}
-
-// ── Parent Panel Component ──────────────────────────────────────────────────
-
 interface DrawingScope {
   apiUrl: string;
   token: string;
@@ -408,7 +94,7 @@ interface DrawingScope {
   siteId: string;
   cameraId: string;
   zoneId: string;
-  preview: DecodedPreview;
+  reference: CameraConfigurationReference;
   editingRegion: EditingRegionScope | null;
 }
 
@@ -445,8 +131,6 @@ function ZonePpeCameraRegionPanelContent({
   internalNonce,
 }: ZonePpeCameraRegionPanelProps & { internalNonce: number }) {
   const { t } = useLocale();
-  const isAiWorkPaused =
-    import.meta.env.VITE_AI_WORK_PAUSED === 'true' || import.meta.env.VITE_AI_WORK_PAUSED === true;
 
   // 1. Zone Selection (default to first zone if available)
   const [requestedZoneId, setSelectedZoneId] = useState<string>(() => zones[0]?.id ?? '');
@@ -522,7 +206,6 @@ function ZonePpeCameraRegionPanelContent({
     return allFetchedCameras.filter((cam) => cam.siteId === siteId && cam.status === 'ACTIVE');
   }, [allFetchedCameras, siteId]);
 
-  // Error Classification for Camera Query
   const cameraError = camerasInfiniteQuery.error;
   const isCameraHard = isAuthOrScopeError(cameraError);
   const isCameraBaseError = Boolean(
@@ -617,7 +300,6 @@ function ZonePpeCameraRegionPanelContent({
     );
   }, [allFetchedRegions, selectedCameraId, selectedZoneId]);
 
-  // Error Classification for Region Query
   const regionError = regionsInfiniteQuery.error;
   const isRegionHard = isAuthOrScopeError(regionError);
   const isRegionBaseError = Boolean(
@@ -644,40 +326,64 @@ function ZonePpeCameraRegionPanelContent({
   const cameraServerTotal = camerasInfiniteQuery.data?.pages.at(-1)?.total ?? 0;
   const regionServerTotal = regionsInfiniteQuery.data?.pages.at(-1)?.total ?? 0;
 
-  // 4. Live/Replay Scoped Camera Preview via Gateway
-  const scopedPreview = useScopedCameraPreview({
+  // 4. Explicit Scoped Camera Configuration Reference
+  const [mutationScopeError, setMutationScopeError] = useState<ApiError | null>(null);
+  const configReference = useCameraConfigurationReference({
     apiUrl,
     token,
     sessionScope,
+    credentialId,
     siteId,
     cameraId: selectedCameraId,
-    enabled: !isAiWorkPaused,
+    cameraExternalId: selectedCamera?.externalId ?? '',
+    enabled: Boolean(
+      token &&
+      sessionScope &&
+      siteId &&
+      !mutationScopeError &&
+      selectedCamera &&
+      selectedCamera.status === 'ACTIVE' &&
+      !isCameraBaseError &&
+      !isAuthOrScopeError(regionsInfiniteQuery.error),
+    ),
   });
-
-  const isExternalIdMatched = Boolean(
-    selectedCamera &&
-    scopedPreview.cameraExternalId &&
-    scopedPreview.cameraExternalId === selectedCamera.externalId,
-  );
-
-  const isPreviewStatusReady = scopedPreview.status === 'LIVE' || scopedPreview.status === 'REPLAY';
-
-  const canStartDrawing = Boolean(
-    !isAiWorkPaused &&
-    scopedPreview.preview &&
-    isPreviewStatusReady &&
-    isExternalIdMatched &&
-    !isCameraBaseError &&
-    !isAuthOrScopeError(regionsInfiniteQuery.error),
-  );
 
   // 5. Drawing State bound to complete captured scope
   const [drawingScope, setDrawingScope] = useState<DrawingScope | null>(null);
+  const [isCandidateReviewOpen, setIsCandidateReviewOpen] = useState(false);
   const [lastSavedDraft, setLastSavedDraft] = useState<string | null>(null);
   const [savedRegionInfo, setSavedRegionInfo] = useState<{
     id: string;
     version: number;
   } | null>(null);
+
+  const isHookReferenceScopeValid = isConfigurationReferenceScopeMatched(
+    configReference.reference,
+    siteId,
+    selectedCamera,
+  );
+  const isHookReferenceExpired = useConfigurationReferenceExpired(configReference.reference);
+  const validHookReference =
+    isHookReferenceScopeValid && !isHookReferenceExpired ? configReference.reference : null;
+
+  const canRequestReference = Boolean(
+    token &&
+    !mutationScopeError &&
+    sessionScope &&
+    siteId &&
+    selectedCamera &&
+    selectedCamera.status === 'ACTIVE' &&
+    !isCameraBaseError &&
+    !isAuthOrScopeError(regionsInfiniteQuery.error) &&
+    !isAuthOrScopeError(configReference.error),
+  );
+
+  const canStartDrawing = Boolean(
+    canRequestReference &&
+    validHookReference &&
+    selectedZone &&
+    validHookReference.configurationVersion === selectedCamera?.configurationVersion,
+  );
 
   const successFeedback = savedRegionInfo
     ? t('regionSetup.feedback.saved', {
@@ -686,7 +392,6 @@ function ZonePpeCameraRegionPanelContent({
       })
     : null;
 
-  // Track active selection to clear stale feedback/draft whenever selection changes even when not drawing
   const [activeSelectionKey, setActiveSelectionKey] = useState(
     () => `${siteId}:${selectedZoneId}:${selectedCameraId}`,
   );
@@ -694,15 +399,14 @@ function ZonePpeCameraRegionPanelContent({
   if (activeSelectionKey !== currentSelectionKey) {
     setActiveSelectionKey(currentSelectionKey);
     setDrawingScope(null);
+    setIsCandidateReviewOpen(false);
     setLastSavedDraft(null);
     setSavedRegionInfo(null);
   }
 
-  // Immediate revocation & isolation guard
   const isDrawingScopeRevoked = Boolean(
     drawingScope &&
-    (isAiWorkPaused ||
-      drawingScope.siteId !== siteId ||
+    (drawingScope.siteId !== siteId ||
       drawingScope.cameraId !== selectedCameraId ||
       drawingScope.zoneId !== selectedZoneId ||
       drawingScope.sessionScope !== sessionScope ||
@@ -712,12 +416,8 @@ function ZonePpeCameraRegionPanelContent({
       drawingScope.apiUrl !== apiUrl ||
       !activeCameras.some((cam) => cam.id === drawingScope.cameraId) ||
       !zones.some((z) => z.id === drawingScope.zoneId) ||
-      (scopedPreview.cameraExternalId &&
-        selectedCamera &&
-        scopedPreview.cameraExternalId !== selectedCamera.externalId) ||
-      scopedPreview.errorStatus === 401 ||
-      scopedPreview.errorStatus === 403 ||
-      scopedPreview.errorStatus === 404 ||
+      !isConfigurationReferenceScopeMatched(drawingScope.reference, siteId, selectedCamera) ||
+      isAuthOrScopeError(configReference.error) ||
       isAuthOrScopeError(camerasInfiniteQuery.error) ||
       isAuthOrScopeError(regionsInfiniteQuery.error)),
   );
@@ -730,11 +430,11 @@ function ZonePpeCameraRegionPanelContent({
   }
   if (isDrawingScopeRevoked) {
     setDrawingScope(null);
+    setIsCandidateReviewOpen(false);
     setLastSavedDraft(null);
     setSavedRegionInfo(null);
   }
 
-  // Synchronous scope equality gate: drawing canvas is ONLY visible if current scope strictly matches drawing scope
   const isCurrentScopeActive = Boolean(
     drawingScope &&
     drawingScope.apiUrl === apiUrl &&
@@ -747,11 +447,23 @@ function ZonePpeCameraRegionPanelContent({
     drawingScope.zoneId === selectedZoneId,
   );
 
+  const handleRequestReference = () => {
+    if (!canRequestReference || configReference.isLoading) return;
+    if (isCurrentScopeActive) {
+      setIsCandidateReviewOpen(true);
+    } else {
+      setIsCandidateReviewOpen(false);
+    }
+    void configReference.request();
+  };
+
   const handleStartDrawing = () => {
-    if (!canStartDrawing || !scopedPreview.preview) return;
+    if (!canStartDrawing || !validHookReference) return;
+    if (isConfigurationReferenceExpiredAt(validHookReference, Date.now())) return;
     if (drawingScope?.editingRegion) {
       setLastSavedDraft(null);
     }
+    setIsCandidateReviewOpen(false);
     setDrawingScope({
       apiUrl,
       token,
@@ -761,33 +473,68 @@ function ZonePpeCameraRegionPanelContent({
       siteId,
       cameraId: selectedCameraId,
       zoneId: selectedZoneId,
-      preview: scopedPreview.preview,
+      reference: validHookReference,
       editingRegion: null,
     });
     setSavedRegionInfo(null);
   };
 
-  const handleStartEditingRegion = (region: RegionResponse, initialPoints: NormalizedPoint[]) => {
-    if (!canStartDrawing || !scopedPreview.preview || !selectedCamera) return;
-    setDrawingScope({
+  const handleStartEditingRegion = useCallback(
+    (region: RegionResponse, initialPoints: NormalizedPoint[]) => {
+      if (!canStartDrawing || !validHookReference || !selectedCamera) return;
+      if (isConfigurationReferenceExpiredAt(validHookReference, Date.now())) return;
+      setIsCandidateReviewOpen(false);
+      setDrawingScope({
+        apiUrl,
+        token,
+        sessionScope,
+        credentialId,
+        internalNonce,
+        siteId,
+        cameraId: selectedCameraId,
+        zoneId: selectedZoneId,
+        reference: validHookReference,
+        editingRegion: {
+          id: region.id,
+          version: region.version,
+          expectedConfigurationVersion: validHookReference.configurationVersion,
+          initialPoints,
+        },
+      });
+      setLastSavedDraft(JSON.stringify(initialPoints));
+      setSavedRegionInfo(null);
+    },
+    [
+      canStartDrawing,
+      validHookReference,
+      selectedCamera,
       apiUrl,
       token,
       sessionScope,
       credentialId,
       internalNonce,
       siteId,
-      cameraId: selectedCameraId,
-      zoneId: selectedZoneId,
-      preview: scopedPreview.preview,
-      editingRegion: {
-        id: region.id,
-        version: region.version,
-        expectedConfigurationVersion: selectedCamera.configurationVersion,
-        initialPoints,
-      },
+      selectedCameraId,
+      selectedZoneId,
+    ],
+  );
+
+  const handleAcceptCandidateReference = (candidate: CameraConfigurationReference) => {
+    if (isConfigurationReferenceExpiredAt(candidate, Date.now())) return;
+    setIsCandidateReviewOpen(false);
+    setDrawingScope((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        reference: candidate,
+        editingRegion: prev.editingRegion
+          ? {
+              ...prev.editingRegion,
+              expectedConfigurationVersion: candidate.configurationVersion,
+            }
+          : null,
+      };
     });
-    setLastSavedDraft(JSON.stringify(initialPoints));
-    setSavedRegionInfo(null);
   };
 
   const handleSaveSuccess = (
@@ -817,6 +564,10 @@ function ZonePpeCameraRegionPanelContent({
       }
       return {
         ...prev,
+        reference: {
+          ...prev.reference,
+          configurationVersion: data.configurationVersion,
+        },
         editingRegion: {
           id: data.region.id,
           version: data.region.version,
@@ -830,6 +581,7 @@ function ZonePpeCameraRegionPanelContent({
   const handleZoneChange = (zoneId: string) => {
     setSelectedZoneId(zoneId);
     setDrawingScope(null);
+    setIsCandidateReviewOpen(false);
     setLastSavedDraft(null);
     setSavedRegionInfo(null);
   };
@@ -837,9 +589,27 @@ function ZonePpeCameraRegionPanelContent({
   const handleCameraChange = (cameraId: string) => {
     setSelectedCameraId(cameraId);
     setDrawingScope(null);
+    setIsCandidateReviewOpen(false);
     setLastSavedDraft(null);
     setSavedRegionInfo(null);
   };
+
+  const statusCardReference =
+    isCurrentScopeActive && drawingScope
+      ? drawingScope.reference
+      : isHookReferenceScopeValid
+        ? configReference.reference
+        : null;
+  const isStatusCardReferenceExpired = useConfigurationReferenceExpired(statusCardReference);
+
+  const candidateReference =
+    isCurrentScopeActive &&
+    drawingScope &&
+    validHookReference &&
+    isCandidateReviewOpen &&
+    !isSameConfigurationReference(validHookReference, drawingScope.reference)
+      ? validHookReference
+      : null;
 
   return (
     <div
@@ -938,14 +708,12 @@ function ZonePpeCameraRegionPanelContent({
             ))}
           </select>
 
-          {/* Initial Camera Loading */}
           {isCamerasInitialLoading && (
             <div role="status" aria-live="polite" className="text-xs text-slate-500 py-1">
               {t('regionSetup.camera.loading')}
             </div>
           )}
 
-          {/* Camera Error Message */}
           {cameraError && (
             <div
               role="alert"
@@ -956,7 +724,6 @@ function ZonePpeCameraRegionPanelContent({
             </div>
           )}
 
-          {/* Camera Pagination & Retry Controls */}
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             {isCameraBaseError && (
               <button
@@ -1011,8 +778,32 @@ function ZonePpeCameraRegionPanelContent({
         </div>
       </div>
 
-      {/* Snapshot Preview & Drawing Trigger */}
+      {/* Explicit Configuration Reference Card & Drawing Trigger */}
       <div className="space-y-3">
+        {mutationScopeError && (
+          <p
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+          >
+            {t(
+              mutationScopeError.status === 401
+                ? 'regionSetup.error.401'
+                : mutationScopeError.status === 403
+                  ? 'regionSetup.error.403'
+                  : 'regionSetup.reference.error.404',
+            )}
+          </p>
+        )}
+        <CameraRegionReferenceStatusCard
+          reference={statusCardReference}
+          isExpired={isStatusCardReferenceExpired}
+          isLoading={configReference.isLoading}
+          error={configReference.error}
+          canRequest={canRequestReference}
+          isDrawingActive={isCurrentScopeActive}
+          onRequestReference={handleRequestReference}
+        />
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
@@ -1032,19 +823,6 @@ function ZonePpeCameraRegionPanelContent({
           )}
         </div>
 
-        {/* Warning messages if preview cannot be used for drawing */}
-        {!canStartDrawing && !isCurrentScopeActive && (
-          <div className="text-xs text-amber-800 bg-[#FBF3DB] p-3 rounded-xl border border-amber-200">
-            {isAiWorkPaused
-              ? t('regionSetup.previewWarning.aiPaused')
-              : !scopedPreview.preview || scopedPreview.status === 'UNAVAILABLE'
-                ? t('regionSetup.previewWarning.unavailable')
-                : !isExternalIdMatched
-                  ? t('regionSetup.previewWarning.externalIdMismatch')
-                  : t('regionSetup.previewWarning.connecting')}
-          </div>
-        )}
-
         {/* Remount inner drawing/mutation component keyed by opaque scope ID */}
         {isCurrentScopeActive && drawingScope && selectedCamera && selectedZone && (
           <ZonePpeCameraRegionDrawer
@@ -1057,16 +835,26 @@ function ZonePpeCameraRegionPanelContent({
             siteId={siteId}
             selectedCamera={selectedCamera}
             selectedZone={selectedZone}
-            frozenPreview={drawingScope.preview}
+            frozenReference={drawingScope.reference}
+            candidateReference={candidateReference}
             editingRegion={drawingScope.editingRegion}
-            isStreamUnavailable={
-              !scopedPreview.preview ||
-              scopedPreview.status === 'UNAVAILABLE' ||
-              scopedPreview.status === 'CONNECTING'
-            }
             lastSavedDraft={lastSavedDraft}
+            onAcceptCandidateReference={handleAcceptCandidateReference}
+            onScopeRevoked={(status) => {
+              setMutationScopeError(
+                new ApiError('http', 'Camera configuration scope revoked.', status),
+              );
+              setDrawingScope(null);
+              setIsCandidateReviewOpen(false);
+              setLastSavedDraft(null);
+              setSavedRegionInfo(null);
+            }}
+            onCancelCandidateReview={() => setIsCandidateReviewOpen(false)}
             onSaveSuccess={handleSaveSuccess}
-            onClose={() => setDrawingScope(null)}
+            onClose={() => {
+              setDrawingScope(null);
+              setIsCandidateReviewOpen(false);
+            }}
           />
         )}
       </div>
@@ -1089,14 +877,12 @@ function ZonePpeCameraRegionPanelContent({
             )}
         </div>
 
-        {/* Initial Region Loading State */}
         {isRegionsInitialLoading && (
           <div role="status" aria-live="polite" className="text-xs text-slate-500 py-1">
             {t('regionSetup.list.loading')}
           </div>
         )}
 
-        {/* Region Error Message */}
         {regionError && (
           <div
             role="alert"
@@ -1107,7 +893,6 @@ function ZonePpeCameraRegionPanelContent({
           </div>
         )}
 
-        {/* Base / Hard Error Retry Button */}
         {isRegionBaseError && (
           <div className="py-1">
             <button
@@ -1126,7 +911,6 @@ function ZonePpeCameraRegionPanelContent({
           </div>
         )}
 
-        {/* Empty State: Only when not initial loading, not base error, camera selected, no linked regions */}
         {!isRegionsInitialLoading &&
           !isRegionBaseError &&
           Boolean(selectedCameraId) &&
@@ -1144,14 +928,12 @@ function ZonePpeCameraRegionPanelContent({
             </>
           )}
 
-        {/* No camera selected guidance */}
         {!selectedCameraId && !isCameraBaseError && !camerasInfiniteQuery.isLoading && (
           <div className="text-xs text-slate-500 italic py-1">
             {t('regionSetup.list.noCameraSelected')}
           </div>
         )}
 
-        {/* Render Region List */}
         {visibleLinkedRegions.length > 0 && (
           <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
             {visibleLinkedRegions.map((region) => {
@@ -1181,7 +963,7 @@ function ZonePpeCameraRegionPanelContent({
                         type="button"
                         onClick={() => handleStartEditingRegion(region, editablePoints)}
                         disabled={!canStartDrawing || isCurrentScopeActive}
-                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
                       >
                         {t('regionSetup.list.editGeometry')}
                       </button>
@@ -1196,7 +978,6 @@ function ZonePpeCameraRegionPanelContent({
           </div>
         )}
 
-        {/* Next Page Region Controls */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {isTransientNextRegionError && (
             <button
