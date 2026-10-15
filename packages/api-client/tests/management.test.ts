@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { getEventListeners } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, SmartSiteManagementClient } from '../src/index';
+import {
+  ApiError,
+  SmartSiteManagementClient,
+  registerSessionCredential,
+  unregisterSessionCredential,
+} from '../src/index';
 
 type FetchMock = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -14,13 +19,22 @@ describe('management client', () => {
     const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
     try {
-      await new SmartSiteManagementClient('https://api.example.test').changePassword('temporary-token', 'TempDemo2026!', 'NewDemo2026!');
-      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/auth/change-password');
+      await new SmartSiteManagementClient('https://api.example.test').changePassword(
+        'temporary-token',
+        'TempDemo2026!',
+        'NewDemo2026!',
+      );
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/auth/change-password',
+      );
       expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
-        method: 'POST', credentials: 'include',
+        method: 'POST',
+        credentials: 'include',
         body: JSON.stringify({ currentPassword: 'TempDemo2026!', newPassword: 'NewDemo2026!' }),
       });
-    } finally { vi.unstubAllGlobals(); }
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
   it('creates a contractor representative link with encoded scope IDs', async () => {
     const fetchMock = createFetchMock(
@@ -696,7 +710,7 @@ describe('observation identity client', () => {
       evidenceIndex: 0,
       expectedEvidenceSha256: 'b'.repeat(64),
     };
-    const fetchMock = vi.fn(async (url: string) => {
+    const fetchMock = vi.fn<FetchMock>(async (url: string) => {
       if (String(url).endsWith('/decisions')) {
         return jsonResponse({
           recordedDecision: { ...fixture.decision, id: command.commandId },
@@ -934,11 +948,16 @@ describe('observation identity client', () => {
       const started = new Promise<void>((resolve) => {
         markStarted = resolve;
       });
-      const fetchMock = vi.fn(async () => {
+      const fetchMock = vi.fn<FetchMock>(async () => {
         const response = new Response(
-          kind === 'blob' ? new ReadableStream({
-            pull() { markStarted(); return new Promise(() => undefined); },
-          }) : ' ',
+          kind === 'blob'
+            ? new ReadableStream({
+                pull() {
+                  markStarted();
+                  return new Promise(() => undefined);
+                },
+              })
+            : ' ',
           {
             status: 200,
             headers: { 'Content-Type': kind === 'blob' ? 'image/jpeg' : 'application/json' },
@@ -1192,11 +1211,18 @@ describe('merged session expiration behavior', () => {
     'notifies the browser session on %s HTTP 401 while preserving the API error',
     async (transport) => {
       const dispatchEvent = vi.fn();
+      const sessionScope = `merged-session-scope-${transport}`;
       vi.stubGlobal('window', { dispatchEvent });
       vi.stubGlobal(
         'CustomEvent',
         class {
-          constructor(public type: string) {}
+          detail: { sessionScopes?: readonly string[] };
+          constructor(
+            public type: string,
+            init?: { detail?: { sessionScopes?: readonly string[] } },
+          ) {
+            this.detail = init?.detail ?? {};
+          }
         },
       );
       vi.stubGlobal(
@@ -1208,6 +1234,7 @@ describe('merged session expiration behavior', () => {
             }),
         ),
       );
+      registerSessionCredential('expired-token', sessionScope);
       try {
         const client = new SmartSiteManagementClient('https://api.example.test');
         const request =
@@ -1228,7 +1255,9 @@ describe('merged session expiration behavior', () => {
         await expect(request).rejects.toMatchObject({ code: 'http', status: 401 });
         expect(dispatchEvent).toHaveBeenCalledOnce();
         expect(dispatchEvent.mock.calls[0]?.[0].type).toBe('smartsite:session-expired');
+        expect(dispatchEvent.mock.calls[0]?.[0].detail.sessionScopes).toContain(sessionScope);
       } finally {
+        unregisterSessionCredential('expired-token', sessionScope);
         vi.unstubAllGlobals();
       }
     },

@@ -12,6 +12,7 @@
     "./ppe-items": "./dist/ppe-items.js",
     "./management": "./dist/management-api.js",
     "./camera-preview": "./dist/camera-preview.js",
+    "./camera-observation-zones": "./dist/camera-observation-zones.js",
     "./gate-permissions": "./dist/gate-permissions-api.js",
     "./mf06-assessments": "./dist/mf06-assessment-api.js"
   },

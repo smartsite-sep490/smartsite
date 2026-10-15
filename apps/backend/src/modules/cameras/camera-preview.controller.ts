@@ -13,6 +13,26 @@ import { CameraPreviewService } from './camera-preview.service.js';
 export class CameraPreviewController {
   constructor(private readonly previews: CameraPreviewService) {}
 
+  @Get('cameras/:cameraId/observation-zones')
+  @Header('Cache-Control', 'no-store')
+  async observationZones(
+    @Req() request: Request,
+    @Param('siteId') siteId: string,
+    @Param('cameraId') cameraId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (Object.keys(request.query).some((key) => !['offset', 'limit'].includes(key))) invalid();
+    const page = pagination(offset, limit);
+    return this.previews.observationZones(
+      request.headers.authorization!.slice(7),
+      siteId,
+      cameraId,
+      page.offset,
+      page.limit,
+    );
+  }
+
   @Get('cameras/:cameraId/recorded-video')
   async recordedVideo(
     @Req() request: Request,

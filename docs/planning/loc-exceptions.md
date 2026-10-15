@@ -27,3 +27,14 @@ it must not be rewritten merely to satisfy a LOC target or used in production.
 
 Owner/reviewer: Root. This exception covers the 45-line increase for the
 specific focus behavior, not general growth or browser/production acceptance.
+
+## Shared client composition, 15 October
+
+| Path | Baseline | Current | Reason and follow-up |
+| --- | ---: | ---: | --- |
+| `packages/api-client/src/management.ts` | 3168 | 3447 | Preserve the existing public client/session transport while composing reviewed Main checklist/overview operations and the metadata-only camera read. Avoid a second transport with weaker cancellation/evidence/auth handling. Root owns the exception; extract cohesive feature clients behind this public interface before another feature family is added. |
+| `packages/api-client/tests/management.test.ts` | 1236 | 1265 | Repair two existing session-expiry fixtures to register and clear the actual token/scope pair and assert event scope. Assertions retained; new feature tests are separate bounded files. Root-reviewed exception for this fixture repair only. |
+
+Counts use physical lines at the reviewed local snapshot after formatting.
+Baseline is local2dc598d. This is a bounded integration exception, not an
+acceptance of ongoing growth or evidence of runtime/production readiness.

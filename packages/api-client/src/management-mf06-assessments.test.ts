@@ -353,8 +353,10 @@ describe('SmartSiteManagementClient - MF06 Assessments (B5)', () => {
 
       expect(err).toBeInstanceOf(ApiError);
       if (!(err instanceof ApiError)) throw new Error('Expected ApiError');
-      expect(err.code).toBe('invalid-response');
+      // The shared transport preserves non-2xx HTTP status even without JSON.
+      expect(err.code).toBe('http');
       expect(err.status).toBe(503);
+      expect(err.message).toBe('Backend returned HTTP 503.');
       expect(err.message).not.toContain('<html>');
     });
   });

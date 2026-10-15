@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { Injectable } from '@nestjs/common';
 import {
   parseCameraRegionConfigurationPayload,
@@ -332,6 +333,10 @@ export class CameraConfigurationService {
         take: pagination.limit,
       });
     return { items, total };
+  }
+
+  async observationZones(siteId: string, cameraId: string, offset: number, limit: number) {
+    return readCameraObservationZones(this.dataSource, this.zones, siteId, cameraId, offset, limit);
   }
 
   async getRegion(

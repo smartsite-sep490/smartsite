@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { parseCameraPreviewResponse, type CameraPreviewResponse } from '@smartsite/contracts';
 import { parseCameraMediaFrame, type CameraMediaFrame } from '@smartsite/contracts/camera-preview';
 import type { BackendEnvironment } from '../../config/environment.js';
-import { missing, uuid } from '../../common/configuration/commands.js';
+import { conflict, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { CameraStatus } from '../../database/entities/enums.js';
 import { AuthService } from '../auth/auth.service.js';
@@ -366,6 +366,28 @@ export class CameraPreviewService implements OnModuleDestroy {
     const finalAge = Date.now() - Date.parse(result.frame.capturedAt);
     if (finalAge > 5000 || finalAge < -30_000) unavailable();
     return result;
+  }
+
+  async observationZones(
+    token: string,
+    requestedSite: string,
+    requestedCamera: string,
+    offset: number,
+    limit: number,
+  ) {
+    const siteId = uuid(requestedSite).toLowerCase();
+    const cameraId = uuid(requestedCamera).toLowerCase();
+    await this.authorize(token, siteId);
+    try {
+      const result = await this.cameras.observationZones(siteId, cameraId, offset, limit);
+      const current = await this.cameras.get(siteId, cameraId);
+      if (current.configurationVersion !== result.configurationVersion)
+        conflict('Camera configuration changed; refresh observation context');
+      return result;
+    } finally {
+      // Revocation wins even when the projection/revision lookup itself failed.
+      await this.authorize(token, siteId);
+    }
   }
 
   async list(token: string, requestedSite: string, offset: number, limit: number) {

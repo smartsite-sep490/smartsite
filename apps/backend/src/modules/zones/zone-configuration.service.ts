@@ -19,7 +19,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import {
   command,
   conflict,
@@ -107,7 +107,9 @@ export class ZoneConfigurationService {
             requiredPpe: [...value.requiredPpe].sort(),
             configurationLocked: false,
           }),
-        context ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId) : undefined,
+        context
+          ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+          : undefined,
       );
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
@@ -120,6 +122,17 @@ export class ZoneConfigurationService {
       (await this.dataSource.getRepository(ZoneEntity).findOneBy({ siteId, id: zoneId }))?.name ??
       null
     );
+  }
+  async observationReferences(manager: EntityManager, siteId: string, zoneIds: string[]) {
+    uuid(siteId);
+    if (zoneIds.length > 64) conflict('Too many observation Zone references');
+    if (zoneIds.length === 0) return [];
+    zoneIds.forEach(uuid);
+    return manager.getRepository(ZoneEntity).find({
+      where: { siteId, id: In(zoneIds) },
+      select: { id: true, code: true, name: true },
+      order: { id: 'ASC' },
+    });
   }
   async get(siteId: string, zoneId: string): Promise<ZoneEntity> {
     const zone = await this.dataSource
@@ -151,18 +164,25 @@ export class ZoneConfigurationService {
     context?: MainConfigurationCommandContext,
   ): Promise<ZoneEntity> {
     const value = command(RenameZoneCommand, input);
-    return executeMainMetadataMutation(this.dataSource, context, async (manager) => {
-      const repository = manager.getRepository(ZoneEntity);
-      const zone = await repository.findOne({
-        where: { id: uuid(zoneId), siteId: uuid(siteId) },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!zone) return missing();
-      if (zone.name === value.name) return zone;
-      await repository.update({ id: zone.id, siteId: zone.siteId }, { name: value.name });
-      zone.name = value.name;
-      return zone;
-    }, context ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId) : undefined);
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const repository = manager.getRepository(ZoneEntity);
+        const zone = await repository.findOne({
+          where: { id: uuid(zoneId), siteId: uuid(siteId) },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!zone) return missing();
+        if (zone.name === value.name) return zone;
+        await repository.update({ id: zone.id, siteId: zone.siteId }, { name: value.name });
+        zone.name = value.name;
+        return zone;
+      },
+      context
+        ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+        : undefined,
+    );
   }
 
   async updatePolicy(
@@ -202,7 +222,9 @@ export class ZoneConfigurationService {
         zone.requiredPpe = requiredPpe;
         return zone;
       },
-      context ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId) : undefined,
+      context
+        ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+        : undefined,
     );
   }
 
