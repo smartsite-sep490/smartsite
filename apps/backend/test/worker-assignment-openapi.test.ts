@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
-import { WorkerAssignmentController } from '../src/modules/workforce/worker-assignment.controller.js';
+import { WorkerAssignmentController } from '../src/modules/workforce/directory/worker-assignment.controller.js';
 import { MainAssignmentCommandService } from '../src/modules/zones/main-assignment-command.service.js';
 import { UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
 

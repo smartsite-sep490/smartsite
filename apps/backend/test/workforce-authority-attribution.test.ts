@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { AuthenticatedRequest } from '../src/modules/auth/auth.service.js';
-import { ContractorsController } from '../src/modules/workforce/contractors.controller.js';
-import { WorkforceController } from '../src/modules/workforce/workforce.controller.js';
+import { ContractorsController } from '../src/modules/workforce/directory/contractors.controller.js';
+import { WorkforceController } from '../src/modules/workforce/directory/workforce.controller.js';
 import type { WorkforceConfigurationService } from '../src/modules/workforce/workforce-configuration.service.js';
 import type { MainWorkforceCreateService } from '../src/modules/workforce/main-workforce-create.service.js';
 import type { MainWorkerRosterService } from '../src/modules/workforce/main-worker-roster.service.js';

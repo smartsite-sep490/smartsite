@@ -14,7 +14,7 @@ import { validateEnvironment, type BackendEnvironment } from '../../src/config/e
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
-import { WorkerAssignmentController } from '../../src/modules/workforce/worker-assignment.controller.js';
+import { WorkerAssignmentController } from '../../src/modules/workforce/directory/worker-assignment.controller.js';
 import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { installMainAuthorityCandidate } from '../support/main-authority-candidate.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';

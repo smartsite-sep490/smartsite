@@ -18,7 +18,7 @@ import {
 } from '../../src/database/entities/worker-site-zone-assignment.entity.js';
 import { ZoneAccessGrantEntity } from '../../src/database/entities/zone-access-grant.entity.js';
 import { ZoneRestrictionPolicy, ZoneType } from '../../src/database/entities/enums.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/contractor-operations.service.js';
+import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 const database = createIsolatedTestDatabase({ legacy: true });

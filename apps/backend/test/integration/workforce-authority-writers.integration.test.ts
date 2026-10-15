@@ -20,7 +20,7 @@ import {
 import {
   ContractorOperationsService,
   type WorkforceActor,
-} from '../../src/modules/workforce/contractor-operations.service.js';
+} from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 

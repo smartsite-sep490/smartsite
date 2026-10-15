@@ -13,7 +13,7 @@ import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
-import { ContractorsController } from '../../src/modules/workforce/contractors.controller.js';
+import { ContractorsController } from '../../src/modules/workforce/directory/contractors.controller.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { installMainAuthorityCandidate } from '../support/main-authority-candidate.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';

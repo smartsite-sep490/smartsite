@@ -9,7 +9,7 @@ import { WorkforceConfigurationService } from '../../src/modules/workforce/workf
 import {
   ContractorOperationsService,
   type WorkforceActor,
-} from '../../src/modules/workforce/contractor-operations.service.js';
+} from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { MainRepresentativeCommandService } from '../../src/modules/workforce/main-representative-command.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 
