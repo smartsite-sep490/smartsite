@@ -197,7 +197,7 @@ import {
   filterPpeEvents,
   formatPpeItemLabel,
 } from '../cameras/monitoringUtils';
-import { useAuth } from '../../features/auth/auth-session';
+import { useAuth, useManagementClient } from '../../features/auth/auth-session';
 import type { SharedSession } from '../../types/shared-session';
 
 const authIdentities = new WeakMap<QueryClient, { token: string | null; id: number }>();
@@ -295,7 +295,12 @@ export function PpeMonitoringView({
   const sessionScope = isControlled
     ? (sharedSession?.sessionScope ?? '')
     : (auth.sessionScope ?? '');
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const sessionClient = useManagementClient(apiUrl);
+  const controlledClient = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client =
+    !isControlled || (token === auth.accessToken && sessionScope === auth.sessionScope)
+      ? sessionClient
+      : controlledClient;
 
   const credentialId = useMemo(() => getCredentialId(queryClient, token), [queryClient, token]);
 

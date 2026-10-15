@@ -864,6 +864,8 @@ export class SmartSiteManagementClient {
     let current = session && token ? session.getAccessToken(token) : token;
     const send = (accessToken: string | undefined) =>
       this.readBody(() => {
+        if (session && (!accessToken || !accessToken.trim()))
+          throw new ApiError('invalid-response', 'Session returned an invalid access token.');
         const pending = fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
           ...init,
           headers: {
@@ -890,21 +892,29 @@ export class SmartSiteManagementClient {
           }),
         signal,
       );
-      if (check.ok) return true;
-      if (check.status !== 401)
-        throw new ApiError(
-          'http',
-          'Could not verify the current session.',
-          check.status,
-          undefined,
-          retryAfter(check),
-        );
-      return false;
+      try {
+        if (check.ok) return true;
+        if (check.status !== 401)
+          throw new ApiError(
+            'http',
+            'Could not verify the current session.',
+            check.status,
+            undefined,
+            retryAfter(check),
+          );
+        return false;
+      } finally {
+        // This probe needs only the status; never leave its unused body open.
+        void check.body?.cancel().catch(() => undefined);
+      }
     };
     let response = await send(current);
     if (session && token) session.getAccessToken(token);
     if (response.status !== 401 || !session || !current || (await checkPasswordSession(response)))
       return response;
+    // The rejected transport is no longer used after a refresh. Release it before
+    // opening another response, including long-lived media connections.
+    void response.body?.cancel().catch(() => undefined);
     try {
       current = await this.readBody(() => session.refreshAccessToken(current!), signal);
     } catch (error) {
@@ -2592,7 +2602,8 @@ export class SmartSiteManagementClient {
     options?: CameraVideoStreamOptions,
   ): Promise<void> {
     const sessionScopes = captureSessionScopes(token);
-    const url = `${this.baseUrl.replace(/\/+$/, '')}/api/v1/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/video-stream`;
+    const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/video-stream`;
+    const callerSignal = this.requestOptions(token, options)?.signal;
 
     // Initial connection timeout: only bounds the time to receive response headers,
     // ensuring a timeout does not terminate a healthy long-running stream.
@@ -2612,32 +2623,36 @@ export class SmartSiteManagementClient {
     const abortHandler = () => {
       connectionController.abort();
     };
-    if (options?.signal) {
-      if (options.signal.aborted) {
+    if (callerSignal) {
+      if (callerSignal.aborted) {
         connectionController.abort();
       } else {
-        options.signal.addEventListener('abort', abortHandler, { once: true });
+        callerSignal.addEventListener('abort', abortHandler, { once: true });
       }
     }
 
     let response: Response;
     try {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/x-ndjson',
-          Authorization: `Bearer ${token}`,
+      response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/x-ndjson',
+          },
+          cache: 'no-store',
+          redirect: 'error',
         },
-        cache: 'no-store',
-        redirect: 'error',
-        signal: connectionController.signal,
-      });
+        connectionController.signal,
+        true,
+      );
       isConnected = true;
     } catch (error) {
-      if (options?.signal?.aborted) {
+      if (callerSignal?.aborted) {
         throw new ApiError('cancelled', 'Camera video stream request cancelled.');
       }
-      if (connectionController.signal.aborted && !options?.signal?.aborted) {
+      if (connectionController.signal.aborted && !callerSignal?.aborted) {
         throw new ApiError(
           'timeout',
           `Initial connection to video stream timed out after ${timeoutMs}ms.`,
@@ -2654,41 +2669,26 @@ export class SmartSiteManagementClient {
       if (timeoutTimer) {
         clearTimeout(timeoutTimer);
       }
-      if (options?.signal) {
-        options.signal.removeEventListener('abort', abortHandler);
+      if (callerSignal) {
+        callerSignal.removeEventListener('abort', abortHandler);
       }
     }
 
-    if (options?.signal?.aborted)
+    if (callerSignal?.aborted)
       throw new ApiError('cancelled', 'Camera video stream request cancelled.');
     if (connectionController.signal.aborted)
       throw new ApiError(
         'timeout',
         `Initial connection to video stream timed out after ${timeoutMs}ms.`,
       );
-    if (response.status === 401 && sessionScopes.length > 0) dispatchSessionExpired(sessionScopes);
+    if (!this.session && response.status === 401 && sessionScopes.length > 0)
+      dispatchSessionExpired(sessionScopes);
     if (!response.ok) {
-      const retryAfterHeader = response.headers.get('Retry-After');
-      let retryAfterSeconds: number | undefined;
-      if (retryAfterHeader) {
-        const parsed = parseInt(retryAfterHeader, 10);
-        if (Number.isFinite(parsed) && parsed >= 0) {
-          retryAfterSeconds = Math.min(parsed, 60);
-        }
-      }
-      let errorPayload: unknown;
-      try {
-        errorPayload = await response.json();
-      } catch {
-        errorPayload = undefined;
-      }
-      const backendError = parseBackendErrorEnvelope(errorPayload, response.status);
-      throw new ApiError(
-        'http',
-        backendError?.message ?? `Backend returned HTTP ${response.status} for video stream.`,
-        response.status,
-        backendError,
-        retryAfterSeconds,
+      // Healthy streams have no body deadline. Error bodies are finite JSON,
+      // bounded separately, and remain cancellable after headers arrive.
+      return this.runRequest(
+        { signal: callerSignal, ...(timeoutMs > 0 ? { timeoutMs } : {}) },
+        (signal) => this.responseError(response, signal, false, 16_000, 60),
       );
     }
 
@@ -2710,7 +2710,15 @@ export class SmartSiteManagementClient {
       );
     }
 
-    await processCameraMediaNdjsonStream(response.body, onFrame, options);
+    await processCameraMediaNdjsonStream(
+      response.body,
+      (frame) => {
+        if (!callerSignal?.aborted) onFrame(frame);
+      },
+      { ...options, signal: callerSignal },
+    );
+    if (callerSignal?.aborted)
+      throw new ApiError('cancelled', 'Camera video stream request cancelled.');
   }
 
   /**
@@ -2726,14 +2734,15 @@ export class SmartSiteManagementClient {
     options?: RecordedCameraVideoOptions,
   ): Promise<Blob> {
     const sessionScopes = captureSessionScopes(token);
-    const url = `${this.baseUrl.replace(/\/+$/, '')}/api/v1/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/recorded-video`;
+    const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/recorded-video`;
+    const callerSignal = this.requestOptions(token, options)?.signal;
     const timeoutMs = options?.timeoutMs ?? 5000;
     const controller = new AbortController();
     const abortHandler = () => controller.abort();
     const timer = timeoutMs > 0 ? setTimeout(abortHandler, timeoutMs) : null;
     let response: Response | null = null;
-    if (options?.signal?.aborted) controller.abort();
-    else options?.signal?.addEventListener('abort', abortHandler, { once: true });
+    if (callerSignal?.aborted) controller.abort();
+    else callerSignal?.addEventListener('abort', abortHandler, { once: true });
     const readBounded = async (maximum: number): Promise<Uint8Array<ArrayBuffer>[]> => {
       if (!response?.body)
         throw new ApiError('invalid-response', 'Recorded video response body is missing.');
@@ -2764,15 +2773,20 @@ export class SmartSiteManagementClient {
     };
     try {
       if (controller.signal.aborted) throw new Error('Recorded request aborted');
-      response = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'video/mp4', Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-        redirect: 'error',
-        signal: controller.signal,
-      });
+      response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: 'GET',
+          headers: { Accept: 'video/mp4' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        controller.signal,
+        true,
+      );
       if (controller.signal.aborted) throw new Error('Recorded request aborted');
-      if (response.status === 401 && sessionScopes.length > 0)
+      if (!this.session && response.status === 401 && sessionScopes.length > 0)
         dispatchSessionExpired(sessionScopes);
       if (!response.ok) {
         const retry = response.headers.get('Retry-After');
@@ -2816,7 +2830,7 @@ export class SmartSiteManagementClient {
       if (controller.signal.aborted) throw new Error('Recorded read aborted');
       return new Blob(chunks, { type: 'video/mp4' });
     } catch (error) {
-      if (options?.signal?.aborted)
+      if (callerSignal?.aborted)
         throw new ApiError('cancelled', 'Recorded camera video request cancelled.');
       if (controller.signal.aborted)
         throw new ApiError('timeout', `Recorded video request timed out after ${timeoutMs}ms.`);
@@ -2827,7 +2841,7 @@ export class SmartSiteManagementClient {
       );
     } finally {
       if (timer) clearTimeout(timer);
-      options?.signal?.removeEventListener('abort', abortHandler);
+      callerSignal?.removeEventListener('abort', abortHandler);
       await response?.body?.cancel().catch(() => undefined);
     }
   }
