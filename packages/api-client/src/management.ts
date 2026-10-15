@@ -2774,12 +2774,15 @@ export class SmartSiteManagementClient {
     siteId: string,
     cameraId: string,
     input: CameraMutation & { zoneId: string; polygon: unknown },
+    requestOptions?: RequestOptions,
   ) {
     return this.request<RegionMutationResponse>(
       'POST',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions`,
       token,
       input,
+      undefined,
+      requestOptions,
     );
   }
   listRegions(
@@ -2811,12 +2814,15 @@ export class SmartSiteManagementClient {
     cameraId: string,
     regionId: string,
     input: CameraMutation & { polygon: unknown },
+    requestOptions?: RequestOptions,
   ) {
     return this.request<RegionMutationResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions/${pathId(regionId)}/polygon`,
       token,
       input,
+      undefined,
+      requestOptions,
     );
   }
   setRegionActive(
