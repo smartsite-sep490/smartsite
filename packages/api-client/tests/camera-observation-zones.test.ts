@@ -13,13 +13,13 @@ const result = () => ({
 });
 afterEach(() => vi.unstubAllGlobals());
 it('reads bounded current observation metadata via authenticated cancellable Backend path', async () => {
-  const fetcher = vi.fn().mockResolvedValue(Response.json(result()));
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ ...result(), total: 21 }));
   vi.stubGlobal('fetch', fetcher);
   const client = new SmartSiteManagementClient('https://api.example.test');
   expect(typeof client.getCameraObservationZones).toBe('function');
   expect(
     await client.getCameraObservationZones('synthetic', site, camera, { offset: 20, limit: 20 }),
-  ).toEqual(result());
+  ).toEqual({ ...result(), total: 21 });
   expect(fetcher.mock.calls[0]?.[0]).toBe(
     `https://api.example.test/api/v1/sites/${site}/cameras/${camera}/observation-zones?offset=20&limit=20`,
   );
@@ -28,6 +28,46 @@ it('reads bounded current observation metadata via authenticated cancellable Bac
     redirect: 'error',
     headers: { Authorization: 'Bearer synthetic' },
   });
+});
+it('refuses incomplete or oversized page responses instead of presenting false completeness', async () => {
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  for (const [paging, response] of [
+    [
+      { offset: 0, limit: 20 },
+      { ...result(), items: [], total: 2 },
+    ],
+    [{ offset: 1, limit: 20 }, result()],
+    [
+      { offset: 0, limit: 1 },
+      {
+        ...result(),
+        items: [result().items[0], { id: site, code: 'Z-2', name: 'Second' }],
+        total: 2,
+      },
+    ],
+  ] as const) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(response)));
+    await expect(
+      client.getCameraObservationZones('synthetic', site, camera, paging),
+    ).rejects.toMatchObject({ code: 'invalid-response' });
+  }
+});
+it('rejects invalid page requests locally before sending credentials', async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  for (const paging of [
+    { offset: -1 },
+    { offset: 0.5 },
+    { limit: 0 },
+    { limit: 101 },
+    { limit: NaN },
+  ]) {
+    await expect(
+      client.getCameraObservationZones('synthetic', site, camera, paging),
+    ).rejects.toMatchObject({ code: 'invalid-response' });
+  }
+  expect(fetcher).not.toHaveBeenCalled();
 });
 it('rejects wrong scope, duplicate Zones, unexpected geometry and invalid metadata', async () => {
   const client = new SmartSiteManagementClient('https://api.example.test');
@@ -43,5 +83,32 @@ it('rejects wrong scope, duplicate Zones, unexpected geometry and invalid metada
     await expect(client.getCameraObservationZones('synthetic', site, camera)).rejects.toMatchObject(
       { code: 'invalid-response' },
     );
+  }
+});
+it('bounds stalled metadata reads by the default deadline and honors caller cancellation', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+    const client = new SmartSiteManagementClient('https://api.example.test');
+    const pending = client.getCameraObservationZones('synthetic', site, camera);
+    const deadline = expect(pending).rejects.toMatchObject({ code: 'timeout' });
+    await vi.advanceTimersByTimeAsync(5001);
+    await deadline;
+    const controller = new AbortController();
+    const cancelled = client.getCameraObservationZones(
+      'synthetic',
+      site,
+      camera,
+      {},
+      { signal: controller.signal },
+    );
+    const outcome = expect(cancelled).rejects.toMatchObject({ code: 'cancelled' });
+    controller.abort();
+    await outcome;
+  } finally {
+    vi.useRealTimers();
   }
 });

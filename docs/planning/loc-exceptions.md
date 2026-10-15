@@ -32,7 +32,7 @@ specific focus behavior, not general growth or browser/production acceptance.
 
 | Path | Baseline | Current | Reason and follow-up |
 | --- | ---: | ---: | --- |
-| `packages/api-client/src/management.ts` | 3168 | 3447 | Preserve the existing public client/session transport while composing reviewed Main checklist/overview operations and the metadata-only camera read. Avoid a second transport with weaker cancellation/evidence/auth handling. Root owns the exception; extract cohesive feature clients behind this public interface before another feature family is added. |
+| `packages/api-client/src/management.ts` | 3168 | 3458 | Preserve the existing public client/session transport while composing reviewed Main checklist/overview operations and the metadata-only camera read, including strict returned-page counts and its 5s default deadline. Avoid a second transport with weaker cancellation/evidence/auth handling. Root owns the exception; extract cohesive feature clients behind this public interface before another feature family is added. |
 | `packages/api-client/tests/management.test.ts` | 1236 | 1265 | Repair two existing session-expiry fixtures to register and clear the actual token/scope pair and assert event scope. Assertions retained; new feature tests are separate bounded files. Root-reviewed exception for this fixture repair only. |
 
 Counts use physical lines at the reviewed local snapshot after formatting.

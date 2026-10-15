@@ -1154,6 +1154,16 @@ export class SmartSiteManagementClient {
     paging: PageOptions = {},
     options?: RequestOptions,
   ) {
+    const offset = paging.offset ?? 0;
+    const limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    )
+      throw new ApiError('invalid-response', 'Invalid camera observation page request.');
     const query = new URLSearchParams();
     if (paging.offset !== undefined) query.set('offset', String(paging.offset));
     if (paging.limit !== undefined) query.set('limit', String(paging.limit));
@@ -1163,14 +1173,15 @@ export class SmartSiteManagementClient {
       token,
       undefined,
       undefined,
-      options,
+      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
       { cache: 'no-store', redirect: 'error' },
     );
     try {
       const context = parseCameraObservationZones(result);
       if (
         context.siteId.toLowerCase() !== siteId.toLowerCase() ||
-        context.cameraId.toLowerCase() !== cameraId.toLowerCase()
+        context.cameraId.toLowerCase() !== cameraId.toLowerCase() ||
+        context.items.length !== Math.min(limit, Math.max(0, context.total - offset))
       )
         throw new Error('Scope mismatch');
       return context;
