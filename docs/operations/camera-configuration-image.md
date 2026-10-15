@@ -61,5 +61,9 @@ vendored contracts or claim cross-repository completion from this local change.
 Contract, shared-client and Backend unit/guarded HTTP tests use synthetic JPEGs
 and fake source metadata. They verify software boundaries, not physical capture,
 model quality, browser interaction, deployed capacity or full MF05/MF06 acceptance.
-Full AppModule/PostgreSQL wiring, Web integration and source/browser qualification
-must remain separately evidenced until executed.
+The dedicated integration test also runs actual AppModule/configureApplication
+against a migrated canonical54 file-owned PostgreSQL schema. It verifies real
+login, initial Camera creation with zero Regions, scoped source-byte relay and
+withholding a held image after real session logout. Config/DataSource overrides
+and a synthetic local source are test fixtures; they are not a production rollout.
+Web integration and physical-source/browser qualification remain separate gates.
