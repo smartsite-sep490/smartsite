@@ -340,6 +340,11 @@ function ScopedCameraManagementForm(
   const statusInProgressRef = useRef(false);
   const nameInProgressRef = useRef(false);
   const refreshInProgressRef = useRef(false);
+  const statusTriggerRef = useRef<HTMLButtonElement>(null);
+  const statusConfirmContainerRef = useRef<HTMLDivElement>(null);
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const pendingStatusFocusTargetRef = useRef<'none' | 'trigger' | 'conflict' | 'cancel'>('none');
 
   useLayoutEffect(() => {
     activeRef.current = true;
@@ -355,6 +360,24 @@ function ScopedCameraManagementForm(
   useLayoutEffect(() => {
     onDraftStateChange({ dirty: isDirty, saving: isSaving });
   }, [isDirty, isSaving, onDraftStateChange]);
+
+  useLayoutEffect(() => {
+    if (confirmStatusChange || isSaving || pendingStatusFocusTargetRef.current === 'none') {
+      return;
+    }
+    const target = pendingStatusFocusTargetRef.current;
+    pendingStatusFocusTargetRef.current = 'none';
+    if (document.activeElement && document.activeElement !== document.body) {
+      return;
+    }
+    if (target === 'trigger') {
+      statusTriggerRef.current?.focus();
+    } else if (target === 'conflict') {
+      refreshButtonRef.current?.focus();
+    } else if (target === 'cancel') {
+      cancelButtonRef.current?.focus();
+    }
+  }, [confirmStatusChange, isSaving, isConflictBlocked, blocked]);
 
   const handleSaveName = async (e: FormEvent) => {
     e.preventDefault();
@@ -430,6 +453,12 @@ function ScopedCameraManagementForm(
     ) {
       return;
     }
+    const ownedConfirmFocus = Boolean(
+      statusConfirmContainerRef.current &&
+      document.activeElement instanceof Node &&
+      statusConfirmContainerRef.current.contains(document.activeElement),
+    );
+    pendingStatusFocusTargetRef.current = 'none';
     statusInProgressRef.current = true;
     const targetStatus = currentCamera.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     setFeedback(null);
@@ -452,6 +481,9 @@ function ScopedCameraManagementForm(
       if (draftName === currentCamera.name) {
         setDraftName(validated.name);
       }
+      if (ownedConfirmFocus) {
+        pendingStatusFocusTargetRef.current = 'trigger';
+      }
       setConfirmStatusChange(false);
       setFeedback({
         kind: 'success',
@@ -466,8 +498,14 @@ function ScopedCameraManagementForm(
       if (!activeRef.current) return;
       setConfirmStatusChange(false);
       if (err instanceof ApiError && [401, 403, 404].includes(err.status ?? 0)) {
+        if (ownedConfirmFocus) {
+          pendingStatusFocusTargetRef.current = 'cancel';
+        }
         setBlocked(true);
       } else {
+        if (ownedConfirmFocus) {
+          pendingStatusFocusTargetRef.current = 'conflict';
+        }
         setIsConflictBlocked(true);
       }
       setFeedback({ kind: 'error', key: publicManagementErrorKey(err) });
@@ -594,7 +632,11 @@ function ScopedCameraManagementForm(
       )}
 
       {isConflictBlocked && (
-        <CameraConflictBanner isRefreshing={isRefreshing} onRefresh={handleRefreshCamera} />
+        <CameraConflictBanner
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefreshCamera}
+          refreshButtonRef={refreshButtonRef}
+        />
       )}
 
       <CameraActivationSection
@@ -605,10 +647,13 @@ function ScopedCameraManagementForm(
         onOpenConfirm={() => setConfirmStatusChange(true)}
         onCancelConfirm={() => setConfirmStatusChange(false)}
         onConfirmStatus={handleConfirmStatus}
+        triggerButtonRef={statusTriggerRef}
+        confirmContainerRef={statusConfirmContainerRef}
       />
 
       <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-200 pt-3.5">
         <button
+          ref={cancelButtonRef}
           type="button"
           disabled={isSaving}
           onClick={props.onCancelRequest}

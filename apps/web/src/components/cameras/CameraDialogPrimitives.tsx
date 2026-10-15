@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, type Ref, type RefObject } from 'react';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import type { PpeTranslationKey } from '../../i18n/ppe-catalog';
 import { useLocale } from '../../i18n/ppe-locale';
@@ -113,9 +113,14 @@ export function CameraManagementMetadataCard({
 export interface CameraConflictBannerProps {
   isRefreshing: boolean;
   onRefresh: () => void;
+  refreshButtonRef?: Ref<HTMLButtonElement>;
 }
 
-export function CameraConflictBanner({ isRefreshing, onRefresh }: CameraConflictBannerProps) {
+export function CameraConflictBanner({
+  isRefreshing,
+  onRefresh,
+  refreshButtonRef,
+}: CameraConflictBannerProps) {
   const { t } = useLocale();
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs text-amber-950">
@@ -123,6 +128,7 @@ export function CameraConflictBanner({ isRefreshing, onRefresh }: CameraConflict
         {t('cameraSetup.manage.conflictNotice')}
       </span>
       <button
+        ref={refreshButtonRef}
         type="button"
         disabled={isRefreshing}
         onClick={onRefresh}
@@ -142,6 +148,8 @@ export interface CameraActivationSectionProps {
   onOpenConfirm: () => void;
   onCancelConfirm: () => void;
   onConfirmStatus: () => void;
+  triggerButtonRef?: RefObject<HTMLButtonElement | null>;
+  confirmContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
 export function CameraActivationSection({
@@ -152,10 +160,15 @@ export function CameraActivationSection({
   onOpenConfirm,
   onCancelConfirm,
   onConfirmStatus,
+  triggerButtonRef,
+  confirmContainerRef,
 }: CameraActivationSectionProps) {
   const { t } = useLocale();
   const isActive = status === 'ACTIVE';
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const internalTriggerRef = useRef<HTMLButtonElement>(null);
+  const internalConfirmContainerRef = useRef<HTMLDivElement>(null);
+  const resolvedTriggerRef = triggerButtonRef ?? internalTriggerRef;
+  const resolvedConfirmContainerRef = confirmContainerRef ?? internalConfirmContainerRef;
   const cancelConfirmRef = useRef<HTMLButtonElement>(null);
   const shouldRestoreTriggerFocusRef = useRef(false);
 
@@ -164,9 +177,11 @@ export function CameraActivationSection({
       cancelConfirmRef.current?.focus();
     } else if (shouldRestoreTriggerFocusRef.current) {
       shouldRestoreTriggerFocusRef.current = false;
-      triggerRef.current?.focus();
+      if (!document.activeElement || document.activeElement === document.body) {
+        resolvedTriggerRef.current?.focus();
+      }
     }
-  }, [confirmStatusChange]);
+  }, [confirmStatusChange, resolvedTriggerRef]);
 
   return (
     <div className="min-w-0 space-y-3 border-t border-slate-200 pt-3.5">
@@ -184,7 +199,7 @@ export function CameraActivationSection({
 
         {!confirmStatusChange ? (
           <button
-            ref={triggerRef}
+            ref={resolvedTriggerRef}
             type="button"
             disabled={disabled}
             onClick={onOpenConfirm}
@@ -200,7 +215,10 @@ export function CameraActivationSection({
       </div>
 
       {confirmStatusChange && (
-        <div className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5">
+        <div
+          ref={resolvedConfirmContainerRef}
+          className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5"
+        >
           <p className="text-xs font-medium leading-relaxed text-amber-950 break-words">
             {isActive
               ? t('cameraSetup.manage.confirmDeactivatePrompt')

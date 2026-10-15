@@ -18,3 +18,12 @@ The separately hash-pinned historical catalog under
 `apps/backend/test/support/legacy24/` is immutable fixture material. Its
 provenance records original Git blobs and all import/format transformations;
 it must not be rewritten merely to satisfy a LOC target or used in production.
+
+## Camera status focus, 15 October
+
+| Path | Baseline | Current | Reason and follow-up |
+| --- | ---: | ---: | --- |
+| `apps/web/src/components/cameras/CameraManagementDialog.tsx` | 629 | 674 | Root-reviewed bounded async status focus ownership and outcome targets; mocked API-result DOM regressions include success, conflict, denied and no-focus-steal. Baseline is local28f9c1e. Do not grow the mixed form further without extracting its mutation/focus responsibility; preserve guards and assertions. |
+
+Owner/reviewer: Root. This exception covers the 45-line increase for the
+specific focus behavior, not general growth or browser/production acceptance.
