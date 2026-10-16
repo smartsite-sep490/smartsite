@@ -309,7 +309,8 @@ export interface ZoneEntryDecisionResponse {
 
 export interface ContractorResponse {
   id: string;
-  siteId: string;
+  /** Present only on scoped projections; main Contractor/create has no Site field. */
+  siteId?: string;
   code: string;
   name: string;
   isActive: boolean;

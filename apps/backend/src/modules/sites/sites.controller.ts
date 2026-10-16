@@ -32,6 +32,7 @@ import type { SiteEntity } from '../../database/entities/site.entity.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import {
   CreateSiteCommand,
   RenameSiteCommand,
@@ -55,13 +56,16 @@ function siteResponse(site: SiteEntity) {
 @Controller('sites')
 export class SitesController {
   private readonly logger = new Logger(SitesController.name);
-  constructor(private readonly sites: SiteConfigurationService) {}
+  constructor(
+    private readonly sites: SiteConfigurationService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post()
   @UseGuards(AdminGuard)
   @ApiCreatedResponse({ type: SiteResponseDto })
   async create(@Req() request: AuthenticatedRequest, @Body() input: CreateSiteCommand) {
-    const site = await this.sites.create(input);
+    const site = await this.sites.create(input, configurationCommandContext(request, this.auth));
     this.logger.log({ actorId: request.user!.id, action: 'site.create', resourceId: site.id });
     return siteResponse(site);
   }
@@ -109,7 +113,11 @@ export class SitesController {
     @Param('siteId') siteId: string,
     @Body() input: RenameSiteCommand,
   ) {
-    const site = await this.sites.rename(siteId, input);
+    const site = await this.sites.rename(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({ actorId: request.user!.id, action: 'site.rename', resourceId: site.id });
     return siteResponse(site);
   }

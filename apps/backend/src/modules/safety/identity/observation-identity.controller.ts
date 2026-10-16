@@ -14,6 +14,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { invalid, uuid } from '../../../common/configuration/commands.js';
+import { UnauthorizedException } from '@nestjs/common';
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import { pagination } from '../../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
@@ -72,7 +73,14 @@ export class ObservationIdentityController {
   constructor(
     private readonly context: ObservationIdentityContextService,
     private readonly resolutions: ObservationIdentityResolutionService,
+    private readonly userAuth: UserAuthGuard,
+    private readonly identityAccess: ObservationIdentityAccessGuard,
   ) {}
+
+  private async authorizeRead(request: AuthenticatedRequest, siteId: string): Promise<void> {
+    await this.userAuth.authenticateRequest(request);
+    this.identityAccess.assertAccess(request.user, siteId);
+  }
 
   @Get()
   @Header('Cache-Control', 'private, no-store')
@@ -82,9 +90,12 @@ export class ObservationIdentityController {
     @Param('alertId') alertId: string,
     @Param('eventId') eventId: string,
     @Query() query: Record<string, unknown>,
+    @Req() request: AuthenticatedRequest,
   ) {
     queryPage(query, false);
-    return identityContextResponse(await this.context.get(...scope(siteId, alertId, eventId)));
+    const result = await this.context.get(...scope(siteId, alertId, eventId));
+    await this.authorizeRead(request, siteId);
+    return identityContextResponse(result);
   }
 
   @Get('workers')
@@ -97,13 +108,16 @@ export class ObservationIdentityController {
     @Param('alertId') alertId: string,
     @Param('eventId') eventId: string,
     @Query() query: Record<string, unknown>,
+    @Req() request: AuthenticatedRequest,
   ) {
     const paging = queryPage(query, true);
-    return this.context.listWorkers(
+    const result = await this.context.listWorkers(
       ...scope(siteId, alertId, eventId),
       paging.offset,
       paging.limit,
     );
+    await this.authorizeRead(request, siteId);
+    return result;
   }
 
   @Get(':personObservationIndex/decisions')
@@ -117,6 +131,7 @@ export class ObservationIdentityController {
     @Param('eventId') eventId: string,
     @Param('personObservationIndex') index: string,
     @Query() query: Record<string, unknown>,
+    @Req() request: AuthenticatedRequest,
   ) {
     const paging = queryPage(query, true),
       keys = scope(siteId, alertId, eventId),
@@ -131,6 +146,7 @@ export class ObservationIdentityController {
     const ref =
       records?.heads.find((r) => r.head.personObservationIndex === selected)?.head.subjectRef ??
       null;
+    await this.authorizeRead(request, siteId);
     return identityDecisionPageResponse(result, ref);
   }
 
@@ -184,6 +200,11 @@ export class ObservationIdentityController {
         personIndex(index),
         request.user!.id,
         command,
+        async (manager, actorUserId, scopedSiteId) => {
+          await this.userAuth.authenticateRequest(request, manager);
+          if (request.user?.id !== actorUserId) throw new UnauthorizedException();
+          this.identityAccess.assertAccess(request.user, scopedSiteId);
+        },
       ),
     );
   }

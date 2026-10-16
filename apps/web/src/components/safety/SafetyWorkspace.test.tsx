@@ -76,7 +76,9 @@ it('PPE navigation still opens Alerts instead of Overview', async () => {
 it('localizes workspace tabs both ways while retaining the chosen checklist tab and open draft', async () => {
   await i18n.changeLanguage('en');
   mount();
-  fireEvent.click(await screen.findByRole('button', { name: 'Checklists' }));
+  const checklistsTab = await screen.findByRole('button', { name: 'Checklists' });
+  await waitFor(() => expect((checklistsTab as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(checklistsTab);
   fireEvent.click(await screen.findByRole('button', { name: 'New checklist' }));
   fireEvent.change(screen.getByLabelText('Work description'), {
     target: { value: 'Safety overview\nMy authored work' },

@@ -33,6 +33,7 @@ import type { ZoneAccessGrantEntity } from '../../database/entities/zone-access-
 import type { ZoneEntryDecisionEntity } from '../../database/entities/zone-entry-decision.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import {
   CreateZoneAccessGrantCommand,
   ZoneAccessManagementService,
@@ -90,7 +91,10 @@ const commonResponses = {
 export class ZoneAccessController {
   private readonly logger = new Logger(ZoneAccessController.name);
 
-  constructor(private readonly access: ZoneAccessManagementService) {}
+  constructor(
+    private readonly access: ZoneAccessManagementService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post()
   @ApiCreatedResponse({ type: ZoneAccessGrantResponseDto })
@@ -100,7 +104,12 @@ export class ZoneAccessController {
     @Param('zoneId') zoneId: string,
     @Body() input: CreateZoneAccessGrantCommand,
   ) {
-    const grant = await this.access.createGrant(siteId, zoneId, input);
+    const grant = await this.access.createGrant(
+      siteId,
+      zoneId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone-access.create',
@@ -131,7 +140,13 @@ export class ZoneAccessController {
     @Param('zoneId') zoneId: string,
     @Param('grantId') grantId: string,
   ) {
-    const grant = await this.access.revokeGrant(siteId, zoneId, grantId);
+    const grant = await this.access.revokeGrant(
+      siteId,
+      zoneId,
+      grantId,
+      undefined,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone-access.revoke',

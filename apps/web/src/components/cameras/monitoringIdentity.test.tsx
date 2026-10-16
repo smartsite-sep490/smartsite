@@ -8,6 +8,32 @@ import type { DecodedPreview } from './useRealtimePreview';
 import type { VideoTestDetection } from './videoTestFixture';
 
 const state = vi.hoisted(() => ({ preview: null as DecodedPreview | null }));
+vi.mock('./useScopedCameraPreview', () => ({
+  useScopedCameraPreview: () => ({
+    preview: state.preview,
+    status: state.preview ? 'LIVE' : 'UNAVAILABLE',
+    error: null,
+    isError: false,
+    isLoading: false,
+    isPolling: Boolean(state.preview),
+    retry: vi.fn(),
+    cameraExternalId: state.preview?.frame.cameraExternalId ?? null,
+    capturedAt: state.preview?.frame.capturedAt ?? null,
+  }),
+}));
+vi.mock('../cameras/useScopedCameraPreview', () => ({
+  useScopedCameraPreview: () => ({
+    preview: state.preview,
+    status: state.preview ? 'LIVE' : 'UNAVAILABLE',
+    error: null,
+    isError: false,
+    isLoading: false,
+    isPolling: Boolean(state.preview),
+    retry: vi.fn(),
+    cameraExternalId: state.preview?.frame.cameraExternalId ?? null,
+    capturedAt: state.preview?.frame.capturedAt ?? null,
+  }),
+}));
 vi.mock('./useRealtimePreview', () => ({
   useRealtimePreview: () => ({ preview: state.preview, connected: true, error: null }),
 }));
@@ -92,5 +118,104 @@ describe.each([
     const text = render().replace(/<[^>]*>/g, ' ');
     expect(text).toMatch(/Track ID\s+Track #7/);
     expect(text).toContain('Unknown — not identified');
+  });
+});
+
+describe('PpeMonitoringView baseline copy boundaries', () => {
+  it('displays Helmet and vest detected instead of broad compliance claims', () => {
+    state.preview = {
+      image: {} as HTMLImageElement,
+      frame: {
+        sessionId: '00000000-0000-4000-8000-000000000001',
+        sequenceNumber: '1',
+        cameraExternalId: 'CAM-TEST',
+        capturedAt: '2026-09-30T00:00:00Z',
+        width: 640,
+        height: 480,
+        imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+        zonePolygons: [],
+        detections: [
+          {
+            active: false,
+            alertState: 'COMPLIANT',
+            boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+            confidence: 0.9,
+            eventId: 'evt-compliant',
+            label: 'TRACK #1',
+            ppeStatus: { HARD_HAT: 'PRESENT', SAFETY_VEST: 'PRESENT' },
+            timecode: '00:01',
+            trackId: 1,
+          },
+        ],
+        zoneDetections: [],
+      },
+    };
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <PpeMonitoringView />
+      </QueryClientProvider>,
+    );
+    client.clear();
+
+    expect(markup).not.toContain('CORE PPE OBSERVED');
+    expect(markup).toContain('HELMET AND VEST DETECTED');
+    expect(markup).toContain('Expanded items (gloves, boots, goggles) are not assessed');
+    expect(markup).not.toContain('harness');
+    expect(markup).not.toContain('ALL REQUIRED PPE PRESENT');
+    expect(markup).not.toContain('PPE COMPLIANT');
+  });
+
+  it('displays compliance message for expanded reported items without claiming unassessed harness', () => {
+    state.preview = {
+      image: {} as HTMLImageElement,
+      frame: {
+        sessionId: '00000000-0000-4000-8000-000000000001',
+        sequenceNumber: '1',
+        cameraExternalId: 'CAM-TEST',
+        capturedAt: '2026-09-30T00:00:00Z',
+        width: 640,
+        height: 480,
+        imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+        zonePolygons: [],
+        detections: [
+          {
+            active: false,
+            alertState: 'COMPLIANT',
+            boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+            confidence: 0.9,
+            eventId: 'evt-compliant-expanded',
+            label: 'TRACK #1',
+            ppeStatus: {
+              HARD_HAT: 'PRESENT',
+              SAFETY_VEST: 'PRESENT',
+              GLOVES: 'PRESENT',
+              BOOTS: 'PRESENT',
+              GOGGLES: 'PRESENT',
+            },
+            timecode: '00:01',
+            trackId: 1,
+          },
+        ],
+        zoneDetections: [],
+      },
+    };
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const markup = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <PpeMonitoringView />
+      </QueryClientProvider>,
+    );
+    client.clear();
+
+    expect(markup).not.toContain('CORE PPE OBSERVED');
+    expect(markup).toContain('CORE AND REPORTED PPE DETECTED');
+    expect(markup).toContain('Helmet, safety vest, and reported expanded PPE items detected.');
+    expect(markup).not.toContain('are not assessed');
+    expect(markup).not.toContain('harness');
+    expect(markup).not.toContain('ALL REQUIRED PPE PRESENT');
+    expect(markup).not.toContain('PPE COMPLIANT');
   });
 });

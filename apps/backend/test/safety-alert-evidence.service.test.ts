@@ -204,6 +204,17 @@ test('identity review FRAME digest describes exactly the protected bytes served'
   assert.notEqual(reread.sha256, content.sha256);
 });
 
+test('ordinary evidence download refuses an event mapped to conflicting historical Sites', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-conflicting-evidence-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const value = identityFrameFixture(root, { conflictingSiteMapping: true });
+  await writeFile(join(root, value.fileName), jpeg);
+  await assert.rejects(
+    value.service.read(value.siteId, value.alertId, value.eventId, '0'),
+    isPublicError('NOT_FOUND'),
+  );
+});
+
 test('identity review refuses crops, snapshots and FRAME from a different session', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
   t.after(() => rm(root, { recursive: true, force: true }));

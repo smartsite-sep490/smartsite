@@ -3002,5 +3002,15 @@
   "auth.password.show": "Show password",
   "auth.password.hide": "Hide password",
   "auth.session.restore": "Could not restore your session. Check your connection and try again.",
-  "auth.session.logoutWarning": "Signed out on this browser. Server sign-out could not be confirmed."
+  "auth.session.logoutWarning": "Signed out on this browser. Server sign-out could not be confirmed.",
+  "app.profile_recovery.forbidden": "This account cannot access the current user profile. Sign out and sign in with an authorized account.",
+  "app.profile_recovery.network": "Cannot reach the sign-in service. Check your connection and try again.",
+  "app.profile_recovery.timeout": "Loading your profile timed out. Please try again.",
+  "app.profile_recovery.unavailable": "The sign-in service is temporarily unavailable. Please try again.",
+  "app.profile_recovery.invalid_response": "The sign-in service returned an invalid profile. Please try again.",
+  "app.profile_recovery.default": "Could not load your profile. Please try again.",
+  "app.profile_recovery.retrying": "Retrying…",
+  "app.safety_full_account_required": "Full account details are required to continue this workflow. Refresh your account or sign in again.",
+  "restricted_zone_view.you_are_reviewing_a_technical_observation_at": "You are reviewing a technical observation at",
+  "restricted_zone_view.ai_reported_a_track_candidate": "AI reported a track candidate"
 }

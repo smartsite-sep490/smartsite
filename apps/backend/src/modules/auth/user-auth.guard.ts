@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectThrottlerStorage, type ThrottlerStorage } from '@nestjs/throttler';
+import type { EntityManager } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { AuthService, type AuthenticatedRequest } from './auth.service.js';
@@ -16,6 +17,12 @@ export class UserAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    await this.authenticateRequest(request);
+    return true;
+  }
+
+  /** Same strict boundary for late private reads and transactional mutation claims. */
+  async authenticateRequest(request: AuthenticatedRequest, manager?: EntityManager): Promise<void> {
     if (Array.isArray(request.rawHeaders)) {
       let count = 0;
       for (let index = 0; index < request.rawHeaders.length; index += 2)
@@ -26,11 +33,10 @@ export class UserAuthGuard implements CanActivate {
     if (typeof header !== 'string') throw new UnauthorizedException();
     const match = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(header);
     if (!match?.[1]) throw new UnauthorizedException();
-    const authenticated = await this.auth.authenticate(match[1]);
+    const authenticated = await this.auth.authenticate(match[1], manager);
     request.user = authenticated.user;
     request.sessionId = authenticated.sessionId;
     request.clientType = authenticated.clientType;
-    return true;
   }
 }
 

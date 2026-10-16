@@ -75,6 +75,7 @@ function sanitizeLogValue(
 export function createHttpLoggerOptions(config: ConfigService<BackendEnvironment, true>): Options {
   const secrets = [
     config.get('DATABASE_URL', { infer: true }),
+    config.get('AUTH_JWT_SECRET', { infer: true }),
     config.get('SMARTSITE_AI_SERVICE_TOKEN', { infer: true }),
     config.get('R2_ACCESS_KEY_ID', { infer: true }),
     config.get('R2_SECRET_ACCESS_KEY', { infer: true }),

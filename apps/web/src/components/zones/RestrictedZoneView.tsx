@@ -1,34 +1,33 @@
 import { useManagementClient } from '../../features/auth/auth-session';
+import { useZoneApplicationSession } from './useZoneApplicationSession';
 import { localizedError, localizeMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
+import { presentZoneLabel, presentZoneMessage } from './zonePresentation';
 import { useTranslation } from 'react-i18next';
-import { useRealtimePreview } from '../cameras/useRealtimePreview';
+import { useLocale } from '../../i18n/ppe-locale';
+import { useScopedCameraPreview } from '../cameras/useScopedCameraPreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
-import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type LoginResponse } from '@smartsite/api-client';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useZoneMetadataPages } from './useZoneMetadataPages';
+import { ZoneMetadataPaging } from './ZoneMetadataPaging';
+import { ApiError, type LoginResponse } from '@smartsite/api-client';
+import type { SharedSession } from '../../types/shared-session';
+import { useAuth } from '../../features/auth/auth-session';
+import { PpeDialog } from '../ppe/PpeDialog';
+import { Mf06ZoneAssessmentPanel } from '../ppe/Mf06ZoneAssessmentPanel';
+
+import { IconAlertTriangle, IconClock, IconMaximize, IconGrid, IconKey, IconCheck } from '../icons';
 import {
-  IconX,
-  IconAlertTriangle,
-  IconClock,
-  IconPlay,
-  IconPause,
-  IconVolume,
-  IconMaximize,
-  IconGrid,
-  IconKey,
-  IconCheck,
-} from '../icons';
-import {
-  getZoneVideoTestDetections,
-  loadAiVideoTimeline,
-  type AiVideoTimeline,
-  type VideoTestTimeline,
-} from '../cameras/videoTestFixture';
-import {
-  buildAiWebSocketUrl,
-  getEffectiveDetections,
   getPrimaryZoneDetection,
   getZoneEventRowKey,
   mapContainerPointToVideoNormalized,
@@ -56,6 +55,19 @@ import {
   type SavePolygonMutationVariables,
 } from './zonePolygonAdapter';
 
+function isUnauthorizedError(error: unknown): boolean {
+  if (error instanceof ApiError && error.status === 401) return true;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    (error as { status: unknown }).status === 401
+  ) {
+    return true;
+  }
+  return false;
+}
+
 interface ZoneReviewItem {
   id: string;
   rowKey: string;
@@ -81,30 +93,44 @@ export interface RestrictedZoneViewProps {
       alertId?: string;
     },
   ) => void;
+  sharedSession?: SharedSession | null;
 }
+
+let nextMetadataCredential = 0;
+const allocateMetadataCredential = () => ++nextMetadataCredential;
+type ScopedPolygonMutationVariables = SavePolygonMutationVariables & { metadataCredential: number };
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
   onNavigate,
+  sharedSession: providedSharedSession,
   authenticatedSession,
   onSignOut,
 }: RestrictedZoneViewProps) {
-  useTranslation();
+  const { t: localize } = useTranslation();
+  const sharedSession = useZoneApplicationSession(
+    providedSharedSession,
+    authenticatedSession,
+    onSignOut,
+  );
+  const { t } = useLocale();
+  const isAiWorkPaused =
+    import.meta.env.VITE_AI_WORK_PAUSED === 'true' || import.meta.env.VITE_AI_WORK_PAUSED === true;
 
   const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
+  const auth = useAuth();
+  const triggerSessionExpired = auth?.triggerSessionExpired;
   const activeSession = useRef<{ token: string; userId: string } | null>(null);
   const lifecycleGeneration = useRef(0);
 
-  const [localSession, setSession] = useState<LoginResponse | null>(null);
-  const session = authenticatedSession ?? localSession;
-  const externalSession = authenticatedSession !== undefined;
-  const canConfigure =
-    !externalSession ||
-    session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null);
+  const [session, setSession] = useState<LoginResponse | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
+  const expiredScopeRef = useRef<string | null>(null);
+  const [rejectedCredential, setRejectedCredential] = useState<number | null>(null);
 
   const [requestedSiteId, setRequestedSiteId] = useState('');
   const [requestedCameraId, setRequestedCameraId] = useState('');
@@ -121,15 +147,7 @@ export function RestrictedZoneView({
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true);
   const [selectedIncident, setSelectedIncident] = useState<ZoneReviewItem | null>(null);
-  const [videoTimeline, setVideoTimeline] = useState<VideoTestTimeline>({
-    currentTime: 0,
-    duration: 0,
-  });
-  const [aiTimeline, setAiTimeline] = useState<AiVideoTimeline | null>(null);
   const [zonePolygon, setZonePolygon] = useState<NormalizedPoint[]>(() => {
     const resolved = resolveActivePolygon({
       siteId: 'demo-site',
@@ -174,31 +192,313 @@ export function RestrictedZoneView({
   const activeZonePoint = useRef<number | null>(null);
 
   const [containerSize, setContainerSize] = useState<Size2D>({ width: 829, height: 466 });
-  const [fixtureNaturalSize, setVideoNaturalSize] = useState<Size2D>({ width: 1920, height: 1080 });
 
-  const rawUrl = import.meta.env.VITE_AI_WS_URL;
-  const aiWsToken =
-    import.meta.env.VITE_AI_BACKEND_SERVICE_TOKEN ??
-    import.meta.env.VITE_AI_WS_TOKEN ??
-    import.meta.env.VITE_AI_SERVICE_TOKEN ??
-    '';
+  const isControlled = sharedSession !== undefined;
+  const isShared = isControlled && sharedSession !== null;
+  const apiToken = isControlled ? (sharedSession?.accessToken ?? '') : (session?.accessToken ?? '');
+  const sessionScope = isControlled
+    ? (sharedSession?.sessionScope ?? '')
+    : (session?.user.id ?? '');
+  const effectiveUser = isControlled ? (sharedSession?.user ?? null) : (session?.user ?? null);
+  const roleScopeKey =
+    effectiveUser?.roleAssignments
+      .map(({ role, siteId }) => `${role}:${siteId ?? 'global'}`)
+      .sort()
+      .join('|') ?? '';
+  const [metadataIdentity, setMetadataIdentity] = useState(() => ({
+    token: apiToken,
+    userId: effectiveUser?.id,
+    apiUrl,
+    roleScopeKey,
+    id: allocateMetadataCredential(),
+  }));
+  let metadataCredential = metadataIdentity.id;
+  if (
+    metadataIdentity.token !== apiToken ||
+    metadataIdentity.userId !== effectiveUser?.id ||
+    metadataIdentity.apiUrl !== apiUrl ||
+    metadataIdentity.roleScopeKey !== roleScopeKey
+  ) {
+    metadataCredential = allocateMetadataCredential();
+    setMetadataIdentity({
+      token: apiToken,
+      userId: effectiveUser?.id,
+      apiUrl,
+      roleScopeKey,
+      id: metadataCredential,
+    });
+  }
+  const credentialRef = useRef({ token: apiToken, id: metadataCredential });
+  useLayoutEffect(() => {
+    credentialRef.current = { token: apiToken, id: metadataCredential };
+  }, [apiToken, metadataCredential]);
+  const previousMetadataRef = useRef({
+    apiUrl,
+    sessionScope,
+    id: metadataCredential,
+  });
+  useEffect(() => {
+    const previous = previousMetadataRef.current;
+    if (previous.id !== metadataCredential) {
+      const predicate = (query: { queryKey: readonly unknown[] }) =>
+        query.queryKey[0] === 'zone-admin' && query.queryKey.at(-1) === previous.id;
+      void queryClient.cancelQueries({ predicate });
+      queryClient.removeQueries({ predicate });
 
-  const wsConfig = useMemo(() => {
-    return buildAiWebSocketUrl(rawUrl, aiWsToken);
-  }, [rawUrl, aiWsToken]);
+      const oldCredentialKey = `${previous.sessionScope}:${previous.id}`;
+      const historyPredicate = (query: { queryKey: readonly unknown[] }) =>
+        (query.queryKey[0] === 'mf06-assessments' || query.queryKey[0] === 'mf06-requests') &&
+        query.queryKey[1] === previous.apiUrl &&
+        query.queryKey[4] === oldCredentialKey;
+      void queryClient.cancelQueries({ predicate: historyPredicate });
+      queryClient.removeQueries({ predicate: historyPredicate });
 
-  const {
-    preview,
-    connected: socketConnected,
-    error: socketRuntimeError,
-  } = useRealtimePreview(wsConfig.url);
-  const liveZoneDetections = preview?.frame.zoneDetections ?? null;
+      clearTransientFeedback();
+      setIsEditingZone(false);
+    }
+    previousMetadataRef.current = { apiUrl, sessionScope, id: metadataCredential };
+  }, [apiUrl, sessionScope, metadataCredential, queryClient, clearTransientFeedback]);
+
+  const isGlobalAdmin = useMemo(() => {
+    if (!effectiveUser) return false;
+    return effectiveUser.roleAssignments.some(
+      ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+    );
+  }, [effectiveUser]);
+
+  const isSafetyOfficer = useMemo(() => {
+    if (!effectiveUser) return false;
+    return effectiveUser.roleAssignments.some(
+      ({ role }) => role === 'SAFETY_OFFICER' || role === 'ADMIN',
+    );
+  }, [effectiveUser]);
+
+  const canViewZone =
+    (isGlobalAdmin || isSafetyOfficer) && rejectedCredential !== metadataCredential;
+
+  const assignedSiteIds = useMemo(() => {
+    if (!effectiveUser || isGlobalAdmin) return null;
+    const ids = new Set<string>();
+    for (const assignment of effectiveUser.roleAssignments) {
+      if (assignment.role === 'SAFETY_OFFICER' || assignment.role === 'ADMIN') {
+        if (assignment.siteId) {
+          ids.add(assignment.siteId);
+        }
+      }
+    }
+    return ids;
+  }, [effectiveUser, isGlobalAdmin]);
+
+  const removeSessionQueries = useCallback(
+    (scope: string) => {
+      void queryClient.cancelQueries({ queryKey: ['zone-admin', apiUrl, scope] });
+      queryClient.removeQueries({ queryKey: ['zone-admin', apiUrl, scope] });
+      const historyScopePrefix = `${scope}:`;
+      const historyPredicate = (query: { queryKey: readonly unknown[] }) =>
+        (query.queryKey[0] === 'mf06-assessments' || query.queryKey[0] === 'mf06-requests') &&
+        query.queryKey[1] === apiUrl &&
+        typeof query.queryKey[4] === 'string' &&
+        query.queryKey[4].startsWith(historyScopePrefix);
+
+      void queryClient.cancelQueries({ predicate: historyPredicate });
+      queryClient.removeQueries({ predicate: historyPredicate });
+    },
+    [apiUrl, queryClient],
+  );
+
+  const prevScopeRef = useRef(sessionScope);
+  useEffect(() => {
+    if (prevScopeRef.current && prevScopeRef.current !== sessionScope) {
+      removeSessionQueries(prevScopeRef.current);
+      setRequestedSiteId('');
+      setRequestedCameraId('');
+      setRequestedRegionId('');
+      setIsDraftMode(false);
+      setStaleDraftInfo(null);
+      clearTransientFeedback();
+      setZonePolygon(DEFAULT_ZONE_POLYGON);
+      expiredScopeRef.current = null;
+    }
+    prevScopeRef.current = sessionScope;
+  }, [sessionScope, removeSessionQueries, clearTransientFeedback]);
+
+  const login = useMutation({
+    mutationFn: async () => {
+      const generation = lifecycleGeneration.current;
+      const result = await client.login(username, password);
+      const allowed = result.user.roleAssignments.some(
+        ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+      );
+      if (!allowed) {
+        await client.logout('WEB').catch(() => undefined);
+        throw new Error(tr('restricted_zone_view.a_global_admin_role_is_required'));
+      }
+      if (result.user.mustChangePassword) {
+        await client.logout('WEB').catch(() => undefined);
+        throw new Error(
+          tr('restricted_zone_view.change_the_temporary_password_before_managing_camera_zones'),
+        );
+      }
+      if (generation !== lifecycleGeneration.current) {
+        await client.logout('WEB').catch(() => undefined);
+        throw new Error(tr('restricted_zone_view.the_sign_in_request_was_cancelled'));
+      }
+      activeSession.current = { token: result.accessToken, userId: result.user.id };
+      setSession(result);
+      setPassword('');
+      setLoginError(null);
+      setSessionExpiredMessage(null);
+    },
+    onError: (err) => {
+      setLoginError(err instanceof Error ? err.message : tr('common.sign_in_failed'));
+    },
+  });
+
+  const sessionScopeRef = useRef(sessionScope);
+  useEffect(() => {
+    sessionScopeRef.current = sessionScope;
+  }, [sessionScope]);
+
+  useEffect(() => {
+    lifecycleGeneration.current += 1;
+    return () => {
+      lifecycleGeneration.current += 1;
+      const current = activeSession.current;
+      activeSession.current = null;
+      if (isControlled) {
+        if (sessionScopeRef.current) {
+          removeSessionQueries(sessionScopeRef.current);
+        }
+      } else {
+        if (current) {
+          removeSessionQueries(current.userId);
+          void client.logout('WEB').catch(() => undefined);
+        }
+      }
+    };
+  }, [client, isControlled, removeSessionQueries]);
+
+  const handleLogout = useCallback(() => {
+    if (isShared) {
+      if (sessionScope) removeSessionQueries(sessionScope);
+      sharedSession?.onSignOut?.();
+      return;
+    }
+    const current = activeSession.current;
+    activeSession.current = null;
+    activeScopeRef.current = { userId: null, siteId: '', cameraId: '', regionId: '' };
+    clearTransientFeedback();
+    if (current) removeSessionQueries(current.userId);
+    login.reset();
+    setSession(null);
+    setRequestedSiteId('');
+    setRequestedCameraId('');
+    setRequestedRegionId('');
+    setIsDraftMode(false);
+    setStaleDraftInfo(null);
+    if (current) void client.logout('WEB').catch(() => undefined);
+  }, [
+    isShared,
+    sessionScope,
+    removeSessionQueries,
+    sharedSession,
+    clearTransientFeedback,
+    login,
+    client,
+  ]);
+
+  const sites = useZoneMetadataPages({
+    queryKey: ['zone-admin', apiUrl, sessionScope, 'sites', 'pages', metadataCredential],
+    read: (offset, signal) =>
+      client.listSites(apiToken, offset ? { offset, limit: 100 } : { limit: 100 }, { signal }),
+    enabled: canViewZone && apiToken.length > 0 && sessionScope.length > 0,
+  });
+
+  const availableSites = useMemo(() => {
+    const items = sites.data?.items ?? [];
+    if (!assignedSiteIds) return items;
+    return items.filter((site) => assignedSiteIds.has(site.id));
+  }, [sites.data?.items, assignedSiteIds]);
+
+  const selectedSiteId = availableSites.some((site) => site.id === requestedSiteId)
+    ? requestedSiteId
+    : (availableSites[0]?.id ?? '');
+
+  const cameras = useZoneMetadataPages({
+    queryKey: [
+      'zone-admin',
+      apiUrl,
+      sessionScope,
+      selectedSiteId,
+      'cameras',
+      'pages',
+      metadataCredential,
+    ],
+    read: (offset, signal) =>
+      client.listPreviewCameras(
+        apiToken,
+        selectedSiteId,
+        offset ? { offset, limit: 100 } : { limit: 100 },
+        { signal },
+      ),
+    enabled:
+      canViewZone && apiToken.length > 0 && sessionScope.length > 0 && selectedSiteId.length > 0,
+  });
+
+  const selectedCameraId = cameras.data?.items.some(
+    (cam) => cam.id === requestedCameraId && cam.siteId === selectedSiteId,
+  )
+    ? requestedCameraId
+    : (cameras.data?.items.find((cam) => cam.siteId === selectedSiteId)?.id ?? '');
+
+  const selectedCamera = useMemo(
+    () => cameras.data?.items.find((c) => c.id === selectedCameraId && c.siteId === selectedSiteId),
+    [cameras.data?.items, selectedCameraId, selectedSiteId],
+  );
+
+  const scopedPreview = useScopedCameraPreview({
+    apiUrl,
+    client,
+    token: apiToken,
+    sessionScope,
+    siteId: selectedSiteId,
+    cameraId: selectedCameraId,
+    enabled: Boolean(
+      !isAiWorkPaused &&
+      canViewZone &&
+      apiToken &&
+      sessionScope &&
+      selectedSiteId &&
+      selectedCameraId,
+    ),
+  });
+
+  const preview = isAiWorkPaused ? null : scopedPreview.preview;
+  const socketError = isAiWorkPaused ? null : scopedPreview.error;
+  const isLive =
+    !isAiWorkPaused && (scopedPreview.status === 'LIVE' || scopedPreview.status === 'REPLAY');
+  const zoneDetections = useMemo(() => preview?.frame.zoneDetections ?? [], [preview]);
   const videoNaturalSize = useMemo(
     () =>
-      preview ? { width: preview.frame.width, height: preview.frame.height } : fixtureNaturalSize,
-    [preview, fixtureNaturalSize],
+      preview
+        ? { width: preview.frame.width, height: preview.frame.height }
+        : { width: 1920, height: 1080 },
+    [preview],
   );
-  const socketError = wsConfig.error ?? socketRuntimeError;
+
+  const producerSessionId = preview?.frame.sessionId ?? 'none';
+  const producerCameraExternalId = preview?.frame.cameraExternalId ?? 'none';
+
+  // Render-time bounded review scope identity without raw tokens
+  const currentReviewScopeKey = `${metadataCredential}:${sessionScope}:${selectedSiteId}:${selectedCameraId}:${scopedPreview.sourceKind ?? 'none'}:${scopedPreview.status}:${producerSessionId}:${producerCameraExternalId}`;
+  const [prevReviewScopeKey, setPrevReviewScopeKey] = useState(currentReviewScopeKey);
+
+  if (prevReviewScopeKey !== currentReviewScopeKey) {
+    setPrevReviewScopeKey(currentReviewScopeKey);
+    if (selectedIncident !== null) {
+      setSelectedIncident(null);
+    }
+  }
 
   // Update clock every second
   useEffect(() => {
@@ -226,23 +526,9 @@ export function RestrictedZoneView({
     return () => observer.disconnect();
   }, []);
 
-  const fallbackDetections = useMemo(
-    () => getZoneVideoTestDetections(videoTimeline, aiTimeline),
-    [videoTimeline, aiTimeline],
-  );
-
-  const { detections: zoneDetections, isLive } = getEffectiveDetections(
-    liveZoneDetections,
-    fallbackDetections,
-  );
-
   // Bug 2: Prioritize first active intrusion track, then fallback to index 0
   const testDetection = useMemo(() => {
     return getPrimaryZoneDetection(zoneDetections);
-  }, [zoneDetections]);
-
-  const activeZoneDetections = useMemo(() => {
-    return zoneDetections.filter((detection) => detection.active);
   }, [zoneDetections]);
 
   // Map zone polygon from video space to container space for SVG display under object-cover
@@ -271,130 +557,45 @@ export function RestrictedZoneView({
     );
   };
 
-  const removeSessionQueries = useCallback(
-    (userId: string) => {
-      queryClient.removeQueries({ queryKey: ['zone-admin', apiUrl, userId] });
-    },
-    [apiUrl, queryClient],
-  );
-
-  const login = useMutation({
-    mutationFn: async () => {
-      const generation = lifecycleGeneration.current;
-      const result = await client.login(username, password);
-      const isGlobalAdmin = result.user.roleAssignments.some(
-        ({ role, siteId }) => role === 'ADMIN' && siteId === null,
-      );
-      if (!isGlobalAdmin) {
-        await client.logout('WEB').catch(() => undefined);
-        throw new Error(tr('restricted_zone_view.a_global_admin_role_is_required'));
-      }
-      if (result.user.mustChangePassword) {
-        await client.logout('WEB').catch(() => undefined);
-        throw new Error(
-          tr('restricted_zone_view.change_the_temporary_password_before_managing_camera_zones'),
-        );
-      }
-      if (generation !== lifecycleGeneration.current) {
-        await client.logout('WEB').catch(() => undefined);
-        throw new Error(tr('restricted_zone_view.the_sign_in_request_was_cancelled'));
-      }
-      activeSession.current = { token: result.accessToken, userId: result.user.id };
-      setSession(result);
-      setPassword('');
-      setLoginError(null);
-    },
-    onError: (err) => {
-      setLoginError(err instanceof Error ? err.message : tr('common.sign_in_failed'));
-    },
-  });
-
-  useEffect(() => {
-    if (authenticatedSession)
-      activeSession.current = {
-        token: authenticatedSession.accessToken,
-        userId: authenticatedSession.user.id,
-      };
-  }, [authenticatedSession]);
-
-  useEffect(() => {
-    lifecycleGeneration.current += 1;
-    return () => {
-      lifecycleGeneration.current += 1;
-      const current = activeSession.current;
-      activeSession.current = null;
-      if (!current) return;
-      removeSessionQueries(current.userId);
-      if (!externalSession) void client.logout('WEB').catch(() => undefined);
-    };
-  }, [client, removeSessionQueries, externalSession]);
-
-  const handleLogout = () => {
-    if (externalSession) {
-      onSignOut?.();
-      return;
-    }
-    const current = activeSession.current;
-    activeSession.current = null;
-    activeScopeRef.current = { userId: null, siteId: '', cameraId: '', regionId: '' };
-    clearTransientFeedback();
-    if (current) removeSessionQueries(current.userId);
-    login.reset();
-    setSession(null);
-    setRequestedSiteId('');
-    setRequestedCameraId('');
-    setRequestedRegionId('');
-    setIsDraftMode(false);
-    setStaleDraftInfo(null);
-    if (current) void client.logout('WEB').catch(() => undefined);
-  };
-
-  const apiToken = session?.accessToken ?? '';
-  const sessionScope = session?.user.id ?? '';
-
-  const sites = useQuery({
-    queryKey: ['zone-admin', apiUrl, sessionScope, 'sites'],
-    queryFn: () => client.listSites(apiToken, { limit: 100 }),
-    enabled: !!canConfigure && apiToken.length > 0,
-  });
-
-  const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
-    ? requestedSiteId
-    : (sites.data?.items[0]?.id ?? '');
-
-  const cameras = useQuery({
-    queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
-    queryFn: () => client.listCameras(apiToken, selectedSiteId, { limit: 100 }),
-    enabled: !!canConfigure && apiToken.length > 0 && selectedSiteId.length > 0,
-  });
-
-  const selectedCameraId = cameras.data?.items.some((cam) => cam.id === requestedCameraId)
-    ? requestedCameraId
-    : (cameras.data?.items[0]?.id ?? '');
-
-  const selectedCamera = useMemo(
-    () => cameras.data?.items.find((c) => c.id === selectedCameraId),
-    [cameras.data?.items, selectedCameraId],
-  );
-
-  const regions = useQuery({
-    queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
-    queryFn: () => client.listRegions(apiToken, selectedSiteId, selectedCameraId, { limit: 100 }),
+  const regions = useZoneMetadataPages({
+    queryKey: [
+      'zone-admin',
+      apiUrl,
+      sessionScope,
+      selectedSiteId,
+      selectedCameraId,
+      'regions',
+      'pages',
+      metadataCredential,
+    ],
+    read: (offset, signal) =>
+      client.listRegions(
+        apiToken,
+        selectedSiteId,
+        selectedCameraId,
+        offset ? { offset, limit: 100 } : { limit: 100 },
+        { signal },
+      ),
     enabled:
-      !!canConfigure &&
+      canViewZone &&
+      isGlobalAdmin &&
       apiToken.length > 0 &&
+      sessionScope.length > 0 &&
       selectedSiteId.length > 0 &&
       selectedCameraId.length > 0,
   });
 
   const activeRegions = useMemo(
-    () => regions.data?.items.filter((r) => r.isActive) ?? [],
-    [regions.data?.items],
+    () => regions.data?.items.filter((r) => r.isActive && r.cameraId === selectedCameraId) ?? [],
+    [regions.data?.items, selectedCameraId],
   );
 
   const selectableRegions = useMemo(
-    () => (activeRegions.length > 0 ? activeRegions : (regions.data?.items ?? [])),
-    [activeRegions, regions.data?.items],
+    () =>
+      activeRegions.length > 0
+        ? activeRegions
+        : (regions.data?.items.filter((r) => r.cameraId === selectedCameraId) ?? []),
+    [activeRegions, regions.data?.items, selectedCameraId],
   );
 
   const selectedRegionId = selectableRegions.some((r) => r.id === requestedRegionId)
@@ -406,20 +607,21 @@ export function RestrictedZoneView({
     [selectableRegions, selectedRegionId],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeScopeRef.current = {
-      userId: session?.user.id ?? null,
+      userId: effectiveUser?.id ?? null,
+      sessionScope,
       siteId: selectedSiteId,
       cameraId: selectedCameraId,
       regionId: selectedRegionId,
     };
-  }, [session?.user.id, selectedSiteId, selectedCameraId, selectedRegionId]);
+  }, [effectiveUser?.id, sessionScope, selectedSiteId, selectedCameraId, selectedRegionId]);
 
-  const currentScopeKey = session
-    ? `${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
+  const currentScopeKey = effectiveUser
+    ? `${sessionScope}:${metadataCredential}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
     : 'fallback-camera-04';
-  const currentIdentityScopeKey = session
-    ? `${session.user.id}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}`
+  const currentIdentityScopeKey = effectiveUser
+    ? `${effectiveUser.id}:${sessionScope}:${metadataCredential}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}`
     : 'fallback-camera-04';
 
   const [prevScopeKey, setPrevScopeKey] = useState(currentScopeKey);
@@ -451,11 +653,15 @@ export function RestrictedZoneView({
   const savePolygonMutation = useMutation<
     RegionMutationResponse,
     unknown,
-    SavePolygonMutationVariables
+    ScopedPolygonMutationVariables
   >({
-    mutationFn: async (vars: SavePolygonMutationVariables) => {
-      const token = vars.token || activeSession.current?.token;
-      if (!token || !activeSession.current || activeSession.current.userId !== vars.userId) {
+    mutationFn: async (vars: ScopedPolygonMutationVariables) => {
+      const token =
+        vars.token || (isShared ? sharedSession?.accessToken : activeSession.current?.token);
+      if (!token) {
+        throw new Error(tr('restricted_zone_view.sign_in_as_admin_before_saving_to_backend'));
+      }
+      if (!isShared && (!activeSession.current || activeSession.current.userId !== vars.userId)) {
         throw new Error(tr('restricted_zone_view.sign_in_as_admin_before_saving_to_backend'));
       }
       const payload = preparePolygonSave(
@@ -467,18 +673,22 @@ export function RestrictedZoneView({
     onSuccess: async (mutationResult, vars) => {
       const plan = planMutationCompletion(apiUrl, vars);
 
-      // Always clear the draft and invalidate queries for the saved scope
-      clearLocalDraft(
-        plan.draftScopeToClear.siteId,
-        plan.draftScopeToClear.cameraId,
-        plan.draftScopeToClear.regionId,
-      );
+      // Invalidation targets the mutation's scope key (old query cache if scope rotated)
       await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
       await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
 
       // Invalidation is asynchronous. Re-evaluate the live scope after every
-      // await so a completion from camera A cannot modify camera B's UI.
-      if (isMutationScopeActive(activeScopeRef.current, vars)) {
+      // await so a completion from camera A or old token cannot modify active UI or clear new drafts.
+      if (
+        vars.token === credentialRef.current.token &&
+        vars.metadataCredential === credentialRef.current.id &&
+        isMutationScopeActive(activeScopeRef.current, vars)
+      ) {
+        clearLocalDraft(
+          plan.draftScopeToClear.siteId,
+          plan.draftScopeToClear.cameraId,
+          plan.draftScopeToClear.regionId,
+        );
         setConflictMessage(null);
         setStaleDraftInfo(null);
         setIsDraftMode(false);
@@ -500,7 +710,11 @@ export function RestrictedZoneView({
         await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
       }
 
-      if (isMutationScopeActive(activeScopeRef.current, vars)) {
+      if (
+        vars.token === credentialRef.current.token &&
+        vars.metadataCredential === credentialRef.current.id &&
+        isMutationScopeActive(activeScopeRef.current, vars)
+      ) {
         if (isConflictError(error)) {
           setConflictMessage(formatConflictMessage(vars.cameraLabel));
         } else {
@@ -513,11 +727,26 @@ export function RestrictedZoneView({
     },
   });
 
+  const isMatchingLiveCamera =
+    !isAiWorkPaused &&
+    scopedPreview.status === 'LIVE' &&
+    Boolean(selectedCamera?.externalId && preview?.frame.cameraExternalId) &&
+    selectedCamera?.externalId === preview?.frame.cameraExternalId;
+
+  const canEditGeometry =
+    !isAiWorkPaused && (isGlobalAdmin ? isMatchingLiveCamera : !isControlled && !effectiveUser);
+
   const handleSaveToBackend = () => {
-    if (!session || !apiToken) return;
+    if (!isGlobalAdmin || !effectiveUser || !apiToken) return;
     if (!selectedSiteId || !selectedCamera || !selectedRegion) return;
-    const vars: SavePolygonMutationVariables = {
-      userId: session.user.id,
+    if (!isMatchingLiveCamera) {
+      showStatusMessage('Cannot save polygon: camera snapshot is not live or does not match.');
+      return;
+    }
+    const vars: ScopedPolygonMutationVariables = {
+      metadataCredential,
+      userId: effectiveUser.id,
+      sessionScope,
       token: apiToken,
       siteId: selectedSiteId,
       cameraId: selectedCamera.id,
@@ -530,7 +759,12 @@ export function RestrictedZoneView({
   };
 
   const saveDraft = () => {
-    if (session) {
+    if (effectiveUser && !isGlobalAdmin) return;
+    if (effectiveUser && !isMatchingLiveCamera) {
+      showStatusMessage('Cannot save draft: camera snapshot is not live or does not match.');
+      return;
+    }
+    if (effectiveUser) {
       if (!selectedSiteId || !selectedCameraId || !selectedCamera || !selectedRegion) {
         showStatusMessage(
           tr('restricted_zone_view.wait_for_a_site_camera_and_region_before_saving_a_local_draft'),
@@ -562,7 +796,7 @@ export function RestrictedZoneView({
   };
 
   const resetToAuthoritative = () => {
-    if (session && selectedSiteId && selectedCameraId && selectedRegion) {
+    if (effectiveUser && selectedSiteId && selectedCameraId && selectedRegion) {
       clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion.id);
       const authoritative = backendPolygonToPoints(selectedRegion.polygon, DEFAULT_ZONE_POLYGON);
       setZonePolygon(authoritative);
@@ -584,21 +818,23 @@ export function RestrictedZoneView({
       return resolveCameraAndWorkArea(
         preview.frame.cameraExternalId,
         testDetection?.regionId,
-        tr('monitoring_utils.chua_co_ma_camera'),
+        selectedCamera?.code || localize('monitoring_utils.chua_co_ma_camera'),
       );
     }
     if (selectedCamera) {
       const regionLabel = selectedRegion
-        ? tr('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
-        : tr('common.restricted_zone');
+        ? localize('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
+        : localize('common.restricted_zone');
       return {
         camera: `${selectedCamera.code} · ${selectedCamera.name}`,
         workArea: regionLabel,
       };
     }
-    const rawCamera = testDetection?.cameraExternalId || aiTimeline?.cameraExternalId;
-    return resolveCameraAndWorkArea(rawCamera, testDetection?.regionId, 'CAM-04');
-  }, [preview, selectedCamera, selectedRegion, testDetection, aiTimeline]);
+    return {
+      camera: 'No Camera Selected',
+      workArea: 'Restricted Zone',
+    };
+  }, [preview, selectedCamera, selectedRegion, testDetection, localize]);
 
   const exportZone = () => {
     const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
@@ -615,76 +851,38 @@ export function RestrictedZoneView({
     );
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    void loadAiVideoTimeline('/assets/zone-ai.timeline.json')
-      .then((timeline) => {
-        if (!cancelled) setAiTimeline(timeline);
-      })
-      .catch(() => {
-        if (!cancelled) setAiTimeline(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const updateVideoTimeline = (video: HTMLVideoElement) => {
-    setVideoTimeline({ currentTime: video.currentTime, duration: video.duration });
-  };
-
-  const togglePlayback = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      void video.play();
-    } else {
-      video.pause();
-    }
-  };
-
-  const toggleMuted = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    video.muted = !video.muted;
-    setIsMuted(video.muted);
-  };
-
   // Bug 5: Key zone = eventId + trackId
   const events: ZoneReviewItem[] = useMemo(() => {
-    return (aiTimeline?.entries ?? [])
-      .flatMap((entry) =>
-        entry.event.observations
-          .filter((observation) => observation.type === 'ZONE_ENTRY')
-          .map((observation) => {
-            const context = resolveCameraAndWorkArea(
-              entry.event.cameraExternalId,
-              observation.regionId,
-              'CAM-04',
-            );
-            return {
-              id: entry.event.eventId,
-              rowKey: getZoneEventRowKey(entry.event.eventId, observation.trackId),
-              trackId: observation.trackId,
-              time: `${Math.floor(entry.videoTimeSeconds / 60)
-                .toString()
-                .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
-                .toString()
-                .padStart(2, '0')}`,
-              person: tr('messages.2c6bb8488230', { value1: observation.trackId }),
-              zone: context.workArea,
-              camera: context.camera,
-              identity: tr('common.unknown'),
-              authorization: tr('common.backend_evaluation_required'),
-              result: tr('common.technical_entry'),
-            };
-          }),
-      )
-      .slice(-20)
-      .reverse();
-  }, [aiTimeline]);
+    if (!preview) return [];
+    const timeStr = scopedPreview.capturedAt
+      ? formatClockTime(new Date(scopedPreview.capturedAt))
+      : clockTime;
+
+    return (preview.frame.zoneDetections ?? [])
+      .filter((det) => det.active)
+      .map((det) => {
+        const context = resolveCameraAndWorkArea(
+          preview.frame.cameraExternalId,
+          det.regionId,
+          selectedCamera?.code || localize('common.cam_04'),
+        );
+        return {
+          id: det.eventId || `SNAPSHOT-${det.trackId ?? 0}`,
+          rowKey: getZoneEventRowKey(det.eventId || 'SNAP', det.trackId ?? 0),
+          trackId: det.trackId ?? 0,
+          time: timeStr,
+          person:
+            det.trackId !== null && det.trackId !== undefined
+              ? localize('messages.2c6bb8488230', { value1: det.trackId })
+              : localize('common.unknown_person'),
+          zone: context.workArea,
+          camera: context.camera,
+          identity: localize('common.unknown'),
+          authorization: 'Backend evaluation required',
+          result: 'Technical entry',
+        };
+      });
+  }, [preview, scopedPreview.capturedAt, clockTime, selectedCamera?.code, localize]);
 
   // Truly filters the loaded Zone events list
   const displayedEvents = useMemo(() => {
@@ -697,118 +895,336 @@ export function RestrictedZoneView({
   const openReviewFromDetection = () => {
     if (!testDetection) return;
     const context = resolveCameraAndWorkArea(
-      testDetection.cameraExternalId || aiTimeline?.cameraExternalId,
+      preview?.frame.cameraExternalId || selectedCamera?.externalId,
       testDetection.regionId,
-      tr('common.cam_04'),
+      selectedCamera?.code || tr('common.cam_04'),
     );
     setSelectedIncident({
-      id: testDetection.eventId,
-      rowKey: `${testDetection.eventId}-${testDetection.trackId ?? 0}`,
+      id: testDetection.eventId || `SNAPSHOT-${testDetection.trackId ?? 0}`,
+      rowKey: `${testDetection.eventId || 'SNAP'}-${testDetection.trackId ?? 0}`,
       trackId: testDetection.trackId ?? 0,
       person:
-        testDetection.trackId !== null
+        testDetection.trackId !== null && testDetection.trackId !== undefined
           ? tr('messages.2c6bb8488230', { value1: testDetection.trackId })
           : tr('common.unknown_person'),
       zone: context.workArea,
       camera: context.camera,
       identity: tr('common.unknown'),
-      authorization: tr('common.backend_evaluation_required'),
+      authorization: 'Backend evaluation required',
       result: testDetection.active
         ? tr('common.zone_entry_observation_f1b9fa')
-        : tr('common.scanning_video_e63c77'),
-      time: isLive ? clockTime : testDetection.timecode,
+        : 'Scanning Snapshot',
+      time: isLive ? clockTime : (testDetection.timecode ?? '00:00'),
     });
   };
 
+  const auth401Error = useMemo(() => {
+    if (!sessionScope) return null;
+    if (isUnauthorizedError(sites.error)) return sites.error;
+    if (isUnauthorizedError(cameras.error)) return cameras.error;
+    if (isUnauthorizedError(regions.error)) return regions.error;
+    if (scopedPreview.errorStatus === 401 && Boolean(sessionScope && selectedCameraId)) {
+      return new ApiError('http', scopedPreview.error || 'Camera preview session expired', 401);
+    }
+    if (
+      savePolygonMutation.variables &&
+      savePolygonMutation.variables.sessionScope === sessionScope &&
+      savePolygonMutation.variables.metadataCredential === metadataCredential &&
+      savePolygonMutation.variables.token === apiToken &&
+      isUnauthorizedError(savePolygonMutation.error)
+    ) {
+      return savePolygonMutation.error;
+    }
+    return null;
+  }, [
+    sessionScope,
+    sites.error,
+    cameras.error,
+    regions.error,
+    scopedPreview.errorStatus,
+    scopedPreview.error,
+    selectedCameraId,
+    savePolygonMutation.error,
+    savePolygonMutation.variables,
+    metadataCredential,
+    apiToken,
+  ]);
+
+  useEffect(() => {
+    if (!auth401Error || !sessionScope) return;
+    const expiryKey = `${sessionScope}:${metadataCredential}`;
+    if (expiredScopeRef.current === expiryKey) return;
+    expiredScopeRef.current = expiryKey;
+    const generation = lifecycleGeneration.current;
+
+    queueMicrotask(() => {
+      // A new credential or unmount can overtake the deferred notification.
+      if (
+        lifecycleGeneration.current !== generation ||
+        credentialRef.current.id !== metadataCredential ||
+        credentialRef.current.token !== apiToken
+      )
+        return;
+      setRejectedCredential(metadataCredential);
+      removeSessionQueries(sessionScope);
+      if (isControlled) {
+        triggerSessionExpired?.(sessionScope);
+        sharedSession?.onSignOut?.();
+      } else {
+        setSessionExpiredMessage('Your session is no longer valid. Sign in again.');
+        handleLogout();
+      }
+    });
+  }, [
+    auth401Error,
+    sessionScope,
+    metadataCredential,
+    apiToken,
+    isControlled,
+    sharedSession,
+    removeSessionQueries,
+    triggerSessionExpired,
+    handleLogout,
+  ]);
+
+  const handleHistoryUnauthorized = useCallback(() => {
+    const currentScope = sessionScopeRef.current;
+    const currentActiveSite = activeScopeRef.current.siteId;
+    if (!sessionScope || sessionScope !== currentScope) return;
+    if (!selectedSiteId || selectedSiteId !== currentActiveSite) return;
+
+    const expiryKey = `${sessionScope}:${metadataCredential}`;
+    if (expiredScopeRef.current === expiryKey) return;
+    const generation = lifecycleGeneration.current;
+    const currentCredential = metadataCredential;
+    const currentToken = apiToken;
+    const capturedSiteId = selectedSiteId;
+    const capturedScope = sessionScope;
+
+    queueMicrotask(() => {
+      if (
+        lifecycleGeneration.current !== generation ||
+        credentialRef.current.id !== currentCredential ||
+        credentialRef.current.token !== currentToken ||
+        sessionScopeRef.current !== capturedScope ||
+        activeScopeRef.current.siteId !== capturedSiteId
+      ) {
+        return;
+      }
+      // Share the existing metadata expiry gate; an overtaken notification must not reserve it.
+      if (expiredScopeRef.current === expiryKey) return;
+      expiredScopeRef.current = expiryKey;
+      setRejectedCredential(currentCredential);
+      removeSessionQueries(capturedScope);
+      if (isControlled) {
+        triggerSessionExpired?.(capturedScope);
+        sharedSession?.onSignOut?.();
+      } else {
+        setSessionExpiredMessage('Your session is no longer valid. Sign in again.');
+        handleLogout();
+      }
+    });
+  }, [
+    sessionScope,
+    selectedSiteId,
+    metadataCredential,
+    apiToken,
+    isControlled,
+    sharedSession,
+    removeSessionQueries,
+    triggerSessionExpired,
+    handleLogout,
+  ]);
+
+  const isSiteMetadataSettled = Boolean(
+    canViewZone &&
+    apiToken &&
+    sessionScope &&
+    !sites.isPending &&
+    !sites.error &&
+    !auth401Error &&
+    selectedSiteId,
+  );
+
+  if (
+    isControlled &&
+    (sharedSession === null || auth401Error || rejectedCredential === metadataCredential)
+  ) {
+    return (
+      <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
+        <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">
+            {t('cameraMonitoring.codeMf06')}
+          </p>
+          <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">
+            {t('ppe.sessionExpired.title')}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
+            {t('restrictedZone.sessionExpired.description')}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isShared && !canViewZone) {
+    return (
+      <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
+        <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">
+            {t('cameraMonitoring.codeMf06')}
+          </p>
+          <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">
+            {t('restrictedZone.accessRestricted.title')}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
+            {t('restrictedZone.accessRestricted.description')}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
-      {/* Admin Session & Backend Camera/Region Configuration Bar */}
-      {!canConfigure ? (
-        <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-          {tr('auth.error.forbidden')}
-        </p>
-      ) : !session ? (
-        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
-                  <IconKey className="h-4 w-4" />
-                </span>
-                <h2 className="text-sm font-bold text-[#2F3437]">
-                  {tr('common.backend_camera_configuration')}
-                </h2>
-              </div>
-              <p className="mt-1 text-xs text-[#6B6B6B] max-w-xl">
-                {tr(
-                  'restricted_zone_view.sign_in_as_a_global_admin_to_load_camera_regions_and_save_authoritative_polygons_t',
-                )}
-              </p>
-            </div>
-            <form
-              onSubmit={(e: FormEvent) => {
-                e.preventDefault();
-                login.mutate();
-              }}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input
-                required
-                type="text"
-                autoComplete="username"
-                placeholder={tr('common.admin_username')}
-                aria-label={tr('common.admin_username')}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
-              />
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                placeholder={tr('common.password')}
-                aria-label={tr('common.password')}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
-              />
-              <button
-                type="submit"
-                disabled={login.isPending}
-                className="rounded-lg bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#333333] disabled:opacity-60 cursor-pointer transition-colors"
-              >
-                {login.isPending
-                  ? tr('common.signing_in')
-                  : tr('restricted_zone_view.sign_in_as_admin')}
-              </button>
-            </form>
+      {/* AI Work Paused Notice Banner */}
+      {isAiWorkPaused && (
+        <div
+          role="status"
+          data-testid="ai-work-paused-banner"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex items-start gap-3"
+        >
+          <IconAlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-amber-800">
+              {t('ppe.pausedBanner.title')}
+            </h2>
+            <p className="mt-0.5 text-xs text-amber-800">{t('ppe.pausedBanner.description')}</p>
           </div>
-          {loginError && (
-            <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
-              {localizedError(loginError ?? undefined)}
-            </p>
-          )}
         </div>
+      )}
+
+      {/* Admin Session & Backend Camera/Region Configuration Bar */}
+      {!effectiveUser || (!isControlled && auth401Error) ? (
+        isControlled ? (
+          <div className="rounded-xl border border-[#EAEAEA] bg-white p-4">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
+                <IconAlertTriangle className="h-4 w-4" />
+              </span>
+              <h2 className="text-sm font-bold text-[#2F3437]">{t('ppe.sessionExpired.title')}</h2>
+            </div>
+            <p className="mt-1 text-xs text-[#6B6B6B]">
+              {t('restrictedZone.sessionExpired.description')}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 ">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
+                    <IconKey className="h-4 w-4" />
+                  </span>
+                  <h2 className="text-sm font-bold text-[#2F3437]">
+                    {tr('common.backend_camera_configuration')}
+                  </h2>
+                </div>
+                <p className="mt-1 text-xs text-[#6B6B6B] max-w-xl">
+                  {tr(
+                    'restricted_zone_view.sign_in_as_a_global_admin_to_load_camera_regions_and_save_authoritative_polygons_t',
+                  )}
+                </p>
+              </div>
+              <form
+                onSubmit={(e: FormEvent) => {
+                  e.preventDefault();
+                  setSessionExpiredMessage(null);
+                  login.mutate();
+                }}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <input
+                  required
+                  type="text"
+                  autoComplete="username"
+                  placeholder={tr('common.admin_username')}
+                  aria-label={tr('common.admin_username')}
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setSessionExpiredMessage(null);
+                  }}
+                  className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                />
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder={tr('common.password')}
+                  aria-label={tr('common.password')}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setSessionExpiredMessage(null);
+                  }}
+                  className="rounded-lg border border-[#EAEAEA] px-2.5 py-1.5 text-xs text-[#2F3437] placeholder:text-[#6B6B6B] focus:border-[#F66B17] focus:ring-1 focus:ring-[#F66B17] outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={login.isPending}
+                  className="rounded-lg bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#333333] disabled:opacity-60 cursor-pointer transition-colors"
+                >
+                  {login.isPending
+                    ? tr('common.signing_in')
+                    : tr('restricted_zone_view.sign_in_as_admin')}
+                </button>
+              </form>
+            </div>
+            {sessionExpiredMessage && !loginError && (
+              <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
+                {presentZoneMessage(sessionExpiredMessage, t)}
+              </p>
+            )}
+            {loginError && (
+              <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
+                {localizedError(loginError ?? undefined)}
+              </p>
+            )}
+          </div>
+        )
       ) : (
-        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4  space-y-3">
+        <div className="rounded-xl border border-[#EAEAEA] bg-white p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#EAEAEA]">
             <div className="flex items-center gap-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                  isGlobalAdmin ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                }`}
+              >
                 <IconCheck className="h-4 w-4" />
               </span>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">
-                    {tr('common.admin_session_active')}
+                  <span
+                    className={`text-xs font-bold uppercase tracking-wider ${
+                      isGlobalAdmin ? 'text-emerald-700' : 'text-blue-700'
+                    }`}
+                  >
+                    {isGlobalAdmin
+                      ? tr('common.admin_session_active')
+                      : t('restrictedZone.session.safetyOfficerActive')}
                   </span>
                   <span className="text-xs font-semibold text-[#2F3437]">
-                    · {session.user.displayName} ({session.user.username})
+                    · {effectiveUser.displayName} ({effectiveUser.username || effectiveUser.id})
                   </span>
                 </div>
                 <p className="text-[11px] text-[#6B6B6B]">
-                  {tr(
-                    'restricted_zone_view.global_admin_role_verified_polygons_saved_here_synchronize_directly_with_backend_c',
-                  )}
+                  {isGlobalAdmin
+                    ? tr(
+                        'restricted_zone_view.global_admin_role_verified_polygons_saved_here_synchronize_directly_with_backend_c',
+                      )
+                    : t('restrictedZone.session.safetyOfficerDesc')}
                 </p>
               </div>
             </div>
@@ -824,15 +1240,19 @@ export function RestrictedZoneView({
           {/* Selectors Grid: Site, Camera, Region, Version */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
+              <label
+                htmlFor="zone-site-select"
+                className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1"
+              >
                 {tr('common.site_fa7955')}
               </label>
               <select
+                id="zone-site-select"
                 value={selectedSiteId}
                 onChange={(e) => {
                   const siteId = e.target.value;
                   activeScopeRef.current = {
-                    userId: session.user.id,
+                    userId: effectiveUser.id,
                     siteId,
                     cameraId: '',
                     regionId: '',
@@ -842,27 +1262,32 @@ export function RestrictedZoneView({
                   setRequestedCameraId('');
                   setRequestedRegionId('');
                 }}
-                disabled={sites.isPending || !sites.data?.items.length}
+                disabled={sites.isPending || !availableSites.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
-                {sites.data?.items.map((site) => (
+                {availableSites.map((site) => (
                   <option key={site.id} value={site.id}>
                     {site.code} · {site.name}
                   </option>
                 ))}
               </select>
+              <ZoneMetadataPaging query={sites} kind="sites" />
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
+              <label
+                htmlFor="zone-camera-select"
+                className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1"
+              >
                 {tr('common.camera')}
               </label>
               <select
+                id="zone-camera-select"
                 value={selectedCameraId}
                 onChange={(e) => {
                   const cameraId = e.target.value;
                   activeScopeRef.current = {
-                    userId: session.user.id,
+                    userId: effectiveUser.id,
                     siteId: selectedSiteId,
                     cameraId,
                     regionId: '',
@@ -874,56 +1299,95 @@ export function RestrictedZoneView({
                 disabled={cameras.isPending || !cameras.data?.items.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
-                {cameras.data?.items.map((camera) => (
-                  <option key={camera.id} value={camera.id}>
-                    {camera.code} · {camera.name} (v{camera.configurationVersion})
-                  </option>
-                ))}
+                {cameras.data?.items
+                  .filter((camera) => camera.siteId === selectedSiteId)
+                  .map((camera) => (
+                    <option key={camera.id} value={camera.id}>
+                      {camera.code} · {camera.name} (v{camera.configurationVersion})
+                    </option>
+                  ))}
               </select>
+              <ZoneMetadataPaging query={cameras} kind="cameras" />
             </div>
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
-                {tr('common.region_zone')}
-              </label>
-              <select
-                value={selectedRegionId}
-                onChange={(e) => {
-                  const regionId = e.target.value;
-                  activeScopeRef.current = {
-                    userId: session.user.id,
-                    siteId: selectedSiteId,
-                    cameraId: selectedCameraId,
-                    regionId,
-                  };
-                  clearTransientFeedback();
-                  setRequestedRegionId(regionId);
-                }}
-                disabled={regions.isPending || selectableRegions.length === 0}
-                className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
-              >
-                {selectableRegions.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {tr('restricted_zone_view.region_value_vvalue_value', {
-                      value1: region.id.slice(0, 8),
-                      value2: region.version,
-                      value3: region.isActive ? tr('common.active_bdecc2') : '',
-                    })}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isGlobalAdmin ? (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label
+                    htmlFor="zone-region-geometry-select"
+                    className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
+                    title={t('restrictedZone.regionSelect.labelTitle')}
+                  >
+                    {t('restrictedZone.regionSelect.label')}
+                  </label>
+                  <span
+                    className="text-[9px] text-[#8C8C8C] font-normal"
+                    title={t('restrictedZone.regionSelect.editTargetTitle')}
+                  >
+                    {t('restrictedZone.regionSelect.editTarget')}
+                  </span>
+                </div>
+                <select
+                  id="zone-region-geometry-select"
+                  aria-label={t('restrictedZone.regionSelect.label')}
+                  title={t('restrictedZone.regionSelect.selectTitle')}
+                  value={selectedRegionId}
+                  onChange={(e) => {
+                    const regionId = e.target.value;
+                    activeScopeRef.current = {
+                      userId: effectiveUser.id,
+                      siteId: selectedSiteId,
+                      cameraId: selectedCameraId,
+                      regionId,
+                    };
+                    clearTransientFeedback();
+                    setRequestedRegionId(regionId);
+                  }}
+                  disabled={regions.isPending || selectableRegions.length === 0}
+                  className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
+                >
+                  {selectableRegions.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {tr('restricted_zone_view.region_value_vvalue_value', {
+                        value1: region.id.slice(0, 8),
+                        value2: region.version,
+                        value3: region.isActive ? tr('common.active_bdecc2') : '',
+                      })}
+                    </option>
+                  ))}
+                </select>
+                <ZoneMetadataPaging query={regions} kind="regions" />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
+                  {t('restrictedZone.scope.zoneScopeLabel')}
+                </label>
+                <div
+                  className="w-full rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-2.5 py-1.5 text-xs font-medium text-[#6B6B6B]"
+                  title={t('restrictedZone.scope.readOnlyTitle')}
+                >
+                  {t('restrictedZone.scope.readOnlyValue')}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-2 pt-1 sm:pt-0">
-              {isDraftMode ? (
-                <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                  {tr('common.unsaved_local_draft')}
-                </span>
+              {isGlobalAdmin ? (
+                isDraftMode ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    {tr('common.unsaved_local_draft')}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    {tr('common.server_synced_vvalue', {
+                      value1: selectedCamera?.configurationVersion ?? 0,
+                    })}
+                  </span>
+                )
               ) : (
-                <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  {tr('common.server_synced_vvalue', {
-                    value1: selectedCamera?.configurationVersion ?? 0,
-                  })}
+                <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                  {t('restrictedZone.scope.safetyOfficerBadge')}
                 </span>
               )}
             </div>
@@ -932,7 +1396,7 @@ export function RestrictedZoneView({
       )}
 
       {/* Stale Draft Warning Banner */}
-      {staleDraftInfo && (
+      {isGlobalAdmin && staleDraftInfo && (
         <div
           role="alert"
           className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
@@ -970,7 +1434,7 @@ export function RestrictedZoneView({
       )}
 
       {/* HTTP 409 Conflict Banner */}
-      {conflictMessage && (
+      {isGlobalAdmin && conflictMessage && (
         <div
           role="alert"
           className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
@@ -981,7 +1445,7 @@ export function RestrictedZoneView({
               <h4 className="text-xs font-bold uppercase tracking-wider text-red-800">
                 {tr('restricted_zone_view.configuration_version_conflict_http_409')}
               </h4>
-              <p className="mt-0.5 text-xs text-red-700">{conflictMessage}</p>
+              <p className="mt-0.5 text-xs text-red-700">{localizeMessage(conflictMessage)}</p>
             </div>
           </div>
           <button
@@ -1001,52 +1465,81 @@ export function RestrictedZoneView({
           ref={containerRef}
           className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none"
         >
-          {/* Local MF05 test fixture driven by the video timeline. */}
           <div className="absolute inset-0">
-            <video
-              ref={videoRef}
-              src="/assets/hazard_restricted_zone_test.mp4"
-              poster="/assets/crane-camera-view.png"
-              autoPlay
-              muted={isMuted}
-              loop
-              playsInline
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onLoadedMetadata={(event) => {
-                const video = event.currentTarget;
-                updateVideoTimeline(video);
-                if (video.videoWidth > 0 && video.videoHeight > 0) {
-                  setVideoNaturalSize({ width: video.videoWidth, height: video.videoHeight });
-                }
-              }}
-              onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
-              aria-label={tr('common.restricted_zone_test_video')}
-              className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
-            />
-
-            {preview && <RealtimePreviewCanvas preview={preview} mode="zone" />}
+            {isAiWorkPaused ? (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-[#041D2E] text-slate-300 p-6 text-center select-none">
+                <IconAlertTriangle className="w-8 h-8 text-amber-400 mb-2" />
+                <p className="text-xs font-bold text-slate-100">{t('ppe.viewport.pausedTitle')}</p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-md">
+                  {t('ppe.viewport.pausedDesc')}
+                </p>
+              </div>
+            ) : preview ? (
+              <RealtimePreviewCanvas preview={preview} mode="zone" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-[#041D2E] text-slate-400 p-6 text-center select-none">
+                {scopedPreview.status === 'CONNECTING' ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-[#F66B17] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs font-semibold text-slate-300">
+                      {t('restrictedZone.viewport.connectingTitle')}
+                    </p>
+                  </div>
+                ) : socketError ? (
+                  <div className="flex flex-col items-center gap-2 max-w-sm">
+                    <IconAlertTriangle className="w-8 h-8 text-amber-500" />
+                    <p className="text-xs font-bold text-slate-200">
+                      {t('ppe.viewport.snapshotUnavailableTitle')}
+                    </p>
+                    <p className="text-[11px] text-slate-400">{socketError}</p>
+                  </div>
+                ) : !selectedCameraId ? (
+                  <p className="text-xs text-slate-400">
+                    {t('restrictedZone.viewport.noCameraSelected')}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    {t('ppe.viewport.snapshotUnavailableTitle')}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* AI Status Badge */}
             <div
-              className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm ${
+              title={
+                isAiWorkPaused
+                  ? t('ppe.badge.aiPaused')
+                  : scopedPreview.status === 'LIVE'
+                    ? t('restrictedZone.badge.liveSnapshot1s')
+                    : scopedPreview.status === 'REPLAY'
+                      ? t('restrictedZone.badge.replaySnapshot1s')
+                      : scopedPreview.status === 'UNAVAILABLE'
+                        ? t('restrictedZone.badge.snapshotUnavailable')
+                        : t('restrictedZone.badge.cameraOffline')
+              }
+              className={`absolute top-14 left-1/2 -translate-x-1/2 max-w-[85%] truncate px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm z-20 pointer-events-none text-center ${
                 testDetection?.active
                   ? 'bg-[#DF2225]/90 text-white'
                   : 'bg-slate-900/75 text-white/80'
               }`}
             >
-              {isLive
-                ? tr('common.mf05_ai_realtime')
-                : aiTimeline
-                  ? tr('common.mf05_ai_pipeline')
-                  : tr('restricted_zone_view.mf05_ai_output_required')}{' '}
+              {isAiWorkPaused
+                ? t('ppe.badge.aiPaused')
+                : scopedPreview.status === 'LIVE'
+                  ? t('restrictedZone.badge.liveSnapshot1s')
+                  : scopedPreview.status === 'REPLAY'
+                    ? t('restrictedZone.badge.replaySnapshot1s')
+                    : scopedPreview.status === 'UNAVAILABLE'
+                      ? t('restrictedZone.badge.snapshotUnavailable')
+                      : t('restrictedZone.badge.cameraOffline')}{' '}
               ·{' '}
               {testDetection
                 ? testDetection.active
-                  ? tr('common.zone_entry')
-                  : tr('labels.SCANNING')
-                : tr('common.no_targets')}{' '}
-              · {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
+                  ? t('restrictedZone.badge.zoneEntry')
+                  : t('restrictedZone.badge.scanning')
+                : t('ppe.badge.resultNoTargets')}{' '}
+              · {isLive ? clockTime : '--:--'}
             </div>
 
             {/* Horizontal scanning line */}
@@ -1057,22 +1550,14 @@ export function RestrictedZoneView({
               className="absolute inset-0 w-full h-full"
               viewBox="0 0 1 1"
               preserveAspectRatio="none"
-              onPointerMove={
-                isEditingZone &&
-                (!preview || selectedCamera?.externalId === preview.frame.cameraExternalId)
-                  ? updateZonePoint
-                  : undefined
-              }
+              onPointerMove={canEditGeometry ? updateZonePoint : undefined}
               onPointerUp={() => {
                 activeZonePoint.current = null;
               }}
               aria-label={tr('common.restricted_zone_editor')}
               style={{
                 visibility:
-                  isLive &&
-                  (!isEditingZone || selectedCamera?.externalId !== preview?.frame.cameraExternalId)
-                    ? 'hidden'
-                    : 'visible',
+                  isEditingZone && canEditGeometry ? 'visible' : preview ? 'hidden' : 'visible',
               }}
             >
               <polygon
@@ -1097,6 +1582,7 @@ export function RestrictedZoneView({
                 {tr('common.no_entry_zone')}
               </text>
               {isEditingZone &&
+                canEditGeometry &&
                 displayPolygon.map(([x, y], index) => (
                   <circle
                     key={`zone-point-${index}`}
@@ -1120,21 +1606,23 @@ export function RestrictedZoneView({
 
             <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
               <div className="flex items-center gap-2">
-                {!isEditingZone ? (
+                {!isGlobalAdmin && effectiveUser ? (
+                  <span className="rounded bg-slate-900/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-slate-300 backdrop-blur-sm border border-slate-700">
+                    {t('restrictedZone.controls.safetyOfficerReadOnlyBadge')}
+                  </span>
+                ) : !isEditingZone ? (
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsEditingZone(true)}
-                      disabled={
-                        isLive && selectedCamera?.externalId !== preview?.frame.cameraExternalId
-                      }
+                      disabled={isAiWorkPaused || (effectiveUser ? !canEditGeometry : false)}
                       title={
-                        isLive
-                          ? tr(
-                              'restricted_zone_view.select_the_matching_backend_camera_before_editing_this_preview',
-                            )
+                        effectiveUser && !canEditGeometry
+                          ? scopedPreview.status !== 'LIVE'
+                            ? t('restrictedZone.controls.editDisabledNotLive')
+                            : t('restrictedZone.controls.editDisabledMismatch')
                           : tr('common.edit_zone_draft')
                       }
-                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
+                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {tr('common.edit_zone_8924f0')}
                     </button>
@@ -1146,10 +1634,10 @@ export function RestrictedZoneView({
                   </div>
                 ) : (
                   <>
-                    {session && selectedCamera && selectedRegion ? (
+                    {effectiveUser && selectedCamera && selectedRegion ? (
                       <button
                         onClick={handleSaveToBackend}
-                        disabled={savePolygonMutation.isPending}
+                        disabled={savePolygonMutation.isPending || !canEditGeometry}
                         className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
                       >
                         {savePolygonMutation.isPending
@@ -1159,7 +1647,8 @@ export function RestrictedZoneView({
                     ) : null}
                     <button
                       onClick={saveDraft}
-                      className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 cursor-pointer"
+                      disabled={effectiveUser ? !canEditGeometry : false}
+                      className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 disabled:opacity-60 cursor-pointer"
                     >
                       {tr('common.save_local_draft')}
                     </button>
@@ -1167,9 +1656,9 @@ export function RestrictedZoneView({
                       onClick={resetToAuthoritative}
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
-                      {session && selectedRegion
+                      {effectiveUser && selectedRegion
                         ? tr('common.reset_to_server')
-                        : tr('labels.RESET')}
+                        : t('restrictedZone.controls.resetBtn')}
                     </button>
                     <button
                       onClick={exportZone}
@@ -1182,118 +1671,98 @@ export function RestrictedZoneView({
               </div>
               {saveStatusMessage && (
                 <div className="rounded bg-black/75 px-2.5 py-1 text-[10px] font-medium text-amber-200 backdrop-blur-sm border border-amber-500/30">
-                  {localizeMessage(saveStatusMessage)}
+                  {presentZoneMessage(saveStatusMessage, t)}
                 </div>
               )}
             </div>
 
-            {/* Render one bounding box per active zone-entry track */}
-            {!isLive &&
-              activeZoneDetections.map((detection) =>
-                detection.boundingBox ? (
-                  <div
-                    key={`${detection.eventId}-${detection.trackId}`}
-                    className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
-                    style={{
-                      left: `${detection.boundingBox.x1 * 100}%`,
-                      top: `${detection.boundingBox.y1 * 100}%`,
-                      width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
-                      height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
-                    }}
-                  >
-                    <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                      {tr('ppe_monitoring_view.value_track_value', {
-                        value1: detection.label,
-                        value2: detection.trackId,
-                      })}
-                    </div>
-                  </div>
-                ) : null,
-              )}
-
             {/* Empty live frame indicator */}
             {isLive && zoneDetections.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold">
-                  {tr('restricted_zone_view.live_feed_connected_no_restricted_zone_intrusions')}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold text-center max-w-md">
+                  {scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                    ? t('restrictedZone.viewport.emptyFrameReplay')
+                    : t('restrictedZone.viewport.emptyFrameLive')}
                 </div>
               </div>
             )}
           </div>
 
           {/* Top Header Overlay */}
-          <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white">
-            <div className="flex flex-col gap-0.5">
-              <span className="font-bold text-sm tracking-wide text-white drop-shadow-md">
+          <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white pointer-events-none">
+            <div className="flex flex-col gap-0.5 max-w-[70%] sm:max-w-[75%] min-w-0 pr-2">
+              <span
+                title={activeCameraContext.camera}
+                className="font-bold text-sm tracking-wide text-white drop-shadow-md truncate"
+              >
                 {activeCameraContext.camera}
               </span>
-              <span className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md">
+              <span
+                title={activeCameraContext.workArea}
+                className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md truncate"
+              >
                 {activeCameraContext.workArea}
               </span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm">
+            <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm flex-shrink-0">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isLive && socketConnected
-                    ? 'bg-[#DF2225] animate-ping'
-                    : socketError
-                      ? 'bg-amber-400'
-                      : 'bg-slate-400'
+                  isAiWorkPaused
+                    ? 'bg-amber-400'
+                    : scopedPreview.status === 'LIVE'
+                      ? 'bg-[#DF2225] animate-ping'
+                      : scopedPreview.status === 'REPLAY'
+                        ? 'bg-blue-400'
+                        : socketError
+                          ? 'bg-amber-400'
+                          : 'bg-slate-400'
                 }`}
               />
               <span className="font-mono text-[10px] font-bold text-white tracking-wider">
-                {isLive && socketConnected
-                  ? tr('common.live_value', { value1: clockTime })
-                  : socketError
-                    ? tr('common.offline_socket_error')
-                    : tr('common.timeline_value', { value1: testDetection?.timecode ?? '00:00' })}
+                {isAiWorkPaused
+                  ? t('ppe.header.status.paused')
+                  : scopedPreview.status === 'LIVE'
+                    ? t('restrictedZone.headerOverlay.liveSnapshotTime', { time: clockTime })
+                    : scopedPreview.status === 'REPLAY'
+                      ? t('restrictedZone.headerOverlay.replaySnapshotTime', { time: clockTime })
+                      : socketError
+                        ? t('restrictedZone.headerOverlay.snapshotUnavailable')
+                        : t('restrictedZone.headerOverlay.offline')}
               </span>
             </div>
           </div>
 
-          {/* Socket error message banner if present */}
+          {/* Snapshot error message banner if present */}
           {socketError && (
-            <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center gap-2 backdrop-blur-sm">
-              <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
-              <span className="truncate">
-                {tr('common.ai_websocket_value', { value1: socketError })}
-              </span>
+            <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center justify-between gap-2 backdrop-blur-sm">
+              <div className="flex items-center gap-2 truncate">
+                <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+                <span className="truncate">
+                  {t('restrictedZone.errorBanner.cameraSnapshotPrefix', { error: socketError })}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={scopedPreview.retry}
+                className="text-[10px] font-bold underline hover:text-white cursor-pointer flex-shrink-0"
+              >
+                {t('mf06.detail.retry')}
+              </button>
             </div>
           )}
 
           {/* Bottom Camera Controls Bar Overlay */}
           <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={togglePlayback}
-                disabled={isLive}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                aria-label={isPlaying ? tr('common.pause_playback') : tr('common.resume_playback')}
-                title={
-                  isLive
-                    ? tr('ppe_monitoring_view.playback_controls_apply_to_timeline_replay_only')
-                    : isPlaying
-                      ? tr('common.pause')
-                      : tr('common.play')
-                }
-              >
-                {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={toggleMuted}
-                disabled={isLive}
-                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                aria-label={isMuted ? tr('common.unmute_audio') : tr('common.mute_audio')}
-                title={
-                  isLive
-                    ? tr('ppe_monitoring_view.realtime_preview_has_no_audio')
-                    : tr('common.sound')
-                }
-              >
-                <IconVolume className="w-4 h-4" />
-              </button>
+              <span className="text-[11px] text-white/70 font-medium">
+                {isAiWorkPaused
+                  ? t('ppe.toolbar.captionPaused')
+                  : scopedPreview.status === 'LIVE'
+                    ? t('restrictedZone.toolbar.liveSnapshot1s')
+                    : scopedPreview.status === 'REPLAY'
+                      ? t('restrictedZone.toolbar.replaySnapshot1s')
+                      : t('restrictedZone.toolbar.cameraOffline')}
+              </span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -1308,7 +1777,7 @@ export function RestrictedZoneView({
               </button>
               <button
                 type="button"
-                onClick={() => void videoRef.current?.requestFullscreen()}
+                onClick={() => void containerRef.current?.requestFullscreen()}
                 className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
                 title={tr('common.fullscreen')}
                 aria-label={tr('common.enter_fullscreen')}
@@ -1320,8 +1789,8 @@ export function RestrictedZoneView({
         </div>
 
         {/* Right: Sidebar Verification Card (355px) */}
-        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto min-w-0">
-          <div className="p-6 space-y-6">
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] flex flex-col h-[600px] xl:h-[466px] min-w-0 overflow-hidden">
+          <div className="flex-1 p-4 sm:p-5 space-y-4 overflow-y-auto min-h-0">
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2 min-w-0">
               <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
@@ -1463,7 +1932,7 @@ export function RestrictedZoneView({
                       ? tr('common.zone_entry_observation')
                       : zoneDetections.length === 0
                         ? tr('ppe_monitoring_view.clear_no_targets')
-                        : tr('common.scanning_video')}
+                        : t('ppe.result.scanningSnapshot')}
                   </span>
                 </div>
                 <p className="text-xs text-[#6B6B6B]">
@@ -1472,17 +1941,17 @@ export function RestrictedZoneView({
                         'restricted_zone_view.technical_zone_entry_observation_backend_decides_authorization_and_violation',
                       )
                     : isLive
-                      ? tr('ppe_monitoring_view.streaming_live_inference_from_ai_websocket')
-                      : tr(
-                          'restricted_zone_view.generate_zone_ai_timeline_json_then_play_the_matching_video',
-                        )}
+                      ? scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                        ? t('ppe.result.descStreamingReplay')
+                        : t('ppe.result.descStreamingLive')
+                      : t('ppe.result.descSnapshotOffline')}
                 </p>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="p-6 pt-0 space-y-2">
+          <div className="p-4 pt-3 border-t border-[#EAEAEA] bg-[#FBFBFA] space-y-2 flex-shrink-0">
             <button
               onClick={openReviewFromDetection}
               disabled={!testDetection?.active}
@@ -1524,21 +1993,36 @@ export function RestrictedZoneView({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                      ? 'bg-amber-500'
+                      : 'bg-[#DF2225] animate-ping'
+                  }`}
+                />
                 <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
-                  {tr('restricted_zone_view.live_zone_observations_active')}
+                  {scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                    ? t('restrictedZone.observations.replayHeading')
+                    : tr('restricted_zone_view.live_zone_observations_active')}
                 </h3>
               </div>
               <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-                {tr(
-                  'restricted_zone_view.technical_zone_entry_detections_are_rendered_directly_on_the_live_camera_feed_abov',
-                )}
+                {scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                  ? t('restrictedZone.observations.replayDesc')
+                  : tr(
+                      'restricted_zone_view.technical_zone_entry_detections_are_rendered_directly_on_the_live_camera_feed_abov',
+                    )}
               </p>
             </div>
             {onNavigate && (
               <button
                 type="button"
-                onClick={() => onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })}
+                onClick={() =>
+                  onNavigate('incidents', {
+                    alertType: 'RESTRICTED_ZONE_INTRUSION',
+                    ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
+                  })
+                }
                 className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
               >
                 {tr('ppe_monitoring_view.view_in_safety_alerts')}
@@ -1554,14 +2038,9 @@ export function RestrictedZoneView({
                 {tr('common.zone_replay_observations')}
               </h3>
               <p className="text-xs text-[#6B6B6B] mt-1">
-                {tr(
-                  'ppe_monitoring_view.observations_from_the_sample_video_timeline_live_safety_alerts_are_available_in_sa',
-                  {
-                    value1:
-                      activeFilterWorker !== null &&
-                      tr('messages.becfe40eedac', { value1: activeFilterWorker }),
-                  },
-                )}
+                {t('restrictedZone.table.subtitle')}
+                {activeFilterWorker !== null &&
+                  tr('messages.becfe40eedac', { value1: activeFilterWorker })}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1569,7 +2048,10 @@ export function RestrictedZoneView({
                 <button
                   type="button"
                   onClick={() =>
-                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })
+                    onNavigate('incidents', {
+                      alertType: 'RESTRICTED_ZONE_INTRUSION',
+                      ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
+                    })
                   }
                   className="px-2.5 py-1.5 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer"
                 >
@@ -1623,12 +2105,14 @@ export function RestrictedZoneView({
                 {displayedEvents.map((evt) => (
                   <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
                     <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
-                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">
+                      {localizeMessage(evt.person)}
+                    </td>
                     <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
                     <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
-                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{localizedLabel(evt.identity)}</td>
                     <td className="py-3 px-3 text-[#6B6B6B]">
-                      {localizedLabel(evt.authorization)}
+                      {presentZoneLabel(evt.authorization, t)}
                     </td>
                     <td className="py-3 px-3">
                       <span
@@ -1640,7 +2124,7 @@ export function RestrictedZoneView({
                               : 'bg-amber-50 text-amber-600'
                         }`}
                       >
-                        {localizedLabel(evt.result)}
+                        {presentZoneLabel(evt.result, t)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
@@ -1666,38 +2150,48 @@ export function RestrictedZoneView({
         </div>
       )}
 
+      {/* Historical MF06 Zone Assessments and Request Status */}
+      {isSiteMetadataSettled && (
+        <Mf06ZoneAssessmentPanel
+          token={apiToken}
+          siteId={selectedSiteId}
+          credentialId={`${sessionScope}:${metadataCredential}`}
+          apiUrl={apiUrl}
+          client={client}
+          onUnauthorized={handleHistoryUnauthorized}
+        />
+      )}
+
       {/* Incident Review Modal with Bound Data */}
-      {selectedIncident && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-mono uppercase tracking-wider">
-                  {selectedIncident.id}
-                </span>
-                <h3 className="font-bold text-[#2F3437]">{tr('common.review_action')}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedIncident(null)}
-                aria-label={tr('common.close_review_dialog')}
-                className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
-              >
-                <IconX className="w-5 h-5" />
-              </button>
+      <PpeDialog
+        open={Boolean(selectedIncident)}
+        onClose={() => setSelectedIncident(null)}
+        title={tr('common.review_action')}
+      >
+        {selectedIncident && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-mono uppercase tracking-wider">
+                {selectedIncident.id}
+              </span>
+              <span className="text-xs font-medium text-[#6B6B6B]">
+                {t('restrictedZone.reviewModal.previewBadge')}
+              </span>
             </div>
 
             <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
-                {tr('restricted_zone_view.you_are_reviewing_a_restricted_zone_intrusion_at')}{' '}
+                {tr('restricted_zone_view.you_are_reviewing_a_technical_observation_at')}{' '}
                 <strong className="text-[#2F3437]">
                   {selectedIncident.zone} ({selectedIncident.camera})
                 </strong>
-                {tr('restricted_zone_view.ai_detected_worker')}{' '}
-                <strong className="text-[#2F3437]">{selectedIncident.person}</strong>{' '}
+                {tr('restricted_zone_view.ai_reported_a_track_candidate')}{' '}
+                <strong className="text-[#2F3437]">
+                  {localizeMessage(selectedIncident.person)}
+                </strong>{' '}
                 {tr('common.with_status')}{' '}
                 <strong className="text-[#2F3437]">
-                  {localizedLabel(selectedIncident.authorization)}
+                  {presentZoneLabel(selectedIncident.authorization, t)}
                 </strong>
                 .
               </p>
@@ -1720,7 +2214,10 @@ export function RestrictedZoneView({
                   type="button"
                   onClick={() => {
                     setSelectedIncident(null);
-                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' });
+                    onNavigate('incidents', {
+                      alertType: 'RESTRICTED_ZONE_INTRUSION',
+                      ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
+                    });
                   }}
                   className="py-2 px-4 rounded-lg bg-[#DF2225] hover:bg-[#B8191C] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
                 >
@@ -1744,8 +2241,8 @@ export function RestrictedZoneView({
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </PpeDialog>
     </div>
   );
 }

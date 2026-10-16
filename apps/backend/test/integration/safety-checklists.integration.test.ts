@@ -15,7 +15,7 @@ import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
-import source from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
@@ -66,6 +66,8 @@ import {
 } from '../../src/database/entities/index.js';
 const failure = (code: string) => (e: unknown) =>
   e instanceof PublicHttpException && e.publicPayload.code === code;
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const source = isolated.dataSource;
 const id = {
   site: randomUUID(),
   other: randomUUID(),
@@ -97,7 +99,7 @@ const date = '2026-10-12',
 const pdf = Buffer.from('%PDF-1.4\nSynthetic checklist document\n%%EOF\n');
 const file = { buffer: pdf, size: pdf.length, mimetype: 'application/pdf' };
 before(async () => {
-  await source.initialize();
+  await isolated.initialize();
   root = await mkdtemp(join(tmpdir(), 'smartsite-checklist-test-'));
   const sites = new SiteConfigurationService(source),
     workforce = new WorkforceConfigurationService(source),
@@ -302,7 +304,7 @@ before(async () => {
   });
 });
 after(async () => {
-  if (source.isInitialized) await source.destroy();
+  await isolated.dispose();
   if (root) {
     assert.ok(resolve(root).startsWith(resolve(tmpdir()) + sep));
     await rm(root, { recursive: true, force: true });
@@ -515,33 +517,29 @@ test('weekly context normalizes Monday and paginates teams without losing schedu
     teamId: id.oldTeam,
   });
   assert.equal(daily.teams.items[0]!.workWindows!.length, 1);
-  const night = await source
-    .getRepository(ShiftEntity)
-    .save({
-      id: randomUUID(),
-      siteId: id.site,
-      name: 'Overnight',
-      timezone: 'Asia/Ho_Chi_Minh',
-      startsAt: new Date('2026-01-01T15:00:00Z'),
-      endsAt: new Date('2026-01-01T23:00:00Z'),
-      archivedAt: null,
-      breakStartsAt: null,
-      breakEndsAt: null,
-    });
+  const night = await source.getRepository(ShiftEntity).save({
+    id: randomUUID(),
+    siteId: id.site,
+    name: 'Overnight',
+    timezone: 'Asia/Ho_Chi_Minh',
+    startsAt: new Date('2026-01-01T15:00:00Z'),
+    endsAt: new Date('2026-01-01T23:00:00Z'),
+    archivedAt: null,
+    breakStartsAt: null,
+    breakEndsAt: null,
+  });
   const version = await source
     .getRepository(ScheduleVersionEntity)
     .findOneByOrFail({ siteId: id.site, version: 1 });
-  const schedule = await source
-    .getRepository(WorkerScheduleEntity)
-    .save({
-      id: randomUUID(),
-      siteId: id.site,
-      workerId: id.worker,
-      shiftId: night.id,
-      scheduleVersionId: version.id,
-      workDate: '2026-10-15',
-      isActive: true,
-    });
+  const schedule = await source.getRepository(WorkerScheduleEntity).save({
+    id: randomUUID(),
+    siteId: id.site,
+    workerId: id.worker,
+    shiftId: night.id,
+    scheduleVersionId: version.id,
+    workDate: '2026-10-15',
+    isActive: true,
+  });
   try {
     const overnight = await overview.week(await actor(id.safety), id.site, {
       date,

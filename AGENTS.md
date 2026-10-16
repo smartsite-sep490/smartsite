@@ -113,7 +113,9 @@ When persistence or integration behavior changes, also run the relevant PostgreS
 
 - Start from current `main`; do not commit directly to `main`.
 - One issue describes one reviewable behavior with MF/FR/UC references when applicable, scope, acceptance criteria, and affected contracts.
-- Use short-lived branches such as `feat/mf05-ppe-events`, `fix/mf06-stale-geometry`, or `docs/contract-versioning`. Coding agents may use their required prefix.
+- Use short-lived branches such as `feat/mf05-ppe-events`, `fix/mf06-stale-geometry`, or `docs/contract-versioning`. The project owner prohibits the `codex/` prefix.
+- Before starting a new feature slice or finalizing an integration, fetch `origin/main`, record the exact upstream SHA, and integrate the current Main changes into the working feature branch. Preserve uncommitted work first and resolve conflicts explicitly; do not overwrite owner changes or use a blind reset/pull to hide divergence. If fetching fails, report that the upstream state is unverified rather than claiming to use the latest Main.
+- Main owns the login screen. Keep its current UI and authentication flow when integrating MF05/MF06; coordinate necessary compatibility fixes and regression tests instead of maintaining a separate login redesign without the owner's approval.
 - One person owns a branch. Other members contribute through review or explicitly coordinated commits; never share an uncoordinated working tree.
 - Keep a PR focused. Do not combine dependency upgrades, formatting sweeps, refactors, and product behavior unless inseparable.
 - Use Conventional Commit-style messages. Explain behavior, migration/deployment order, security impact, and verification in the PR.
@@ -146,6 +148,8 @@ A change is done only when all applicable statements are true:
 
 ## 11. Coding-agent rules
 
+- For the owner's current MF05/MF06 coordination, assign Agy only Frontend/UI/UX work. Backend/API/database/security review and integration fixes stay with Root or the explicitly assigned Backend owner. Do not delegate Backend/database work or read-only review to Agy without a new direct instruction. Tuấn's assigned Backend and MF08 implementation ownership remains intact.
+
 - Read this entire file before editing. If the AI tool does not automatically load `AGENTS.md`, attach or paste it into the task context.
 - Inspect code and tests; do not guess file names, APIs, package versions, or completed behavior.
 - Follow existing conventions unless the issue explicitly changes them.
@@ -153,3 +157,12 @@ A change is done only when all applicable statements are true:
 - Do not suppress type, lint, migration, or test errors merely to obtain a green check.
 - Do not report completion from code inspection alone. Run the required commands and cite the actual results.
 - AI output always requires human review. Never provide production credentials or unrestricted personal/site data to a coding assistant.
+
+## 12. Feature-sized tasks, context and file size
+
+- Follow [Feature task workflow](docs/planning/feature-context-workflow.md). Start from one feature pack and one task brief; do not load the whole project ledger or inherit an entire long conversation into a worker.
+- New or substantially rewritten handwritten code targets at most 300 physical lines per file. Above 500 lines, split by responsibility or record a reviewed exception with a reason, owner and follow-up. Tests target 400 lines, with the same exception process above 700. Do not compress formatting or remove tests to satisfy a count.
+- Existing oversized files are grandfathered, not automatically accepted for further growth. A change that grows one needs a scoped exception or a justified extraction. Generated code, immutable migration history, vendored contracts and provenance-checked frozen fixtures are counted separately; never rewrite them just for size.
+- New feature documents target 150 lines and must stay within 250 unless a specific audit/spec exception is recorded. Link to canonical contracts, decisions and evidence instead of duplicating histories.
+- Aim for at least 80% of implementation/review tasks to finish below 100,000 context tokens. Give fresh workers only the bounded brief and required references. Target 60,000; checkpoint and hand off before 80,000 when actual usage is available. This is an operational target, not a guarantee or an enforced token limit.
+- If token telemetry is unavailable, label usage unknown. Do not present file size, a token estimate, process memory or a short prompt as measured context usage. Record worker type and actual task evidence, not invented Agy activity.

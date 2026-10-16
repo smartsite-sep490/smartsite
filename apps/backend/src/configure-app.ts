@@ -12,6 +12,7 @@ import {
   normalizeBodyParserError,
 } from './common/http/http-exception.filter.js';
 import { installRequestLogging } from './observability/logger.js';
+import { BoundedExpressAdapter } from './common/http/bounded-express-adapter.js';
 import {
   PublicHttpException,
   type PublicValidationIssue,
@@ -51,6 +52,24 @@ export async function configureApplication(app: NestExpressApplication): Promise
     exposedHeaders: ['X-Request-Id', 'Retry-After'],
     credentials: true,
   });
+  const shutdownAdapter = app.getHttpAdapter();
+  if (shutdownAdapter instanceof BoundedExpressAdapter) {
+    const filter = app.get(HttpExceptionFilter);
+    // Preserve correlation/Helmet/CORS, but reject new work before body parsing/guards/IO.
+    app.use((req: Request, res: Response, next: () => void) => {
+      if (!shutdownAdapter.isDraining) return next();
+      res.setHeader('Connection', 'close');
+      res.setHeader('Cache-Control', 'no-store');
+      filter.reply(
+        new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Service unavailable',
+        }),
+        req,
+        res,
+      );
+    });
+  }
   app.useBodyParser('json', { limit: '1mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '1mb' });
   app.use(normalizeBodyParserError);

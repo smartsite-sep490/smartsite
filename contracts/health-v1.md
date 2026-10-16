@@ -6,6 +6,7 @@ This contract describes connectivity checks. Authenticated Backend–AI observat
 
 - `GET /api/v1/health/live`: HTTP 200, JSON `{"status":"ok","service":"smartsite-backend"}`. Process liveness only; no database/model readiness assertion.
 - `GET /api/v1/health/ready`: HTTP 200, JSON `{"status":"ok","service":"smartsite-backend","database":"up"}` if the bounded database check succeeds. HTTP 503 otherwise, using the public error envelope below. No connection string or internal database errors appear in the response.
+- The database check reads migration history from the initialized TypeORM driver's exact schema. Every migration required by the running release must have one matching name/timestamp record; missing/inaccessible history or pending migrations returns the same `503 DATABASE_UNAVAILABLE` envelope. `database: down` includes a reachable database whose release schema is not ready. The probe never creates history tables or runs migrations. Additional recorded migrations are tolerated for a coordinated mixed-version rollout; this is not a schema-drift, SQL-checksum or rollback-compatibility audit.
 - Both health routes are exempt from the in-memory rate limiter. This is process/database readiness, not detector, identity or authorization readiness.
 - Development API docs: `/api/docs`; UI and schema are disabled in test and production. Service-token-protected AI ingestion exists; end-user authentication and its domain APIs are still pending.
 

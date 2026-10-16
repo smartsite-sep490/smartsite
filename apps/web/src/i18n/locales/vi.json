@@ -3002,5 +3002,15 @@
   "auth.password.show": "Hiện mật khẩu",
   "auth.password.hide": "Ẩn mật khẩu",
   "auth.session.restore": "Chưa thể khôi phục phiên đăng nhập. Kiểm tra kết nối và thử lại.",
-  "auth.session.logoutWarning": "Đã đăng xuất trên trình duyệt này. Chưa xác nhận được việc thu hồi phiên trên máy chủ."
+  "auth.session.logoutWarning": "Đã đăng xuất trên trình duyệt này. Chưa xác nhận được việc thu hồi phiên trên máy chủ.",
+  "app.profile_recovery.forbidden": "Tài khoản này không có quyền xem hồ sơ hiện tại. Hãy đăng xuất và đăng nhập bằng tài khoản có quyền.",
+  "app.profile_recovery.network": "Không thể kết nối dịch vụ đăng nhập. Hãy kiểm tra kết nối và thử lại.",
+  "app.profile_recovery.timeout": "Đã hết thời gian tải hồ sơ. Vui lòng thử lại.",
+  "app.profile_recovery.unavailable": "Dịch vụ đăng nhập tạm thời không khả dụng. Vui lòng thử lại.",
+  "app.profile_recovery.invalid_response": "Dịch vụ đăng nhập trả về hồ sơ không hợp lệ. Vui lòng thử lại.",
+  "app.profile_recovery.default": "Không thể tải hồ sơ của bạn. Vui lòng thử lại.",
+  "app.profile_recovery.retrying": "Đang thử lại…",
+  "app.safety_full_account_required": "Cần thông tin tài khoản đầy đủ để tiếp tục quy trình này. Hãy tải lại tài khoản hoặc đăng nhập lại.",
+  "restricted_zone_view.you_are_reviewing_a_technical_observation_at": "Bạn đang xem một quan sát kỹ thuật tại",
+  "restricted_zone_view.ai_reported_a_track_candidate": "AI báo cáo một ứng viên theo dõi"
 }

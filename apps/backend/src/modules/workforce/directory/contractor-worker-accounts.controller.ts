@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs
 import { ApiBearerAuth, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import {
   ContractorWorkerAccountsService,
   CreateContractorWorkerAccountCommand,
@@ -13,7 +14,10 @@ import {
 @UseGuards(UserAuthGuard)
 @Controller()
 export class ContractorWorkerAccountsController {
-  constructor(private readonly accounts: ContractorWorkerAccountsService) {}
+  constructor(
+    private readonly accounts: ContractorWorkerAccountsService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Put('sites/:siteId/contractors/:contractorId/workers/:workerId')
   update(
@@ -23,7 +27,14 @@ export class ContractorWorkerAccountsController {
     @Param('workerId') workerId: string,
     @Body() input: UpdateContractorWorkerCommand,
   ) {
-    return this.accounts.update(request.user!, siteId, contractorId, workerId, input);
+    return this.accounts.update(
+      request.user!,
+      siteId,
+      contractorId,
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
   }
 
   @Get('sites/:siteId/contractor-worker-account-options')
@@ -38,6 +49,11 @@ export class ContractorWorkerAccountsController {
     @Param('contractorId') contractorId: string,
     @Body() input: CreateContractorWorkerAccountCommand,
   ) {
-    return this.accounts.create(request.user!, contractorId, input);
+    return this.accounts.create(
+      request.user!,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
   }
 }

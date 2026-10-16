@@ -5,7 +5,7 @@ beforeLocaleTest(async () => {
 });
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, cleanup, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -195,6 +195,131 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
   let queryClient: QueryClient;
   const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
+  it.each(['unauthorized', 'success'] as const)(
+    'ignores a retired session mutation %s even if transport ignores abort',
+    async (outcome) => {
+      const user = userEvent.setup();
+      const context = createMockContext();
+      context.subjects = [{ ...context.subjects[0]!, canClear: true, clearBlockReason: null }];
+      let resolve!: (value: unknown) => void;
+      let reject!: (error: unknown) => void;
+      let signal: AbortSignal | undefined;
+      const pending = new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      const decide = vi.fn((_t, _s, _a, _e, _p, _c, options) => {
+        signal = options.signal;
+        return pending;
+      });
+      const onUnauthorized = vi.fn();
+      const client = {
+        getObservationIdentityContext: vi.fn().mockResolvedValue(context),
+        listObservationIdentityWorkers: vi.fn().mockResolvedValue(mockWorkersList),
+        listObservationIdentityDecisions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+        decideObservationIdentity: decide,
+      } as unknown as SmartSiteManagementClient;
+      const view = (sessionScope: string, token: string) => (
+        <QueryClientProvider client={queryClient}>
+          <ObservationIdentityReviewPanel
+            client={client}
+            apiUrl="https://api.example"
+            sessionScope={sessionScope}
+            token={token}
+            siteId="00000000-0000-4000-8000-000000000001"
+            alertId="alert-1"
+            detection={createMockDetection()}
+            evidenceIndex={0}
+            evidenceBlob={null}
+            onUnauthorized={onUnauthorized}
+          />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(view('old-session', 'old-token'));
+      await user.click(await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i }));
+      await user.click(screen.getByLabelText(/Thu hồi xác minh \(CLEAR\)/i));
+      await user.type(
+        screen.getByLabelText(/Lý do đánh giá/i),
+        'Synthetic session revocation check',
+      );
+      await user.click(screen.getByRole('button', { name: /Thu hồi xác minh/i }));
+      await waitFor(() => expect(decide).toHaveBeenCalledTimes(1));
+      rerender(view('new-session', 'new-token'));
+      await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
+      expect(signal?.aborted).toBe(true);
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      await act(async () => {
+        if (outcome === 'unauthorized')
+          reject(new ApiError('http', 'Retired session expired', 401));
+        else resolve({ recordedDecision: {}, latestRevision: 1, replayed: false });
+        await pending.catch(() => undefined);
+        await new Promise((done) => setTimeout(done, 0));
+      });
+      expect(onUnauthorized).not.toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(screen.getByRole('tab', { name: /ĐỐI TƯỢNG #0/i })).not.toBeNull();
+      expect(screen.queryByText(/Retired session expired/i)).toBeNull();
+    },
+  );
+
+  it('propagates a manual CLEAR mutation401 to the owning session', async () => {
+    const context = createMockContext();
+    context.subjects = [
+      {
+        ...context.subjects[0]!,
+        canResolve: false,
+        resolveBlockReason: 'FRAME_UNAVAILABLE',
+        canClear: true,
+        clearBlockReason: null,
+        revision: 1,
+        latestManualDecision: {
+          id: '00000000-0000-4000-8000-000000000555',
+          revision: 1,
+          action: 'RESOLVE',
+          workerId: '00000000-0000-4000-8000-000000000777',
+          actorUserId: '00000000-0000-4000-8000-000000000888',
+          reason: 'Prior synthetic review',
+          scope: 'EXACT_OBSERVATION',
+          verificationMethod: 'MANUAL',
+          recordedAt: '2026-09-30T10:00:00Z',
+        },
+      },
+    ];
+    const decide = vi.fn().mockRejectedValue(new ApiError('http', 'Review session expired', 401));
+    const onUnauthorized = vi.fn();
+    const mockClient = {
+      getObservationIdentityContext: vi.fn().mockResolvedValue(context),
+      listObservationIdentityWorkers: vi.fn().mockResolvedValue(mockWorkersList),
+      listObservationIdentityDecisions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+      decideObservationIdentity: decide,
+    } as unknown as SmartSiteManagementClient;
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ObservationIdentityReviewPanel
+          client={mockClient}
+          apiUrl="https://api.example"
+          sessionScope="clear-401-session"
+          token="synthetic-token"
+          siteId="00000000-0000-4000-8000-000000000001"
+          alertId="00000000-0000-4000-8000-000000000002"
+          detection={createMockDetection()}
+          evidenceIndex={null}
+          evidenceBlob={null}
+          onUnauthorized={onUnauthorized}
+        />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i }));
+    await user.click(screen.getByLabelText(/Thu hồi xác minh \(CLEAR\)/i));
+    await user.type(screen.getByLabelText(/Lý do đánh giá/i), 'Clear prior synthetic review');
+    await user.click(screen.getByRole('button', { name: /Thu hồi xác minh/i }));
+    await waitFor(() => expect(onUnauthorized).toHaveBeenCalled());
+    // One response must notify its session owner exactly once.
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(decide).toHaveBeenCalledTimes(1);
+  });
+
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -231,6 +356,41 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+
+  it.each(['workers', 'history'])(
+    'propagates a selected PERSON %s query401 to the owning session',
+    async (source) => {
+      const denied = vi.fn().mockRejectedValue(new ApiError('http', 'Child session expired', 401));
+      const onUnauthorized = vi.fn();
+      const mockClient = {
+        getObservationIdentityContext: vi.fn().mockResolvedValue(createMockContext()),
+        listObservationIdentityWorkers:
+          source === 'workers' ? denied : vi.fn().mockResolvedValue(mockWorkersList),
+        listObservationIdentityDecisions:
+          source === 'history' ? denied : vi.fn().mockResolvedValue({ items: [], total: 0 }),
+        decideObservationIdentity: vi.fn(),
+      } as unknown as SmartSiteManagementClient;
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ObservationIdentityReviewPanel
+            client={mockClient}
+            apiUrl="https://api.example"
+            sessionScope="session-401"
+            token="synthetic-token"
+            siteId="00000000-0000-4000-8000-000000000001"
+            alertId="00000000-0000-4000-8000-000000000002"
+            detection={createMockDetection()}
+            evidenceIndex={null}
+            evidenceBlob={null}
+            onUnauthorized={onUnauthorized}
+          />
+        </QueryClientProvider>,
+      );
+      await userEvent.setup().click(await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i }));
+      await waitFor(() => expect(onUnauthorized).toHaveBeenCalled());
+      expect(denied).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('initially requires explicit selection: no subject auto-selected, no worker query dispatched, prompt visible', async () => {
     const mockContext = createMockContext();

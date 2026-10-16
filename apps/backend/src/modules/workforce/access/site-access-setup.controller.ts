@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/comm
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
+import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.js';
 import {
   SiteAccessSetupService,
   GrantContractorZoneCommand,
@@ -14,43 +16,74 @@ import {
 @UseGuards(UserAuthGuard)
 @Controller('sites/:siteId/access-setup')
 export class SiteAccessSetupController {
-  constructor(private readonly setup: SiteAccessSetupService) {}
+  constructor(
+    private readonly setup: SiteAccessSetupService,
+    private readonly auth: UserAuthGuard,
+    private readonly queries: SiteAccessSetupQueryService,
+  ) {}
   @Post('contractor-zone-permissions/dates') contractorDates(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: GrantContractorZoneDatesCommand,
   ) {
-    return this.setup.grantContractor(req.user!, siteId, input);
+    return this.setup.grantContractor(
+      req.user!,
+      siteId,
+      input,
+      configurationCommandContext(req, this.auth),
+    );
   }
   @Get() options(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string) {
-    return this.setup.options(req.user!, siteId);
+    return this.queries.options(siteId, configurationCommandContext(req, this.auth));
   }
   @Post('contractor-zone-permissions') contractor(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: GrantContractorZoneCommand,
   ) {
-    return this.setup.grantContractor(req.user!, siteId, input);
+    return this.setup.grantContractor(
+      req.user!,
+      siteId,
+      input,
+      configurationCommandContext(req, this.auth),
+    );
   }
   @Post('worker-zone-permissions') worker(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: GrantWorkerZoneCommand,
   ) {
-    return this.setup.grantWorker(req.user!, siteId, input);
+    return this.setup.grantWorker(
+      req.user!,
+      siteId,
+      input,
+      configurationCommandContext(req, this.auth),
+    );
   }
   @Post('contractor-zone-permissions/:id/revoke') revokeContractor(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
   ) {
-    return this.setup.revoke(req.user!, siteId, id, 'contractor');
+    return this.setup.revoke(
+      req.user!,
+      siteId,
+      id,
+      'contractor',
+      configurationCommandContext(req, this.auth),
+    );
   }
   @Post('worker-zone-permissions/:id/revoke') revokeWorker(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('id') id: string,
   ) {
-    return this.setup.revoke(req.user!, siteId, id, 'worker');
+    return this.setup.revoke(
+      req.user!,
+      siteId,
+      id,
+      'worker',
+      configurationCommandContext(req, this.auth),
+    );
   }
 }

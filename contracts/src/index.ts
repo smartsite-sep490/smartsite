@@ -1,4 +1,24 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export {
+  parseCameraPreviewFrame,
+  parseCameraPreviewResponse,
+  EXPERIMENTAL_OBJECT_CLASSES,
+} from './camera-preview.js';
+export type {
+  AccessSetupResponse,
+  GrantContractorZoneCommand,
+  GrantWorkerZoneCommand,
+} from './access-setup-api.js';
+
+export type {
+  CameraPreviewFrame,
+  CameraPreviewDetection,
+  CameraPreviewResponse,
+} from './camera-preview.js';
+
+export { PPE_ITEMS } from './ppe-items.js';
+export type { PpeItem } from './ppe-items.js';
+
 export type * from './attendance-reports-api.js';
 export type {
   AttendanceDayStatus,
@@ -143,6 +163,19 @@ export type {
   ShiftRequestResponse,
   AbsenceRequestResponse,
 } from './management-api.js';
+export type {
+  Mf06AssessmentResponse,
+  Mf06AssessmentPage,
+  Mf06RequestStatusResponse,
+  Mf06RequestStatusPage,
+} from './mf06-assessment-api.js';
+export {
+  parseMf06AssessmentResponse,
+  parseMf06AssessmentPage,
+  parseMf06RequestStatusResponse,
+  parseMf06RequestStatusPage,
+} from './mf06-assessment-api.js';
+
 export * from './safety-workflow-api.js';
 export * from './access-flow-api.js';
 export * from './access-setup-api.js';
@@ -153,3 +186,5 @@ export * from './manager-overview-api.js';
 
 export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
+export * from './camera-observation-zones.js';
+export * from './camera-configuration-image.js';

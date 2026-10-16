@@ -26,6 +26,7 @@ import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-c
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { isEventIdConflict } from '../../src/integrations/ai/typeorm-error.js';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
   if (!dataSource.isInitialized) {
@@ -518,6 +519,18 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
       cameraExternalId,
       observations: [
         {
+          type: 'PERSON',
+          trackId: 201,
+          confidence: 0.95,
+          boundingBox: {
+            x1: 0.15,
+            y1: 0.15,
+            x2: 0.45,
+            y2: 0.85,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
+        {
           type: 'PPE',
           trackId: 201,
           ppeItem: 'HARD_HAT',
@@ -805,5 +818,208 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     const raw = await source.getRepository(AiObservationEventEntity).findOneBy({ eventId });
     assert.ok(raw);
     assert.equal(raw.processingStatus, EventProcessingStatus.PROCESSED);
+  });
+});
+
+test('AiIngestionService: zero or duplicate PERSON on track retains alerts with null identity columns and UNAVAILABLE zone decision in real PostgreSQL', async () => {
+  await withDataSource(async (source) => {
+    const siteRepo = source.getRepository(SiteEntity);
+    const cameraRepo = source.getRepository(CameraEntity);
+    const zoneRepo = source.getRepository(ZoneEntity);
+    const regionRepo = source.getRepository(CameraObservationRegionEntity);
+
+    const contextResolver = new ObservationContextResolverService();
+    const zoneAuth = new ZoneAuthorizationService();
+    const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
+    const groupingService = new DurableGroupingService(
+      createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+    );
+    const service = new AiIngestionService(
+      source,
+      contextResolver,
+      candidateEvaluator,
+      groupingService,
+      createTestConfig(),
+    );
+
+    const cases = [
+      {
+        name: 'zero PERSON on track',
+        trackId: 301,
+        personObservations: [],
+      },
+      {
+        name: 'duplicate PERSON on track',
+        trackId: 401,
+        personObservations: [
+          {
+            type: 'PERSON',
+            trackId: 401,
+            confidence: 0.94,
+            boundingBox: {
+              x1: 0.1,
+              y1: 0.1,
+              x2: 0.4,
+              y2: 0.8,
+              coordinateSpace: 'NORMALIZED_0_1',
+            },
+          },
+          {
+            type: 'PERSON',
+            trackId: 401,
+            confidence: 0.91,
+            boundingBox: {
+              x1: 0.12,
+              y1: 0.12,
+              x2: 0.42,
+              y2: 0.82,
+              coordinateSpace: 'NORMALIZED_0_1',
+            },
+          },
+        ],
+      },
+    ];
+
+    for (const testCase of cases) {
+      const siteId = randomUUID();
+      const cameraId = randomUUID();
+      const zoneId = randomUUID();
+      const regionId = randomUUID();
+      const cameraExternalId = `CAM-PERSON-TABLE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+      await siteRepo.save({
+        id: siteId,
+        code: `SITE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: `Person Table Site (${testCase.name})`,
+      });
+
+      await cameraRepo.save({
+        id: cameraId,
+        siteId,
+        externalId: cameraExternalId,
+        code: cameraExternalId,
+        name: `Person Table Camera (${testCase.name})`,
+        status: CameraStatus.ACTIVE,
+      });
+
+      await zoneRepo.save({
+        id: zoneId,
+        siteId,
+        code: `ZONE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: `Person Table Zone (${testCase.name})`,
+        type: ZoneType.RESTRICTED,
+        restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+        requiredPpe: ['HARD_HAT'],
+      });
+
+      await regionRepo.save({
+        id: regionId,
+        cameraId,
+        zoneId,
+        coordinateSpace: 'NORMALIZED_0_1',
+        version: 1,
+        isActive: true,
+        polygon: { type: 'Polygon', coordinates: [] },
+      });
+
+      const eventId = randomUUID();
+      const candidateWorkerId = 'W'.repeat(64);
+      const payload = createSampleEvent({
+        eventId,
+        cameraExternalId,
+        observations: [
+          ...testCase.personObservations,
+          {
+            type: 'PPE',
+            trackId: testCase.trackId,
+            ppeItem: 'HARD_HAT',
+            status: 'MISSING',
+            regionId,
+            geometryVersion: 1,
+            confidence: 0.95,
+            boundingBox: {
+              x1: 0.1,
+              y1: 0.1,
+              x2: 0.4,
+              y2: 0.8,
+              coordinateSpace: 'NORMALIZED_0_1',
+            },
+          },
+          {
+            type: 'ZONE_ENTRY',
+            trackId: testCase.trackId,
+            regionId,
+            geometryVersion: 1,
+            confidence: 0.92,
+          },
+          {
+            type: 'IDENTITY_CANDIDATE',
+            trackId: testCase.trackId,
+            status: 'CANDIDATE',
+            candidateWorkerId,
+            similarityScore: 0.93,
+            qualityScore: 0.88,
+          },
+        ],
+      });
+
+      const original = structuredClone(payload);
+      const expectedHash = computeCanonicalPayloadHash(original);
+
+      const result = await service.ingestEvent(payload);
+      assert.equal(result.status, EventProcessingStatus.PROCESSED);
+      assert.equal(result.alertIds.length, 2);
+
+      // Assert payload unchanged by ingestion
+      assert.deepEqual(payload, original);
+
+      // Assert alerts include exact PPE_VIOLATION and RESTRICTED_ZONE_INTRUSION types with null identity columns
+      const alerts = await Promise.all(
+        result.alertIds.map((id) =>
+          source.getRepository(SafetyAlertEntity).findOneByOrFail({ id }),
+        ),
+      );
+      assert.equal(alerts.length, 2);
+      const alertTypes = alerts.map((a) => a.alertType).sort();
+      assert.deepEqual(
+        alertTypes,
+        [AlertType.PPE_VIOLATION, AlertType.RESTRICTED_ZONE_INTRUSION].sort(),
+      );
+      assert.deepEqual(alerts.map((alert) => alert.candidateSubtype).sort(), [
+        'PPE_HARD_HAT_MISSING',
+        'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+      ]);
+      for (const alert of alerts) {
+        assert.equal(alert.candidateWorkerId, null);
+        assert.equal(alert.identitySimilarityScore, null);
+        assert.equal(alert.identityQualityScore, null);
+      }
+
+      // Assert mapping alert IDs equal result IDs
+      const mappings = await source
+        .getRepository(AlertDetectionMappingEntity)
+        .find({ where: { eventId } });
+      assert.equal(mappings.length, 2);
+      const mappingAlertIds = mappings.map((m) => m.alertId).sort();
+      const expectedAlertIds = [...result.alertIds].sort();
+      assert.deepEqual(mappingAlertIds, expectedAlertIds);
+
+      // Verify Zone decision recorded as UNAVAILABLE / IDENTITY_UNAVAILABLE
+      const decision = await source
+        .getRepository(ZoneEntryDecisionEntity)
+        .findOneByOrFail({ eventId });
+      assert.equal(decision.status, 'UNAVAILABLE');
+      assert.equal(decision.reasonCode, 'IDENTITY_UNAVAILABLE');
+      assert.equal(decision.candidateWorkerId, null);
+      assert.equal(decision.workerId, null);
+      assert.equal(decision.trackId, testCase.trackId);
+
+      // Assert raw matches original payload and expected canonical hash
+      const raw = await source.getRepository(AiObservationEventEntity).findOneByOrFail({ eventId });
+      assert.equal(raw.processingStatus, EventProcessingStatus.PROCESSED);
+      assert.equal(raw.processingNote, null);
+      assert.equal(raw.payloadHash, expectedHash);
+      assert.deepEqual(raw.rawPayload, original);
+    }
   });
 });

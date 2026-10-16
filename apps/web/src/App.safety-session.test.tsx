@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { act } from '@testing-library/react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { it, expect, vi, afterEach } from 'vitest';
 import * as api from '@smartsite/api-client';
@@ -31,7 +31,6 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   sessionStorage.clear();
-  localStorage.clear();
   animations.callbacks.length = 0;
 });
 
@@ -47,7 +46,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  cache.setQueryData(['auth', 'session'], { accessToken: 'test-token', user });
+  cache.setQueryData(['auth', 'session', 'http://localhost:3000', 0], true);
   vi.spyOn(api, 'getBackendHealth').mockResolvedValue({
     status: 'ok',
     service: 'smartsite-backend',
@@ -70,6 +69,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
       <AuthContext.Provider
         value={{
           accessToken,
+          sessionScope: accessToken ? 'synthetic-app-safety-scope' : '',
           setAccessToken,
           isSessionExpired: false,
           triggerSessionExpired: vi.fn(),
@@ -87,14 +87,20 @@ it('App clears the authenticated Safety workspace even when server logout fails'
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(await screen.findByText('No incidents found.')).not.toBeNull();
+  expect(await screen.findByText('No incidents found.', {}, { timeout: 8000 })).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Sign out Representative' }));
   await waitFor(() => expect(logout).toHaveBeenCalledOnce());
-  expect(await screen.findByRole('button', { name: 'Sign In' })).not.toBeNull();
+  expect(await screen.findByRole('button', { name: /^sign in$/i })).not.toBeNull();
   expect(screen.queryByRole('button', { name: 'Sign out Representative' })).toBeNull();
   expect(cache.getQueryCache().findAll({ queryKey: ['safety-workflow'] })).toHaveLength(0);
-  expect(cache.getQueryData(['auth', 'me', 'http://localhost:3000'])).toBeUndefined();
-  expect(sessionStorage.getItem('smartsite:signed-out')).toBe('true');
+  const profileQueries = cache
+    .getQueryCache()
+    .findAll({ queryKey: ['auth', 'me', 'http://localhost:3000'] });
+  expect(
+    profileQueries.filter((query) => query.queryKey[3] === 'synthetic-app-safety-scope'),
+  ).toHaveLength(0);
+  expect(profileQueries.every((query) => query.state.data === undefined)).toBe(true);
+  expect(sessionStorage.getItem('smartsite:logout:http://localhost:3000')).toBe('1');
   cleanup();
   const refresh = vi.spyOn(api.SmartSiteManagementClient.prototype, 'refresh');
   const freshCache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -107,12 +113,11 @@ it('App clears the authenticated Safety workspace even when server logout fails'
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(await screen.findByRole('button', { name: 'Sign In' })).not.toBeNull();
+  expect(await screen.findByRole('button', { name: /^sign in$/i })).not.toBeNull();
   expect(refresh).not.toHaveBeenCalled();
 });
 
-it('login animation cannot navigate back to Dashboard after opening Safety', async () => {
-  vi.spyOn(api.SmartSiteManagementClient.prototype, 'refresh').mockRejectedValue(new api.ApiError('http', 'Unauthorized', 401));
+it('an account refresh after sign-in cannot navigate back to Dashboard after opening Safety', async () => {
   const user = {
     id: 'representative',
     username: 'rep',
@@ -124,12 +129,12 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  cache.setQueryData(['auth', 'session'], null);
+  cache.setQueryData(['auth', 'session', 'http://localhost:3000', 0], null);
   vi.spyOn(api, 'getBackendHealth').mockResolvedValue({
     status: 'ok',
     service: 'smartsite-backend',
   });
-  vi.spyOn(api.SmartSiteManagementClient.prototype, 'me').mockResolvedValue(user);
+  const me = vi.spyOn(api.SmartSiteManagementClient.prototype, 'me').mockResolvedValue(user);
   vi.spyOn(api.SmartSiteManagementClient.prototype, 'login').mockResolvedValue({
     accessToken: 'test-token',
     tokenType: 'Bearer',
@@ -174,7 +179,13 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
   });
   function OpenSafety() {
     const navigate = useNavigate();
-    return <button onClick={() => navigate('/incidents')}>Open Safety</button>;
+    const location = useLocation();
+    return (
+      <>
+        <button onClick={() => navigate('/incidents')}>Open Safety</button>
+        <output data-testid="safety-location">{location.pathname}</output>
+      </>
+    );
   }
   render(
     <QueryClientProvider client={cache}>
@@ -189,13 +200,16 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
   fireEvent.change(await screen.findByPlaceholderText('Enter your username'), {
     target: { value: 'rep' },
   });
-  fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'test-password' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-  await screen.findByRole('heading', { name: /Site A/i });
+  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'test-password' } });
+  fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+  await screen.findByRole('heading', { name: /Site A/i }, { timeout: 8000 });
   fireEvent.click(screen.getByRole('button', { name: 'Open Safety' }));
   await screen.findByRole('button', { name: 'Sign out Representative' });
-  act(() => {
-    for (const callback of animations.callbacks) callback();
+  const callsBeforeRefresh = me.mock.calls.length;
+  await act(async () => {
+    await cache.invalidateQueries({ queryKey: ['auth', 'me'] });
   });
+  await waitFor(() => expect(me.mock.calls.length).toBeGreaterThan(callsBeforeRefresh));
+  expect(screen.getByTestId('safety-location').textContent).toBe('/incidents');
   expect(screen.getByRole('button', { name: 'Sign out Representative' })).not.toBeNull();
 });

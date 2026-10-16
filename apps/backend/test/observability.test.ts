@@ -133,6 +133,31 @@ test('JSON logging removes credentials and omits body, query, evidence and error
   assert.ok(failure.err.cause);
 });
 
+test('configured JWT signing secret is redacted in free-form and nested log text', () => {
+  const signingSecret = 'SYNTHETIC_SIGNING_SECRET_NOT_A_REAL_KEY_20261009';
+  const lines: string[] = [];
+  const logger = pino(createHttpLoggerOptions(config({ AUTH_JWT_SECRET: signingSecret })), {
+    write: (line) => {
+      lines.push(line);
+    },
+  });
+  logger.info(
+    {
+      eventId: 'safe-signing-secret-regression',
+      context: { note: `Configured value: ${signingSecret}`, nested: [signingSecret] },
+    },
+    `Initialization context ${signingSecret}`,
+  );
+  const output = lines.join('');
+  assert.ok(
+    !output.includes(signingSecret),
+    'Configured signing secret must be omitted from every log string',
+  );
+  assert.match(output, /safe-signing-secret-regression/);
+  assert.match(output, /Initialization context/);
+  assert.match(output, /\[Redacted\]/);
+});
+
 test('one HTTP completion log retains the response request ID and excludes sensitive HTTP data', async (t) => {
   const lines: string[] = [];
   const options = createHttpLoggerOptions(config());

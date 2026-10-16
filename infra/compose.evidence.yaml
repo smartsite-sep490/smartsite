@@ -1,9 +1,13 @@
+# Opt-in local evidence reader for a host camera worker's existing private root.
+# Keep the writer outside this overlay; no camera/model is started here.
 services:
   backend:
     environment:
       EVIDENCE_LOCAL_ROOT: /var/lib/smartsite/evidence
     volumes:
       - type: bind
-        source: ${EVIDENCE_LOCAL_HOST_ROOT:?Set EVIDENCE_LOCAL_HOST_ROOT to the canonical evidence directory}
+        source: ${EVIDENCE_LOCAL_HOST_ROOT:?Set EVIDENCE_LOCAL_HOST_ROOT to the existing private host evidence directory}
         target: /var/lib/smartsite/evidence
         read_only: true
+        bind:
+          create_host_path: false

@@ -23,7 +23,7 @@ import {
   ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
@@ -58,7 +58,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     worker = actor(workerAccountId, UserRole.WORKER);
   const from = new Date(Date.now() - 60_000).toISOString(),
     until = new Date(Date.now() + 3600_000).toISOString();
-  const operations = new ContractorOperationsService(dataSource),
+  const operations = new MainAssignmentCommandService(dataSource),
     setup = new SiteAccessSetupService(dataSource),
     access = new QrAccessService(dataSource),
     attendance = new AttendanceService(dataSource);
@@ -122,32 +122,50 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       configurationLocked: false,
     });
     await assert.rejects(
-      operations.requestAssignment(rep, workerId, {
+      operations.publicRequest(
+        workerId,
+        {
+          siteId,
+          zoneIds: [zoneId],
+          validFrom: from,
+          validUntil: null,
+        },
+        { actorUserId: rep.id },
+      ),
+      /expiry/,
+    );
+    const assignment = await operations.publicRequest(
+      workerId,
+      {
         siteId,
         zoneIds: [zoneId],
         validFrom: from,
-        validUntil: null,
-      }),
-      /expiry/,
+        validUntil: until,
+      },
+      { actorUserId: rep.id },
     );
-    const assignment = await operations.requestAssignment(rep, workerId, {
-      siteId,
-      zoneIds: [zoneId],
-      validFrom: from,
-      validUntil: until,
+    await dataSource.getRepository(UserRoleAssignmentEntity).save({
+      id: randomUUID(),
+      userId: outsiderId,
+      role: UserRole.SITE_MANAGER,
+      siteId: otherSiteId,
     });
     await assert.rejects(
-      operations.siteManagerDecision(
-        actor(managerId, UserRole.SITE_MANAGER, otherSiteId),
+      operations.publicDecision(
         assignment.id,
         { approve: true, expectedVersion: 1 },
+        { actorUserId: outsiderId },
       ),
     );
-    await operations.siteManagerDecision(manager, assignment.id, {
-      approve: true,
-      expectedVersion: 1,
-      reviewNote: 'Validated participation',
-    });
+    await operations.publicDecision(
+      assignment.id,
+      {
+        approve: true,
+        expectedVersion: 1,
+        reviewNote: 'Validated participation',
+      },
+      { actorUserId: manager.id },
+    );
     assert.equal(
       (
         await dataSource
@@ -413,14 +431,22 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     const latestAssignment = await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)
       .findOneByOrFail({ id: assignment.id });
-    await operations.revokeAssignment(manager, assignment.id, {
-      expectedVersion: latestAssignment.version,
-      reviewNote: 'Participation ended',
-    });
-    await operations.revokeAssignment(manager, assignment.id, {
-      expectedVersion: latestAssignment.version,
-      reviewNote: 'Participation ended',
-    });
+    await operations.publicRevoke(
+      assignment.id,
+      {
+        expectedVersion: latestAssignment.version,
+        reviewNote: 'Participation ended',
+      },
+      { actorUserId: manager.id },
+    );
+    await operations.publicRevoke(
+      assignment.id,
+      {
+        expectedVersion: latestAssignment.version,
+        reviewNote: 'Participation ended',
+      },
+      { actorUserId: manager.id },
+    );
     assert.equal(
       (
         await dataSource
