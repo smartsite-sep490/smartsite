@@ -132,7 +132,7 @@ const owned = (extra = {}) => ({
       'DATABASE_URL=postgresql://smartsite_test:private@host.docker.internal:5433/smartsite_test?options=-c%20search_path%3Disolated_test_' +
         'c'.repeat(32),
       'MF06_ENQUEUE_ENABLED=false',
-      'AI_PREVIEW_SOURCES_JSON={}',
+      'SMARTSITE_AI_PREVIEW_SOURCES={}',
     ],
   },
   HostConfig: {
@@ -159,6 +159,13 @@ test('owned target rejects recycled ID, wrong schema, wildcard port and enabled 
     assert.throws(() => verifyOwnedContainer(profile(), receipt, v), /owned load target/i);
   }
   assert.equal(verifyOwnedContainer(profile(), receipt, owned()).containerId, receipt.containerId);
+});
+
+test('owned target checks the actual preview setting, including an old off-looking variable', () => {
+  const state = owned();
+  state.Config.Env[3] = 'SMARTSITE_AI_PREVIEW_SOURCES={"camera":"http://127.0.0.1:8000"}';
+  state.Config.Env.push('AI_PREVIEW_SOURCES_JSON={}');
+  assert.throws(() => verifyOwnedContainer(profile(), receipt, state), /owned load target/i);
 });
 test('latency/error summary cannot pass on all throttled or unsuccessful attempts', () => {
   const samples = [

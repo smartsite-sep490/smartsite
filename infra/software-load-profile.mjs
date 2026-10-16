@@ -157,7 +157,7 @@ export function verifyOwnedContainer(input, receipt, state) {
     db.pathname !== '/smartsite_test' ||
     db.searchParams.get('options') !== `-c search_path=${receipt.schema}` ||
     env.MF06_ENQUEUE_ENABLED !== 'false' ||
-    env.AI_PREVIEW_SOURCES_JSON !== '{}'
+    env.SMARTSITE_AI_PREVIEW_SOURCES !== '{}'
   )
     bad();
   const bindings = Object.values(state.HostConfig.PortBindings ?? {}).flat();
