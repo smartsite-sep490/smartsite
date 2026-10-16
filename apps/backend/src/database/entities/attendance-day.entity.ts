@@ -19,7 +19,10 @@ import { ShiftEntity } from './shift.entity.js';
 @Entity({ name: 'attendance_day' })
 @Unique('uq_attendance_day_worker_date', ['siteId', 'workerId', 'workDate'])
 @Index('idx_attendance_day_due', ['status', 'endsAt'])
-@Check('attendance_day_status_check', "status IN ('IN_PROGRESS','NEEDS_REVIEW','CONFIRMED')")
+@Check(
+  'attendance_day_status_check',
+  "status IN ('IN_PROGRESS','NEEDS_REVIEW','CONFIRMED','ABSENT')",
+)
 @Check('attendance_day_regular_minutes_check', 'regular_minutes >= 0')
 @Check('attendance_day_overtime_minutes_check', 'overtime_minutes >= 0')
 @Check('attendance_day_provisional_minutes_check', 'provisional_minutes >= 0')
@@ -30,6 +33,10 @@ import { ShiftEntity } from './shift.entity.js';
   '(break_starts_at IS NULL AND break_ends_at IS NULL) OR (break_starts_at IS NOT NULL AND break_ends_at IS NOT NULL AND starts_at IS NOT NULL AND ends_at IS NOT NULL AND break_starts_at >= starts_at AND break_ends_at <= ends_at AND break_ends_at > break_starts_at)',
 )
 @Check('attendance_day_check', '(starts_at IS NULL AND ends_at IS NULL) OR ends_at > starts_at')
+@Check('attendance_day_allowed_exit_minutes_check', 'allowed_exit_minutes >= 0')
+@Check('attendance_day_max_exit_count_check', 'max_exit_count >= 0')
+@Check('attendance_day_exit_count_check', 'exit_count >= 0')
+@Check('attendance_day_deducted_minutes_check', 'deducted_minutes >= 0')
 export class AttendanceDayEntity {
   @PrimaryColumn({ type: 'uuid' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
@@ -53,6 +60,14 @@ export class AttendanceDayEntity {
   @Column({ name: 'break_starts_at', type: 'timestamptz', nullable: true })
   breakStartsAt!: Date | null;
   @Column({ name: 'break_ends_at', type: 'timestamptz', nullable: true }) breakEndsAt!: Date | null;
+  @Column({ name: 'allowed_exit_minutes', type: 'integer', default: 15 })
+  allowedExitMinutes!: number;
+  @Column({ name: 'max_exit_count', type: 'integer', default: 2 })
+  maxExitCount!: number;
+  @Column({ name: 'exit_count', type: 'integer', default: 0 })
+  exitCount!: number;
+  @Column({ name: 'deducted_minutes', type: 'integer', default: 0 })
+  deductedMinutes!: number;
   @Column({ type: 'varchar', length: 16 }) status!: AttendanceDayStatus;
   @Column({ name: 'regular_minutes', type: 'integer', default: 0 }) regularMinutes!: number;
   @Column({ name: 'overtime_minutes', type: 'integer', default: 0 }) overtimeMinutes!: number;

@@ -1,4 +1,5 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export type * from './attendance-reports-api.js';
 export type {
   AttendanceDayStatus,
   AttendanceNotificationEvent,

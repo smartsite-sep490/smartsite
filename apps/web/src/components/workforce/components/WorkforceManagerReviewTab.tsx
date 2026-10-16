@@ -1,5 +1,6 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
+import { localizeMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
@@ -455,7 +456,7 @@ export function WorkforceManagerReviewTab({
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">
-                    {actionFeedback.title}
+                    {localizeMessage(actionFeedback.title)}
                   </span>
                   <button
                     type="button"
@@ -467,7 +468,7 @@ export function WorkforceManagerReviewTab({
                   </button>
                 </div>
                 <p className="text-xs font-semibold text-slate-100 leading-snug">
-                  {actionFeedback.message}
+                  {localizeMessage(actionFeedback.message)}
                 </p>
               </div>
             </div>

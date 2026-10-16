@@ -20,7 +20,9 @@ export class AttendanceDaysDto {
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) fromDate?: string;
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) toDate?: string;
   @IsOptional() @IsUUID() workerId?: string;
-  @IsOptional() @IsIn(['IN_PROGRESS', 'NEEDS_REVIEW', 'CONFIRMED']) status?: AttendanceDayStatus;
+  @IsOptional()
+  @IsIn(['IN_PROGRESS', 'NEEDS_REVIEW', 'CONFIRMED', 'ABSENT'])
+  status?: AttendanceDayStatus;
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => (value === undefined ? undefined : Number(value)))
   @IsInt()

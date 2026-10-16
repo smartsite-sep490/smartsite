@@ -353,6 +353,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [hasShiftBreak, setHasShiftBreak] = useState(false);
   const [shiftBreakStartsAt, setShiftBreakStartsAt] = useState('12:00');
   const [shiftBreakEndsAt, setShiftBreakEndsAt] = useState('13:00');
+  const [shiftAllowedExitMinutes, setShiftAllowedExitMinutes] = useState(15);
+  const [shiftMaxExitCount, setShiftMaxExitCount] = useState(2);
   const [shiftError, setShiftError] = useState<string | null>(null);
   const [shiftSuccess, setShiftSuccess] = useState<string | null>(null);
 
@@ -518,6 +520,10 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       timezone: 'Asia/Ho_Chi_Minh',
       breakStartsAt,
       breakEndsAt,
+      ...(shiftAllowedExitMinutes !== 15
+        ? { allowedExitMinutes: Number(shiftAllowedExitMinutes) }
+        : {}),
+      ...(shiftMaxExitCount !== 2 ? { maxExitCount: Number(shiftMaxExitCount) } : {}),
     });
   };
 
@@ -931,22 +937,30 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                             <Badge variant="neutral">{tr('common.archived')}</Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 font-mono text-[11.5px] font-medium text-slate-700 bg-slate-50 border border-[#E2E8F0] px-2.5 py-1 rounded-lg w-fit">
-                          <IconClock className="w-3 h-3 text-slate-400" />
-                          <span>
-                            {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)}
-                            {shift.breakStartsAt && shift.breakEndsAt && (
-                              <span className="block text-xs text-slate-500">
-                                {tr('common.unpaid_break_value', {
-                                  value1: formatShiftRange(
-                                    shift.breakStartsAt,
-                                    shift.breakEndsAt,
-                                    shift.timezone,
-                                  ),
-                                })}
-                              </span>
-                            )}
-                          </span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 font-mono text-[11.5px] font-medium text-slate-700 bg-slate-50 border border-[#E2E8F0] px-2.5 py-1 rounded-lg w-fit">
+                            <IconClock className="w-3 h-3 text-slate-400" />
+                            <span>
+                              {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)}
+                              {shift.breakStartsAt && shift.breakEndsAt && (
+                                <span className="block text-xs text-slate-500">
+                                  {tr('common.unpaid_break_value', {
+                                    value1: formatShiftRange(
+                                      shift.breakStartsAt,
+                                      shift.breakEndsAt,
+                                      shift.timezone,
+                                    ),
+                                  })}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="text-[11.5px] text-slate-500">
+                            {tr('schedule_setup_view.exit_policy_badge', {
+                              minutes: shift.allowedExitMinutes ?? 15,
+                              count: shift.maxExitCount ?? 2,
+                            })}
+                          </div>
                         </div>
                       </div>
 
@@ -1553,6 +1567,50 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               </p>
             </div>
           )}
+
+          <div className="grid grid-cols-2 gap-3.5 pt-2 border-t border-slate-100">
+            <div className="space-y-1">
+              <label
+                htmlFor="shift-allowed-exit-minutes"
+                className="block text-xs font-medium text-slate-700"
+              >
+                {tr('schedule_setup_view.allowed_exit_minutes')}
+              </label>
+              <input
+                id="shift-allowed-exit-minutes"
+                type="number"
+                min={0}
+                max={120}
+                className="w-full px-3 py-2 text-sm border rounded-xl border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#F66B17]/20 focus:border-[#F66B17]"
+                value={shiftAllowedExitMinutes}
+                onChange={(e) => setShiftAllowedExitMinutes(parseInt(e.target.value, 10) || 0)}
+              />
+              <p className="text-[11px] text-slate-500">
+                {tr('schedule_setup_view.allowed_exit_minutes_desc')}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label
+                htmlFor="shift-max-exit-count"
+                className="block text-xs font-medium text-slate-700"
+              >
+                {tr('schedule_setup_view.max_exit_count')}
+              </label>
+              <input
+                id="shift-max-exit-count"
+                type="number"
+                min={0}
+                max={10}
+                className="w-full px-3 py-2 text-sm border rounded-xl border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#F66B17]/20 focus:border-[#F66B17]"
+                value={shiftMaxExitCount}
+                onChange={(e) => setShiftMaxExitCount(parseInt(e.target.value, 10) || 0)}
+              />
+              <p className="text-[11px] text-slate-500">
+                {tr('schedule_setup_view.max_exit_count_desc')}
+              </p>
+            </div>
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="outline" size="md" onClick={() => setShowCreateShiftModal(false)}>
               {tr('common.cancel')}

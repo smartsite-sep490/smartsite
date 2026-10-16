@@ -32,5 +32,12 @@ minimumReleaseAgeExclude:
   - expo-modules-jsi@57.1.2
   - expo-router@57.0.26
   - expo-splash-screen@57.0.10
+  # SDK 57 compatibility patches authorized on 2026-10-16.
+  - '@expo/cli@57.0.31'
+  - '@expo/router-server@57.0.13'
+  - '@expo/ui@57.0.25'
+  - babel-preset-expo@57.0.16
+  - expo@57.0.30
+  - expo-router@57.0.28
 saveExact: true
 engineStrict: true

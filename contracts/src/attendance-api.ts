@@ -19,15 +19,18 @@ export interface IgnoreDuplicateAttendanceCommand {
   expectedSessionVersion: number;
   reason: string;
 }
-export type AttendanceDayStatus = 'IN_PROGRESS' | 'NEEDS_REVIEW' | 'CONFIRMED';
+export type AttendanceDayStatus = 'IN_PROGRESS' | 'NEEDS_REVIEW' | 'CONFIRMED' | 'ABSENT';
 export type AttendanceNotificationEvent =
   | 'EARLY_EXIT'
   | 'MISSING_CHECKOUT'
+  | 'ABSENT'
   | 'UNSCHEDULED_ENTRY'
   | 'ENTRY_DENIED_NO_SCHEDULE'
   | 'TIME_REQUESTED'
   | 'TIME_APPROVED'
-  | 'TIME_REJECTED';
+  | 'TIME_REJECTED'
+  | 'EXIT_DURATION_EXCEEDED'
+  | 'MAX_EXITS_EXCEEDED';
 export interface AttendanceDayResponse {
   id: string;
   workerId: string;
@@ -40,6 +43,10 @@ export interface AttendanceDayResponse {
   endsAt: string | null;
   breakStartsAt?: string | null;
   breakEndsAt?: string | null;
+  allowedExitMinutes?: number;
+  maxExitCount?: number;
+  exitCount?: number;
+  deductedMinutes?: number;
   status: AttendanceDayStatus;
   regularMinutes: number;
   overtimeMinutes: number;

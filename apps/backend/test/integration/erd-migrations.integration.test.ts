@@ -31,6 +31,10 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
         !(m.name ?? m.constructor.name).startsWith('ContractorZoneRegrant') &&
         !(m.name ?? m.constructor.name).startsWith('SingleTeamZone') &&
         m.name !== 'ShiftBreak1791763200001' &&
+        m.name !== 'AttendanceAbsence1792022400000' &&
+        // Exit policies require attendance_day from the excluded MF03 migrations.
+        !(m.name ?? m.constructor.name).startsWith('ShiftExitGracePeriod') &&
+        !(m.name ?? m.constructor.name).startsWith('AttendanceExitNotifications') &&
         !(m.name ?? m.constructor.name).startsWith('Mf03'),
     );
     const access = migrations.filter((m) => (m.name ?? m.constructor.name).startsWith('Erd'));

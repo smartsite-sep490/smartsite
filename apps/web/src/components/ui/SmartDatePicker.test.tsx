@@ -27,3 +27,35 @@ it('fixes day/month/year display, enforces bounds and returns ISO calendar dates
   await userEvent.setup().click(screen.getByRole('button', { name: /October 13.*2026/ }));
   expect(change).toHaveBeenCalledWith('2026-10-13');
 });
+
+it('supports clearable compact mode with placeholder and clear button', async () => {
+  const change = vi.fn();
+  const { rerender } = render(
+    <SmartDatePicker
+      id="test-date"
+      label="From"
+      value="2026-10-15"
+      onChange={change}
+      placeholder="dd/mm/yyyy"
+      clearable
+      compact
+    />,
+  );
+  expect(screen.getByLabelText('From').textContent).toContain('15/10/2026');
+  const clearButton = screen.getByRole('button', { name: /clear/i });
+  await userEvent.setup().click(clearButton);
+  expect(change).toHaveBeenCalledWith('');
+
+  rerender(
+    <SmartDatePicker
+      id="test-date"
+      label="From"
+      value=""
+      onChange={change}
+      placeholder="dd/mm/yyyy"
+      clearable
+      compact
+    />,
+  );
+  expect(screen.getByLabelText('From').textContent).toContain('dd/mm/yyyy');
+});

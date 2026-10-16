@@ -99,6 +99,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           },
           items: [
             {
+              id: 'dashboard',
+              get label() {
+                return tr('common.dashboard');
+              },
+              icon: IconDashboard,
+            },
+            {
               id: 'workforce',
               get label() {
                 return tr('app_layout.my_schedule_requests');

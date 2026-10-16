@@ -17,6 +17,7 @@ import {
 import { AuthContext } from '../auth/auth-session';
 import { NotificationBell } from './NotificationBell';
 import { formatNotificationDisplayMessage } from './notification-utils';
+import i18n from '../../i18n';
 
 const notification: UserNotificationResponse = {
   id: 'notification-1',
@@ -97,15 +98,34 @@ beforeEach(() => {
       disconnect() {}
     };
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   queryClient?.clear();
   vi.useRealTimers();
   vi.restoreAllMocks();
   focusManager.setFocused(undefined);
+  await i18n.changeLanguage('en');
 });
 
 describe('durable Web notification bell', () => {
+  it('keeps the translated notification title in the deletion dialog when language changes', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      ...page,
+      items: [{ ...notification, event: 'MAX_EXITS_EXCEEDED', title: 'MAX EXITS EXCEEDED' }],
+    });
+    await i18n.changeLanguage('vi');
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Thông báo, 1/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xóa thông báo' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.textContent).toContain('Vượt số lần ra ngoài cho phép');
+    expect(dialog.textContent).not.toContain('MAX EXITS EXCEEDED');
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+    expect(dialog.textContent).toContain('Exit count limit exceeded');
+    expect(SmartSiteManagementClient.prototype.deleteNotification).not.toHaveBeenCalled();
+  });
   it('confirms deletion, preserves unread items and reloads the inbox', async () => {
     const read = {
       ...notification,

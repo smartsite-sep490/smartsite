@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { AttendanceDayEntity } from '../src/database/entities/index.js';
+import { WorkerScheduleEntity } from '../src/database/entities/index.js';
 import { AttendanceReconciliationService } from '../src/modules/workforce/attendance/attendance-reconciliation.service.js';
 import type { SchedulingNotificationService } from '../src/modules/workforce/notifications/scheduling-notification.service.js';
 
@@ -14,8 +15,9 @@ test('reconciliation does not skip due days beyond the first 500 records', async
   let reads = 0;
   const manager = { query: async () => [] } as unknown as EntityManager;
   const source = {
-    getRepository: () => ({
+    getRepository: (entity: unknown) => ({
       find: async () => {
+        if (entity === WorkerScheduleEntity) return [];
         const batch = reads++ === 0 ? ids.slice(0, 500) : ids.slice(500);
         return batch.map((id) => ({ id, siteId: 'synthetic-site', workerId: id }));
       },
