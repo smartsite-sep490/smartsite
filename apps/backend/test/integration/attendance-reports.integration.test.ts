@@ -7,7 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { DataSource, In } from 'typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { createTestConfig } from '../support/config.js';
 import {
@@ -39,9 +39,13 @@ import { HttpExceptionFilter } from '../../src/common/http/http-exception.filter
 import { scheduledShiftWindow } from '../../src/modules/workforce/attendance/attendance-calculation.js';
 import type { AttendanceSummaryResponse, AttendanceWorkersResponse } from '@smartsite/contracts';
 
+const database = createIsolatedTestDatabase();
+const dataSource = database.dataSource;
+
 test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, search/filter pagination and scope revocation', async (t) => {
+  t.after(() => database.dispose());
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-14T11:00:00Z') });
-  await dataSource.initialize();
+  await database.initialize();
   const siteId = randomUUID(),
     otherSite = randomUUID(),
     contractorId = randomUUID(),
@@ -398,6 +402,5 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
     await dataSource.getRepository(UserRoleAssignmentEntity).delete({ userId: In(userIds) });
     await dataSource.getRepository(UserEntity).delete(userIds);
     await dataSource.getRepository(SiteEntity).delete([siteId, otherSite]);
-    await dataSource.destroy();
   }
 });

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import {
   AccessAttemptEntity,
@@ -37,7 +37,12 @@ import { ScheduleConfigurationService } from '../../src/modules/workforce/schedu
 test('MF03: interval totals, missing checkout, notifications, approvals, scope and database concurrency', async (t) => {
   // Keep generated day shifts away from midnight in both UTC and the site timezone.
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 9, 8, 2) });
-  await dataSource.initialize();
+  const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
+  const { dataSource } = isolatedDatabase;
+  t.after(async () => {
+    await isolatedDatabase.dispose();
+  });
+  await isolatedDatabase.initialize();
   const siteId = randomUUID(),
     contractorId = randomUUID(),
     workerId = randomUUID(),
@@ -1299,6 +1304,6 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     await dataSource.query('DELETE FROM user_role_assignment WHERE user_id=ANY($1)', [ids]);
     await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [ids]);
     await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);
-    await dataSource.destroy();
+    await isolatedDatabase.dispose();
   }
 });

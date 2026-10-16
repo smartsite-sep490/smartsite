@@ -122,7 +122,7 @@ describe.each([
 });
 
 describe('PpeMonitoringView baseline copy boundaries', () => {
-  it('displays Core PPE Observed and Helmet and vest detected instead of broad compliance claims', () => {
+  it('displays Helmet and vest detected instead of broad compliance claims', () => {
     state.preview = {
       image: {} as HTMLImageElement,
       frame: {
@@ -159,7 +159,7 @@ describe('PpeMonitoringView baseline copy boundaries', () => {
     );
     client.clear();
 
-    expect(markup).toContain('CORE PPE OBSERVED');
+    expect(markup).not.toContain('CORE PPE OBSERVED');
     expect(markup).toContain('HELMET AND VEST DETECTED');
     expect(markup).toContain('Expanded items (gloves, boots, goggles) are not assessed');
     expect(markup).not.toContain('harness');
@@ -210,7 +210,7 @@ describe('PpeMonitoringView baseline copy boundaries', () => {
     );
     client.clear();
 
-    expect(markup).toContain('CORE PPE OBSERVED');
+    expect(markup).not.toContain('CORE PPE OBSERVED');
     expect(markup).toContain('CORE AND REPORTED PPE DETECTED');
     expect(markup).toContain('Helmet, safety vest, and reported expanded PPE items detected.');
     expect(markup).not.toContain('are not assessed');

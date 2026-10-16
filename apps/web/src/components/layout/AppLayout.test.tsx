@@ -279,7 +279,7 @@ describe('Role-specific navigation and NotificationBell integration', () => {
     ).toBeTruthy();
   });
 
-  it('Worker-only account sees only My Schedule & Requests and My QR Pass, and disables NotificationBell when mustChangePassword is true', () => {
+  it('Worker-only account sees Dashboard, My Schedule & Requests and My QR Pass, and disables NotificationBell when mustChangePassword is true', () => {
     profileState.data = {
       id: 'worker-user-1',
       username: 'worker.demo',
@@ -294,7 +294,7 @@ describe('Role-specific navigation and NotificationBell integration', () => {
     const navigation = within(screen.getByRole('navigation', { name: 'Main navigation' }));
     expect(navigation.getByRole('button', { name: 'My Schedule & Requests' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'My QR Pass' })).toBeTruthy();
-    expect(navigation.queryByRole('button', { name: 'Dashboard' })).toBeNull();
+    expect(navigation.getByRole('button', { name: 'Dashboard' })).toBeTruthy();
     expect(navigation.queryByRole('button', { name: 'Site Access' })).toBeNull();
     expect(navigation.queryByRole('button', { name: 'PPE Monitoring' })).toBeNull();
     expect(navigation.queryByRole('button', { name: 'Safety Operations' })).toBeNull();

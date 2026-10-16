@@ -101,3 +101,28 @@ adapter/lifecycle patch stays in their existing responsibilities; Root reviewed
 the small PPE/Zone setup/Region client-wiring growth exceptions. The change passes
 an existing client through existing props; a broader extraction needs its own
 scoped follow-up, without unrelated file splitting or formatting churn.
+
+## Main PR62 integration and CI repair, 16 October
+
+Integrated Main `3ce0358` (MF03 attendance) in merge `4898a84`, preserving Main
+login/register/styles, Worker dashboard navigation, conditional/enum localization
+checks and the four Safety migration slots. The canonical graph now contains58
+migrations. Release54 upgrades by4; frozen legacy24 upgrades by35 and retains its
+retired ledger entry (59 total). Existing data, explicit DENY and unverified Face
+provenance assertions remain enabled.
+
+Three current attendance/scheduling integration suites now use per-file canonical
+schemas instead of the frozen legacy24 fixture. Cleanup is registered before
+initialization. Their actual dedicated5433 runs passed1/7/1 cases; migration
+upgrade verification passed3 with1 explicit approved-Main-snapshot case skipped.
+Main Worker navigation and removed duplicate PPE badges have updated regression
+expectations; role exclusions, identity boundaries and safety-claim checks remain.
+
+Final full Web verification passed1516 tests/158 files with no source changes
+during the run. Backend unit verification passed812 with1 skipped (813 total).
+Web/Backend types and builds, changed-test lint/format, root25 and infrastructure1
+passed. Local harnesses use existing version-checked sandbox dependencies; they
+are not a fresh Linux frozen install or the complete CI/container pipeline.
+Canvas mock and locale chunk-size warnings remain. Remote CI must verify the
+pushed commit before merge. AI, camera workers and browser proof remain paused;
+these results do not establish production or whole-product acceptance.
