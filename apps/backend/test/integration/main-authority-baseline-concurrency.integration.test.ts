@@ -214,7 +214,7 @@ test('caller-supplied baseline body, hashes and clock cannot replace the databas
   assert.equal(rows.length, 1);
   assert.equal(rows[0].snapshot_json.forged, undefined);
   assert.equal(rows[0].snapshot_json.version, 'MF06_MAIN_BASELINE_JSONB_V1');
-  assert.equal(rows[0].snapshot_json.sources.length, 15);
+  assert.equal(rows[0].snapshot_json.sources.length, 18);
   assert(rows[0].row_count > 0);
   assert.notEqual(rows[0].snapshot_hash, '0'.repeat(64));
   assert.equal(

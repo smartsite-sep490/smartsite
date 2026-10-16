@@ -8,7 +8,7 @@ import type {
   Mf06AssessmentProvenance,
 } from '../../../database/entities/mf06-assessment.entity.js';
 import {
-  MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_AUTHORITY_ARCHIVE_FORMATS,
   decodeStoredMainAuthorityArchive,
   type MainAuthorityArchive,
   type MainAuthorityArchiveContext,
@@ -98,7 +98,7 @@ const inputSchema = z.strictObject({
   cropSha256: hash.nullable(),
   authorityArtifact: z
     .strictObject({
-      format: z.literal(MAIN_AUTHORITY_ARCHIVE_FORMAT),
+      format: z.enum(MAIN_AUTHORITY_ARCHIVE_FORMATS),
       sha256: hash,
       payload: z.unknown(),
     })

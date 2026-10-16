@@ -9,6 +9,7 @@ import { ZoneRestrictionPolicy } from '../../src/database/entities/enums.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { LEGACY_TEST_MIGRATIONS } from '../support/legacy-test-migrations.js';
 import { loadMainRecoveryMigrations } from '../support/main-recovery-profile.js';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
@@ -38,7 +39,10 @@ for (const profile of [
         db.setOptions({
           migrations: production.filter(
             (migration) =>
-              typeof migration !== 'function' || migration.name !== 'SafetyChecklists1792195200000',
+              typeof migration !== 'function' ||
+              !['SafetyChecklists1792195200000', 'Mf06TeamAuthorityHistory1792281600000'].includes(
+                migration.name,
+              ),
           ),
         });
       else if (profile === 'populated-main35') {
@@ -131,9 +135,28 @@ for (const profile of [
         const applied = await db.runMigrations();
         assert.equal(
           applied.length,
-          profile === 'populated-release54' ? 1 : profile === 'populated-main35' ? 20 : 32,
+          profile === 'populated-release54' ? 2 : profile === 'populated-main35' ? 21 : 33,
         );
-        for (const { table, fields, rows } of inventory)
+        for (const { table, fields, rows } of inventory) {
+          if (table === 'mf06_authority_source') {
+            const expected = MAIN_AUTHORITY_V2_SOURCES.map(([source_kind, table_name, fields]) => ({
+              source_kind,
+              table_name,
+              fields,
+              protocol_version: 'MAIN_ROW_JOURNAL_V1',
+            }));
+            assert.deepEqual(
+              await db.query(
+                'SELECT to_jsonb(s)::text AS row FROM mf06_authority_source s ORDER BY to_jsonb(s)::text',
+              ),
+              await db.query(
+                'SELECT value::text AS row FROM jsonb_array_elements($1::jsonb) ORDER BY value::text',
+                [JSON.stringify(expected)],
+              ),
+              table,
+            );
+            continue;
+          }
           assert.deepEqual(
             await db.query(
               `SELECT to_jsonb(r)::text AS row FROM (SELECT ${fields.map((f) => `"${f}"`).join(',')} FROM "${table}") r ORDER BY to_jsonb(r)::text`,
@@ -141,8 +164,9 @@ for (const profile of [
             rows,
             table,
           );
+        }
       }
-      assert.equal(db.migrations.length, 55);
+      assert.equal(db.migrations.length, 56);
       assert.equal(await new DatabaseService(db).isReady(), true);
       assert.deepEqual(await db.runMigrations(), []);
       const applied: { name: string }[] = await db.query(
@@ -159,7 +183,7 @@ for (const profile of [
           1,
         );
       }
-      assert.equal(applied.length, profile === 'populated-legacy24' ? 56 : 55);
+      assert.equal(applied.length, profile === 'populated-legacy24' ? 57 : 56);
       assert.equal(
         (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
           .epoch_id,

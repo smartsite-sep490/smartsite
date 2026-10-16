@@ -3,6 +3,7 @@ import { Mf06MainAuthorityJournal1791590400002 } from './migrations/179159040000
 import { SafetyFaceProvenance1791590400003 } from './migrations/1791590400003-SafetyFaceProvenance.js';
 import { Mf06ImmutableAssessments1791590400004 } from './migrations/1791590400004-Mf06ImmutableAssessments.js';
 import { SafetyChecklists1792195200000 } from './migrations/1792195200000-SafetyChecklists.js';
+import { Mf06TeamAuthorityHistory1792281600000 } from './migrations/1792281600000-Mf06TeamAuthorityHistory.js';
 import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
 import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
 import { ContractorZoneRegrant1791940000001 } from './migrations/1791940000001-ContractorZoneRegrant.js';
@@ -141,6 +142,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ContractorZoneRegrant1791940000001,
       SingleTeamZone1791940000002,
       SafetyChecklists1792195200000,
+      Mf06TeamAuthorityHistory1792281600000,
     ],
     logging: false,
     extra: {

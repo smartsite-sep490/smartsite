@@ -1,6 +1,6 @@
 import type { EntityManager } from 'typeorm';
-import { MAIN_AUTHORITY_SOURCES } from './main-authority-sources.js';
-import { MAIN_AUTHORITY_FUNCTION_PROFILES } from './main-authority-function-profiles.js';
+import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from './main-team-authority-sources.js';
+import { MAIN_AUTHORITY_V2_FUNCTION_PROFILES as MAIN_AUTHORITY_FUNCTION_PROFILES } from './main-team-authority-function-profiles.js';
 
 /** Point-in-time canonical trigger/source/function preflight, not writer closure or cutover. */
 export async function hasMainAuthorityCapture(

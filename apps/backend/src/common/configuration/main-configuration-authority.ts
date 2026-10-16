@@ -5,7 +5,7 @@ import { DataSource, QueryFailedError, type EntityManager } from 'typeorm';
 import { conflict, uuid } from './commands.js';
 import { PublicHttpException } from '../http/public-http-exception.js';
 import { withZoneAuthorityTransaction } from '../../modules/zones/zone-authority-transaction.js';
-import { MAIN_AUTHORITY_SOURCES } from './main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from './main-team-authority-sources.js';
 import { hasMainAuthorityCapture } from './main-authority-capture-preflight.js';
 
 /** Server-only actor claim; it is never accepted from a management DTO. */
@@ -45,6 +45,11 @@ type Operation =
   | 'CONTRACTOR_ZONE_REVOKE'
   | 'WORKER_ZONE_GRANT'
   | 'WORKER_ZONE_REVOKE'
+  | 'TEAM_CREATE'
+  | 'TEAM_ARCHIVE'
+  | 'TEAM_ASSIGN'
+  | 'TEAM_ZONE_GRANT'
+  | 'TEAM_ZONE_REVOKE'
   | 'CAMERA_CREATE'
   | 'CAMERA_STATUS_UPDATE'
   | 'REGION_CREATE'
@@ -151,7 +156,7 @@ export async function executeMainConfigurationCommand<T>(
     );
     if (installed[0]?.n === 0) return { value: await work(manager), journaled: false };
     if (installed[0]?.n !== relations.length) unavailable();
-    const captures =
+    let captures =
       operation === 'MAIN_AUTHORITY_BASELINE'
         ? MAIN_AUTHORITY_SOURCES.map(([, table]) => table)
         : operation === 'USER_CONTRACTOR_WORKER_ACCOUNT_CREATE'
@@ -207,6 +212,8 @@ export async function executeMainConfigurationCommand<T>(
                                               operation === 'ZONE_DENY_REVOKE'
                                             ? ['zone_access_grant']
                                             : ['camera', 'camera_observation_region', 'zone'];
+    if (operation.startsWith('TEAM_'))
+      captures = ['contractor_team', 'contractor_team_membership', 'team_zone_permission'];
     if (!(await hasMainAuthorityCapture(manager, captures))) unavailable();
     if (!context) return { value: await work(manager), journaled: false };
     const nested = await manager.query(

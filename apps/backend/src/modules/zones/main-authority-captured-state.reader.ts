@@ -1,10 +1,10 @@
 import type { EntityManager } from 'typeorm';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { z } from 'zod';
-import { MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-team-authority-sources.js';
 import { hasMainAuthorityCapture } from '../../common/configuration/main-authority-capture-preflight.js';
 import {
-  MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
   parseMainAuthorityInstant,
   sealMainAuthorityArchive,
   type MainAuthorityArchive,
@@ -159,7 +159,7 @@ export class MainAuthorityCapturedStateReader {
       purpose: scope.purpose,
     };
     const payload = {
-      version: MAIN_AUTHORITY_ARCHIVE_FORMAT,
+      version: MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
       context,
       archivedAt: baseline.archived_at,
       baseline: {

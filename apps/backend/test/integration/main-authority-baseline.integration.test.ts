@@ -29,7 +29,7 @@ after(async () => {
   await database.dispose();
 });
 
-const EXACT_15_SOURCE_KINDS = [
+const EXACT_18_SOURCE_KINDS = [
   'USER_ACCOUNT',
   'USER_ROLE',
   'SITE',
@@ -45,6 +45,9 @@ const EXACT_15_SOURCE_KINDS = [
   'ZONE_POLICY',
   'CAMERA',
   'REGION',
+  'TEAM',
+  'TEAM_MEMBERSHIP',
+  'TEAM_PERMISSION',
 ] as const;
 
 const FORBIDDEN_FIELDS = [
@@ -279,7 +282,7 @@ async function assertBaselineTableExistsInCurrentSchema() {
 //         source preserved / state STAGING / control NULL / no READY
 // -----------------------------------------------------------------------------
 
-test('Baseline capture produces consistent immutable STAGING snapshot across 15 sources with bound command and witness', async () => {
+test('Baseline capture produces consistent immutable STAGING snapshot across 18 sources with bound command and witness', async () => {
   const f = await fixture();
   const authCtx = await createAuthContext(f.adminUsername, f.adminPassword);
   const service = new MainAuthorityBaselineService(db);
@@ -305,7 +308,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
   assert.ok(record.rowCount > 0, 'Total rowCount must be greater than zero');
   assert.ok(typeof record.capturedAt === 'string', 'capturedAt must be a valid timestamp string');
 
-  // 2. Snapshot structure and exactly 15 source kinds
+  // 2. Snapshot structure and exactly 18 source kinds
   const snapshot = record.snapshot as {
     version: string;
     epochId: string;
@@ -325,10 +328,10 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
   assert.equal(snapshot.capturedAt, record.capturedAt);
   assert.equal(snapshot.declaredWriterManifestHash, validManifestHash);
   assert.equal(snapshot.sourceRegistryHash, record.sourceRegistryHash);
-  assert.equal(snapshot.sources.length, 15, 'Snapshot must contain exactly 15 source kinds');
+  assert.equal(snapshot.sources.length, 18, 'Snapshot must contain exactly 18 source kinds');
 
   const capturedKinds = snapshot.sources.map((s) => s.sourceKind);
-  for (const expectedKind of EXACT_15_SOURCE_KINDS) {
+  for (const expectedKind of EXACT_18_SOURCE_KINDS) {
     assert.ok(
       capturedKinds.includes(expectedKind),
       `Missing expected source kind: ${expectedKind}`,
