@@ -92,3 +92,13 @@ independent-image, camera-viewpoint, browser or product gates.
 Reviewer/owner: Root; implementation and independent regression workers were actual
 Herdr Agy p7/p5, with p8 independent read-only review. No role grant or Backend
 permission bypass is implied. Context telemetry remains unknown.
+
+## Main login role-resolution repair, 16 October
+
+| Path | Baseline | Current | Reason and follow-up |
+| --- | ---: | ---: | --- |
+| `apps/web/src/app.tsx` | 619 | 623 | Root permits four lines for waiting on the existing current-user query before leaving login. No new login form, role grant, query transport or feature responsibility. Existing root routing remains grandfathered; extract cohesive routing/session composition before unrelated growth. |
+
+Baseline is79791f6; fix isf4a6f29. Focused routing/locale/shell19PASS,
+independent source review and types/lint support this bounded exception only.
+The separate localization audit and full remote CI remain open.

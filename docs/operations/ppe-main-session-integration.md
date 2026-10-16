@@ -70,6 +70,14 @@ passed96 cases with one separate localization-audit failure; whole Web CI remain
 open until remaining visible prose is localized. No browser or AI acceptance is
 implied by these fixture and routing results.
 
+The localization source audit resolves common and Safety namespaces separately.
+Unknown options/spreads remain unresolved instead of silently accepting a key
+from the wrong catalog. Parser fixtures cover property order, quoted namespace
+keys, opaque options and computed properties. Technical MF identifiers and the
+literal Escape key label are excluded narrowly; visible prose/ARIA scanning and
+the whole-source zero-finding assertion remain enabled. Parser-only passes do
+not close the separately failing visible-copy gate.
+
 ## Desktop workspace presentation
 
 Scope selection, configuration actions and viewing controls have separate visual
