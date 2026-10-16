@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -79,8 +81,7 @@ function createRealAccessServices() {
     MF06_ENQUEUE_ENABLED: 'false',
     MF06_ASSESSMENT_READ_ENABLED: 'false',
     CORS_ORIGINS: 'http://localhost:5181',
-    STORAGE_LOCAL_ROOT:
-      'D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/software-http-unused-media',
+    STORAGE_LOCAL_ROOT: join(tmpdir(), 'smartsite-representative-race-unused-media'),
   });
   assert.equal(environment.MF06_ENQUEUE_ENABLED, false);
   assert.equal(environment.MF06_ASSESSMENT_READ_ENABLED, false);

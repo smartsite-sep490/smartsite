@@ -28,6 +28,7 @@ import {
   type Mf06AssessmentAppendInput,
 } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { LEGACY_ENTITIES } from '../support/legacy24/data-source.js';
 import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
 import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/mf06-request-context.js';
 import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
@@ -47,6 +48,9 @@ const db = isolated.dataSource;
 const store = new Mf06AssessmentStore(db);
 
 before(async () => {
+  // This historical fixture explicitly installs B2 after the frozen request/job graph.
+  // Register its matching frozen projections only here, not in every legacy24 schema.
+  db.setOptions({ entities: [...LEGACY_ENTITIES] });
   await isolated.initialize();
   const runner = db.createQueryRunner();
   try {
