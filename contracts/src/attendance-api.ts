@@ -28,7 +28,9 @@ export type AttendanceNotificationEvent =
   | 'ENTRY_DENIED_NO_SCHEDULE'
   | 'TIME_REQUESTED'
   | 'TIME_APPROVED'
-  | 'TIME_REJECTED';
+  | 'TIME_REJECTED'
+  | 'EXIT_DURATION_EXCEEDED'
+  | 'MAX_EXITS_EXCEEDED';
 export interface AttendanceDayResponse {
   id: string;
   workerId: string;
@@ -41,6 +43,10 @@ export interface AttendanceDayResponse {
   endsAt: string | null;
   breakStartsAt?: string | null;
   breakEndsAt?: string | null;
+  allowedExitMinutes?: number;
+  maxExitCount?: number;
+  exitCount?: number;
+  deductedMinutes?: number;
   status: AttendanceDayStatus;
   regularMinutes: number;
   overtimeMinutes: number;

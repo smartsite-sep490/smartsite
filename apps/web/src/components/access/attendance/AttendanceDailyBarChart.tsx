@@ -1,4 +1,5 @@
-import { translate as tr } from '../../../i18n';
+import { translate as tr, uiLocale } from '../../../i18n';
+import { localizedLabel } from '../../../i18n/labels';
 import { attendanceHours } from './attendance-display';
 import type { AttendanceReportDay } from '@smartsite/contracts';
 
@@ -12,7 +13,7 @@ export function AttendanceDailyBarChart({ daily }: { daily: AttendanceReportDay[
   const formatDayName = (dateStr: string) => {
     try {
       const d = new Date(`${dateStr}T00:00:00Z`);
-      return d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+      return d.toLocaleDateString(uiLocale(), { weekday: 'short', timeZone: 'UTC' });
     } catch {
       return dateStr;
     }
@@ -64,7 +65,7 @@ export function AttendanceDailyBarChart({ daily }: { daily: AttendanceReportDay[
               <td>{d.workDate}</td>
               <td>{attendanceHours(d.regularMinutes)}</td>
               <td>{attendanceHours(d.overtimeMinutes)}</td>
-              <td>{d.status}</td>
+              <td>{localizedLabel(d.status)}</td>
             </tr>
           ))}
         </tbody>
@@ -77,7 +78,7 @@ export function AttendanceDailyBarChart({ daily }: { daily: AttendanceReportDay[
           {[12, 8, 4, 0].map((h) => (
             <div key={h} className="relative flex items-center w-full">
               <span className="w-8 text-[11px] font-mono text-slate-400 text-right pr-2 shrink-0">
-                {h}h
+                {tr('attendance_report.chart_hours', { hours: h })}
               </span>
               <div className="w-full border-b border-dashed border-slate-100" />
             </div>

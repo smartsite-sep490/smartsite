@@ -333,6 +333,8 @@ export interface ShiftResponse {
   timezone: string;
   breakStartsAt?: string | null;
   breakEndsAt?: string | null;
+  allowedExitMinutes?: number;
+  maxExitCount?: number;
   createdAt: string;
   /** Absent on older servers; null means available for new assignments. */
   archivedAt?: string | null;

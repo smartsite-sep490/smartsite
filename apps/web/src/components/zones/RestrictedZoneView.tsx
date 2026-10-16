@@ -1014,7 +1014,7 @@ export function RestrictedZoneView({
               {testDetection
                 ? testDetection.active
                   ? tr('common.zone_entry')
-                  : 'SCANNING'
+                  : tr('labels.SCANNING')
                 : tr('common.no_targets')}{' '}
               · {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
             </div>
@@ -1137,7 +1137,9 @@ export function RestrictedZoneView({
                       onClick={resetToAuthoritative}
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
-                      {session && selectedRegion ? tr('common.reset_to_server') : 'RESET'}
+                      {session && selectedRegion
+                        ? tr('common.reset_to_server')
+                        : tr('labels.RESET')}
                     </button>
                     <button
                       onClick={exportZone}

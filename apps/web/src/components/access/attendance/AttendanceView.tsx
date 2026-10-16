@@ -636,7 +636,7 @@ export function AttendanceView({
                               ? `${new Date(s.effectiveInAt).toLocaleString(uiLocale())}${!s.effectiveOutAt ? ` (${attendanceLabel('MISSING_OUT')})` : ''}`
                               : s.effectiveOutAt
                                 ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
-                                : s.status}
+                                : attendanceLabel(s.status)}
                         </option>
                       ),
                   )}

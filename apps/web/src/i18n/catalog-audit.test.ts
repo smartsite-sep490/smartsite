@@ -7,7 +7,19 @@ import en from './locales/en.json';
 it('scans every production UI source for missing keys and untranslated visible literals', () => {
   const root = path.resolve('src');
   const failures: string[] = [];
-  const brands = new Set(['Smart', 'Site', 'SmartSite', 'S', 'QR', 'MF01', 'MF05', 'IoT']);
+  // Language names are intentionally shown in their own language in the selector.
+  const brands = new Set([
+    'Smart',
+    'Site',
+    'SmartSite',
+    'S',
+    'QR',
+    'MF01',
+    'MF05',
+    'IoT',
+    'English',
+    'Tiếng Việt',
+  ]);
   const attrs = new Set([
     'title',
     'placeholder',
@@ -37,20 +49,68 @@ it('scans every production UI source for missing keys and untranslated visible l
         failures.push(
           `${path.relative(root, filename)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${text}`,
         );
+      function checkVisibleExpression(node: ts.Expression): void {
+        if (
+          ts.isPropertyAccessExpression(node) &&
+          [
+            'status',
+            'kind',
+            'method',
+            'direction',
+            'role',
+            'severity',
+            'effect',
+            'restrictionPolicy',
+          ].includes(node.name.text)
+        ) {
+          report(node, `unlocalized enum ${node.getText(source)}`);
+        } else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+          if (/[A-Za-zÀ-ỹ]{2}/.test(node.text) && !brands.has(node.text))
+            report(node, `visible expression literal ${node.text}`);
+        } else if (ts.isConditionalExpression(node)) {
+          checkVisibleExpression(node.whenTrue);
+          checkVisibleExpression(node.whenFalse);
+        } else if (
+          ts.isBinaryExpression(node) &&
+          [
+            ts.SyntaxKind.BarBarToken,
+            ts.SyntaxKind.QuestionQuestionToken,
+            ts.SyntaxKind.AmpersandAmpersandToken,
+          ].includes(node.operatorToken.kind)
+        ) {
+          checkVisibleExpression(node.right);
+        } else if (ts.isParenthesizedExpression(node)) {
+          checkVisibleExpression(node.expression);
+        }
+      }
+      function checkTranslationKey(node: ts.Expression): void {
+        if (ts.isStringLiteral(node)) {
+          if (!(node.text in en) && !(`${node.text}_other` in en))
+            report(node, `missing key ${node.text}`);
+        } else if (ts.isConditionalExpression(node)) {
+          checkTranslationKey(node.whenTrue);
+          checkTranslationKey(node.whenFalse);
+        }
+      }
       function visit(node: ts.Node) {
         if (
           ts.isCallExpression(node) &&
           ['tr', 'translate'].includes(node.expression.getText(source)) &&
-          node.arguments[0] &&
-          ts.isStringLiteral(node.arguments[0])
+          node.arguments[0]
         ) {
-          const key = node.arguments[0].text;
-          if (!(key in en) && !(`${key}_other` in en)) report(node, `missing key ${key}`);
+          checkTranslationKey(node.arguments[0]);
         }
         if (ts.isJsxText(node)) {
           const text = node.text.trim();
           if (/[A-Za-zÀ-ỹ]{2}/.test(text) && !brands.has(text))
             report(node, `visible literal ${text}`);
+        }
+        if (
+          ts.isJsxExpression(node) &&
+          node.expression &&
+          (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))
+        ) {
+          checkVisibleExpression(node.expression);
         }
         if (
           ts.isJsxAttribute(node) &&
@@ -62,6 +122,15 @@ it('scans every production UI source for missing keys and untranslated visible l
           // Model IDs, camera/site codes and punctuation are data, not localized prose.
           if (/[A-Za-zÀ-ỹ]{2}/.test(text) && !brands.has(text) && !/^[A-Z\d_-]+$/.test(text))
             report(node, `visible attribute ${text}`);
+        }
+        if (
+          ts.isJsxAttribute(node) &&
+          attrs.has(node.name.getText(source)) &&
+          node.initializer &&
+          ts.isJsxExpression(node.initializer) &&
+          node.initializer.expression
+        ) {
+          checkVisibleExpression(node.initializer.expression);
         }
         ts.forEachChild(node, visit);
       }

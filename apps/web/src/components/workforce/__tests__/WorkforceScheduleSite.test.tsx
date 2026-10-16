@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { WorkforceScheduleTab } from '../components/WorkforceScheduleTab';
+import i18n from '../../../i18n';
 
 let queries: QueryClient;
 
@@ -77,11 +78,12 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   queries?.clear();
   vi.restoreAllMocks();
   vi.useRealTimers();
+  await i18n.changeLanguage('en');
 });
 
 function mount(siteId = 'site-1') {
@@ -135,7 +137,12 @@ it.each(['timetable', 'list'])('shows backend ABSENT in the %s schedule view', a
   });
   mount();
   if (mode === 'list') fireEvent.click(await screen.findByRole('button', { name: 'List' }));
-  expect(await screen.findByText('ABSENT')).toBeTruthy();
+  expect(await screen.findByText('Absent')).toBeTruthy();
+  expect(screen.queryByText('ABSENT')).toBeNull();
+  await act(async () => {
+    await i18n.changeLanguage('vi');
+  });
+  expect(await screen.findByText('Vắng mặt')).toBeTruthy();
   expect(SmartSiteManagementClient.prototype.attendanceDays).toHaveBeenCalledWith(
     'synthetic-token',
     'site-1',

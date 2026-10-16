@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { DataSource, In, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
 import type { AttendanceDayResponse, AttendanceNotificationEvent } from '@smartsite/contracts';
@@ -18,10 +18,10 @@ import {
 import { auditAccess } from '../shared/access-audit.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import {
-  workedMilliseconds,
   workDateAt,
   scheduledShiftWindow,
-  type WorkInterval,
+  calculateShiftAttendanceSubtraction,
+  type ShiftSubtractionResult,
 } from './attendance-calculation.js';
 
 @Injectable()
@@ -192,6 +192,10 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         endsAt: shift?.endsAt ?? null,
         breakStartsAt: shift?.breakStartsAt ?? null,
         breakEndsAt: shift?.breakEndsAt ?? null,
+        allowedExitMinutes: shift?.allowedExitMinutes ?? 15,
+        maxExitCount: shift?.maxExitCount ?? 2,
+        exitCount: 0,
+        deductedMinutes: 0,
         status: 'IN_PROGRESS',
         regularMinutes: 0,
         overtimeMinutes: 0,
@@ -383,7 +387,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         worker,
         event.id,
         'EARLY_EXIT',
-        'You left the site before the shift ended. Work time is paused until you return.',
+        `You left the site before the shift ended. Temporary exits allow ${day.allowedExitMinutes ?? 15} minutes without deduction for up to ${day.maxExitCount ?? 2} exits. Excess time is deducted; exits beyond the limit and final early departure are deducted in full.`,
         false,
         day.workDate,
         day.id,
@@ -427,6 +431,8 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       day.confirmedMinutes,
       day.anomalies,
       day.scheduleId,
+      day.exitCount,
+      day.deductedMinutes,
     ]);
     const worker = await manager
       .getRepository(WorkerEntity)
@@ -448,6 +454,8 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         day.endsAt = shift.endsAt;
         day.breakStartsAt = shift.breakStartsAt;
         day.breakEndsAt = shift.breakEndsAt;
+        day.allowedExitMinutes = shift.allowedExitMinutes ?? 15;
+        day.maxExitCount = shift.maxExitCount ?? 2;
         day.timezone = shift.timezone;
         day.shiftName = shift.name;
         await manager
@@ -469,8 +477,6 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
           .findBy({ workerScheduleId: day.scheduleId })
       : [];
     const approvedOvertime = overtime.filter((r) => r.status === 'APPROVED');
-    const regular: WorkInterval[] =
-      day.startsAt && day.endsAt ? [{ start: +day.startsAt, end: +day.endsAt }] : [];
     const overtimeWindows = approvedOvertime.map((r) => ({ start: +r.startsAt, end: +r.endsAt }));
     const leave = leaves
       .filter((r) => r.status === 'APPROVED')
@@ -480,27 +486,39 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
           : [],
       );
     const end = Math.max(day.endsAt ? +day.endsAt : 0, ...overtimeWindows.map((w) => w.end));
-    const closed = sessions
-      .filter((s) => s.status !== 'IGNORED' && s.effectiveInAt && s.effectiveOutAt)
-      .map((s) => ({ start: +s.effectiveInAt!, end: +s.effectiveOutAt! }));
-    const provisional = sessions
-      .filter((s) => s.status !== 'IGNORED' && s.effectiveInAt)
-      .map((s) => ({ start: +s.effectiveInAt!, end: s.effectiveOutAt ? +s.effectiveOutAt : +now }));
-    const regularExclusions = [
-      ...leave,
-      ...(day.breakStartsAt && day.breakEndsAt
-        ? [{ start: +day.breakStartsAt, end: +day.breakEndsAt }]
-        : []),
-    ];
-    const regularMs = workedMilliseconds(closed, regular, regularExclusions);
-    const overtimeMs = workedMilliseconds(closed, overtimeWindows, leave);
-    day.regularMinutes = Math.floor(regularMs / 60000);
-    day.overtimeMinutes = Math.floor((regularMs + overtimeMs) / 60000) - day.regularMinutes;
-    day.provisionalMinutes = Math.floor(
-      (workedMilliseconds(provisional, regular, regularExclusions) +
-        workedMilliseconds(provisional, overtimeWindows, leave)) /
-        60000,
-    );
+    let violations: Array<'EXIT_DURATION_EXCEEDED' | 'MAX_EXITS_EXCEEDED'> = [];
+    let violationDetails: ShiftSubtractionResult['violationDetails'] = [];
+    if (day.startsAt && day.endsAt) {
+      const calcResult = calculateShiftAttendanceSubtraction({
+        shiftWindow: {
+          startsAt: day.startsAt,
+          endsAt: day.endsAt,
+          breakStartsAt: day.breakStartsAt,
+          breakEndsAt: day.breakEndsAt,
+        },
+        policy: {
+          allowedExitMinutes: day.allowedExitMinutes ?? 15,
+          maxExitCount: day.maxExitCount ?? 2,
+        },
+        sessions,
+        leaveWindows: leave,
+        overtimeWindows,
+        now,
+      });
+      day.regularMinutes = calcResult.regularMinutes;
+      day.overtimeMinutes = calcResult.overtimeMinutes;
+      day.provisionalMinutes = calcResult.provisionalMinutes;
+      day.exitCount = calcResult.exitCount;
+      day.deductedMinutes = calcResult.deductedMinutes;
+      violations = calcResult.violations;
+      violationDetails = calcResult.violationDetails;
+    } else {
+      day.regularMinutes = 0;
+      day.overtimeMinutes = 0;
+      day.provisionalMinutes = 0;
+      day.exitCount = 0;
+      day.deductedMinutes = 0;
+    }
     const anomalies: string[] = [];
     if (!day.scheduleId) anomalies.push('NO_SCHEDULE');
     if (schedules.length > 1) anomalies.push('MULTIPLE_SHIFTS');
@@ -563,8 +581,16 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       leaves.some((r) => r.status === 'PENDING_MANAGER')
     )
       anomalies.push('PENDING_REQUEST');
+    if (violations.includes('EXIT_DURATION_EXCEEDED')) anomalies.push('EXIT_DURATION_EXCEEDED');
+    if (violations.includes('MAX_EXITS_EXCEEDED')) anomalies.push('MAX_EXITS_EXCEEDED');
     day.anomalies = anomalies;
-    const blocking = anomalies.filter((a) => !(a === 'EARLY_CHECKOUT' && day.reviewedBy));
+    // Exit violations already have a deterministic deduction and notification.
+    // Preserve review requirements for missing evidence and final early departure.
+    const nonBlocking = (a: string) =>
+      a === 'EXIT_DURATION_EXCEEDED' ||
+      a === 'MAX_EXITS_EXCEEDED' ||
+      (a === 'EARLY_CHECKOUT' && Boolean(day.reviewedBy));
+    const blocking = anomalies.filter((a) => !nonBlocking(a));
     day.status = blocking.length
       ? 'NEEDS_REVIEW'
       : absent
@@ -573,7 +599,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
           ? 'IN_PROGRESS'
           : 'CONFIRMED';
     day.confirmedMinutes =
-      day.status === 'CONFIRMED' ? Math.floor((regularMs + overtimeMs) / 60000) : null;
+      day.status === 'CONFIRMED' ? day.regularMinutes + day.overtimeMinutes : null;
     const after = JSON.stringify([
       day.status,
       day.regularMinutes,
@@ -582,6 +608,8 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       day.confirmedMinutes,
       day.anomalies,
       day.scheduleId,
+      day.exitCount,
+      day.deductedMinutes,
     ]);
     if (before !== after) day.version += 1;
     await manager.getRepository(AttendanceDayEntity).save(day);
@@ -616,6 +644,20 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         true,
         day.workDate,
       );
+    for (const violation of violationDetails) {
+      const v = violation.event;
+      // request_id is a UUID. Derive it from the exit so retries, growing
+      // durations and later exits cannot send the same warning twice.
+      const hash = createHash('sha256')
+        .update(`${day.id}:${v}:${violation.exitedAt}`)
+        .digest('hex');
+      const notificationId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+      const isDuration = v === 'EXIT_DURATION_EXCEEDED';
+      const msg = isDuration
+        ? `Công nhân ${worker.displayName} ra ngoài quá thời gian cho phép (${day.allowedExitMinutes ?? 15} phút) trong ca làm việc ngày ${day.workDate}. Phần vượt quá đã bị trừ vào giờ làm.`
+        : `Công nhân ${worker.displayName} đã vượt quá số lần ra ngoài cho phép (${day.maxExitCount ?? 2} lần) trong ca làm việc ngày ${day.workDate}. Toàn bộ thời gian ra ngoài này đã bị trừ vào giờ làm.`;
+      await this.notify(manager, worker, notificationId, v, msg, true, day.workDate, day.id);
+    }
     return day;
   }
   response(
@@ -636,6 +678,10 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       endsAt: day.endsAt?.toISOString() ?? null,
       breakStartsAt: day.breakStartsAt?.toISOString() ?? null,
       breakEndsAt: day.breakEndsAt?.toISOString() ?? null,
+      allowedExitMinutes: day.allowedExitMinutes ?? 15,
+      maxExitCount: day.maxExitCount ?? 2,
+      exitCount: day.exitCount ?? 0,
+      deductedMinutes: day.deductedMinutes ?? 0,
       status: day.status,
       regularMinutes: day.regularMinutes,
       overtimeMinutes: day.overtimeMinutes,

@@ -2166,7 +2166,10 @@ export class SmartSiteManagementClient {
     input: Pick<
       ShiftResponse,
       'name' | 'startsAt' | 'endsAt' | 'timezone' | 'breakStartsAt' | 'breakEndsAt'
-    >,
+    > & {
+      allowedExitMinutes?: number;
+      maxExitCount?: number;
+    },
   ) {
     return this.request<ShiftResponse>('POST', `/sites/${pathId(siteId)}/shifts`, token, input);
   }

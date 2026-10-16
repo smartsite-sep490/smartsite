@@ -1,4 +1,5 @@
 import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -270,7 +271,7 @@ export function SecurityGateDeskView({
       setRepeatNotice('');
       setSeparatePassage(false);
       setQrResultMessage(
-        `${r.authorization}: ${r.worker.displayName} · ${getSafeReasonMessage(r.reasonCode)}`,
+        `${localizedLabel(r.authorization)}: ${r.worker.displayName} · ${getSafeReasonMessage(r.reasonCode)}`,
       );
       setCandidateWorker(r.worker);
       setCurrentAttempt(r.attempt ?? null);
@@ -725,7 +726,7 @@ export function SecurityGateDeskView({
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${cameraActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}
                 />
-                {cameraActive ? tr('common.live_720p') : 'OFFLINE'}
+                {cameraActive ? tr('common.live_720p') : localizedLabel('OFFLINE')}
               </span>
             </div>
           </div>
@@ -1060,7 +1061,7 @@ export function SecurityGateDeskView({
                       {tr('common.worker_fallback_session')}
                     </span>
                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800">
-                      {tr('common.direction_value', { value1: fallback.direction })}
+                      {tr('common.direction_value', { value1: localizedLabel(fallback.direction) })}
                     </span>
                   </div>
                   <p className="text-xs text-blue-800">
@@ -1290,8 +1291,9 @@ export function SecurityGateDeskView({
         <section className="space-y-3 rounded-xl border bg-white p-5">
           <p className="text-sm">
             {tr(
-              'security_gate_desk_view.this_value_is_recorded_attendance_has_been_updated_automatically',
-              { value1: confirmedEvent.direction === 'IN' ? 'entry' : 'exit' },
+              confirmedEvent.direction === 'IN'
+                ? 'security_gate_desk_view.entry_recorded'
+                : 'security_gate_desk_view.exit_recorded',
             )}
           </p>
         </section>
@@ -1381,12 +1383,12 @@ export function SecurityGateDeskView({
                           : 'bg-blue-100 text-blue-800'
                       }`}
                     >
-                      {evt.direction === 'IN' ? 'IN' : 'OUT'}
+                      {localizedLabel(evt.direction)}
                     </span>
                   </td>
                   <td className="px-3.5 py-2.5">
                     <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700">
-                      {evt.method}
+                      {localizedLabel(evt.method)}
                     </span>
                   </td>
                   <td className="px-3.5 py-2.5">

@@ -1,4 +1,5 @@
 import { translate as tr, uiLocale } from '../../../i18n';
+import { localizedLabel } from '../../../i18n/labels';
 export const attendanceLabel = (value: string) =>
   ({
     IN_PROGRESS: tr('common.in_progress_c1f88e'),
@@ -16,7 +17,7 @@ export const attendanceLabel = (value: string) =>
     REJECTED: tr('common.rejected'),
     EARLY_CHECKOUT: tr('common.early_departure'),
     SCHEDULE_CHANGED: tr('common.schedule_changed'),
-  })[value] ?? value.replaceAll('_', ' ').toLowerCase();
+  })[value] ?? localizedLabel(value.replaceAll('_', ' ').toLowerCase());
 
 export const attendanceHours = (minutes: number) =>
   tr('time.hoursMinutes', { hours: Math.floor(minutes / 60), minutes: minutes % 60 });

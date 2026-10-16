@@ -668,8 +668,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     [secondShiftId, managerShiftId],
   );
   assert.deepEqual(Object.keys(eligibleShifts.json.items[0]).sort(), [
+    'allowedExitMinutes',
+    'breakEndsAt',
+    'breakStartsAt',
     'endsAt',
     'id',
+    'maxExitCount',
     'name',
     'startsAt',
     'timezone',

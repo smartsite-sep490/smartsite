@@ -4,11 +4,42 @@ import test from 'node:test';
 import { ValidationPipe } from '@nestjs/common';
 import { command } from '../src/common/configuration/commands.js';
 import { ReviewAttendanceCorrectionCommand } from '../src/modules/workforce/attendance/attendance.service.js';
+import { CreateShiftDto } from '../src/modules/workforce/scheduling/dto/schedule-configuration.dto.js';
 import {
   AttendanceDaysDto,
   AttendanceTimeRequestsDto,
   ReviewAttendanceTimeDto,
 } from '../src/modules/workforce/attendance/dto/attendance.dto.js';
+
+test('exit policy validates integer minutes 0-120 and counts 0-10 at the HTTP boundary', async () => {
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  const shift = {
+    name: 'Day',
+    startsAt: '2026-10-15T08:00:00Z',
+    endsAt: '2026-10-15T17:00:00Z',
+    timezone: 'UTC',
+  };
+  for (const policy of [
+    {},
+    { allowedExitMinutes: 0, maxExitCount: 0 },
+    { allowedExitMinutes: 120, maxExitCount: 10 },
+  ]) {
+    await pipe.transform({ ...shift, ...policy }, { type: 'body', metatype: CreateShiftDto });
+  }
+  for (const policy of [
+    { allowedExitMinutes: -1 },
+    { allowedExitMinutes: 121 },
+    { allowedExitMinutes: 1.5 },
+    { allowedExitMinutes: '15' },
+    { maxExitCount: -1 },
+    { maxExitCount: 11 },
+    { maxExitCount: 1.5 },
+  ]) {
+    await assert.rejects(
+      pipe.transform({ ...shift, ...policy }, { type: 'body', metatype: CreateShiftDto }),
+    );
+  }
+});
 
 test('attendance query can be revalidated after the HTTP pipe without inventing pagination values', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });

@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { localizedError } from '../../../i18n/messages';
-import { attendanceHours } from './attendance-display';
+import { attendanceHours, attendanceLabel } from './attendance-display';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
 import { AttendanceDailyBarChart } from './AttendanceDailyBarChart';
 import { AttendanceDistributionDonut } from './AttendanceDistributionDonut';
@@ -44,6 +45,7 @@ export function WorkerAttendanceDetailPanel({
   onPreviousWeek: () => void;
   onNextWeek: () => void;
 }) {
+  useTranslation();
   const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const [activeTab, setActiveTab] = useState<'records' | 'timesheet'>('records');
   const [expandedDayId, setExpandedDayId] = useState<string | null>(null);
@@ -76,7 +78,8 @@ export function WorkerAttendanceDetailPanel({
   // Query for session intervals of the selected day
   const dayDetailQuery = useQuery({
     queryKey: ['attendance-day-detail', apiUrl, sessionScope, siteId, expandedDayId],
-    queryFn: () => (expandedDayId ? client.attendanceDayDetail(token, siteId, expandedDayId) : null),
+    queryFn: () =>
+      expandedDayId ? client.attendanceDayDetail(token, siteId, expandedDayId) : null,
     enabled: Boolean(expandedDayId),
     refetchInterval: 30000,
   });
@@ -134,7 +137,10 @@ export function WorkerAttendanceDetailPanel({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 id="worker-detail-heading" className="text-base font-extrabold text-[#071A2B]">
+                  <h2
+                    id="worker-detail-heading"
+                    className="text-base font-extrabold text-[#071A2B]"
+                  >
                     {worker.workerName}
                   </h2>
                   <AttendanceStatusBadge status={worker.todayStatus} />
@@ -369,7 +375,7 @@ export function WorkerAttendanceDetailPanel({
                               ? attendanceHours(day.totalMinutes)
                               : day.provisionalMinutes > 0
                                 ? `${attendanceHours(day.provisionalMinutes)}*`
-                                : '0h 0m'}
+                                : attendanceHours(0)}
                           </td>
                           <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
                             {attendanceHours(day.regularMinutes)}
@@ -387,7 +393,9 @@ export function WorkerAttendanceDetailPanel({
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
                                 aria-expanded={isExpanded}
                               >
-                                <span>{isExpanded ? 'Hide' : 'Details'}</span>
+                                <span>
+                                  {tr(isExpanded ? 'common.hide_details' : 'common.view_details')}
+                                </span>
                                 <IconChevronDown
                                   className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                                 />
@@ -411,9 +419,7 @@ export function WorkerAttendanceDetailPanel({
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     {tr('attendance_report.timesheet_detail')}
                   </h4>
-                  <span className="text-xs text-slate-500">
-                    {tr('common.confirmed_only')}
-                  </span>
+                  <span className="text-xs text-slate-500">{tr('common.confirmed_only')}</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -456,10 +462,7 @@ export function WorkerAttendanceDetailPanel({
             {/* Expandable Session Detail Drawer */}
             {expandedDayId && (
               <div className="p-5 bg-slate-50/80 border-t border-slate-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    {tr('attendance_report.sessions')} ({tr('common.id_value', { value1: expandedDayId })})
-                  </h4>
+                <div className="flex items-center justify-end">
                   {onSelectDayForCorrection && (
                     <button
                       onClick={() => onSelectDayForCorrection(expandedDayId)}
@@ -482,7 +485,59 @@ export function WorkerAttendanceDetailPanel({
                 )}
 
                 {dayDetailQuery.data && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-xl bg-white border border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                          {tr('attendance_report.scheduled_shift')}
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {dayDetailQuery.data.day.startsAt && dayDetailQuery.data.day.endsAt
+                            ? `${formatShortTime(dayDetailQuery.data.day.startsAt)} - ${formatShortTime(dayDetailQuery.data.day.endsAt)}`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                          {tr('attendance_report.shift_exits')}
+                        </span>
+                        <span className="font-semibold text-slate-800">
+                          {tr('attendance_report.shift_exits_value', {
+                            count: dayDetailQuery.data.day.exitCount ?? 0,
+                            max:
+                              dayDetailQuery.data.day.maxExitCount !== undefined
+                                ? tr('attendance_report.max_exits_limit', {
+                                    max: dayDetailQuery.data.day.maxExitCount,
+                                  })
+                                : '',
+                          })}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                          {tr('attendance_report.deducted_time')}
+                        </span>
+                        <span
+                          className={`font-semibold font-mono ${(dayDetailQuery.data.day.deductedMinutes ?? 0) > 0 ? 'text-rose-600' : 'text-slate-700'}`}
+                        >
+                          {tr('attendance_report.deducted_minutes_value', {
+                            minutes: dayDetailQuery.data.day.deductedMinutes ?? 0,
+                          })}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                          {tr('attendance_report.actual_working_hours')}
+                        </span>
+                        <span className="font-semibold font-mono text-emerald-700">
+                          {attendanceHours(
+                            dayDetailQuery.data.day.confirmedMinutes ??
+                              dayDetailQuery.data.day.provisionalMinutes,
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
                     {!dayDetailQuery.data.sessions.length ? (
                       <p className="text-xs text-slate-400 italic">
                         {tr('attendance_report.no_sessions_recorded')}
@@ -517,7 +572,7 @@ export function WorkerAttendanceDetailPanel({
                             )}
                             <div className="flex items-center justify-between pt-1">
                               <span className="text-[10px] font-bold text-slate-500">
-                                {session.status}
+                                {attendanceLabel(session.status)}
                               </span>
                               {session.ignoreReason && (
                                 <span className="text-[10px] text-slate-400 italic">

@@ -1165,12 +1165,12 @@ export function WorkforceScheduleTab({
                                       }`}
                                     >
                                       {scheduleAttendance(sched.id) === 'ABSENT'
-                                        ? 'ABSENT'
+                                        ? localizedLabel('ABSENT')
                                         : isPast
-                                          ? 'PAST'
+                                          ? localizedLabel('PAST')
                                           : hasPendingRequest
-                                            ? 'PENDING'
-                                            : 'SCHEDULED'}
+                                            ? localizedLabel('PENDING')
+                                            : localizedLabel('SCHEDULED')}
                                     </span>
                                   </div>
 
@@ -1325,12 +1325,12 @@ export function WorkforceScheduleTab({
                                       }
                                     >
                                       {scheduleAttendance(sched.id) === 'ABSENT'
-                                        ? 'ABSENT'
+                                        ? localizedLabel('ABSENT')
                                         : isPast
-                                          ? 'PAST'
+                                          ? localizedLabel('PAST')
                                           : hasPendingRequest
                                             ? tr('common.pending_review_ac9bf8')
-                                            : 'SCHEDULED'}
+                                            : localizedLabel('SCHEDULED')}
                                     </Badge>
                                   </div>
 

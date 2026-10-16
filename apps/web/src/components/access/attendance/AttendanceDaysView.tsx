@@ -7,7 +7,12 @@ import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { loadAllPages } from '../../workforce/load-all-pages';
-import { attendanceLabel, attendanceHours, attendanceDate, formatWorkDate } from './attendance-display';
+import {
+  attendanceLabel,
+  attendanceHours,
+  attendanceDate,
+  formatWorkDate,
+} from './attendance-display';
 import { SmartDatePicker } from '../../ui';
 import { requestTimeInstant, requestShiftTimes, requestWallTime } from './attendance-request-time';
 import type {
@@ -733,7 +738,9 @@ export function AttendanceDaysView({
                               {!isWorker && (
                                 <p className="text-xs font-bold text-[#071A2B]">{day.workerName}</p>
                               )}
-                              <p className="text-xs font-semibold text-slate-700">{formatWorkDate(day.workDate)}</p>
+                              <p className="text-xs font-semibold text-slate-700">
+                                {formatWorkDate(day.workDate)}
+                              </p>
                             </div>
                           </div>
                         </td>
@@ -885,7 +892,9 @@ export function AttendanceDaysView({
                   <h3 className="text-sm font-bold text-[#071A2B]">
                     {activeDay.workerName}
                     <span className="ml-2 text-slate-400 font-normal">·</span>
-                    <span className="ml-2 text-slate-500 font-semibold">{formatWorkDate(activeDay.workDate)}</span>
+                    <span className="ml-2 text-slate-500 font-semibold">
+                      {formatWorkDate(activeDay.workDate)}
+                    </span>
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     {activeDay.startsAt
@@ -1106,7 +1115,9 @@ export function AttendanceDaysView({
                 const canConfirmEarly =
                   data.canReview &&
                   activeDay.anomalies.includes('EARLY_CHECKOUT') &&
-                  !activeDay.anomalies.includes('SCHEDULE_CHANGED');
+                  activeDay.anomalies.every((a) =>
+                    ['EARLY_CHECKOUT', 'EXIT_DURATION_EXCEEDED', 'MAX_EXITS_EXCEEDED'].includes(a),
+                  );
                 const hasDuplicateToIgnore =
                   data.canReview &&
                   (detail.data?.sessions.some((s) => s.canIgnoreDuplicate) ?? false);
@@ -1171,8 +1182,9 @@ export function AttendanceDaysView({
             <h3 className="font-bold text-[#071A2B]">{tr('common.request_submitted')}</h3>
             <p className="text-sm text-slate-600">
               {tr(
-                'attendance_days_view.your_value_request_was_sent_to_your_contractor_representative',
-                { value1: submittedRequest.kind === 'OVERTIME' ? 'overtime' : 'leave' },
+                submittedRequest.kind === 'OVERTIME'
+                  ? 'attendance_days_view.overtime_request_sent'
+                  : 'attendance_days_view.leave_request_sent',
               )}
             </p>
             <div aria-live="polite">
@@ -1517,7 +1529,7 @@ export function AttendanceDaysView({
                         <span className="text-xs font-bold text-[#071A2B]">{r.workerName}</span>
                         <StatusBadge status={r.status} />
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          {r.kind}
+                          {localizedLabel(r.kind)}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500">

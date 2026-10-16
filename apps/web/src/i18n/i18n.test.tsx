@@ -18,7 +18,15 @@ import {
 import {
   attendanceHours,
   attendanceDate,
+  attendanceLabel,
 } from '../components/access/attendance/attendance-display';
+
+it('localizes exit violations wherever attendance anomaly labels are shown', async () => {
+  await i18n.changeLanguage('vi');
+  expect(attendanceLabel('EXIT_DURATION_EXCEEDED')).toBe('Ra ngoài quá thời gian cho phép');
+  expect(attendanceLabel('MAX_EXITS_EXCEEDED')).toBe('Vượt số lần ra ngoài cho phép');
+  expect(attendanceLabel('ABSENT')).toBe('Vắng mặt');
+});
 
 beforeEach(async () => {
   await i18n.changeLanguage('en');

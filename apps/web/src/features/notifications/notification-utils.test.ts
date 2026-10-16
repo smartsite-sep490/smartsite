@@ -12,6 +12,91 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it('translates the exit-policy reminder from the server and preserves configured limits', async () => {
+    const item = {
+      event: 'EARLY_EXIT' as const,
+      message:
+        'You left the site before the shift ended. Temporary exits allow 15 minutes without deduction for up to 2 exits. Excess time is deducted; exits beyond the limit and final early departure are deducted in full.',
+    };
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      'Bạn đã rời công trường trước khi hết ca. Mỗi lượt ra ngoài được miễn trừ 15 phút, tối đa 2 lượt. Phần vượt thời gian sẽ bị trừ; lượt vượt số lần cho phép và thời gian về sớm được trừ toàn bộ.',
+    );
+    expect(formatNotificationTitle({ event: item.event, title: 'EARLY EXIT' })).toBe('Ra sớm');
+    await i18n.changeLanguage('en');
+    expect(formatNotificationDisplayMessage(item)).toBe(item.message);
+    expect(formatNotificationTitle({ event: item.event, title: 'EARLY EXIT' })).toBe('Early exit');
+  });
+
+  it.each([
+    ['EXIT_DURATION_EXCEEDED', 'Ra ngoài quá thời gian cho phép', 'Exit time limit exceeded'],
+    ['MAX_EXITS_EXCEEDED', 'Vượt số lần ra ngoài cho phép', 'Exit count limit exceeded'],
+  ] as const)(
+    'translates the %s title even for stored raw event codes',
+    async (event, vietnamese, english) => {
+      await i18n.changeLanguage('vi');
+      expect(formatNotificationTitle({ event, title: event.replaceAll('_', ' ') })).toBe(
+        vietnamese,
+      );
+      await i18n.changeLanguage('en');
+      expect(formatNotificationTitle({ event, title: event })).toBe(english);
+    },
+  );
+
+  it('translates stored violations without displaying transient duration details', async () => {
+    const duration = {
+      event: 'EXIT_DURATION_EXCEEDED' as const,
+      message:
+        'Công nhân Nguyễn An ra ngoài quá thời gian cho phép (15 phút) trong ca làm việc ngày 2026-10-16. Phần vượt quá đã bị trừ vào giờ làm. Lượt ra ngoài thứ 1, thời gian ngoài giờ nghỉ: 25 phút; thời gian bị trừ tính đến lần kiểm tra này: 10 phút.',
+    };
+    const count = {
+      event: 'MAX_EXITS_EXCEEDED' as const,
+      message:
+        'Công nhân Nguyễn An đã vượt quá số lần ra ngoài cho phép (0 lần) trong ca làm việc ngày 2026-10-16. Toàn bộ thời gian ra ngoài này đã bị trừ vào giờ làm. Lượt ra ngoài thứ 1, thời gian ngoài giờ nghỉ: 10 phút; thời gian bị trừ tính đến lần kiểm tra này: 10 phút.',
+    };
+    expect(formatNotificationDisplayMessage(duration)).toBe(
+      'Worker Nguyễn An exceeded the allowed exit time (15 minutes) during the shift on 2026-10-16. The excess time has been deducted from working hours.',
+    );
+    expect(formatNotificationDisplayMessage(count)).toBe(
+      'Worker Nguyễn An exceeded the allowed exit count (0 exits) during the shift on 2026-10-16. The full duration of this exit has been deducted from working hours.',
+    );
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationDisplayMessage(duration)).toBe(
+      duration.message.split(' Lượt ra ngoài thứ')[0],
+    );
+    expect(formatNotificationDisplayMessage(count)).toBe(
+      count.message.split(' Lượt ra ngoài thứ')[0],
+    );
+  });
+
+  it('hides a legacy zero-minute snapshot in both languages, including an English stored body', async () => {
+    const message =
+      'Worker An exceeded the allowed exit count (2 exits) during the shift on 2026-10-16. The full duration of this exit has been deducted from working hours.';
+    const item = {
+      event: 'MAX_EXITS_EXCEEDED' as const,
+      message:
+        message +
+        ' Exit 3, time outside excluding breaks: 0 minutes; time deducted as of this check: 0 minutes.',
+    };
+    expect(formatNotificationDisplayMessage(item)).toBe(message);
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      'Công nhân An đã vượt quá số lần ra ngoài cho phép (2 lần) trong ca làm việc ngày 2026-10-16. Toàn bộ thời gian ra ngoài này đã bị trừ vào giờ làm.',
+    );
+  });
+
+  it('translates older violation notices without detail suffixes', async () => {
+    expect(
+      formatNotificationDisplayMessage({
+        event: 'MAX_EXITS_EXCEEDED',
+        message:
+          'Công nhân An đã vượt quá số lần ra ngoài cho phép (2 lần) trong ca làm việc ngày 2026-10-16. Toàn bộ thời gian ra ngoài này đã bị trừ vào giờ làm.',
+      }),
+    ).toBe(
+      'Worker An exceeded the allowed exit count (2 exits) during the shift on 2026-10-16. The full duration of this exit has been deducted from working hours.',
+    );
+  });
+
   it('opens the worker schedule for a denied entry without inventing an attendance day', () => {
     const notification: UserNotificationResponse = {
       id: 'notice',

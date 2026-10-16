@@ -13,9 +13,40 @@ import { AttendanceDailyBarChart } from './AttendanceDailyBarChart';
 import { AttendanceDistributionDonut } from './AttendanceDistributionDonut';
 import { AttendanceWorkersTable } from './AttendanceWorkersTable';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
+import i18n from '../../../i18n';
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  await i18n.changeLanguage('en');
+});
+
+it('localizes chart weekdays, hour units and accessible status text in Vietnamese', async () => {
+  await i18n.changeLanguage('vi');
+  render(
+    <AttendanceDailyBarChart
+      daily={[
+        {
+          workDate: '2026-10-16',
+          attendanceDayId: 'day',
+          status: 'PRESENT',
+          shifts: [],
+          firstCheckInAt: null,
+          lastCheckOutAt: null,
+          hoursStatus: 'CONFIRMED',
+          regularMinutes: 480,
+          overtimeMinutes: 0,
+          totalMinutes: 480,
+          provisionalMinutes: 0,
+          anomalies: [],
+        },
+      ]}
+    />,
+  );
+  expect(screen.queryByText('Fri')).toBeNull();
+  expect(screen.getByText('Thứ 6')).toBeTruthy();
+  expect(screen.getByText('12 giờ')).toBeTruthy();
+  expect(screen.queryByText('PRESENT')).toBeNull();
+  expect(screen.getByText('Có mặt')).toBeTruthy();
 });
 
 describe('AttendanceSummaryCards', () => {
@@ -153,12 +184,7 @@ describe('AttendanceDailyBarChart', () => {
 
 describe('AttendanceDistributionDonut', () => {
   it('calculates proportions accurately and renders legend', () => {
-    render(
-      <AttendanceDistributionDonut
-        regularMinutes={2400}
-        overtimeMinutes={600}
-      />,
-    );
+    render(<AttendanceDistributionDonut regularMinutes={2400} overtimeMinutes={600} />);
 
     expect(screen.getByText('50h 0m')).toBeTruthy(); // 3000 / 60
     expect(screen.getByText('Regular')).toBeTruthy();

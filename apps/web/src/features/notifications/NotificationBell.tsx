@@ -347,7 +347,7 @@ export function NotificationBell({
               <p id="delete-single-description">
                 {tr(
                   'notification_bell.delete_notification_ldquo_value_rdquo_this_cannot_be_undone_from_the_app',
-                  { value1: targetSingleDelete.title },
+                  { value1: formatNotificationTitle(targetSingleDelete) },
                 )}
               </p>
               <div className="flex gap-2">
