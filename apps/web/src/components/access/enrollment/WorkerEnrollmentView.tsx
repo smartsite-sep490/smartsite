@@ -1,5 +1,6 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedLabel } from '../../../i18n/labels';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -795,13 +796,13 @@ export function WorkerEnrollmentView({
                 }`}
               />
               {profileStatus === 'ACTIVE'
-                ? 'ACTIVE'
+                ? localizedLabel('ACTIVE')
                 : profileStatus === 'REVOKED'
-                  ? 'REVOKED'
+                  ? localizedLabel('REVOKED')
                   : profileStatus === 'NEEDS_REENROLL'
                     ? tr('common.needs_re_enrollment')
                     : profileStatus === 'DELETED'
-                      ? 'DELETED'
+                      ? localizedLabel('DELETED')
                       : tr('common.not_enrolled')}
             </span>
           </div>

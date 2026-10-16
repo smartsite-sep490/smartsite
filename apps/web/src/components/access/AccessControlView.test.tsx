@@ -255,12 +255,11 @@ describe('Site Access ERD integration', () => {
     await screen.findByText('No visitor pass requests at this site.');
     expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
-  it('signs out through the shared session', async () => {
-    const user = userEvent.setup();
+  it('renders user details without separate sign out or role badge in page header', async () => {
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    await user.click(screen.getByRole('button', { name: /sign out/i }));
-    expect(authSessionMock.logout).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+    expect(screen.getByText('Quản trị viên Hệ thống')).toBeTruthy();
   });
   it('Representative sees scoped assignment/Zone setup without Admin account or gate controls', async () => {
     authSessionMock.user = {
@@ -274,6 +273,8 @@ describe('Site Access ERD integration', () => {
     });
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
+    expect(screen.queryByRole('heading', { name: 'Attendance', level: 1 })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Correction requests' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Revoke Contractor Zone' })).toBeNull();

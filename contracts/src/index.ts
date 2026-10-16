@@ -19,6 +19,7 @@ export type {
 export { PPE_ITEMS } from './ppe-items.js';
 export type { PpeItem } from './ppe-items.js';
 
+export type * from './attendance-reports-api.js';
 export type {
   AttendanceDayStatus,
   AttendanceNotificationEvent,

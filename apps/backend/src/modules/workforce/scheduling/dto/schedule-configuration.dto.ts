@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsISO8601,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -11,6 +12,8 @@ import {
   IsTimeZone,
   Matches,
   MaxLength,
+  Min,
+  Max,
 } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -37,6 +40,18 @@ export class CreateShiftDto {
   @IsOptional()
   @IsISO8601({ strict: true })
   breakEndsAt?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  allowedExitMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  maxExitCount?: number;
 
   @Transform(trim)
   @IsString()

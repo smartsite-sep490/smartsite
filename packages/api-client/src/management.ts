@@ -23,6 +23,10 @@ import type {
   ArchiveContractorTeamCommand,
   AssignContractorTeamCommand,
   AttendanceDaysResponse,
+  AttendanceReportQuery,
+  AttendanceWorkersQuery,
+  AttendanceSummaryResponse,
+  AttendanceWorkersResponse,
   AttendanceTimeRequestsQuery,
   AttendanceTimeRequestsResponse,
   AttendanceDayDetailResponse,
@@ -471,6 +475,26 @@ export class SmartSiteManagementClient {
     return this.request<AttendanceDaysResponse>(
       'GET',
       `/sites/${pathId(siteId)}/attendance-days?${query}`,
+      token,
+    );
+  }
+  attendanceSummary(token: string, siteId: string, options: AttendanceReportQuery) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<AttendanceSummaryResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-summary?${query}`,
+      token,
+    );
+  }
+  attendanceWorkers(token: string, siteId: string, options: AttendanceWorkersQuery) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<AttendanceWorkersResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-workers?${query}`,
       token,
     );
   }
@@ -3025,7 +3049,10 @@ export class SmartSiteManagementClient {
     input: Pick<
       ShiftResponse,
       'name' | 'startsAt' | 'endsAt' | 'timezone' | 'breakStartsAt' | 'breakEndsAt'
-    >,
+    > & {
+      allowedExitMinutes?: number;
+      maxExitCount?: number;
+    },
   ) {
     return this.request<ShiftResponse>('POST', `/sites/${pathId(siteId)}/shifts`, token, input);
   }

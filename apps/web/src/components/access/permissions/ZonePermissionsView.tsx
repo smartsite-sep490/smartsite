@@ -1,7 +1,7 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
-import { translate as tr } from '../../../i18n';
+import { translate as tr, uiLocale } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,7 +32,7 @@ function errorMessage(error: unknown): string {
 
 function formatDate(value: string | null): string {
   if (!value) return tr('common.no_expiry');
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat(uiLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));
@@ -240,7 +240,7 @@ export function ZonePermissionsView({
           >
             {zones.data?.items.map((zone) => (
               <option key={zone.id} value={zone.id}>
-                {zone.code} · {zone.name} · {zone.restrictionPolicy}
+                {zone.code} · {zone.name} · {localizedLabel(zone.restrictionPolicy)}
               </option>
             ))}
           </select>
@@ -358,7 +358,7 @@ export function ZonePermissionsView({
                 <span
                   className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${worker.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F7F6F3] text-[#6B6B6B]'}`}
                 >
-                  {worker.isActive ? 'ACTIVE' : 'INACTIVE'}
+                  {localizedLabel(worker.isActive ? 'ACTIVE' : 'INACTIVE')}
                 </span>
               </div>
             ))}
@@ -487,12 +487,12 @@ export function ZonePermissionsView({
                       <span
                         className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${grant.effect === 'ALLOW' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
                       >
-                        {grant.effect}
+                        {localizedLabel(grant.effect)}
                       </span>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${stateTone(state)}`}
                       >
-                        {state}
+                        {localizedLabel(state)}
                       </span>
                     </div>
                   </div>

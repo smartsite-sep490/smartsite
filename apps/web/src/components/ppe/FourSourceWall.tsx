@@ -204,12 +204,12 @@ export function FourSourceWallTile({
             {isAiWorkPaused
               ? t('ppe.badge.aiPaused')
               : isReplay
-                ? 'REPLAY'
+                ? t('ppe.wall.sourceReplay')
                 : isLive
-                  ? 'LIVE'
+                  ? t('ppe.wall.sourceLive')
                   : status === 'CONNECTING'
-                    ? 'CONNECTING'
-                    : 'UNAVAILABLE'}
+                    ? t('ppe.wall.sourceConnecting')
+                    : t('ppe.wall.sourceUnavailable')}
           </span>
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60">
             <span

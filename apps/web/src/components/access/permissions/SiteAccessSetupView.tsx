@@ -6,7 +6,6 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AttendanceView } from '../attendance/AttendanceView';
 
 function localTime(offset: number) {
   const date = new Date(Date.now() + offset);
@@ -395,7 +394,6 @@ export function SiteAccessSetupView({
         ))}
         {revoke.error && <p role="alert">{localizedError(revoke.error.message)}</p>}
       </section>
-      <AttendanceView apiUrl={apiUrl} token={token} siteId={siteId} sessionScope={sessionScope} />
     </div>
   );
 }

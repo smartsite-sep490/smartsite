@@ -1,6 +1,10 @@
 import { hasRegisteredFeatureKey, registerFeatureCatalog } from './feature-catalog-registry';
 
 export const PPE_EN_CATALOG = {
+  'ppe.wall.sourceReplay': 'REPLAY',
+  'ppe.wall.sourceLive': 'LIVE',
+  'ppe.wall.sourceConnecting': 'CONNECTING',
+  'ppe.wall.sourceUnavailable': 'UNAVAILABLE',
   'ppe.error.metadata401': 'Session expired or unauthorized. Please sign in again.',
   'ppe.error.metadata403': 'You do not have permission to access this resource.',
   'ppe.error.site404': 'Site resource unavailable.',
@@ -992,6 +996,10 @@ export const PPE_EN_CATALOG = {
 export type PpeTranslationKey = keyof typeof PPE_EN_CATALOG;
 
 export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
+  'ppe.wall.sourceReplay': 'PHÁT LẠI',
+  'ppe.wall.sourceLive': 'TRỰC TIẾP',
+  'ppe.wall.sourceConnecting': 'ĐANG KẾT NỐI',
+  'ppe.wall.sourceUnavailable': 'KHÔNG KHẢ DỤNG',
   'ppe.error.metadata401':
     'Phiên làm việc đã hết hạn hoặc chưa được xác thực. Vui lòng đăng nhập lại.',
   'ppe.error.metadata403': 'Bạn không có quyền truy cập tài nguyên này.',

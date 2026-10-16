@@ -27,7 +27,13 @@ test('MF03 migration preserves legacy multiple shifts, blocks new conflicts and 
     for (const migration of migrations.filter(
       (m) =>
         !mf03Migrations.includes(m) &&
-        !['ShiftBreak1791763200001', 'GateScheduleDenial1791849600000'].includes(m.name ?? ''),
+        ![
+          'ShiftBreak1791763200001',
+          'GateScheduleDenial1791849600000',
+          'AttendanceAbsence1792022400000',
+          'ShiftExitGracePeriod1792281600000',
+          'AttendanceExitNotifications1792281600001',
+        ].includes(m.name ?? ''),
     ))
       await migration.up(runner);
     const site = randomUUID(),

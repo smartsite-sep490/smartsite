@@ -138,6 +138,10 @@ export class ScheduleConfigurationService {
       startsAt: shift.startsAt.toISOString(),
       endsAt: shift.endsAt.toISOString(),
       timezone: shift.timezone,
+      breakStartsAt: shift.breakStartsAt?.toISOString() ?? null,
+      breakEndsAt: shift.breakEndsAt?.toISOString() ?? null,
+      allowedExitMinutes: shift.allowedExitMinutes ?? 15,
+      maxExitCount: shift.maxExitCount ?? 2,
     };
   }
 
@@ -244,6 +248,8 @@ export class ScheduleConfigurationService {
       invalid('Shift break requires both timestamps and must be within the shift');
     const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
     if (!site) missing();
+    const allowedExitMinutes = value.allowedExitMinutes ?? 15;
+    const maxExitCount = value.maxExitCount ?? 2;
     return this.dataSource.getRepository(ShiftEntity).save({
       id: randomUUID(),
       siteId: scopedSiteId,
@@ -253,6 +259,8 @@ export class ScheduleConfigurationService {
       timezone: value.timezone,
       breakStartsAt,
       breakEndsAt,
+      allowedExitMinutes,
+      maxExitCount,
     });
   }
 

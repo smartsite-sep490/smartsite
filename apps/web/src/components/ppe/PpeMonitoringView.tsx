@@ -3311,7 +3311,7 @@ export function PpeMonitoringView({
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FBF3DB] text-[#956400]">
-                          {evt.status}
+                          {t('ppe.event.statusSnapshotObservation')}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-right">

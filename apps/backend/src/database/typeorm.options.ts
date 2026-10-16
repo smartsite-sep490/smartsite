@@ -2,8 +2,11 @@ import { Mf06AssessmentRequests1791590400001 } from './migrations/1791590400001-
 import { Mf06MainAuthorityJournal1791590400002 } from './migrations/1791590400002-Mf06MainAuthorityJournal.js';
 import { SafetyFaceProvenance1791590400003 } from './migrations/1791590400003-SafetyFaceProvenance.js';
 import { Mf06ImmutableAssessments1791590400004 } from './migrations/1791590400004-Mf06ImmutableAssessments.js';
+import { ShiftExitGracePeriod1792281600000 } from './migrations/1792281600000-ShiftExitGracePeriod.js';
+import { AttendanceExitNotifications1792281600001 } from './migrations/1792281600001-AttendanceExitNotifications.js';
 import { SafetyChecklists1792195200000 } from './migrations/1792195200000-SafetyChecklists.js';
 import { SingleSiteManager1791936000000 } from './migrations/1791936000000-SingleSiteManager.js';
+import { AttendanceAbsence1792022400000 } from './migrations/1792022400000-AttendanceAbsence.js';
 import { TeamZonePermissions1791940000000 } from './migrations/1791940000000-TeamZonePermissions.js';
 import { ContractorZoneRegrant1791940000001 } from './migrations/1791940000001-ContractorZoneRegrant.js';
 import { SingleTeamZone1791940000002 } from './migrations/1791940000002-SingleTeamZone.js';
@@ -140,7 +143,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       TeamZonePermissions1791940000000,
       ContractorZoneRegrant1791940000001,
       SingleTeamZone1791940000002,
+      AttendanceAbsence1792022400000,
       SafetyChecklists1792195200000,
+      ShiftExitGracePeriod1792281600000,
+      AttendanceExitNotifications1792281600001,
     ],
     logging: false,
     extra: {

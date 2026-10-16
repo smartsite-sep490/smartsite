@@ -809,10 +809,10 @@ export class AttendanceDaysService {
       if (day.reviewedBy === actor.id && day.reviewNote === value.reviewNote) return { id };
       if (day.version !== value.expectedVersion)
         conflict('Attendance changed; reload before reviewing');
-      if (
-        day.anomalies.some((a) => a !== 'EARLY_CHECKOUT') ||
-        !day.anomalies.includes('EARLY_CHECKOUT')
-      )
+      const blocking = day.anomalies.filter(
+        (a) => a !== 'EXIT_DURATION_EXCEEDED' && a !== 'MAX_EXITS_EXCEEDED',
+      );
+      if (blocking.some((a) => a !== 'EARLY_CHECKOUT') || !blocking.includes('EARLY_CHECKOUT'))
         conflict('Resolve missing events, schedules and pending requests before confirming hours');
       day.reviewedBy = actor.id;
       day.reviewedAt = new Date();

@@ -1,4 +1,14 @@
 export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
+export type {
+  AttendanceReportQuery,
+  AttendanceWorkersQuery,
+  AttendanceReportStatus,
+  AttendanceReportMetrics,
+  AttendanceReportDay,
+  AttendanceWorkerReport,
+  AttendanceWorkersResponse,
+  AttendanceSummaryResponse,
+} from '@smartsite/contracts';
 export { SmartSiteManagementClient } from './management';
 export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
 export type { Mf05DemoStatus } from './mf05-demo';
