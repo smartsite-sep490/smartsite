@@ -233,7 +233,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                   {
                     id: 'camera-setup',
                     get label() {
-                      return tr('safety:cameraSetup.title');
+                      return tr('cameraSetup.title', { ns: 'safety' });
                     },
                     icon: IconCamera,
                   },

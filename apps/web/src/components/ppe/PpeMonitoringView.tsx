@@ -1455,7 +1455,7 @@ export function PpeMonitoringView({
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 {!selectedSiteId && visibleAuthorizedSites.length > 0 && (
-                  <option value="">{tr('safety:cameraSetup.chooseSite')}</option>
+                  <option value="">{tr('cameraSetup.chooseSite', { ns: 'safety' })}</option>
                 )}
                 {visibleAuthorizedSites.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -1565,7 +1565,7 @@ export function PpeMonitoringView({
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 {!selectedCameraId && visibleAuthorizedCameras.length > 0 && (
-                  <option value="">{tr('safety:cameraSetup.chooseCamera')}</option>
+                  <option value="">{tr('cameraSetup.chooseCamera', { ns: 'safety' })}</option>
                 )}
                 {visibleAuthorizedCameras.map((camera) => (
                   <option key={camera.id} value={camera.id}>
@@ -1683,7 +1683,7 @@ export function PpeMonitoringView({
               !selectedCameraId &&
               previewCamerasInfiniteQuery.isSuccess)) && (
             <p role="status" className="text-xs text-slate-600">
-              {tr('safety:cameraSetup.linkedSelection')}
+              {tr('cameraSetup.linkedSelection', { ns: 'safety' })}
             </p>
           )}
           {isSiteSettledEmpty && (
@@ -1720,7 +1720,7 @@ export function PpeMonitoringView({
                   onOpenSetup({ siteId: selectedSiteId, cameraId: selectedCamera?.id })
                 }
               >
-                {tr('safety:cameraSetup.title')}
+                {tr('cameraSetup.title', { ns: 'safety' })}
               </button>
             </div>
           )

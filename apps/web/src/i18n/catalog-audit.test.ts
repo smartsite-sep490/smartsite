@@ -38,6 +38,7 @@ const catalogs: Record<string, Set<string>> = {
   safety: new Set([
     ...staticCatalogKeys('locale-context.ts', 'EN_CATALOG'),
     ...staticCatalogKeys('ppe-catalog.ts', 'PPE_EN_CATALOG'),
+    ...staticCatalogKeys('../components/cameras/camera-setup-catalog.ts', 'en'),
   ]),
 };
 
@@ -77,6 +78,13 @@ it('audits the requested namespace without accepting keys from unrelated catalog
   expect(hasKey('common', 'safety.evidence.frameCaptionBase')).toBe(false);
   expect(hasKey('safety', 'safety.evidence.notRegistered')).toBe(false);
   expect(hasKey('unknown', 'common.retry')).toBe(false);
+});
+
+it('audits the registered camera setup catalog in its Safety namespace', () => {
+  expect(hasKey('safety', 'cameraSetup.title')).toBe(true);
+  expect(hasKey('safety', 'cameraSetup.linkedSelection')).toBe(true);
+  expect(hasKey('common', 'cameraSetup.title')).toBe(false);
+  expect(hasKey('safety', 'cameraSetup.notRegistered')).toBe(false);
 });
 
 it.each([
