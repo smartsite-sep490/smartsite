@@ -165,7 +165,9 @@ export function FourSourceWallTile({
   return (
     <div
       data-testid={`wall-tile-${camera.id}`}
-      aria-label={`Camera ${camera.name || camera.code} (${isSelected ? 'focused' : 'available'})`}
+      aria-label={t(isSelected ? 'ppe.wall.tileAriaFocused' : 'ppe.wall.tileAriaAvailable', {
+        camera: camera.name || camera.code,
+      })}
       onClick={() => onSelect(camera.id)}
       className={`relative rounded-2xl border transition-all flex flex-col justify-between overflow-hidden cursor-pointer select-none bg-[#0F141C] ${
         isSelected
@@ -241,8 +243,10 @@ export function FourSourceWallTile({
             className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center space-y-2"
           >
             <div className="w-6 h-6 rounded-full border-2 border-amber-400 border-t-transparent animate-spin mb-1" />
-            <p className="text-[11px] font-semibold text-amber-300">Applying Demo Region...</p>
-            <p className="text-[10px] text-white/50">Awaiting fresh camera snapshot...</p>
+            <p className="text-[11px] font-semibold text-amber-300">
+              {t('ppe.viewport.applyingTitle')}
+            </p>
+            <p className="text-[10px] text-white/50">{t('ppe.wall.awaitingSnapshot')}</p>
           </div>
         ) : preview ? (
           <RealtimePreviewCanvas
@@ -255,21 +259,21 @@ export function FourSourceWallTile({
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center">
             <div className="w-6 h-6 rounded-full border-2 border-slate-400 border-t-transparent animate-spin mb-2" />
             <p className="text-[11px] font-semibold">
-              Connecting ({isSelected ? '500ms' : '1s'} snapshot)...
+              {t('ppe.wall.connectingSnapshot', { cadence: isSelected ? '500ms' : '1s' })}
             </p>
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center space-y-2">
             <IconAlertTriangle className="w-6 h-6 text-amber-400" />
             <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-              Snapshot Unavailable
+              {t('ppe.wall.snapshotUnavailable')}
             </p>
             <p className="text-[10px] text-white/60 max-w-[200px] truncate">
-              {error || 'No active camera snapshot available.'}
+              {error || t('ppe.wall.noActiveSnapshot')}
             </p>
             {errorStatus === 429 && (
               <p role="status" aria-live="polite" className="text-[10px] text-white/70">
-                Automatic retry resumes after server cooldown.
+                {t('ppe.viewport.snapshotCooldown429')}
               </p>
             )}
             {token && (
@@ -282,7 +286,7 @@ export function FourSourceWallTile({
                 disabled={retryDisabled}
                 className="pointer-events-auto rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-[#111111] hover:bg-slate-100 transition-colors cursor-pointer mt-1 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Retry
+                {t('mf06.detail.retry')}
               </button>
             )}
           </div>
@@ -292,7 +296,7 @@ export function FourSourceWallTile({
         {preview && detectionsCount === 0 && (
           <div className="absolute inset-x-2 bottom-8 flex justify-center pointer-events-none z-10">
             <div className="bg-black/70 px-2 py-1 rounded text-white/80 text-[10px] font-medium text-center truncate max-w-full">
-              No Person detections · Zero detections do not certify safety clearance
+              {t('ppe.wall.noPersonDetectionsDisclaimer')}
             </div>
           </div>
         )}
@@ -303,17 +307,17 @@ export function FourSourceWallTile({
         <div className="flex items-center gap-2 text-white/70">
           {!isAiWorkPaused && (
             <>
-              <span>Cadence: {isSelected ? '500ms' : '1s'}</span>
+              <span>{t('ppe.wall.cadenceLabel', { cadence: isSelected ? '500ms' : '1s' })}</span>
               {detectionsCount > 0 ? (
                 <span className="text-emerald-300 font-semibold">
-                  {detectionsCount} Person detection(s)
+                  {t('ppe.wall.personDetectionsCount', { count: detectionsCount })}
                 </span>
               ) : (
-                <span className="text-white/50">No Person detections</span>
+                <span className="text-white/50">{t('ppe.wall.noPersonDetections')}</span>
               )}
               {showModelObjects && modelObjectsCount > 0 && (
                 <span className="text-sky-300 font-semibold">
-                  {modelObjectsCount} raw object(s)
+                  {t('ppe.wall.rawObjectsCount', { count: modelObjectsCount })}
                 </span>
               )}
             </>
@@ -383,6 +387,7 @@ export function FourSourceWall({
   onTilePreviewUpdate,
   onTileUnmount,
 }: FourSourceWallProps) {
+  const { t } = useLocale();
   // Maximum 4 actual authorized preview cameras; never fabricate a fourth feed
   const activeCameras = useMemo(() => cameras.slice(0, 4), [cameras]);
 
@@ -392,12 +397,8 @@ export function FourSourceWall({
         data-testid="wall-empty-state"
         className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center space-y-2 shadow-sm"
       >
-        <p className="text-sm font-semibold text-slate-800">
-          Chưa có camera khả dụng cho công trường này
-        </p>
-        <p className="text-xs text-slate-500">
-          Vui lòng chọn công trường khác hoặc liên hệ quản trị viên để cấp quyền camera.
-        </p>
+        <p className="text-sm font-semibold text-slate-800">{t('ppe.wall.emptyTitle')}</p>
+        <p className="text-xs text-slate-500">{t('ppe.wall.emptyDesc')}</p>
       </div>
     );
   }
@@ -449,10 +450,10 @@ export function FourSourceWall({
               {slotNumber}
             </div>
             <p className="text-xs font-semibold text-slate-700">
-              Kênh {slotNumber} · Chưa chỉ định
+              {t('ppe.wall.unassignedSlotTitle', { slot: slotNumber })}
             </p>
             <p className="text-[10px] text-slate-500 mt-1 max-w-[220px]">
-              Chưa có nguồn camera được phân quyền. Hệ thống không tạo nguồn mô phỏng.
+              {t('ppe.wall.unassignedSlotDesc')}
             </p>
           </div>
         );

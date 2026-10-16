@@ -808,6 +808,185 @@ export const PPE_EN_CATALOG = {
   'safety.subtype.ZONE_ENTRY_UNAUTHORIZED': 'Unauthorized Zone Entry',
   'safety.subtype.ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE': 'Authorization Unavailable',
   'safety.subtype.RESTRICTED_ZONE_INTRUSION': 'Restricted Zone Intrusion',
+
+  'cameraMonitoring.switcherAria': 'Camera monitoring view',
+  'cameraMonitoring.codeMf05': 'MF05',
+  'cameraMonitoring.codeMf06': 'MF06',
+
+  'ppe.rawCanvas.ariaLabel': 'Raw unanalyzed camera live video stream',
+
+  'ppe.previewCanvas.regionPrefix': 'Region',
+  'ppe.previewCanvas.experimentalObjectSummary':
+    'Experimental object: {className} ({confidence}%).',
+  'ppe.previewCanvas.currentFrameObservationsAria': 'Current frame observations',
+  'ppe.previewCanvas.frameDetailsAria': 'Frame observation details',
+  'ppe.previewCanvas.frameObservationsCount': 'Frame ({count} observation(s))',
+  'ppe.previewCanvas.regionParen': '(Region: {regionId})',
+  'ppe.previewCanvas.boxPx': 'Box px: {box}',
+
+  'ppe.wall.tileAriaFocused': 'Camera {camera} (focused)',
+  'ppe.wall.tileAriaAvailable': 'Camera {camera} (available)',
+  'ppe.wall.awaitingSnapshot': 'Awaiting fresh camera snapshot...',
+  'ppe.wall.connectingSnapshot': 'Connecting ({cadence} snapshot)...',
+  'ppe.wall.snapshotUnavailable': 'Snapshot Unavailable',
+  'ppe.wall.noActiveSnapshot': 'No active camera snapshot available.',
+  'ppe.wall.noPersonDetectionsDisclaimer':
+    'No Person detections · Zero detections do not certify safety clearance',
+  'ppe.wall.cadenceLabel': 'Cadence: {cadence}',
+  'ppe.wall.personDetectionsCount': '{count} Person detection(s)',
+  'ppe.wall.noPersonDetections': 'No Person detections',
+  'ppe.wall.rawObjectsCount': '{count} raw object(s)',
+  'ppe.wall.emptyTitle': 'No cameras available for this site',
+  'ppe.wall.emptyDesc': 'Select another site or contact an administrator for camera access.',
+  'ppe.wall.unassignedSlotTitle': 'Slot {slot} · Unassigned',
+  'ppe.wall.unassignedSlotDesc':
+    'No authorized camera source assigned. The system does not fabricate simulated feeds.',
+
+  'mf05Demo.mutationError.400':
+    'Invalid region request or malformed configuration parameters (400).',
+  'mf05Demo.mutationError.401': 'Authentication session expired or invalid credentials (401).',
+  'mf05Demo.mutationError.403':
+    'Permission denied: Administrator role required to apply saved regions (403).',
+  'mf05Demo.mutationError.409':
+    'Configuration conflict: Region or configuration version was modified by another operation (409).',
+  'mf05Demo.mutationError.503':
+    'Service unavailable: Ingestion backend or stream processor is temporarily down (503).',
+  'mf05Demo.mutationError.httpStatus': 'Failed to apply region configuration (HTTP {status}).',
+  'mf05Demo.mutationError.default':
+    'Failed to apply region configuration due to a connection or server error.',
+  'mf05Demo.accessErrorTitle': 'Diagnostic Controls Access Error ({status})',
+  'mf05Demo.accessErrorDesc':
+    'Permission denied: Diagnostic region controls require proper administrator privileges.',
+  'mf05Demo.loading': 'Loading MF05 diagnostic region controls...',
+  'mf05Demo.candidatesSummaryApplying':
+    'MF05 candidates / evidence (applying — safety not assessed)',
+  'mf05Demo.candidatesSummaryCount': 'MF05 candidates / evidence ({count})',
+  'mf05Demo.applyingBadge': 'applying — safety not assessed',
+  'mf05Demo.heading': 'MF05 Diagnostic Region Control',
+  'mf05Demo.badgeLocalDiagnostic': 'Local Diagnostic Only',
+  'mf05Demo.stateApplying': 'Applying...',
+  'mf05Demo.stateActiveApplied': 'Active & Applied',
+  'mf05Demo.statePendingApply': 'Pending Apply',
+  'mf05Demo.savedConfigLabel': 'Saved Config',
+  'mf05Demo.savedRevValue': 'Saved Rev: {version}',
+  'mf05Demo.loadedConfigLabel': 'Loaded Config',
+  'mf05Demo.loadedRevValue': 'Loaded Rev: {version}',
+  'mf05Demo.none': 'None',
+  'mf05Demo.loadedGeometryLabel': 'Loaded Geometry',
+  'mf05Demo.loadedGeomValue': 'Loaded Geom: {version}',
+  'mf05Demo.activeLoadedRegionLabel': 'Active Loaded Region',
+  'mf05Demo.activeSavedRegionLabel': 'Active Saved Region (1 per camera)',
+  'mf05Demo.savedRegionSummary': '{id} (v{version} · {points} points)',
+  'mf05Demo.noSavedRegions': 'No saved regions available for this camera',
+  'mf05Demo.applySavedRegionBtn': 'Apply Saved Region',
+  'mf05Demo.adminPermissionRequired': 'Admin permission required to apply region changes.',
+  'mf05Demo.failedToApplyTitle': 'Failed to Apply Region',
+  'mf05Demo.candidatesHeading': 'MF05 candidate input for MF08, NOT persisted Safety Alert',
+  'mf05Demo.candidatesCount': 'Count: {count}',
+  'mf05Demo.candidatesDisclaimer':
+    'Temporal-confirmed and backend policy filtered candidates. (Zero candidates => no confirmed candidate, NOT safety clear).',
+  'mf05Demo.noConfirmedCandidate': 'no confirmed candidate (NOT safety clear)',
+  'mf05Demo.fieldSubtype': 'Subtype:',
+  'mf05Demo.fieldTrack': 'Track:',
+  'mf05Demo.fieldGeom': 'Geom:',
+  'mf05Demo.latestEvidenceHeading': 'Latest Actual Evidence Image',
+  'mf05Demo.downloadEvidenceBtn': 'Download Evidence',
+  'mf05Demo.noEvidenceImage': 'No evidence image available',
+  'mf05Demo.evidenceIdentityUnavailable': 'Evidence identity unavailable',
+  'mf05Demo.latestEvidenceAlt': 'Latest MF05 evidence candidate',
+  'mf05Demo.evidenceBoxOverlayAria': 'evidence bounding box overlay',
+  'mf05Demo.fieldEvent': 'Event:',
+  'mf05Demo.fieldDimensions': 'Dimensions:',
+  'mf05Demo.targetTrack': 'Track: {id}',
+  'mf05Demo.targetRegionVersion': 'Region: {regionId} (v{version})',
+
+  'zonePaging.sites.loading': 'Loading sites…',
+  'zonePaging.cameras.loading': 'Loading cameras…',
+  'zonePaging.regions.loading': 'Loading regions…',
+  'zonePaging.sites.loadedCount': '{loaded} of {total} sites loaded',
+  'zonePaging.cameras.loadedCount': '{loaded} of {total} cameras loaded',
+  'zonePaging.regions.loadedCount': '{loaded} of {total} regions loaded',
+  'zonePaging.sites.errorInitial': 'Cannot load sites. Try again.',
+  'zonePaging.cameras.errorInitial': 'Cannot load cameras. Try again.',
+  'zonePaging.regions.errorInitial': 'Cannot load regions. Try again.',
+  'zonePaging.sites.errorMore': 'Cannot load more sites. Try again.',
+  'zonePaging.cameras.errorMore': 'Cannot load more cameras. Try again.',
+  'zonePaging.regions.errorMore': 'Cannot load more regions. Try again.',
+  'zonePaging.sites.retryInitial': 'Retry loading sites',
+  'zonePaging.cameras.retryInitial': 'Retry loading cameras',
+  'zonePaging.regions.retryInitial': 'Retry loading regions',
+  'zonePaging.sites.retryMore': 'Retry loading more sites',
+  'zonePaging.cameras.retryMore': 'Retry loading more cameras',
+  'zonePaging.regions.retryMore': 'Retry loading more regions',
+  'zonePaging.sites.loadingMore': 'Loading more sites…',
+  'zonePaging.cameras.loadingMore': 'Loading more cameras…',
+  'zonePaging.regions.loadingMore': 'Loading more regions…',
+  'zonePaging.sites.loadMore': 'Load more sites',
+  'zonePaging.cameras.loadMore': 'Load more cameras',
+  'zonePaging.regions.loadMore': 'Load more regions',
+
+  'restrictedZone.status.cannotSavePolygonNotLive':
+    'Cannot save polygon: camera snapshot is not live or does not match.',
+  'restrictedZone.status.cannotSaveDraftNotLive':
+    'Cannot save draft: camera snapshot is not live or does not match.',
+  'restrictedZone.event.authBackendRequired': 'Backend evaluation required',
+  'restrictedZone.event.resultTechnicalEntry': 'Technical entry',
+  'restrictedZone.event.resultScanningSnapshot': 'Scanning Snapshot',
+  'restrictedZone.error.previewSessionExpired': 'Camera preview session expired',
+  'restrictedZone.error.sessionNoLongerValid': 'Your session is no longer valid. Sign in again.',
+  'restrictedZone.sessionExpired.description':
+    'Zone session is pending or expired. Please sign in to the application to configure camera regions.',
+  'restrictedZone.accessRestricted.title': 'Zone Configuration is restricted',
+  'restrictedZone.accessRestricted.description':
+    'A global Admin role or assigned Site Safety Officer role is required to view restricted zones.',
+  'restrictedZone.session.safetyOfficerActive': 'Safety Officer Session Active (Read-Only)',
+  'restrictedZone.session.safetyOfficerDesc':
+    'Safety Officer role verified. Snapshot camera monitoring is active in read-only mode.',
+  'restrictedZone.regionSelect.labelTitle':
+    'Select authoritative region polygon for geometry editing and backend synchronization',
+  'restrictedZone.regionSelect.label': 'Region (Geometry Editing)',
+  'restrictedZone.regionSelect.editTargetTitle':
+    'Editing target only. Live AI intrusion detection displays observed camera zone events without filtering.',
+  'restrictedZone.regionSelect.editTarget': 'Edit Target',
+  'restrictedZone.regionSelect.selectTitle':
+    'Authoritative polygon geometry target for editing and backend sync. Live AI detection stream reflects observed camera zones.',
+  'restrictedZone.scope.zoneScopeLabel': 'Zone Scope',
+  'restrictedZone.scope.readOnlyTitle':
+    'Live AI detections reflect observed camera zones; geometry editing is restricted to Admin',
+  'restrictedZone.scope.readOnlyValue': 'Restricted Zone (Read-Only)',
+  'restrictedZone.scope.safetyOfficerBadge': 'Safety Officer (Read-Only)',
+  'restrictedZone.viewport.connectingTitle': 'Connecting to Camera Snapshot...',
+  'restrictedZone.viewport.noCameraSelected': 'No camera selected or available for preview',
+  'restrictedZone.badge.liveSnapshot1s': 'MF06 LIVE SNAPSHOT (1s)',
+  'restrictedZone.badge.replaySnapshot1s': 'MF06 REPLAY SNAPSHOT (1s)',
+  'restrictedZone.badge.snapshotUnavailable': 'MF06 SNAPSHOT UNAVAILABLE',
+  'restrictedZone.badge.cameraOffline': 'MF06 CAMERA OFFLINE',
+  'restrictedZone.badge.zoneEntry': 'ZONE ENTRY',
+  'restrictedZone.badge.scanning': 'SCANNING',
+  'restrictedZone.controls.safetyOfficerReadOnlyBadge': 'SAFETY OFFICER (READ-ONLY)',
+  'restrictedZone.controls.editDisabledNotLive':
+    'Live camera snapshot is required before editing restricted zone geometry',
+  'restrictedZone.controls.editDisabledMismatch':
+    'Select the matching Backend camera before editing this preview',
+  'restrictedZone.controls.resetBtn': 'RESET',
+  'restrictedZone.viewport.emptyFrameReplay':
+    'Replay Snapshot Active · No AI person observations in this snapshot; no conclusion about safety/authorization',
+  'restrictedZone.viewport.emptyFrameLive':
+    'Live Snapshot Active · No AI person observations in this snapshot; no conclusion about safety/authorization',
+  'restrictedZone.headerOverlay.liveSnapshotTime': 'LIVE SNAPSHOT (1s) - {time}',
+  'restrictedZone.headerOverlay.replaySnapshotTime': 'REPLAY SNAPSHOT (1s) - {time}',
+  'restrictedZone.headerOverlay.snapshotUnavailable': 'SNAPSHOT UNAVAILABLE',
+  'restrictedZone.headerOverlay.offline': 'OFFLINE',
+  'restrictedZone.errorBanner.cameraSnapshotPrefix': 'Camera Snapshot: {error}',
+  'restrictedZone.toolbar.liveSnapshot1s': 'Live Camera Snapshot (1s)',
+  'restrictedZone.toolbar.replaySnapshot1s': 'Replay Camera Snapshot (1s)',
+  'restrictedZone.toolbar.cameraOffline': 'Camera Offline',
+  'restrictedZone.observations.replayHeading': 'Replay Zone Observations Active',
+  'restrictedZone.observations.replayDesc':
+    'Technical zone-entry detections are rendered from recorded video replay stream above. Sample replay timeline rows are hidden during stream playback. Durable safety alerts require Backend worker ingestion; review persisted records in Safety Alerts.',
+  'restrictedZone.table.subtitle':
+    'Observations from the camera snapshot feed. Live safety alerts are available in Safety Alerts.',
+  'restrictedZone.reviewModal.previewBadge': 'Technical Observation Preview',
 } as const;
 
 export type PpeTranslationKey = keyof typeof PPE_EN_CATALOG;
@@ -1640,6 +1819,189 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'safety.subtype.ZONE_ENTRY_UNAUTHORIZED': 'Vào khu vực khi chưa được cấp phép',
   'safety.subtype.ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE': 'Không thể xác minh quyền vào khu vực',
   'safety.subtype.RESTRICTED_ZONE_INTRUSION': 'Xâm nhập vùng hạn chế',
+
+  'cameraMonitoring.switcherAria': 'Chế độ xem giám sát camera',
+  'cameraMonitoring.codeMf05': 'MF05',
+  'cameraMonitoring.codeMf06': 'MF06',
+
+  'ppe.rawCanvas.ariaLabel': 'Luồng video trực tiếp gốc từ camera chưa qua phân tích',
+
+  'ppe.previewCanvas.regionPrefix': 'Khu vực',
+  'ppe.previewCanvas.experimentalObjectSummary': 'Vật thể thử nghiệm: {className} ({confidence}%).',
+  'ppe.previewCanvas.currentFrameObservationsAria': 'Các quan sát trong khung hình hiện tại',
+  'ppe.previewCanvas.frameDetailsAria': 'Chi tiết quan sát trong khung hình',
+  'ppe.previewCanvas.frameObservationsCount': 'Khung hình ({count} quan sát)',
+  'ppe.previewCanvas.regionParen': '(Khu vực: {regionId})',
+  'ppe.previewCanvas.boxPx': 'Tọa độ khung (px): {box}',
+
+  'ppe.wall.tileAriaFocused': 'Camera {camera} (đang chọn tiêu điểm)',
+  'ppe.wall.tileAriaAvailable': 'Camera {camera} (khả dụng)',
+  'ppe.wall.awaitingSnapshot': 'Đang chờ ảnh chụp camera mới...',
+  'ppe.wall.connectingSnapshot': 'Đang kết nối (ảnh chụp {cadence})...',
+  'ppe.wall.snapshotUnavailable': 'Ảnh chụp không khả dụng',
+  'ppe.wall.noActiveSnapshot': 'Không có ảnh chụp camera đang hoạt động.',
+  'ppe.wall.noPersonDetectionsDisclaimer':
+    'Không phát hiện người · Không có phát hiện không đồng nghĩa với chứng nhận an toàn',
+  'ppe.wall.cadenceLabel': 'Chu kỳ: {cadence}',
+  'ppe.wall.personDetectionsCount': '{count} phát hiện người',
+  'ppe.wall.noPersonDetections': 'Không phát hiện người',
+  'ppe.wall.rawObjectsCount': '{count} vật thể thô',
+  'ppe.wall.emptyTitle': 'Chưa có camera khả dụng cho công trường này',
+  'ppe.wall.emptyDesc':
+    'Vui lòng chọn công trường khác hoặc liên hệ quản trị viên để cấp quyền camera.',
+  'ppe.wall.unassignedSlotTitle': 'Kênh {slot} · Chưa chỉ định',
+  'ppe.wall.unassignedSlotDesc':
+    'Chưa có nguồn camera được phân quyền. Hệ thống không tạo nguồn mô phỏng.',
+
+  'mf05Demo.mutationError.400':
+    'Yêu cầu vùng không hợp lệ hoặc tham số cấu hình sai định dạng (400).',
+  'mf05Demo.mutationError.401':
+    'Phiên xác thực đã hết hạn hoặc thông tin đăng nhập không hợp lệ (401).',
+  'mf05Demo.mutationError.403':
+    'Từ chối quyền truy cập: Cần vai trò Quản trị viên (Admin) để áp dụng vùng đã lưu (403).',
+  'mf05Demo.mutationError.409':
+    'Xung đột cấu hình: Vùng hoặc phiên bản cấu hình đã bị thay đổi bởi thao tác khác (409).',
+  'mf05Demo.mutationError.503':
+    'Dịch vụ không khả dụng: Máy chủ tiếp nhận hoặc tiến trình xử lý luồng tạm thời gián đoạn (503).',
+  'mf05Demo.mutationError.httpStatus': 'Không thể áp dụng cấu hình vùng (HTTP {status}).',
+  'mf05Demo.mutationError.default': 'Không thể áp dụng cấu hình vùng do lỗi kết nối hoặc máy chủ.',
+  'mf05Demo.accessErrorTitle': 'Lỗi truy cập điều khiển chẩn đoán ({status})',
+  'mf05Demo.accessErrorDesc':
+    'Từ chối quyền truy cập: Điều khiển vùng chẩn đoán yêu cầu quyền quản trị viên phù hợp.',
+  'mf05Demo.loading': 'Đang tải điều khiển vùng chẩn đoán MF05...',
+  'mf05Demo.candidatesSummaryApplying':
+    'Ứng viên / bằng chứng MF05 (đang áp dụng — chưa thể kết luận an toàn)',
+  'mf05Demo.candidatesSummaryCount': 'Ứng viên / bằng chứng MF05 ({count})',
+  'mf05Demo.applyingBadge': 'đang áp dụng — chưa thể kết luận an toàn',
+  'mf05Demo.heading': 'Điều khiển vùng chẩn đoán MF05',
+  'mf05Demo.badgeLocalDiagnostic': 'Chỉ chẩn đoán cục bộ',
+  'mf05Demo.stateApplying': 'Đang áp dụng...',
+  'mf05Demo.stateActiveApplied': 'Đang hoạt động & Đã áp dụng',
+  'mf05Demo.statePendingApply': 'Chờ áp dụng',
+  'mf05Demo.savedConfigLabel': 'Cấu hình đã lưu',
+  'mf05Demo.savedRevValue': 'Phiên bản lưu: {version}',
+  'mf05Demo.loadedConfigLabel': 'Cấu hình đã nạp',
+  'mf05Demo.loadedRevValue': 'Phiên bản nạp: {version}',
+  'mf05Demo.none': 'Chưa có',
+  'mf05Demo.loadedGeometryLabel': 'Hình học đã nạp',
+  'mf05Demo.loadedGeomValue': 'Hình học nạp: {version}',
+  'mf05Demo.activeLoadedRegionLabel': 'Vùng đang nạp hoạt động',
+  'mf05Demo.activeSavedRegionLabel': 'Vùng đã lưu đang hoạt động (1 vùng mỗi camera)',
+  'mf05Demo.savedRegionSummary': '{id} (v{version} · {points} điểm)',
+  'mf05Demo.noSavedRegions': 'Chưa có vùng quan sát đã lưu cho camera này',
+  'mf05Demo.applySavedRegionBtn': 'Áp dụng vùng đã lưu',
+  'mf05Demo.adminPermissionRequired':
+    'Cần quyền Quản trị viên (Admin) để áp dụng thay đổi vùng quan sát.',
+  'mf05Demo.failedToApplyTitle': 'Không thể áp dụng vùng quan sát',
+  'mf05Demo.candidatesHeading':
+    'Đầu vào ứng viên MF05 cho MF08, KHÔNG phải Cảnh báo an toàn đã lưu',
+  'mf05Demo.candidatesCount': 'Số lượng: {count}',
+  'mf05Demo.candidatesDisclaimer':
+    'Các ứng viên đã xác nhận theo thời gian và lọc theo chính sách máy chủ. (0 ứng viên => chưa có ứng viên xác nhận, KHÔNG đồng nghĩa chứng nhận an toàn).',
+  'mf05Demo.noConfirmedCandidate':
+    'chưa có ứng viên xác nhận (KHÔNG đồng nghĩa chứng nhận an toàn)',
+  'mf05Demo.fieldSubtype': 'Phân loại:',
+  'mf05Demo.fieldTrack': 'Mã theo vết:',
+  'mf05Demo.fieldGeom': 'Hình học:',
+  'mf05Demo.latestEvidenceHeading': 'Ảnh bằng chứng thực tế mới nhất',
+  'mf05Demo.downloadEvidenceBtn': 'Tải ảnh bằng chứng',
+  'mf05Demo.noEvidenceImage': 'Chưa có ảnh bằng chứng',
+  'mf05Demo.evidenceIdentityUnavailable': 'Không xác định được định danh bằng chứng',
+  'mf05Demo.latestEvidenceAlt': 'Ứng viên bằng chứng MF05 mới nhất',
+  'mf05Demo.evidenceBoxOverlayAria': 'lớp phủ khung giới hạn bằng chứng',
+  'mf05Demo.fieldEvent': 'Sự kiện:',
+  'mf05Demo.fieldDimensions': 'Kích thước:',
+  'mf05Demo.targetTrack': 'Track: {id}',
+  'mf05Demo.targetRegionVersion': 'Vùng: {regionId} (v{version})',
+
+  'zonePaging.sites.loading': 'Đang tải công trường…',
+  'zonePaging.cameras.loading': 'Đang tải camera…',
+  'zonePaging.regions.loading': 'Đang tải vùng quan sát…',
+  'zonePaging.sites.loadedCount': 'Đã tải {loaded} / {total} công trường',
+  'zonePaging.cameras.loadedCount': 'Đã tải {loaded} / {total} camera',
+  'zonePaging.regions.loadedCount': 'Đã tải {loaded} / {total} vùng quan sát',
+  'zonePaging.sites.errorInitial': 'Không thể tải công trường. Vui lòng thử lại.',
+  'zonePaging.cameras.errorInitial': 'Không thể tải camera. Vui lòng thử lại.',
+  'zonePaging.regions.errorInitial': 'Không thể tải vùng quan sát. Vui lòng thử lại.',
+  'zonePaging.sites.errorMore': 'Không thể tải thêm công trường. Vui lòng thử lại.',
+  'zonePaging.cameras.errorMore': 'Không thể tải thêm camera. Vui lòng thử lại.',
+  'zonePaging.regions.errorMore': 'Không thể tải thêm vùng quan sát. Vui lòng thử lại.',
+  'zonePaging.sites.retryInitial': 'Thử tải lại công trường',
+  'zonePaging.cameras.retryInitial': 'Thử tải lại camera',
+  'zonePaging.regions.retryInitial': 'Thử tải lại vùng quan sát',
+  'zonePaging.sites.retryMore': 'Thử tải thêm công trường',
+  'zonePaging.cameras.retryMore': 'Thử tải thêm camera',
+  'zonePaging.regions.retryMore': 'Thử tải thêm vùng quan sát',
+  'zonePaging.sites.loadingMore': 'Đang tải thêm công trường…',
+  'zonePaging.cameras.loadingMore': 'Đang tải thêm camera…',
+  'zonePaging.regions.loadingMore': 'Đang tải thêm vùng quan sát…',
+  'zonePaging.sites.loadMore': 'Tải thêm công trường',
+  'zonePaging.cameras.loadMore': 'Tải thêm camera',
+  'zonePaging.regions.loadMore': 'Tải thêm vùng quan sát',
+
+  'restrictedZone.status.cannotSavePolygonNotLive':
+    'Không thể lưu đa giác: ảnh chụp camera không phải trực tiếp hoặc không khớp.',
+  'restrictedZone.status.cannotSaveDraftNotLive':
+    'Không thể lưu bản nháp: ảnh chụp camera không phải trực tiếp hoặc không khớp.',
+  'restrictedZone.event.authBackendRequired': 'Cần đánh giá từ Backend',
+  'restrictedZone.event.resultTechnicalEntry': 'Quan sát đi vào vùng kỹ thuật',
+  'restrictedZone.event.resultScanningSnapshot': 'Đang quét ảnh chụp',
+  'restrictedZone.error.previewSessionExpired': 'Phiên xem trước camera đã hết hạn',
+  'restrictedZone.error.sessionNoLongerValid':
+    'Phiên làm việc không còn hợp lệ. Vui lòng đăng nhập lại.',
+  'restrictedZone.sessionExpired.description':
+    'Phiên khu vực hạn chế đang chờ hoặc đã hết hạn. Vui lòng đăng nhập vào ứng dụng để cấu hình vùng quan sát của camera.',
+  'restrictedZone.accessRestricted.title': 'Cấu hình Khu vực bị hạn chế',
+  'restrictedZone.accessRestricted.description':
+    'Cần vai trò Quản trị viên toàn hệ thống (Admin) hoặc Cán bộ an toàn tại công trường được phân công để xem khu vực hạn chế.',
+  'restrictedZone.session.safetyOfficerActive': 'Phiên Cán bộ an toàn đang hoạt động (Chỉ đọc)',
+  'restrictedZone.session.safetyOfficerDesc':
+    'Đã xác minh vai trò Cán bộ an toàn. Giám sát ảnh chụp camera đang hoạt động ở chế độ chỉ đọc.',
+  'restrictedZone.regionSelect.labelTitle':
+    'Chọn đa giác vùng quan sát chuẩn để chỉnh sửa hình học và đồng bộ với máy chủ',
+  'restrictedZone.regionSelect.label': 'Vùng quan sát (Chỉnh sửa hình học)',
+  'restrictedZone.regionSelect.editTargetTitle':
+    'Chỉ chọn đối tượng chỉnh sửa. Phát hiện xâm nhập AI trực tiếp hiển thị các sự kiện vùng camera ghi nhận mà không lọc.',
+  'restrictedZone.regionSelect.editTarget': 'Đối tượng sửa',
+  'restrictedZone.regionSelect.selectTitle':
+    'Đa giác vùng quan sát chuẩn để chỉnh sửa và đồng bộ máy chủ. Luồng nhận diện AI trực tiếp phản ánh các khu vực camera ghi nhận.',
+  'restrictedZone.scope.zoneScopeLabel': 'Phạm vi khu vực',
+  'restrictedZone.scope.readOnlyTitle':
+    'Nhận diện AI trực tiếp phản ánh các khu vực camera ghi nhận; chỉnh sửa hình học chỉ dành cho Quản trị viên (Admin)',
+  'restrictedZone.scope.readOnlyValue': 'Khu vực hạn chế (Chỉ đọc)',
+  'restrictedZone.scope.safetyOfficerBadge': 'Cán bộ an toàn (Chỉ đọc)',
+  'restrictedZone.viewport.connectingTitle': 'Đang kết nối ảnh chụp camera...',
+  'restrictedZone.viewport.noCameraSelected': 'Chưa chọn camera hoặc không có camera để xem trước',
+  'restrictedZone.badge.liveSnapshot1s': 'ẢNH CHỤP TRỰC TIẾP MF06 (1s)',
+  'restrictedZone.badge.replaySnapshot1s': 'ẢNH CHỤP PHÁT LẠI MF06 (1s)',
+  'restrictedZone.badge.snapshotUnavailable': 'ẢNH CHỤP MF06 KHÔNG KHẢ DỤNG',
+  'restrictedZone.badge.cameraOffline': 'CAMERA MF06 NGOẠI TUYẾN',
+  'restrictedZone.badge.zoneEntry': 'ĐI VÀO VÙNG',
+  'restrictedZone.badge.scanning': 'ĐANG QUÉT',
+  'restrictedZone.controls.safetyOfficerReadOnlyBadge': 'CÁN BỘ AN TOÀN (CHỈ ĐỌC)',
+  'restrictedZone.controls.editDisabledNotLive':
+    'Cần có ảnh chụp camera trực tiếp trước khi chỉnh sửa hình học vùng hạn chế',
+  'restrictedZone.controls.editDisabledMismatch':
+    'Chọn camera Backend tương ứng trước khi chỉnh sửa khung xem trước này',
+  'restrictedZone.controls.resetBtn': 'ĐẶT LẠI',
+  'restrictedZone.viewport.emptyFrameReplay':
+    'Ảnh chụp phát lại đang hoạt động · Không có quan sát người từ AI trong ảnh chụp này; không kết luận về an toàn hay thẩm quyền',
+  'restrictedZone.viewport.emptyFrameLive':
+    'Ảnh chụp trực tiếp đang hoạt động · Không có quan sát người từ AI trong ảnh chụp này; không kết luận về an toàn hay thẩm quyền',
+  'restrictedZone.headerOverlay.liveSnapshotTime': 'ẢNH CHỤP TRỰC TIẾP (1s) - {time}',
+  'restrictedZone.headerOverlay.replaySnapshotTime': 'ẢNH CHỤP PHÁT LẠI (1s) - {time}',
+  'restrictedZone.headerOverlay.snapshotUnavailable': 'ẢNH CHỤP KHÔNG KHẢ DỤNG',
+  'restrictedZone.headerOverlay.offline': 'NGOẠI TUYẾN',
+  'restrictedZone.errorBanner.cameraSnapshotPrefix': 'Ảnh chụp camera: {error}',
+  'restrictedZone.toolbar.liveSnapshot1s': 'Ảnh chụp camera trực tiếp (1s)',
+  'restrictedZone.toolbar.replaySnapshot1s': 'Ảnh chụp camera phát lại (1s)',
+  'restrictedZone.toolbar.cameraOffline': 'Camera ngoại tuyến',
+  'restrictedZone.observations.replayHeading': 'Đang hiển thị quan sát vùng phát lại',
+  'restrictedZone.observations.replayDesc':
+    'Các nhận diện kỹ thuật đi vào vùng được hiển thị từ luồng phát lại video ghi sẵn phía trên. Các dòng mẫu được ẩn trong khi phát luồng. Cảnh báo an toàn lưu trữ bền vững do Backend xử lý; vui lòng xem và xác minh bản ghi lưu trữ tại mục Cảnh báo an toàn.',
+  'restrictedZone.table.subtitle':
+    'Các quan sát từ nguồn ảnh chụp camera. Cảnh báo an toàn trực tiếp được quản lý tại mục Cảnh báo an toàn.',
+  'restrictedZone.reviewModal.previewBadge': 'Xem trước quan sát kỹ thuật',
 };
 
 const PPE_SENTINEL_KEY: PpeTranslationKey = 'ppe.header.title';

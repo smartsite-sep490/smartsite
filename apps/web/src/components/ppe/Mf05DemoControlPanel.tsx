@@ -1,10 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import {
-  SmartSiteManagementClient,
-  ApiError,
-  type Mf05DemoStatus,
-} from '@smartsite/api-client';
+import { SmartSiteManagementClient, ApiError, type Mf05DemoStatus } from '@smartsite/api-client';
 import {
   IconCheck,
   IconAlertTriangle,
@@ -13,6 +9,7 @@ import {
   IconRadio,
   IconClock,
 } from '../icons';
+import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 import { downloadMf05EvidenceExport } from './mf05EvidenceExport';
 
 export type { Mf05DemoStatus };
@@ -35,22 +32,25 @@ function opaqueCredential(client: QueryClient, token: string) {
   return id;
 }
 
-function getMutationErrorMessage(status?: number): string {
+function getMutationErrorMessage(
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+  status?: number,
+): string {
   switch (status) {
     case 400:
-      return 'Invalid region request or malformed configuration parameters (400).';
+      return t('mf05Demo.mutationError.400');
     case 401:
-      return 'Authentication session expired or invalid credentials (401).';
+      return t('mf05Demo.mutationError.401');
     case 403:
-      return 'Permission denied: Administrator role required to apply saved regions (403).';
+      return t('mf05Demo.mutationError.403');
     case 409:
-      return 'Configuration conflict: Region or configuration version was modified by another operation (409).';
+      return t('mf05Demo.mutationError.409');
     case 503:
-      return 'Service unavailable: Ingestion backend or stream processor is temporarily down (503).';
+      return t('mf05Demo.mutationError.503');
     default:
       return status
-        ? `Failed to apply region configuration (HTTP ${status}).`
-        : 'Failed to apply region configuration due to a connection or server error.';
+        ? t('mf05Demo.mutationError.httpStatus', { status })
+        : t('mf05Demo.mutationError.default');
   }
 }
 
@@ -75,6 +75,7 @@ export function Mf05DemoControlPanel({
   canApply,
   onApplyingChange,
 }: Mf05DemoControlPanelProps) {
+  const { t } = useLocale();
   // Gating condition: Explicit VITE_MF05_DEMO_CONTROLS === 'true' required.
   // Gating is evaluated after hooks to comply with React hook rules.
   const isEnabled = import.meta.env.VITE_MF05_DEMO_CONTROLS === 'true';
@@ -98,7 +99,9 @@ export function Mf05DemoControlPanel({
   }, [currentScopeKey]);
 
   // Derived scoped selection instead of effect setState
-  const [userSelection, setUserSelection] = useState<{ scope: string; regionId: string } | null>(null);
+  const [userSelection, setUserSelection] = useState<{ scope: string; regionId: string } | null>(
+    null,
+  );
 
   // State for requested revision instead of reading refs during render
   const [requestedRevisionState, setRequestedRevisionState] = useState<{
@@ -161,15 +164,10 @@ export function Mf05DemoControlPanel({
 
   // Derived active region selection: use user choice for current scope, or fallback to status
   const defaultRegionId =
-    status?.selectedRegionId ??
-    status?.loadedRegionId ??
-    status?.regions[0]?.id ??
-    '';
+    status?.selectedRegionId ?? status?.loadedRegionId ?? status?.regions[0]?.id ?? '';
 
   const selectedRegionId =
-    userSelection?.scope === currentScopeKey
-      ? userSelection.regionId
-      : defaultRegionId;
+    userSelection?.scope === currentScopeKey ? userSelection.regionId : defaultRegionId;
 
   // Apply mutation with stale response suppression
   const applyMutation = useMutation({
@@ -208,9 +206,7 @@ export function Mf05DemoControlPanel({
 
   // Determine applying status using state (no refs accessed during render)
   const requestedRevision =
-    requestedRevisionState?.scope === currentScopeKey
-      ? requestedRevisionState.revision
-      : null;
+    requestedRevisionState?.scope === currentScopeKey ? requestedRevisionState.revision : null;
 
   const isWaitingForRequestedRevision =
     requestedRevision !== null &&
@@ -244,11 +240,9 @@ export function Mf05DemoControlPanel({
       <div className="mb-4 rounded-md border border-amber-200 bg-[#FBF3DB] p-4 text-amber-900">
         <div className="flex items-center gap-2 font-medium">
           <IconAlertTriangle className="h-5 w-5 text-amber-700" />
-          <span>Diagnostic Controls Access Error ({errorStatus})</span>
+          <span>{t('mf05Demo.accessErrorTitle', { status: errorStatus })}</span>
         </div>
-        <p className="mt-1 text-sm text-amber-800">
-          Permission denied: Diagnostic region controls require proper administrator privileges.
-        </p>
+        <p className="mt-1 text-sm text-amber-800">{t('mf05Demo.accessErrorDesc')}</p>
       </div>
     );
   }
@@ -258,7 +252,7 @@ export function Mf05DemoControlPanel({
       <div className="rounded-md border border-[#EAEAEA] bg-white p-4 text-[#6B6B6B] text-sm">
         <div className="flex items-center gap-2">
           <IconClock className="h-4 w-4 animate-spin text-[#6B6B6B]" />
-          <span>Loading MF05 diagnostic region controls...</span>
+          <span>{t('mf05Demo.loading')}</span>
         </div>
       </div>
     );
@@ -287,8 +281,8 @@ export function Mf05DemoControlPanel({
   // While isApplying, show 0 current candidates and suppress old evidence image (hide oldphase data)
   const visibleCandidates = isApplying ? [] : status.candidates;
   const summaryText = isApplying
-    ? 'MF05 candidates / evidence (applying — not safe)'
-    : `MF05 candidates / evidence (${visibleCandidates.length})`;
+    ? t('mf05Demo.candidatesSummaryApplying')
+    : t('mf05Demo.candidatesSummaryCount', { count: visibleCandidates.length });
 
   const evidenceFrame = isApplying ? null : status.evidenceFrame;
   const hasEvidenceImage = Boolean(!isApplying && status.evidenceImageDataUrl);
@@ -315,9 +309,9 @@ export function Mf05DemoControlPanel({
           c.trackId === target.trackId &&
           c.ppeItem === target.ppeItem &&
           c.regionId === target.regionId &&
-          c.geometryVersion === target.geometryVersion
-      )
-    )
+          c.geometryVersion === target.geometryVersion,
+      ),
+    ),
   );
 
   return (
@@ -328,11 +322,11 @@ export function Mf05DemoControlPanel({
           <div className="flex items-center gap-2 min-w-0">
             <IconShield className="h-5 w-5 text-slate-900 flex-shrink-0" />
             <h3 className="text-base font-semibold tracking-wide text-slate-900">
-              MF05 Diagnostic Region Control
+              {t('mf05Demo.heading')}
             </h3>
           </div>
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] text-slate-600 flex-shrink-0">
-            Local Diagnostic Only
+            {t('mf05Demo.badgeLocalDiagnostic')}
           </span>
         </div>
 
@@ -353,16 +347,16 @@ export function Mf05DemoControlPanel({
           {status.state === 'APPLYING' || isApplying ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#FBF3DB] px-2.5 py-0.5 text-xs font-medium text-[#956400] border border-[#F3E5A6] flex-shrink-0">
               <IconClock className="h-3.5 w-3.5 animate-spin" />
-              Applying...
+              {t('mf05Demo.stateApplying')}
             </span>
           ) : isFullyApplied ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#EDF3EC] px-2.5 py-0.5 text-xs font-medium text-[#346538] border border-[#C5DDC6] flex-shrink-0">
               <IconCheck className="h-3.5 w-3.5" />
-              Active & Applied
+              {t('mf05Demo.stateActiveApplied')}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-slate-600 border border-slate-200/80 flex-shrink-0">
-              Pending Apply
+              {t('mf05Demo.statePendingApply')}
             </span>
           )}
         </div>
@@ -371,27 +365,39 @@ export function Mf05DemoControlPanel({
       {/* ── Revisions & Metadata Grid (Visible near top) ── */}
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 min-w-0">
         <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 min-w-0">
-          <span className="block text-xs font-medium text-slate-500">Saved Config</span>
+          <span className="block text-xs font-medium text-slate-500">
+            {t('mf05Demo.savedConfigLabel')}
+          </span>
           <span className="text-sm font-semibold text-slate-900 truncate block mt-0.5">
-            Saved Rev: {status.configurationVersion}
+            {t('mf05Demo.savedRevValue', { version: status.configurationVersion })}
           </span>
         </div>
         <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 min-w-0">
-          <span className="block text-xs font-medium text-slate-500">Loaded Config</span>
+          <span className="block text-xs font-medium text-slate-500">
+            {t('mf05Demo.loadedConfigLabel')}
+          </span>
           <span className="text-sm font-semibold text-slate-900 truncate block mt-0.5">
-            Loaded Rev: {status.loadedConfigurationVersion ?? 'None'}
+            {t('mf05Demo.loadedRevValue', {
+              version: status.loadedConfigurationVersion ?? t('mf05Demo.none'),
+            })}
           </span>
         </div>
         <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 min-w-0">
-          <span className="block text-xs font-medium text-slate-500">Loaded Geometry</span>
+          <span className="block text-xs font-medium text-slate-500">
+            {t('mf05Demo.loadedGeometryLabel')}
+          </span>
           <span className="text-sm font-semibold text-slate-900 truncate block mt-0.5">
-            Loaded Geom: {status.loadedGeometryVersion ?? 'None'}
+            {t('mf05Demo.loadedGeomValue', {
+              version: status.loadedGeometryVersion ?? t('mf05Demo.none'),
+            })}
           </span>
         </div>
         <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 min-w-0">
-          <span className="block text-xs font-medium text-slate-500">Active Loaded Region</span>
+          <span className="block text-xs font-medium text-slate-500">
+            {t('mf05Demo.activeLoadedRegionLabel')}
+          </span>
           <span className="truncate text-xs font-mono font-medium text-slate-900 block mt-0.5">
-            {status.loadedRegionId ?? 'None'}
+            {status.loadedRegionId ?? t('mf05Demo.none')}
           </span>
         </div>
       </div>
@@ -402,7 +408,7 @@ export function Mf05DemoControlPanel({
           htmlFor="mf05-region-select"
           className="block text-xs font-semibold uppercase tracking-wider text-slate-500"
         >
-          Active Saved Region (1 per camera)
+          {t('mf05Demo.activeSavedRegionLabel')}
         </label>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center min-w-0 w-full max-w-full">
           <select
@@ -415,7 +421,7 @@ export function Mf05DemoControlPanel({
             className="w-full sm:flex-1 min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs sm:text-sm text-slate-800 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 focus:outline-none disabled:opacity-50 truncate"
           >
             {status.regions.length === 0 ? (
-              <option value="">No saved regions available for this camera</option>
+              <option value="">{t('mf05Demo.noSavedRegions')}</option>
             ) : (
               status.regions.map((reg) => (
                 <option key={reg.id} value={reg.id}>
@@ -428,12 +434,7 @@ export function Mf05DemoControlPanel({
           <button
             type="button"
             onClick={handleApply}
-            disabled={
-              !canApply ||
-              !selectedRegionId ||
-              isApplying ||
-              status.regions.length === 0
-            }
+            disabled={!canApply || !selectedRegionId || isApplying || status.regions.length === 0}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-colors flex-shrink-0 ${
               canApply && selectedRegionId && !isApplying && status.regions.length > 0
                 ? 'bg-[#0F172A] text-white hover:bg-slate-800 active:bg-black cursor-pointer shadow-xs'
@@ -443,21 +444,19 @@ export function Mf05DemoControlPanel({
             {isApplying ? (
               <>
                 <IconClock className="h-4 w-4 animate-spin" />
-                <span>Applying...</span>
+                <span>{t('mf05Demo.stateApplying')}</span>
               </>
             ) : (
               <>
                 <IconCheck className="h-4 w-4" />
-                <span>Apply Saved Region</span>
+                <span>{t('mf05Demo.applySavedRegionBtn')}</span>
               </>
             )}
           </button>
         </div>
 
         {!canApply && (
-          <p className="mt-1.5 text-xs text-amber-800">
-            Admin permission required to apply region changes.
-          </p>
+          <p className="mt-1.5 text-xs text-amber-800">{t('mf05Demo.adminPermissionRequired')}</p>
         )}
 
         {/* Mutation Error Alert with safe explanations (role="alert", no fake saved success) */}
@@ -468,11 +467,9 @@ export function Mf05DemoControlPanel({
           >
             <div className="flex items-center gap-2 font-medium text-red-800">
               <IconAlertTriangle className="h-4 w-4 text-red-700" />
-              <span>Failed to Apply Region</span>
+              <span>{t('mf05Demo.failedToApplyTitle')}</span>
             </div>
-            <p className="mt-1 text-red-800">
-              {getMutationErrorMessage(applyStatus)}
-            </p>
+            <p className="mt-1 text-red-800">{getMutationErrorMessage(t, applyStatus)}</p>
           </div>
         )}
       </div>
@@ -484,7 +481,7 @@ export function Mf05DemoControlPanel({
             <span className="truncate">{summaryText}</span>
             {isApplying && (
               <span className="rounded-full bg-[#FBF3DB] px-2 py-0.5 text-[11px] font-medium text-[#956400] border border-[#F3E5A6] flex-shrink-0">
-                applying — not safe
+                {t('mf05Demo.applyingBadge')}
               </span>
             )}
           </div>
@@ -498,19 +495,17 @@ export function Mf05DemoControlPanel({
           <div className="min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 min-w-0 w-full">
               <h4 className="text-sm font-semibold text-slate-800 min-w-0 break-words">
-                MF05 candidate input for MF08, NOT persisted Safety Alert
+                {t('mf05Demo.candidatesHeading')}
               </h4>
               <span className="text-xs text-slate-500 font-mono flex-shrink-0 self-start sm:self-auto">
-                Count: {visibleCandidates.length}
+                {t('mf05Demo.candidatesCount', { count: visibleCandidates.length })}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Temporal-confirmed and backend policy filtered candidates. (Zero candidates =&gt; no confirmed candidate, NOT safety clear).
-            </p>
+            <p className="mt-0.5 text-xs text-slate-500">{t('mf05Demo.candidatesDisclaimer')}</p>
 
             {visibleCandidates.length === 0 ? (
               <div className="mt-3 rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 text-center text-xs text-slate-500">
-                no confirmed candidate (NOT safety clear)
+                {t('mf05Demo.noConfirmedCandidate')}
               </div>
             ) : (
               <div className="mt-3 grid gap-2 sm:grid-cols-2 min-w-0">
@@ -524,27 +519,35 @@ export function Mf05DemoControlPanel({
                       className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 text-xs min-w-0"
                     >
                       <div className="flex items-center justify-between text-slate-800 font-medium gap-2 min-w-0">
-                        <span className="font-mono text-slate-900 font-semibold truncate break-all">{cand.eventId}</span>
+                        <span className="font-mono text-slate-900 font-semibold truncate break-all">
+                          {cand.eventId}
+                        </span>
                         <span className="rounded-lg bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-700 flex-shrink-0">
                           {cand.ppeItem}
                         </span>
                       </div>
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-1 text-slate-500 text-[11px] min-w-0 w-full">
                         <div className="min-w-0 break-words break-all">
-                          <span className="text-slate-500">Subtype:</span>{' '}
-                          <span className="text-slate-800 break-words break-all">{cand.candidateSubtype}</span>
+                          <span className="text-slate-500">{t('mf05Demo.fieldSubtype')}</span>{' '}
+                          <span className="text-slate-800 break-words break-all">
+                            {cand.candidateSubtype}
+                          </span>
                         </div>
                         <div className="min-w-0 break-words break-all">
-                          <span className="text-slate-500">Track:</span>{' '}
+                          <span className="text-slate-500">{t('mf05Demo.fieldTrack')}</span>{' '}
                           <span className="text-slate-800 font-mono break-all">{cand.trackId}</span>
                         </div>
                         <div className="min-w-0 break-words break-all">
-                          <span className="text-slate-500">Geom:</span>{' '}
-                          <span className="text-slate-800 font-mono break-all">v{cand.geometryVersion}</span>
+                          <span className="text-slate-500">{t('mf05Demo.fieldGeom')}</span>{' '}
+                          <span className="text-slate-800 font-mono break-all">
+                            v{cand.geometryVersion}
+                          </span>
                         </div>
                         <div className="min-w-0 break-words break-all">
-                          <span className="text-slate-500">Captured:</span>{' '}
-                          <span className="text-slate-800 font-mono break-all">{cand.capturedAt ? cand.capturedAt.slice(11, 19) : 'N/A'}</span>
+                          <span className="text-slate-500">{t('mf06.detail.field.captured')}</span>{' '}
+                          <span className="text-slate-800 font-mono break-all">
+                            {cand.capturedAt ? cand.capturedAt.slice(11, 19) : 'N/A'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -559,7 +562,7 @@ export function Mf05DemoControlPanel({
             <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
               <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2 min-w-0">
                 <IconCamera className="h-4 w-4 text-slate-500 flex-shrink-0" />
-                <span className="truncate">Latest Actual Evidence Image</span>
+                <span className="truncate">{t('mf05Demo.latestEvidenceHeading')}</span>
               </h4>
               {!isApplying && isEvidenceIdentityAvailable && evidenceFrame && (
                 <button
@@ -567,18 +570,18 @@ export function Mf05DemoControlPanel({
                   onClick={() => downloadMf05EvidenceExport(status)}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer flex-shrink-0 shadow-xs"
                 >
-                  Download Evidence
+                  {t('mf05Demo.downloadEvidenceBtn')}
                 </button>
               )}
             </div>
             <div className="mt-2 min-w-0">
               {isApplying || !status.evidenceImageDataUrl ? (
                 <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-4 text-center text-xs text-slate-500">
-                  No evidence image available
+                  {t('mf05Demo.noEvidenceImage')}
                 </div>
               ) : !isEvidenceIdentityAvailable || !evidenceFrame ? (
                 <div className="rounded-xl border border-amber-200 bg-[#FBF3DB] p-4 text-center text-xs text-amber-800">
-                  Evidence identity unavailable
+                  {t('mf05Demo.evidenceIdentityUnavailable')}
                 </div>
               ) : (
                 <div className="space-y-3 min-w-0">
@@ -592,16 +595,18 @@ export function Mf05DemoControlPanel({
                   >
                     <img
                       src={status.evidenceImageDataUrl}
-                      alt="Latest MF05 evidence candidate"
+                      alt={t('mf05Demo.latestEvidenceAlt')}
                       className="h-full w-full object-contain"
                     />
                     <svg
-                      aria-label="evidence bounding box overlay"
+                      aria-label={t('mf05Demo.evidenceBoxOverlayAria')}
                       viewBox={`0 0 ${evidenceFrame.frameDimensions.width} ${evidenceFrame.frameDimensions.height}`}
                       className="absolute inset-0 h-full w-full pointer-events-none"
                     >
                       {evidenceFrame.targets.map((target, idx) => (
-                        <React.Fragment key={`${target.trackId}-${target.ppeItem}-${target.regionId}-${idx}`}>
+                        <React.Fragment
+                          key={`${target.trackId}-${target.ppeItem}-${target.regionId}-${idx}`}
+                        >
                           {target.personBox && (
                             <rect
                               data-testid={`evidence-box-person-${target.trackId}`}
@@ -651,19 +656,24 @@ export function Mf05DemoControlPanel({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2 text-[11px] text-slate-500 min-w-0">
                       <div className="min-w-0">
-                        <span className="text-slate-500">Event:</span>{' '}
-                        <span className="font-mono text-slate-900 font-semibold break-all">{evidenceFrame.eventId}</span>
-                      </div>
-                      <div className="flex-shrink-0">
-                        <span className="text-slate-500">Captured:</span>{' '}
-                        <span className="font-mono text-slate-900">
-                          {evidenceFrame.capturedAt ? evidenceFrame.capturedAt.slice(11, 19) : 'N/A'}
+                        <span className="text-slate-500">{t('mf05Demo.fieldEvent')}</span>{' '}
+                        <span className="font-mono text-slate-900 font-semibold break-all">
+                          {evidenceFrame.eventId}
                         </span>
                       </div>
                       <div className="flex-shrink-0">
-                        <span className="text-slate-500">Dimensions:</span>{' '}
+                        <span className="text-slate-500">{t('mf06.detail.field.captured')}</span>{' '}
                         <span className="font-mono text-slate-900">
-                          {evidenceFrame.frameDimensions.width} × {evidenceFrame.frameDimensions.height}
+                          {evidenceFrame.capturedAt
+                            ? evidenceFrame.capturedAt.slice(11, 19)
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="text-slate-500">{t('mf05Demo.fieldDimensions')}</span>{' '}
+                        <span className="font-mono text-slate-900">
+                          {evidenceFrame.frameDimensions.width} ×{' '}
+                          {evidenceFrame.frameDimensions.height}
                         </span>
                       </div>
                     </div>
@@ -676,13 +686,18 @@ export function Mf05DemoControlPanel({
                           className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-slate-200/80 px-2.5 py-1.5 text-slate-800 min-w-0 shadow-xs"
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-semibold text-slate-900 font-mono flex-shrink-0">Track: {target.trackId}</span>
+                            <span className="font-semibold text-slate-900 font-mono flex-shrink-0">
+                              {t('mf05Demo.targetTrack', { id: target.trackId })}
+                            </span>
                             <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700 flex-shrink-0">
                               {target.ppeItem}
                             </span>
                           </div>
                           <div className="font-mono text-[11px] text-slate-500 break-all">
-                            Region: {target.regionId} (v{target.geometryVersion})
+                            {t('mf05Demo.targetRegionVersion', {
+                              regionId: target.regionId,
+                              version: target.geometryVersion,
+                            })}
                           </div>
                         </div>
                       ))}

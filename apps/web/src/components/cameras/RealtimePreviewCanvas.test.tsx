@@ -192,7 +192,7 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
     ).toBeGreaterThanOrEqual(1);
 
     // 5. Visible compact details dropdown exists and is default collapsed
-    const detailsSummary = screen.getByText(/Khung hình \(1 quan sát\)/i);
+    const detailsSummary = screen.getByText('Frame (1 observation(s))');
     expect(detailsSummary).toBeTruthy();
     const detailsElement = detailsSummary.closest('details');
     expect(detailsElement).toBeTruthy();
@@ -322,7 +322,7 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
     // 3. Accessible list has entries for all 4 tracks, and visible details list reflects all 4 tracks
     const listItems = screen.getAllByRole('listitem');
     expect(listItems.length).toBe(4);
-    expect(screen.getByText(/Khung hình \(4 quan sát\)/i)).toBeTruthy();
+    expect(screen.getByText('Frame (4 observation(s))')).toBeTruthy();
   });
 
   it('6. Regression: supports multiple zone observations for same trackId across distinct regions', () => {
@@ -360,17 +360,17 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
     render(<RealtimePreviewCanvas preview={preview} mode="zone" />);
 
     // Header accurately states observations, not unique people
-    expect(screen.getByText(/Khung hình \(2 quan sát\)/i)).toBeTruthy();
+    expect(screen.getByText('Frame (2 observation(s))')).toBeTruthy();
 
     // Renders distinct region context for each row
-    expect(screen.getAllByText(/Khu vực: zone-north/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Khu vực: zone-south/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Region: zone-north/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Region: zone-south/i).length).toBeGreaterThanOrEqual(1);
 
     // Accessible list exposes both observations with their respective regions
     const items = screen.getAllByRole('listitem');
     expect(items.length).toBe(2);
-    expect(items[0]!.textContent).toContain('Khu vực: zone-north');
-    expect(items[1]!.textContent).toContain('Khu vực: zone-south');
+    expect(items[0]!.textContent).toContain('Region: zone-north');
+    expect(items[1]!.textContent).toContain('Region: zone-south');
   });
 
   it('7. Renders accessible summary and canvas label for expanded 5 items when all reported present', () => {
@@ -474,6 +474,9 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
     );
 
     const canvasEn = screen.getByRole('region', { name: 'Synchronized AI camera frame' });
+    expect(screen.getByLabelText('Current frame observations')).toBeTruthy();
+    expect(screen.getByLabelText('Frame observation details')).toBeTruthy();
+    expect(screen.getByText('Frame (1 observation(s))')).toBeTruthy();
     expect(canvasEn.getAttribute('data-frame-id')).toBe('00000000-0000-4000-8000-000000000001:100');
     expect(mockContext.fillText).toHaveBeenCalledWith(
       'Hardhat 91%',
@@ -499,6 +502,9 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
     });
 
     const canvasVi = screen.getByRole('region', { name: 'Khung hình camera AI đã đồng bộ' });
+    expect(screen.getByLabelText('Các quan sát trong khung hình hiện tại')).toBeTruthy();
+    expect(screen.getByLabelText('Chi tiết quan sát trong khung hình')).toBeTruthy();
+    expect(screen.getByText('Khung hình (1 quan sát)')).toBeTruthy();
     expect(canvasVi.getAttribute('data-frame-id')).toBe('00000000-0000-4000-8000-000000000001:100');
 
     // Exact person box and raw machine className tags remain unchanged in VI
@@ -528,5 +534,6 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
       await i18n.changeLanguage('en');
     });
     expect(screen.getByRole('region', { name: 'Synchronized AI camera frame' })).not.toBeNull();
+    expect(screen.getByText('Frame (1 observation(s))')).toBeTruthy();
   });
 });

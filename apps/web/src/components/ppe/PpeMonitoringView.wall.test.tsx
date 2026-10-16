@@ -411,8 +411,8 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     const slot4 = screen.getByTestId('wall-unassigned-slot-4');
     expect(slot3).not.toBeNull();
     expect(slot4).not.toBeNull();
-    expect(slot3?.textContent).toContain('Kênh 3 · Chưa chỉ định');
-    expect(slot4?.textContent).toContain('Kênh 4 · Chưa chỉ định');
+    expect(slot3?.textContent).toContain('Slot 3 · Unassigned');
+    expect(slot4?.textContent).toContain('Slot 4 · Unassigned');
   });
 
   it('clicking a tile in wall view updates selected camera and reuses wall frame in focus card without extra subscription', async () => {

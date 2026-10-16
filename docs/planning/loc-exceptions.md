@@ -102,3 +102,19 @@ permission bypass is implied. Context telemetry remains unknown.
 Baseline is79791f6; fix isf4a6f29. Focused routing/locale/shell19PASS,
 independent source review and types/lint support this bounded exception only.
 The separate localization audit and full remote CI remain open.
+
+## Safety presentation localization, 16 October
+
+| Path | Baseline HEAD6035df7 | Reviewed change | Reason and follow-up |
+| --- | ---: | --- | --- |
+| `apps/web/src/components/cameras/RealtimePreviewCanvas.test.tsx` | 532 | Seven extra lines | Existing frame/box tests now verify EN/VI accessibility text on the same pixels and IDs. Keep all lineage assertions; extract common canvas fixtures before adding a new responsibility. |
+| `apps/web/src/components/ppe/FourSourceWall.tsx` | 462 | One extra line | Replace existing prose with typed translation keys; camera limits, policies and polling remain unchanged. Extract tile presentation before unrelated growth. |
+| `apps/web/src/components/ppe/Mf05DemoControlPanel.tsx` | 699 | Fifteen extra lines | Localize existing diagnostics, status errors and evidence labels without modifying commands or scope. Extract diagnostics presentation before another feature is added. |
+| `apps/web/src/components/zones/RestrictedZoneView.tsx` | 2234 | Fourteen extra lines | Translate existing visible strings and render retained system feedback through a bounded adapter. Existing queries, technical row values and geometry remain unchanged. Further work must extract orchestration rather than add responsibilities. |
+| `apps/web/src/i18n/ppe-catalog.ts` | 1657 | 362 extra lines | Matching EN/VI entries for the existing camera, wall, diagnostic and Zone views. Root permits this integration repair; split catalogs by feature while preserving typed keys before further expansion. |
+
+Reviewer/owner: Root. Actual Agy p8 implemented presentation changes; Herdr
+Codex supplied an independent source review. Root reproduced and repaired six
+retained-message gaps and ambiguous applying-state wording. New Zone adapter and
+regression files stay below100 lines each. Final checks are recorded separately
+in the operations evidence; this exception does not certify CI or production.

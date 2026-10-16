@@ -23,7 +23,7 @@ export function CameraMonitoringView({
   sharedSession,
 }: CameraMonitoringViewProps) {
   useTranslation();
-  useLocale();
+  const { t } = useLocale();
 
   const [internalTab, setInternalTab] = useState<CameraSubTab>('ppe');
   const activeTab = controlledTab ?? internalTab;
@@ -68,7 +68,11 @@ export function CameraMonitoringView({
         </div>
 
         {/* Sub-navbar Segmented Switcher */}
-        <div role="group" aria-label="Camera monitoring view" className="flex flex-wrap max-w-full bg-[#F7F6F3] p-1 rounded-lg border border-[#EAEAEA] self-start md:self-auto">
+        <div
+          role="group"
+          aria-label={t('cameraMonitoring.switcherAria')}
+          className="flex flex-wrap max-w-full bg-[#F7F6F3] p-1 rounded-lg border border-[#EAEAEA] self-start md:self-auto"
+        >
           <button
             type="button"
             aria-pressed={activeTab === 'ppe'}
@@ -90,7 +94,7 @@ export function CameraMonitoringView({
                   : 'bg-[#EAEAEA] text-[#6B6B6B]'
               }`}
             >
-              MF05
+              {t('cameraMonitoring.codeMf05')}
             </span>
           </button>
 
@@ -115,7 +119,7 @@ export function CameraMonitoringView({
                   : 'bg-[#EAEAEA] text-[#6B6B6B]'
               }`}
             >
-              MF06
+              {t('cameraMonitoring.codeMf06')}
             </span>
           </button>
         </div>

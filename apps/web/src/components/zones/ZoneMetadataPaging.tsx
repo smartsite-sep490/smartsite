@@ -1,3 +1,5 @@
+import { useLocale } from '../../i18n/ppe-locale';
+
 interface MetadataQuery {
   isPending: boolean;
   isFetching: boolean;
@@ -17,21 +19,24 @@ export function ZoneMetadataPaging({
   query: MetadataQuery;
   kind: 'sites' | 'cameras' | 'regions';
 }) {
+  const { t } = useLocale();
   const nextError = query.isError && query.retainOnError;
   return (
     <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[#6B6B6B]">
       {query.isPending ? (
-        <span role="status">Loading {kind}…</span>
+        <span role="status">{t(`zonePaging.${kind}.loading`)}</span>
       ) : query.data ? (
         <span>
-          {query.data.items.length} of {query.data.total} {kind} loaded
+          {t(`zonePaging.${kind}.loadedCount`, {
+            loaded: query.data.items.length,
+            total: query.data.total,
+          })}
         </span>
       ) : null}
       {query.isError ? (
         <>
           <span role="alert">
-            Cannot load {nextError ? 'more ' : ''}
-            {kind}. Try again.
+            {nextError ? t(`zonePaging.${kind}.errorMore`) : t(`zonePaging.${kind}.errorInitial`)}
           </span>
           <button
             type="button"
@@ -42,8 +47,7 @@ export function ZoneMetadataPaging({
             }}
             className="rounded border px-2 py-1 disabled:opacity-50"
           >
-            Retry loading {nextError ? 'more ' : ''}
-            {kind}
+            {nextError ? t(`zonePaging.${kind}.retryMore`) : t(`zonePaging.${kind}.retryInitial`)}
           </button>
         </>
       ) : query.hasNextPage ? (
@@ -55,7 +59,9 @@ export function ZoneMetadataPaging({
           }}
           className="rounded border px-2 py-1 disabled:opacity-50"
         >
-          {query.isFetchingNextPage ? `Loading more ${kind}…` : `Load more ${kind}`}
+          {query.isFetchingNextPage
+            ? t(`zonePaging.${kind}.loadingMore`)
+            : t(`zonePaging.${kind}.loadMore`)}
         </button>
       ) : null}
     </div>
