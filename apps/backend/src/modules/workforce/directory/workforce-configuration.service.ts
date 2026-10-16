@@ -1,3 +1,4 @@
+import { refuseLegacyMainWriter } from '../../../common/configuration/legacy-workforce-writer.js';
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
@@ -252,6 +253,7 @@ export class WorkforceConfigurationService {
 
   /** Account-first enrollment used by Face/Identity flows; remains idempotent. */
   async forAccount(siteIdValue: string, input: LinkWorkerAccountCommand) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const siteId = uuid(siteIdValue);
     const value = command(LinkWorkerAccountCommand, input);
     return this.dataSource.transaction(async (manager) => {
@@ -286,6 +288,7 @@ export class WorkforceConfigurationService {
   }
 
   async linkAccount(siteIdValue: string, workerIdValue: string, input: LinkWorkerAccountCommand) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const siteId = uuid(siteIdValue);
     const workerId = uuid(workerIdValue);
     const value = command(LinkWorkerAccountCommand, input);
@@ -317,6 +320,7 @@ export class WorkforceConfigurationService {
   }
 
   async create(siteId: string, input: CreateWorkerDto): Promise<WorkerEntity> {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const scopedSiteId = uuid(siteId);
     const value = command(CreateWorkerDto, input);
     const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
@@ -344,6 +348,7 @@ export class WorkforceConfigurationService {
   }
 
   async createContractor(siteId: string, input: CreateContractorDto): Promise<ContractorEntity> {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const scopedSiteId = uuid(siteId);
     const value = command(CreateContractorDto, input);
     const code = value.code ?? `CTR-${randomUUID().toUpperCase()}`;
@@ -396,6 +401,7 @@ export class WorkforceConfigurationService {
     contractorId: string,
     input: AssignContractorRepresentativeDto,
   ): Promise<ContractorRepresentativeAssignmentEntity> {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     try {
       return await this.dataSource.transaction((manager) =>
         this.assignRepresentativeInTransaction(manager, siteId, contractorId, input),

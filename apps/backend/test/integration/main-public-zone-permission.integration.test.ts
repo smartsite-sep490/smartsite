@@ -14,7 +14,7 @@ import { validateEnvironment, type BackendEnvironment } from '../../src/config/e
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
-import { SiteAccessSetupController } from '../../src/modules/workforce/site-access-setup.controller.js';
+import { SiteAccessSetupController } from '../../src/modules/workforce/access/site-access-setup.controller.js';
 import { MainZonePermissionCommandService } from '../../src/modules/zones/main-zone-permission-command.service.js';
 import { installMainAuthorityCandidate } from '../support/main-authority-candidate.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
@@ -28,7 +28,8 @@ before(async () => {
 after(async () => {
   await database.dispose();
 });
-async function fixture(role = 'ADMIN') {
+async function fixture(role?: string) {
+  const actorRole = role ?? 'ADMIN';
   const f = Object.fromEntries(
     [
       'actor',
@@ -63,9 +64,16 @@ async function fixture(role = 'ADMIN') {
   await db.query('INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)', [
     randomUUID(),
     f.actor,
-    role,
-    role === 'ADMIN' ? null : f.site,
+    actorRole,
+    actorRole === 'ADMIN' ? null : f.site,
   ]);
+  // Successful mixed-operation fixtures have the real Site Manager assignment.
+  // Explicit fixture('ADMIN') remains Admin-only for role/capability boundaries.
+  if (role === undefined)
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+      [randomUUID(), f.actor, f.site],
+    );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
     [f.contractor],
@@ -265,7 +273,7 @@ for (const actorRole of ['ADMIN', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'])
       };
       const manager = actorRole !== 'CONTRACTOR_REPRESENTATIVE';
       assert.equal(result.canReviewAssignments, manager);
-      assert.equal(result.canGrantContractorZones, manager);
+      assert.equal(result.canGrantContractorZones, actorRole === 'SITE_MANAGER');
       assert.equal(result.canGrantWorkerZones, actorRole !== 'SITE_MANAGER');
       for (const [list, primary, secondary] of [
         [result.participations, f.participation, extra.participation],
@@ -325,7 +333,7 @@ test('access setup options unknown or malformed Site is not a fabricated success
 
 test('access setup options rejects Safety-only and wrong-Site manager roles', async () => {
   const f = await fixture('SAFETY_OFFICER');
-  const other = await fixture();
+  const other = await fixture('ADMIN');
   await withApi(f, async (request) => {
     assert.equal((await request(base(f), undefined, 'GET')).status, 403);
     await role(f, 'SITE_MANAGER', other.site);

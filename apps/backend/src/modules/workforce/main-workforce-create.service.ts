@@ -38,7 +38,10 @@ export class MainWorkforceCreateService {
     context: MainConfigurationCommandContext,
   ): Promise<ContractorEntity> {
     const siteId = uuid(siteIdValue).toLowerCase();
-    const value = command(CreateContractorDto, input);
+    const validated = command(CreateContractorDto, input);
+    // Preserve Main's optional-code API and keep one generated code across
+    // complete-transaction retries. Never query with an undefined predicate.
+    const value = { ...validated, code: validated.code ?? `CTR-${randomUUID().toUpperCase()}` };
     try {
       return await executeMainConfigurationCommand(
         this.source,

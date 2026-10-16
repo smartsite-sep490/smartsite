@@ -16,6 +16,10 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 
 const database = createIsolatedTestDatabase({ legacy: true });
 const { dataSource } = database;
+const applicationName = `smartsite-revoke-${randomUUID()}`;
+dataSource.setOptions({
+  extra: { ...dataSource.options.extra, application_name: applicationName },
+});
 before(() => database.initialize());
 after(() => database.dispose());
 
@@ -78,15 +82,14 @@ test('concurrent Zone revocations keep the first persisted timestamp and both re
   try {
     // Hold the real row until both requests are waiting in PostgreSQL. The old
     // repository monkeypatch no longer intercepts transaction-owned repositories.
-    const scope: { schema: string }[] = await dataSource.query('SELECT current_schema() AS schema');
     const deadline = Date.now() + 5000;
     let waiting = 0;
     do {
       const rows: { n: number }[] = await dataSource.query(
         `SELECT count(*)::int AS n FROM pg_stat_activity
         WHERE datname=current_database() AND wait_event_type='Lock'
-        AND query LIKE $1 AND query LIKE '%zone_access_grant%'`,
-        [`%${scope[0]!.schema}%`],
+        AND application_name=$1 AND query LIKE '%zone_access_grant%'`,
+        [applicationName],
       );
       waiting = rows[0]!.n;
       if (waiting < 2) await new Promise((resolve) => setTimeout(resolve, 20));

@@ -13,7 +13,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 
 test(
-  'actual compiled main native app.close drains an admitted MAIN39 transaction before pool shutdown',
+  'actual compiled main native app.close drains an admitted MAIN58 transaction before pool shutdown',
   { timeout: 40_000 },
   async (t) => {
     const url = new URL(resolveTestDatabaseUrl());
@@ -166,7 +166,7 @@ test(
     assert.deepEqual(await control('READY'), {
       type: 'READY',
       entrypoint: 'main.ts',
-      registeredMigrations: 39,
+      registeredMigrations: 58,
       productionConfig: true,
     });
     const login = await request('/auth/login', 'POST', {
@@ -200,6 +200,14 @@ test(
     );
     assert.equal(siteResponse.status, 201);
     const site = await siteResponse.json();
+    // Main requires an exact-Site Manager for Zone writes; Admin alone is not enough.
+    const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
+      username,
+    ]);
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
+      [actorId, site.id],
+    );
     await held.connect();
     await held.startTransaction();
     await held.query('LOCK TABLE zone IN ACCESS EXCLUSIVE MODE');

@@ -20,15 +20,9 @@ import { TeamZonePermissionEntity } from './team-zone-permission.entity.js';
 export * from './team-zone-permission.entity.js';
 import { ScheduleAssignmentBatchEntity } from './schedule-assignment-batch.entity.js';
 export * from './schedule-assignment-batch.entity.js';
-import {
-  ContractorTeamEntity,
-  ContractorTeamMembershipEntity,
-} from './contractor-team.entity.js';
+import { ContractorTeamEntity, ContractorTeamMembershipEntity } from './contractor-team.entity.js';
 export * from './contractor-team.entity.js';
-import {
-  AttendanceDayEntity,
-  OvertimeRequestEntity,
-} from './attendance-day.entity.js';
+import { AttendanceDayEntity, OvertimeRequestEntity } from './attendance-day.entity.js';
 export * from './attendance-day.entity.js';
 import { AccessAttemptEntity, GateEventEntity } from './access-flow.entity.js';
 import { AccessAuditEntity } from './access-audit.entity.js';
@@ -93,10 +87,10 @@ import { ContractorZoneAccessGrantEntity } from './contractor-zone-access-grant.
 import { ZoneAuthorityCommandEntity } from './zone-authority-command.entity.js';
 import { ZoneAuthorityFactRevisionEntity } from './zone-authority-fact-revision.entity.js';
 import { ZoneAuthorityHistoryEpochEntity } from './zone-authority-history-epoch.entity.js';
-import { Mf06AssessmentRequestEntity } from './mf06-assessment-request.entity.js';
-import { Mf06AssessmentJobEntity } from './mf06-assessment-job.entity.js';
-import { Mf06AssessmentEntity } from './mf06-assessment.entity.js';
-import { Mf06AuthorityArtifactEntity } from './mf06-authority-artifact.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from './zone-entry-assessment-request.entity.js';
+import { ZoneEntryAssessmentJobEntity } from './zone-entry-assessment-job.entity.js';
+import { ZoneEntryAssessmentEntity } from './zone-entry-assessment.entity.js';
+import { ZoneEntryAuthorityArtifactEntity } from './zone-entry-authority-artifact.entity.js';
 
 import { UserNotificationEntity } from './user-notification.entity.js';
 
@@ -142,10 +136,10 @@ export * from './contractor-zone-access-grant.entity.js';
 export * from './zone-authority-command.entity.js';
 export * from './zone-authority-fact-revision.entity.js';
 export * from './zone-authority-history-epoch.entity.js';
-export * from './mf06-assessment-request.entity.js';
-export * from './mf06-assessment-job.entity.js';
-export * from './mf06-assessment.entity.js';
-export * from './mf06-authority-artifact.entity.js';
+export * from './zone-entry-assessment-request.entity.js';
+export * from './zone-entry-assessment-job.entity.js';
+export * from './zone-entry-assessment.entity.js';
+export * from './zone-entry-authority-artifact.entity.js';
 
 export * from './user-notification.entity.js';
 
@@ -222,10 +216,10 @@ export const ENTITIES = [
   ZoneAuthorityCommandEntity,
   ZoneAuthorityFactRevisionEntity,
   ZoneAuthorityHistoryEpochEntity,
-  Mf06AssessmentRequestEntity,
-  Mf06AssessmentJobEntity,
-  Mf06AssessmentEntity,
-  Mf06AuthorityArtifactEntity,
+  ZoneEntryAssessmentRequestEntity,
+  ZoneEntryAssessmentJobEntity,
+  ZoneEntryAssessmentEntity,
+  ZoneEntryAuthorityArtifactEntity,
   UserNotificationEntity,
   TeamZonePermissionEntity,
 ] as const;

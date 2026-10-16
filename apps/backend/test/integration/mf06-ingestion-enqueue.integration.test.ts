@@ -20,8 +20,8 @@ import {
   CameraObservationRegionEntity,
   CameraStatus,
   EventProcessingStatus,
-  Mf06AssessmentJobEntity,
-  Mf06AssessmentRequestEntity,
+  ZoneEntryAssessmentJobEntity,
+  ZoneEntryAssessmentRequestEntity,
   SiteEntity,
   ZoneEntity,
   ZoneRestrictionPolicy,
@@ -417,7 +417,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
 
     // Verify assessment request
     const request = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneBy({ eventId: payload.eventId });
     assert.ok(request, 'Assessment request must be enqueued');
     assert.equal(request.subjectBindingStatus, 'BOUND');
@@ -434,7 +434,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
 
     // Verify assessment job
     const job = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: request.requestId });
     assert.ok(job, 'Assessment job must be created atomically');
     assert.equal(job.status, 'PENDING');
@@ -471,7 +471,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(raw.resolvedCameraId, infra.cameraId);
 
     const req = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneByOrFail({ eventId: payload.eventId });
     assert.equal(req.payloadHash, expectedHash);
     assert.equal(req.siteId, infra.siteId);
@@ -512,15 +512,15 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(rawCount, 1, 'Exactly one raw event row must be persisted');
 
     const reqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: payload.eventId });
     assert.equal(reqCount, 1, 'Exactly one assessment request must exist');
 
     const req = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneByOrFail({ eventId: payload.eventId });
     const job = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: req.requestId });
     assert.ok(job, 'Exactly one job must exist for the request');
   });
@@ -574,7 +574,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     );
 
     const req = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneByOrFail({ eventId: sharedEventId });
     assert.equal(req.trackId, 501, 'Original request trackId must not be overwritten');
   });
@@ -600,7 +600,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     const result = await service.ingestEvent(payload);
     assert.equal(result.status, EventProcessingStatus.SKIPPED_NO_CANDIDATE);
 
-    const requests = await db.getRepository(Mf06AssessmentRequestEntity).find({
+    const requests = await db.getRepository(ZoneEntryAssessmentRequestEntity).find({
       where: { eventId: payload.eventId },
       order: { zoneObservationIndex: 'ASC' },
     });
@@ -617,10 +617,10 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(requests[1]!.zoneId, infra.zone2Id);
 
     const job1 = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: requests[0]!.requestId });
     const job2 = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: requests[1]!.requestId });
     assert.ok(job1 && job2, 'Both assessment jobs must exist');
   });
@@ -645,7 +645,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     const badRegionResult = await service.ingestEvent(badRegionPayload);
     assert.equal(badRegionResult.status, EventProcessingStatus.SKIPPED_NO_CANDIDATE);
     const badRegionReqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: badRegionPayload.eventId });
     assert.equal(badRegionReqCount, 0, 'Unconfigured region must produce zero assessment requests');
 
@@ -661,7 +661,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     const skewResult = await service.ingestEvent(skewPayload);
     assert.equal(skewResult.status, EventProcessingStatus.SKIPPED_CLOCK_SKEW);
     const skewReqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: skewPayload.eventId });
     assert.equal(skewReqCount, 0, 'Clock skew event must produce zero assessment requests');
 
@@ -676,7 +676,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     const unknownCamResult = await service.ingestEvent(unknownCameraPayload);
     assert.equal(unknownCamResult.status, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
     const unknownCamReqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: unknownCameraPayload.eventId });
     assert.equal(unknownCamReqCount, 0, 'Unknown camera must produce zero assessment requests');
   });
@@ -738,7 +738,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(rawCount, 0, 'Raw event must be rolled back on downstream failure');
 
     const reqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: payload.eventId });
     assert.equal(reqCount, 0, 'Assessment request must be rolled back on downstream failure');
 
@@ -790,13 +790,13 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(rawCount, 0, 'Rejected multi-entry event raw record must be rolled back');
 
     const reqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: payload.eventId });
     assert.equal(reqCount, 0, 'Rejected multi-entry requests must be rolled back');
 
     // Verify prior job and request remain intact
     const priorJob = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: prior.requestId });
     assert.ok(priorJob, 'Prior job must be retained');
   });
@@ -839,10 +839,10 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
 
     // Verify expired jobs are NOT purged
     const pendingExists = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: priorPending.requestId });
     const claimedExists = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: priorClaimed.requestId });
     assert.ok(pendingExists && claimedExists, 'Expired nonterminal jobs must remain in database');
   });
@@ -909,7 +909,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(result.status, EventProcessingStatus.SKIPPED_NO_CANDIDATE);
 
     const reqCount = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .countBy({ eventId: unblockedPayload.eventId });
     assert.equal(reqCount, 1, 'Event after lock release must enqueue successfully');
   });
@@ -1068,7 +1068,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
 
     // 7. Verify assessment request preserved the initial context (infra.siteId, NOT site2Id)
     const req = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneByOrFail({ eventId: payload.eventId });
     assert.equal(
       req.siteId,
@@ -1150,8 +1150,11 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
           .countBy({ eventId: overCapacity.eventId }),
         0,
       );
-      assert.equal(await owned.dataSource.getRepository(Mf06AssessmentRequestEntity).count(), 1);
-      assert.equal(await owned.dataSource.getRepository(Mf06AssessmentJobEntity).count(), 1);
+      assert.equal(
+        await owned.dataSource.getRepository(ZoneEntryAssessmentRequestEntity).count(),
+        1,
+      );
+      assert.equal(await owned.dataSource.getRepository(ZoneEntryAssessmentJobEntity).count(), 1);
     } finally {
       await app.close();
       await owned.dispose();

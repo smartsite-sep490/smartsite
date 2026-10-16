@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { configurationCommandContext } from '../../auth/configuration-command-context.js';
+import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.js';
 import {
   SiteAccessSetupService,
   GrantContractorZoneCommand,
@@ -18,6 +19,7 @@ export class SiteAccessSetupController {
   constructor(
     private readonly setup: SiteAccessSetupService,
     private readonly auth: UserAuthGuard,
+    private readonly queries: SiteAccessSetupQueryService,
   ) {}
   @Post('contractor-zone-permissions/dates') contractorDates(
     @Req() req: AuthenticatedRequest,
@@ -32,7 +34,7 @@ export class SiteAccessSetupController {
     );
   }
   @Get() options(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string) {
-    return this.setup.options(req.user!, siteId);
+    return this.queries.options(siteId, configurationCommandContext(req, this.auth));
   }
   @Post('contractor-zone-permissions') contractor(
     @Req() req: AuthenticatedRequest,

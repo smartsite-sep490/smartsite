@@ -23,7 +23,7 @@ import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-
 import { CameraObservationRegionEntity } from '../../src/database/entities/camera-observation-region.entity.js';
 import { CameraEntity } from '../../src/database/entities/camera.entity.js';
 
-const isolatedDatabase = createIsolatedTestDatabase({ legacy: true });
+const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
 const dataSource = isolatedDatabase.dataSource;
 before(() => isolatedDatabase.initialize());
 

@@ -37,7 +37,7 @@ const policy = {
   restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
   requiredPpe: ['SAFETY_VEST', 'HARD_HAT'],
 };
-async function fixture(role = 'ADMIN') {
+async function fixture(role = 'ADMIN', manageSite = role === 'ADMIN') {
   const actorUserId = randomUUID(),
     siteId = randomUUID();
   await db.query(
@@ -53,6 +53,7 @@ async function fixture(role = 'ADMIN') {
     role,
     role === 'ADMIN' ? null : siteId,
   ]);
+  if (manageSite) await managerRole(actorUserId, siteId);
   const sites = new SiteConfigurationService(db),
     zones = new ZoneConfigurationService(db, sites);
   return {
@@ -64,6 +65,12 @@ async function fixture(role = 'ADMIN') {
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+async function managerRole(actorId: string, siteId: string) {
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), actorId, siteId],
+  );
+}
 async function zone(f: Fixture, ctx: Context | undefined = f.ctx) {
   return f.zones.create(f.siteId, { code: randomUUID(), name: 'Synthetic Zone', ...policy }, ctx);
 }
@@ -144,7 +151,7 @@ test('locked policy allows an exact no-op but refuses changed PPE and leaves no 
     commands,
   );
 });
-for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
+for (const role of ['SAFETY_OFFICER', 'WORKER'])
   test(`Site and Zone writes reject current ${role} in the transaction`, async () => {
     const f = await fixture(role);
     await assert.rejects(
@@ -153,6 +160,16 @@ for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
     );
     await assert.rejects(zone(f), status(403));
   });
+test('Main Site Manager can write its Zone but cannot create Sites; Admin alone cannot write Zones', async () => {
+  const manager = await fixture('SITE_MANAGER');
+  await assert.rejects(
+    manager.sites.create({ code: randomUUID(), name: 'Denied' }, manager.ctx),
+    status(403),
+  );
+  assert.ok((await zone(manager)).id);
+  const admin = await fixture('ADMIN', false);
+  await assert.rejects(zone(admin), status(403));
+});
 test('Site and Zone reauthentication refuses a revoked session before any metadata is committed', async () => {
   const f = await fixture();
   let claims = 0;
@@ -328,6 +345,7 @@ test('actual AppModule Site and Zone HTTP writes bind the bearer actor inside al
     assert.equal(created.status, 201);
     const site = (await created.json()) as { id: string };
     assert.equal((await attribution(site.id, 'SITE_CREATE')).actor_user_id, f.actorUserId);
+    await managerRole(f.actorUserId, site.id);
     const root = `/sites/${site.id}/zones`;
     const linked = await request(root, {
       code: randomUUID(),
@@ -420,6 +438,7 @@ test('main metadata duplicate codes and wrong Site policy writes retain existing
   const f = await fixture(),
     z = await zone(f);
   const site = await f.sites.create({ code: randomUUID(), name: 'Unique Site' }, f.ctx);
+  await managerRole(f.actorUserId, site.id);
   const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
   await assert.rejects(f.sites.create({ code: site.code, name: 'Duplicate' }, f.ctx), status(409));
   await assert.rejects(
@@ -446,6 +465,7 @@ test('postcommit metadata witness failure keeps committed DTO successful while h
   );
   try {
     const site = await f.sites.create({ code: randomUUID(), name: 'Committed Site' }, f.ctx);
+    await managerRole(f.actorUserId, site.id);
     const z = await f.zones.create(
       site.id,
       { code: randomUUID(), name: 'Committed Zone', ...policy },

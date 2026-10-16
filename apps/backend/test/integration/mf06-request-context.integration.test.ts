@@ -1,3 +1,4 @@
+import { ZoneEntryAssessmentJobEntity } from '../../src/database/entities/zone-entry-assessment-job.entity.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -8,7 +9,7 @@ import {
   CameraEntity,
   CameraStatus,
   EventProcessingStatus,
-  Mf06AssessmentRequestEntity,
+  ZoneEntryAssessmentRequestEntity,
   SiteEntity,
   ZoneEntity,
   ZoneRestrictionPolicy,
@@ -79,7 +80,7 @@ async function fixture(ambiguous = false, invalidCanonicalHash = false) {
   const selected = selectZoneEntrySubject(raw, 3);
   assert.ok(selected.zoneEligible);
   const requestId = randomUUID();
-  await db.getRepository(Mf06AssessmentRequestEntity).insert({
+  await db.getRepository(ZoneEntryAssessmentRequestEntity).insert({
     requestId,
     eventId,
     payloadHash,
@@ -140,10 +141,10 @@ test('real MF06 context retains captured provenance after current Camera edits a
   await db.getRepository(CameraEntity).delete(f.cameraId);
   assert.deepEqual(await reader.load(f.siteId, f.requestId), original);
   assert.equal(
-    await db.getRepository(Mf06AssessmentRequestEntity).countBy({ requestId: f.requestId }),
+    await db.getRepository(ZoneEntryAssessmentRequestEntity).countBy({ requestId: f.requestId }),
     1,
   );
-  assert.equal(await db.getRepository('Mf06AssessmentJobEntity').count(), 0);
+  assert.equal(await db.getRepository(ZoneEntryAssessmentJobEntity).count(), 0);
 });
 
 test('real stored hash agreement cannot certify a noncanonical MF06 raw event', async () => {

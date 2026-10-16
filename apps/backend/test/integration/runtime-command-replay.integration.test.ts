@@ -26,7 +26,7 @@ test(
   async (t) => {
     const databaseUrl = new URL(resolveTestDatabaseUrl());
     assert.equal(databaseUrl.port, '5433', 'Dedicated test database only');
-    const isolated = createIsolatedTestDatabase({ legacy: true });
+    const isolated = createIsolatedTestDatabase({ canonical: true });
     const db = isolated.dataSource;
     const evidenceRoot = await mkdtemp(join(tmpdir(), 'smartsite-runtime-replay-'));
     const children: { process: ChildProcess; exited: Promise<void> }[] = [];
@@ -191,6 +191,13 @@ test(
     const create = (route: string, body: unknown) =>
       request(route, 201, { method: 'POST', body, token: admin });
     const site = await create('/sites', { code: adminName, name: 'Synthetic replay Site' });
+    const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
+      adminName,
+    ]);
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
+      [actorId, site.id],
+    );
     const reviewerName = `replay-so-${randomBytes(6).toString('hex')}`;
     const reviewer = await create('/users', {
       username: reviewerName,

@@ -50,7 +50,7 @@ test(
   'real HTTP ingestion, Workforce identity review and evidence remain scoped after restart',
   { timeout: 60_000 },
   async (t) => {
-    const isolated = createIsolatedTestDatabase({ legacy: true });
+    const isolated = createIsolatedTestDatabase({ canonical: true });
     const db = isolated.dataSource;
     const evidenceRoot = await mkdtemp(join(tmpdir(), 'smartsite-business-http-'));
     let app: NestExpressApplication | undefined;
@@ -95,7 +95,8 @@ test(
       await app.listen(0, '127.0.0.1');
       return `${await app.getUrl()}/api/v1`;
     }
-    // Bootstrap is the sole direct seed; business records below use guarded HTTP.
+    // Seed the Admin, then assign the real scoped Manager role for Zone writes.
+    // Business records below still use guarded HTTP, never an Admin bypass.
     await new UsersService(db, new SiteConfigurationService(db)).bootstrap(
       'business-admin',
       'Synthetic Admin',
@@ -133,7 +134,7 @@ test(
       return result.accessToken;
     };
     let admin = await login('business-admin', 'InitialAdmin123!');
-    await request('/sites', { token: admin, expected: 403 });
+    await request('/sites', { token: admin, expected: 200 });
     await request('/auth/change-password', {
       method: 'POST',
       token: admin,
@@ -145,6 +146,13 @@ test(
       request<T>(route, { method: 'POST', token: admin, body, expected: 201 });
     const site = await create<SiteResponse>('/sites', { code: 'BIZ-A', name: 'Synthetic Site A' });
     const other = await create<SiteResponse>('/sites', { code: 'BIZ-B', name: 'Synthetic Site B' });
+    const [{ id: adminId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
+      'business-admin',
+    ]);
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+      [randomUUID(), adminId, site.id],
+    );
     const reviewer = await create<AccountResponse>('/users', {
       username: 'business-safety',
       displayName: 'Synthetic Safety',

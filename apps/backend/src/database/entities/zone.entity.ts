@@ -4,7 +4,6 @@ import { SiteEntity } from './site.entity.js';
 
 @Entity({ name: 'zone' })
 @Unique('uq_zone_site_code', ['siteId', 'code'])
-@Unique('uq_zone_authority_id_site', ['id', 'siteId'])
 @Unique('uq_mf06_request_zone_scope', ['id', 'siteId'])
 export class ZoneEntity {
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_zone_id' })

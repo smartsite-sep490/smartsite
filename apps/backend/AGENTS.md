@@ -27,6 +27,14 @@ Choose the simplest structure that meets current requirements. Each new layer, d
 - Add subfolders such as `dto/`, `guards/`, `policies/`, or `common/http/filters/` when actual code needs grouping. Keep a small set of related files together until that grouping improves navigation.
 - Add a nested `AGENTS.md` only for substantial, lasting rules specific to that module, such as AI raw-payload and idempotency invariants. Document only the additional rules; do not copy parent guidance or create a guide for every folder. Update ownership and guidance when module responsibilities change.
 
+## ERD and physical naming
+
+- The owner's supplied ERD is the baseline contract for implementation, not an output to rewrite around existing code. Follow its table/column names, types, nullability and real relationships; a generated observed-schema diagram never supersedes it.
+- Use lower `snake_case` physical identifiers and business names for new tables; use corresponding business names for entity classes. MF05/MF06 identify flows, not sufficient domain names. Existing flow-prefixed extensions require explicit naming review; their presence in code does not approve them.
+- Keep SQL migrations, explicit TypeORM `name` mappings and the reviewed ERD aligned. Preserve existing PK/FK/constraint names, including historical `ck_`/`chk_` variants. A required rename needs a forward migration and API/data compatibility review; never rewrite applied migrations or enable synchronization.
+- Required tables may extend the baseline. Document their business purpose and names, then align migrations, entities and ERD. Keep PostgreSQL enums distinct from varchar/CHECK states and do not invent FK relations from JSON/arrays. Applied migration class identifiers are historical identities, not entity names, and must not be rewritten for naming cleanup.
+- The owner's baseline contains70 tables/735 columns. An observed test-schema snapshot contains19 additional tables and seven extra columns; this is a discrepancy inventory, not approval of extension naming or proof of complete ERD conformance.
+
 ## Configuration and HTTP boundaries
 
 - Change env fields in the Zod schema, inferred types, examples, documentation, and regression tests together. Use typed ConfigService in services; do not scatter `process.env` reads or unvalidated fallbacks.

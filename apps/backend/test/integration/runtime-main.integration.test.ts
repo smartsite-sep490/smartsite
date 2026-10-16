@@ -218,7 +218,7 @@ test(
     let token: string;
     let cookie: string;
     await t.test(
-      'existing WEB login requires password change, revokes the old token, and issues secure cookie attributes',
+      'existing WEB login permits optional password change, revokes the old token, and issues secure cookie attributes',
       async () => {
         await request('/sites', 401);
         await request('/auth/login', 400, { method: 'POST', body: {} });
@@ -228,7 +228,7 @@ test(
         });
         const oldToken = first.data.accessToken;
         secrets.push(oldToken);
-        await request('/sites', 403, { token: oldToken });
+        await request('/sites', 200, { token: oldToken });
         await request('/auth/change-password', 204, {
           method: 'POST',
           token: oldToken,
@@ -262,6 +262,13 @@ test(
           body: { code: username, name: 'Synthetic runtime Site' },
         });
         siteId = site.data.id;
+        const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
+          username,
+        ]);
+        await db.query(
+          "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
+          [actorId, siteId],
+        );
         const camera = await request(`/sites/${siteId}/cameras`, 201, {
           method: 'POST',
           token,

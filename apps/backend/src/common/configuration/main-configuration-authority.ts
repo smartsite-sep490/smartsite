@@ -232,12 +232,16 @@ export async function executeMainConfigurationCommand<T>(
     operation === 'USER_ROLE_REPLACE' ||
     operation === 'USER_PASSWORD_RESET' ||
     operation === 'USER_PASSWORD_CHANGE';
+  // Account-first enrollment locks the target account before looking for its
+  // Worker. A waiter must see the first creator's committed Worker after that
+  // lock, rather than reuse a pre-lock SERIALIZABLE snapshot and report409.
+  const refreshAfterAccountLock = revokesAccountSessions || operation === 'WORKER_ACCOUNT_PREPARE';
   const result = await (
     context
       ? withZoneAuthorityTransaction(
           source,
           transactionWork,
-          revokesAccountSessions ? 'READ COMMITTED' : 'SERIALIZABLE',
+          refreshAfterAccountLock ? 'READ COMMITTED' : 'SERIALIZABLE',
         )
       : source.transaction(transactionWork)
   ).catch((error: unknown) => {

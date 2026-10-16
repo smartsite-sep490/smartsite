@@ -7,6 +7,7 @@ import { WorkforceNotificationsModule } from '../notifications/notifications.mod
 import { QrAccessService } from './qr-access.service.js';
 import { SiteAccessSetupService } from './site-access-setup.service.js';
 import { SiteAccessSetupController } from './site-access-setup.controller.js';
+import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.js';
 import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
 import { FaceGateController } from './face-gate.controller.js';
 import { FaceGateService } from './face-gate.service.js';
@@ -31,6 +32,7 @@ import { WorkerGatePermissionsController } from './worker-gate-permissions.contr
   providers: [
     QrAccessService,
     SiteAccessSetupService,
+    SiteAccessSetupQueryService,
     FaceGateService,
     WorkerGatePermissionsService,
   ],

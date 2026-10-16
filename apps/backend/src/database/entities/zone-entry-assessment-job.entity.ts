@@ -1,11 +1,11 @@
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
-import { Mf06AssessmentRequestEntity } from './mf06-assessment-request.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from './zone-entry-assessment-request.entity.js';
 
 export type Mf06AssessmentJobStatus = 'PENDING' | 'CLAIMED' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
 /** Operational head only; transitions and lease ownership require the later CAS worker. */
 @Entity({ name: 'mf06_assessment_job' })
-@ForeignKey(() => Mf06AssessmentRequestEntity, ['requestId'], ['requestId'], {
+@ForeignKey(() => ZoneEntryAssessmentRequestEntity, ['requestId'], ['requestId'], {
   name: 'fk_mf06_job_request',
   onDelete: 'RESTRICT',
 })
@@ -25,7 +25,7 @@ export type Mf06AssessmentJobStatus = 'PENDING' | 'CLAIMED' | 'SUCCEEDED' | 'FAI
   'chk_mf06_job_error_code',
   "last_error_code IS NULL OR last_error_code ~ '^[A-Z][A-Z0-9_]{0,63}$'",
 )
-export class Mf06AssessmentJobEntity {
+export class ZoneEntryAssessmentJobEntity {
   @PrimaryColumn({ name: 'request_id', type: 'uuid', primaryKeyConstraintName: 'pk_mf06_job' })
   requestId!: string;
 

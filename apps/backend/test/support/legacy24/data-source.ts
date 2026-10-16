@@ -4,8 +4,16 @@ import { ENTITIES as LEGACY_ENTITIES } from './entities/index.js';
 
 type Target = Parameters<DataSource['hasMetadata']>[0];
 const knownTargets = new Map<Target, Target>();
+const historicalNames: Readonly<Record<string, string>> = {
+  ZoneEntryAssessmentRequestEntity: 'Mf06AssessmentRequestEntity',
+  ZoneEntryAssessmentJobEntity: 'Mf06AssessmentJobEntity',
+  ZoneEntryAssessmentEntity: 'Mf06AssessmentEntity',
+  ZoneEntryAuthorityArtifactEntity: 'Mf06AuthorityArtifactEntity',
+};
 for (const current of MAIN_ENTITIES) {
-  const historical = LEGACY_ENTITIES.find((entity) => entity.name === current.name);
+  const historical = LEGACY_ENTITIES.find(
+    (entity) => entity.name === (historicalNames[current.name] ?? current.name),
+  );
   if (historical) knownTargets.set(current, historical);
 }
 

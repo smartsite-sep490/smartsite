@@ -1,4 +1,4 @@
-import type { Mf06AssessmentPurpose } from '../../database/entities/mf06-assessment-request.entity.js';
+import type { Mf06AssessmentPurpose } from '../../database/entities/zone-entry-assessment-request.entity.js';
 import { computeCanonicalPayloadHash, PPE_ITEMS } from '@smartsite/contracts';
 import { z } from 'zod';
 import { MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-authority-sources.js';

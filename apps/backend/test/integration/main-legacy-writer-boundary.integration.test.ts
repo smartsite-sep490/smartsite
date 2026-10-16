@@ -267,6 +267,11 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
       f = await fixture(db),
       service = new MainRepresentativeCommandService(db);
     const context = { actorUserId: f.actor, reauthorize: async () => {} };
+    if (kind === 'ASSIGN')
+      await db.query(
+        "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+        [randomUUID(), f.actor, f.site],
+      );
     const result =
       kind === 'GRANT'
         ? await service.grant(f.contractor, { userId: f.target }, context)

@@ -311,7 +311,7 @@ test('valid initial Admin bootstrap records unattributed account/role facts, not
       )[0].n,
       2,
     );
-    assert.equal(created.mustChangePassword, true);
+    assert.equal(created.mustChangePassword, false);
     await assert.rejects(
       service.bootstrap('synthetic.second', 'Second Admin', 'SyntheticAdmin123!'),
       (e: { getStatus?: () => number }) => e.getStatus?.() === 409,
@@ -332,7 +332,7 @@ test('uninstalled legacy journal preserves initial Admin bootstrap and actorless
       'Synthetic Admin',
       'SyntheticAdmin123!',
     );
-    assert.equal(created.mustChangePassword, true);
+    assert.equal(created.mustChangePassword, false);
     assert.equal(
       await executeMainConfigurationCommand(
         source,

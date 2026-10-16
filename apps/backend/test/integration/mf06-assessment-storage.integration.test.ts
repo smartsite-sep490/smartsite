@@ -1,3 +1,4 @@
+import { ZoneEntryAssessmentJobEntity } from '../../src/database/entities/zone-entry-assessment-job.entity.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +8,7 @@ import {
   AiObservationEventEntity,
   CameraEntity,
   EventProcessingStatus,
-  Mf06AssessmentRequestEntity,
+  ZoneEntryAssessmentRequestEntity,
   SiteEntity,
   ZoneEntity,
   ZoneRestrictionPolicy,
@@ -181,13 +182,13 @@ function job(requestId: unknown): Row {
 }
 
 test('MF06 storage registers no worker, backfill or identity assertion', async () => {
-  assert.equal(await db.getRepository(Mf06AssessmentRequestEntity).count(), 0);
-  assert.equal(await db.getRepository('Mf06AssessmentJobEntity').count(), 0);
+  assert.equal(await db.getRepository(ZoneEntryAssessmentRequestEntity).count(), 0);
+  assert.equal(await db.getRepository(ZoneEntryAssessmentJobEntity).count(), 0);
   assert.equal(db.options.synchronize, false);
   assert.equal(db.options.migrationsRun, false);
   assert.ok(
     db
-      .getMetadata(Mf06AssessmentRequestEntity)
+      .getMetadata(ZoneEntryAssessmentRequestEntity)
       .foreignKeys.every(
         (fk) =>
           !['camera', 'camera_observation_region', 'worker', 'account_face_template'].includes(
@@ -213,7 +214,7 @@ test('DB subject binding matches selector for missing, ambiguous and unusable bo
       row = f.request();
     await insert('mf06_assessment_request', row);
     const stored = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneByOrFail({ requestId: row.request_id as string });
     assert.equal(stored.subjectBindingStatus, row.subject_binding_status);
     assert.equal(stored.personObservationIndex, row.person_observation_index);
@@ -366,7 +367,7 @@ test('two PERSON/Zone bindings cannot cross-assign original indices or Tracks', 
     );
     await insert('mf06_assessment_request', row);
     const stored = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneByOrFail({ requestId: row.request_id as string });
     assert.equal(stored.personObservationIndex, personIndex);
     assert.equal(stored.trackId, trackId);
@@ -408,7 +409,7 @@ test('request and source evidence resist mutation/purge; historical Camera survi
   assert.equal(
     (
       await db
-        .getRepository(Mf06AssessmentRequestEntity)
+        .getRepository(ZoneEntryAssessmentRequestEntity)
         .findOneByOrFail({ requestId: row.request_id as string })
     ).siteId,
     f.siteId,
@@ -420,7 +421,7 @@ test('request and source evidence resist mutation/purge; historical Camera survi
     null,
   );
   const stored = await db
-    .getRepository(Mf06AssessmentRequestEntity)
+    .getRepository(ZoneEntryAssessmentRequestEntity)
     .findOneByOrFail({ requestId: row.request_id as string });
   assert.equal(stored.cameraId, f.cameraId);
   assert.equal(stored.siteId, f.siteId);
@@ -439,7 +440,7 @@ test('request and source evidence resist mutation/purge; historical Camera survi
     legacy.eventId,
   ]);
   assert.equal(
-    await db.getRepository(Mf06AssessmentRequestEntity).countBy({ eventId: legacy.eventId }),
+    await db.getRepository(ZoneEntryAssessmentRequestEntity).countBy({ eventId: legacy.eventId }),
     0,
   );
 });
@@ -603,11 +604,11 @@ test('safe integer transformers retain maximum Track/geometry and reject lossy v
   const row = f.request();
   await insert('mf06_assessment_request', row);
   const stored = await db
-    .getRepository(Mf06AssessmentRequestEntity)
+    .getRepository(ZoneEntryAssessmentRequestEntity)
     .findOneByOrFail({ requestId: row.request_id as string });
   assert.equal(stored.trackId, Number.MAX_SAFE_INTEGER);
   assert.equal(stored.geometryVersion, Number.MAX_SAFE_INTEGER);
-  const metadata = db.getMetadata(Mf06AssessmentRequestEntity);
+  const metadata = db.getMetadata(ZoneEntryAssessmentRequestEntity);
   for (const name of ['trackId', 'geometryVersion']) {
     const transformer = metadata.findColumnWithPropertyName(name)?.transformer;
     assert.ok(transformer && !Array.isArray(transformer));
@@ -743,7 +744,7 @@ test('upgrade never backfills; empty down/up preserves earlier tables and legacy
     runner = previous.createQueryRunner();
   try {
     await migration.up(runner);
-    assert.equal(await previous.getRepository(Mf06AssessmentRequestEntity).count(), 0);
+    assert.equal(await previous.getRepository(ZoneEntryAssessmentRequestEntity).count(), 0);
     await previous.query('TRUNCATE mf06_assessment_job, mf06_assessment_request');
     await migration.down(runner);
     assert.deepEqual(

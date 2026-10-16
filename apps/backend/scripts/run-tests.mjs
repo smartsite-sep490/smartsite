@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 // Set before any application ESM imports, including ConfigModule.forRoot().
 process.env.NODE_ENV = 'test';
 const backendDirectory = fileURLToPath(new URL('../', import.meta.url));
+// Compiled runtime tests still inspect checked-in Dockerfile commands. CI does
+// not supply an archive override, so derive the checkout from this source script.
+process.env.SMARTSITE_TEST_SOURCE_REPO ??= fileURLToPath(new URL('../../../', import.meta.url));
 // Integrity tests read the original frozen TypeScript bytes and provenance,
 // which tsc does not emit beside the compiled historical test profile.
 cpSync(

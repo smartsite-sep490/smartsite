@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -96,8 +98,7 @@ test('full AppModule configuration image works before any Region and withholds p
         MF06_ENQUEUE_ENABLED: 'false',
         MF06_ASSESSMENT_READ_ENABLED: 'false',
         CORS_ORIGINS: 'http://localhost:5181',
-        STORAGE_LOCAL_ROOT:
-          'D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/configuration-image-unused-media',
+        STORAGE_LOCAL_ROOT: join(tmpdir(), 'smartsite-configuration-image-unused-media'),
       }),
     );
     const module = await Test.createTestingModule({ imports: [AppModule] })

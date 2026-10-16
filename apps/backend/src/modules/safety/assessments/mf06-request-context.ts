@@ -1,6 +1,6 @@
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import type { DataSource } from 'typeorm';
-import { Mf06AssessmentRequestEntity } from '../../../database/entities/mf06-assessment-request.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from '../../../database/entities/zone-entry-assessment-request.entity.js';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import type { ObservationSubjectRef } from '../identity/observation-identity.types.js';
@@ -9,7 +9,7 @@ import { selectZoneEntrySubject } from '../identity/observation-identity-subject
 
 /** Internal immutable projection. It is not a public DTO or an approved resolver wire contract. */
 export type Mf06CapturedRequest = Readonly<
-  Omit<Mf06AssessmentRequestEntity, 'capturedAt' | 'requestedAt' | 'bindingHash'> & {
+  Omit<ZoneEntryAssessmentRequestEntity, 'capturedAt' | 'requestedAt' | 'bindingHash'> & {
     capturedAt: string;
     requestedAt: string;
     storedBindingHash: string;
@@ -47,7 +47,7 @@ const sameUuid = (left: unknown, right: unknown): boolean =>
  * The opaque stored binding hash is carried unchanged, never certified by this reader.
  */
 export function inspectMf06StoredBinding(
-  request: Mf06AssessmentRequestEntity,
+  request: ZoneEntryAssessmentRequestEntity,
   event: AiObservationEventEntity,
 ): Mf06StoredBindingInspection {
   const invalid: Mf06StoredBindingInspection = {
@@ -161,7 +161,7 @@ export class Mf06RequestContextReader {
       return { status: 'UNAVAILABLE', reason: 'INVALID_STORED_BINDING' };
     return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
       const request = await manager
-        .getRepository(Mf06AssessmentRequestEntity)
+        .getRepository(ZoneEntryAssessmentRequestEntity)
         .findOneBy({ requestId: requestId.toLowerCase(), siteId: siteId.toLowerCase() });
       if (
         !request ||

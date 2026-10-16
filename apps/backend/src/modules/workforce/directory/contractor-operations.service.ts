@@ -1,3 +1,4 @@
+import { refuseLegacyMainWriter } from '../../../common/configuration/legacy-workforce-writer.js';
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
@@ -285,6 +286,7 @@ export class ContractorOperationsService {
   }
 
   async createContractor(actor: WorkforceActor, input: CreateContractorCommand) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     this.assertAdmin(actor);
     const value = command(CreateContractorCommand, input);
     try {
@@ -304,6 +306,7 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: CreateContractorParticipationCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     this.assertAdmin(actor);
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorParticipationCommand, input);
@@ -332,6 +335,7 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: GrantContractorRepresentativeCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     this.assertAdmin(actor);
     const contractorId = uuid(contractorIdValue);
     const value = command(GrantContractorRepresentativeCommand, input);
@@ -367,6 +371,7 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: CreateContractorWorkerCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
@@ -403,6 +408,7 @@ export class ContractorOperationsService {
     workerIdValue: string,
     input: CreateWorkerSiteZoneAssignmentCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const workerId = uuid(workerIdValue);
     const value = command(CreateWorkerSiteZoneAssignmentCommand, input);
     const siteId = uuid(value.siteId);
@@ -451,6 +457,7 @@ export class ContractorOperationsService {
   }
 
   async safetyReview(actor: WorkforceActor, requestIdValue: string) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const requestId = uuid(requestIdValue);
     return this.dataSource.transaction(async (manager) => {
       const request = await manager
@@ -485,6 +492,7 @@ export class ContractorOperationsService {
     requestIdValue: string,
     input: SiteManagerDecisionCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const requestId = uuid(requestIdValue);
     const value = command(SiteManagerDecisionCommand, input);
     return this.dataSource.transaction(async (manager) => {
@@ -551,6 +559,7 @@ export class ContractorOperationsService {
     requestIdValue: string,
     input: RevokeWorkerAssignmentCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const value = command(RevokeWorkerAssignmentCommand, input);
     return this.dataSource.transaction(async (manager) => {
       const assignment = await manager

@@ -2,9 +2,9 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { getMetadataArgsStorage } from 'typeorm';
-import { Mf06AssessmentEntity } from '../src/database/entities/mf06-assessment.entity.js';
-import { Mf06AuthorityArtifactEntity } from '../src/database/entities/mf06-authority-artifact.entity.js';
-import { Mf06AssessmentRequestEntity } from '../src/database/entities/mf06-assessment-request.entity.js';
+import { ZoneEntryAssessmentEntity } from '../src/database/entities/zone-entry-assessment.entity.js';
+import { ZoneEntryAuthorityArtifactEntity } from '../src/database/entities/zone-entry-authority-artifact.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
 
 // -----------------------------------------------------------------------------
 // TypeORM Metadata Inspection Helpers (Pure metadata, no database connection)
@@ -12,9 +12,9 @@ import { Mf06AssessmentRequestEntity } from '../src/database/entities/mf06-asses
 
 const storage = getMetadataArgsStorage();
 type EntityConstructor =
-  | typeof Mf06AssessmentEntity
-  | typeof Mf06AuthorityArtifactEntity
-  | typeof Mf06AssessmentRequestEntity;
+  | typeof ZoneEntryAssessmentEntity
+  | typeof ZoneEntryAuthorityArtifactEntity
+  | typeof ZoneEntryAssessmentRequestEntity;
 
 function getEntityTable(target: EntityConstructor) {
   return storage.tables.find((t) => t.target === target);
@@ -229,25 +229,25 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
   describe('Suite 1: Architecture Boundaries & Metadata Class Registration', () => {
     it('registers exactly two separate entity classes for MF06 B2 persistence', () => {
       assert.notEqual(
-        Mf06AssessmentEntity,
-        Mf06AuthorityArtifactEntity,
+        ZoneEntryAssessmentEntity,
+        ZoneEntryAuthorityArtifactEntity,
         'Assessment and Artifact must be distinct entity classes',
       );
       assert.equal(
-        typeof Mf06AssessmentEntity,
+        typeof ZoneEntryAssessmentEntity,
         'function',
-        'Mf06AssessmentEntity must be a class constructor',
+        'ZoneEntryAssessmentEntity must be a class constructor',
       );
       assert.equal(
-        typeof Mf06AuthorityArtifactEntity,
+        typeof ZoneEntryAuthorityArtifactEntity,
         'function',
-        'Mf06AuthorityArtifactEntity must be a class constructor',
+        'ZoneEntryAuthorityArtifactEntity must be a class constructor',
       );
     });
 
-    it('binds Mf06AuthorityArtifactEntity to table mf06_authority_artifact', () => {
-      const table = getEntityTable(Mf06AuthorityArtifactEntity);
-      assert.ok(table, 'Mf06AuthorityArtifactEntity must be decorated with @Entity()');
+    it('binds ZoneEntryAuthorityArtifactEntity to table mf06_authority_artifact', () => {
+      const table = getEntityTable(ZoneEntryAuthorityArtifactEntity);
+      assert.ok(table, 'ZoneEntryAuthorityArtifactEntity must be decorated with @Entity()');
       assert.equal(
         table.name,
         'mf06_authority_artifact',
@@ -255,9 +255,9 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
       );
     });
 
-    it('binds Mf06AssessmentEntity to table mf06_assessment', () => {
-      const table = getEntityTable(Mf06AssessmentEntity);
-      assert.ok(table, 'Mf06AssessmentEntity must be decorated with @Entity()');
+    it('binds ZoneEntryAssessmentEntity to table mf06_assessment', () => {
+      const table = getEntityTable(ZoneEntryAssessmentEntity);
+      assert.ok(table, 'ZoneEntryAssessmentEntity must be decorated with @Entity()');
       assert.equal(
         table.name,
         'mf06_assessment',
@@ -267,7 +267,8 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('ensures no eager relations exist on either entity to prevent large payload leakage or memory bloat', () => {
       const relations = storage.relations.filter(
-        (r) => r.target === Mf06AssessmentEntity || r.target === Mf06AuthorityArtifactEntity,
+        (r) =>
+          r.target === ZoneEntryAssessmentEntity || r.target === ZoneEntryAuthorityArtifactEntity,
       );
       for (const rel of relations) {
         assert.notEqual(
@@ -280,7 +281,8 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('ensures no embedded entities are declared on assessment or artifact', () => {
       const embeddeds = storage.embeddeds.filter(
-        (e) => e.target === Mf06AssessmentEntity || e.target === Mf06AuthorityArtifactEntity,
+        (e) =>
+          e.target === ZoneEntryAssessmentEntity || e.target === ZoneEntryAuthorityArtifactEntity,
       );
       assert.equal(
         embeddeds.length,
@@ -290,7 +292,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
     });
   });
 
-  describe('Suite 2: Mf06AuthorityArtifactEntity TypeORM Columns & Constraints', () => {
+  describe('Suite 2: ZoneEntryAuthorityArtifactEntity TypeORM Columns & Constraints', () => {
     const expectedArtifactColumns: ExpectedColumnSpec[] = [
       {
         propOrCol: 'artifactId',
@@ -334,28 +336,28 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
     ];
 
     it('declares exactly the 6 columns matching candidate migration DDL', () => {
-      const columns = getEntityColumns(Mf06AuthorityArtifactEntity);
+      const columns = getEntityColumns(ZoneEntryAuthorityArtifactEntity);
       assert.equal(
         columns.length,
         6,
-        `Expected 6 columns on Mf06AuthorityArtifactEntity, found ${columns.length}`,
+        `Expected 6 columns on ZoneEntryAuthorityArtifactEntity, found ${columns.length}`,
       );
     });
 
     for (const spec of expectedArtifactColumns) {
       it(`configures column '${spec.propOrCol}' (${spec.dbName}) correctly`, () => {
-        assertColumnMatches(Mf06AuthorityArtifactEntity, spec);
+        assertColumnMatches(ZoneEntryAuthorityArtifactEntity, spec);
       });
     }
 
     it('enforces composite UNIQUE(artifact_id, request_id) for composite FK reference', () => {
-      assertHasUnique(Mf06AuthorityArtifactEntity, ['artifactId', 'requestId']);
+      assertHasUnique(ZoneEntryAuthorityArtifactEntity, ['artifactId', 'requestId']);
     });
 
     it('configures foreign key to mf06_assessment_request(request_id) ON DELETE RESTRICT', () => {
       assertHasForeignKey(
-        Mf06AuthorityArtifactEntity,
-        Mf06AssessmentRequestEntity,
+        ZoneEntryAuthorityArtifactEntity,
+        ZoneEntryAssessmentRequestEntity,
         ['requestId'],
         ['requestId'],
         { onDelete: 'RESTRICT' },
@@ -364,7 +366,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces canonical sha256 64-hex regex check constraint', () => {
       assertHasCheckRegex(
-        Mf06AuthorityArtifactEntity,
+        ZoneEntryAuthorityArtifactEntity,
         /sha256\s*~\s*'\^\[0-9a-f\]\{64\}\$'/,
         'sha256 lowercase 64-hex regex',
       );
@@ -372,7 +374,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces db body_hash 64-hex regex check constraint', () => {
       assertHasCheckRegex(
-        Mf06AuthorityArtifactEntity,
+        ZoneEntryAuthorityArtifactEntity,
         /body_hash\s*~\s*'\^\[0-9a-f\]\{64\}\$'/,
         'body_hash lowercase 64-hex regex',
       );
@@ -380,7 +382,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces body size limit check constraint (octet_length <= 2MB)', () => {
       assertHasCheckRegex(
-        Mf06AuthorityArtifactEntity,
+        ZoneEntryAuthorityArtifactEntity,
         /octet_length\s*\(\s*body::text\s*\)\s*<=\s*2097152/,
         'body size limit 2097152 bytes',
       );
@@ -388,14 +390,14 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces stored_at finite check constraint', () => {
       assertHasCheckRegex(
-        Mf06AuthorityArtifactEntity,
+        ZoneEntryAuthorityArtifactEntity,
         /isfinite\s*\(\s*stored_at\s*\)/,
         'isfinite(stored_at)',
       );
     });
   });
 
-  describe('Suite 3: Mf06AssessmentEntity TypeORM Columns & Operational Attributes', () => {
+  describe('Suite 3: ZoneEntryAssessmentEntity TypeORM Columns & Operational Attributes', () => {
     const expectedAssessmentColumns: ExpectedColumnSpec[] = [
       {
         propOrCol: 'assessmentId',
@@ -523,17 +525,17 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
     ];
 
     it('declares exactly the 19 columns matching candidate migration DDL', () => {
-      const columns = getEntityColumns(Mf06AssessmentEntity);
+      const columns = getEntityColumns(ZoneEntryAssessmentEntity);
       assert.equal(
         columns.length,
         19,
-        `Expected 19 columns on Mf06AssessmentEntity, found ${columns.length}`,
+        `Expected 19 columns on ZoneEntryAssessmentEntity, found ${columns.length}`,
       );
     });
 
     for (const spec of expectedAssessmentColumns) {
       it(`configures column '${spec.propOrCol}' (${spec.dbName}) correctly`, () => {
-        assertColumnMatches(Mf06AssessmentEntity, spec);
+        assertColumnMatches(ZoneEntryAssessmentEntity, spec);
       });
     }
 
@@ -546,7 +548,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
         'authorityArtifactId',
       ];
       for (const prop of privacyCols) {
-        const col = findEntityColumn(Mf06AssessmentEntity, prop);
+        const col = findEntityColumn(ZoneEntryAssessmentEntity, prop);
         assert.ok(col, `Privacy column '${prop}' must exist`);
         assert.equal(
           col.options.nullable,
@@ -574,7 +576,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
         'assessedAt',
       ];
       for (const prop of operationalCols) {
-        const col = findEntityColumn(Mf06AssessmentEntity, prop);
+        const col = findEntityColumn(ZoneEntryAssessmentEntity, prop);
         assert.ok(col, `Operational column '${prop}' must exist`);
         assert.notEqual(
           col.options.nullable,
@@ -585,23 +587,23 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
     });
   });
 
-  describe('Suite 4: Mf06AssessmentEntity Constraints, Indexes & Foreign Keys', () => {
+  describe('Suite 4: ZoneEntryAssessmentEntity Constraints, Indexes & Foreign Keys', () => {
     it('enforces UNIQUE on request_id (at most one assessment per request)', () => {
-      assertHasUnique(Mf06AssessmentEntity, ['requestId']);
+      assertHasUnique(ZoneEntryAssessmentEntity, ['requestId']);
     });
 
     it('enforces UNIQUE on command_id (idempotent command boundary)', () => {
-      assertHasUnique(Mf06AssessmentEntity, ['commandId']);
+      assertHasUnique(ZoneEntryAssessmentEntity, ['commandId']);
     });
 
     it('enforces UNIQUE on authority_artifact_id (strictly 1:1 artifact attachment)', () => {
-      assertHasUnique(Mf06AssessmentEntity, ['authorityArtifactId']);
+      assertHasUnique(ZoneEntryAssessmentEntity, ['authorityArtifactId']);
     });
 
     it('configures foreign key to mf06_assessment_request(request_id) ON DELETE RESTRICT', () => {
       assertHasForeignKey(
-        Mf06AssessmentEntity,
-        Mf06AssessmentRequestEntity,
+        ZoneEntryAssessmentEntity,
+        ZoneEntryAssessmentRequestEntity,
         ['requestId'],
         ['requestId'],
         { onDelete: 'RESTRICT' },
@@ -610,8 +612,8 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('configures composite foreign key fk_mf06_assessment_artifact to mf06_authority_artifact(artifact_id, request_id) ON DELETE RESTRICT', () => {
       assertHasForeignKey(
-        Mf06AssessmentEntity,
-        Mf06AuthorityArtifactEntity,
+        ZoneEntryAssessmentEntity,
+        ZoneEntryAuthorityArtifactEntity,
         ['authorityArtifactId', 'requestId'],
         ['artifactId', 'requestId'],
         {
@@ -622,7 +624,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
     });
 
     it('configures composite index idx_mf06_assessment_site_time on (site_id, assessed_at, assessment_id)', () => {
-      const indices = getEntityIndices(Mf06AssessmentEntity);
+      const indices = getEntityIndices(ZoneEntryAssessmentEntity);
       const found = indices.find(
         (idx) =>
           idx.name === 'idx_mf06_assessment_site_time' ||
@@ -646,15 +648,15 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
     });
   });
 
-  describe('Suite 5: Mf06AssessmentEntity Business Integrity & Check Constraints', () => {
+  describe('Suite 5: ZoneEntryAssessmentEntity Business Integrity & Check Constraints', () => {
     it('enforces 64-hex regex check constraints on command_hash and binding_hash', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /command_hash\s*~\s*'\^\[0-9a-f\]\{64\}\$'/,
         'command_hash 64-hex regex',
       );
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /binding_hash\s*~\s*'\^\[0-9a-f\]\{64\}\$'/,
         'binding_hash 64-hex regex',
       );
@@ -662,12 +664,12 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces 64-hex regex check constraints on frame_sha256 and crop_sha256', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /frame_sha256\s*~\s*'\^\[0-9a-f\]\{64\}\$'/,
         'frame_sha256 64-hex regex',
       );
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /crop_sha256\s*~\s*'\^\[0-9a-f\]\{64\}\$'/,
         'crop_sha256 64-hex regex',
       );
@@ -675,7 +677,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it("enforces outcome IN ('ALLOWED','DENIED','UNAVAILABLE') check constraint", () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /outcome\s+IN\s*\(\s*'ALLOWED'\s*,\s*'DENIED'\s*,\s*'UNAVAILABLE'\s*\)/,
         'outcome enum values',
       );
@@ -683,7 +685,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it("enforces provenance IN ('UNAVAILABLE','SYNTHETIC_TEST','TRUSTED_SERVICE') check constraint", () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /provenance\s+IN\s*\(\s*'UNAVAILABLE'\s*,\s*'SYNTHETIC_TEST'\s*,\s*'TRUSTED_SERVICE'\s*\)/,
         'provenance enum values',
       );
@@ -691,7 +693,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces non-empty and trimmed evaluator_version check constraint', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /char_length\s*\(\s*evaluator_version\s*\)\s*>\s*0\s+AND\s+evaluator_version\s*=\s*btrim\s*\(\s*evaluator_version\s*\)/,
         'evaluator_version non-empty and trimmed',
       );
@@ -699,7 +701,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces claim_head_revision > 0 check constraint', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /claim_head_revision\s*>\s*0/,
         'claim_head_revision positive integer',
       );
@@ -707,7 +709,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces isfinite(assessed_at) check constraint', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /isfinite\s*\(\s*assessed_at\s*\)/,
         'isfinite(assessed_at)',
       );
@@ -715,17 +717,17 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces the exact outcome and reason_code mapping check constraint matrix', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /outcome\s*=\s*'ALLOWED'\s+AND\s+reason_code\s+IN\s*\(\s*'POLICY_NONE'\s*,\s*'AUTHORIZED'\s*\)/,
         'ALLOWED reason codes',
       );
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /outcome\s*=\s*'DENIED'\s+AND\s+reason_code\s+IN\s*\(\s*'POLICY_PROHIBITED'\s*,\s*'UNAUTHORIZED'\s*\)/,
         'DENIED reason codes',
       );
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /outcome\s*=\s*'UNAVAILABLE'\s+AND\s+reason_code\s+IN\s*\(\s*'INVALID_BINDING'\s*,\s*'IDENTITY_UNAVAILABLE'\s*,\s*'MEDIA_UNAVAILABLE'\s*,\s*'PROFILE_REVOKED'\s*,\s*'AUTHORITY_UNAVAILABLE'\s*,\s*'SERVICE_DISABLED'\s*,\s*'ABORTED'\s*\)/,
         'UNAVAILABLE reason codes',
       );
@@ -733,7 +735,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces that non-UNAVAILABLE outcome requires authority_artifact_id IS NOT NULL', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /outcome\s*=\s*'UNAVAILABLE'\s+OR\s+authority_artifact_id\s+IS\s+NOT\s+NULL/,
         'non-UNAVAILABLE requires artifact',
       );
@@ -741,7 +743,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
 
     it('enforces evidence completeness check when reason_code is AUTHORIZED or UNAUTHORIZED', () => {
       assertHasCheckRegex(
-        Mf06AssessmentEntity,
+        ZoneEntryAssessmentEntity,
         /reason_code\s+NOT\s+IN\s*\(\s*'AUTHORIZED'\s*,\s*'UNAUTHORIZED'\s*\)\s+OR\s*\(\s*worker_id\s+IS\s+NOT\s+NULL\s+AND\s+profile_revision\s+IS\s+NOT\s+NULL\s+AND\s+frame_sha256\s+IS\s+NOT\s+NULL\s+AND\s+crop_sha256\s+IS\s+NOT\s+NULL\s+AND\s+provenance\s*<>\s*'UNAVAILABLE'\s*\)/,
         'identity completeness for AUTHORIZED/UNAUTHORIZED',
       );

@@ -87,6 +87,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     synchronize: false,
     migrationsRun: false,
     connectTimeoutMS: timeoutMs,
+    // PostgreSQL supplies gen_random_uuid(); connection startup must not install
+    // extensions just because a read-only projection contains a generated UUID.
+    installExtensions: false,
+    uuidExtension: 'pgcrypto',
     entities: ENTITIES.filter((entity) => !LEGACY_ONLY_ENTITIES.has(entity)),
     migrations: [
       Mf05Mf06Foundation1789689600000,
