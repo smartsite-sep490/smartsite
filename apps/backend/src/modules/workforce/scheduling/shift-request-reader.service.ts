@@ -22,6 +22,13 @@ export class ShiftRequestReaderService {
     const query = command(ShiftRequestListDto, input);
     const paging = page(Number(query.offset ?? '0'), Number(query.limit ?? '20'));
     const workerView = query.view === 'WORKER' || query.view === 'INCOMING';
+    const readAll =
+      !workerView &&
+      actor.roleAssignments.some(
+        (a) =>
+          (a.role === UserRole.ADMIN && a.siteId === null) ||
+          (a.role === UserRole.SITE_MANAGER && a.siteId === site),
+      );
     const role = workerView ? UserRole.WORKER : UserRole.CONTRACTOR_REPRESENTATIVE;
     const deny = () => {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -32,7 +39,7 @@ export class ShiftRequestReaderService {
     if (
       !actor.isActive ||
       actor.mustChangePassword ||
-      !actor.roleAssignments.some((a) => a.siteId === site && a.role === role)
+      (!readAll && !actor.roleAssignments.some((a) => a.siteId === site && a.role === role))
     )
       deny();
     let workerId: string | null = null;
@@ -51,8 +58,10 @@ export class ShiftRequestReaderService {
         deny();
       workerId = worker!.id;
     }
-    const eligible = await this.dataSource.query(
-      `SELECT 1 FROM app_user u
+    const eligible = readAll
+      ? [true]
+      : await this.dataSource.query(
+          `SELECT 1 FROM app_user u
       JOIN user_role_assignment r ON r.user_id = u.id AND r.site_id = $2 AND r.role = $3
       WHERE u.id = $1 AND u.is_active AND ($4::uuid IS NOT NULL OR EXISTS (
         SELECT 1 FROM contractor_representative_assignment a
@@ -60,8 +69,8 @@ export class ShiftRequestReaderService {
         JOIN contractor_site_participation p ON p.contractor_id = a.contractor_id AND p.site_id = a.site_id
         WHERE a.user_id = u.id AND a.site_id = $2 AND p.is_active AND p.valid_from <= CURRENT_TIMESTAMP
           AND (p.valid_until IS NULL OR p.valid_until > CURRENT_TIMESTAMP)))`,
-      [actor.id, site, role, workerId],
-    );
+          [actor.id, site, role, workerId],
+        );
     if (!eligible.length) deny();
     // Scope, filters, mixed ordering, count and pagination are all evaluated by PostgreSQL.
     const [result] = (await this.dataSource.query(
@@ -102,8 +111,8 @@ export class ShiftRequestReaderService {
           AND EXISTS (SELECT 1 FROM contractor_site_participation p WHERE p.site_id = r.site_id
             AND p.contractor_id = w.contractor_id AND p.is_active AND p.valid_from <= CURRENT_TIMESTAMP
             AND (p.valid_until IS NULL OR p.valid_until > CURRENT_TIMESTAMP))
-          AND EXISTS (SELECT 1 FROM user_role_assignment a WHERE a.user_id = $2 AND a.site_id = r.site_id AND a.role = $4)
-          AND (($3::uuid IS NOT NULL AND (r.worker_id = $3 OR r.coworker_worker_id = $3)
+          AND EXISTS (SELECT 1 FROM user_role_assignment a WHERE a.user_id = $2 AND ((a.site_id = r.site_id AND (a.role = $4 OR ($10 AND a.role = 'SITE_MANAGER'))) OR ($10 AND a.site_id IS NULL AND a.role = 'ADMIN')))
+          AND ($10 OR ($3::uuid IS NOT NULL AND (r.worker_id = $3 OR r.coworker_worker_id = $3)
             AND EXISTS (SELECT 1 FROM worker me WHERE me.id = $3 AND me.user_id = $2 AND me.site_id = r.site_id AND me.is_active))
             OR ($3::uuid IS NULL AND EXISTS (SELECT 1 FROM contractor_representative_assignment a
               WHERE a.user_id = $2 AND a.site_id = r.site_id AND a.contractor_id = w.contractor_id)))
@@ -136,6 +145,7 @@ export class ShiftRequestReaderService {
         query.search?.trim().toLowerCase() ?? '',
         paging.limit,
         paging.offset,
+        readAll,
       ],
     )) as Array<{
       items: Array<{ payload: Record<string, unknown>; requestType: 'CHANGE' | 'SWAP' }>;

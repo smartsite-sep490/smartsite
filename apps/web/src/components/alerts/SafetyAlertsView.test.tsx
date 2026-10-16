@@ -146,6 +146,47 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     globalThis.fetch = originalFetch;
   });
 
+  it('does not offer a Site where the same account only represents a contractor', async () => {
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        ...mockSitesList.items,
+        {
+          id: 'site-beta',
+          code: 'BETA',
+          name: 'Contractor-only Site',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      total: 2,
+    });
+    const alerts = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+      .mockResolvedValue({ items: [], total: 0 });
+    const session: LoginResponse = {
+      ...mockSafetyOfficerLoginResponse,
+      user: {
+        ...mockSafetyOfficerLoginResponse.user,
+        roleAssignments: [
+          ...mockSafetyOfficerLoginResponse.user.roleAssignments,
+          { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-beta' },
+        ],
+      },
+    };
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://127.0.0.1:3001"
+          authenticatedSession={session}
+          initialSiteId="site-beta"
+        />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('option', { name: /Công trường Alpha/ });
+    expect(screen.queryByRole('option', { name: /Contractor-only Site/ })).toBeNull();
+    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('site-alpha');
+    expect(alerts.mock.calls.every((call) => call[1] === 'site-alpha')).toBe(true);
+  });
+
   it('Admin-only role computation: passes canReviewIdentity=false and NEVER calls identity APIs when user has only global Admin role', async () => {
     const user = userEvent.setup();
 

@@ -62,7 +62,9 @@ export function ScheduleAssignmentForm({
   shifts,
   versions,
   onScopeChange,
+  managerScope = false,
 }: {
+  managerScope?: boolean;
   apiUrl: string;
   token: string;
   siteId: string;
@@ -75,7 +77,7 @@ export function ScheduleAssignmentForm({
   const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['schedule-assignment-batches', apiUrl, token, siteId];
-  const [contractorChoice] = useState(
+  const [contractorChoice, setContractorChoice] = useState(
     () => new URLSearchParams(window.location.search).get('contractorId') ?? '',
   );
   const [target, setTarget] = useState<'TEAM' | 'WORKER'>('TEAM');
@@ -96,8 +98,19 @@ export function ScheduleAssignmentForm({
   const [message, setMessage] = useState('');
   const request = useRef<{ key: string; id: string } | null>(null);
   const scopes = useQuery({
-    queryKey: ['contractor-dashboard-scopes', apiUrl, token],
-    queryFn: () => client.contractorDashboardScopes(token),
+    queryKey: ['schedule-contractor-scopes', apiUrl, token, siteId, managerScope],
+    queryFn: async () =>
+      managerScope
+        ? {
+            items: (await client.accessSetup(token, siteId)).participations
+              .filter(
+                (c) =>
+                  Date.parse(c.validFrom) <= Date.now() &&
+                  (!c.validUntil || Date.parse(c.validUntil) > Date.now()),
+              )
+              .map((c) => ({ siteId, contractorId: c.contractorId, contractorName: c.name })),
+          }
+        : client.contractorDashboardScopes(token),
   });
   const availableScopes = scopes.data?.items.filter((scope) => scope.siteId === siteId) ?? [];
   const contractorId = contractorChoice
@@ -279,6 +292,33 @@ export function ScheduleAssignmentForm({
           disabled={loading || Boolean(loadError) || save.isPending || !contractorId}
           className="space-y-3.5"
         >
+          {availableScopes.length > 1 && (
+            <label className="block text-xs font-semibold">
+              {tr('common.contractor')}
+              <select
+                className={field}
+                value={contractorId}
+                disabled={save.isPending}
+                onChange={(e) => {
+                  setContractorChoice(e.target.value);
+                  setTargetId('');
+                  setMembers(undefined);
+                  setShift('');
+                  setBatchPage(0);
+                  setMessage('');
+                  preview.reset();
+                  save.reset();
+                  request.current = null;
+                }}
+              >
+                {availableScopes.map((scope) => (
+                  <option key={scope.contractorId} value={scope.contractorId}>
+                    {scope.contractorName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {/* Assignment target Segmented Control */}
           <div className="space-y-1.5">
             <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -784,7 +824,24 @@ function BatchEditor({
   const [worker, setWorker] = useState('');
   const [shift, setShift] = useState('');
   const [reason, setReason] = useState('');
-  const [savedMessage, setSavedMessage] = useState('');
+  const [savedResult, setSavedResult] = useState<{
+    changedCount?: number;
+    skippedCount?: number;
+    action: ChangeScheduleAssignmentCommand['action'];
+  } | null>(null);
+  const savedMessage = !savedResult
+    ? ''
+    : savedResult.changedCount !== undefined
+      ? tr(
+          'schedule_assignment_form.value_schedule_s_value_value_started_or_attendance_protected_schedule_s_skipped',
+          {
+            value1: savedResult.changedCount,
+            value2:
+              savedResult.action === 'CANCEL' ? tr('actions.cancelled') : tr('actions.updated'),
+            value3: savedResult.skippedCount ?? 0,
+          },
+        )
+      : tr('common.schedule_change_saved');
   const request = useRef<{ key: string; id: string } | null>(null);
   const mutation = useMutation({
     mutationFn: () => {
@@ -802,18 +859,7 @@ function BatchEditor({
       return onChange({ ...input, requestId: request.current.id });
     },
     onSuccess: async (result) => {
-      setSavedMessage(
-        result.changedCount !== undefined
-          ? tr(
-              'schedule_assignment_form.value_schedule_s_value_value_started_or_attendance_protected_schedule_s_skipped',
-              {
-                value1: result.changedCount,
-                value2: actionValue === 'CANCEL' ? tr('actions.cancelled') : tr('actions.updated'),
-                value3: result.skippedCount ?? 0,
-              },
-            )
-          : tr('common.schedule_change_saved'),
-      );
+      setSavedResult({ ...result, action: actionValue });
       setOpen(false);
       setReason('');
       request.current = null;
@@ -946,7 +992,7 @@ function BatchEditor({
       )}
       {mutation.isSuccess && (
         <p role="status" className="text-xs text-emerald-700">
-          {savedMessage}
+          {localizeMessage(savedMessage)}
         </p>
       )}
     </article>

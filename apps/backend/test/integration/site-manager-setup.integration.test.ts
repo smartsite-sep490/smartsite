@@ -1,3 +1,4 @@
+import { participateContractor } from '../support/contractor-participation.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -63,6 +64,8 @@ test('Site Manager representative creation is atomic, scoped and supports multip
     code: `C-${randomUUID()}`,
     name: 'Second contractor',
   });
+  await participateContractor(source, site.id, first.id);
+  await participateContractor(source, site.id, second.id);
   const input = () => ({
     username: `rep-${randomUUID()}`,
     displayName: 'Representative',

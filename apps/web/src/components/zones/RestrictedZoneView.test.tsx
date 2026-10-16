@@ -184,7 +184,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       id: 'admin-user-1',
       username: 'admin',
       displayName: 'Global Administrator',
-      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
       isActive: true,
       mustChangePassword: false,
     },
@@ -354,7 +354,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     expect(SmartSiteManagementClient.prototype.logout).not.toHaveBeenCalled();
   });
 
-  it('Admin login loads real-shaped Site/Camera/Region responses and displays server synced state', async () => {
+  it('Manager login loads real-shaped Site/Camera/Region responses and displays server synced state', async () => {
     const user = userEvent.setup();
 
     render(

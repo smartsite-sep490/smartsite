@@ -536,9 +536,9 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   assert.equal(managerVersion.status, 201);
   const managerVersionId = (managerVersion.json as { id: string }).id;
 
-  const managerSchedule = await postJson(
+  const representativeSchedule = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
-    mgrTokenA,
+    repTokenA,
     {
       workerId: workerCEntityId,
       shiftId: managerShiftId,
@@ -546,7 +546,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
       isActive: true,
     },
   );
-  assert.equal(managerSchedule.status, 403);
+  assert.equal(representativeSchedule.status, 403);
 
   const adminSchedule = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
@@ -564,7 +564,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   // shifts belonging to the representative's contractor.
   const secondShiftSameDay = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
-    repTokenA,
+    mgrTokenA,
     {
       workerId: workerAEntityId,
       shiftId: secondShiftId,
@@ -575,7 +575,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   assert.equal(secondShiftSameDay.status, 409);
   const nextDaySchedule = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
-    repTokenA,
+    mgrTokenA,
     { workerId: workerAEntityId, shiftId: secondShiftId, workDate: '2030-01-02', isActive: true },
   );
   assert.equal(nextDaySchedule.status, 201);
@@ -583,7 +583,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
 
   const duplicateShiftSameDay = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
-    repTokenA,
+    mgrTokenA,
     {
       workerId: workerAEntityId,
       shiftId,
@@ -1042,7 +1042,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   );
   assert.equal(
     (
-      await postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, repTokenA, {
+      await postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, mgrTokenA, {
         workerId: workerAEntityId,
         shiftId: secondShiftId,
         workDate: '2030-01-10',
@@ -1094,7 +1094,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
 
   const freshSource = await postJson(
     `/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`,
-    repTokenA,
+    mgrTokenA,
     {
       workerId: workerAEntityId,
       shiftId,
@@ -1113,7 +1113,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   // A concurrent assignment either commits before archival or observes the archived flag.
   const [raceArchive, raceAssignment] = await Promise.all([
     postJson(`/sites/${siteA}/shifts/${shiftId}/archive`, mgrTokenA, {}),
-    postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, repTokenA, {
+    postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, mgrTokenA, {
       workerId: workerAEntityId,
       shiftId,
       workDate: '2030-02-02',
@@ -1129,7 +1129,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   );
   assert.equal(
     (
-      await postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, repTokenA, {
+      await postJson(`/sites/${siteA}/schedule-versions/${versionId}/worker-schedules`, mgrTokenA, {
         workerId: workerAEntityId,
         shiftId,
         workDate: '2030-02-03',

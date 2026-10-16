@@ -192,7 +192,6 @@ export class ContractorOperationsService {
     lock = false,
   ): Promise<void> {
     this.assertPasswordChanged(actor);
-    if (this.isAdmin(actor)) return;
     if (!this.hasSiteRole(actor, siteId, UserRole.CONTRACTOR_REPRESENTATIVE)) this.forbidden();
     const grants = manager.getRepository(ContractorRepresentativeGrantEntity);
     const where = { userId: actor.id, contractorId };
@@ -208,26 +207,7 @@ export class ContractorOperationsService {
     role: UserRole.SAFETY_OFFICER | UserRole.SITE_MANAGER,
   ): Promise<void> {
     this.assertPasswordChanged(actor);
-    if (!this.isAdmin(actor) && !this.hasSiteRole(actor, siteId, role)) this.forbidden();
-  }
-
-  /**
-   * Site-roster workers are created by the administrative workforce surface and
-   * intentionally have no contractor yet.  Face enrollment is still an
-   * operator action, so keep it limited to the global administrator or a
-   * trusted operator assigned to that worker's site.
-   */
-  private assertWorkerEnrollmentOperator(actor: WorkforceActor, siteId: string): void {
-    this.assertPasswordChanged(actor);
-    if (this.isAdmin(actor)) return;
-    const allowed = actor.roleAssignments.some(
-      ({ role, siteId: assignedSiteId }) =>
-        assignedSiteId === siteId &&
-        (role === UserRole.SITE_MANAGER ||
-          role === UserRole.SAFETY_OFFICER ||
-          role === UserRole.SECURITY_OFFICER),
-    );
-    if (!allowed) this.forbidden();
+    if (!this.hasSiteRole(actor, siteId, role)) this.forbidden();
   }
 
   private async requireActiveParticipation(
@@ -276,8 +256,7 @@ export class ContractorOperationsService {
     )
       return worker;
     if (!worker.contractorId) {
-      this.assertWorkerEnrollmentOperator(actor, worker.siteId);
-      return worker;
+      this.forbidden();
     }
     await this.requireContractorRepresentative(manager, actor, worker.contractorId, worker.siteId);
     await this.requireActiveParticipation(manager, worker.contractorId, worker.siteId, new Date());
@@ -304,9 +283,9 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: CreateContractorParticipationCommand,
   ) {
-    this.assertAdmin(actor);
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorParticipationCommand, input);
+    await this.requireSiteRole(actor, uuid(value.siteId), UserRole.SITE_MANAGER);
     const range = timeRange(value.validFrom, value.validUntil);
     return this.dataSource.transaction(async (manager) => {
       const contractor = await manager
@@ -461,6 +440,7 @@ export class ContractorOperationsService {
         .getOne();
       if (!request) missing();
       await this.requireSiteRole(actor, request.siteId, UserRole.SAFETY_OFFICER);
+      if (request.requestedByUserId === actor.id) this.forbidden();
       if (request.status !== WorkerSiteZoneAssignmentStatus.PENDING)
         conflict('Assignment is not pending');
       request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
@@ -496,6 +476,7 @@ export class ContractorOperationsService {
         .getOne();
       if (!request) missing();
       await this.requireSiteRole(actor, request.siteId, UserRole.SITE_MANAGER);
+      if (request.requestedByUserId === actor.id) this.forbidden();
       if (
         ![
           WorkerSiteZoneAssignmentStatus.PENDING,

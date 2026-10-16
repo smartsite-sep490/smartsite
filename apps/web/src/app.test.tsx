@@ -6,8 +6,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './app';
+import type { RoleAssignmentResponse } from '@smartsite/contracts/management';
 
-const accountState = vi.hoisted(() => ({ mustChangePassword: false }));
+const accountState = vi.hoisted(() => ({
+  mustChangePassword: false,
+  roleAssignments: [] as RoleAssignmentResponse[],
+}));
 
 vi.mock('@smartsite/api-client', async () => {
   const actual =
@@ -19,7 +23,7 @@ vi.mock('@smartsite/api-client', async () => {
 });
 
 vi.mock('./features/auth/auth-session', async (importOriginal) => ({
-  ...await importOriginal<typeof import('./features/auth/auth-session')>(),
+  ...(await importOriginal<typeof import('./features/auth/auth-session')>()),
   useAuth: () => ({
     accessToken: 'test-token',
     isSessionExpired: false,
@@ -28,13 +32,20 @@ vi.mock('./features/auth/auth-session', async (importOriginal) => ({
   useRestoreSession: () => ({ isLoading: false }),
   useLogout: () => ({ mutate: vi.fn() }),
   useCurrentUser: () => ({
-    data: { roleAssignments: [], mustChangePassword: accountState.mustChangePassword },
+    data: {
+      roleAssignments: accountState.roleAssignments,
+      mustChangePassword: accountState.mustChangePassword,
+    },
   }),
   SessionExpiredModal: () => null,
 }));
 
 vi.mock('./features/auth/ChangePasswordScreen', () => ({
   ChangePasswordScreen: () => <h1>Change your temporary password</h1>,
+}));
+
+vi.mock('./components/access/AccessControlView', () => ({
+  AccessControlView: () => <h1>Security site access</h1>,
 }));
 
 vi.mock('./components/landing/LandingPage', () => ({
@@ -98,6 +109,7 @@ describe('App Navigation and Context Lifecycle', () => {
 
   beforeEach(() => {
     accountState.mustChangePassword = false;
+    accountState.roleAssignments = [{ role: 'ADMIN', siteId: null }];
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, gcTime: 0 },
@@ -125,6 +137,82 @@ describe('App Navigation and Context Lifecycle', () => {
     cleanup();
     queryClient.clear();
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    'SAFETY_OFFICER',
+    'SITE_MANAGER',
+    'CONTRACTOR_REPRESENTATIVE',
+    'SECURITY_OFFICER',
+    'WORKER',
+    'ADMIN',
+  ] as const)('allows a signed-in %s to choose the password form', (role) => {
+    accountState.roleAssignments = [{ role, siteId: role === 'ADMIN' ? null : 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={['/account/password']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('heading', { name: 'Change your temporary password' })).toBeTruthy();
+  });
+
+  it.each(['/login', '/dashboard'])(
+    'opens main Safety operations for a Safety-only account entering %s',
+    (path) => {
+      accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }];
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <QueryClientProvider client={queryClient}>
+            <App />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).toBeTruthy();
+    },
+  );
+
+  it.each([
+    '/login',
+    '/dashboard',
+    '/accounts',
+    '/workforce',
+    '/site-setup',
+    '/schedule-setup',
+    '/incidents',
+    '/ppe',
+    '/zones',
+    '/live-monitoring',
+    '/iot',
+    '/progress',
+  ])('keeps a Security-only account in its gate workspace when opening %s', async (path) => {
+    accountState.roleAssignments = [{ role: 'SECURITY_OFFICER', siteId: 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Security site access' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'PPE Monitoring' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Safety Alerts Queue' })).toBeNull();
+  });
+
+  it('retains other explicitly assigned roles for a Security/Admin account', () => {
+    accountState.roleAssignments = [
+      { role: 'SECURITY_OFFICER', siteId: 'site-alpha' },
+      { role: 'ADMIN', siteId: null },
+    ];
+    render(
+      <MemoryRouter initialEntries={['/ppe']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
   });
 
   it('sets initialType when navigated with context, and clears it when navigating via sidebar without context', async () => {

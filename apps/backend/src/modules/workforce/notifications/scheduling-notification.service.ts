@@ -33,7 +33,7 @@ export const schedulingScope = `
   AND ((n.recipient_role = 'WORKER' AND EXISTS (SELECT 1 FROM worker w WHERE w.id = n.worker_id
     AND w.user_id = n.recipient_user_id AND w.site_id = n.site_id
     AND w.contractor_id = n.contractor_id AND w.is_active = true))
-    OR (n.recipient_role = 'CONTRACTOR_REPRESENTATIVE' AND EXISTS
+    OR n.recipient_role = 'SITE_MANAGER' OR (n.recipient_role = 'CONTRACTOR_REPRESENTATIVE' AND EXISTS
       (SELECT 1 FROM contractor_representative_assignment a WHERE a.user_id = n.recipient_user_id
         AND a.site_id = n.site_id AND a.contractor_id = n.contractor_id)))`;
 
@@ -173,6 +173,20 @@ export class SchedulingNotificationService {
           siteId: worker.siteId,
           workerId: worker.id,
         });
+    }
+    if (input.event === 'TIME_REQUESTED') {
+      const managers: Array<{ user_id: string }> = await manager.query(
+        "SELECT user_id FROM user_role_assignment WHERE site_id=$1 AND role='SITE_MANAGER'",
+        [worker.siteId],
+      );
+      recipients.unshift(
+        ...managers.map((r) => ({
+          recipientUserId: r.user_id,
+          recipientRole: 'SITE_MANAGER' as const,
+          workerId: null,
+          contractorId: worker.contractorId!,
+        })),
+      );
     }
     const site = await manager.getRepository(SiteEntity).findOneByOrFail({ id: worker.siteId });
     const seen = new Set<string>();
@@ -517,7 +531,8 @@ export class SchedulingNotificationService {
           tab: 'incidents',
         },
       };
-    const review = n.recipientRole === 'CONTRACTOR_REPRESENTATIVE';
+    const review =
+      n.recipientRole === 'CONTRACTOR_REPRESENTATIVE' || n.recipientRole === 'SITE_MANAGER';
     const pending = n.event === 'CHANGE_REQUESTED' || n.event === 'SWAP_CONFIRMED';
     return {
       id: n.id,

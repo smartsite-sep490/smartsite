@@ -116,7 +116,8 @@ export function SiteAccessSetupView({
       ? `${data.participations.find((p) => p.id === permission.siteContractorId)?.name ?? tr('common.contractor')} / ${data.zones.find((z) => z.id === permission.zoneId)?.name ?? tr('common.zone')}`
       : tr('common.unavailable_permission');
   };
-  const inputClass = 'mt-1 block w-full rounded-lg border border-slate-300 p-2 text-sm';
+  const inputClass =
+    'mt-1 block w-full min-w-0 max-w-full rounded-lg border border-slate-300 p-2 text-sm';
   return (
     <div className="space-y-6">
       <section className="space-y-4 rounded-2xl border bg-white p-6">
@@ -129,7 +130,7 @@ export function SiteAccessSetupView({
           )}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="text-xs font-semibold">
+          <label className="min-w-0 max-w-full text-xs font-semibold">
             {tr('common.start')}{' '}
             <input
               className={inputClass}
@@ -138,7 +139,7 @@ export function SiteAccessSetupView({
               onChange={(e) => setValidFrom(e.target.value)}
             />
           </label>
-          <label className="text-xs font-semibold">
+          <label className="min-w-0 max-w-full text-xs font-semibold">
             {tr('common.end')}{' '}
             <input
               className={inputClass}
@@ -147,7 +148,7 @@ export function SiteAccessSetupView({
               onChange={(e) => setValidUntil(e.target.value)}
             />
           </label>
-          <label className="text-xs font-semibold">
+          <label className="min-w-0 max-w-full text-xs font-semibold">
             {tr('common.zone')}{' '}
             <select
               className={inputClass}
@@ -165,7 +166,7 @@ export function SiteAccessSetupView({
         </div>
         {data.canGrantContractorZones && (
           <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-            <label className="text-xs font-semibold">
+            <label className="min-w-0 max-w-full text-xs font-semibold">
               {tr('site_access_setup_view.contractor_at_this_site')}{' '}
               <select
                 className={inputClass}
@@ -193,7 +194,7 @@ export function SiteAccessSetupView({
         )}
         {data.canGrantWorkerZones && (
           <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-            <label className="text-xs font-semibold">
+            <label className="min-w-0 max-w-full text-xs font-semibold">
               {tr('common.worker')}{' '}
               <select
                 className={inputClass}

@@ -43,14 +43,15 @@ export async function attendanceAccess(
     roles.some((r) => r.siteId === worker.siteId && r.role === UserRole.WORKER)
   )
     return 'SELF' as const;
-  if (representative && participation) return 'REPRESENTATIVE' as const;
+  if (review && roles.some((r) => r.role === UserRole.SITE_MANAGER && r.siteId === worker.siteId))
+    return 'STAFF' as const;
+  if (!review && representative && participation) return 'REPRESENTATIVE' as const;
   if (
     !review &&
     roles.some(
       (r) =>
         (r.role === UserRole.ADMIN && r.siteId === null) ||
-        (r.siteId === worker.siteId &&
-          [UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER].includes(r.role)),
+        (r.siteId === worker.siteId && r.role === UserRole.SITE_MANAGER),
     )
   )
     return 'STAFF' as const;

@@ -42,7 +42,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
     displayName: 'Representative',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE' as const, siteId: 'site' }],
+    roleAssignments: [{ role: 'SITE_MANAGER' as const, siteId: 'site' }],
   };
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -87,6 +87,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  fireEvent.click(await screen.findByRole('button', { name: /^Incidents$/ }));
   expect(await screen.findByText('No incidents found.')).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Sign out Representative' }));
   await waitFor(() => expect(logout).toHaveBeenCalledOnce());
@@ -112,14 +113,16 @@ it('App clears the authenticated Safety workspace even when server logout fails'
 });
 
 it('login animation cannot navigate back to Dashboard after opening Safety', async () => {
-  vi.spyOn(api.SmartSiteManagementClient.prototype, 'refresh').mockRejectedValue(new api.ApiError('http', 'Unauthorized', 401));
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'refresh').mockRejectedValue(
+    new api.ApiError('http', 'Unauthorized', 401),
+  );
   const user = {
     id: 'representative',
     username: 'rep',
     displayName: 'Representative',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE' as const, siteId: 'site' }],
+    roleAssignments: [{ role: 'SITE_MANAGER' as const, siteId: 'site' }],
   };
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -191,7 +194,7 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
   });
   fireEvent.change(screen.getByPlaceholderText('••••••••'), { target: { value: 'test-password' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-  await screen.findByRole('heading', { name: /Site A/i });
+  await screen.findByRole('button', { name: 'Open Safety' });
   fireEvent.click(screen.getByRole('button', { name: 'Open Safety' }));
   await screen.findByRole('button', { name: 'Sign out Representative' });
   act(() => {

@@ -1,16 +1,11 @@
-import { translate as tr } from '../../i18n';
-import { useTranslation } from 'react-i18next';
 import React, { ReactNode, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import {
   IconDashboard,
   IconUsers,
   IconKey,
   IconHardHat,
   IconAlertTriangle,
-  IconRadio,
-  IconTrendingUp,
   IconHome,
   IconBuilding,
   IconCalendar,
@@ -24,14 +19,21 @@ import {
 
 import { useLogout, useCurrentUser } from '../../features/auth/auth-session';
 import { NotificationBell } from '../../features/notifications/NotificationBell';
+import { useTranslation } from 'react-i18next';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
+import { workspaceTabs } from '../../features/auth/workspace-access';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export type ActiveTab =
   | 'dashboard'
-  | 'workforce'
+  | 'assigned-work'
+  | 'contractor-teams'
+  | 'worker-summary'
   | 'worker-onboarding'
+  | 'workforce'
   | 'site-setup'
+  | 'accounts'
   | 'schedule-setup'
   | 'access'
   | 'live-monitoring'
@@ -49,8 +51,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }: AppLayoutProps) {
-  useTranslation();
-
+  const { t } = useTranslation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -69,197 +70,75 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
 
   // useCurrentUser calls /auth/me using the live accessToken; works after hard refresh.
   const { data: currentUser } = useCurrentUser(apiUrl);
-  const displayName = currentUser?.username || tr('common.user');
+  const displayName = currentUser?.username || t('shell.user');
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const userRole = roles.includes('ADMIN')
-    ? tr('common.system_admin')
+    ? t('shell.systemAdmin')
     : roles.includes('SITE_MANAGER')
-      ? tr('common.site_manager')
+      ? t('shell.siteManager')
       : roles.includes('CONTRACTOR_REPRESENTATIVE')
-        ? tr('common.contractor_rep')
+        ? t('shell.contractorRep')
         : roles.includes('WORKER')
-          ? tr('common.worker')
-          : tr('common.authenticated_user');
+          ? t('shell.worker')
+          : roles.includes('SECURITY_OFFICER')
+            ? t('accounts.role.SECURITY_OFFICER')
+            : roles.includes('SAFETY_OFFICER')
+              ? t('accounts.role.SAFETY_OFFICER')
+              : t('shell.authenticated');
   const userInitials = displayName.slice(0, 2).toUpperCase();
 
-  const isAdmin = roles.includes('ADMIN');
-  const isManager = roles.includes('SITE_MANAGER');
-  const isContractorRep = !isAdmin && roles.includes('CONTRACTOR_REPRESENTATIVE');
-  const isWorker = roles.includes('WORKER');
-  const isWorkerOnly = isWorker && !isAdmin && !isManager && !isContractorRep;
-  const isManagerOnly = isManager && !isAdmin && !isContractorRep;
-  const canAccessWorkforce = (isWorker || isContractorRep) && !isAdmin;
-  const canAccessScheduleSetup = (isManager || isContractorRep) && !isAdmin;
-
-  const navGroups = isWorkerOnly
-    ? [
+  // Keep main's Safety presentation without changing the other role workspaces.
+  // Navigation and business capabilities still use the scoped role policy below.
+  const mainSafetyUi =
+    roles.includes('SAFETY_OFFICER') &&
+    ['dashboard', 'live-monitoring', 'ppe', 'zones', 'incidents', 'account/password'].includes(
+      activeTab,
+    );
+  const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
+  const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
+  const navGroups = [
+    {
+      label: t('shell.workspace'),
+      items: [
+        { id: 'dashboard', label: t('shell.dashboard'), icon: IconDashboard },
+        { id: 'contractor-teams', label: t('shell.contractorTeams'), icon: IconUsers },
+        { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconUsers },
+        { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
+        { id: 'worker-summary', label: t('shell.workerSummary'), icon: IconDashboard },
         {
-          get label() {
-            return tr('common.workspace');
-          },
-          items: [
-            {
-              id: 'dashboard',
-              get label() {
-                return tr('common.dashboard');
-              },
-              icon: IconDashboard,
-            },
-            {
-              id: 'workforce',
-              get label() {
-                return tr('app_layout.my_schedule_requests');
-              },
-              icon: IconUsers,
-            },
-            {
-              id: 'access',
-              get label() {
-                return tr('common.my_qr_pass');
-              },
-              icon: IconKey,
-            },
-          ],
+          id: 'workforce',
+          label: t(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
+          icon: IconUsers,
         },
-      ]
-    : [
-        {
-          get label() {
-            return tr('common.workspace');
-          },
-          items: [
-            {
-              id: 'dashboard',
-              get label() {
-                return tr('common.dashboard');
-              },
-              icon: IconDashboard,
-            },
-            ...(canAccessWorkforce
-              ? [
-                  {
-                    id: 'workforce',
-                    get label() {
-                      return isContractorRep
-                        ? tr('common.contractor_review')
-                        : tr('common.workforce');
-                    },
-                    icon: IconUsers,
-                  },
-                ]
-              : []),
-            ...(canAccessScheduleSetup
-              ? [
-                  {
-                    id: 'schedule-setup',
-                    get label() {
-                      return tr('common.schedule_setup');
-                    },
-                    icon: IconCalendar,
-                  },
-                ]
-              : []),
-            ...(isContractorRep
-              ? [
-                  {
-                    id: 'worker-onboarding',
-                    get label() {
-                      return tr('common.worker_onboarding');
-                    },
-                    icon: IconUsers,
-                  },
-                ]
-              : []),
-            ...(isAdmin || isManager
-              ? [
-                  {
-                    id: 'site-setup',
-                    get label() {
-                      return isAdmin ? tr('common.site_setup') : tr('common.contractors_zones');
-                    },
-                    icon: IconBuilding,
-                  },
-                ]
-              : []),
-            ...(!isManagerOnly
-              ? [
-                  {
-                    id: 'access',
-                    get label() {
-                      return isContractorRep && !isAdmin
-                        ? tr('common.attendance_access')
-                        : tr('common.site_access');
-                    },
-                    icon: IconKey,
-                  },
-                ]
-              : []),
-          ],
-        },
-        {
-          get label() {
-            return tr('common.safety');
-          },
-          items: [
-            {
-              id: 'live-monitoring',
-              get label() {
-                return tr('common.live_monitoring');
-              },
-              icon: IconCamera,
-            },
-            {
-              id: 'ppe',
-              get label() {
-                return tr('common.ppe_monitoring');
-              },
-              icon: IconHardHat,
-            },
-            {
-              id: 'zones',
-              get label() {
-                return tr('common.restricted_zones');
-              },
-              icon: IconShield,
-            },
-            {
-              id: 'incidents',
-              get label() {
-                return tr('common.safety_operations_06c3c3');
-              },
-              icon: IconAlertTriangle,
-            },
-          ],
-        },
-        {
-          get label() {
-            return tr('common.site_data');
-          },
-          items: [
-            {
-              id: 'iot',
-              get label() {
-                return tr('common.iot_monitoring');
-              },
-              icon: IconRadio,
-            },
-            {
-              id: 'progress',
-              get label() {
-                return tr('common.progress');
-              },
-              icon: IconTrendingUp,
-            },
-          ],
-        },
-      ];
+        { id: 'accounts', label: t('accounts.title'), icon: IconUsers },
+        { id: 'site-setup', label: t('shell.siteSetup'), icon: IconBuilding },
+        { id: 'schedule-setup', label: t('shell.schedule'), icon: IconCalendar },
+        { id: 'access', label: t(workerOnly ? 'shell.myQr' : 'shell.access'), icon: IconKey },
+      ].filter((item) => allowedTabs.includes(item.id)),
+    },
+    {
+      label: t('shell.safety'),
+      items: [
+        { id: 'live-monitoring', label: t('shell.live'), icon: IconCamera },
+        { id: 'ppe', label: t('shell.ppe'), icon: IconHardHat },
+        { id: 'zones', label: t('shell.zones'), icon: IconShield },
+        { id: 'incidents', label: t('shell.incidents'), icon: IconAlertTriangle },
+      ].filter((item) => allowedTabs.includes(item.id)),
+    },
+  ].filter((group) => group.items.length > 0);
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
       {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
-          isCollapsed ? 'w-16 sm:w-20' : 'w-16 sm:w-20 lg:w-64'
+          mainSafetyUi
+            ? isCollapsed
+              ? 'w-16 sm:w-20'
+              : 'w-16 sm:w-20 lg:w-64'
+            : isCollapsed
+              ? 'w-20'
+              : 'w-20 lg:w-64'
         } bg-gradient-to-b from-[#071320] via-[#04121D] to-[#020B13] text-white flex flex-col justify-between shrink-0 select-none border-r border-white/10 transition-all duration-300 ease-in-out sticky top-0 h-screen z-30 shadow-2xl`}
       >
         <div>
@@ -273,8 +152,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <div
               className="flex items-center gap-3 cursor-pointer group"
               onClick={() => navigate('/')}
-              title={tr('common.smartsite_homepage')}
-              aria-label={tr('common.smartsite_homepage')}
+              title={t('shell.home')}
+              aria-label={t('shell.home')}
             >
               <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-[0_0_20px_rgba(246,107,23,0.25)] transition-transform group-hover:scale-105 border border-white/10 bg-white p-0.5 flex items-center justify-center">
                 <img
@@ -292,7 +171,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                     </span>
                   </div>
                   <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase mt-0.5 font-semibold">
-                    {tr('common.operations')}
+                    {t('shell.operations')}
                   </span>
                 </div>
               )}
@@ -302,8 +181,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="hidden lg:flex w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
-              title={isCollapsed ? tr('common.mo_rong_sidebar') : tr('common.thu_nho_sidebar')}
-              aria-label={isCollapsed ? tr('common.expand_sidebar') : tr('common.collapse_sidebar')}
+              title={t(isCollapsed ? 'shell.expand' : 'shell.collapse')}
+              aria-label={isCollapsed ? t('shell.expand') : t('shell.collapse')}
             >
               {isCollapsed ? (
                 <IconChevronRight className="w-3.5 h-3.5" />
@@ -315,7 +194,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
 
           {/* Navigation Section */}
           <div className="px-3 py-4 flex-1 overflow-y-auto custom-scrollbar">
-            <nav className="space-y-6" aria-label={tr('common.main_navigation')}>
+            <nav className="space-y-6" aria-label={t('shell.navigation')}>
               {navGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1.5">
                   {!isCollapsed && (
@@ -387,8 +266,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         <div className="p-2 lg:p-3 border-t border-white/10">
           <button
             onClick={() => navigate('/')}
-            title={isCollapsed ? tr('common.public_smartsite_homepage') : undefined}
-            aria-label={tr('common.public_smartsite_homepage')}
+            title={isCollapsed ? t('shell.publicHome') : undefined}
+            aria-label={t('shell.publicHome')}
             className={`w-full min-h-11 lg:min-h-0 flex items-center ${
               isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
             } rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-xs group`}
@@ -396,7 +275,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <IconHome className="w-4 h-4 text-[#FF7A1A] shrink-0 group-hover:scale-110 transition-transform filter drop-shadow-[0_0_6px_rgba(246,107,23,0.4)]" />
             {!isCollapsed && (
               <span className="hidden lg:inline whitespace-nowrap overflow-hidden font-medium">
-                {tr('common.public_smartsite_homepage')}
+                {t('shell.publicHome')}
               </span>
             )}
           </button>
@@ -406,33 +285,57 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-canvas)]">
         {/* Top Header Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs">
+        <header
+          className={
+            mainSafetyUi
+              ? 'h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
+              : 'h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-xs'
+          }
+        >
           {/* Left: Brand/Context info */}
-          <div className="hidden xl:flex min-w-0 items-center gap-4">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              {tr('common.smartsite_operations_platform')}
+          <div
+            className={
+              mainSafetyUi
+                ? 'hidden xl:flex min-w-0 items-center gap-4'
+                : 'hidden sm:flex items-center gap-4'
+            }
+          >
+            <span
+              className={
+                mainSafetyUi
+                  ? 'text-xs font-bold text-slate-500 uppercase tracking-wider'
+                  : 'text-xs font-semibold text-[#62748E] uppercase tracking-wider'
+              }
+            >
+              {t('shell.platform')}
             </span>
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-xs font-bold text-[#008C47] shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-[#008C47] animate-pulse" />
-              <span>{tr('common.all_systems_online')}</span>
-            </div>
           </div>
 
           {/* Right: Search, Notification, Profile */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {!mainSafetyUi && <LanguageSwitcher />}
             {/* Search Input */}
             <div className="relative w-56 hidden lg:block">
-              <IconSearch className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <IconSearch
+                className={`w-4 h-4 ${mainSafetyUi ? 'text-slate-400' : 'text-[var(--text-secondary)]'} absolute left-3 top-1/2 -translate-y-1/2`}
+              />
               <input
                 type="text"
-                placeholder={tr('common.search_smartsite')}
-                aria-label={tr('common.search_smartsite')}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:bg-white transition-all placeholder:text-slate-400"
+                placeholder={t('shell.search')}
+                aria-label={t('shell.search')}
+                className={
+                  mainSafetyUi
+                    ? 'w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:bg-white transition-all placeholder:text-slate-400'
+                    : 'w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-secondary)]'
+                }
               />
             </div>
 
-            <LanguageSwitcher />
+            {mainSafetyUi && <LanguageSwitcher />}
             <NotificationBell
+              assignedWork={
+                allowedTabs.includes('assigned-work') && !allowedTabs.includes('incidents')
+              }
               key={currentUser?.id ?? 'signed-out'}
               apiUrl={apiUrl}
               userId={currentUser?.id ?? ''}
@@ -444,22 +347,32 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 {userInitials}
               </div>
-              <div className="text-left leading-tight hidden sm:block max-w-36 truncate">
+              <div
+                className={`text-left leading-tight hidden sm:block${mainSafetyUi ? ' max-w-36 truncate' : ''}`}
+              >
                 <p className="font-semibold text-xs text-[#041D2E]">{displayName}</p>
                 <p className="text-[11px] text-[#62748E]">{userRole}</p>
               </div>
             </div>
 
-            <button type="button" onClick={() => navigate('/account/password')} className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2" title={tr('auth.password.title')} aria-label={tr('auth.password.title')}>
-              <IconKey className="w-4 h-4" />
-            </button>
+            {mainSafetyUi && (
+              <button
+                type="button"
+                onClick={() => navigate('/account/password')}
+                className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
+                title={t('auth.password.title')}
+                aria-label={t('auth.password.title')}
+              >
+                <IconKey className="w-4 h-4" />
+              </button>
+            )}
             {/* Logout Button */}
             <button
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
-              title={tr('common.logout')}
-              aria-label={tr('common.logout')}
+              title={t('shell.logout')}
+              aria-label={t('shell.logout')}
             >
               <IconLogOut className="w-4 h-4" />
             </button>

@@ -101,19 +101,22 @@ test('ContractorOperationsService denies a representative without a grant for th
   assert.equal(savedWorkers.length, 0);
 });
 
-test('ContractorOperationsService allows a global admin to enroll an unassigned site worker', async () => {
+test('ContractorOperationsService denies a global admin enrolling an unassigned site worker', async () => {
   const worker = {
     id: '00000000-0000-4000-8000-000000000010',
     siteId: IDs.site,
     contractorId: null,
     isActive: true,
   } as WorkerEntity;
-  const result = await enrollmentServiceFor(worker, {
-    id: IDs.actor,
-    mustChangePassword: false,
-    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
-  });
-  assert.equal(result, worker);
+  await assert.rejects(
+    enrollmentServiceFor(worker, {
+      id: IDs.actor,
+      mustChangePassword: false,
+      roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+    }),
+    (error: unknown) =>
+      error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+  );
 });
 
 test('ContractorOperationsService denies enrollment of an unassigned site worker to an unrelated role', async () => {

@@ -1,3 +1,4 @@
+import { participateContractor } from '../support/contractor-participation.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -69,6 +70,8 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
   const first = await workforce.createContractor(siteA, input);
   const second = await workforce.createContractor(siteB, input);
   assert.equal(first.id, second.id);
+  await participateContractor(dataSource, siteA, first.id);
+  await participateContractor(dataSource, siteB, first.id);
   assert.equal((await workforce.listContractors(admin, siteA)).total, 1);
   assert.equal((await workforce.listContractors(admin, siteB)).total, 1);
   assert.equal((await workforce.listContractors(admin, siteC)).total, 0);

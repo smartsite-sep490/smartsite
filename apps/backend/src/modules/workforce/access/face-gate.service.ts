@@ -160,7 +160,7 @@ export class FaceGateService {
     siteId: string,
     gateId: string,
   ): Promise<{ items: GateAccessLogResponse[] }> {
-    await this.requireOperator(actor, siteId, gateId);
+    await this.requireOperator(actor, siteId, gateId, true);
     const logs = await this.dataSource.getRepository(GateAccessLogEntity).find({
       where: { siteId, gateId },
       order: { createdAt: 'DESC', id: 'DESC' },
@@ -186,15 +186,18 @@ export class FaceGateService {
     };
   }
 
-  private async requireOperator(actor: WorkforceActor, siteId: string, gateId: string) {
+  private async requireOperator(
+    actor: WorkforceActor,
+    siteId: string,
+    gateId: string,
+    readOnly = false,
+  ) {
     uuid(siteId);
     const allowed = actor.roleAssignments.some(
       ({ role, siteId: assignedSiteId }) =>
-        (role === UserRole.ADMIN && assignedSiteId === null) ||
+        (readOnly && role === UserRole.ADMIN && assignedSiteId === null) ||
         (assignedSiteId === siteId &&
-          [UserRole.SAFETY_OFFICER, UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER].includes(
-            role,
-          )),
+          (role === UserRole.SECURITY_OFFICER || (readOnly && role === UserRole.SITE_MANAGER))),
     );
     if (actor.mustChangePassword || !allowed)
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {

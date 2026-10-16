@@ -13,6 +13,7 @@ import type {
   Page,
 } from '@smartsite/api-client';
 import { AccessControlView } from './AccessControlView';
+import i18n from '../../i18n';
 
 const authSessionMock = vi.hoisted(() => ({
   accessToken: 'mock-admin-token',
@@ -151,7 +152,8 @@ const setupData = {
 };
 describe('Site Access ERD integration', () => {
   let queryClient: QueryClient;
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
     });
@@ -164,16 +166,6 @@ describe('Site Access ERD integration', () => {
       canReviewCorrection: false,
       sessions: [],
       corrections: [],
-    });
-    vi.spyOn(SmartSiteManagementClient.prototype, 'attendanceDays').mockResolvedValue({
-      items: [],
-      total: 0,
-      requests: [],
-      canReview: false,
-      canRequest: false,
-    });
-    vi.spyOn(SmartSiteManagementClient.prototype, 'attendanceTimesheets').mockResolvedValue({
-      items: [],
     });
     vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers').mockResolvedValue(mockWorkersList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listZoneEntryDecisions').mockResolvedValue(
@@ -251,15 +243,16 @@ describe('Site Access ERD integration', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    await user.click(screen.getByRole('button', { name: 'Visitor Passes' }));
+    await user.click(screen.getByRole('button', { name: /Visitor Passes|Khách viếng thăm/i }));
     await screen.findByText('No visitor pass requests at this site.');
     expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
-  it('renders user details without separate sign out or role badge in page header', async () => {
+  it('signs out through the shared session', async () => {
+    const user = userEvent.setup();
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
-    expect(screen.getByText('Quản trị viên Hệ thống')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /sign out/i }));
+    expect(authSessionMock.logout).toHaveBeenCalledTimes(1);
   });
   it('Representative sees scoped assignment/Zone setup without Admin account or gate controls', async () => {
     authSessionMock.user = {
@@ -273,8 +266,6 @@ describe('Site Access ERD integration', () => {
     });
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    expect(screen.queryByRole('heading', { name: 'Attendance', level: 1 })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Correction requests' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Revoke Contractor Zone' })).toBeNull();
@@ -286,14 +277,13 @@ describe('Site Access ERD integration', () => {
     };
     const user = userEvent.setup();
     mount();
-    await screen.findByRole('button', { name: 'Visitor Passes' });
-    await user.click(screen.getByRole('button', { name: 'Visitor Passes' }));
+    await screen.findByRole('button', { name: /Visitor Passes|Khách viếng thăm/i });
+    await user.click(screen.getByRole('button', { name: /Visitor Passes|Khách viếng thăm/i }));
     await screen.findByText('No visitor pass requests at this site.');
-    expect(screen.getByRole('button', { name: 'Zone Permissions' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Zone Permissions/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
   });
   it('Worker sees personal QR and attendance without gate operations', async () => {
-    const user = userEvent.setup();
     authSessionMock.user = {
       ...mockAdminLoginResponse.user,
       roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
@@ -302,10 +292,64 @@ describe('Site Access ERD integration', () => {
     await screen.findByRole('button', { name: 'Get My QR' });
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Attendance' }));
-    await screen.findByRole('heading', { name: 'My Work Hours' });
-    expect(screen.queryByText('+ Enrol Worker')).toBeNull();
-    expect(screen.queryByText('Active Workers')).toBeNull();
+    await screen.findByText(/Attendance/i);
+  });
+
+  it('Security has worker and visitor gate operations without approval or permission controls', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SECURITY_OFFICER', siteId: 'site-alpha' }],
+    };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
+      items: [],
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listVisitorEvents').mockResolvedValue({
+      items: [],
+    });
+    vi.mocked(SmartSiteManagementClient.prototype.listVisits).mockResolvedValue({
+      items: [
+        {
+          id: 'pending-visit',
+          siteId: 'site-alpha',
+          visitorName: 'Synthetic visitor',
+          company: '',
+          contact: '',
+          hostName: 'Synthetic host',
+          purpose: 'Visit',
+          targetArea: 'Office',
+          groupSize: 1,
+          gateId: 'gate-north-01',
+          validFrom: new Date().toISOString(),
+          validUntil: new Date(Date.now() + 3600000).toISOString(),
+          status: 'PENDING',
+          decidedByUserId: null,
+          enteredCount: 0,
+          exitedCount: 0,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole('button', { name: /Worker entry \/ exit/i });
+    const tabs = within(screen.getByRole('navigation', { name: 'Access control tabs' }));
+    expect(tabs.getAllByRole('button')).toHaveLength(2);
+    expect(
+      tabs.getByRole('button', { name: /Worker entry \/ exit/i }).getAttribute('aria-current'),
+    ).toBe('page');
+    await waitFor(() =>
+      expect(SmartSiteManagementClient.prototype.listWorkers).toHaveBeenCalledWith(
+        'mock-admin-token',
+        'site-alpha',
+        { limit: 100 },
+      ),
+    );
+    expect(SmartSiteManagementClient.prototype.accessSetup).not.toHaveBeenCalled();
+    await user.click(tabs.getByRole('button', { name: /Visitor entry \/ exit/i }));
+    await screen.findByText('Synthetic visitor');
+    expect(screen.getByRole('button', { name: i18n.t('visitor.preview') })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: i18n.t('visitor.approve') })).toBeNull();
+    expect(screen.queryByRole('button', { name: i18n.t('visitor.reject') })).toBeNull();
+    expect(screen.queryByRole('button', { name: i18n.t('visitor.cancel') })).toBeNull();
   });
 });

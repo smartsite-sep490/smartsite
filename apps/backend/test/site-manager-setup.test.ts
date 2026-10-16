@@ -1,3 +1,4 @@
+import { AdminGuard } from '../src/modules/auth/user-auth.guard.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -54,11 +55,12 @@ test('all setup provisioning HTTP routes use the scoped guard', () => {
   for (const controller of [SiteRepresentativesController]) {
     assert.ok(Reflect.getMetadata(GUARDS_METADATA, controller).includes(SiteManagerGuard));
   }
-  for (const method of [
-    'create',
-    'assignRepresentative',
-    'listRepresentativeAssignments',
-  ] as const) {
+  assert.ok(
+    Reflect.getMetadata(GUARDS_METADATA, ContractorsController.prototype.create).includes(
+      AdminGuard,
+    ),
+  );
+  for (const method of ['assignRepresentative', 'listRepresentativeAssignments'] as const) {
     assert.ok(
       Reflect.getMetadata(GUARDS_METADATA, ContractorsController.prototype[method]).includes(
         SiteManagerGuard,

@@ -54,7 +54,7 @@ export class SafetyChecklists1792195200000 implements MigrationInterface {
   ALTER TABLE safety_workflow_audit ADD CONSTRAINT safety_workflow_audit_resource_type_check CHECK(resource_type IN ('INCIDENT','SAFETY_TASK','CHECKLIST'));
   ALTER TABLE user_notification DROP CONSTRAINT chk_notification_request_type,DROP CONSTRAINT chk_notification_role,DROP CONSTRAINT chk_notification_event;
   ALTER TABLE user_notification ADD CONSTRAINT chk_notification_request_type CHECK(request_type IN ('CHANGE','SWAP','SAFETY','ATTENDANCE','SCHEDULE','CHECKLIST'));
-  ALTER TABLE user_notification ADD CONSTRAINT chk_notification_role CHECK((recipient_role='WORKER' AND worker_id IS NOT NULL) OR (recipient_role IN ('CONTRACTOR_REPRESENTATIVE','SAFETY_OFFICER') AND worker_id IS NULL));
+  ALTER TABLE user_notification ADD CONSTRAINT chk_notification_role CHECK((recipient_role='WORKER' AND worker_id IS NOT NULL) OR (recipient_role IN ('CONTRACTOR_REPRESENTATIVE','SAFETY_OFFICER','SITE_MANAGER') AND worker_id IS NULL));
   ALTER TABLE user_notification ADD CONSTRAINT chk_notification_event CHECK(event IN ('CHANGE_REQUESTED','SWAP_REQUESTED','SWAP_CONFIRMED','SWAP_DECLINED','REQUEST_APPLIED','REQUEST_REJECTED','REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','ABSENT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED','CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED'));
   ALTER TABLE user_notification ADD CONSTRAINT chk_notification_checklist_target CHECK(
     (request_type<>'CHECKLIST' AND event NOT IN ('CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED')) OR
@@ -89,7 +89,7 @@ export class SafetyChecklists1792195200000 implements MigrationInterface {
    ALTER TABLE user_notification DROP CONSTRAINT chk_notification_checklist_target;
    ALTER TABLE user_notification DROP CONSTRAINT chk_notification_request_type,DROP CONSTRAINT chk_notification_role,DROP CONSTRAINT chk_notification_event;
    ALTER TABLE user_notification ADD CONSTRAINT chk_notification_request_type CHECK(request_type IN ('CHANGE','SWAP','SAFETY','ATTENDANCE','SCHEDULE'));
-   ALTER TABLE user_notification ADD CONSTRAINT chk_notification_role CHECK((recipient_role='WORKER' AND worker_id IS NOT NULL) OR (recipient_role='CONTRACTOR_REPRESENTATIVE' AND worker_id IS NULL));
+   ALTER TABLE user_notification ADD CONSTRAINT chk_notification_role CHECK((recipient_role='WORKER' AND worker_id IS NOT NULL) OR (recipient_role IN ('CONTRACTOR_REPRESENTATIVE','SITE_MANAGER') AND worker_id IS NULL));
    ALTER TABLE user_notification ADD CONSTRAINT chk_notification_event CHECK(event IN ('CHANGE_REQUESTED','SWAP_REQUESTED','SWAP_CONFIRMED','SWAP_DECLINED','REQUEST_APPLIED','REQUEST_REJECTED','REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','ABSENT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED'));
    ALTER TABLE safety_workflow_audit DROP CONSTRAINT safety_workflow_audit_resource_type_check;
    ALTER TABLE safety_workflow_audit ADD CONSTRAINT safety_workflow_audit_resource_type_check CHECK(resource_type IN ('INCIDENT','SAFETY_TASK'));

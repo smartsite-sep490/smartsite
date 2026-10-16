@@ -35,7 +35,8 @@ import { pagination } from '../../common/http/pagination.js';
 import type { CameraEntity } from '../../database/entities/camera.entity.js';
 import type { CameraObservationRegionEntity } from '../../database/entities/camera-observation-region.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
-import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
 import {
   CameraConfigurationService,
   CreateCameraCommand,
@@ -81,7 +82,7 @@ function regionResponse(region: CameraObservationRegionEntity) {
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard, SiteConfigurationGuard)
 @Controller('sites/:siteId/cameras')
 export class CamerasController {
   private readonly logger = new Logger(CamerasController.name);

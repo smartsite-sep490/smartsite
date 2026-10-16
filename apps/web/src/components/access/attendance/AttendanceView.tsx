@@ -349,22 +349,22 @@ export function AttendanceView({
 
       // Generate CSV content
       const headers = [
-        'Worker Code',
-        'Worker Name',
-        'Today Status',
-        'Total Minutes',
-        'Regular Minutes',
-        'Overtime Minutes',
-        'Provisional Minutes',
-        'Days Present',
-        'Days Required',
-        'Attendance Rate (%)',
+        tr('attendance_export.worker_code'),
+        tr('attendance_export.worker_name'),
+        tr('attendance_export.today_status'),
+        tr('attendance_export.total_minutes'),
+        tr('attendance_export.regular_minutes'),
+        tr('attendance_export.overtime_minutes'),
+        tr('attendance_export.provisional_minutes'),
+        tr('attendance_export.days_present'),
+        tr('attendance_export.days_required'),
+        tr('attendance_export.attendance_rate'),
       ];
 
       const rows = allWorkers.map((w) => [
         `"${w.workerCode.replace(/"/g, '""')}"`,
         `"${w.workerName.replace(/"/g, '""')}"`,
-        `"${w.todayStatus}"`,
+        `"${localizedLabel(w.todayStatus)}"`,
         w.totalMinutes,
         w.regularMinutes,
         w.overtimeMinutes,
@@ -375,7 +375,7 @@ export function AttendanceView({
       ]);
 
       const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);

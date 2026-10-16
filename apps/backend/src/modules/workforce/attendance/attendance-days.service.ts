@@ -254,7 +254,12 @@ export class AttendanceDaysService {
       try {
         const access = await attendanceAccess(this.source.manager, actor, worker);
         visible.push(worker);
-        if (access === 'REPRESENTATIVE') canReview = true;
+        try {
+          await attendanceAccess(this.source.manager, actor, worker, true);
+          canReview = true;
+        } catch (error) {
+          if (!(error instanceof PublicHttpException && error.getStatus() === 403)) throw error;
+        }
         if (access === 'SELF') canRequest = true;
       } catch (error) {
         if (!(error instanceof Error && 'getStatus' in error)) throw error;
@@ -370,6 +375,13 @@ export class AttendanceDaysService {
       .findOneBy({ id: day.workerId, siteId });
     if (!worker) missing();
     const access = await attendanceAccess(this.source.manager, actor, worker);
+    let canReview = false;
+    try {
+      await attendanceAccess(this.source.manager, actor, worker, true);
+      canReview = true;
+    } catch (error) {
+      if (!(error instanceof PublicHttpException && error.getStatus() === 403)) throw error;
+    }
     const schedule = day.scheduleId
       ? await this.source.getRepository(WorkerScheduleEntity).findOneBy({
           id: day.scheduleId,
@@ -433,8 +445,7 @@ export class AttendanceDaysService {
         rawOutAt:
           rawEvents.find((event) => event.id === s.checkOutEventId)?.occurredAt.toISOString() ??
           null,
-        canIgnoreDuplicate:
-          access === 'REPRESENTATIVE' && worker.userId !== actor.id && this.duplicate(s),
+        canIgnoreDuplicate: canReview && worker.userId !== actor.id && this.duplicate(s),
         ignoredBy: s.ignoredBy,
         ignoredAt: s.ignoredAt?.toISOString() ?? null,
         ignoreReason: s.ignoreReason,
