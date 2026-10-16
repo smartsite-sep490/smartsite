@@ -37,7 +37,7 @@ const policy = {
   restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
   requiredPpe: ['SAFETY_VEST', 'HARD_HAT'],
 };
-async function fixture(role = 'ADMIN') {
+async function fixture(role = 'SITE_MANAGER') {
   const actorUserId = randomUUID(),
     siteId = randomUUID();
   await db.query(
@@ -83,7 +83,7 @@ async function attribution(id: string, operation: string, witnessed: true | null
   return row;
 }
 test('existing Site create binds a global Admin to its initial main policy fact', async () => {
-  const f = await fixture(),
+  const f = await fixture('ADMIN'),
     site = await f.sites.create({ code: randomUUID(), name: 'New Site' }, f.ctx);
   assert.equal((await attribution(site.id, 'SITE_CREATE')).actor_user_id, f.actorUserId);
   assert.equal(
@@ -144,7 +144,7 @@ test('locked policy allows an exact no-op but refuses changed PPE and leaves no 
     commands,
   );
 });
-for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
+for (const role of ['SAFETY_OFFICER', 'WORKER'])
   test(`Site and Zone writes reject current ${role} in the transaction`, async () => {
     const f = await fixture(role);
     await assert.rejects(
@@ -153,6 +153,15 @@ for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
     );
     await assert.rejects(zone(f), status(403));
   });
+test('Site Managers cannot create Sites and global Admin cannot provision Zones', async () => {
+  const manager = await fixture(),
+    admin = await fixture('ADMIN');
+  await assert.rejects(
+    manager.sites.create({ code: randomUUID(), name: 'Denied' }, manager.ctx),
+    status(403),
+  );
+  await assert.rejects(zone(admin), status(403));
+});
 test('Site and Zone reauthentication refuses a revoked session before any metadata is committed', async () => {
   const f = await fixture();
   let claims = 0;
@@ -169,13 +178,14 @@ test('Site and Zone reauthentication refuses a revoked session before any metada
   assert.equal(claims, 2);
 });
 test('partial installed journal refuses Site and Zone creation', async () => {
-  const f = await fixture();
+  const f = await fixture(),
+    admin = await fixture('ADMIN');
   await db.query(
     'ALTER TABLE mf06_authority_commit_witness RENAME TO test_metadata_hidden_witness',
   );
   try {
     await assert.rejects(
-      f.sites.create({ code: randomUUID(), name: 'Denied' }, f.ctx),
+      admin.sites.create({ code: randomUUID(), name: 'Denied' }, admin.ctx),
       status(503),
     );
     await assert.rejects(zone(f), status(503));
@@ -186,13 +196,14 @@ test('partial installed journal refuses Site and Zone creation', async () => {
   }
 });
 test('disabled owning capture triggers refuse metadata writes', async () => {
-  const f = await fixture();
+  const f = await fixture(),
+    admin = await fixture('ADMIN');
   await db.query(
     'ALTER TABLE site DISABLE TRIGGER trg_mf06_capture_site;ALTER TABLE zone DISABLE TRIGGER trg_mf06_capture_zone',
   );
   try {
     await assert.rejects(
-      f.sites.create({ code: randomUUID(), name: 'Denied' }, f.ctx),
+      admin.sites.create({ code: randomUUID(), name: 'Denied' }, admin.ctx),
       status(503),
     );
     await assert.rejects(zone(f), status(503));
@@ -310,7 +321,23 @@ async function withApi(
   }
 }
 
-test('actual AppModule Site and Zone HTTP writes bind the bearer actor inside all three transactions', async () => {
+test('actual AppModule Site HTTP writes bind the global Admin bearer actor inside the transaction', async () => {
+  const f = await fixture('ADMIN');
+  await withApi(f, async (request, guards) => {
+    let claims = 0;
+    const original = guards.sites.authenticateRequest.bind(guards.sites);
+    guards.sites.authenticateRequest = async (r, manager) => {
+      if (manager) claims++;
+      await original(r, manager);
+    };
+    const created = await request('/sites', { code: randomUUID(), name: 'HTTP synthetic Site' });
+    assert.equal(created.status, 201);
+    const site = (await created.json()) as { id: string };
+    assert.equal((await attribution(site.id, 'SITE_CREATE')).actor_user_id, f.actorUserId);
+    assert.equal(claims, 1);
+  });
+});
+test('actual AppModule Zone HTTP writes bind the assigned Manager bearer actor inside both transactions', async () => {
   const f = await fixture();
   await withApi(f, async (request, guards) => {
     let claims = 0;
@@ -324,11 +351,7 @@ test('actual AppModule Site and Zone HTTP writes bind the bearer actor inside al
         await original(r, manager);
       };
     }
-    const created = await request('/sites', { code: randomUUID(), name: 'HTTP synthetic Site' });
-    assert.equal(created.status, 201);
-    const site = (await created.json()) as { id: string };
-    assert.equal((await attribution(site.id, 'SITE_CREATE')).actor_user_id, f.actorUserId);
-    const root = `/sites/${site.id}/zones`;
+    const root = `/sites/${f.siteId}/zones`;
     const linked = await request(root, {
       code: randomUUID(),
       name: 'HTTP synthetic Zone',
@@ -345,14 +368,14 @@ test('actual AppModule Site and Zone HTTP writes bind the bearer actor inside al
     );
     assert.equal(updated.status, 200);
     assert.equal((await attribution(z.id, 'ZONE_POLICY_UPDATE')).actor_user_id, f.actorUserId);
-    assert.equal(claims, 3);
+    assert.equal(claims, 2);
   });
 });
 
 for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as const)
   test(`actual HTTP logout before ${target} transaction claim returns 401 without committing metadata or an orphan command`, async () => {
-    const f = await fixture(),
-      z = await zone(f);
+    const f = await fixture(target === 'SITE_CREATE' ? 'ADMIN' : 'SITE_MANAGER'),
+      z = target === 'SITE_CREATE' ? null : await zone(f);
     await withApi(f, async (request, guards, logout) => {
       const guard = target === 'SITE_CREATE' ? guards.sites : guards.zones;
       let signal!: () => void, release!: () => void;
@@ -378,7 +401,7 @@ for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as con
           : target === 'ZONE_CREATE'
             ? request(`/sites/${f.siteId}/zones`, { code, name: 'Held Zone', ...policy })
             : request(
-                `/sites/${f.siteId}/zones/${z.id}/policy`,
+                `/sites/${f.siteId}/zones/${z!.id}/policy`,
                 { ...policy, requiredPpe: [] },
                 'PATCH',
               );
@@ -405,10 +428,11 @@ for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as con
         (await db.query('SELECT count(*)::int AS n FROM zone WHERE code=$1', [code]))[0].n,
         0,
       );
-      assert.deepEqual((await f.zones.get(f.siteId, z.id)).requiredPpe, [
-        'HARD_HAT',
-        'SAFETY_VEST',
-      ]);
+      if (z)
+        assert.deepEqual((await f.zones.get(f.siteId, z.id)).requiredPpe, [
+          'HARD_HAT',
+          'SAFETY_VEST',
+        ]);
       assert.equal(
         (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
         count,
@@ -419,16 +443,20 @@ for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as con
 test('main metadata duplicate codes and wrong Site policy writes retain existing conflict/scope behavior', async () => {
   const f = await fixture(),
     z = await zone(f);
-  const site = await f.sites.create({ code: randomUUID(), name: 'Unique Site' }, f.ctx);
+  const admin = await fixture('ADMIN');
+  const site = await admin.sites.create({ code: randomUUID(), name: 'Unique Site' }, admin.ctx);
   const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
-  await assert.rejects(f.sites.create({ code: site.code, name: 'Duplicate' }, f.ctx), status(409));
+  await assert.rejects(
+    admin.sites.create({ code: site.code, name: 'Duplicate' }, admin.ctx),
+    status(409),
+  );
   await assert.rejects(
     f.zones.create(f.siteId, { code: z.code, name: 'Duplicate', ...policy }, f.ctx),
     status(409),
   );
   await assert.rejects(
     f.zones.updatePolicy(site.id, z.id, { ...policy, requiredPpe: [] }, f.ctx),
-    status(404),
+    status(403),
   );
   assert.equal(await f.zones.referenceName(site.id, z.id), null);
   assert.equal(await f.zones.referenceName(f.siteId, null), null);
@@ -440,24 +468,28 @@ test('main metadata duplicate codes and wrong Site policy writes retain existing
 });
 
 test('postcommit metadata witness failure keeps committed DTO successful while historical proof remains unconfirmed', async () => {
-  const f = await fixture();
+  const f = await fixture(),
+    admin = await fixture('ADMIN');
   await db.query(
     "CREATE FUNCTION test_metadata_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic witness failure';END $$;CREATE TRIGGER test_metadata_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_metadata_witness_failure()",
   );
   try {
-    const site = await f.sites.create({ code: randomUUID(), name: 'Committed Site' }, f.ctx);
+    const site = await admin.sites.create(
+      { code: randomUUID(), name: 'Committed Site' },
+      admin.ctx,
+    );
     const z = await f.zones.create(
-      site.id,
+      f.siteId,
       { code: randomUUID(), name: 'Committed Zone', ...policy },
       f.ctx,
     );
-    for (const [id, op] of [
-      [site.id, 'SITE_CREATE'],
-      [z.id, 'ZONE_CREATE'],
+    for (const [id, op, actor] of [
+      [site.id, 'SITE_CREATE', admin.actorUserId],
+      [z.id, 'ZONE_CREATE', f.actorUserId],
     ]) {
       const row = await attribution(id!, op!, null);
       assert.equal(row.witnessed, null);
-      assert.equal(row.actor_user_id, f.actorUserId);
+      assert.equal(row.actor_user_id, actor);
     }
   } finally {
     await db.query(

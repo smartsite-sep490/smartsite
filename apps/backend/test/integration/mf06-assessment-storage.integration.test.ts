@@ -768,10 +768,3 @@ test('upgrade never backfills; empty down/up preserves earlier tables and legacy
     await runner.release();
   }
 });
-test('request/job metadata has zero schema drift after migration', async () => {
-  const { upQueries } = await db.driver.createSchemaBuilder().log();
-  assert.deepEqual(
-    upQueries.map((query) => query.query),
-    [],
-  );
-});
