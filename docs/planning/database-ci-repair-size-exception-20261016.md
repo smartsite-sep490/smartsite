@@ -18,6 +18,7 @@ Existing oversized files grow only at the following repaired boundaries:
 | test/mf06-assessment-entities.test.ts |750→752| Mechanical wrapping after longer business class names |
 | test/integration/mf01-onboarding.integration.test.ts |1457→1475| Existing end-to-end fixture calls the attributed Main creation/assignment commands |
 | test/integration/mf06-assessment-store.integration.test.ts |1284→1288| Explicitly register frozen B2 projections in the historical fixture that installs B2 |
+| test/integration/operational-recovery.integration.test.ts |995→1011| Restore fixture uses a real scoped Site Manager and preserves the Admin-denied control |
 
 The new production guard is a separate small file. No test assertions were
 compressed or removed to meet a line limit; frozen migration/entity snapshots

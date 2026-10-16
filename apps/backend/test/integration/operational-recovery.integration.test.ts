@@ -386,8 +386,8 @@ function recoveryScenario(main37 = false, linux = false) {
       token,
     );
     token = await login(changed);
-    const create = async (route: string, body: unknown) =>
-      (await request(route, 201, body, token)).json();
+    const create = async (route: string, body: unknown, actorToken = token) =>
+      (await request(route, 201, body, actorToken)).json();
     const site = await create('/sites', { code: username, name: 'Synthetic recovery Site' });
     const otherSite = await create('/sites', {
       code: `${username}-other`,
@@ -398,13 +398,29 @@ function recoveryScenario(main37 = false, linux = false) {
       externalId: username,
       name: 'Synthetic metadata Camera',
     });
-    const zone = await create(`/sites/${site.id}/zones`, {
+    const managerUsername = `${username}-manager`;
+    await create('/users', {
+      username: managerUsername,
+      displayName: 'Synthetic recovery Site Manager',
+      temporaryPassword: initial,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+    });
+    const managerLogin = await request('/auth/login', 200, {
+      username: managerUsername,
+      password: initial,
+      clientType: 'WEB',
+    });
+    const managerToken = (await managerLogin.json()).accessToken;
+    secrets.push(managerToken);
+    const zoneInput = {
       code: 'RESTORE',
       name: 'Synthetic recovery Zone',
       type: 'STANDARD',
       restrictionPolicy: 'NONE',
       requiredPpe: ['HARD_HAT'],
-    });
+    };
+    await request(`/sites/${site.id}/zones`, 403, zoneInput, token);
+    const zone = await create(`/sites/${site.id}/zones`, zoneInput, managerToken);
     const { region } = await create(`/sites/${site.id}/cameras/${camera.id}/regions`, {
       zoneId: zone.id,
       expectedConfigurationVersion: 1,
