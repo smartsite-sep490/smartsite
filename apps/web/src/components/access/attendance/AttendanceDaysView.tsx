@@ -1,11 +1,11 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { localizedLabel } from '../../../i18n/labels';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { loadAllPages } from '../../workforce/load-all-pages';
 import {
   attendanceLabel,
@@ -141,7 +141,7 @@ export function AttendanceDaysView({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');

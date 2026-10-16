@@ -38,7 +38,7 @@ function setup() {
 }
 
 async function fill(user: ReturnType<typeof userEvent.setup>, confirmation = 'NewDemo2026!') {
-  await user.type(screen.getByLabelText('Current temporary password'), 'TempDemo2026!');
+  await user.type(screen.getByLabelText('Current password'), 'TempDemo2026!');
   await user.type(screen.getByLabelText('New password', { exact: true }), 'NewDemo2026!');
   await user.type(screen.getByLabelText('Confirm new password'), confirmation);
 }
@@ -68,7 +68,7 @@ it('rejects mismatched confirmation before submitting credentials', async () => 
   cache.clear();
 });
 
-it('keeps the account blocked when the backend rejects the current password', async () => {
+it('keeps the session when the backend rejects the current password', async () => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'changePassword').mockRejectedValue(
     new ApiError('http', 'Unauthorized', 401),
   );
@@ -82,6 +82,19 @@ it('keeps the account blocked when the backend rejects the current password', as
   cache.clear();
 });
 
+it('reports an unverified password on temporary errors without clearing the session or form', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'changePassword').mockRejectedValue(
+    new ApiError('network', 'Offline'),
+  );
+  const { user, cache, setAccessToken } = setup();
+  await fill(user);
+  await user.click(screen.getByRole('button', { name: 'Save new password' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('Could not verify');
+  expect(setAccessToken).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('Current password') as HTMLInputElement).value).toBe('TempDemo2026!');
+  cache.clear();
+});
+
 it('shows password policy errors from the backend and allows correction', async () => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'changePassword').mockRejectedValue(
     new ApiError('http', 'Password must include an uppercase letter', 400),
@@ -89,7 +102,7 @@ it('shows password policy errors from the backend and allows correction', async 
   const { user, cache, onComplete } = setup();
   await fill(user);
   await user.click(screen.getByRole('button', { name: 'Save new password' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('uppercase letter');
+  expect((await screen.findByRole('alert')).textContent).toContain('Check the entered information');
   expect(screen.getByRole('button', { name: 'Save new password' }).hasAttribute('disabled')).toBe(
     false,
   );

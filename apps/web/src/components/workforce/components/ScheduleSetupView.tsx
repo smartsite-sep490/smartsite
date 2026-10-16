@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { ScheduleAssignmentForm } from './ScheduleAssignmentForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { ApiError } from '@smartsite/api-client';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import {
   IconCalendar,
   IconClock,
@@ -79,7 +79,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const { accessToken } = useAuth();
   const { data: currentUser } = useCurrentUser(apiUrl);
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
 
   const roleAssignments = useMemo(
     () => currentUser?.roleAssignments ?? [],

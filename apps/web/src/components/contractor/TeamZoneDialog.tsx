@@ -1,10 +1,10 @@
+import { useManagementClient } from '../../features/auth/auth-session';
 import { localizedError } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { Dialog, SmartDatePicker } from '../ui';
 export function TeamZoneDialog({
   apiUrl,
@@ -27,7 +27,7 @@ export function TeamZoneDialog({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]),
+  const client = useManagementClient(apiUrl),
     cache = useQueryClient();
   const key = ['team-zones', apiUrl, userId, siteId, contractorId, teamId];
   const data = useQuery({

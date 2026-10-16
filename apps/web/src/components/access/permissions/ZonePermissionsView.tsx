@@ -1,10 +1,11 @@
+import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  SmartSiteManagementClient,
   type Page,
   type WorkerResponse,
   type ZoneAccessEffect,
@@ -91,7 +92,7 @@ export function ZonePermissionsView({
 }: ZonePermissionsViewProps) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const [requestedZoneId, setRequestedZoneId] = useState('');
   const [decisionStatus, setDecisionStatus] = useState<'ALL' | ZoneEntryDecisionStatus>('ALL');

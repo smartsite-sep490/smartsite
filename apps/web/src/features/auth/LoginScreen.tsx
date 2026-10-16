@@ -6,7 +6,8 @@ import React, { useRef, useState } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { useLogin } from './auth-session';
-import { IconArrowRight, IconAlertTriangle, IconUser, IconKey } from '../../components/icons';
+import { AuthErrorNotice } from './AuthErrorNotice';
+import { IconArrowRight, IconUser, IconKey } from '../../components/icons';
 
 interface LoginScreenProps {
   notice?: string;
@@ -22,7 +23,6 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -31,148 +31,15 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
 
   useGSAP(
     () => {
-      // Start as a small square (solid, no opacity 0, to make morph seamless)
-      gsap.set(panelRef.current, { width: 240, height: 240, opacity: 1, scale: 1 });
-      gsap.set('.login-form-content', { opacity: 0, scale: 0.95 });
-      gsap.set('.login-loading-content', { display: 'none' });
-
-      const tl = gsap.timeline({ delay: 0.01 });
-      tl.to(panelRef.current, { width: 440, height: 560, duration: 0.5, ease: 'back.out(1.2)' }).to(
-        '.login-form-content',
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 0.3,
-        },
-        '-=0.1',
-      );
+      gsap.fromTo(panelRef.current, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3 });
     },
     { scope: containerRef },
   );
 
-  const handleNavigateRegister = () => {
-    const tl = gsap.timeline();
-    tl.to('.login-form-content', { opacity: 0, scale: 0.95, duration: 0.2 }).to(
-      panelRef.current,
-      {
-        width: 240,
-        height: 240,
-        duration: 0.4,
-        ease: 'back.in(1.2)',
-        onComplete: onNavigateToRegister,
-      },
-      '-=0.1',
-    );
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage('');
-
-    const tl = gsap.timeline();
-
-    // Morph into loading state
-    tl.to('.login-form-content', {
-      opacity: 0,
-      scale: 0.95,
-      duration: 0.3,
-      onComplete: () => {
-        gsap.set('.login-form-content', { display: 'none' });
-        gsap.set('.login-loading-content', { display: 'flex' });
-      },
-    })
-      .to(
-        panelRef.current,
-        {
-          width: 240,
-          height: 240,
-          duration: 0.7,
-          ease: 'back.inOut(1.2)',
-        },
-        'morph',
-      )
-      .to(
-        '.login-loading-content',
-        {
-          opacity: 1,
-          scale: 1,
-          duration: 0.4,
-          ease: 'power2.out',
-        },
-        'morph+=0.4',
-      );
-
-    loginMutation.mutate(
-      { username, password },
-      {
-        onSuccess: () => {
-          gsap.to(panelRef.current, {
-            scale: 1.1,
-            opacity: 0,
-            duration: 0.5,
-            ease: 'power3.in',
-            delay: 0.5, // let them see the success glow briefly
-          });
-          // Turn orb to green/success
-          gsap.to('.orb-core', {
-            backgroundColor: '#10B981',
-            boxShadow: '0 0 40px 20px rgba(16,185,129,0.4)',
-          });
-        },
-        onError: (err: unknown) => {
-          let msg = tr('login_screen.an_unexpected_error_occurred');
-          const errorObj = err as { status?: number; message?: string; type?: string };
-          if (errorObj?.status === 401) {
-            msg = tr('common.invalid_credentials');
-          } else if (errorObj?.status === 429) {
-            msg = tr('common.too_many_attempts');
-          } else if (errorObj?.message === 'Network Error' || errorObj?.type === 'network') {
-            msg = tr('common.connection_failed');
-          }
-
-          setErrorMessage(msg);
-
-          // Shake effect on error
-          gsap.fromTo(
-            panelRef.current,
-            { x: -10 },
-            { x: 0, duration: 0.4, ease: 'elastic.out(2, 0.2)' },
-          );
-
-          // Revert back to form
-          const revertTl = gsap.timeline({ delay: 0.5 });
-          revertTl
-            .to('.login-loading-content', {
-              opacity: 0,
-              scale: 0.9,
-              duration: 0.3,
-              onComplete: () => {
-                gsap.set('.login-loading-content', { display: 'none' });
-                gsap.set('.login-form-content', { display: 'flex' });
-              },
-            })
-            .to(
-              panelRef.current,
-              {
-                width: 440,
-                height: 560,
-                duration: 0.5,
-                ease: 'back.out(1.2)',
-              },
-              'revert',
-            )
-            .to(
-              '.login-form-content',
-              {
-                opacity: 1,
-                scale: 1,
-                duration: 0.4,
-              },
-              'revert+=0.2',
-            );
-        },
-      },
-    );
+    if (loginMutation.isPending) return;
+    loginMutation.mutate({ username: username.trim(), password });
   };
 
   return (
@@ -207,7 +74,7 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
         ref={panelRef}
         data-auth-panel
         className="relative z-10 filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-center mx-4"
-        style={{ maxWidth: 'calc(100vw - 32px)', minHeight: 600 }}
+        style={{ width: 440, maxWidth: 'calc(100vw - 32px)', minHeight: 600 }}
       >
         {/* Outer Thin Border Layer */}
         <div
@@ -241,7 +108,7 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
         />
 
         {/* --- FORM STATE --- */}
-        <div className="login-form-content absolute inset-0 flex flex-col p-10 justify-center">
+        <div className="login-form-content absolute inset-0 flex flex-col p-6 sm:p-10 justify-center">
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
@@ -263,46 +130,65 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5 flex-1 flex flex-col justify-center">
+          <form
+            onSubmit={handleSubmit}
+            aria-busy={loginMutation.isPending}
+            className="space-y-5 flex-1 flex flex-col justify-center"
+          >
             <div className="space-y-4">
               {/* Username Input */}
               <div>
-                <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">
+                <label
+                  htmlFor="login-username"
+                  className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest"
+                >
                   {tr('common.username')}
                 </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconUser className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
+                    id="login-username"
+                    autoComplete="username"
+                    maxLength={64}
+                    disabled={loginMutation.isPending}
                     type="text"
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder={tr('common.enter_your_username')}
-                    className="bg-transparent text-white w-full !outline-none focus:outline-none focus-visible:!outline-none text-sm placeholder:text-white/20"
+                    className="bg-transparent text-white w-full outline-none focus-visible:ring-2 focus-visible:ring-[#F66B17] text-sm placeholder:text-white/20"
                   />
                 </div>
               </div>
 
               {/* Password Input */}
               <div>
-                <label className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest">
+                <label
+                  htmlFor="login-password"
+                  className="block text-[11px] font-bold text-white/60 mb-2 uppercase tracking-widest"
+                >
                   {tr('common.password')}
                 </label>
                 <div className="relative flex items-center bg-black/40 border border-white/10 rounded-xl pl-4 pr-3 py-3.5 focus-within:border-[#F66B17]/60 transition-colors">
                   <IconKey className="w-4 h-4 text-white/30 mr-3 shrink-0" />
                   <input
+                    id="login-password"
+                    autoComplete="current-password"
+                    maxLength={128}
+                    disabled={loginMutation.isPending}
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="bg-transparent text-white w-full pr-8 !outline-none focus:outline-none focus-visible:!outline-none text-sm placeholder:text-white/20"
+                    className="bg-transparent text-white w-full pr-8 outline-none focus-visible:ring-2 focus-visible:ring-[#F66B17] text-sm placeholder:text-white/20"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors focus:outline-none cursor-pointer"
-                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors focus-visible:outline-2 focus-visible:outline-[#F66B17] cursor-pointer"
+                    aria-label={tr(showPassword ? 'auth.password.hide' : 'auth.password.show')}
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? (
                       <svg
@@ -348,20 +234,16 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
                 {localizeMessage(notice)}
               </p>
             )}
-            {errorMessage && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                <IconAlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                <p className="text-red-400 text-xs font-medium">{localizeMessage(errorMessage)}</p>
-              </div>
-            )}
+            <AuthErrorNotice error={loginMutation.error} />
 
             <div className="pt-2">
               <button
                 type="submit"
+                disabled={loginMutation.isPending}
                 className="group relative w-full flex items-center justify-center gap-2 py-4 bg-[#F66B17] hover:bg-[#D94E07] transition-all rounded-xl overflow-hidden active:scale-[0.98] shadow-[0_0_20px_rgba(246,107,23,0.3)]"
               >
                 <span className="font-bold text-white tracking-wide text-sm">
-                  {tr('common.sign_in_bcc0bc')}
+                  {tr(loginMutation.isPending ? 'auth.login.busy' : 'common.sign_in_bcc0bc')}
                 </span>
                 <IconArrowRight className="w-4 h-4 text-white transition-transform group-hover:translate-x-1" />
               </button>
@@ -373,31 +255,13 @@ export function LoginScreen({ onBack, onNavigateToRegister, notice }: LoginScree
               </span>{' '}
               <button
                 type="button"
-                onClick={handleNavigateRegister}
+                onClick={onNavigateToRegister}
                 className="text-[#F66B17] text-xs font-bold hover:text-[#D94E07] transition-colors"
               >
-                {tr('common.sign_up')}
+                {tr('auth.registration.title')}
               </button>
             </div>
           </form>
-        </div>
-
-        {/* --- LOADING STATE --- */}
-        <div className="login-loading-content absolute inset-0 flex items-center justify-center">
-          <div className="relative w-full h-full flex items-center justify-center">
-            {/* The wireframe square inside the orb container */}
-            <div className="absolute w-20 h-20 border border-white/10 rounded-2xl" />
-
-            {/* Outer animated rings */}
-            <div className="absolute w-24 h-24 border border-[#F66B17]/20 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
-            <div
-              className="absolute w-32 h-32 border border-[#F66B17]/10 rounded-full animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"
-              style={{ animationDelay: '1s' }}
-            />
-
-            {/* The glowing orb */}
-            <div className="orb-core relative w-8 h-8 bg-[#F66B17] rounded-full shadow-[0_0_40px_20px_rgba(246,107,23,0.4)] animate-pulse" />
-          </div>
         </div>
       </div>
     </div>

@@ -12,7 +12,8 @@ import {
 import { WorkforceView } from '../components/WorkforceView';
 
 let user: Pick<AccountResponse, 'id' | 'roleAssignments' | 'mustChangePassword'>;
-vi.mock('../../../features/auth/auth-session', () => ({
+vi.mock('../../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'synthetic-token' }),
   useCurrentUser: () => ({ data: user, isLoading: false, isError: false }),
 }));

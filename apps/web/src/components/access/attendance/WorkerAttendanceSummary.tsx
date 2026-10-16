@@ -1,6 +1,7 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   IconChevronDown,
@@ -10,7 +11,6 @@ import {
   IconTrendingUp,
   IconAlertTriangle,
 } from '../../icons';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import {
   attendanceDate,
   attendanceHours,
@@ -34,7 +34,7 @@ export function WorkerAttendanceSummary({
   useTranslation();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const scope = [apiUrl, sessionScope, siteId];
   const context = useQuery({
     queryKey: ['attendance-worker-context', ...scope],
@@ -118,7 +118,10 @@ export function WorkerAttendanceSummary({
 
   if (context.isError)
     return (
-      <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700 flex items-center justify-between">
+      <div
+        role="alert"
+        className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700 flex items-center justify-between"
+      >
         <span>{tr('common.work_hours_unavailable')}</span>
         <button
           onClick={() => void context.refetch()}

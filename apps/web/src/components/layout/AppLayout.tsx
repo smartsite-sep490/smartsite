@@ -450,12 +450,16 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               </div>
             </div>
 
+            <button type="button" onClick={() => navigate('/account/password')} className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2" title={tr('auth.password.title')} aria-label={tr('auth.password.title')}>
+              <IconKey className="w-4 h-4" />
+            </button>
             {/* Logout Button */}
             <button
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
               title={tr('common.logout')}
+              aria-label={tr('common.logout')}
             >
               <IconLogOut className="w-4 h-4" />
             </button>

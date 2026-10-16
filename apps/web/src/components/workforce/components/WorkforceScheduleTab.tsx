@@ -1,3 +1,5 @@
+import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +8,6 @@ import { useSearchParams } from 'react-router-dom';
 import { useNotificationRequest } from '../hooks/useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  SmartSiteManagementClient,
   ShiftSwapRequestResponse,
   WorkerScheduleResponse,
 } from '@smartsite/api-client';
@@ -204,7 +205,7 @@ export function WorkforceScheduleTab({
 
   const sessionScope = sessionScopeProp || currentUserId || 'workforce-session';
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [params] = useSearchParams();
   const target = useNotificationRequest(apiUrl, siteId, token);
 

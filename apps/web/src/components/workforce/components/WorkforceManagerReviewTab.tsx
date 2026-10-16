@@ -1,11 +1,12 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
 import { localizeMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useNotificationRequest } from '../hooks/useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type ShiftRequestResponse } from '@smartsite/api-client';
+import { type ShiftRequestResponse } from '@smartsite/api-client';
 import {
   IconUsers,
   IconAlertCircle,
@@ -49,7 +50,7 @@ export function WorkforceManagerReviewTab({
   useTranslation();
 
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const target = useNotificationRequest(apiUrl, siteId, token);
   const [userSubTab, setSubTab] = useState<'pending' | 'history' | null>(null);
   const subTab =

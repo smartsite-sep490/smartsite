@@ -1,3 +1,4 @@
+import { useManagementClient } from '../../features/auth/auth-session';
 import { SafetyOverviewView } from '../safety/SafetyOverviewView';
 import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
 import { AlertWorkContext } from '../safety/AlertWorkContext';
@@ -14,7 +15,6 @@ import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
-  SmartSiteManagementClient,
   type LoginResponse,
   type SafetyAlertResponse,
   type SafetyAlertReviewTargetStatus,
@@ -164,7 +164,7 @@ export function SafetyAlertsView({
 }: SafetyAlertsViewProps) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(
     initialIncidentId

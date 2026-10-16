@@ -1,9 +1,10 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type ZoneResponse } from '@smartsite/api-client';
+import { type ZoneResponse } from '@smartsite/api-client';
 import { loadAllPages } from '../load-all-pages';
 import {
   IconAlertTriangle,
@@ -28,7 +29,7 @@ export function SiteZoneSetup({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['site-setup', apiUrl, userId, 'zones', siteId];
   const zones = useQuery({

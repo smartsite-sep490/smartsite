@@ -7,7 +7,8 @@ import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { ScheduleSetupView } from '../components/ScheduleSetupView';
 
 const session = vi.hoisted(() => ({ role: 'SITE_MANAGER' }));
-vi.mock('../../../features/auth/auth-session', () => ({
+vi.mock('../../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'synthetic-token' }),
   useCurrentUser: () => ({ data: { roleAssignments: [{ role: session.role, siteId: 'site-1' }] } }),
 }));

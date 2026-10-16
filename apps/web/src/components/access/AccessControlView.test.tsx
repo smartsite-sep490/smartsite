@@ -20,7 +20,8 @@ const authSessionMock = vi.hoisted(() => ({
   logout: vi.fn(),
 }));
 
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({
     accessToken: authSessionMock.accessToken,
     setAccessToken: vi.fn(),

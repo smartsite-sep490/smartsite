@@ -18,7 +18,8 @@ vi.mock('@smartsite/api-client', async () => {
   };
 });
 
-vi.mock('./features/auth/auth-session', () => ({
+vi.mock('./features/auth/auth-session', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./features/auth/auth-session')>(),
   useAuth: () => ({
     accessToken: 'test-token',
     isSessionExpired: false,

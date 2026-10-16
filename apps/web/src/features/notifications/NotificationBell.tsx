@@ -5,12 +5,8 @@ import { useEffect, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import {
-  ApiError,
-  SmartSiteManagementClient,
-  type UserNotificationResponse,
-} from '@smartsite/api-client';
-import { useAuth } from '../auth/auth-session';
+import { type UserNotificationResponse } from '@smartsite/api-client';
+import { useManagementClient, useAuth } from '../auth/auth-session';
 import {
   IconBell,
   IconCheck,
@@ -63,8 +59,8 @@ export function NotificationBell({
 }) {
   useTranslation();
 
-  const { accessToken, triggerSessionExpired } = useAuth();
-  const client = new SmartSiteManagementClient(apiUrl);
+  const { accessToken } = useAuth();
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -107,10 +103,6 @@ export function NotificationBell({
       }
     : undefined;
 
-  useEffect(() => {
-    if (query.error instanceof ApiError && query.error.status === 401) triggerSessionExpired();
-  }, [query.error, triggerSessionExpired]);
-
   useEffect(
     () => () => {
       void queryClient.cancelQueries({ queryKey: ['notifications', apiUrl, userId] });
@@ -143,9 +135,6 @@ export function NotificationBell({
       setDeleteMessage(tr('counts.deletedNotifications', { count: result.deleted }));
       await queryClient.resetQueries({ queryKey: key });
     },
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 401) triggerSessionExpired();
-    },
   });
 
   const deleteSingle = useMutation({
@@ -154,9 +143,6 @@ export function NotificationBell({
       setTargetSingleDelete(null);
       setDeleteMessage(tr('common.notification_deleted'));
       await queryClient.resetQueries({ queryKey: key });
-    },
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 401) triggerSessionExpired();
     },
   });
 

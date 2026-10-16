@@ -1,5 +1,6 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type ShiftRequestListOptions } from '@smartsite/api-client';
+import { type ShiftRequestListOptions } from '@smartsite/api-client';
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 
 export function useShiftRequests(
@@ -8,9 +9,10 @@ export function useShiftRequests(
   token: string,
   options: ShiftRequestListOptions,
 ) {
+  const client = useManagementClient(apiUrl);
   return useQuery({
     queryKey: ['shift-requests', apiUrl, siteId, options],
-    queryFn: () => new SmartSiteManagementClient(apiUrl).listShiftRequests(token, siteId, options),
+    queryFn: () => client.listShiftRequests(token, siteId, options),
     refetchInterval: WORKFORCE_POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,

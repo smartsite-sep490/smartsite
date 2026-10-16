@@ -1,11 +1,11 @@
 import { localizedError } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type WorkerResponse } from '@smartsite/api-client';
+import { type WorkerResponse } from '@smartsite/api-client';
 import { WORKER_DEFAULT_TEMPORARY_PASSWORD } from '@smartsite/contracts/management';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import { WorkerEnrollmentView } from '../../access/enrollment/WorkerEnrollmentView';
 import { loadAllPages } from '../load-all-pages';
 import {
@@ -24,7 +24,7 @@ export function WorkerOnboardingView({ apiUrl }: { apiUrl: string }) {
 
   const { accessToken } = useAuth();
   const profile = useCurrentUser(apiUrl);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const user = profile.data;
   const siteIds =
@@ -216,7 +216,7 @@ function WorkerAccountForm({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const options = useQuery({
     queryKey: ['worker-onboarding', apiUrl, sessionScope, siteId, 'contractors'],
@@ -456,7 +456,7 @@ function ContractorWorkerRoster({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState('');
   const workers = useQuery({
@@ -634,7 +634,7 @@ function WorkerProfileForm({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const [original] = useState(worker);
   const [displayName, setDisplayName] = useState(worker.displayName);

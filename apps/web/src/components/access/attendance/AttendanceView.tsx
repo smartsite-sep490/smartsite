@@ -1,3 +1,4 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
@@ -5,7 +6,6 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { AttendanceDaysView } from './AttendanceDaysView';
 import { WorkerAttendanceSummary } from './WorkerAttendanceSummary';
 import { attendanceDate, attendanceLabel } from './attendance-display';
@@ -13,13 +13,7 @@ import { AttendanceSummaryCards } from './AttendanceSummaryCards';
 import { AttendanceWorkersTable } from './AttendanceWorkersTable';
 import { WorkerAttendanceDetailPanel } from './WorkerAttendanceDetailPanel';
 import { SmartDatePicker, SmartTimePicker, Tabs } from '../../ui';
-import {
-  IconSearch,
-  IconRefresh,
-  IconExport,
-  IconCalendar,
-  IconClock,
-} from '../../icons';
+import { IconSearch, IconRefresh, IconExport, IconCalendar, IconClock } from '../../icons';
 import type { AttendanceReportStatus } from '@smartsite/contracts';
 
 function localDateTime(value: string | null | undefined) {
@@ -128,7 +122,7 @@ export function AttendanceView({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const timezone = 'Asia/Ho_Chi_Minh';
 

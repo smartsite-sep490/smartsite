@@ -1,11 +1,12 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
+import { ApiError } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import type {
@@ -104,7 +105,7 @@ export function SecurityGateDeskView({
 }: SecurityGateDeskViewProps) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   // Gate selection & direction
   const [selectedGateId, setSelectedGateId] = useState<string>(gates[0]?.id ?? '');

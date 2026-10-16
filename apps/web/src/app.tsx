@@ -26,6 +26,8 @@ import {
   SessionExpiredModal,
 } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
+import { AuthErrorNotice } from './features/auth/AuthErrorNotice';
+import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
 import { WorkforceView } from './components/workforce/components/WorkforceView';
 import { SiteSetupView } from './components/workforce/components/SiteSetupView';
@@ -49,6 +51,7 @@ interface ProtectedRoutesProps {
 
 function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
   useTranslation();
+  const navigate = useNavigate();
 
   const { accessToken } = useAuth();
   const currentUser = useCurrentUser(apiUrl);
@@ -106,6 +109,18 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             )
           }
         />
+        <Route
+          path="/account/password"
+          element={
+            <ChangePasswordScreen
+              apiUrl={apiUrl}
+              onCancel={() => navigate(`/${defaultAuthTab}`)}
+              onComplete={() =>
+                navigate('/login', { state: { passwordChanged: true }, replace: true })
+              }
+            />
+          }
+        />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
         <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
         <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
@@ -123,6 +138,8 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           path="/zones"
           element={
             <RestrictedZoneView
+              authenticatedSession={profile.data ? { accessToken, user: profile.data } : undefined}
+              onSignOut={() => logout.mutate()}
               apiUrl={apiUrl}
               onNavigate={(tab, context) => onNavigate(tab, context)}
             />
@@ -215,8 +232,16 @@ export function App() {
   useTranslation();
 
   const navigate = useNavigate();
-  const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
-  const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
+  const location = useLocation();
+  const {
+    accessToken,
+    isSessionExpired,
+    dismissSessionExpired,
+    logoutUnconfirmed,
+    passwordChanged,
+  } = useAuth();
+  const restoringSession = useRestoreSession(apiUrl);
+  const isRestoringSession = restoringSession.isLoading;
   const currentUserQuery = useCurrentUser(apiUrl);
   const currentUser = currentUserQuery.data;
 
@@ -251,6 +276,25 @@ export function App() {
       >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
       </div>
+    );
+  }
+
+  if (restoringSession.isError && !accessToken) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <section className="max-w-md space-y-4 rounded-xl border bg-white p-6">
+          <h1 className="font-bold">{tr('auth.session.restore')}</h1>
+          <AuthErrorNotice error={restoringSession.error} />
+          <button
+            type="button"
+            disabled={restoringSession.isFetching}
+            onClick={() => void restoringSession.refetch()}
+            className="rounded-lg bg-[#071A2B] text-white px-4 py-2"
+          >
+            {tr('common.retry')}
+          </button>
+        </section>
+      </main>
     );
   }
 
@@ -303,6 +347,13 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
+                notice={
+                  logoutUnconfirmed
+                    ? tr('auth.session.logoutWarning')
+                    : passwordChanged || location.state?.passwordChanged
+                      ? tr('auth.password.success')
+                      : undefined
+                }
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />
@@ -319,7 +370,6 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <RegisterScreen
-                onRegisterSuccess={() => navigate('/login')}
                 onBackToLogin={() => navigate('/login')}
                 onBackToSite={() => navigate('/')}
               />

@@ -1,10 +1,10 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { SmartDatePicker } from '../../ui';
 import {
   IconAlertTriangle,
@@ -34,7 +34,7 @@ export function ContractorZoneSetup({
 }) {
   useTranslation();
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, userId, siteId, 'access-setup'];
   const setup = useQuery({ queryKey: key, queryFn: () => client.accessSetup(token, siteId) });
