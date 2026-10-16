@@ -6,18 +6,19 @@ The configuration-only website state helper deliberately refuses nonempty busine
 
 ## Profiles and prerequisites
 
-The Backend integration test `test/integration/operational-recovery.integration.test.ts` has two profiles:
+The Backend integration test `test/integration/operational-recovery.integration.test.ts` has three profiles:
 
-- The canonical source-registry profile uses approved MAIN35 plus the four reserved Safety slots (39), including completed synthetic MF06 history and journal/consent storage.
+- The canonical source-registry profile uses all 56 registered migrations, including completed synthetic MF06 history, journal/consent storage, Checklist and team history. This is the current runtime schema.
 - The opt-in MAIN profile loads the exact 35 migrations from approved commit `2e98619ac94be775ef43f4cb3076f00a59b88df1`, then request migration0001 and immutable assessment migration0004. The helper compares every snapshot source with Git and every compiled module with a fresh deterministic transpilation before importing it. This test-only list never changes production registration.
+- The opt-in Linux profile uses the canonical schema and an explicitly pinned qualified Backend image. It verifies the owned container's SIGTERM shutdown separately from Windows process termination. Set `SMARTSITE_TEST_LINUX_RECOVERY_IMAGE` to the inspected immutable image ID; the test checks the image command and ownership before starting it.
 
-Both profiles require `TEST_DATABASE_URL` for the dedicated loopback `smartsite_test` user/database on port5433, and `SMARTSITE_TEST_PG_BIN` pointing to an existing PostgreSQL client binary directory. Do not put credentials in commands, committed env files or reports. The MAIN profile additionally requires `SMARTSITE_TEST_SOURCE_REPO` and `SMARTSITE_TEST_MAIN_SNAPSHOT`, both absolute paths. Missing explicit inputs produce a skipped scenario, not passing recovery evidence.
+All profiles require `TEST_DATABASE_URL` for the dedicated loopback `smartsite_test` user/database on port5433. Supply either `SMARTSITE_TEST_PG_BIN` pointing to an existing PostgreSQL client binary directory, or `SMARTSITE_TEST_PG_CONTAINER` containing the exact 64-character ID of the owned PG18 `postgres-test` container. The container adapter checks Compose ownership, loopback5433 binding, fake test database/account and running state; it accepts only the owned isolated-schema dump/restore arguments. It transfers the archive over stdin/stdout with bounded size and time. Do not put operational credentials in commands, committed env files or reports. The MAIN profile additionally requires `SMARTSITE_TEST_SOURCE_REPO` and `SMARTSITE_TEST_MAIN_SNAPSHOT`, both absolute paths. Missing explicit inputs produce a skipped scenario, not passing recovery evidence.
 
 Compile tests into a fresh exclusive output, with the existing installed workspace dependencies resolvable from that output. Set `TEMP`/`TMP` to the approved task data directory on D. Never overwrite a running website's frozen Backend build or reuse another attempt's outputs. Run the compiled integration file with Node's test runner and retain the command, exit status and unredacted-secret-free result artifacts.
 
 ## What the drill verifies
 
-1. Create and migrate one fresh file-owned `isolated_test_<32hex>` namespace; verify the dedicated URL and its resolved schema. Require `public.app_user` to be absent. This does not assert every public relation is absent.
+1. Create and migrate one fresh file-owned `isolated_test_<32hex>` namespace; verify the dedicated URL and its resolved schema. Verify its `app_user` is a distinct relation from any public preflight fixture. The standard runner may retain frozen Legacy24 tables in public; do not migrate, clear or restore those tables as part of this drill.
 2. Start actual compiled `main.js` with production configuration, no provider overrides, a synthetic account and an empty preview-source map. Create scoped configuration and two synthetic observation/evidence fixtures. These transport inputs are not AI inference or human ground truth.
 3. In the MAIN profile, create a synthetic request, a claimed job, an attached authority artifact and an UNAVAILABLE assessment through the normal guards in one transaction. Verify finalization to `SUCCEEDED`, revision3 and cleared lease. The synthetic artifact declarations do not activate an epoch or prove authority writer coverage.
 4. Stop the owned fixture API and wait for its terminal state before DB/media capture. On Windows this is forced quiescence, not graceful shutdown acceptance. There are no other writers to this fixture. Do not generalize this to a mixed production writer environment.
@@ -30,7 +31,7 @@ Compile tests into a fresh exclusive output, with the existing installed workspa
 
 ## Explicit readiness boundary
 
-The canonical runtime registers39 migrations. The retained MAIN37 predecessor lacks `Mf06MainAuthorityJournal1791590400002` and `SafetyFaceProvenance1791590400003`; its recovery scenario explicitly requires liveness200 and readiness503 before and after restore, with that exact difference recorded. The canonical MAIN39 recovery scenario requires readiness200. Older source24 results belong to their original source commit, not this registry.
+The canonical runtime registers56 migrations. The retained MAIN37 predecessor lacks 19 current migrations, including `Mf06MainAuthorityJournal1791590400002`, `SafetyFaceProvenance1791590400003` and `Mf06TeamAuthorityHistory1792281600000`; its recovery scenario requires liveness200 and readiness503 before and after restore, with the exact registered difference recorded. Both canonical recovery scenarios require readiness200. Older source24 results belong to their original source commit, not this registry.
 
 This negative boundary does not qualify a production MAIN rollout. Do not stamp a missing migration, bypass readiness or register the legacy history on MAIN merely to make a probe pass. The canonical graph preserves all approved MAIN migration bodies and applies additive approved Safety migrations; existing legacy history remains preserved when upgrading a previously migrated database. Migration readiness is separate from writer closure, a trusted authority epoch and deployment acceptance.
 

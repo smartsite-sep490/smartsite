@@ -92,3 +92,9 @@ independent-image, camera-viewpoint, browser or product gates.
 Reviewer/owner: Root; implementation and independent regression workers were actual
 Herdr Agy p7/p5, with p8 independent read-only review. No role grant or Backend
 permission bypass is implied. Context telemetry remains unknown.
+
+## Tuấn Backend MF05/MF06, 16 October
+
+The [scoped Backend exceptions](../operations/mf05-mf06-tuan-backend-report.md#loc-exceptions)
+record baseline/current physical counts, owner, review scope and follow-up for
+bounded authority, transaction, fixture and recovery changes from bundle v4.
