@@ -14,14 +14,16 @@ import {
   ZoneType,
 } from '../../src/database/entities/index.js';
 import { parseNormalizedCapturedAt } from '../../src/integrations/ai/ai-ingestion.service.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
-  if (!dataSource.isInitialized) await dataSource.initialize();
+  if (!dataSource.isInitialized) await isolated.initialize();
   try {
     return await fn(dataSource);
   } finally {
-    if (dataSource.isInitialized) await dataSource.destroy();
+    await isolated.dispose();
   }
 }
 
@@ -36,7 +38,7 @@ test('identity audit migration keeps independent column defaults, exact pointer 
         column_default: string | null;
       }[]
     >(
-      `SELECT table_name,column_name,udt_name,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' AND (table_name='observation_identity_resolution' AND column_name IN ('person_observation_index','revision','current_decision_id','subject_ref','payload_hash')) OR (table_schema='public' AND table_name='observation_identity_decision' AND column_name IN ('expected_revision','revision','worker_id','evidence_index','scope','verification_method')) ORDER BY table_name,column_name`,
+      `SELECT table_name,column_name,udt_name,is_nullable,column_default FROM information_schema.columns WHERE table_schema=current_schema() AND (table_name='observation_identity_resolution' AND column_name IN ('person_observation_index','revision','current_decision_id','subject_ref','payload_hash')) OR (table_schema=current_schema() AND table_name='observation_identity_decision' AND column_name IN ('expected_revision','revision','worker_id','evidence_index','scope','verification_method')) ORDER BY table_name,column_name`,
     );
     assert.deepEqual(
       columns.map((c) =>
@@ -86,7 +88,7 @@ test('foundation migration creates 7 tables with required columns, nullability, 
       'zone',
     ];
     const tables = (await source.query(
-      `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY($1) ORDER BY tablename`,
+      `SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename = ANY($1) ORDER BY tablename`,
       [expectedTables],
     )) as { tablename: string }[];
     assert.deepEqual(
@@ -166,7 +168,7 @@ zone|configuration_locked|bool|NO||||false
       `SELECT table_name, column_name, udt_name, is_nullable,
               character_maximum_length, numeric_precision, numeric_scale, column_default
        FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = ANY($1)
+       WHERE table_schema = current_schema() AND table_name = ANY($1)
        ORDER BY table_name, ordinal_position`,
       [expectedTables],
     )) as Record<string, string | number | null>[];
@@ -196,6 +198,7 @@ test('foundation migration registers exact enum labels in PostgreSQL catalog', a
       `SELECT t.typname, e.enumlabel
        FROM pg_type t
        JOIN pg_enum e ON t.oid = e.enumtypid
+       JOIN pg_namespace n ON n.oid=t.typnamespace AND n.nspname=current_schema()
        WHERE t.typname IN (
          'camera_status', 'zone_type', 'zone_restriction_policy',
          'event_processing_status', 'alert_type', 'alert_status'
@@ -223,7 +226,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
   await withDataSource(async (source) => {
     // 1. Primary Keys
     const pkRows = await source.query(
-      `SELECT conname FROM pg_constraint WHERE contype = 'p' AND connamespace = 'public'::regnamespace ORDER BY conname`,
+      `SELECT conname FROM pg_constraint WHERE contype = 'p' AND connamespace = current_schema()::regnamespace ORDER BY conname`,
     );
     const pkNames = new Set(pkRows.map((r: { conname: string }) => r.conname));
     const expectedPKs = [
@@ -241,7 +244,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
 
     // 2. Unique Constraints
     const uqRows = await source.query(
-      `SELECT conname FROM pg_constraint WHERE contype = 'u' AND connamespace = 'public'::regnamespace ORDER BY conname`,
+      `SELECT conname FROM pg_constraint WHERE contype = 'u' AND connamespace = current_schema()::regnamespace ORDER BY conname`,
     );
     const uqNames = new Set(uqRows.map((r: { conname: string }) => r.conname));
     const expectedUQs = [
@@ -256,7 +259,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
 
     // 3. Check Constraints
     const chkRows = await source.query(
-      `SELECT conname FROM pg_constraint WHERE contype = 'c' AND connamespace = 'public'::regnamespace ORDER BY conname`,
+      `SELECT conname FROM pg_constraint WHERE contype = 'c' AND connamespace = current_schema()::regnamespace ORDER BY conname`,
     );
     const chkNames = new Set(chkRows.map((r: { conname: string }) => r.conname));
     assert.ok(chkNames.has('chk_region_coordinate_space'), 'Missing chk_region_coordinate_space');
@@ -269,7 +272,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
     // 4. Foreign Keys with exact onDelete actions:
     // confdeltype: 'r' = RESTRICT, 'c' = CASCADE, 'n' = SET NULL, 'a' = NO ACTION
     const fkRows = await source.query(
-      `SELECT conname, confdeltype FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace`,
+      `SELECT conname, confdeltype FROM pg_constraint WHERE contype = 'f' AND connamespace = current_schema()::regnamespace`,
     );
     const fkMap = new Map<string, string>(
       fkRows.map((r: { conname: string; confdeltype: string }) => [r.conname, r.confdeltype]),
@@ -301,7 +304,7 @@ test('foundation migration defines all deterministic PK, UQ, FK, and Check const
 test('foundation migration creates required performance indexes', async () => {
   await withDataSource(async (source) => {
     const indexRows = await source.query(
-      `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
+      `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema()`,
     );
     const indexNames = new Set(indexRows.map((r: { indexname: string }) => r.indexname));
     assert.ok(indexNames.has('idx_region_camera_active'), 'Missing idx_region_camera_active');

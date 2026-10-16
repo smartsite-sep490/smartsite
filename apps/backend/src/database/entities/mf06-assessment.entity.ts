@@ -34,7 +34,7 @@ export type Mf06AssessmentReasonCode =
 @Unique('uq_mf06_assessment_command', ['commandId'])
 @Unique('uq_mf06_assessment_artifact', ['authorityArtifactId'])
 @ForeignKey(() => Mf06AssessmentRequestEntity, ['requestId'], ['requestId'], {
-  name: 'fk_mf06_assessment_request',
+  name: 'mf06_assessment_request_id_fkey',
   onDelete: 'RESTRICT',
 })
 @ForeignKey(
@@ -47,33 +47,30 @@ export type Mf06AssessmentReasonCode =
   },
 )
 @Index('idx_mf06_assessment_site_time', ['siteId', 'assessedAt', 'assessmentId'])
-@Check('chk_mf06_assessment_command_hash', "command_hash ~ '^[0-9a-f]{64}$'")
-@Check('chk_mf06_assessment_binding_hash', "binding_hash ~ '^[0-9a-f]{64}$'")
-@Check('chk_mf06_assessment_frame_sha256', "frame_sha256 ~ '^[0-9a-f]{64}$'")
-@Check('chk_mf06_assessment_crop_sha256', "crop_sha256 ~ '^[0-9a-f]{64}$'")
-@Check('chk_mf06_assessment_outcome', "outcome IN ('ALLOWED','DENIED','UNAVAILABLE')")
+@Check('mf06_assessment_command_hash_check', "command_hash ~ '^[0-9a-f]{64}$'")
+@Check('mf06_assessment_binding_hash_check', "binding_hash ~ '^[0-9a-f]{64}$'")
+@Check('mf06_assessment_frame_sha256_check', "frame_sha256 ~ '^[0-9a-f]{64}$'")
+@Check('mf06_assessment_crop_sha256_check', "crop_sha256 ~ '^[0-9a-f]{64}$'")
+@Check('mf06_assessment_outcome_check', "outcome IN ('ALLOWED','DENIED','UNAVAILABLE')")
 @Check(
-  'chk_mf06_assessment_provenance',
+  'mf06_assessment_provenance_check',
   "provenance IN ('UNAVAILABLE','SYNTHETIC_TEST','TRUSTED_SERVICE')",
 )
 @Check(
-  'chk_mf06_assessment_evaluator_version',
+  'mf06_assessment_evaluator_version_check',
   'char_length(evaluator_version)>0 AND evaluator_version=btrim(evaluator_version)',
 )
-@Check('chk_mf06_assessment_claim_head_revision', 'claim_head_revision > 0')
-@Check('chk_mf06_assessment_assessed_at', 'isfinite(assessed_at)')
+@Check('mf06_assessment_claim_head_revision_check', 'claim_head_revision > 0')
+@Check('mf06_assessment_assessed_at_check', 'isfinite(assessed_at)')
 @Check(
-  'chk_mf06_assessment_outcome_reason',
+  'mf06_assessment_check',
   "(outcome='ALLOWED' AND reason_code IN ('POLICY_NONE','AUTHORIZED')) OR " +
     "(outcome='DENIED' AND reason_code IN ('POLICY_PROHIBITED','UNAUTHORIZED')) OR " +
     "(outcome='UNAVAILABLE' AND reason_code IN ('INVALID_BINDING','IDENTITY_UNAVAILABLE','MEDIA_UNAVAILABLE','PROFILE_REVOKED','AUTHORITY_UNAVAILABLE','SERVICE_DISABLED','ABORTED'))",
 )
+@Check('mf06_assessment_check1', "outcome='UNAVAILABLE' OR authority_artifact_id IS NOT NULL")
 @Check(
-  'chk_mf06_assessment_artifact_required',
-  "outcome='UNAVAILABLE' OR authority_artifact_id IS NOT NULL",
-)
-@Check(
-  'chk_mf06_assessment_identity_completeness',
+  'mf06_assessment_check2',
   "reason_code NOT IN ('AUTHORIZED','UNAUTHORIZED') OR (worker_id IS NOT NULL AND profile_revision IS NOT NULL AND frame_sha256 IS NOT NULL AND crop_sha256 IS NOT NULL AND provenance<>'UNAVAILABLE')",
 )
 export class Mf06AssessmentEntity {

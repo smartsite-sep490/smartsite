@@ -15,15 +15,15 @@ import { Mf06AssessmentRequestEntity } from './mf06-assessment-request.entity.js
  * canonical content; database guards enforce their narrower storage boundary.
  */
 @Entity({ name: 'mf06_authority_artifact' })
-@Unique('uq_mf06_artifact_request', ['artifactId', 'requestId'])
+@Unique('mf06_authority_artifact_artifact_id_request_id_key', ['artifactId', 'requestId'])
 @ForeignKey(() => Mf06AssessmentRequestEntity, ['requestId'], ['requestId'], {
-  name: 'fk_mf06_artifact_request',
+  name: 'mf06_authority_artifact_request_id_fkey',
   onDelete: 'RESTRICT',
 })
-@Check('chk_mf06_artifact_sha256', "sha256 ~ '^[0-9a-f]{64}$'")
-@Check('chk_mf06_artifact_body_hash', "body_hash ~ '^[0-9a-f]{64}$'")
-@Check('chk_mf06_artifact_body_size', 'octet_length(body::text) <= 2097152')
-@Check('chk_mf06_artifact_stored_at', 'isfinite(stored_at)')
+@Check('mf06_authority_artifact_sha256_check', "sha256 ~ '^[0-9a-f]{64}$'")
+@Check('mf06_authority_artifact_body_hash_check', "body_hash ~ '^[0-9a-f]{64}$'")
+@Check('mf06_authority_artifact_body_check', 'octet_length(body::text) <= 2097152')
+@Check('mf06_authority_artifact_stored_at_check', 'isfinite(stored_at)')
 export class Mf06AuthorityArtifactEntity {
   @PrimaryColumn({
     name: 'artifact_id',
