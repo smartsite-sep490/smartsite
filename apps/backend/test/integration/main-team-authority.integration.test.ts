@@ -148,6 +148,38 @@ async function commandFixture() {
   return { site, contractor, admin, worker, zone, cp, actor, service, team: created.id, dates };
 }
 
+test('team calendar grants preserve parent microseconds and reject a changed exact retry', async () => {
+  const f = await commandFixture();
+  await db.query(
+    "UPDATE contractor_zone_permission SET valid_from=current_date::timestamptz+interval '1 microsecond',valid_until=(current_date+5)::timestamptz+interval '9 microseconds' WHERE id=$1",
+    [f.cp],
+  );
+  const input = {
+    requestId: randomUUID(),
+    contractorZonePermissionId: f.cp,
+    startDate: f.dates.start,
+    endDate: f.dates.until,
+    timezone: 'UTC',
+  };
+  const granted = await f.service.grantZone(f.actor, f.site, f.contractor, f.team, input);
+  const [bounds] = await db.query(
+    'SELECT tp.valid_from=cp.valid_from AS same_from,tp.valid_until=cp.valid_until AS same_until FROM team_zone_permission tp JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id WHERE tp.id=$1',
+    [granted.id],
+  );
+  assert.deepEqual(bounds, { same_from: true, same_until: true });
+  assert.deepEqual(
+    await f.service.grantZone(f.actor, f.site, f.contractor, f.team, input),
+    granted,
+  );
+  await db.query(
+    "UPDATE contractor_zone_permission SET valid_from=valid_from+interval '1 microsecond' WHERE id=$1",
+    [f.cp],
+  );
+  await assert.rejects(f.service.grantZone(f.actor, f.site, f.contractor, f.team, input), {
+    status: 409,
+  });
+});
+
 test('real team commands attribute facts and historical replay survives revoke and membership removal', async () => {
   const f = await commandFixture();
   const baseline = await new MainAuthorityBaselineService(db).capture(

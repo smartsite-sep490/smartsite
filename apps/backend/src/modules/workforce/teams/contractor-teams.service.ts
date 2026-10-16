@@ -175,16 +175,21 @@ export class ContractorTeamsService {
           missing();
         if (cp.revokedAt || +cp.validUntil <= Date.now())
           conflict('Contractor Zone permission is no longer available');
-        const [bounds] = (await m.query(
-          `SELECT ($1::date::timestamp AT TIME ZONE $3) AS "from",(($2::date+1)::timestamp AT TIME ZONE $3) AS "until"`,
-          [value.startDate, value.endDate, value.timezone],
-        )) as { from: Date; until: Date }[];
-        const from = new Date(Math.max(+bounds!.from, +cp.validFrom, +p.validFrom)),
-          until = new Date(
-            Math.min(+bounds!.until, +cp.validUntil, p.validUntil ? +p.validUntil : Infinity),
-          );
-        if (!Number.isFinite(+from) || !Number.isFinite(+until) || until <= from)
-          conflict('Team dates must overlap the granted Contractor Zone period');
+        const [bounds] = await m.query<{ from: string; until: string; valid: boolean }[]>(
+          `WITH bounds AS (
+            SELECT greatest($1::date::timestamp AT TIME ZONE $3,cp.valid_from,p.valid_from) AS f,
+              least(($2::date+1)::timestamp AT TIME ZONE $3,cp.valid_until,p.valid_until) AS u,
+              cp.valid_from AS cf,cp.valid_until AS cu,p.valid_from AS pf,p.valid_until AS pu
+            FROM contractor_zone_permission cp JOIN contractor_site_participation p ON p.id=cp.site_contractor_id WHERE cp.id=$4)
+          SELECT to_char(f AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "from",
+            to_char(u AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "until",
+            isfinite(f) AND isfinite(u) AND isfinite(cf) AND isfinite(cu) AND isfinite(pf)
+              AND (pu IS NULL OR isfinite(pu)) AND u>f AS valid FROM bounds`,
+          [value.startDate, value.endDate, value.timezone, cp.id],
+        );
+        if (!bounds?.valid) conflict('Team dates must overlap the granted Contractor Zone period');
+        const from = bounds.from,
+          until = bounds.until;
         const existing = await m
           .getRepository(TeamZonePermissionEntity)
           .findOneBy({ id: value.requestId });
@@ -199,8 +204,12 @@ export class ContractorTeamsService {
             existing.teamId !== teamId ||
             existing.contractorZonePermissionId !== cp.id ||
             existing.grantedBy !== actor.id ||
-            +existing.validFrom !== +from ||
-            +existing.validUntil !== +until ||
+            !(
+              await m.query(
+                'SELECT valid_from=$2::timestamptz AND valid_until=$3::timestamptz AS same FROM team_zone_permission WHERE id=$1',
+                [existing.id, from, until],
+              )
+            )[0]?.same ||
             (creation?.changes?.replacesPermissionId ?? null) !== replaceId
           )
             conflict('Request was used for another team Zone');
@@ -225,35 +234,41 @@ export class ContractorTeamsService {
             { teamId, replacementId: value.requestId },
           );
         } else if (current) conflict('Team already has a Zone. Edit the existing assignment');
-        const permission = await m.getRepository(TeamZonePermissionEntity).save({
-          id: value.requestId,
-          teamId,
-          contractorZonePermissionId: cp.id,
-          validFrom: from,
-          validUntil: until,
-          grantedBy: actor.id,
-          revokedAt: null,
-        });
+        await m
+          .getRepository(TeamZonePermissionEntity)
+          .createQueryBuilder()
+          .insert()
+          .values({
+            id: value.requestId,
+            teamId,
+            contractorZonePermissionId: cp.id,
+            validFrom: () => ':exactFrom',
+            validUntil: () => ':exactUntil',
+            grantedBy: actor.id,
+            revokedAt: null,
+          })
+          .setParameters({ exactFrom: from, exactUntil: until })
+          .execute();
         await auditAccess(
           m,
           actor.id,
           siteId,
           'TEAM_ZONE_GRANTED',
           'team_zone_permission',
-          permission.id,
+          value.requestId,
           null,
           {
             teamId,
             contractorZonePermissionId: cp.id,
             replacesPermissionId: replaceId,
-            validFrom: from.toISOString(),
-            validUntil: until.toISOString(),
+            validFrom: from,
+            validUntil: until,
             startDate: value.startDate,
             endDate: value.endDate,
             timezone: value.timezone,
           },
         );
-        return { id: permission.id };
+        return { id: value.requestId };
       },
     ).catch((error) => knownUnique(error, ['pk_team_zone_permission', 'uq_team_single_zone']));
   }
