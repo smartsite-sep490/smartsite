@@ -1,10 +1,17 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { cpSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // Set before any application ESM imports, including ConfigModule.forRoot().
 process.env.NODE_ENV = 'test';
 const backendDirectory = fileURLToPath(new URL('../', import.meta.url));
+// Integrity tests read the original frozen TypeScript bytes and provenance,
+// which tsc does not emit beside the compiled historical test profile.
+cpSync(
+  new URL('../test/support/legacy24/', import.meta.url),
+  new URL('../.test-build/test/support/legacy24/', import.meta.url),
+  { recursive: true },
+);
 const { validateEnvironment } = await import('../.test-build/src/config/environment.js');
 for (const key of [
   ...Object.keys(validateEnvironment({ NODE_ENV: 'test' })),
