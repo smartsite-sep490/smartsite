@@ -2833,6 +2833,7 @@ export function PpeMonitoringView({
 
       {canOpenZonePpe && isZonePpeOpen && selectedSiteId && (
         <ZonePpeSetupDialog
+          client={client}
           key={JSON.stringify([
             apiUrl,
             sessionScope,

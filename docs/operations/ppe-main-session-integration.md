@@ -6,6 +6,11 @@ credential. A terminal authentication failure clears the current session. A
 controlled PPE viewer whose token or scope differs from the application session
 retains its independent client; it cannot borrow another session's credentials.
 
+The Zone popup and its nested camera/Region metadata panel receive that owning client
+from PPE. Standalone callers may omit it and keep the existing independent client.
+The optional client does not change Site/credential query scopes, permissions,
+Region geometry/version handling or reference expiry.
+
 Media cancellation follows both the caller and the owning session. Responses that
 arrive after cancellation are discarded. The first rejected401 body is released
 before refresh. Invalid empty adapter credentials never reach fetch. The auxiliary
@@ -35,9 +40,13 @@ Silent same-user refresh still rotates the credential scope, which can unmount
 the protected workspace and discard an open Zone draft. Preserving human-authored
 drafts requires separating logical workflow identity from credential/pixel scope;
 never reuse old credential scopes or retain stale authorization/pixels to hide it.
-Zone child-client integration is a separate follow-up. AI/capture remain paused.
+AI/capture remain paused.
+The configuration-reference hook and Region mutation drawer still construct their
+own leaf clients. Session integration for those calls is a separate open follow-up;
+this change covers Zone reads/writes and camera/Region metadata lists.
 
 The existing large management client and PPE view are grandfathered. This bounded
 adapter/lifecycle patch stays in their existing responsibilities; Root reviewed
-the small PPE growth exception. Follow-up extraction belongs with session-bound
-PPE child-client integration, without unrelated file splitting or formatting churn.
+the small PPE/Zone setup/Region client-wiring growth exceptions. The change passes
+an existing client through existing props; a broader extraction needs its own
+scoped follow-up, without unrelated file splitting or formatting churn.

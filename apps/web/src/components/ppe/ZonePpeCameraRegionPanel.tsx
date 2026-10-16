@@ -22,6 +22,7 @@ import { useCameraRegionMutationScope } from './useCameraRegionMutationScope';
 
 export interface ZonePpeCameraRegionPanelProps {
   apiUrl: string;
+  client?: SmartSiteManagementClient;
   token: string;
   sessionScope: string;
   credentialId: number;
@@ -123,6 +124,7 @@ export function ZonePpeCameraRegionPanel(props: ZonePpeCameraRegionPanelProps) {
 
 function ZonePpeCameraRegionPanelContent({
   apiUrl,
+  client: providedClient,
   token,
   sessionScope,
   credentialId,
@@ -144,7 +146,8 @@ function ZonePpeCameraRegionPanelContent({
     [zones, selectedZoneId],
   );
 
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const fallbackClient = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = providedClient ?? fallbackClient;
 
   // 2. Active Cameras on Site - Explicit Accumulative Pagination
   const camerasInfiniteQuery = useInfiniteQuery({
