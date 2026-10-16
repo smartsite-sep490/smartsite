@@ -1,11 +1,20 @@
+import React, { useState } from 'react';
+import { SmartSiteMobileApp } from '../src/SmartSiteMobileApp';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getBackendHealth } from '@smartsite/api-client';
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
-export default function ConnectionScreen() {
+function ConnectionDiagnostics({ onClose }: { onClose: () => void }) {
   const health = useQuery({
     queryKey: ['backend-health', apiUrl],
     queryFn: ({ signal }) => getBackendHealth(apiUrl ?? '', { signal, timeoutMs: 8_000 }),
@@ -15,48 +24,53 @@ export default function ConnectionScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.eyebrow}>SMARTSITE / MOBILE</Text>
+        <View style={styles.diagHeader}>
+          <Text style={styles.eyebrow}>SMARTSITE / MOBILE</Text>
+          <Pressable onPress={onClose} style={styles.closeDiagBtn}>
+            <Text style={styles.closeDiagText}>← Quay lại ứng dụng</Text>
+          </Pressable>
+        </View>
+
         <Text accessibilityRole="header" style={styles.title}>
-          Connection check
+          Kiểm tra kết nối Backend
         </Text>
         <Text style={styles.description}>
-          Check that this device can reach the SmartSite backend.
+          Kiểm tra kết nối mạng giữa thiết bị di động và máy chủ SmartSite API.
         </Text>
 
         <View style={styles.panel} accessibilityLiveRegion="polite">
           <Text style={styles.label}>BACKEND API</Text>
           <Text selectable style={styles.address}>
-            {apiUrl || 'No API address configured'}
+            {apiUrl || 'Chưa cấu hình địa chỉ API'}
           </Text>
 
           {!apiUrl ? (
             <>
-              <Text style={styles.status}>Set your API address</Text>
+              <Text style={styles.status}>Cần cấu hình EXPO_PUBLIC_API_URL</Text>
               <Text style={styles.detail}>
-                Set EXPO_PUBLIC_API_URL in apps/mobile/.env.local to an address this device can
-                reach, then reload the app.
+                Thiết lập EXPO_PUBLIC_API_URL trong apps/mobile/.env.local để kết nối backend.
               </Text>
             </>
           ) : health.isFetching ? (
             <View style={styles.loading}>
-              <ActivityIndicator accessibilityLabel="Checking backend connection" color="#235D4C" />
-              <Text style={styles.detail}>Checking connection…</Text>
+              <ActivityIndicator accessibilityLabel="Đang kiểm tra kết nối" color="#F05A28" />
+              <Text style={styles.detail}>Đang kiểm tra kết nối…</Text>
             </View>
           ) : health.isError ? (
             <>
-              <Text style={[styles.status, styles.error]}>Could not connect</Text>
+              <Text style={[styles.status, styles.error]}>Không thể kết nối</Text>
               <Text style={styles.detail}>{health.error.message}</Text>
               <Text style={styles.hint}>
-                Confirm the backend is running and the API address is reachable from this device.
+                Xác nhận backend đang chạy và địa chỉ API có thể truy cập được từ thiết bị này.
               </Text>
             </>
           ) : health.isSuccess ? (
             <>
-              <Text style={[styles.status, styles.success]}>Backend is online</Text>
+              <Text style={[styles.status, styles.success]}>Backend đang hoạt động</Text>
               <Text style={styles.detail}>{health.data.service}</Text>
             </>
           ) : (
-            <Text style={styles.detail}>Waiting for a network connection…</Text>
+            <Text style={styles.detail}>Đang chờ kết nối mạng…</Text>
           )}
 
           {apiUrl ? (
@@ -71,70 +85,92 @@ export default function ConnectionScreen() {
               ]}
             >
               <Text style={styles.buttonLabel}>
-                {health.isFetching ? 'Checking…' : health.isError ? 'Try again' : 'Check again'}
+                {health.isFetching ? 'Đang kiểm tra…' : health.isError ? 'Thử lại' : 'Kiểm tra lại'}
               </Text>
             </Pressable>
           ) : null}
         </View>
-
-        <Text style={styles.footnote}>
-          Foundation preview. This screen checks API availability only.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+export default function MobileRootScreen() {
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+
+  if (showDiagnostics) {
+    return <ConnectionDiagnostics onClose={() => setShowDiagnostics(false)} />;
+  }
+
+  return <SmartSiteMobileApp />;
+}
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F5F5F1' },
+  safeArea: { flex: 1, backgroundColor: '#F8F9FB' },
   content: {
     flexGrow: 1,
     padding: 24,
-    paddingTop: 48,
+    paddingTop: 32,
     maxWidth: 640,
     width: '100%',
     alignSelf: 'center',
   },
+  diagHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  closeDiagBtn: {
+    padding: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  closeDiagText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#F05A28',
+  },
   eyebrow: {
-    color: '#526158',
+    color: '#64748B',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.5,
-    marginBottom: 24,
   },
   title: {
-    color: '#16271F',
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: -0.8,
-    marginBottom: 12,
+    color: '#0F1E36',
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    marginBottom: 10,
   },
-  description: { color: '#526158', fontSize: 17, lineHeight: 26, marginBottom: 32 },
+  description: { color: '#64748B', fontSize: 15, lineHeight: 22, marginBottom: 24 },
   panel: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#D5DDD6',
+    borderColor: '#E2E8F0',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 24,
+    borderRadius: 16,
+    padding: 22,
   },
-  label: { color: '#526158', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
-  address: { color: '#37473D', fontSize: 14, lineHeight: 22, marginBottom: 28 },
-  status: { color: '#16271F', fontSize: 21, fontWeight: '600', marginBottom: 8 },
-  success: { color: '#235D4C' },
-  error: { color: '#9D3529' },
-  detail: { color: '#37473D', fontSize: 16, lineHeight: 24 },
-  hint: { color: '#526158', fontSize: 14, lineHeight: 22, marginTop: 12 },
+  label: { color: '#64748B', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
+  address: { color: '#0F1E36', fontSize: 14, lineHeight: 22, marginBottom: 20 },
+  status: { color: '#0F1E36', fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  success: { color: '#059669' },
+  error: { color: '#DC2626' },
+  detail: { color: '#334155', fontSize: 14, lineHeight: 22 },
+  hint: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 10 },
   loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   button: {
     alignItems: 'center',
-    backgroundColor: '#235D4C',
-    borderRadius: 8,
-    minHeight: 48,
+    backgroundColor: '#F05A28',
+    borderRadius: 12,
+    minHeight: 46,
     justifyContent: 'center',
     padding: 12,
-    marginTop: 24,
+    marginTop: 22,
   },
   buttonDimmed: { opacity: 0.6 },
-  buttonLabel: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  footnote: { color: '#526158', fontSize: 13, lineHeight: 20, marginTop: 24 },
+  buttonLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });
