@@ -10,7 +10,6 @@ import { WorkforceSchedulingModule } from './scheduling/scheduling.module.js';
 import { WorkforceIdentityModule } from './identity/identity.module.js';
 import { WorkforceAccessModule } from './access/access.module.js';
 import { WorkforceManagementModule } from './management/management.module.js';
-import { SiteAccessSetupQueryService } from './site-access-setup-query.service.js';
 
 @Module({
   imports: [
@@ -25,13 +24,13 @@ import { SiteAccessSetupQueryService } from './site-access-setup-query.service.j
     WorkforceAccessModule,
     WorkforceManagementModule,
   ],
-  providers: [MainZonePermissionCommandService, SiteAccessSetupQueryService],
+  providers: [MainZonePermissionCommandService],
   exports: [
     WorkforceDirectoryModule,
     WorkforceNotificationsModule,
     WorkforceIdentityModule,
     MainZonePermissionCommandService,
-    SiteAccessSetupQueryService,
+    WorkforceAccessModule,
     WorkforceManagementModule,
   ],
 })

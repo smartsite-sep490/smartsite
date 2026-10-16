@@ -114,7 +114,9 @@ export class SiteAccessSetupQueryService {
         // pg Dates serialize with the same millisecond precision as retained-main entity responses.
         return {
           canReviewAssignments: siteManager,
-          canGrantContractorZones: siteManager,
+          canGrantContractorZones: roles.some(
+            (r) => r.role === 'SITE_MANAGER' && r.site_id === site,
+          ),
           canGrantWorkerZones: admin || roles.some((r) => r.role === 'CONTRACTOR_REPRESENTATIVE'),
           participations: participations.map(dates),
           workers,
