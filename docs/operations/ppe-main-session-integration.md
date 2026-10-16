@@ -54,6 +54,22 @@ drafts requires separating logical workflow identity from credential/pixel scope
 never reuse old credential scopes or retain stale authorization/pixels to hide it.
 AI/capture remain paused.
 
+## Main login role resolution and shared locale fixtures
+
+An authenticated visitor on the login route waits for the current-user query to
+finish before redirecting. This avoids a temporary dashboard URL while Worker
+roles are pending. Protected routes retain their existing profile-error and
+authorization checks; this does not grant a new role or change Main's login UI.
+
+Locale compatibility tests now request Vietnamese explicitly when required and
+retain Main's shared language on provider unmount. Shell locale tests exercise
+the real language menu while isolating the unrelated notification child, whose
+own session/security behavior has separate tests. Focused routing/locale/shell
+verification passed19 cases after reproducing6 failures. The wider local run
+passed96 cases with one separate localization-audit failure; whole Web CI remains
+open until remaining visible prose is localized. No browser or AI acceptance is
+implied by these fixture and routing results.
+
 ## Desktop workspace presentation
 
 Scope selection, configuration actions and viewing controls have separate visual
