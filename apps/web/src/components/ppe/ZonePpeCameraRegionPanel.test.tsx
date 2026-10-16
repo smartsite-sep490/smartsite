@@ -263,6 +263,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     const start = await screen.findByRole('button', { name: /Start Drawing Region/i });
     await waitFor(() => {
       expect(refState.lastOptions).toEqual({
+        client: expect.any(SmartSiteManagementClient),
         apiUrl: 'http://localhost:3000',
         token: 'mock-token-xyz',
         sessionScope: 'scope-01',

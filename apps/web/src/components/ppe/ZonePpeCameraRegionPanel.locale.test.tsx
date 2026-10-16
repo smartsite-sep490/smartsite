@@ -317,6 +317,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     const startBtnVi = await screen.findByRole('button', { name: 'Bắt đầu vẽ vùng quan sát' });
     await waitFor(() => {
       expect(refState.lastOptions).toEqual({
+        client: expect.any(SmartSiteManagementClient),
         apiUrl: 'http://localhost:3000',
         token: 'mock-token-xyz',
         sessionScope: 'scope-01',

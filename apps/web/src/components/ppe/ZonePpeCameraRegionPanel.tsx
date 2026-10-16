@@ -336,6 +336,7 @@ function ZonePpeCameraRegionPanelContent({
 
   const configReference = useCameraConfigurationReference({
     apiUrl,
+    client,
     token,
     sessionScope,
     credentialId,
@@ -832,6 +833,7 @@ function ZonePpeCameraRegionPanelContent({
           <ZonePpeCameraRegionDrawer
             key={`${apiUrl}:${sessionScope}:${internalNonce}:${siteId}:${selectedCameraId}:${selectedZoneId}:${drawingScope.editingRegion?.id ?? 'new'}`}
             apiUrl={apiUrl}
+            client={client}
             token={token}
             sessionScope={sessionScope}
             credentialId={credentialId}

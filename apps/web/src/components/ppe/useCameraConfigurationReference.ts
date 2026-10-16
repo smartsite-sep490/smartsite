@@ -17,7 +17,9 @@ import {
   type ConfigurationReferenceScopeInput,
 } from './cameraConfigurationReferenceHelpers';
 
-export type UseCameraConfigurationReferenceOptions = ConfigurationReferenceScopeInput;
+export type UseCameraConfigurationReferenceOptions = ConfigurationReferenceScopeInput & {
+  client?: SmartSiteManagementClient;
+};
 
 export type CameraConfigurationReference = CameraConfigurationImageResponse & {
   image: HTMLImageElement;
@@ -48,7 +50,14 @@ export function useCameraConfigurationReference(
   const { apiUrl, token, sessionScope, credentialId, siteId, cameraId, cameraExternalId, enabled } =
     options;
   const queryClient = useQueryClient();
-  const [scopeOwner] = useState<object>(() => ({}));
+  const normalizedApiUrl = apiUrl.trim().replace(/\/+$/, '');
+  const managementClient = useMemo(
+    () => options.client ?? new SmartSiteManagementClient(normalizedApiUrl),
+    [normalizedApiUrl, options.client],
+  );
+  // A replacement client owns a different credential lifetime, even if the
+  // caller reuses its token/scope fields. Never share its reference cache.
+  const scopeOwner = useMemo<object>(() => ({ managementClient }), [managementClient]);
 
   const scope = useMemo(
     () =>
@@ -76,7 +85,6 @@ export function useCameraConfigurationReference(
   );
 
   const {
-    normalizedApiUrl,
     trimmedToken,
     normalizedSiteId,
     normalizedCameraId,
@@ -87,11 +95,6 @@ export function useCameraConfigurationReference(
   const queryKey = useMemo(
     () => JSON.parse(activeScopeKey) as readonly (string | number)[],
     [activeScopeKey],
-  );
-
-  const managementClient = useMemo(
-    () => new SmartSiteManagementClient(normalizedApiUrl),
-    [normalizedApiUrl],
   );
 
   const [decodedState, setDecodedState] = useState<ScopedDecodedReference | null>(null);

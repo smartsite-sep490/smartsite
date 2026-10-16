@@ -18,6 +18,7 @@ import type { CameraConfigurationReference } from './useCameraConfigurationRefer
 
 export interface ZonePpeCameraRegionDrawerProps {
   apiUrl: string;
+  client?: SmartSiteManagementClient;
   token: string;
   sessionScope: string;
   credentialId: number;
@@ -65,7 +66,26 @@ function invalidateRegionMutationQueries(
   }
 }
 
+const drawerClientKeys = new WeakMap<SmartSiteManagementClient, number>();
+let nextDrawerClientKey = 0;
+
 export function ZonePpeCameraRegionDrawer(props: ZonePpeCameraRegionDrawerProps) {
+  const client = useMemo(
+    () => props.client ?? new SmartSiteManagementClient(props.apiUrl),
+    [props.apiUrl, props.client],
+  );
+  let clientKey = drawerClientKeys.get(client);
+  if (clientKey === undefined) {
+    clientKey = ++nextDrawerClientKey;
+    drawerClientKeys.set(client, clientKey);
+  }
+  // Unmounting the previous owner aborts its write and suppresses callbacks.
+  return <ZonePpeCameraRegionDrawerContent key={clientKey} {...props} client={client} />;
+}
+
+function ZonePpeCameraRegionDrawerContent(
+  props: ZonePpeCameraRegionDrawerProps & { client: SmartSiteManagementClient },
+) {
   const {
     siteId,
     selectedCamera,
@@ -77,7 +97,7 @@ export function ZonePpeCameraRegionDrawer(props: ZonePpeCameraRegionDrawerProps)
   } = props;
   const { t } = useLocale();
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(props.apiUrl), [props.apiUrl]);
+  const client = props.client;
 
   const initialPoints = useMemo(() => editingRegion?.initialPoints ?? [], [editingRegion]);
   const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>(() =>
