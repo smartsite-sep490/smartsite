@@ -44,7 +44,7 @@ test('registered entity columns exist in the canonical migrated schema', async (
   const installedMigrations = (await dataSource.query('SELECT name FROM migrations')) as Array<{
     name: string;
   }>;
-  assert.equal(dataSource.migrations.length, 54);
+  assert.equal(dataSource.migrations.length, 55);
   assert.deepEqual(
     installedMigrations.map((migration) => migration.name).sort(),
     dataSource.migrations.map((migration) => migration.name ?? migration.constructor.name).sort(),

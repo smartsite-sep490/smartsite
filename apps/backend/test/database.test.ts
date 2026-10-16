@@ -200,11 +200,12 @@ test('integration configuration selects only a dedicated local test database and
     }
     fs.writeFileSync(envFile, `TEST_DATABASE_URL=${localUrl}\nDATABASE_URL=invalid-runtime-url\n`);
     assert.equal(resolveTestDatabaseUrl({}, envFile), localUrl);
-    const processUrl = localUrl.replace('localhost:5433', '127.0.0.1:5434');
+    const processUrl = localUrl.replace('localhost:5433', '127.0.0.1:5433');
     assert.equal(resolveTestDatabaseUrl({ TEST_DATABASE_URL: processUrl }, envFile), processUrl);
     for (const unsafeUrl of [
       '',
       localUrl.replace('localhost', 'db.example'),
+      localUrl.replace(':5433', ':5434'),
       localUrl.replace('smartsite_test:', 'smartsite:'),
       localUrl.replace('/smartsite_test', '/smartsite'),
       localUrl.replace('fake-test-password', ''),
