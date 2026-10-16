@@ -7,7 +7,7 @@ import { FaceEnrollmentController } from '../../src/modules/workforce/identity/f
 import { FaceGateService } from '../../src/modules/workforce/access/face-gate.service.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
+import { MainWorkerRosterService } from '../../src/modules/workforce/main-worker-roster.service.js';
 import {
   AccessAuditEntity,
   ContractorEntity,
@@ -220,15 +220,17 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       .save({ id, siteId, externalId: id, displayName: 'Synthetic worker', isActive: true });
   }
 
-  const workforce = new WorkforceConfigurationService(dataSource);
+  const workforce = new MainWorkerRosterService(dataSource);
   const prepared = await Promise.all([
-    workforce.forAccount(siteId, { userId: accountId }),
-    workforce.forAccount(siteId, { userId: accountId }),
+    workforce.forAccount(siteId, { userId: accountId }, { actorUserId: actorId }),
+    workforce.forAccount(siteId, { userId: accountId }, { actorUserId: actorId }),
   ]);
   assert.equal(prepared[0]!.id, prepared[1]!.id);
   assert.equal(prepared[0]!.userId, accountId);
   await dataSource.getRepository(WorkerEntity).delete(prepared[0]!.id);
-  await assert.rejects(workforce.forAccount(siteId, { userId: randomUUID() }));
+  await assert.rejects(
+    workforce.forAccount(siteId, { userId: randomUUID() }, { actorUserId: actorId }),
+  );
 
   const enrollment = new FaceEnrollmentService(
     dataSource,
@@ -356,16 +358,25 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
   await dataSource.getRepository(WorkerEntity).update(workerId, { userId: null });
 
-  await assert.rejects(workforce.linkAccount(otherSiteId, workerId, { userId: accountId }));
   await assert.rejects(
-    workforce.linkAccount(siteId, workerId, { userId: unassignedUserId }),
+    workforce.linkAccount(otherSiteId, workerId, { userId: accountId }, { actorUserId: actorId }),
+  );
+  await assert.rejects(
+    workforce.linkAccount(siteId, workerId, { userId: unassignedUserId }, { actorUserId: actorId }),
     /account assigned/,
   );
-  await workforce.linkAccount(siteId, workerId, { userId: accountId });
-  assert.equal((await workforce.forAccount(siteId, { userId: accountId })).id, workerId);
-  await assert.rejects(workforce.forAccount(otherSiteId, { userId: accountId }));
-  await workforce.linkAccount(siteId, workerId, { userId: accountId }); // idempotent
-  await assert.rejects(workforce.linkAccount(siteId, secondWorkerId, { userId: accountId }));
+  await workforce.linkAccount(siteId, workerId, { userId: accountId }, { actorUserId: actorId });
+  assert.equal(
+    (await workforce.forAccount(siteId, { userId: accountId }, { actorUserId: actorId })).id,
+    workerId,
+  );
+  await assert.rejects(
+    workforce.forAccount(otherSiteId, { userId: accountId }, { actorUserId: actorId }),
+  );
+  await workforce.linkAccount(siteId, workerId, { userId: accountId }, { actorUserId: actorId }); // idempotent
+  await assert.rejects(
+    workforce.linkAccount(siteId, secondWorkerId, { userId: accountId }, { actorUserId: actorId }),
+  );
 
   // Main allows an active account-linked Worker to enroll themselves at their assigned Site.
   // It does not allow that Worker to operate another Worker's enrollment or bypass initial password change.
@@ -726,7 +737,9 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
 
   // Disabling UserEntity rejects account lookup, while worker identity at the gate remains independent of login account
   await dataSource.getRepository(UserEntity).update(accountId, { isActive: false });
-  await assert.rejects(workforce.forAccount(siteId, { userId: accountId }));
+  await assert.rejects(
+    workforce.forAccount(siteId, { userId: accountId }, { actorUserId: actorId }),
+  );
   const disabledAccountResult = await gate.verify(actor, siteId, 'gate1', frame);
   assert.equal(verification?.templates?.length, 1);
   assert.equal(disabledAccountResult.worker?.id, workerId);

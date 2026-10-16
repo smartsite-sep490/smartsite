@@ -1,3 +1,4 @@
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
@@ -60,14 +61,6 @@ test('Site Manager representative creation is atomic, scoped and supports multip
   const reps = new SiteRepresentativesService(source, users, workforce);
   const site = await sites.create({ code: randomUUID(), name: 'Representative test' });
   const other = await sites.create({ code: randomUUID(), name: 'Other site' });
-  const first = await workforce.createContractor(site.id, {
-    code: `C-${randomUUID()}`,
-    name: 'First contractor',
-  });
-  const second = await workforce.createContractor(site.id, {
-    code: `C-${randomUUID()}`,
-    name: 'Second contractor',
-  });
   const input = () => ({
     username: `rep-${randomUUID()}`,
     displayName: 'Representative',
@@ -85,6 +78,23 @@ test('Site Manager representative creation is atomic, scoped and supports multip
     temporaryPassword: 'TempDemo2026!',
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: other.id }],
   });
+  const creation = new MainWorkforceCreateService(source);
+  const first = await creation.createSiteContractor(
+    site.id,
+    {
+      code: `C-${randomUUID()}`,
+      name: 'First contractor',
+    },
+    { actorUserId: manager!.id },
+  );
+  const second = await creation.createSiteContractor(
+    site.id,
+    {
+      code: `C-${randomUUID()}`,
+      name: 'Second contractor',
+    },
+    { actorUserId: manager!.id },
+  );
   for (const contractor of [first, second]) {
     const user = await reps.create(site.id, contractor.id, input(), { actorUserId: manager!.id });
     assert.deepEqual(user!.roleAssignments, [
@@ -94,10 +104,9 @@ test('Site Manager representative creation is atomic, scoped and supports multip
   assert.equal((await users.listSiteRepresentatives(site.id)).total, 2);
   assert.equal((await users.listSiteRepresentatives(other.id)).total, 0);
   const failed = input();
-  await assert.rejects(
-    reps.create(other.id, first.id, failed, { actorUserId: otherManager!.id }),
-    { status: 404 },
-  );
+  await assert.rejects(reps.create(other.id, first.id, failed, { actorUserId: otherManager!.id }), {
+    status: 404,
+  });
   assert.equal(
     await source.getRepository(UserEntity).existsBy({ username: failed.username }),
     false,

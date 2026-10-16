@@ -1,3 +1,5 @@
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -11,18 +13,18 @@ import { UserRoleAssignmentEntity } from '../../src/database/entities/user-role-
 import { UserEntity, UserRole } from '../../src/database/entities/user.entity.js';
 import { ZoneEntity } from '../../src/database/entities/zone.entity.js';
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { MainRepresentativeCommandService } from '../../src/modules/workforce/main-representative-command.service.js';
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling/scheduling-workflow.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
+after(() => isolated.dispose());
 
 test('MF07 Site setup reuses one Contractor across Sites and shares Representative grants with main', async () => {
-  await dataSource.initialize();
+  await isolated.initialize();
   const suffix = randomUUID().slice(0, 8);
   const [siteA, siteB, siteC] = [randomUUID(), randomUUID(), randomUUID()];
   await dataSource.getRepository(SiteEntity).save([
@@ -64,10 +66,29 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
     })),
   };
   const workforce = new WorkforceConfigurationService(dataSource);
-  const main = new ContractorOperationsService(dataSource);
+  const creation = new MainWorkforceCreateService(dataSource);
+  const assignments = new MainAssignmentCommandService(dataSource);
+  const representatives = new MainRepresentativeCommandService(dataSource);
+  const managerIds = new Map<string, string>();
+  for (const siteId of [siteA, siteB, siteC]) {
+    const id = randomUUID();
+    managerIds.set(siteId, id);
+    await dataSource.query(
+      "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic manager','unused',false)",
+      [id],
+    );
+    await dataSource.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+      [randomUUID(), id, siteId],
+    );
+  }
   const input = { code: `C_${suffix}`, name: 'Shared Contractor' };
-  const first = await workforce.createContractor(siteA, input);
-  const second = await workforce.createContractor(siteB, input);
+  const first = await creation.createSiteContractor(siteA, input, {
+    actorUserId: managerIds.get(siteA)!,
+  });
+  const second = await creation.createSiteContractor(siteB, input, {
+    actorUserId: managerIds.get(siteB)!,
+  });
   assert.equal(first.id, second.id);
   assert.equal((await workforce.listContractors(admin, siteA)).total, 1);
   assert.equal((await workforce.listContractors(admin, siteB)).total, 1);
@@ -78,9 +99,26 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
       .countBy({ contractorId: first.id }),
     2,
   );
-  await assert.rejects(workforce.assignRepresentative(siteC, first.id, { userId: repId }));
-  const assignmentA = await workforce.assignRepresentative(siteA, first.id, { userId: repId });
-  const assignmentB = await workforce.assignRepresentative(siteB, first.id, { userId: repId });
+  await assert.rejects(
+    representatives.assign(
+      siteC,
+      first.id,
+      { userId: repId },
+      { actorUserId: managerIds.get(siteC)! },
+    ),
+  );
+  const assignmentA = await representatives.assign(
+    siteA,
+    first.id,
+    { userId: repId },
+    { actorUserId: managerIds.get(siteA)! },
+  );
+  const assignmentB = await representatives.assign(
+    siteB,
+    first.id,
+    { userId: repId },
+    { actorUserId: managerIds.get(siteB)! },
+  );
   assert.notEqual(assignmentA.id, assignmentB.id);
   assert.equal((await workforce.listRepresentativeAssignments(siteA)).total, 1);
   assert.equal((await workforce.listRepresentativeAssignments(siteB)).total, 1);
@@ -91,11 +129,15 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
     }),
     1,
   );
-  const worker = await main.createWorker(rep, first.id, {
-    siteId: siteB,
-    externalId: `W_${suffix}`,
-    displayName: 'Site B Worker',
-  });
+  const worker = await creation.createWorker(
+    first.id,
+    {
+      siteId: siteB,
+      externalId: `W_${suffix}`,
+      displayName: 'Site B Worker',
+    },
+    { actorUserId: rep.id },
+  );
   assert.equal(worker.siteId, siteB);
   const zoneId = randomUUID();
   await dataSource.getRepository(ZoneEntity).save({
@@ -109,23 +151,31 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
     configurationLocked: false,
   });
   await assert.rejects(
-    main.requestAssignment(rep, worker.id, {
-      siteId: siteA,
-      zoneIds: [zoneId],
-      validFrom: new Date().toISOString(),
-      validUntil: null,
-    }),
+    assignments.publicRequest(
+      worker.id,
+      {
+        siteId: siteA,
+        zoneIds: [zoneId],
+        validFrom: new Date().toISOString(),
+        validUntil: null,
+      },
+      { actorUserId: rep.id },
+    ),
   );
   assert.equal(
     await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).countBy({ workerId: worker.id }),
     0,
   );
   await assert.rejects(
-    main.createWorker(rep, first.id, {
-      siteId: siteC,
-      externalId: `WC_${suffix}`,
-      displayName: 'Denied Worker',
-    }),
+    creation.createWorker(
+      first.id,
+      {
+        siteId: siteC,
+        externalId: `WC_${suffix}`,
+        displayName: 'Denied Worker',
+      },
+      { actorUserId: rep.id },
+    ),
   );
   await dataSource.getRepository(UserRoleAssignmentEntity).delete({
     userId: repId,
@@ -162,10 +212,14 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
     new SchedulingWorkflowService(dataSource).listShiftChangeRequests(rep, siteB),
   );
   await assert.rejects(
-    main.createWorker(rep, first.id, {
-      siteId: siteB,
-      externalId: `WD_${suffix}`,
-      displayName: 'Revoked Worker',
-    }),
+    creation.createWorker(
+      first.id,
+      {
+        siteId: siteB,
+        externalId: `WD_${suffix}`,
+        displayName: 'Revoked Worker',
+      },
+      { actorUserId: rep.id },
+    ),
   );
 });

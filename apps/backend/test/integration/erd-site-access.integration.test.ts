@@ -1,3 +1,4 @@
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -14,7 +15,6 @@ import {
   ZoneType,
   ZoneRestrictionPolicy,
   WorkerSiteZoneAssignmentEntity,
-  WorkerGatePermissionEntity,
   AccessAttemptEntity,
   GateEventEntity,
   AttendanceEventEntity,
@@ -23,18 +23,18 @@ import {
   ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 test('ERD: bounded permissions, gate confirmation, temporary passage and attendance corrections', async () => {
-  await dataSource.initialize();
+  await isolated.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
     contractorId = randomUUID(),
@@ -58,8 +58,8 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     worker = actor(workerAccountId, UserRole.WORKER);
   const from = new Date(Date.now() - 60_000).toISOString(),
     until = new Date(Date.now() + 3600_000).toISOString();
-  const operations = new ContractorOperationsService(dataSource),
-    setup = new SiteAccessSetupService(dataSource),
+  const assignments = new MainAssignmentCommandService(dataSource);
+  const setup = new SiteAccessSetupService(dataSource),
     access = new QrAccessService(dataSource),
     attendance = new AttendanceService(dataSource);
   const gateId = 'gate-north-01';
@@ -122,32 +122,52 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       configurationLocked: false,
     });
     await assert.rejects(
-      operations.requestAssignment(rep, workerId, {
+      assignments.publicRequest(
+        workerId,
+        {
+          siteId,
+          zoneIds: [zoneId],
+          validFrom: from,
+          validUntil: null,
+        },
+        { actorUserId: rep.id },
+      ),
+      /expiry/,
+    );
+    const assignment = await assignments.publicRequest(
+      workerId,
+      {
         siteId,
         zoneIds: [zoneId],
         validFrom: from,
-        validUntil: null,
-      }),
-      /expiry/,
+        validUntil: until,
+      },
+      { actorUserId: rep.id },
     );
-    const assignment = await operations.requestAssignment(rep, workerId, {
-      siteId,
-      zoneIds: [zoneId],
-      validFrom: from,
-      validUntil: until,
-    });
+    await dataSource.query(
+      "UPDATE user_role_assignment SET site_id=$2 WHERE user_id=$1 AND role='SITE_MANAGER'",
+      [managerId, otherSiteId],
+    );
     await assert.rejects(
-      operations.siteManagerDecision(
-        actor(managerId, UserRole.SITE_MANAGER, otherSiteId),
+      assignments.publicDecision(
         assignment.id,
         { approve: true, expectedVersion: 1 },
+        { actorUserId: actor(managerId, UserRole.SITE_MANAGER, otherSiteId).id },
       ),
     );
-    await operations.siteManagerDecision(manager, assignment.id, {
-      approve: true,
-      expectedVersion: 1,
-      reviewNote: 'Validated participation',
-    });
+    await dataSource.query(
+      "UPDATE user_role_assignment SET site_id=$2 WHERE user_id=$1 AND role='SITE_MANAGER'",
+      [managerId, siteId],
+    );
+    await assignments.publicDecision(
+      assignment.id,
+      {
+        approve: true,
+        expectedVersion: 1,
+        reviewNote: 'Validated participation',
+      },
+      { actorUserId: manager.id },
+    );
     assert.equal(
       (
         await dataSource
@@ -413,14 +433,22 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     const latestAssignment = await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)
       .findOneByOrFail({ id: assignment.id });
-    await operations.revokeAssignment(manager, assignment.id, {
-      expectedVersion: latestAssignment.version,
-      reviewNote: 'Participation ended',
-    });
-    await operations.revokeAssignment(manager, assignment.id, {
-      expectedVersion: latestAssignment.version,
-      reviewNote: 'Participation ended',
-    });
+    await assignments.publicRevoke(
+      assignment.id,
+      {
+        expectedVersion: latestAssignment.version,
+        reviewNote: 'Participation ended',
+      },
+      { actorUserId: manager.id },
+    );
+    await assignments.publicRevoke(
+      assignment.id,
+      {
+        expectedVersion: latestAssignment.version,
+        reviewNote: 'Participation ended',
+      },
+      { actorUserId: manager.id },
+    );
     assert.equal(
       (
         await dataSource
@@ -432,23 +460,6 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await passage('OUT', true);
     assert.ok((await dataSource.getRepository(AccessAuditEntity).findBy({ siteId })).length > 10);
   } finally {
-    await cleanupSiteAccess(dataSource, [siteId, otherSiteId]);
-    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.getRepository(WorkerGatePermissionEntity).delete({ siteId });
-    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
-    await dataSource.getRepository(WorkerEntity).delete({ siteId });
-    await dataSource.getRepository(ContractorSiteParticipationEntity).delete({ siteId });
-    await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });
-    await dataSource
-      .getRepository(ContractorRepresentativeAssignmentEntity)
-      .delete({ contractorId });
-    await dataSource.getRepository(ContractorEntity).delete(contractorId);
-    await dataSource.getRepository(ZoneEntity).delete(zoneId);
-    await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId });
-    await dataSource.getRepository(UserEntity).delete(users);
-    await dataSource.getRepository(SiteEntity).delete([siteId, otherSiteId]);
-    await dataSource.destroy();
+    await isolated.dispose();
   }
 });

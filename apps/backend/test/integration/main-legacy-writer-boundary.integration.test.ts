@@ -12,9 +12,33 @@ import {
 } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { MainRepresentativeCommandService } from '../../src/modules/workforce/main-representative-command.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
+import { Legacy24TestDataSource } from '../support/legacy24/data-source.js';
 
 const canonical = createIsolatedTestDatabase();
 const legacy = createIsolatedTestDatabase({ legacy: true });
+test('legacy linked Worker creation uses only its transaction connection in a one-slot pool', async () => {
+  const f = await fixture(legacy.dataSource);
+  await legacy.dataSource.query("UPDATE user_role_assignment SET role='WORKER' WHERE user_id=$1", [
+    f.target,
+  ]);
+  const single = new Legacy24TestDataSource({
+    ...legacy.dataSource.options,
+    extra: { ...legacy.dataSource.options.extra, max: 1, connectionTimeoutMillis: 250 },
+  });
+  try {
+    await single.initialize();
+    const worker = await new WorkforceConfigurationService(single).create(f.site, {
+      externalId: randomUUID(),
+      displayName: 'Synthetic linked Worker',
+      contractorId: f.contractor,
+      userId: f.target,
+    });
+    assert.equal(worker.userId, f.target);
+    assert.equal(worker.contractorId, f.contractor);
+  } finally {
+    if (single.isInitialized) await single.destroy();
+  }
+});
 before(async () => {
   await canonical.initialize();
   await legacy.initialize();
@@ -24,7 +48,7 @@ after(async () => {
   await legacy.dispose();
 });
 
-async function fixture(db: DataSource) {
+async function fixture(db: DataSource, role = 'ADMIN') {
   const f = {
     actor: randomUUID(),
     target: randomUUID(),
@@ -51,8 +75,8 @@ async function fixture(db: DataSource) {
     [f.participation, f.contractor, f.site],
   );
   await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL),($3,$4,'CONTRACTOR_REPRESENTATIVE',$5)",
-    [randomUUID(), f.actor, randomUUID(), f.target, f.site],
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$6,$7),($3,$4,'CONTRACTOR_REPRESENTATIVE',$5)",
+    [randomUUID(), f.actor, randomUUID(), f.target, f.site, role, role === 'ADMIN' ? null : f.site],
   );
   const actor: WorkforceActor = {
     id: f.actor,
@@ -143,6 +167,14 @@ const calls = [
     'assignment safety review',
     (db: DataSource, f: Fixture) =>
       new ContractorOperationsService(db).safetyReview(f.actorContext, f.worker),
+  ],
+  [
+    'assignment revoke',
+    (db: DataSource, f: Fixture) =>
+      new ContractorOperationsService(db).revokeAssignment(f.actorContext, f.worker, {
+        expectedVersion: 1,
+        reviewNote: 'Synthetic revoke',
+      }),
   ],
   [
     'assignment decision',
@@ -264,7 +296,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
 for (const kind of ['GRANT', 'ASSIGN'] as const)
   test(`canonical authenticated replacement ${kind} retains exact actor/fact/witness attribution`, async () => {
     const db = canonical.dataSource,
-      f = await fixture(db),
+      f = await fixture(db, kind === 'GRANT' ? 'ADMIN' : 'SITE_MANAGER'),
       service = new MainRepresentativeCommandService(db);
     const context = { actorUserId: f.actor, reauthorize: async () => {} };
     const result =

@@ -2,11 +2,11 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
-import source from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ManagerOverviewService } from '../../src/modules/workforce/management/manager-overview.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
 import {
   UserEntity,
@@ -25,14 +25,14 @@ import {
   ZoneRestrictionPolicy,
 } from '../../src/database/entities/index.js';
 
-after(async () => {
-  if (source.isInitialized) await source.destroy();
-});
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const source = isolated.dataSource;
+after(() => isolated.dispose());
 
 test('manager overview: generated codes, Site isolation, current roster and dated Zone/schedule aggregation', async () => {
-  await source.initialize();
+  await isolated.initialize();
   const sites = new SiteConfigurationService(source),
-    workforce = new WorkforceConfigurationService(source),
+    workforce = new MainWorkforceCreateService(source),
     zones = new ZoneConfigurationService(source, sites),
     service = new ManagerOverviewService(source);
   const site = await sites.create({ code: randomUUID(), name: 'Manager overview fixture' });
@@ -57,10 +57,19 @@ test('manager overview: generated codes, Site isolation, current roster and date
     mustChangePassword: false,
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
   };
+  const otherManagerId = randomUUID();
+  await source.query(
+    "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Other synthetic manager','unused',false)",
+    [otherManagerId],
+  );
+  await source.query(
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), otherManagerId, other.id],
+  );
   const contractors = await Promise.all([
-    workforce.createContractor(site.id, { name: 'Alpha' }),
-    workforce.createContractor(site.id, { name: 'Beta' }),
-    workforce.createContractor(other.id, { name: 'Foreign' }),
+    workforce.createSiteContractor(site.id, { name: 'Alpha' }, { actorUserId: userId }),
+    workforce.createSiteContractor(site.id, { name: 'Beta' }, { actorUserId: userId }),
+    workforce.createSiteContractor(other.id, { name: 'Foreign' }, { actorUserId: otherManagerId }),
   ]);
   assert.equal(new Set(contractors.map((c) => c.code)).size, 3);
   contractors.forEach((c) => assert.match(c.code, /^CTR-[0-9A-F-]{36}$/));
@@ -78,12 +87,19 @@ test('manager overview: generated codes, Site isolation, current roster and date
   ]);
   assert.notEqual(zone.code, expiredZone.code);
   assert.match(zone.code, /^ZONE-[0-9A-F-]{36}$/);
-  await assert.rejects(workforce.createContractor(site.id, { name: '' }), { status: 400 });
+  await assert.rejects(
+    workforce.createSiteContractor(site.id, { name: '' }, { actorUserId: userId }),
+    { status: 400 },
+  );
   await assert.rejects(zones.create(site.id, { ...zoneInput, code: '' }), { status: 400 });
-  const explicit = await workforce.createContractor(other.id, {
-    code: 'LEGACY-' + randomUUID(),
-    name: 'Legacy',
-  });
+  const explicit = await workforce.createSiteContractor(
+    other.id,
+    {
+      code: 'LEGACY-' + randomUUID(),
+      name: 'Legacy',
+    },
+    { actorUserId: otherManagerId },
+  );
   assert.ok(explicit.code.startsWith('LEGACY-'));
   const workers = await source.getRepository(WorkerEntity).save(
     [true, true, false].map((isActive) => ({
