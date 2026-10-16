@@ -13,6 +13,15 @@ import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-t
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
+// The release54 fixture predates the checklist migration and Main PR62's three
+// attendance migrations. Keep that historical starting point explicit.
+const afterRelease54 = new Set([
+  'SafetyChecklists1792195200000',
+  'Mf06TeamAuthorityHistory1792281600000',
+  'AttendanceAbsence1792022400000',
+  'ShiftExitGracePeriod1792281600000',
+  'AttendanceExitNotifications1792281600001',
+]);
 for (const profile of [
   'fresh',
   'populated-release54',
@@ -38,11 +47,7 @@ for (const profile of [
       if (profile === 'populated-release54')
         db.setOptions({
           migrations: production.filter(
-            (migration) =>
-              typeof migration !== 'function' ||
-              !['SafetyChecklists1792195200000', 'Mf06TeamAuthorityHistory1792281600000'].includes(
-                migration.name,
-              ),
+            (migration) => typeof migration !== 'function' || !afterRelease54.has(migration.name),
           ),
         });
       else if (profile === 'populated-main35') {
@@ -135,7 +140,7 @@ for (const profile of [
         const applied = await db.runMigrations();
         assert.equal(
           applied.length,
-          profile === 'populated-release54' ? 2 : profile === 'populated-main35' ? 21 : 33,
+          profile === 'populated-release54' ? 5 : profile === 'populated-main35' ? 24 : 36,
         );
         for (const { table, fields, rows } of inventory) {
           if (table === 'mf06_authority_source') {
@@ -166,7 +171,7 @@ for (const profile of [
           );
         }
       }
-      assert.equal(db.migrations.length, 56);
+      assert.equal(db.migrations.length, 59);
       assert.equal(await new DatabaseService(db).isReady(), true);
       assert.deepEqual(await db.runMigrations(), []);
       const applied: { name: string }[] = await db.query(
@@ -183,7 +188,7 @@ for (const profile of [
           1,
         );
       }
-      assert.equal(applied.length, profile === 'populated-legacy24' ? 57 : 56);
+      assert.equal(applied.length, profile === 'populated-legacy24' ? 60 : 59);
       assert.equal(
         (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
           .epoch_id,

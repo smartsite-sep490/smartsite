@@ -3,6 +3,7 @@ import { useZoneApplicationSession } from './useZoneApplicationSession';
 import { localizedError, localizeMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
+import { presentZoneLabel, presentZoneMessage } from './zonePresentation';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '../../i18n/ppe-locale';
 import { useScopedCameraPreview } from '../cameras/useScopedCameraPreview';
@@ -1052,11 +1053,14 @@ export function RestrictedZoneView({
     return (
       <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
         <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF06</p>
-          <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">Session pending or expired</h1>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">
+            {t('cameraMonitoring.codeMf06')}
+          </p>
+          <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">
+            {t('ppe.sessionExpired.title')}
+          </h1>
           <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
-            Zone session is pending or expired. Please sign in to the application to configure
-            camera regions.
+            {t('restrictedZone.sessionExpired.description')}
           </p>
         </div>
       </div>
@@ -1067,13 +1071,14 @@ export function RestrictedZoneView({
     return (
       <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
         <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">MF06</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F66B17]">
+            {t('cameraMonitoring.codeMf06')}
+          </p>
           <h1 className="mt-2 text-2xl font-bold text-[#2F3437]">
-            Zone Configuration is restricted
+            {t('restrictedZone.accessRestricted.title')}
           </h1>
           <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
-            A global Admin role or assigned Site Safety Officer role is required to view restricted
-            zones.
+            {t('restrictedZone.accessRestricted.description')}
           </p>
         </div>
       </div>
@@ -1107,11 +1112,10 @@ export function RestrictedZoneView({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-[#F66B17]">
                 <IconAlertTriangle className="h-4 w-4" />
               </span>
-              <h2 className="text-sm font-bold text-[#2F3437]">Session pending or expired</h2>
+              <h2 className="text-sm font-bold text-[#2F3437]">{t('ppe.sessionExpired.title')}</h2>
             </div>
             <p className="mt-1 text-xs text-[#6B6B6B]">
-              Zone session is pending or expired. Please sign in to the application to configure
-              camera regions.
+              {t('restrictedZone.sessionExpired.description')}
             </p>
           </div>
         ) : (
@@ -1179,7 +1183,7 @@ export function RestrictedZoneView({
             </div>
             {sessionExpiredMessage && !loginError && (
               <p role="alert" className="mt-2 text-xs text-red-600 font-medium">
-                {localizeMessage(sessionExpiredMessage)}
+                {presentZoneMessage(sessionExpiredMessage, t)}
               </p>
             )}
             {loginError && (
@@ -1209,7 +1213,7 @@ export function RestrictedZoneView({
                   >
                     {isGlobalAdmin
                       ? tr('common.admin_session_active')
-                      : 'Safety Officer Session Active (Read-Only)'}
+                      : t('restrictedZone.session.safetyOfficerActive')}
                   </span>
                   <span className="text-xs font-semibold text-[#2F3437]">
                     · {effectiveUser.displayName} ({effectiveUser.username || effectiveUser.id})
@@ -1220,7 +1224,7 @@ export function RestrictedZoneView({
                     ? tr(
                         'restricted_zone_view.global_admin_role_verified_polygons_saved_here_synchronize_directly_with_backend_c',
                       )
-                    : 'Safety Officer role verified. Snapshot camera monitoring is active in read-only mode.'}
+                    : t('restrictedZone.session.safetyOfficerDesc')}
                 </p>
               </div>
             </div>
@@ -1312,21 +1316,21 @@ export function RestrictedZoneView({
                   <label
                     htmlFor="zone-region-geometry-select"
                     className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
-                    title="Select authoritative region polygon for geometry editing and backend synchronization"
+                    title={t('restrictedZone.regionSelect.labelTitle')}
                   >
-                    Region (Geometry Editing)
+                    {t('restrictedZone.regionSelect.label')}
                   </label>
                   <span
                     className="text-[9px] text-[#8C8C8C] font-normal"
-                    title="Editing target only. Live AI intrusion detection displays observed camera zone events without filtering."
+                    title={t('restrictedZone.regionSelect.editTargetTitle')}
                   >
-                    Edit Target
+                    {t('restrictedZone.regionSelect.editTarget')}
                   </span>
                 </div>
                 <select
                   id="zone-region-geometry-select"
-                  aria-label="Region (Geometry Editing)"
-                  title="Authoritative polygon geometry target for editing and backend sync. Live AI detection stream reflects observed camera zones."
+                  aria-label={t('restrictedZone.regionSelect.label')}
+                  title={t('restrictedZone.regionSelect.selectTitle')}
                   value={selectedRegionId}
                   onChange={(e) => {
                     const regionId = e.target.value;
@@ -1357,13 +1361,13 @@ export function RestrictedZoneView({
             ) : (
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
-                  Zone Scope
+                  {t('restrictedZone.scope.zoneScopeLabel')}
                 </label>
                 <div
                   className="w-full rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-2.5 py-1.5 text-xs font-medium text-[#6B6B6B]"
-                  title="Live AI detections reflect observed camera zones; geometry editing is restricted to Admin"
+                  title={t('restrictedZone.scope.readOnlyTitle')}
                 >
-                  Restricted Zone (Read-Only)
+                  {t('restrictedZone.scope.readOnlyValue')}
                 </div>
               </div>
             )}
@@ -1383,7 +1387,7 @@ export function RestrictedZoneView({
                 )
               ) : (
                 <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                  Safety Officer (Read-Only)
+                  {t('restrictedZone.scope.safetyOfficerBadge')}
                 </span>
               )}
             </div>
@@ -1478,21 +1482,25 @@ export function RestrictedZoneView({
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-6 h-6 border-2 border-[#F66B17] border-t-transparent rounded-full animate-spin" />
                     <p className="text-xs font-semibold text-slate-300">
-                      Connecting to Camera Snapshot...
+                      {t('restrictedZone.viewport.connectingTitle')}
                     </p>
                   </div>
                 ) : socketError ? (
                   <div className="flex flex-col items-center gap-2 max-w-sm">
                     <IconAlertTriangle className="w-8 h-8 text-amber-500" />
-                    <p className="text-xs font-bold text-slate-200">Camera Snapshot Unavailable</p>
+                    <p className="text-xs font-bold text-slate-200">
+                      {t('ppe.viewport.snapshotUnavailableTitle')}
+                    </p>
                     <p className="text-[11px] text-slate-400">{socketError}</p>
                   </div>
                 ) : !selectedCameraId ? (
                   <p className="text-xs text-slate-400">
-                    No camera selected or available for preview
+                    {t('restrictedZone.viewport.noCameraSelected')}
                   </p>
                 ) : (
-                  <p className="text-xs text-slate-400">Camera Snapshot Unavailable</p>
+                  <p className="text-xs text-slate-400">
+                    {t('ppe.viewport.snapshotUnavailableTitle')}
+                  </p>
                 )}
               </div>
             )}
@@ -1503,12 +1511,12 @@ export function RestrictedZoneView({
                 isAiWorkPaused
                   ? t('ppe.badge.aiPaused')
                   : scopedPreview.status === 'LIVE'
-                    ? 'MF06 LIVE SNAPSHOT (1s)'
+                    ? t('restrictedZone.badge.liveSnapshot1s')
                     : scopedPreview.status === 'REPLAY'
-                      ? 'MF06 REPLAY SNAPSHOT (1s)'
+                      ? t('restrictedZone.badge.replaySnapshot1s')
                       : scopedPreview.status === 'UNAVAILABLE'
-                        ? 'MF06 SNAPSHOT UNAVAILABLE'
-                        : 'MF06 CAMERA OFFLINE'
+                        ? t('restrictedZone.badge.snapshotUnavailable')
+                        : t('restrictedZone.badge.cameraOffline')
               }
               className={`absolute top-14 left-1/2 -translate-x-1/2 max-w-[85%] truncate px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm z-20 pointer-events-none text-center ${
                 testDetection?.active
@@ -1519,13 +1527,18 @@ export function RestrictedZoneView({
               {isAiWorkPaused
                 ? t('ppe.badge.aiPaused')
                 : scopedPreview.status === 'LIVE'
-                  ? 'MF06 LIVE SNAPSHOT (1s)'
+                  ? t('restrictedZone.badge.liveSnapshot1s')
                   : scopedPreview.status === 'REPLAY'
-                    ? 'MF06 REPLAY SNAPSHOT (1s)'
+                    ? t('restrictedZone.badge.replaySnapshot1s')
                     : scopedPreview.status === 'UNAVAILABLE'
-                      ? 'MF06 SNAPSHOT UNAVAILABLE'
-                      : 'MF06 CAMERA OFFLINE'}{' '}
-              · {testDetection ? (testDetection.active ? 'ZONE ENTRY' : 'SCANNING') : 'NO TARGETS'}{' '}
+                      ? t('restrictedZone.badge.snapshotUnavailable')
+                      : t('restrictedZone.badge.cameraOffline')}{' '}
+              ·{' '}
+              {testDetection
+                ? testDetection.active
+                  ? t('restrictedZone.badge.zoneEntry')
+                  : t('restrictedZone.badge.scanning')
+                : t('ppe.badge.resultNoTargets')}{' '}
               · {isLive ? clockTime : '--:--'}
             </div>
 
@@ -1595,7 +1608,7 @@ export function RestrictedZoneView({
               <div className="flex items-center gap-2">
                 {!isGlobalAdmin && effectiveUser ? (
                   <span className="rounded bg-slate-900/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-slate-300 backdrop-blur-sm border border-slate-700">
-                    SAFETY OFFICER (READ-ONLY)
+                    {t('restrictedZone.controls.safetyOfficerReadOnlyBadge')}
                   </span>
                 ) : !isEditingZone ? (
                   <div className="flex items-center gap-2">
@@ -1605,8 +1618,8 @@ export function RestrictedZoneView({
                       title={
                         effectiveUser && !canEditGeometry
                           ? scopedPreview.status !== 'LIVE'
-                            ? 'Live camera snapshot is required before editing restricted zone geometry'
-                            : 'Select the matching Backend camera before editing this preview'
+                            ? t('restrictedZone.controls.editDisabledNotLive')
+                            : t('restrictedZone.controls.editDisabledMismatch')
                           : tr('common.edit_zone_draft')
                       }
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1643,7 +1656,9 @@ export function RestrictedZoneView({
                       onClick={resetToAuthoritative}
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
-                      {effectiveUser && selectedRegion ? tr('common.reset_to_server') : 'RESET'}
+                      {effectiveUser && selectedRegion
+                        ? tr('common.reset_to_server')
+                        : t('restrictedZone.controls.resetBtn')}
                     </button>
                     <button
                       onClick={exportZone}
@@ -1656,7 +1671,7 @@ export function RestrictedZoneView({
               </div>
               {saveStatusMessage && (
                 <div className="rounded bg-black/75 px-2.5 py-1 text-[10px] font-medium text-amber-200 backdrop-blur-sm border border-amber-500/30">
-                  {localizeMessage(saveStatusMessage)}
+                  {presentZoneMessage(saveStatusMessage, t)}
                 </div>
               )}
             </div>
@@ -1666,10 +1681,8 @@ export function RestrictedZoneView({
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                 <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold text-center max-w-md">
                   {scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
-                    ? 'Replay'
-                    : 'Live'}{' '}
-                  Snapshot Active · No AI person observations in this snapshot; no conclusion about
-                  safety/authorization
+                    ? t('restrictedZone.viewport.emptyFrameReplay')
+                    : t('restrictedZone.viewport.emptyFrameLive')}
                 </div>
               </div>
             )}
@@ -1709,12 +1722,12 @@ export function RestrictedZoneView({
                 {isAiWorkPaused
                   ? t('ppe.header.status.paused')
                   : scopedPreview.status === 'LIVE'
-                    ? `LIVE SNAPSHOT (1s) - ${clockTime}`
+                    ? t('restrictedZone.headerOverlay.liveSnapshotTime', { time: clockTime })
                     : scopedPreview.status === 'REPLAY'
-                      ? `REPLAY SNAPSHOT (1s) - ${clockTime}`
+                      ? t('restrictedZone.headerOverlay.replaySnapshotTime', { time: clockTime })
                       : socketError
-                        ? 'SNAPSHOT UNAVAILABLE'
-                        : 'OFFLINE'}
+                        ? t('restrictedZone.headerOverlay.snapshotUnavailable')
+                        : t('restrictedZone.headerOverlay.offline')}
               </span>
             </div>
           </div>
@@ -1724,14 +1737,16 @@ export function RestrictedZoneView({
             <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center justify-between gap-2 backdrop-blur-sm">
               <div className="flex items-center gap-2 truncate">
                 <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
-                <span className="truncate">Camera Snapshot: {socketError}</span>
+                <span className="truncate">
+                  {t('restrictedZone.errorBanner.cameraSnapshotPrefix', { error: socketError })}
+                </span>
               </div>
               <button
                 type="button"
                 onClick={scopedPreview.retry}
                 className="text-[10px] font-bold underline hover:text-white cursor-pointer flex-shrink-0"
               >
-                Retry
+                {t('mf06.detail.retry')}
               </button>
             </div>
           )}
@@ -1743,10 +1758,10 @@ export function RestrictedZoneView({
                 {isAiWorkPaused
                   ? t('ppe.toolbar.captionPaused')
                   : scopedPreview.status === 'LIVE'
-                    ? 'Live Camera Snapshot (1s)'
+                    ? t('restrictedZone.toolbar.liveSnapshot1s')
                     : scopedPreview.status === 'REPLAY'
-                      ? 'Replay Camera Snapshot (1s)'
-                      : 'Camera Offline'}
+                      ? t('restrictedZone.toolbar.replaySnapshot1s')
+                      : t('restrictedZone.toolbar.cameraOffline')}
               </span>
             </div>
 
@@ -1917,7 +1932,7 @@ export function RestrictedZoneView({
                       ? tr('common.zone_entry_observation')
                       : zoneDetections.length === 0
                         ? tr('ppe_monitoring_view.clear_no_targets')
-                        : 'SCANNING SNAPSHOT'}
+                        : t('ppe.result.scanningSnapshot')}
                   </span>
                 </div>
                 <p className="text-xs text-[#6B6B6B]">
@@ -1927,9 +1942,9 @@ export function RestrictedZoneView({
                       )
                     : isLive
                       ? scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
-                        ? 'Rendering recorded video replay stream from Camera Preview API.'
-                        : 'Streaming live snapshot from Camera Preview API.'
-                      : 'Camera snapshot is unavailable or offline.'}
+                        ? t('ppe.result.descStreamingReplay')
+                        : t('ppe.result.descStreamingLive')
+                      : t('ppe.result.descSnapshotOffline')}
                 </p>
               </div>
             </div>
@@ -1987,13 +2002,13 @@ export function RestrictedZoneView({
                 />
                 <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
                   {scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
-                    ? 'Replay Zone Observations Active'
+                    ? t('restrictedZone.observations.replayHeading')
                     : tr('restricted_zone_view.live_zone_observations_active')}
                 </h3>
               </div>
               <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
                 {scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
-                  ? 'Technical zone-entry detections are rendered from recorded video replay stream above. Sample replay timeline rows are hidden during stream playback. Durable safety alerts require Backend worker ingestion; review persisted records in Safety Alerts.'
+                  ? t('restrictedZone.observations.replayDesc')
                   : tr(
                       'restricted_zone_view.technical_zone_entry_detections_are_rendered_directly_on_the_live_camera_feed_abov',
                     )}
@@ -2023,8 +2038,7 @@ export function RestrictedZoneView({
                 {tr('common.zone_replay_observations')}
               </h3>
               <p className="text-xs text-[#6B6B6B] mt-1">
-                Observations from the camera snapshot feed. Live safety alerts are available in
-                Safety Alerts.
+                {t('restrictedZone.table.subtitle')}
                 {activeFilterWorker !== null &&
                   tr('messages.becfe40eedac', { value1: activeFilterWorker })}
               </p>
@@ -2098,7 +2112,7 @@ export function RestrictedZoneView({
                     <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
                     <td className="py-3 px-3 text-[#6B6B6B]">{localizedLabel(evt.identity)}</td>
                     <td className="py-3 px-3 text-[#6B6B6B]">
-                      {localizedLabel(evt.authorization)}
+                      {presentZoneLabel(evt.authorization, t)}
                     </td>
                     <td className="py-3 px-3">
                       <span
@@ -2110,7 +2124,7 @@ export function RestrictedZoneView({
                               : 'bg-amber-50 text-amber-600'
                         }`}
                       >
-                        {localizedLabel(evt.result)}
+                        {presentZoneLabel(evt.result, t)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
@@ -2161,7 +2175,7 @@ export function RestrictedZoneView({
                 {selectedIncident.id}
               </span>
               <span className="text-xs font-medium text-[#6B6B6B]">
-                Technical Observation Preview
+                {t('restrictedZone.reviewModal.previewBadge')}
               </span>
             </div>
 
@@ -2177,7 +2191,7 @@ export function RestrictedZoneView({
                 </strong>{' '}
                 {tr('common.with_status')}{' '}
                 <strong className="text-[#2F3437]">
-                  {localizedLabel(selectedIncident.authorization)}
+                  {presentZoneLabel(selectedIncident.authorization, t)}
                 </strong>
                 .
               </p>

@@ -143,6 +143,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
 
     await waitFor(() => {
       expect(refHookState.lastOptions).toEqual({
+        client: expect.any(SmartSiteManagementClient),
         apiUrl: 'http://localhost:3000',
         token: 'admin-jwt-token',
         sessionScope: 'admin:GLOBAL',

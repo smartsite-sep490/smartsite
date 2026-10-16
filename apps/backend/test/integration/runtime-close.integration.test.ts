@@ -13,7 +13,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 
 test(
-  'actual compiled main native app.close drains an admitted MAIN56 transaction before pool shutdown',
+  'actual compiled main native app.close drains an admitted MAIN59 transaction before pool shutdown',
   { timeout: 40_000 },
   async (t) => {
     const url = new URL(resolveTestDatabaseUrl());
@@ -166,7 +166,7 @@ test(
     assert.deepEqual(await control('READY'), {
       type: 'READY',
       entrypoint: 'main.ts',
-      registeredMigrations: 56,
+      registeredMigrations: 59,
       productionConfig: true,
     });
     const login = await request('/auth/login', 'POST', {

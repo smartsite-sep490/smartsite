@@ -9,7 +9,7 @@ import {
   POSITIVE_PPE_OBJECT_CLASSES,
   NEGATIVE_PPE_OBJECT_CLASSES,
 } from '../cameras/realtimePreview';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   useInfiniteQuery,
   useQuery,
@@ -197,7 +197,7 @@ import {
   filterPpeEvents,
   formatPpeItemLabel,
 } from '../cameras/monitoringUtils';
-import { useAuth } from '../../features/auth/auth-session';
+import { useAuth, useManagementClient } from '../../features/auth/auth-session';
 import type { SharedSession } from '../../types/shared-session';
 
 const authIdentities = new WeakMap<QueryClient, { token: string | null; id: number }>();
@@ -289,13 +289,19 @@ export function PpeMonitoringView({
 }: PpeMonitoringViewProps = {}) {
   const auth = useAuth();
   const { t } = useLocale();
+  const diagnosticsContentId = useId();
   const queryClient = useQueryClient();
   const isControlled = sharedSession !== undefined;
   const token = isControlled ? (sharedSession?.accessToken ?? '') : (auth.accessToken ?? '');
   const sessionScope = isControlled
     ? (sharedSession?.sessionScope ?? '')
     : (auth.sessionScope ?? '');
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const sessionClient = useManagementClient(apiUrl);
+  const controlledClient = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client =
+    !isControlled || (token === auth.accessToken && sessionScope === auth.sessionScope)
+      ? sessionClient
+      : controlledClient;
 
   const credentialId = useMemo(() => getCredentialId(queryClient, token), [queryClient, token]);
 
@@ -1299,13 +1305,13 @@ export function PpeMonitoringView({
   };
 
   return (
-    <div className="space-y-5 max-w-[1202px] w-full min-w-0 max-w-full mx-auto text-[#2F3437] pb-10">
+    <div className="space-y-4 max-w-[1240px] w-full min-w-0 max-w-full mx-auto text-[#2F3437] pb-10">
       {/* 0. Page Title & Concise Operational Status Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
         <h1 className="text-xl font-bold tracking-tight text-slate-900">{t('ppe.header.title')}</h1>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200/80 bg-white text-sm shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200/80 bg-white text-xs shadow-xs">
             <span
               className={`w-2 h-2 rounded-full ${
                 isAiWorkPaused
@@ -1317,7 +1323,7 @@ export function PpeMonitoringView({
                       : 'bg-slate-400'
               }`}
             />
-            <span className="font-medium text-slate-800">
+            <span className="font-semibold text-slate-800">
               {isAiWorkPaused
                 ? t('ppe.header.status.paused')
                 : scopedPreview.status === 'LIVE' && preview
@@ -1329,7 +1335,7 @@ export function PpeMonitoringView({
             <span className="text-slate-300" aria-hidden="true">
               ·
             </span>
-            <span className="text-xs font-mono text-slate-500">{clockTime}</span>
+            <span className="text-xs font-mono text-slate-500 tabular-nums">{clockTime}</span>
           </div>
         </div>
       </div>
@@ -1338,21 +1344,21 @@ export function PpeMonitoringView({
       {isAiWorkPaused && (
         <div
           data-testid="ai-work-paused-banner"
-          className="rounded-xl border border-amber-200/90 bg-amber-50/60 px-3.5 py-2 text-amber-950"
+          className="rounded-2xl border border-amber-200/90 bg-amber-50/60 px-4 py-2.5 text-amber-950"
         >
           <div className="flex items-start gap-2.5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-amber-200/70 text-amber-800 mt-0.5">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-amber-200/70 text-amber-800 mt-0.5">
               <IconAlertTriangle className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs sm:text-sm">
                 <h2 className="font-semibold text-amber-950">{t('ppe.pausedBanner.title')}</h2>
                 <span className="text-amber-400" aria-hidden="true">
                   ·
                 </span>
                 <p className="text-amber-900">{t('ppe.pausedBanner.summary')}</p>
               </div>
-              <details className="mt-0.5 text-xs text-amber-800">
+              <details className="mt-1 text-xs text-amber-800">
                 <summary className="cursor-pointer font-medium text-amber-900 hover:underline select-none">
                   {t('ppe.pausedBanner.detailsToggle')}
                 </summary>
@@ -1378,30 +1384,36 @@ export function PpeMonitoringView({
         </div>
       )}
 
-      {/* Monitoring Scope & Configuration Sections */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_355px] gap-4 items-stretch min-w-0 w-full max-w-full">
+      {/* Monitoring Scope (Primary Selectors) & Secondary Configuration Actions */}
+      <div
+        className={`grid grid-cols-1 gap-4 items-stretch min-w-0 w-full max-w-full ${
+          canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
+            ? 'xl:grid-cols-[minmax(0,1fr)_360px]'
+            : ''
+        }`}
+      >
         <section
           aria-label={t('ppe.layout.monitoringScope')}
-          className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex flex-col justify-start gap-3 min-w-0 w-full max-w-full"
+          className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full"
         >
           <div className="flex items-center justify-between gap-2 min-w-0">
-            <h2 className="text-xs font-semibold text-slate-500">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               {t('ppe.layout.monitoringScope')}
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0 w-full max-w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 min-w-0 w-full max-w-full">
             {/* Site Scope Block */}
-            <div className="flex flex-col gap-1.5 min-w-0 w-full max-w-full">
+            <div className="flex flex-col gap-1 min-w-0 w-full max-w-full">
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <label
                   htmlFor="site-selector"
-                  className="text-sm font-medium text-slate-700 truncate"
+                  className="text-xs font-semibold text-slate-700 truncate"
                 >
                   {t('ppe.scope.siteLabel')}
                 </label>
                 {!isSitesBaseError && allFetchedSites.length > 0 && (
-                  <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
+                  <span className="text-[11px] text-slate-500 font-mono tabular-nums whitespace-nowrap">
                     {t('ppe.scope.loadedCount', {
                       loaded: visibleAuthorizedSites.length,
                       total: siteServerTotal,
@@ -1421,7 +1433,7 @@ export function PpeMonitoringView({
                 disabled={
                   !token || sitesInfiniteQuery.isPending || visibleAuthorizedSites.length === 0
                 }
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 {visibleAuthorizedSites.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -1436,7 +1448,7 @@ export function PpeMonitoringView({
                 (!isSitesBaseError &&
                   !isTransientNextSitesError &&
                   sitesInfiniteQuery.hasNextPage)) && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
                   {isSitesInitialLoading && (
                     <span
                       role="status"
@@ -1455,7 +1467,7 @@ export function PpeMonitoringView({
                         sitesInfiniteQuery.refetch({ cancelRefetch: false });
                       }}
                       disabled={sitesInfiniteQuery.isFetching}
-                      className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 shrink-0 whitespace-nowrap"
+                      className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 shrink-0 whitespace-nowrap"
                     >
                       {sitesInfiniteQuery.isFetching
                         ? t('ppe.scope.retryingSites')
@@ -1471,7 +1483,7 @@ export function PpeMonitoringView({
                         sitesInfiniteQuery.fetchNextPage({ cancelRefetch: false });
                       }}
                       disabled={sitesInfiniteQuery.isFetching}
-                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 shrink-0 whitespace-nowrap"
+                      className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 shrink-0 whitespace-nowrap"
                     >
                       {sitesInfiniteQuery.isFetching
                         ? t('ppe.scope.retryingMoreSites')
@@ -1489,7 +1501,7 @@ export function PpeMonitoringView({
                           sitesInfiniteQuery.fetchNextPage({ cancelRefetch: false });
                         }}
                         disabled={sitesInfiniteQuery.isFetching}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 shrink-0 whitespace-nowrap"
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 shrink-0 whitespace-nowrap"
                       >
                         {sitesInfiniteQuery.isFetching
                           ? t('ppe.scope.loadingMoreSites')
@@ -1501,16 +1513,16 @@ export function PpeMonitoringView({
             </div>
 
             {/* Camera Scope Block */}
-            <div className="flex flex-col gap-1.5 min-w-0 w-full max-w-full">
+            <div className="flex flex-col gap-1 min-w-0 w-full max-w-full">
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <label
                   htmlFor="camera-selector"
-                  className="text-sm font-medium text-slate-700 truncate"
+                  className="text-xs font-semibold text-slate-700 truncate"
                 >
                   {t('ppe.scope.cameraLabel')}
                 </label>
                 {!isCamerasBaseError && allFetchedCameras.length > 0 && (
-                  <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
+                  <span className="text-[11px] text-slate-500 font-mono tabular-nums whitespace-nowrap">
                     {t('ppe.scope.loadedCount', {
                       loaded: visibleAuthorizedCameras.length,
                       total: cameraServerTotal,
@@ -1528,7 +1540,7 @@ export function PpeMonitoringView({
                   previewCamerasInfiniteQuery.isPending ||
                   visibleAuthorizedCameras.length === 0
                 }
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 {visibleAuthorizedCameras.map((camera) => (
                   <option key={camera.id} value={camera.id}>
@@ -1544,7 +1556,7 @@ export function PpeMonitoringView({
                 (!isCamerasBaseError &&
                   !isTransientNextCamerasError &&
                   previewCamerasInfiniteQuery.hasNextPage)) && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
                   {isCamerasInitialLoading && (
                     <span
                       role="status"
@@ -1573,7 +1585,7 @@ export function PpeMonitoringView({
                         previewCamerasInfiniteQuery.refetch({ cancelRefetch: false });
                       }}
                       disabled={previewCamerasInfiniteQuery.isFetching}
-                      className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 shrink-0 whitespace-nowrap"
+                      className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 shrink-0 whitespace-nowrap"
                     >
                       {previewCamerasInfiniteQuery.isFetching
                         ? t('ppe.scope.retryingCameras')
@@ -1589,7 +1601,7 @@ export function PpeMonitoringView({
                         previewCamerasInfiniteQuery.fetchNextPage({ cancelRefetch: false });
                       }}
                       disabled={previewCamerasInfiniteQuery.isFetching}
-                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 shrink-0 whitespace-nowrap"
+                      className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 shrink-0 whitespace-nowrap"
                     >
                       {previewCamerasInfiniteQuery.isFetching
                         ? t('ppe.scope.retryingMoreCameras')
@@ -1607,7 +1619,7 @@ export function PpeMonitoringView({
                           previewCamerasInfiniteQuery.fetchNextPage({ cancelRefetch: false });
                         }}
                         disabled={previewCamerasInfiniteQuery.isFetching}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 shrink-0 whitespace-nowrap"
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 shrink-0 whitespace-nowrap"
                       >
                         {previewCamerasInfiniteQuery.isFetching
                           ? t('ppe.scope.loadingMoreCameras')
@@ -1623,7 +1635,7 @@ export function PpeMonitoringView({
           {sitesError && (
             <div
               role="alert"
-              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm text-rose-800 flex items-center gap-2 w-full"
+              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800 flex items-center gap-2 w-full"
             >
               <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
               <span>{getSafePublicMetadataErrorMessage(sitesError, 'site', t)}</span>
@@ -1633,7 +1645,7 @@ export function PpeMonitoringView({
           {camerasError && !isSitesBaseError && (
             <div
               role="alert"
-              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm text-rose-800 flex items-center gap-2 w-full"
+              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800 flex items-center gap-2 w-full"
             >
               <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
               <span>{getSafePublicMetadataErrorMessage(camerasError, 'camera', t)}</span>
@@ -1644,7 +1656,7 @@ export function PpeMonitoringView({
             <div
               role="status"
               aria-live="polite"
-              className="text-sm text-slate-500 italic py-1 px-1 w-full"
+              className="text-xs text-slate-500 italic py-0.5 px-1 w-full"
             >
               {t('ppe.empty.noSites')}
             </div>
@@ -1654,7 +1666,7 @@ export function PpeMonitoringView({
             <div
               role="status"
               aria-live="polite"
-              className="text-sm text-slate-500 italic py-1 px-1 w-full"
+              className="text-xs text-slate-500 italic py-0.5 px-1 w-full"
             >
               {previewCamerasInfiniteQuery.hasNextPage
                 ? t('ppe.empty.noCamerasLoadedYet')
@@ -1667,17 +1679,17 @@ export function PpeMonitoringView({
           aria-label={t('ppe.layout.configuration')}
           className={
             canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
-              ? 'rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs flex flex-col justify-start gap-3 min-w-0 w-full max-w-full'
+              ? 'rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full'
               : 'sr-only'
           }
         >
           <div className="flex items-center justify-between gap-2 min-w-0">
-            <h2 className="text-xs font-semibold text-slate-500">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               {t('ppe.layout.configuration')}
             </h2>
           </div>
 
-          <div className="flex flex-col sm:flex-row xl:flex-col items-stretch sm:items-center xl:items-stretch gap-2 min-w-0 w-full">
+          <div className="flex flex-col gap-2 min-w-0 w-full">
             {/* Authorized Configure PPE by Zone trigger */}
             {canOpenZonePpe && (
               <button
@@ -1686,41 +1698,45 @@ export function PpeMonitoringView({
                   setIsZonePpeOpen(true);
                 }}
                 disabled={!selectedSiteId}
-                className="w-full sm:w-auto xl:w-full min-w-0 rounded-xl border border-[#0F172A] bg-[#0F172A] px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="w-full min-w-0 rounded-lg border border-[#0F172A] bg-[#0F172A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
-                <IconShield className="w-4 h-4 shrink-0" />
+                <IconShield className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{t('ppe.admin.configureByZone')}</span>
               </button>
             )}
 
-            {/* Global Admin Register camera trigger */}
-            {canRegisterCamera && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRegistrationFeedback(null);
-                  setIsRegisterCameraOpen(true);
-                }}
-                className="w-full sm:w-auto xl:w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-              >
-                <IconCamera className="w-4 h-4 shrink-0" />
-                <span className="truncate">{t('ppe.admin.registerCamera')}</span>
-              </button>
-            )}
+            {(canRegisterCamera || canManageCamera) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0 w-full">
+                {/* Global Admin Register camera trigger */}
+                {canRegisterCamera && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegistrationFeedback(null);
+                      setIsRegisterCameraOpen(true);
+                    }}
+                    className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  >
+                    <IconCamera className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{t('ppe.admin.registerCamera')}</span>
+                  </button>
+                )}
 
-            {/* Global Admin Manage camera trigger */}
-            {canManageCamera && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRegistrationFeedback(null);
-                  setIsManageCameraOpen(true);
-                }}
-                className="w-full sm:w-auto xl:w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-              >
-                <IconCamera className="w-4 h-4 shrink-0" />
-                <span className="truncate">{t('ppe.admin.manageCamera')}</span>
-              </button>
+                {/* Global Admin Manage camera trigger */}
+                {canManageCamera && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegistrationFeedback(null);
+                      setIsManageCameraOpen(true);
+                    }}
+                    className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  >
+                    <IconCamera className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{t('ppe.admin.manageCamera')}</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -1728,10 +1744,10 @@ export function PpeMonitoringView({
             <div
               role="status"
               aria-live="polite"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-800 flex items-center justify-between gap-2 w-full"
+              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800 flex items-center justify-between gap-2 w-full"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                <IconCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                 <span className="truncate">
                   {registrationFeedback === 'ppe.admin.registrationSuccess'
                     ? t('ppe.admin.registrationSuccess')
@@ -1751,84 +1767,92 @@ export function PpeMonitoringView({
         </section>
       </div>
 
-      {/* Slim Viewing Mode & Quick Camera Switcher Row Immediately Above Camera / Wall */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-xs min-w-0 w-full max-w-full">
-        {/* View Mode Switcher: Single Focus vs 4-Source Wall */}
-        <div
-          className="flex items-center rounded-xl border border-slate-200 bg-[#F1F5F9] p-0.5 flex-shrink-0"
-          role="group"
-          aria-label={t('ppe.viewMode.groupAria')}
-        >
-          <button
-            type="button"
-            data-testid="toggle-view-single"
-            onClick={() => setViewMode('single')}
-            className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'single'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-            aria-pressed={viewMode === 'single'}
+      {/* Viewing Controls Bar: View Mode Switcher, Quick Camera Strip & Polling Cadence */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-xs min-w-0 w-full max-w-full">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
+          {/* View Mode Switcher: Single Focus vs 4-Source Wall */}
+          <div
+            className="flex items-center rounded-xl border border-slate-200/90 bg-[#F1F5F9] p-0.5 flex-shrink-0"
+            role="group"
+            aria-label={t('ppe.viewMode.groupAria')}
           >
-            <IconEye className="w-4 h-4" />
-            <span>{t('ppe.viewMode.single')}</span>
-          </button>
-          <button
-            type="button"
-            data-testid="toggle-view-wall"
-            onClick={() => setViewMode('wall')}
-            className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'wall'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-            aria-pressed={viewMode === 'wall'}
-          >
-            <IconGrid className="w-4 h-4" />
-            <span>{t('ppe.viewMode.wall')}</span>
-          </button>
+            <button
+              type="button"
+              data-testid="toggle-view-single"
+              onClick={() => setViewMode('single')}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
+                viewMode === 'single'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              aria-pressed={viewMode === 'single'}
+            >
+              <IconEye className="w-3.5 h-3.5" />
+              <span>{t('ppe.viewMode.single')}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="toggle-view-wall"
+              onClick={() => setViewMode('wall')}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
+                viewMode === 'wall'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              aria-pressed={viewMode === 'wall'}
+            >
+              <IconGrid className="w-3.5 h-3.5" />
+              <span>{t('ppe.viewMode.wall')}</span>
+            </button>
+          </div>
+
+          {/* Inline quick camera chips in Single Focus mode */}
+          {visibleAuthorizedCameras.length > 0 && viewMode === 'single' && (
+            <>
+              <span className="hidden sm:block h-4 w-px bg-slate-200 shrink-0" aria-hidden="true" />
+              <div
+                data-testid="camera-overview-strip"
+                className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar min-w-0 py-0.5"
+              >
+                {previewCamerasQuery.data.items.map((cam) => {
+                  const isCurrent = cam.id === selectedCameraId;
+                  const camCtx = resolveCameraAndWorkArea(cam.name || cam.code);
+                  return (
+                    <button
+                      key={`cam-chip-${cam.id}`}
+                      type="button"
+                      data-testid={`camera-chip-${cam.id}`}
+                      aria-pressed={isCurrent}
+                      onClick={() => setSelectedCameraId(cam.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-colors shrink-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
+                        isCurrent
+                          ? 'border-slate-900 bg-slate-900 text-white font-medium'
+                          : 'border-slate-200 bg-slate-50 hover:bg-white text-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isCurrent ? 'bg-emerald-400' : 'bg-slate-400'
+                        }`}
+                        title={
+                          isCurrent
+                            ? t('ppe.overview.selectedTitle')
+                            : t('ppe.overview.selectTitle')
+                        }
+                        aria-label={isCurrent ? t('ppe.overview.selectedAria') : undefined}
+                      />
+                      <span className="truncate max-w-[140px]">{camCtx.camera}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Inline quick camera chips in Single Focus mode */}
-        {visibleAuthorizedCameras.length > 0 && viewMode === 'single' && (
-          <div
-            data-testid="camera-overview-strip"
-            className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar min-w-0"
-          >
-            {previewCamerasQuery.data.items.map((cam) => {
-              const isCurrent = cam.id === selectedCameraId;
-              const camCtx = resolveCameraAndWorkArea(cam.name || cam.code);
-              return (
-                <button
-                  key={`cam-chip-${cam.id}`}
-                  type="button"
-                  data-testid={`camera-chip-${cam.id}`}
-                  onClick={() => setSelectedCameraId(cam.id)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-colors shrink-0 cursor-pointer ${
-                    isCurrent
-                      ? 'border-slate-900 bg-slate-900 text-white font-medium'
-                      : 'border-slate-200 bg-slate-50 hover:bg-white text-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isCurrent ? 'bg-emerald-400' : 'bg-slate-400'
-                    }`}
-                    title={
-                      isCurrent ? t('ppe.overview.selectedTitle') : t('ppe.overview.selectTitle')
-                    }
-                    aria-label={isCurrent ? t('ppe.overview.selectedAria') : undefined}
-                  />
-                  <span className="truncate max-w-[140px]">{camCtx.camera}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
         {!isAiWorkPaused && (
-          <div className="flex items-center gap-2.5 flex-shrink-0 min-w-0">
-            <span className="text-xs font-medium text-slate-500 truncate">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2.5 py-1 flex-shrink-0 min-w-0">
+            <span className="text-[11px] font-mono text-slate-600 tabular-nums truncate">
               {viewMode === 'wall' ? t('ppe.cadence.wall') : t('ppe.cadence.single')}
             </span>
             {(scopedPreview.isPolling ||
@@ -1847,10 +1871,10 @@ export function PpeMonitoringView({
         )}
       </div>
 
-      {/* Main Interactive Viewport: Camera Video Feed (Single Focus or 4-Source Wall) + Right Card (355px) */}
+      {/* Main Interactive Viewport: Camera Video Feed (Single Focus or 4-Source Wall) + Right Card (360px) */}
       <div
         data-testid="ppe-monitoring-layout"
-        className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_355px] gap-4 items-stretch mt-4"
+        className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-stretch"
       >
         {/* Left: Camera Feed Viewport OR 4-Source Wall */}
         {viewMode === 'wall' ? (
@@ -1888,13 +1912,13 @@ export function PpeMonitoringView({
             />
           </div>
         ) : (
-          <div className="relative bg-[#0F141C] rounded-2xl border border-slate-800 overflow-hidden w-full min-w-0 aspect-video xl:h-[466px] flex flex-col justify-between select-none shadow-sm">
+          <div className="relative bg-[#0F141C] rounded-2xl border border-slate-800 overflow-hidden w-full min-w-0 aspect-video xl:aspect-auto xl:h-[540px] flex flex-col justify-between select-none shadow-sm">
             <div className="absolute inset-0">
               {isAiWorkPaused ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0F141C] px-5 py-16 text-center text-white">
-                  <IconCamera className="h-9 w-9 text-slate-400" />
-                  <h2 className="text-base font-semibold">{t('ppe.viewport.pausedTitle')}</h2>
-                  <p className="max-w-sm text-sm leading-relaxed text-slate-300">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#0F141C] px-5 py-16 text-center text-white">
+                  <IconCamera className="h-8 w-8 text-slate-400" />
+                  <h2 className="text-sm font-semibold">{t('ppe.viewport.pausedTitle')}</h2>
+                  <p className="max-w-sm text-xs leading-relaxed text-slate-300">
                     {t('ppe.viewport.pausedDesc')}
                   </p>
                 </div>
@@ -1937,7 +1961,7 @@ export function PpeMonitoringView({
                       <button
                         type="button"
                         onClick={scopedMedia.retry}
-                        className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs"
+                        className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs"
                       >
                         {t('ppe.viewport.reconnectStream')}
                       </button>
@@ -1972,14 +1996,14 @@ export function PpeMonitoringView({
                           disabled={
                             scopedMedia.status === 'HALTED' || scopedMedia.errorStatus === 429
                           }
-                          className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                          className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                         >
                           {t('ppe.viewport.retryStream')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setStreamViewMode('ai-analyzed')}
-                          className="rounded-xl bg-slate-800 border border-slate-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                          className="rounded-lg bg-slate-800 border border-slate-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
                         >
                           {t('ppe.viewport.switchToAiEvidence')}
                         </button>
@@ -2035,14 +2059,14 @@ export function PpeMonitoringView({
                           type="button"
                           onClick={scopedRecordedVideo.retry}
                           disabled={scopedRecordedVideo.status === 'HALTED'}
-                          className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                          className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                         >
                           {t('ppe.viewport.retryVideo')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setStreamViewMode('ai-analyzed')}
-                          className="rounded-xl bg-slate-800 border border-slate-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                          className="rounded-lg bg-slate-800 border border-slate-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
                         >
                           {t('ppe.viewport.switchToAiEvidence')}
                         </button>
@@ -2113,96 +2137,10 @@ export function PpeMonitoringView({
                         scopedPreview.errorStatus === 403 ||
                         scopedPreview.errorStatus === 401
                       }
-                      className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {t('ppe.viewport.retrySnapshot')}
                     </button>
-                  )}
-                </div>
-              )}
-
-              {/* Snapshot result badges require active monitoring. */}
-              {!isAiWorkPaused && (
-                <div
-                  title={
-                    effectiveStreamViewMode === 'live-raw'
-                      ? scopedMedia.status === 'LIVE'
-                        ? t('ppe.badge.rawTitleLive')
-                        : scopedMedia.status === 'STALLED'
-                          ? t('ppe.badge.rawTitleStalled')
-                          : t('ppe.badge.rawTitleUnavailable')
-                      : effectiveStreamViewMode === 'recorded-raw'
-                        ? scopedRecordedVideo.status === 'READY'
-                          ? t('ppe.badge.recordedTitleReady')
-                          : scopedRecordedVideo.status === 'LOADING'
-                            ? t('ppe.badge.recordedTitleLoading')
-                            : t('ppe.badge.recordedTitleUnavailable')
-                        : isAiWorkPaused
-                          ? t('ppe.badge.aiPaused')
-                          : scopedPreview.status === 'LIVE'
-                            ? t('ppe.badge.aiLiveSnapshot')
-                            : scopedPreview.status === 'REPLAY'
-                              ? t('ppe.badge.aiReplaySnapshot')
-                              : t('ppe.badge.aiSnapshotUnavailable')
-                  }
-                  className={`absolute top-14 left-1/2 -translate-x-1/2 max-w-[85%] truncate px-3.5 py-1 rounded-full text-[10px] font-bold tracking-wider z-20 pointer-events-none text-center border shadow-xs ${
-                    effectiveStreamViewMode === 'live-raw'
-                      ? scopedMedia.status === 'STALLED'
-                        ? 'bg-amber-950/80 text-amber-200 border-amber-800/60'
-                        : 'bg-slate-900/80 text-slate-200 border-slate-700/60'
-                      : effectiveStreamViewMode === 'recorded-raw'
-                        ? 'bg-slate-900/80 text-slate-200 border-slate-700/60'
-                        : ppeResultState === 'CONFIRMED_MISSING'
-                          ? 'bg-red-950/80 text-red-200 border-red-800/60'
-                          : ppeResultState === 'PENDING_CONFIRMATION' ||
-                              ppeResultState === 'UNKNOWN'
-                            ? 'bg-amber-950/80 text-amber-200 border-amber-800/60'
-                            : 'bg-slate-900/80 text-slate-200 border-slate-700/60'
-                  }`}
-                >
-                  {effectiveStreamViewMode === 'live-raw' ? (
-                    <>
-                      {t('ppe.badge.rawPrefix')} ·{' '}
-                      {scopedMedia.status === 'LIVE'
-                        ? t('ppe.badge.rawStateLive')
-                        : scopedMedia.status === 'STALLED'
-                          ? t('ppe.badge.rawStateStalled')
-                          : scopedMedia.status === 'CONNECTING'
-                            ? t('ppe.badge.rawStateConnecting')
-                            : t('ppe.badge.stateUnavailable')}{' '}
-                      · {formatCapturedFrameTime(scopedMedia.frame?.capturedAt)}
-                    </>
-                  ) : effectiveStreamViewMode === 'recorded-raw' ? (
-                    <>
-                      {t('ppe.badge.recordedPrefix')} ·{' '}
-                      {scopedRecordedVideo.status === 'READY'
-                        ? t('ppe.badge.recordedStateReady')
-                        : scopedRecordedVideo.status === 'LOADING'
-                          ? t('ppe.badge.recordedStateLoading')
-                          : t('ppe.badge.stateUnavailable')}{' '}
-                      · {clockTime}
-                    </>
-                  ) : (
-                    <>
-                      {isAiWorkPaused
-                        ? t('ppe.badge.aiPaused')
-                        : scopedPreview.status === 'LIVE'
-                          ? t('ppe.badge.aiLiveSnapshot')
-                          : scopedPreview.status === 'REPLAY'
-                            ? t('ppe.badge.aiReplaySnapshot')
-                            : t('ppe.badge.aiSnapshotUnavailable')}{' '}
-                      ·{' '}
-                      {ppeResultState === 'CONFIRMED_MISSING'
-                        ? t('ppe.badge.resultMissing')
-                        : ppeResultState === 'PENDING_CONFIRMATION'
-                          ? t('ppe.badge.resultVerifying')
-                          : ppeResultState === 'COMPLIANT'
-                            ? t('ppe.badge.resultCompliant')
-                            : ppeResultState === 'UNKNOWN'
-                              ? t('ppe.badge.resultUnknown')
-                              : t('ppe.badge.resultNoTargets')}{' '}
-                      · {displayedCapturedTime}
-                    </>
                   )}
                 </div>
               )}
@@ -2227,7 +2165,7 @@ export function PpeMonitoringView({
             </div>
 
             {/* Top Camera Metadata */}
-            <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white pointer-events-none">
+            <div className="relative z-10 px-4 py-3 flex items-start justify-between text-white pointer-events-none">
               <div className="flex flex-col gap-0.5 max-w-[70%] sm:max-w-[75%] min-w-0 pr-2">
                 <span
                   title={activeCameraContext.camera}
@@ -2245,13 +2183,13 @@ export function PpeMonitoringView({
               <div className="flex items-center gap-2">
                 <span
                   data-testid="factual-source-label"
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase border ${displayedSourceBadgeClass}`}
+                  className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${displayedSourceBadgeClass}`}
                 >
                   {t('ppe.viewport.sourceBadge', { source: displayedSourceLabel })}
                 </span>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 flex-shrink-0">
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-black/60 flex-shrink-0">
                   <span className={`w-1.5 h-1.5 rounded-full ${displayedDotClass}`} />
-                  <span className="font-mono text-[10px] font-semibold text-white tracking-wider">
+                  <span className="font-mono text-[10px] font-semibold text-white tracking-wider tabular-nums">
                     {displayedStatusText}
                   </span>
                 </div>
@@ -2264,7 +2202,7 @@ export function PpeMonitoringView({
               : effectiveStreamViewMode === 'recorded-raw'
                 ? Boolean(scopedRecordedVideo.videoUrl && scopedRecordedVideo.error)
                 : Boolean(preview && scopedPreview.error)) && (
-              <div className="relative z-10 px-5 py-1.5 bg-amber-950/80 text-amber-200 text-xs flex items-center gap-2">
+              <div className="relative z-10 px-4 py-1.5 bg-amber-950/85 text-amber-200 text-xs flex items-center gap-2">
                 <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
                 <span className="truncate">
                   {effectiveStreamViewMode === 'live-raw'
@@ -2297,8 +2235,8 @@ export function PpeMonitoringView({
             )}
 
             {/* Bottom Toolbar */}
-            <div className="relative z-10 px-5 py-2.5 bg-gradient-to-t from-black/80 via-black/50 to-transparent flex flex-wrap gap-3 items-center justify-between text-white text-xs opacity-90 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="relative z-10 px-4 py-2 bg-slate-950/85 border-t border-white/10 flex flex-wrap gap-2.5 items-center justify-between text-white text-xs">
+              <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                 {/* Live video vs AI evidence toggle controls */}
                 {isSelectedCameraLive ? (
                   <div
@@ -2375,12 +2313,12 @@ export function PpeMonitoringView({
                     </button>
                   </div>
                 ) : (
-                  <span className="text-[11px] text-white/60 font-medium">
+                  <span className="text-[11px] text-white/70 font-medium">
                     {t('ppe.toolbar.replayAiOnly')}
                   </span>
                 )}
 
-                <span className="text-white/60 text-[11px]">
+                <span className="text-white/60 text-[11px] font-mono tabular-nums truncate">
                   {isAiWorkPaused
                     ? t('ppe.toolbar.captionPaused')
                     : effectiveStreamViewMode === 'live-raw'
@@ -2391,11 +2329,11 @@ export function PpeMonitoringView({
                 </span>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setViewMode('wall')}
-                  className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                   title={t('ppe.toolbar.switchToWallAria')}
                   aria-label={t('ppe.toolbar.switchToWallAria')}
                   data-testid="switch-to-wall-toolbar-btn"
@@ -2407,14 +2345,18 @@ export function PpeMonitoringView({
           </div>
         )}
 
-        {/* Right: AI Detection & PPE Check Card (355px) */}
+        {/* Right: AI Detection & PPE Check Card (360px, height-aligned with viewport on desktop) */}
         <div
           data-testid="ai-detection-panel"
-          className="bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col h-[600px] xl:h-auto xl:[contain:size] min-h-0 min-w-0 overflow-hidden"
+          className={`bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-col min-h-0 min-w-0 overflow-hidden ${
+            viewMode === 'single'
+              ? 'h-[540px] xl:h-[540px]'
+              : 'h-[540px] xl:h-auto xl:min-h-[540px] xl:[contain:size]'
+          }`}
         >
-          <div className="flex-1 p-4 sm:p-5 space-y-4 overflow-y-auto min-h-0">
+          <div className="flex-1 p-4 space-y-3.5 overflow-y-auto min-h-0">
             {/* Header: flex-wrap prevents RAW VIEW UNANALYZED badge from truncating to RA... */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
               <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 <span className="text-xs font-bold text-slate-700 tracking-wide flex-shrink-0">
                   {t('ppe.card.headerTitle')}
@@ -2422,7 +2364,7 @@ export function PpeMonitoringView({
                 {!isAiWorkPaused && effectiveStreamViewMode === 'live-raw' && (
                   <span
                     data-testid="raw-feed-unanalyzed-badge"
-                    className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap"
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap"
                   >
                     {t('ppe.card.rawUnanalyzedBadge')}
                   </span>
@@ -2430,7 +2372,7 @@ export function PpeMonitoringView({
                 {!isAiWorkPaused && effectiveStreamViewMode === 'recorded-raw' && (
                   <span
                     data-testid="recorded-feed-unanalyzed-badge"
-                    className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap"
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap"
                   >
                     {t('ppe.card.recordedUnanalyzedBadge')}
                   </span>
@@ -2438,11 +2380,11 @@ export function PpeMonitoringView({
               </div>
               <span
                 data-testid="ai-evidence-badge"
-                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border flex-shrink-0 whitespace-nowrap ${
+                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 whitespace-nowrap ${
                   !isAiWorkPaused &&
                   preview &&
                   (scopedPreview.status === 'LIVE' || scopedPreview.status === 'REPLAY')
-                    ? 'bg-slate-100 text-slate-700 border-slate-300 font-mono'
+                    ? 'bg-slate-100 text-slate-700 border-slate-300 font-mono tabular-nums'
                     : 'bg-amber-50 text-amber-800 border-amber-200'
                 }`}
               >
@@ -2456,7 +2398,7 @@ export function PpeMonitoringView({
             </div>
 
             {isAiWorkPaused ? (
-              <div className="space-y-3.5 pt-1">
+              <div className="space-y-3 pt-0.5">
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                   <span className="font-medium text-slate-700 truncate">
                     {activeCameraContext.camera}
@@ -2467,9 +2409,9 @@ export function PpeMonitoringView({
 
                 <div
                   data-testid="ai-paused-empty-state"
-                  className="rounded-xl bg-amber-50/60 border border-amber-200/80 p-4 space-y-1.5"
+                  className="rounded-xl bg-amber-50/60 border border-amber-200/80 p-3.5 space-y-1.5"
                 >
-                  <p className="text-sm font-semibold text-amber-950">
+                  <p className="text-xs font-semibold text-amber-950">
                     {t('ppe.card.pausedEmptyTitle')}
                   </p>
                   <p className="text-xs text-amber-900/80 leading-relaxed">
@@ -2477,7 +2419,7 @@ export function PpeMonitoringView({
                   </p>
                 </div>
 
-                <details className="text-xs text-slate-500 pt-1">
+                <details className="text-xs text-slate-500 pt-0.5">
                   <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
                     {t('ppe.check.notesSummary')}
                   </summary>
@@ -2490,12 +2432,12 @@ export function PpeMonitoringView({
             ) : (
               <>
                 {/* 2-Column Details Grid */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+                <div className="rounded-xl bg-[#F8FAFC] border border-slate-200/70 p-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldIdentity')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-sm mt-0.5">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
                       {!preview || scopedPreview.status === 'UNAVAILABLE'
                         ? t('ppe.card.identitySnapshotUnavailable')
                         : testDetection?.trackId !== null && testDetection?.trackId !== undefined
@@ -2504,10 +2446,10 @@ export function PpeMonitoringView({
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldTrackId')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-sm mt-0.5">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 tabular-nums truncate">
                       {!preview || scopedPreview.status === 'UNAVAILABLE'
                         ? '—'
                         : ppeDetections
@@ -2518,36 +2460,36 @@ export function PpeMonitoringView({
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldCamera')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-sm mt-0.5">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
                       {activeCameraContext.camera}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldWorkArea')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-sm mt-0.5">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
                       {activeCameraContext.workArea}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldDetected')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-sm mt-0.5">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono tabular-nums">
                       {!preview || scopedPreview.status === 'UNAVAILABLE'
                         ? '—'
                         : displayedCapturedTime}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
+                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldConfidence')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-sm mt-0.5">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono tabular-nums">
                       {!preview ||
                       scopedPreview.status === 'UNAVAILABLE' ||
                       testDetection?.confidence === null ||
@@ -2558,19 +2500,17 @@ export function PpeMonitoringView({
                   </div>
                 </div>
 
-                <div className="h-px bg-slate-100 w-full" />
-
                 {/* PPE Check List */}
                 <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                     <p className="text-xs font-bold text-slate-700 tracking-wide">
                       {t('ppe.check.heading')}
                     </p>
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
                       {t('ppe.check.experimentalBadge')}
                     </span>
                   </div>
-                  <details className="mb-3 text-xs text-slate-500">
+                  <details className="mb-2.5 text-xs text-slate-500">
                     <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
                       {t('ppe.check.notesSummary')}
                     </summary>
@@ -2583,9 +2523,9 @@ export function PpeMonitoringView({
                     {!preview || scopedPreview.status === 'UNAVAILABLE' ? (
                       <div
                         data-testid="ai-snapshot-unavailable-msg"
-                        className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-center space-y-1"
+                        className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center space-y-1"
                       >
-                        <p className="text-sm font-semibold text-slate-700">
+                        <p className="text-xs font-semibold text-slate-700">
                           {t('ppe.check.unavailableTitle')}
                         </p>
                         <p className="text-xs text-slate-500">
@@ -2595,7 +2535,7 @@ export function PpeMonitoringView({
                         </p>
                       </div>
                     ) : ppeDetections.length === 0 ? (
-                      <p className="text-sm text-slate-500 italic">
+                      <p className="text-xs text-slate-500 italic py-1">
                         {t('ppe.check.noTrackedIndividuals')}
                       </p>
                     ) : (
@@ -2613,12 +2553,12 @@ export function PpeMonitoringView({
                         return (
                           <div
                             key={`ppe-check-${detection.trackId}`}
-                            className="rounded-xl bg-[#F8FAFC] border border-slate-100 p-3"
+                            className="rounded-xl bg-[#F8FAFC] border border-slate-200/70 p-2.5"
                           >
-                            <p className="mb-2 text-xs font-bold text-slate-800">
+                            <p className="mb-1.5 text-xs font-bold text-slate-800 tabular-nums">
                               {t('ppe.trackLabel', { id: detection.trackId ?? '' })}
                             </p>
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                               {itemsToDisplay.map((item) => {
                                 const state = getPpeItemDisplayState(detection, item);
                                 const itemName =
@@ -2652,41 +2592,38 @@ export function PpeMonitoringView({
                                 return (
                                   <div
                                     key={`${detection.trackId}-${item}`}
-                                    className="py-1 border-b border-slate-200/80 last:border-0"
+                                    className="py-1 border-b border-slate-200/70 last:border-0"
                                   >
-                                    <div className="flex items-center justify-between text-sm">
-                                      <div className="flex items-center gap-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <div className="flex items-center gap-2 min-w-0">
                                         {state === 'PRESENT' ? (
-                                          <IconCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                                          <IconCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                                         ) : state === 'CONFIRMED_MISSING' ? (
-                                          <IconX className="w-4 h-4 text-[#DF2225] flex-shrink-0" />
+                                          <IconX className="w-3.5 h-3.5 text-[#DF2225] flex-shrink-0" />
                                         ) : (
-                                          <IconAlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                                          <IconAlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                                         )}
-                                        <span className="font-medium text-slate-800">
+                                        <span
+                                          className={`font-medium truncate ${
+                                            state === 'CONFIRMED_MISSING'
+                                              ? 'text-[#DF2225] font-semibold'
+                                              : state === 'PENDING_MISSING'
+                                                ? 'text-amber-700'
+                                                : state === 'PRESENT'
+                                                  ? 'text-slate-800'
+                                                  : 'text-slate-600'
+                                          }`}
+                                        >
                                           {itemName} · {statusLabel}
                                         </span>
                                       </div>
-                                      <span
-                                        className={`text-xs font-semibold ${
-                                          state === 'CONFIRMED_MISSING'
-                                            ? 'text-[#DF2225]'
-                                            : state === 'PENDING_MISSING'
-                                              ? 'text-amber-600'
-                                              : state === 'PRESENT'
-                                                ? 'text-emerald-600'
-                                                : 'text-slate-500'
-                                        }`}
-                                      >
-                                        {statusLabel}
-                                      </span>
                                     </div>
 
                                     {isItemInConfirmedMissingArray &&
                                       state !== 'CONFIRMED_MISSING' && (
                                         <div
                                           data-testid={`confirmed-episode-warning-${detection.trackId}-${item}`}
-                                          className="mt-1.5 p-2.5 rounded-xl bg-red-50/80 border border-red-200 text-slate-800 text-xs space-y-1 min-w-0"
+                                          className="mt-1.5 p-2 rounded-lg bg-red-50/80 border border-red-200 text-slate-800 text-xs space-y-1 min-w-0"
                                         >
                                           <div className="flex flex-col gap-0.5 min-w-0 font-semibold">
                                             <div className="flex items-start gap-1.5 text-[#DF2225] min-w-0">
@@ -2725,7 +2662,7 @@ export function PpeMonitoringView({
 
                 {/* Quick link indicator for Experimental detector objects */}
                 {modelObjects && (
-                  <div className="pt-2 border-t border-slate-200/80 text-center">
+                  <div className="pt-1.5 border-t border-slate-200/80 text-center">
                     <button
                       type="button"
                       onClick={() => setIsDiagnosticsOpen(true)}
@@ -2741,7 +2678,7 @@ export function PpeMonitoringView({
                 )}
 
                 {/* Result Alert Box */}
-                <div className="pt-1">
+                <div className="pt-0.5">
                   <div
                     className={`border-l-[3px] pl-3 ${
                       ppeResultState === 'CONFIRMED_MISSING'
@@ -2751,11 +2688,11 @@ export function PpeMonitoringView({
                           : 'border-slate-200'
                     }`}
                   >
-                    <p className="text-xs font-medium text-slate-500 mb-0.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5">
                       {t('ppe.result.label')}
                     </p>
                     <div
-                      className={`flex items-center gap-1.5 text-sm font-bold mb-1 ${
+                      className={`flex items-center gap-1.5 text-xs font-bold mb-0.5 ${
                         ppeResultState === 'CONFIRMED_MISSING'
                           ? 'text-red-500'
                           : ppeResultState === 'COMPLIANT'
@@ -2812,12 +2749,12 @@ export function PpeMonitoringView({
 
           {/* Action button */}
           {(!isControlled || sharedSession !== null) && (
-            <div className="p-3.5 border-t border-slate-200/80 bg-[#F8FAFC] flex-shrink-0">
+            <div className="p-3 border-t border-slate-200/80 bg-[#F8FAFC] flex-shrink-0">
               <button
                 type="button"
                 onClick={openReviewFromDetection}
                 disabled={!testDetection}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+                className="w-full py-2 px-4 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
               >
                 {t('ppe.action.reviewAlert')}
               </button>
@@ -2828,6 +2765,7 @@ export function PpeMonitoringView({
 
       {canOpenZonePpe && isZonePpeOpen && selectedSiteId && (
         <ZonePpeSetupDialog
+          client={client}
           key={JSON.stringify([
             apiUrl,
             sessionScope,
@@ -3049,11 +2987,11 @@ export function PpeMonitoringView({
         data-testid="secondary-diagnostics-drawer"
         className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm"
       >
-        <div className="p-3.5 sm:p-4 bg-[#F8FAFC] border-b border-slate-200/80 flex items-center justify-between gap-3">
+        <div className="px-4 py-3 bg-[#F8FAFC] border-b border-slate-200/80 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <IconShield className="w-4 h-4 text-slate-900 shrink-0" />
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-slate-900 truncate">
+              <h3 className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
                 {t('ppe.diagnostics.title')}
               </h3>
               <p className="text-xs text-slate-500 truncate">{t('ppe.diagnostics.subtitle')}</p>
@@ -3063,18 +3001,19 @@ export function PpeMonitoringView({
             type="button"
             data-testid="toggle-diagnostics-drawer"
             onClick={() => setIsDiagnosticsOpen((prev) => !prev)}
-            className="px-3.5 py-1.5 text-sm font-medium rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shrink-0 shadow-xs"
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer shrink-0 shadow-xs"
             aria-expanded={isDiagnosticsOpen}
+            aria-controls={diagnosticsContentId}
           >
             {isDiagnosticsOpen ? t('ppe.diagnostics.collapseBtn') : t('ppe.diagnostics.expandBtn')}
           </button>
         </div>
 
         {isDiagnosticsOpen && (
-          <div className="p-4 sm:p-5 space-y-5">
+          <div id={diagnosticsContentId} className="p-4 space-y-4">
             {/* MF05 Demo Control Panel (Diagnostic only, enabled via VITE_MF05_DEMO_CONTROLS === 'true') */}
             {isDemoControlsEnabled && selectedSiteId && selectedCameraId && token && (
-              <div className="border border-slate-200/80 rounded-2xl p-4 bg-[#F8FAFC]">
+              <div className="border border-slate-200/80 rounded-2xl p-3.5 bg-[#F8FAFC]">
                 <Mf05DemoControlPanel
                   key={currentCameraScope}
                   apiUrl={apiUrl}
@@ -3099,7 +3038,7 @@ export function PpeMonitoringView({
                     </p>
                     <span
                       data-testid="experimental-objects-status-badge"
-                      className={`text-xs font-medium px-2 py-0.5 rounded-md border flex-shrink-0 ${
+                      className={`text-[11px] font-medium px-2 py-0.5 rounded-md border flex-shrink-0 ${
                         modelObjects.detections.length > 0
                           ? 'bg-[#EDF3EC] text-[#346538] border-[#C5DDC6]'
                           : 'bg-slate-100 text-slate-600 border-slate-200/80'
@@ -3128,17 +3067,16 @@ export function PpeMonitoringView({
                   </button>
                 </div>
 
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  {t('ppe.diagnostics.raw15ClassDisclaimer')}
-                </p>
-
                 {/* Display Focus Presets Bar (DISPLAY FOCUS ONLY) */}
-                <div className="pt-1 space-y-1.5 min-w-0" data-testid="display-preset-bar">
+                <div
+                  className="rounded-xl bg-[#F8FAFC] border border-slate-200/70 p-3 space-y-2 min-w-0"
+                  data-testid="display-preset-bar"
+                >
                   <div className="flex items-center justify-between min-w-0">
                     <p className="text-xs font-semibold text-slate-700">
                       {t('ppe.diagnostics.presetHeading')}
                     </p>
-                    <span className="text-xs text-slate-500 italic">
+                    <span className="text-[11px] text-slate-500">
                       {t('ppe.diagnostics.presetSubnote')}
                     </span>
                   </div>
@@ -3176,9 +3114,15 @@ export function PpeMonitoringView({
                       );
                     })}
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    {t('ppe.diagnostics.presetDisclaimer')}
-                  </p>
+                  <details className="text-xs text-slate-500 pt-0.5">
+                    <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
+                      {t('ppe.check.notesSummary')}
+                    </summary>
+                    <div className="mt-1.5 space-y-1 leading-relaxed">
+                      <p>{t('ppe.diagnostics.raw15ClassDisclaimer')}</p>
+                      <p>{t('ppe.diagnostics.presetDisclaimer')}</p>
+                    </div>
+                  </details>
                 </div>
 
                 {/* 8 Positive PPE Object Families List */}
@@ -3193,7 +3137,7 @@ export function PpeMonitoringView({
                         <div
                           key={`pos-obj-${det.classId}-${idx}`}
                           data-testid={`model-object-item-${det.className}`}
-                          className="flex items-center justify-between rounded-xl bg-[#F8FAFC] border border-slate-200/80 px-2.5 py-1.5 text-xs min-w-0"
+                          className="flex items-center justify-between rounded-lg bg-[#F8FAFC] border border-slate-200/80 px-2.5 py-1.5 text-xs min-w-0"
                         >
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="font-medium text-slate-800 truncate">
@@ -3210,7 +3154,7 @@ export function PpeMonitoringView({
                               </span>
                             )}
                           </div>
-                          <span className="font-mono text-xs text-[#346538] font-semibold flex-shrink-0 ml-1">
+                          <span className="font-mono text-xs text-[#346538] font-semibold tabular-nums flex-shrink-0 ml-1">
                             {Math.round(det.confidence * 100)}%
                           </span>
                         </div>
@@ -3230,7 +3174,7 @@ export function PpeMonitoringView({
                         <span
                           key={`neg-obj-${det.classId}-${idx}`}
                           data-testid={`model-object-negative-${det.className}`}
-                          className="rounded-md bg-[#FDEBEC] border border-red-200 px-2 py-0.5 text-xs text-red-800 font-mono flex-shrink-0"
+                          className="rounded-md bg-[#FDEBEC] border border-red-200 px-2 py-0.5 text-xs text-red-800 font-mono tabular-nums flex-shrink-0"
                         >
                           {det.className} ({Math.round(det.confidence * 100)}%)
                         </span>
@@ -3246,7 +3190,7 @@ export function PpeMonitoringView({
 
       {/* Live AI Observations status or Replay Observations Table */}
       {isLive ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 space-y-2 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-3 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -3259,7 +3203,7 @@ export function PpeMonitoringView({
                         : 'bg-emerald-500 animate-pulse'
                   }`}
                 />
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
                   {isAiWorkPaused
                     ? t('ppe.observations.pausedHeading')
                     : scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
@@ -3289,7 +3233,7 @@ export function PpeMonitoringView({
                     ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
                   })
                 }
-                className="self-start sm:self-auto px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm font-medium transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+                className="self-start sm:self-auto px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
               >
                 {t('ppe.observations.viewInSafetyAlerts')}
               </button>
@@ -3297,11 +3241,13 @@ export function PpeMonitoringView({
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 space-y-4 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 space-y-3.5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-slate-900">{t('ppe.table.heading')}</h3>
-              <p className="text-xs text-slate-500 mt-1">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                {t('ppe.table.heading')}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
                 {t('ppe.table.subtitle')}
                 {activeFilterWorker !== null &&
                   t('ppe.table.filteredByTrack', { id: activeFilterWorker })}
@@ -3317,7 +3263,7 @@ export function PpeMonitoringView({
                       ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
                     })
                   }
-                  className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm font-medium transition-colors cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer shadow-xs"
                 >
                   {t('ppe.observations.viewInSafetyAlerts')}
                 </button>
@@ -3329,14 +3275,14 @@ export function PpeMonitoringView({
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200/80 text-slate-600 font-semibold text-xs">
-                  <th className="py-3 px-3">{t('ppe.table.colTime')}</th>
-                  <th className="py-3 px-3">{t('ppe.table.colWorker')}</th>
-                  <th className="py-3 px-3">{t('ppe.table.colCamera')}</th>
-                  <th className="py-3 px-3">{t('ppe.table.colWorkArea')}</th>
-                  <th className="py-3 px-3">{t('ppe.table.colIssue')}</th>
-                  <th className="py-3 px-3">{t('ppe.table.colConfidence')}</th>
-                  <th className="py-3 px-3">{t('ppe.table.colStatus')}</th>
-                  <th className="py-3 px-3 text-right">{t('ppe.table.colAction')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colTime')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colWorker')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colCamera')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colWorkArea')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colIssue')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colConfidence')}</th>
+                  <th className="py-2.5 px-3">{t('ppe.table.colStatus')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('ppe.table.colAction')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -3349,18 +3295,26 @@ export function PpeMonitoringView({
                 ) : (
                   displayedEvents.map((evt) => (
                     <tr key={evt.rowKey} className="hover:bg-[#F8FAFC] transition-colors group">
-                      <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.time}</td>
-                      <td className="py-3 px-3 font-semibold text-slate-800">{evt.worker}</td>
-                      <td className="py-3 px-3 font-mono text-slate-500 text-xs">{evt.camera}</td>
-                      <td className="py-3 px-3 text-slate-600">{evt.workArea}</td>
-                      <td className="py-3 px-3 text-[#9F2F2D] font-semibold">{evt.issue}</td>
-                      <td className="py-3 px-3 text-slate-500">{evt.confidence}</td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FBF3DB] text-[#956400]">
-                          {evt.status}
+                      <td className="py-2.5 px-3 font-mono text-slate-500 text-xs tabular-nums">
+                        {evt.time}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800 text-xs">
+                        {evt.worker}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-500 text-xs">{evt.camera}</td>
+                      <td className="py-2.5 px-3 text-slate-600 text-xs">{evt.workArea}</td>
+                      <td className="py-2.5 px-3 text-[#9F2F2D] font-semibold text-xs">
+                        {evt.issue}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-500 text-xs tabular-nums">
+                        {evt.confidence}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FBF3DB] text-[#956400]">
+                          {t('ppe.event.statusSnapshotObservation')}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-2.5 px-3 text-right">
                         {(!isControlled || sharedSession !== null) && (
                           <button
                             type="button"
@@ -3376,7 +3330,7 @@ export function PpeMonitoringView({
                                 },
                               })
                             }
-                            className="px-3 py-1.5 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors shadow-xs"
+                            className="px-3 py-1.5 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors shadow-xs"
                           >
                             {t('ppe.action.reviewAlert')}
                           </button>
@@ -3423,7 +3377,7 @@ export function PpeMonitoringView({
               </p>
               <p>
                 <span className="font-bold text-slate-500">{t('ppe.reviewModal.timeLabel')}</span>{' '}
-                {activeReviewItem.time}
+                <span className="font-mono tabular-nums">{activeReviewItem.time}</span>
               </p>
             </div>
             <p className="text-[11px] text-slate-500">{t('ppe.reviewModal.disclaimer')}</p>
@@ -3432,7 +3386,7 @@ export function PpeMonitoringView({
             <button
               type="button"
               onClick={() => setSelectedReview(null)}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
+              className="px-3.5 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
             >
               {t('ppe.reviewModal.dismissBtn')}
             </button>
@@ -3446,7 +3400,7 @@ export function PpeMonitoringView({
                     ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
                   });
                 }}
-                className="px-4 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors shadow-xs"
+                className="px-4 py-2 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors shadow-xs"
               >
                 {t('ppe.reviewModal.continueBtn')}
               </button>

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LocaleProvider, useLocale } from './locale';
+import i18n from './runtime';
 
 function Probe() {
   const { locale, setLocale, t } = useLocale();
@@ -31,9 +32,9 @@ afterEach(() => {
 });
 
 describe('website locale presentation boundary', () => {
-  it('defaults the mounted website to Vietnamese and restores the preceding document language', () => {
+  it('honors an explicit provider default and keeps the shared document language after unmount', () => {
     const view = render(
-      <LocaleProvider>
+      <LocaleProvider defaultLocale="vi">
         <Probe />
       </LocaleProvider>,
     );
@@ -41,7 +42,18 @@ describe('website locale presentation boundary', () => {
     expect(screen.getByText('Đăng nhập')).toBeDefined();
     expect(document.documentElement.lang).toBe('vi');
     view.unmount();
-    expect(document.documentElement.lang).toBe('fr');
+    expect(document.documentElement.lang).toBe('vi');
+  });
+
+  it('keeps the current Main language when no provider default was requested', () => {
+    const view = render(
+      <LocaleProvider>
+        <Probe />
+      </LocaleProvider>,
+    );
+    expect(screen.getByLabelText('locale').textContent).toBe('en');
+    view.unmount();
+    expect(i18n.resolvedLanguage).toBe('en');
   });
 
   it('switches copy and document language without resetting an existing scope draft', async () => {
@@ -90,7 +102,7 @@ describe('website locale presentation boundary', () => {
     });
     const user = userEvent.setup();
     render(
-      <LocaleProvider>
+      <LocaleProvider defaultLocale="vi">
         <Probe />
       </LocaleProvider>,
     );
@@ -99,10 +111,10 @@ describe('website locale presentation boundary', () => {
     expect(screen.getByText('Sign in')).toBeDefined();
   });
 
-  it('rejects an unsupported stored locale instead of displaying invalid language state', () => {
+  it('rejects an unsupported stored locale and honors the explicit fallback', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue('unsupported-locale');
     render(
-      <LocaleProvider>
+      <LocaleProvider defaultLocale="vi">
         <Probe />
       </LocaleProvider>,
     );

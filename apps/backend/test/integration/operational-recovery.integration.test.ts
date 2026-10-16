@@ -118,7 +118,7 @@ function recoveryScenario(main37 = false, linux = false) {
     });
     await isolated.initialize();
     if (linux)
-      assert.equal(Number((await db.query('SELECT count(*) AS n FROM migrations'))[0].n), 56);
+      assert.equal(Number((await db.query('SELECT count(*) AS n FROM migrations'))[0].n), 59);
     let missingRuntimeMigrations: string[] = [];
     if (main37) {
       assert.equal(
@@ -137,7 +137,7 @@ function recoveryScenario(main37 = false, linux = false) {
           return (migration as new () => { name: string }).prototype.constructor.name;
         })
         .filter((name) => !applied.has(name));
-      assert.equal(missingRuntimeMigrations.length, 19);
+      assert.equal(missingRuntimeMigrations.length, 22);
       for (const name of [
         'Mf06MainAuthorityJournal1791590400002',
         'SafetyFaceProvenance1791590400003',
@@ -364,7 +364,7 @@ function recoveryScenario(main37 = false, linux = false) {
         assert.equal(child.exitCode, null, 'Main exited during startup');
         try {
           // This is an operational restore drill, not production adoption of MAIN.
-          // Incomplete historical MAIN37 is unready for the canonical MAIN56 release.
+          // Incomplete historical MAIN37 is unready for the canonical MAIN59 release.
           await request('/health/live');
           await request('/health/ready', main37 ? 503 : 200);
           return owned;
@@ -960,7 +960,7 @@ function recoveryScenario(main37 = false, linux = false) {
           forcedWindowsQuiesceNotGraceful: !linux && process.platform === 'win32',
           actualLinuxContainers: linuxContainers,
           linuxImage: linux ? linuxImage : null,
-          profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_MAIN56',
+          profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_MAIN59',
           completedMf06HistoryPreserved: !!completed,
           syntheticHistorySuppressed: !!completed,
           functionsTriggersMatched: true,
@@ -1002,7 +1002,7 @@ test(
   recoveryScenario(true),
 );
 test(
-  'owned Linux canonical MAIN56 DB and all evidence files restore into actual production main',
+  'owned Linux canonical MAIN59 DB and all evidence files restore into actual production main',
   {
     timeout: 180_000,
     skip:

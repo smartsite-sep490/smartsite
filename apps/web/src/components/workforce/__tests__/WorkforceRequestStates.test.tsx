@@ -50,6 +50,13 @@ function mount(view: string) {
   );
 }
 beforeEach(() => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'attendanceDays').mockResolvedValue({
+    items: [],
+    total: 0,
+    requests: [],
+    canReview: false,
+    canRequest: true,
+  });
   vi.spyOn(SmartSiteManagementClient.prototype, 'getSite').mockResolvedValue({
     id: 'site-1',
     code: 'SYNTHETIC',

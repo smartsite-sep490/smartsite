@@ -180,11 +180,13 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
 
   return (
     <section aria-label={t('mf06.panel.sectionAria')} className="space-y-4">
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm p-4 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-          <div className="flex items-center gap-2">
-            <IconShield className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/80 px-5 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-200/70 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 shrink-0">
+              <IconShield className="w-4 h-4" />
+            </span>
+            <h2 className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               {t('mf06.panel.heading')}
             </h2>
           </div>
@@ -192,7 +194,7 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
           <div
             role="tablist"
             aria-label={t('mf06.panel.tablistAria')}
-            className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-0.5"
+            className="inline-flex items-center self-start sm:self-auto rounded-lg border border-zinc-200 dark:border-zinc-700/80 bg-zinc-100/90 dark:bg-zinc-800/80 p-1 gap-1"
           >
             <button
               ref={assessmentsTabRef}
@@ -204,7 +206,7 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
               tabIndex={activeTab === 'assessments' ? 0 : -1}
               onClick={() => setActiveTab('assessments')}
               onKeyDown={handleTabKeyDown}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-600 ${
                 activeTab === 'assessments'
                   ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
@@ -222,7 +224,7 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
               tabIndex={activeTab === 'requests' ? 0 : -1}
               onClick={() => setActiveTab('requests')}
               onKeyDown={handleTabKeyDown}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-600 ${
                 activeTab === 'requests'
                   ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
@@ -233,34 +235,43 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
           </div>
         </div>
 
-        {activeTab === 'assessments' ? (
-          <div
-            role="tabpanel"
-            id={assessmentsPanelId}
-            aria-labelledby={assessmentsTabId}
-            tabIndex={0}
-          >
-            <Mf06AssessmentHistory
-              token={props.token}
-              siteId={props.siteId}
-              credentialId={props.credentialId}
-              apiUrl={props.apiUrl}
-              client={props.client}
-              onUnauthorized={props.onUnauthorized}
-            />
-          </div>
-        ) : (
-          <div role="tabpanel" id={requestsPanelId} aria-labelledby={requestsTabId} tabIndex={0}>
-            <Mf06RequestStatusList
-              token={props.token}
-              siteId={props.siteId}
-              credentialId={props.credentialId}
-              apiUrl={props.apiUrl}
-              client={props.client}
-              onUnauthorized={props.onUnauthorized}
-            />
-          </div>
-        )}
+        <div className="p-4 sm:p-5">
+          {activeTab === 'assessments' ? (
+            <div
+              role="tabpanel"
+              id={assessmentsPanelId}
+              aria-labelledby={assessmentsTabId}
+              tabIndex={0}
+              className="rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500"
+            >
+              <Mf06AssessmentHistory
+                token={props.token}
+                siteId={props.siteId}
+                credentialId={props.credentialId}
+                apiUrl={props.apiUrl}
+                client={props.client}
+                onUnauthorized={props.onUnauthorized}
+              />
+            </div>
+          ) : (
+            <div
+              role="tabpanel"
+              id={requestsPanelId}
+              aria-labelledby={requestsTabId}
+              tabIndex={0}
+              className="rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500"
+            >
+              <Mf06RequestStatusList
+                token={props.token}
+                siteId={props.siteId}
+                credentialId={props.credentialId}
+                apiUrl={props.apiUrl}
+                client={props.client}
+                onUnauthorized={props.onUnauthorized}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -556,7 +567,7 @@ function Mf06RequestStatusList({
   return (
     <div className="space-y-4">
       {/* Disclaimer and Technical State / AI-paused Banner */}
-      <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-3 space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
+      <div className="rounded-xl border border-amber-200/90 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/25 px-4 py-3 space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
         <div className="flex items-center gap-2 font-semibold">
           <IconAlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span>
@@ -573,7 +584,7 @@ function Mf06RequestStatusList({
       </div>
 
       {/* Action bar with Manual Refresh and Totals */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-800/40 px-3.5 py-2.5">
         <div className="flex items-center gap-2">
           {!isHardError && (
             <button
@@ -582,13 +593,13 @@ function Mf06RequestStatusList({
               disabled={isFetching}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition cursor-pointer disabled:opacity-50"
             >
-              <IconClock className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              <IconClock className={`w-3.5 h-3.5 shrink-0 ${isFetching ? 'animate-spin' : ''}`} />
               <span>{isFetching ? t('mf06.requests.refreshing') : t('mf06.requests.refresh')}</span>
             </button>
           )}
         </div>
         {latestTotal !== undefined && !isBaseError && !isHardError && (
-          <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+          <span className="text-xs font-semibold tabular-nums px-2.5 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300">
             {t('mf06.history.total', { total: latestTotal })}
           </span>
         )}
@@ -611,7 +622,7 @@ function Mf06RequestStatusList({
       {isBaseError && (
         <div
           role="alert"
-          className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2"
+          className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2.5"
         >
           <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 text-sm font-medium">
             <IconAlertTriangle className="w-5 h-5 flex-shrink-0" />
@@ -640,8 +651,8 @@ function Mf06RequestStatusList({
 
       {/* Requests List */}
       {items.length > 0 && (
-        <div className="space-y-3">
-          <ul role="list" className="space-y-3">
+        <div className="space-y-3.5">
+          <ul role="list" className="space-y-3.5">
             {items.map((request) => {
               const statusMeta =
                 JOB_STATUS_CONFIG[request.jobStatus] ?? JOB_STATUS_CONFIG.NOT_QUEUED;
@@ -652,9 +663,9 @@ function Mf06RequestStatusList({
               return (
                 <li
                   key={request.requestId}
-                  className="rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/30 p-3.5 space-y-2.5 transition hover:border-zinc-300 dark:hover:border-zinc-700"
+                  className="rounded-xl border border-zinc-200/90 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-800/25 p-4 space-y-3 transition hover:border-zinc-300 dark:hover:border-zinc-700"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-zinc-200/70 dark:border-zinc-800">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusMeta.badgeClass}`}
@@ -662,46 +673,46 @@ function Mf06RequestStatusList({
                         {statusLabel}
                       </span>
                       {request.deadlinePassed && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-700">
-                          <IconAlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-700">
+                          <IconAlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
                           {t('mf06.requests.deadlinePassed')}
                         </span>
                       )}
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                         {purposeLabel}
                       </span>
                     </div>
 
                     {request.attemptCount !== null && (
-                      <span className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                      <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
                         {t('mf06.requests.attempts', { count: request.attemptCount })}
                       </span>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-800/60 rounded-md p-2 border border-zinc-100 dark:border-zinc-700/50">
-                    <div>
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/60 rounded-lg p-3 border border-zinc-200/70 dark:border-zinc-800">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.captured')}
                       </span>{' '}
-                      <time dateTime={request.capturedAt} className="font-mono">
+                      <time dateTime={request.capturedAt} className="font-mono tabular-nums">
                         {formatTimestamp(request.capturedAt)}
                       </time>
                     </div>
-                    <div>
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                    <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
+                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.requests.fieldRequested')}
                       </span>{' '}
-                      <time dateTime={request.requestedAt} className="font-mono">
+                      <time dateTime={request.requestedAt} className="font-mono tabular-nums">
                         {formatTimestamp(request.requestedAt)}
                       </time>
                     </div>
-                    <div>
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                    <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
+                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.requests.fieldDeadline')}
                       </span>{' '}
                       {request.deadlineAt ? (
-                        <time dateTime={request.deadlineAt} className="font-mono">
+                        <time dateTime={request.deadlineAt} className="font-mono tabular-nums">
                           {formatTimestamp(request.deadlineAt)}
                         </time>
                       ) : (
@@ -710,36 +721,36 @@ function Mf06RequestStatusList({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-0.5 text-[11px] text-zinc-600 dark:text-zinc-300 font-mono tabular-nums">
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.requestId')}
                       </span>{' '}
-                      {request.requestId}
+                      <span>{request.requestId}</span>
                     </div>
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.eventId')}
                       </span>{' '}
-                      {request.eventId}
+                      <span>{request.eventId}</span>
                     </div>
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.history.fieldCamera')}
                       </span>{' '}
-                      {request.cameraId}
+                      <span>{request.cameraId}</span>
                     </div>
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.history.fieldZone')}
                       </span>{' '}
-                      {request.zoneId}
+                      <span>{request.zoneId}</span>
                     </div>
                   </div>
 
                   {request.jobStatus === 'SUCCEEDED' && request.assessmentId && (
-                    <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
-                      <div className="text-xs text-emerald-700 dark:text-emerald-400 font-mono flex items-center gap-1.5 break-all">
+                    <div className="rounded-lg border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/25 px-3 py-2 flex items-center justify-between gap-2.5 flex-wrap">
+                      <div className="text-xs text-emerald-700 dark:text-emerald-400 font-mono tabular-nums flex items-center gap-1.5 break-all">
                         <IconCheck className="w-3.5 h-3.5 shrink-0" />
                         <span>
                           {t('mf06.detail.field.assessmentId')} <span>{request.assessmentId}</span>
@@ -759,7 +770,7 @@ function Mf06RequestStatusList({
                             purpose: request.purpose,
                           })
                         }
-                        className="px-2.5 py-1 text-xs font-medium text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 rounded-md transition cursor-pointer"
+                        className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition cursor-pointer shrink-0"
                       >
                         {t('mf06.history.viewAssessment')}
                       </button>

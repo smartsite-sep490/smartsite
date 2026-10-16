@@ -10,6 +10,20 @@ export function notificationHref(notification: UserNotificationResponse) {
 export function formatNotificationDisplayMessage(
   item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate'>,
 ): string {
+  if (['EXIT_DURATION_EXCEEDED', 'MAX_EXITS_EXCEEDED'].includes(item.event)) {
+    // Older notifications stored a transient duration snapshot. Hide that
+    // suffix as well so existing inbox entries use the same concise copy.
+    const message = item.message
+      .replace(
+        / Lượt ra ngoài thứ \d+, thời gian ngoài giờ nghỉ: \d+ phút; thời gian bị trừ tính đến lần kiểm tra này: \d+ phút\.$/,
+        '',
+      )
+      .replace(
+        / Exit \d+, time outside excluding breaks: \d+ minutes; time deducted as of this check: \d+ minutes\.$/,
+        '',
+      );
+    return localizeMessage(message);
+  }
   if (
     item.event === 'ENTRY_DENIED_NO_SCHEDULE' &&
     item.message?.startsWith('Bạn chưa được phân công ca làm')
@@ -42,6 +56,9 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
+  if (['EARLY_EXIT', 'EXIT_DURATION_EXCEEDED', 'MAX_EXITS_EXCEEDED'].includes(item.event)) {
+    return tr(`notifications.${item.event}`);
+  }
   if (uiLanguage() === 'en') return item.title;
   return localizeMessage(localizedLabel(item.title));
 }

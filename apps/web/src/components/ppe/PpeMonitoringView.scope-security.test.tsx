@@ -47,7 +47,8 @@ vi.mock('../cameras/useRealtimePreview', () => ({
   }),
 }));
 
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({
     accessToken: null,
     sessionScope: null,
@@ -282,7 +283,11 @@ describe('PpeMonitoringView Scope & Metadata Security', () => {
     expect(screen.queryByText(/Công trường Cũ Vùng A/)).toBeNull();
 
     // Verify listSites was called with new token (third arg is requestOptions)
-    expect(listSitesSpy).toHaveBeenCalledWith(newRawToken, { offset: 0, limit: 20 }, expect.anything());
+    expect(listSitesSpy).toHaveBeenCalledWith(
+      newRawToken,
+      { offset: 0, limit: 20 },
+      expect.anything(),
+    );
 
     // 5. Verify all Query Keys in cache DO NOT contain newRawToken or oldRawToken
     const updatedQueries = queryClient.getQueryCache().getAll();

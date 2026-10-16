@@ -133,7 +133,7 @@ async function selectedRows(db: DataSource) {
   return result;
 }
 
-test('observed seven-migration prefix upgrades populated synthetic data to MAIN56 without inventing identity or grants', async () => {
+test('observed seven-migration prefix upgrades populated synthetic data to MAIN59 without inventing identity or grants', async () => {
   await withLegacySeven(async (legacy, upgrade) => {
     const fixture = await seed(legacy, 2147483647),
       before = await selectedRows(legacy);
@@ -145,7 +145,7 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN5
     assert.equal(
       await new DatabaseService(upgrade).isReady(),
       false,
-      'Reachable legacy7 is not release56 readiness',
+      'Reachable legacy7 is not release59 readiness',
     );
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
@@ -154,10 +154,10 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN5
     );
     await legacy.destroy();
     const applied = await upgrade.runMigrations({ transaction: 'all' });
-    assert.equal(applied.length, 49);
+    assert.equal(applied.length, 52);
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
-      56,
+      59,
     );
     assert.equal(await new DatabaseService(upgrade).isReady(), true);
     const after = await selectedRows(upgrade);

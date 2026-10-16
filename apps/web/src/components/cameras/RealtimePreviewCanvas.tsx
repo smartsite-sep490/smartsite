@@ -1,11 +1,9 @@
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { translate as tr, uiLanguage } from '../../i18n';
+import { useLocale } from '../../i18n/ppe-locale';
 import type { DecodedPreview } from './useRealtimePreview';
-import {
-  POSITIVE_PPE_OBJECT_CLASSES,
-  NEGATIVE_PPE_OBJECT_CLASSES,
-} from './realtimePreview';
+import { POSITIVE_PPE_OBJECT_CLASSES, NEGATIVE_PPE_OBJECT_CLASSES } from './realtimePreview';
 import {
   computeOverlayLabels,
   formatPpeCompactLabel,
@@ -26,6 +24,7 @@ export function RealtimePreviewCanvas({
   filterClasses,
 }: RealtimePreviewCanvasProps) {
   useTranslation();
+  const { t } = useLocale();
   const language = uiLanguage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -38,19 +37,24 @@ export function RealtimePreviewCanvas({
   const accessibleItems = useMemo(() => {
     return detections.map((det) => {
       if (mode === 'zone') {
-        const regionSuffix = det.regionId ? ` · Khu vực: ${det.regionId}` : '';
-        return `Track #${det.trackId ?? '?'}${regionSuffix}: ${det.label}.`;
+        const regionSuffix = det.regionId
+          ? ` · ${t('ppe.previewCanvas.regionPrefix')}: ${det.regionId}`
+          : '';
+        return `${t('ppe.trackLabel', { id: det.trackId ?? '?' })}${regionSuffix}: ${det.label}.`;
       }
       return formatPpeCompactLabel(det).accessibleSummary;
     });
-  }, [detections, mode]);
+  }, [detections, mode, t]);
 
   const accessibleModelObjects = useMemo(() => {
     if (!preview.frame.modelObjects?.detections.length) return [];
-    return preview.frame.modelObjects.detections.map(
-      (obj) => `Experimental object: ${obj.className} (${Math.round(obj.confidence * 100)}%).`,
+    return preview.frame.modelObjects.detections.map((obj) =>
+      t('ppe.previewCanvas.experimentalObjectSummary', {
+        className: obj.className,
+        confidence: Math.round(obj.confidence * 100),
+      }),
     );
-  }, [preview.frame.modelObjects]);
+  }, [preview.frame.modelObjects, t]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -132,11 +136,20 @@ export function RealtimePreviewCanvas({
     // 8. Draw raw experimental modelObjects bounding boxes if toggled on
     if (showModelObjects && frame.modelObjects?.detections) {
       for (const obj of frame.modelObjects.detections) {
-        const isPositivePpe = (POSITIVE_PPE_OBJECT_CLASSES as readonly string[]).includes(obj.className);
-        const isNegativePpe = (NEGATIVE_PPE_OBJECT_CLASSES as readonly string[]).includes(obj.className);
+        const isPositivePpe = (POSITIVE_PPE_OBJECT_CLASSES as readonly string[]).includes(
+          obj.className,
+        );
+        const isNegativePpe = (NEGATIVE_PPE_OBJECT_CLASSES as readonly string[]).includes(
+          obj.className,
+        );
 
         // Apply display filter preset if provided (display focus only)
-        if (filterClasses && filterClasses.length > 0 && isPositivePpe && !filterClasses.includes(obj.className)) {
+        if (
+          filterClasses &&
+          filterClasses.length > 0 &&
+          isPositivePpe &&
+          !filterClasses.includes(obj.className)
+        ) {
           continue;
         }
 
@@ -187,7 +200,7 @@ export function RealtimePreviewCanvas({
       />
 
       {/* Screen-reader accessible current-frame text list */}
-      <ul className="sr-only" aria-label="Current frame observations">
+      <ul className="sr-only" aria-label={t('ppe.previewCanvas.currentFrameObservationsAria')}>
         {accessibleItems.map((summary, idx) => (
           <li key={`${idx}-${summary}`}>{summary}</li>
         ))}
@@ -201,10 +214,12 @@ export function RealtimePreviewCanvas({
         <div className="absolute bottom-2 right-2 z-20 pointer-events-none max-w-xs">
           <details
             className="pointer-events-auto group rounded bg-stone-950/85 backdrop-blur-xs border border-stone-800 text-[11px] text-stone-300 shadow-md transition-all"
-            aria-label="Chi tiết quan sát trong khung hình"
+            aria-label={t('ppe.previewCanvas.frameDetailsAria')}
           >
             <summary className="cursor-pointer select-none px-2.5 py-1 font-semibold text-stone-200 hover:text-white flex items-center justify-between gap-2 list-none">
-              <span>Khung hình ({detections.length} quan sát)</span>
+              <span>
+                {t('ppe.previewCanvas.frameObservationsCount', { count: detections.length })}
+              </span>
               <span className="text-[9px] text-stone-400 group-open:rotate-180 transition-transform">
                 ▼
               </span>
@@ -225,16 +240,18 @@ export function RealtimePreviewCanvas({
                   >
                     <div className="flex items-center justify-between font-bold text-stone-200">
                       <span>
-                        Track #{det.trackId ?? '?'}
+                        {t('ppe.trackLabel', { id: det.trackId ?? '?' })}
                         {det.regionId && (
                           <span className="font-normal text-stone-400 text-[9px] ml-1.5">
-                            (Khu vực: {det.regionId})
+                            {t('ppe.previewCanvas.regionParen', { regionId: det.regionId })}
                           </span>
                         )}
                       </span>
                       <span className="text-stone-400 font-mono text-[9px]">{timeStr}</span>
                     </div>
-                    <div className="text-stone-400">Box px: {boxStr}</div>
+                    <div className="text-stone-400">
+                      {t('ppe.previewCanvas.boxPx', { box: boxStr })}
+                    </div>
                     <div className="text-stone-300">{accessibleItems[idx]}</div>
                   </div>
                 );

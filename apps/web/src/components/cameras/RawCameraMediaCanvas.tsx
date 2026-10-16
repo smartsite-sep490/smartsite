@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
+import { useLocale } from '../../i18n/ppe-locale';
 
 export type RawCameraMediaLineage = Pick<
   CameraMediaFrame,
@@ -31,6 +32,7 @@ export function RawCameraMediaCanvas({
   height = 480,
   className = 'w-full h-full object-contain',
 }: RawCameraMediaCanvasProps) {
+  const { t } = useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useLayoutEffect(() => {
@@ -57,7 +59,7 @@ export function RawCameraMediaCanvas({
         data-testid="raw-camera-media-canvas"
         className={className}
         role="img"
-        aria-label="Raw unanalyzed camera live video stream"
+        aria-label={t('ppe.rawCanvas.ariaLabel')}
         data-media-camera={frame?.cameraExternalId ?? undefined}
         data-media-session={frame?.sessionId ?? undefined}
         data-media-sequence={frame?.sequenceNumber ?? undefined}

@@ -33,9 +33,10 @@ import { AttendanceService } from '../../src/modules/workforce/attendance/attend
 import { workDateAt } from '../../src/modules/workforce/attendance/attendance-calculation.js';
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
-const isolated = createIsolatedTestDatabase({ canonical: true });
-const dataSource = isolated.dataSource;
 test('MF03: interval totals, missing checkout, notifications, approvals, scope and database concurrency', async (t) => {
+  const isolated = createIsolatedTestDatabase({ canonical: true });
+  const dataSource = isolated.dataSource;
+  t.after(() => isolated.dispose());
   // Keep generated day shifts away from midnight in both UTC and the site timezone.
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 9, 8, 2) });
   await isolated.initialize();
@@ -136,6 +137,98 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       workDate: date,
       isActive: true,
     });
+    // A scheduled worker without any passage must still get an attendance day.
+    await reconciliation.runDue(at('16:59'));
+    assert.equal(await dataSource.getRepository(AttendanceDayEntity).countBy({ siteId }), 0);
+    await Promise.all([
+      reconciliation.runDue(at('17:00')),
+      new AttendanceReconciliationService(dataSource, notifications).runDue(at('17:00')),
+    ]);
+    const absentDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ siteId, workerId, workDate: date });
+    assert.equal(absentDay.status, 'ABSENT');
+    assert.equal(absentDay.regularMinutes, 0);
+    assert.equal(absentDay.confirmedMinutes, null);
+    await reconciliation.runDue(at('18:00'));
+    const absenceNotifications = await dataSource
+      .getRepository(UserNotificationEntity)
+      .findBy({ siteId, event: 'ABSENT' });
+    assert.deepEqual(
+      absenceNotifications.map((n) => n.recipientUserId).sort(),
+      [userId, repId].sort(),
+    );
+    assert.equal(
+      (await days.list(workerActor, siteId, { status: 'ABSENT' })).items[0]?.status,
+      'ABSENT',
+    );
+    assert.equal(
+      (await days.list(repActor, siteId, { status: 'ABSENT' })).items[0]?.id,
+      absentDay.id,
+    );
+    assert.equal((await days.list(actor(outsiderId, UserRole.WORKER), siteId, {})).items.length, 0);
+    await assert.rejects(() =>
+      days.detail(actor(outsiderId, UserRole.WORKER), siteId, absentDay.id),
+    );
+    const approvedLeave = await dataSource.getRepository(AbsenceRequestEntity).save({
+      id: randomUUID(),
+      siteId,
+      workerId,
+      workerScheduleId: schedule.id,
+      shiftId: shift.id,
+      expectedScheduleVersionId: version.id,
+      requestedByUserId: userId,
+      status: AbsenceRequestStatus.APPROVED,
+      reason: 'Synthetic approved full shift leave',
+    });
+    await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
+    await reconciliation.runDue(at('18:00'));
+    assert.equal(
+      (await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({ id: absentDay.id }))
+        .status,
+      'CONFIRMED',
+    );
+    assert.equal(
+      await dataSource.getRepository(UserNotificationEntity).countBy({ siteId, event: 'ABSENT' }),
+      0,
+    );
+    await dataSource.getRepository(AbsenceRequestEntity).delete(approvedLeave.id);
+    await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
+    await dataSource.query('DELETE FROM timesheet WHERE attendance_day_id=$1', [absentDay.id]);
+    await dataSource.getRepository(AttendanceDayEntity).delete(absentDay.id);
+    await dataSource.getRepository(WorkerScheduleEntity).update(schedule.id, { isActive: false });
+    await reconciliation.runDue(at('18:00'));
+    assert.equal(await dataSource.getRepository(AttendanceDayEntity).countBy({ siteId }), 0);
+    const absentNightShift = await dataSource.getRepository(ShiftEntity).save({
+      id: randomUUID(),
+      siteId,
+      name: 'Synthetic overnight shift',
+      startsAt: new Date('2026-09-01T15:00:00Z'),
+      endsAt: new Date('2026-09-01T23:00:00Z'),
+      timezone: 'Asia/Ho_Chi_Minh',
+    });
+    const nightSchedule = await dataSource.getRepository(WorkerScheduleEntity).save({
+      id: randomUUID(),
+      siteId,
+      workerId,
+      shiftId: absentNightShift.id,
+      scheduleVersionId: version.id,
+      workDate: '2026-10-02',
+      isActive: true,
+    });
+    await reconciliation.runDue(new Date('2026-10-03T05:59:00+07:00'));
+    assert.equal(await dataSource.getRepository(AttendanceDayEntity).countBy({ siteId }), 0);
+    await reconciliation.runDue(new Date('2026-10-03T06:00:00+07:00'));
+    const absentNightDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ siteId });
+    assert.equal(absentNightDay.workDate, '2026-10-02');
+    assert.equal(absentNightDay.status, 'ABSENT');
+    await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
+    await dataSource.getRepository(AttendanceDayEntity).delete(absentNightDay.id);
+    await dataSource.getRepository(WorkerScheduleEntity).delete(nightSchedule.id);
+    await dataSource.getRepository(ShiftEntity).delete(absentNightShift.id);
+    await dataSource.getRepository(WorkerScheduleEntity).update(schedule.id, { isActive: true });
     const passage = async (
       direction: 'IN' | 'OUT',
       time: string | Date,
@@ -193,7 +286,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     );
     await Promise.all([1, 2].map(() => reconciliation.runDue(at('17:05'))));
     day = await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({ id: day.id });
-    assert.equal(day.provisionalMinutes, 420);
+    assert.equal(day.provisionalMinutes, 435);
     assert.equal(day.confirmedMinutes, null);
     assert.equal(
       await dataSource
@@ -211,7 +304,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     const last = await passage('OUT', '17:20', 'QR');
     day = await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({ id: day.id });
     assert.equal(day.status, 'CONFIRMED');
-    assert.equal(day.confirmedMinutes, 420);
+    assert.equal(day.confirmedMinutes, 435);
     assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ siteId }), 4);
     assert.equal(await dataSource.getRepository(AttendanceSessionEntity).countBy({ siteId }), 2);
     const legacy = await attendance.record(
@@ -278,7 +371,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       true,
     );
     day = await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({ id: day.id });
-    assert.equal(day.confirmedMinutes, 300);
+    assert.equal(day.confirmedMinutes, 315);
     const rawBefore = await dataSource.getRepository(AttendanceEventEntity).findBy({ siteId });
     assert.equal(rawBefore.length, 4);
     await assert.rejects(
@@ -364,7 +457,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       rawBefore,
     );
     assert.equal((await days.detail(workerActor, siteId, day.id)).sessions.length, 2);
-    assert.equal((await days.timesheets(workerActor, siteId, {})).items[0]?.totalMinutes, 300);
+    assert.equal((await days.timesheets(workerActor, siteId, {})).items[0]?.totalMinutes, 315);
     await assert.rejects(days.detail(actor(outsiderId, UserRole.WORKER), siteId, day.id));
     t.mock.timers.setTime(+futureEnd);
     await passage('IN', futureShift.startsAt);
@@ -381,7 +474,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       reviewNote: 'Verified early overtime departure',
     });
     assert.equal((await days.detail(workerActor, siteId, futureDay.id)).day.confirmedMinutes, 150);
-    assert.equal((await days.timesheets(workerActor, siteId, {})).items[0]?.totalMinutes, 450);
+    assert.equal((await days.timesheets(workerActor, siteId, {})).items[0]?.totalMinutes, 465);
     const unassignedIn = new Date(+futureEnd + 86400000);
     await passage('IN', unassignedIn);
     const unassignedDay = await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({
@@ -543,7 +636,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       }),
     ]);
     assert.equal(reviews.filter((result) => result.status === 'fulfilled').length, 1);
-    assert.equal((await days.detail(workerActor, siteId, day.id)).day.confirmedMinutes, 270);
+    assert.equal((await days.detail(workerActor, siteId, day.id)).day.confirmedMinutes, 285);
     assert.ok(
       (await attendance.overview(repActor, siteId, { dayId: day.id })).corrections.some(
         (item) => item.id === correction.id && item.status === 'APPROVED',
@@ -701,7 +794,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     });
     const beforeExit = (await days.detail(workerActor, siteId, issueDay.id)).day;
     assert.equal(beforeExit.confirmedMinutes, null);
-    assert.deepEqual(beforeExit.anomalies, ['MISSING_OUT']);
+    assert.deepEqual(beforeExit.anomalies, ['MISSING_OUT', 'EXIT_DURATION_EXCEEDED']);
     assert.deepEqual(
       await dataSource
         .getRepository(AttendanceEventEntity)
@@ -710,7 +803,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     );
     await passage('OUT', new Date(+issueEnd + 6 * 60000), 'QR');
     const completed = await days.detail(workerActor, siteId, issueDay.id);
-    assert.equal(completed.day.confirmedMinutes, 480);
+    assert.equal(completed.day.confirmedMinutes, 510);
     assert.equal(completed.day.status, 'CONFIRMED');
     assert.equal(
       completed.sessions.find((session) => session.id === openInterval.id)!.status,
@@ -899,7 +992,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
             ['08:00', '11:00'],
             ['11:30', '17:00'],
           ],
-          450,
+          465,
         ],
         [
           22,
@@ -1065,6 +1158,121 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         assert.equal(preservedLegacy.dayId, null);
         assert.equal(preservedLegacy.effectiveOutAt, null);
         assert.equal(preservedLegacy.checkOutEventId, null);
+      },
+    );
+    await t.test(
+      'exit policy counts ongoing exits and sends each violation once to both roles',
+      async () => {
+        const workDate = '2026-11-20';
+        const time = (value: string) => new Date(`${workDate}T${value}:00+07:00`);
+        const configuration = new ScheduleConfigurationService(dataSource);
+        const exitShift = await configuration.createShift(
+          actor(securityId, UserRole.SITE_MANAGER),
+          siteId,
+          {
+            name: 'Exit policy regression',
+            startsAt: time('08:00').toISOString(),
+            endsAt: time('17:00').toISOString(),
+            timezone: 'Asia/Ho_Chi_Minh',
+            breakStartsAt: time('12:00').toISOString(),
+            breakEndsAt: time('13:00').toISOString(),
+            allowedExitMinutes: 15,
+            maxExitCount: 2,
+          },
+        );
+        assert.equal(exitShift.allowedExitMinutes, 15);
+        assert.equal(exitShift.maxExitCount, 2);
+        await dataSource.getRepository(WorkerScheduleEntity).save({
+          id: randomUUID(),
+          siteId,
+          workerId,
+          shiftId: exitShift.id,
+          scheduleVersionId: version.id,
+          workDate,
+          isActive: true,
+        });
+        await passage('IN', time('08:00'));
+        await passage('OUT', time('10:00'));
+        const exitDay = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ siteId, workerId, workDate });
+        const refresh = (value: string) =>
+          dataSource.transaction((manager) =>
+            reconciliation.refresh(manager, exitDay.id, time(value)),
+          );
+        await refresh('10:25');
+        const notices = async (event: 'EXIT_DURATION_EXCEEDED' | 'MAX_EXITS_EXCEEDED') =>
+          (await dataSource.getRepository(UserNotificationEntity).findBy({ siteId, event })).filter(
+            (notice) => notice.content.dayId === exitDay.id,
+          );
+        const durationNotices = await notices('EXIT_DURATION_EXCEEDED');
+        assert.deepEqual(
+          durationNotices.map((n) => n.recipientUserId).sort(),
+          [userId, repId].sort(),
+        );
+        assert.match(durationNotices[0]!.requestId, /^[0-9a-f-]{36}$/);
+        assert.match(durationNotices[0]!.content.message, /Phần vượt quá đã bị trừ vào giờ làm\.$/);
+        assert.doesNotMatch(
+          durationNotices[0]!.content.message,
+          /thời gian ngoài giờ nghỉ|lần kiểm tra này/,
+        );
+        await refresh('10:28');
+        await passage('IN', time('10:30'));
+        await passage('OUT', time('11:00'));
+        await passage('IN', time('11:10'));
+        assert.equal((await notices('EXIT_DURATION_EXCEEDED')).length, 2);
+        await passage('OUT', time('14:00'));
+        const outside = await refresh('14:05');
+        assert.equal(outside.exitCount, 3);
+        assert.equal(outside.deductedMinutes, 20);
+        assert.deepEqual(
+          (await notices('MAX_EXITS_EXCEEDED')).map((n) => n.recipientUserId).sort(),
+          [userId, repId].sort(),
+        );
+        await refresh('14:20');
+        await passage('IN', time('14:30'));
+        await passage('OUT', time('17:30'));
+        const final = await refresh('18:00');
+        assert.equal(final.regularMinutes, 435);
+        assert.equal(final.overtimeMinutes, 0);
+        assert.equal(final.confirmedMinutes, 435);
+        assert.equal((await notices('MAX_EXITS_EXCEEDED')).length, 2);
+        assert.equal((await notices('EXIT_DURATION_EXCEEDED')).length, 2);
+
+        // An informational exit violation must not prevent the existing
+        // representative review of a final early departure.
+        const nextDate = '2026-11-21';
+        const nextAt = (value: string) => new Date(`${nextDate}T${value}:00+07:00`);
+        await dataSource.getRepository(WorkerScheduleEntity).save({
+          id: randomUUID(),
+          siteId,
+          workerId,
+          shiftId: exitShift.id,
+          scheduleVersionId: version.id,
+          workDate: nextDate,
+          isActive: true,
+        });
+        await passage('IN', nextAt('08:00'));
+        await passage('OUT', nextAt('10:00'));
+        await passage('IN', nextAt('10:30'));
+        await passage('OUT', nextAt('16:50'));
+        t.mock.timers.setTime(+nextAt('18:00'));
+        const earlySeed = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ siteId, workerId, workDate: nextDate });
+        const earlyDay = await dataSource.transaction((manager) =>
+          reconciliation.refresh(manager, earlySeed.id),
+        );
+        assert.equal(earlyDay.confirmedMinutes, null);
+        assert.deepEqual(earlyDay.anomalies, ['EARLY_CHECKOUT', 'EXIT_DURATION_EXCEEDED']);
+        await days.acknowledge(repActor, siteId, earlyDay.id, {
+          expectedVersion: earlyDay.version,
+          reviewNote: 'Verified final early departure',
+        });
+        assert.equal(
+          (await days.detail(workerActor, siteId, earlyDay.id)).day.confirmedMinutes,
+          455,
+        );
       },
     );
     await dataSource

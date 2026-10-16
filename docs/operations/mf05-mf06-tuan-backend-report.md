@@ -1,5 +1,7 @@
 # Báo cáo Backend MF05/MF06 — Tuấn
 
+Báo cáo này ghi checkpoint907b4ca trước merge; xem [bản ghép Main-sync tiếp theo](2026-10-16-tuan-main-sync-merge.md) cho registry và kết quả mới.
+
 Ngày kiểm chứng: 2026-10-16. Trạng thái: **BACKEND V4 ĐÃ TRIỂN KHAI/KIỂM CHỨNG; GATE ĐÓNG TOÀN BỘ TASK CÒN OPEN**. Báo cáo phần mềm không thay thế nghiệm thu của leader/owner.
 
 ## Nhánh và phạm vi

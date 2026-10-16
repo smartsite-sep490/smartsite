@@ -10,8 +10,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-const isolated = createIsolatedTestDatabase({ canonical: true });
-const dataSource = isolated.dataSource;
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
@@ -39,15 +37,17 @@ import {
 } from '../../src/database/entities/contractor-team.entity.js';
 
 test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
+  const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
+  const { dataSource } = isolatedDatabase;
   const resources: { app?: NestExpressApplication } = {};
   t.after(async () => {
     try {
       if (resources.app) await resources.app.close();
     } finally {
-      await isolated.dispose();
+      await isolatedDatabase.dispose();
     }
   });
-  await isolated.initialize();
+  await isolatedDatabase.initialize();
   const environment = validateEnvironment({
     NODE_ENV: 'test',
     DATABASE_URL: process.env.TEST_DATABASE_URL,
@@ -674,8 +674,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     [secondShiftId, managerShiftId],
   );
   assert.deepEqual(Object.keys(eligibleShifts.json.items[0]).sort(), [
+    'allowedExitMinutes',
+    'breakEndsAt',
+    'breakStartsAt',
     'endsAt',
     'id',
+    'maxExitCount',
     'name',
     'startsAt',
     'timezone',

@@ -300,6 +300,38 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     expect(wallBtn.getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('exposes the focused quick-camera button as pressed and updates it after selection', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+    const first = await screen.findByTestId('camera-chip-cam-1');
+    const second = await screen.findByTestId('camera-chip-cam-2');
+    expect(first.getAttribute('aria-pressed')).toBe('true');
+    expect(second.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(second);
+    await waitFor(() => expect(second.getAttribute('aria-pressed')).toBe('true'));
+    expect(first.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('associates the diagnostics disclosure with its expanded content', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+    const toggle = await screen.findByTestId('toggle-diagnostics-drawer');
+    if (toggle.getAttribute('aria-expanded') === 'true') fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    const controlsId = toggle.getAttribute('aria-controls');
+    expect(controlsId).toBeTruthy();
+    expect(document.getElementById(controlsId!)).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(controlsId!)).not.toBeNull();
+  });
+
   it('switches to 4-Source Wall and renders up to 4 real camera tiles without fabricated sources', async () => {
     // Setup 4 camera feeds: 3 LIVE, 1 REPLAY
     cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
@@ -379,8 +411,8 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     const slot4 = screen.getByTestId('wall-unassigned-slot-4');
     expect(slot3).not.toBeNull();
     expect(slot4).not.toBeNull();
-    expect(slot3?.textContent).toContain('Kênh 3 · Chưa chỉ định');
-    expect(slot4?.textContent).toContain('Kênh 4 · Chưa chỉ định');
+    expect(slot3?.textContent).toContain('Slot 3 · Unassigned');
+    expect(slot4?.textContent).toContain('Slot 4 · Unassigned');
   });
 
   it('clicking a tile in wall view updates selected camera and reuses wall frame in focus card without extra subscription', async () => {

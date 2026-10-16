@@ -8,6 +8,7 @@ import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 
 export interface ZonePpeSetupPanelProps {
   apiUrl: string;
+  client?: SmartSiteManagementClient;
   token: string;
   sessionScope: string;
   credentialId: number;
@@ -62,6 +63,7 @@ function isAuthOrScopeError(error: unknown): boolean {
 
 function ZonePpeSetupPanelInternal({
   apiUrl,
+  client: providedClient,
   token,
   sessionScope,
   credentialId,
@@ -76,7 +78,8 @@ function ZonePpeSetupPanelInternal({
 }: ZonePpeSetupPanelInternalProps) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const fallbackClient = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = providedClient ?? fallbackClient;
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -1141,6 +1144,7 @@ function ZonePpeSetupPanelInternal({
           {scopedZones.length > 0 ? (
             <ZonePpeCameraRegionPanel
               apiUrl={apiUrl}
+              client={client}
               token={token}
               sessionScope={sessionScope}
               credentialId={credentialId}

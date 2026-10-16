@@ -35,7 +35,9 @@ jobs:
         env:
           EXPO_OFFLINE: '0'
       - name: Validate private evidence reader configuration
-        run: node infra/check-evidence-compose.mjs
+        run: |
+          node --test infra/evidence-compose-validation.test.mjs
+          node infra/check-evidence-compose.mjs
       - name: Validate Backend shutdown grace configuration
         run: node --test infra/backend-shutdown-compose.test.mjs
       - name: Start PostgreSQL container

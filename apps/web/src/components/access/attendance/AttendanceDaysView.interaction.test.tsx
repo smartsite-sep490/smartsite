@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AttendanceDaysView } from './AttendanceDaysView';
 import { AttendanceView } from './AttendanceView';
+import i18n from '../../../i18n';
 
 const api = vi.hoisted(() => ({
   attendanceDays: vi.fn(),
@@ -92,11 +93,12 @@ beforeEach(() => {
   api.reviewAttendanceTime.mockResolvedValue({ id: 'request-1' });
   api.confirmAttendanceDay.mockResolvedValue({ id: 'day-1' });
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   cache?.clear();
   vi.restoreAllMocks();
   vi.useRealTimers();
+  await i18n.changeLanguage('en');
 });
 
 describe('MF03 interactive UI', () => {
@@ -126,6 +128,18 @@ describe('MF03 interactive UI', () => {
         total: 1,
       });
       mount();
+      expect(await screen.findByText(kind === 'OVERTIME' ? 'Overtime' : 'Leave')).toBeTruthy();
+      await act(async () => {
+        await i18n.changeLanguage('vi');
+      });
+      expect(
+        screen.getByText(kind === 'OVERTIME' ? 'Tăng ca' : 'Nghỉ phép', { selector: 'span' }),
+      ).toBeTruthy();
+      expect(screen.queryByText(kind)).toBeNull();
+      expect(screen.getByText('Request for workday')).toBeTruthy();
+      await act(async () => {
+        await i18n.changeLanguage('en');
+      });
       await userEvent.click(await screen.findByRole('button', { name: 'Reject' }));
       expect(api.reviewAttendanceTime).not.toHaveBeenCalled();
       expect(
@@ -711,32 +725,42 @@ describe('MF03 interactive UI', () => {
     );
     expect(screen.queryByRole('button', { name: 'Submit request' })).toBeNull();
   });
-  it('shows a version conflict and lets the representative reload current detail', async () => {
-    api.attendanceDays.mockResolvedValue({
-      items: [day],
-      total: 1,
-      requests: [],
-      canReview: true,
-      canRequest: false,
-    });
-    api.confirmAttendanceDay.mockRejectedValue(
-      new Error('Attendance changed; reload before reviewing'),
-    );
-    mount();
-    await userEvent.click(await screen.findByRole('button', { name: 'View' }));
-    await waitFor(() => expect(api.attendanceDayDetail).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText('Review note'), {
-      target: { value: 'Verified departure' },
-    });
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Confirm actual hours for early departure' }),
-    );
-    expect(await screen.findByRole('alert')).toHaveProperty(
-      'textContent',
-      'Attendance changed; reload before reviewing',
-    );
-    const before = api.attendanceDayDetail.mock.calls.length;
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    await waitFor(() => expect(api.attendanceDayDetail.mock.calls.length).toBeGreaterThan(before));
-  });
+  it.each([['EARLY_CHECKOUT'], ['EARLY_CHECKOUT', 'EXIT_DURATION_EXCEEDED']])(
+    'shows a version conflict and reloads early departure with anomalies %j',
+    async (...anomalies) => {
+      const reviewDay = { ...day, anomalies };
+      api.attendanceDays.mockResolvedValue({
+        items: [reviewDay],
+        total: 1,
+        requests: [],
+        canReview: true,
+        canRequest: false,
+      });
+      api.attendanceDayDetail.mockResolvedValue({
+        day: { ...reviewDay, version: 7 },
+        sessions: [],
+      });
+      api.confirmAttendanceDay.mockRejectedValue(
+        new Error('Attendance changed; reload before reviewing'),
+      );
+      mount();
+      await userEvent.click(await screen.findByRole('button', { name: 'View' }));
+      await waitFor(() => expect(api.attendanceDayDetail).toHaveBeenCalled());
+      fireEvent.change(screen.getByLabelText('Review note'), {
+        target: { value: 'Verified departure' },
+      });
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Confirm actual hours for early departure' }),
+      );
+      expect(await screen.findByRole('alert')).toHaveProperty(
+        'textContent',
+        'Attendance changed; reload before reviewing',
+      );
+      const before = api.attendanceDayDetail.mock.calls.length;
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      await waitFor(() =>
+        expect(api.attendanceDayDetail.mock.calls.length).toBeGreaterThan(before),
+      );
+    },
+  );
 });

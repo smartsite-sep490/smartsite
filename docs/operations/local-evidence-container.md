@@ -19,3 +19,13 @@ Back up the database and this evidence directory together while writers are stop
 Run `node infra/check-evidence-compose.mjs` to validate the real merged Compose configuration with an empty env file and synthetic temporary directory. It runs no containers and reads no runtime `.env`. CI runs it before the integration suite. Container startup, non-root permission behavior and private evidence HTTP reads still require a Docker daemon and the configured writer; configuration validation does not prove these runtime gates.
 
 Storage guidance: [Docker bind mounts](https://docs.docker.com/engine/storage/bind-mounts/) and [OWASP file access/storage controls](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html).
+
+The configuration gate compares the actual evidence overlay with a synthetic
+creation-enabled control. Older compose-go JSON omits `false` on a boolean;
+newer OptOut encoding omits the default `true` instead. Omission is accepted only
+when the control proves the former encoding. Both variants still reject host
+creation, writable mounts, mismatched reader roots and Web exposure. Run
+`node --test infra/evidence-compose-validation.test.mjs` before the actual Compose
+check; neither command starts a container or reads real media. See the upstream
+[boolean encoding](https://github.com/compose-spec/compose-go/blob/v2.4.9/types/types.go#L531-L536)
+and [OptOut encoding](https://github.com/compose-spec/compose-go/blob/main/types/types.go#L544-L559).

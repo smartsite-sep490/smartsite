@@ -452,6 +452,10 @@ function PublicOnlyRoute({
   useTranslation();
 
   const { accessToken } = useAuth();
+  const profile = useCurrentUser(apiUrl);
+  if (accessToken && profile.isPending) {
+    return <PageLoadingFallback />;
+  }
   if (accessToken) {
     return <Navigate to={`/${defaultAuthTab}`} replace />;
   }

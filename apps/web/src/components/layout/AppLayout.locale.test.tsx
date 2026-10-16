@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { LocaleProvider } from '../../i18n/locale';
 import { AppLayout } from './AppLayout';
+import i18n from '../../i18n';
 
 const state = vi.hoisted(() => ({ error: false, logout: vi.fn() }));
 vi.mock('../../features/auth/auth-session', () => ({
@@ -18,6 +19,13 @@ vi.mock('../../features/auth/auth-session', () => ({
     isError: state.error,
   }),
 }));
+vi.mock('../../features/notifications/NotificationBell', () => ({
+  NotificationBell: () => null,
+}));
+
+beforeEach(async () => {
+  await i18n.changeLanguage('vi');
+});
 
 afterEach(() => {
   cleanup();
@@ -46,6 +54,7 @@ describe('localized operational navigation preserves scope and fail-closed acces
     await user.clear(draft);
     await user.type(draft, 'site-b-unsaved');
     expect(screen.getByText('Cán bộ an toàn')).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Chọn ngôn ngữ' }));
     await user.click(screen.getByRole('button', { name: 'English' }));
     expect(screen.getByText('Safety Officer')).toBeDefined();
     expect(screen.getByRole('button', { name: 'PPE Monitoring' })).toBeDefined();
@@ -59,7 +68,8 @@ describe('localized operational navigation preserves scope and fail-closed acces
     state.error = true;
     render(<Shell />);
     expect(screen.queryByText('Cán bộ an toàn')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Giám sát bảo hộ (PPE)' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Giám sát bảo hộ' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Chọn ngôn ngữ' }));
     await user.click(screen.getByRole('button', { name: 'English' }));
     expect(screen.queryByRole('button', { name: 'PPE Monitoring' })).toBeNull();
     expect(screen.getByText('Access not verified')).toBeDefined();

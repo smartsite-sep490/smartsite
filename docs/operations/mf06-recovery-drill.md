@@ -8,7 +8,7 @@ The configuration-only website state helper deliberately refuses nonempty busine
 
 The Backend integration test `test/integration/operational-recovery.integration.test.ts` has three profiles:
 
-- The canonical source-registry profile uses all 56 registered migrations, including completed synthetic MF06 history, journal/consent storage, Checklist and team history. This is the current runtime schema.
+- The canonical source-registry profile uses all 59 registered migrations, including completed synthetic MF06 history, journal/consent storage, Checklist, team history and incoming MF03 attendance changes. This is the merged runtime schema.
 - The opt-in MAIN profile loads the exact 35 migrations from approved commit `2e98619ac94be775ef43f4cb3076f00a59b88df1`, then request migration0001 and immutable assessment migration0004. The helper compares every snapshot source with Git and every compiled module with a fresh deterministic transpilation before importing it. This test-only list never changes production registration.
 - The opt-in Linux profile uses the canonical schema and an explicitly pinned qualified Backend image. It verifies the owned container's SIGTERM shutdown separately from Windows process termination. Set `SMARTSITE_TEST_LINUX_RECOVERY_IMAGE` to the inspected immutable image ID; the test checks the image command and ownership before starting it.
 
@@ -31,9 +31,11 @@ Compile tests into a fresh exclusive output, with the existing installed workspa
 
 ## Explicit readiness boundary
 
-The canonical runtime registers56 migrations. The retained MAIN37 predecessor lacks 19 current migrations, including `Mf06MainAuthorityJournal1791590400002`, `SafetyFaceProvenance1791590400003` and `Mf06TeamAuthorityHistory1792281600000`; its recovery scenario requires liveness200 and readiness503 before and after restore, with the exact registered difference recorded. Both canonical recovery scenarios require readiness200. Older source24 results belong to their original source commit, not this registry.
+The canonical runtime registers59 migrations. The retained MAIN37 predecessor lacks 22 current migrations, including `Mf06MainAuthorityJournal1791590400002`, `SafetyFaceProvenance1791590400003` and `Mf06TeamAuthorityHistory1792281600000`; its recovery scenario requires liveness200 and readiness503 before and after restore, with the exact registered difference recorded. Both canonical recovery scenarios require readiness200. Older source24/56 results belong to their original source commits, not this registry.
 
 This negative boundary does not qualify a production MAIN rollout. Do not stamp a missing migration, bypass readiness or register the legacy history on MAIN merely to make a probe pass. The canonical graph preserves all approved MAIN migration bodies and applies additive approved Safety migrations; existing legacy history remains preserved when upgrading a previously migrated database. Migration readiness is separate from writer closure, a trusted authority epoch and deployment acceptance.
+
+The [merged-source qualification](2026-10-16-tuan-main-sync-merge.md#gate-nâng-cấp-db-còn-mở) separately records a populated56 Checklist-notification upgrade refusal. A successful restore of an already canonical59 fixture does not close that upgrade gate.
 
 ## Gates still open
 
