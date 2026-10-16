@@ -436,8 +436,8 @@ export function Mf06AssessmentDetailDialog({
     <PpeDialog open={open} onClose={handleClose} title={t('mf06.detail.title')} wide>
       <div className="space-y-4 text-xs">
         {/* Technical Safety Observation Disclaimer */}
-        <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-3 space-y-1 text-amber-900 dark:text-amber-200">
-          <div className="flex items-center gap-1.5 font-semibold text-xs">
+        <div className="rounded-xl border border-amber-200/90 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/25 px-4 py-3 space-y-1.5 text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2 font-semibold text-xs">
             <IconAlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>{t('mf06.detail.disclaimerTitle')}</span>
           </div>
@@ -462,7 +462,7 @@ export function Mf06AssessmentDetailDialog({
         {effectiveError && (
           <div
             role="alert"
-            className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2 text-rose-700 dark:text-rose-300"
+            className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2.5 text-rose-700 dark:text-rose-300"
           >
             <div className="flex items-center gap-2 font-medium">
               <IconAlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -473,7 +473,7 @@ export function Mf06AssessmentDetailDialog({
                 type="button"
                 onClick={handleManualRetry}
                 disabled={isFetching}
-                className="px-3 py-1 bg-rose-600 text-white rounded text-xs font-medium hover:bg-rose-700 transition cursor-pointer disabled:opacity-50"
+                className="px-3 py-1.5 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 transition cursor-pointer disabled:opacity-50"
               >
                 {t('mf06.detail.retry')}
               </button>
@@ -485,7 +485,7 @@ export function Mf06AssessmentDetailDialog({
         {validationError && (
           <div
             role="alert"
-            className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-1 text-rose-700 dark:text-rose-300"
+            className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-1 text-rose-700 dark:text-rose-300"
           >
             <div className="flex items-center gap-2 font-medium">
               <IconAlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -498,46 +498,50 @@ export function Mf06AssessmentDetailDialog({
         {record && outcomeMeta && OutcomeIcon && (
           <div className="space-y-4">
             {/* Outcome & Reason Code Badges */}
-            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/90 dark:border-zinc-700/80 rounded-xl">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
                 >
-                  <OutcomeIcon className="w-3.5 h-3.5" />
+                  <OutcomeIcon className="w-3.5 h-3.5 shrink-0" />
                   {t(outcomeMeta.labelKey)}
                 </span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-200/80 dark:bg-zinc-700/70 text-zinc-800 dark:text-zinc-200">
                   {reasonLabel}
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                   {purposeLabel}
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+              <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
                 v{record.evaluatorVersion}
               </span>
             </div>
 
             {/* Timestamps */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white dark:bg-zinc-800/60 rounded-lg p-3 border border-zinc-100 dark:border-zinc-700/50">
-              <div>
-                <span className="text-zinc-400 dark:text-zinc-500 font-medium">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white dark:bg-zinc-800/60 rounded-xl p-3.5 border border-zinc-200/80 dark:border-zinc-700/60">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">
                   {t('mf06.detail.field.captured')}
                 </span>{' '}
-                <div className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
-                  <time dateTime={record.capturedAt}>{record.capturedAt}</time>
-                  <div className="text-[10px] text-zinc-400">
+                <div className="font-mono tabular-nums text-[11px] text-zinc-800 dark:text-zinc-200 space-y-0.5">
+                  <time dateTime={record.capturedAt} className="block">
+                    {record.capturedAt}
+                  </time>
+                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
                     {formatIsoDisplay(record.capturedAt)}
                   </div>
                 </div>
               </div>
-              <div>
-                <span className="text-zinc-400 dark:text-zinc-500 font-medium">
+              <div className="flex flex-col gap-1 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-700/60 sm:pl-3">
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">
                   {t('mf06.detail.field.assessed')}
                 </span>{' '}
-                <div className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
-                  <time dateTime={record.assessedAt}>{record.assessedAt}</time>
-                  <div className="text-[10px] text-zinc-400">
+                <div className="font-mono tabular-nums text-[11px] text-zinc-800 dark:text-zinc-200 space-y-0.5">
+                  <time dateTime={record.assessedAt} className="block">
+                    {record.assessedAt}
+                  </time>
+                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
                     {formatIsoDisplay(record.assessedAt)}
                   </div>
                 </div>
@@ -545,42 +549,42 @@ export function Mf06AssessmentDetailDialog({
             </div>
 
             {/* Identifiers & Provenance (NO private fields/tokens/URIs) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono text-zinc-600 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-800/30 p-3 rounded-lg border border-zinc-200/60 dark:border-zinc-800">
-              <div className="break-all">
-                <span className="text-zinc-400 dark:text-zinc-500">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-[11px] font-mono tabular-nums text-zinc-700 dark:text-zinc-300 bg-zinc-50/70 dark:bg-zinc-900/40 px-3.5 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800">
+              <div className="flex flex-col gap-0.5 break-all">
+                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {t('mf06.detail.field.assessmentId')}
                 </span>{' '}
-                {record.assessmentId}
+                <span>{record.assessmentId}</span>
               </div>
-              <div className="break-all">
-                <span className="text-zinc-400 dark:text-zinc-500">
+              <div className="flex flex-col gap-0.5 break-all">
+                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {t('mf06.detail.field.requestId')}
                 </span>{' '}
-                {record.requestId}
+                <span>{record.requestId}</span>
               </div>
-              <div className="break-all">
-                <span className="text-zinc-400 dark:text-zinc-500">
+              <div className="flex flex-col gap-0.5 break-all">
+                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {t('mf06.detail.field.eventId')}
                 </span>{' '}
-                {record.eventId}
+                <span>{record.eventId}</span>
               </div>
-              <div className="break-all">
-                <span className="text-zinc-400 dark:text-zinc-500">
+              <div className="flex flex-col gap-0.5 break-all">
+                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {t('mf06.detail.field.cameraId')}
                 </span>{' '}
-                {record.cameraId}
+                <span>{record.cameraId}</span>
               </div>
-              <div className="break-all">
-                <span className="text-zinc-400 dark:text-zinc-500">
+              <div className="flex flex-col gap-0.5 break-all">
+                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {t('mf06.detail.field.zoneId')}
                 </span>{' '}
-                {record.zoneId}
+                <span>{record.zoneId}</span>
               </div>
-              <div className="break-all">
-                <span className="text-zinc-400 dark:text-zinc-500">
+              <div className="flex flex-col gap-0.5 break-all">
+                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                   {t('mf06.detail.field.provenance')}
                 </span>{' '}
-                {record.provenance}
+                <span>{record.provenance}</span>
               </div>
             </div>
           </div>

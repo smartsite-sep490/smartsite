@@ -54,6 +54,24 @@ drafts requires separating logical workflow identity from credential/pixel scope
 never reuse old credential scopes or retain stale authorization/pixels to hide it.
 AI/capture remain paused.
 
+## Desktop workspace presentation
+
+Scope selection, configuration actions and viewing controls have separate visual
+groups. The focused viewport and evidence column share a540px desktop height;
+the wall column has a minimum height to avoid collapsing with short content.
+Repeated floating snapshot/status text is removed; capture time stays in the
+evidence fields, including an explicit missing value. Detailed explanations
+remain available through disclosures. Camera chips expose their pressed state
+and the diagnostics disclosure names its controlled content.
+
+MF06 tabs, result/history metadata and detail sections have clearer spacing;
+the outer dialog owns scrolling. Technical IDs remain complete, and Backend
+authority, UNKNOWN, session scopes and query/mutation bindings are unchanged.
+The final affected desktop suite passed261 cases in20 files. Earlier failures,
+including an obsolete floating-badge selector, are preserved in local logs.
+These DOM checks do not establish rendered visual, contrast or screen-reader
+acceptance. Same-user refresh draft continuity remains a separate open task.
+
 The existing large management client and PPE view are grandfathered. This bounded
 adapter/lifecycle patch stays in their existing responsibilities; Root reviewed
 the small PPE/Zone setup/Region client-wiring growth exceptions. The change passes

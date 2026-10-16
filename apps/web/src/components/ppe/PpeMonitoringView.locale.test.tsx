@@ -358,14 +358,16 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     },
   );
 
-  it('keeps missing capture time explicit in the floating AI snapshot badge', async () => {
+  it('keeps missing capture time explicit in evidence after switching to AI snapshots', async () => {
     fixture.preview = preview(true);
     fixture.preview.frame.capturedAt = '';
     const user = userEvent.setup();
     render(<View />);
     await user.click(await screen.findByRole('button', { name: /Bằng chứng AI/ }));
-    const badge = await screen.findByText(/ẢNH CHỤP TRỰC TIẾP MF05/);
-    expect(badge.textContent).toMatch(/·\s*—/);
-    expect(badge.textContent).not.toContain('NaN');
+    const panel = screen.getByTestId('ai-detection-panel');
+    const label = within(panel).getByText('Thời điểm ghi nhận');
+    if (!label.parentElement) throw new Error('Captured-time field missing');
+    expect(within(label.parentElement).getByText('—')).toBeDefined();
+    expect(label.parentElement.textContent).not.toContain('NaN');
   });
 });

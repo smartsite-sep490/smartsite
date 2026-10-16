@@ -424,24 +424,24 @@ export function Mf06AssessmentHistory({
   return (
     <section
       aria-label={t('mf06.history.sectionAria')}
-      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm p-4 space-y-4"
+      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs p-4 sm:p-5 space-y-4"
     >
       {/* Header and Disclaimer */}
-      <div className="border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-zinc-200/80 dark:border-zinc-800 pb-3.5 space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <IconShield className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            <IconShield className="w-5 h-5 text-zinc-700 dark:text-zinc-300 shrink-0" />
+            <h2 className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               {t('mf06.history.heading')}
             </h2>
           </div>
           {latestTotal !== undefined && !isBaseError && !isHardError && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+            <span className="text-xs font-semibold tabular-nums px-2.5 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
               {t('mf06.history.total', { total: latestTotal })}
             </span>
           )}
         </div>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
           {t('mf06.history.disclaimer')}
         </p>
       </div>
@@ -463,7 +463,7 @@ export function Mf06AssessmentHistory({
       {isBaseError && (
         <div
           role="alert"
-          className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2"
+          className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2.5"
         >
           <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 text-sm font-medium">
             <IconAlertTriangle className="w-5 h-5 flex-shrink-0" />
@@ -492,8 +492,8 @@ export function Mf06AssessmentHistory({
 
       {/* Assessment Records List */}
       {items.length > 0 && (
-        <div className="space-y-3">
-          <ul role="list" className="space-y-3">
+        <div className="space-y-3.5">
+          <ul role="list" className="space-y-3.5">
             {items.map((assessment) => {
               const outcomeMeta = OUTCOME_CONFIG[assessment.outcome] ?? OUTCOME_CONFIG.UNAVAILABLE;
               const OutcomeIcon = outcomeMeta.icon;
@@ -506,26 +506,26 @@ export function Mf06AssessmentHistory({
               return (
                 <li
                   key={assessment.assessmentId}
-                  className="rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-800/30 p-3.5 space-y-2.5 transition hover:border-zinc-300 dark:hover:border-zinc-700"
+                  className="rounded-xl border border-zinc-200/90 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-800/25 p-4 space-y-3 transition hover:border-zinc-300 dark:hover:border-zinc-700"
                 >
-                  {/* Status & Outcome Badges */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  {/* Status & Outcome Badges + Right-Aligned Version & Action */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-zinc-200/70 dark:border-zinc-800">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
                       >
-                        <OutcomeIcon className="w-3.5 h-3.5" />
+                        <OutcomeIcon className="w-3.5 h-3.5 shrink-0" />
                         {outcomeLabel}
                       </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-200/70 dark:bg-zinc-700/60 text-zinc-700 dark:text-zinc-300">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-200/75 dark:bg-zinc-700/60 text-zinc-800 dark:text-zinc-200">
                         {reasonLabel}
                       </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                         {purposeLabel}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
+                    <div className="flex items-center gap-2.5 ml-auto">
+                      <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
                         v{assessment.evaluatorVersion}
                       </span>
                       <button
@@ -547,7 +547,7 @@ export function Mf06AssessmentHistory({
                             assessedAt: assessment.assessedAt,
                           })
                         }
-                        className="px-2.5 py-1 text-xs font-medium text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 rounded-md transition cursor-pointer"
+                        className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition cursor-pointer shrink-0"
                       >
                         {t('mf06.history.viewAssessment')}
                       </button>
@@ -555,50 +555,50 @@ export function Mf06AssessmentHistory({
                   </div>
 
                   {/* Historical Timestamps */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-800/60 rounded-md p-2 border border-zinc-100 dark:border-zinc-700/50">
-                    <div>
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/60 rounded-lg p-3 border border-zinc-200/70 dark:border-zinc-800">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.captured')}
                       </span>{' '}
-                      <time dateTime={assessment.capturedAt} className="font-mono">
+                      <time dateTime={assessment.capturedAt} className="font-mono tabular-nums">
                         {formatTimestamp(assessment.capturedAt)}
                       </time>
                     </div>
-                    <div>
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                    <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
+                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.assessed')}
                       </span>{' '}
-                      <time dateTime={assessment.assessedAt} className="font-mono">
+                      <time dateTime={assessment.assessedAt} className="font-mono tabular-nums">
                         {formatTimestamp(assessment.assessedAt)}
                       </time>
                     </div>
                   </div>
 
                   {/* Scoped Technical References with accessible full wrapping */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-0.5 text-[11px] text-zinc-600 dark:text-zinc-300 font-mono tabular-nums">
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.assessmentId')}
                       </span>{' '}
                       <span>{assessment.assessmentId}</span>
                     </div>
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.history.fieldCamera')}
                       </span>{' '}
-                      {assessment.cameraId}
+                      <span>{assessment.cameraId}</span>
                     </div>
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.history.fieldZone')}
                       </span>{' '}
-                      {assessment.zoneId}
+                      <span>{assessment.zoneId}</span>
                     </div>
                     <div className="break-all">
-                      <span className="text-zinc-400 dark:text-zinc-500">
+                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
                         {t('mf06.detail.field.provenance')}
                       </span>{' '}
-                      {assessment.provenance}
+                      <span>{assessment.provenance}</span>
                     </div>
                   </div>
                 </li>
