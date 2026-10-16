@@ -5,6 +5,7 @@ import { useCurrentUser, useLogout } from '../../features/auth/auth-session';
 import { NotificationBell } from '../../features/notifications/NotificationBell';
 import { translate as tr, useLocale } from '../../i18n';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
+import '../cameras/camera-setup-catalog';
 import {
   IconAlertTriangle,
   IconBuilding,
@@ -34,6 +35,7 @@ export type ActiveTab =
   | 'access'
   | 'live-monitoring'
   | 'ppe'
+  | 'camera-setup'
   | 'zones'
   | 'incidents'
   | 'iot'
@@ -226,6 +228,17 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               },
               icon: IconShield,
             },
+            ...(isAdmin || isManager
+              ? [
+                  {
+                    id: 'camera-setup',
+                    get label() {
+                      return tr('safety:cameraSetup.title');
+                    },
+                    icon: IconCamera,
+                  },
+                ]
+              : []),
             {
               id: 'incidents',
               get label() {
@@ -452,7 +465,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               </div>
             </div>
 
-            <button type="button" onClick={() => navigate('/account/password')} className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2" title={tr('auth.password.title')} aria-label={tr('auth.password.title')}>
+            <button
+              type="button"
+              onClick={() => navigate('/account/password')}
+              className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
+              title={tr('auth.password.title')}
+              aria-label={tr('auth.password.title')}
+            >
               <IconKey className="w-4 h-4" />
             </button>
             {/* Logout Button */}

@@ -199,6 +199,8 @@ import {
 } from '../cameras/monitoringUtils';
 import { useAuth, useManagementClient } from '../../features/auth/auth-session';
 import type { SharedSession } from '../../types/shared-session';
+import { translate as tr } from '../../i18n/runtime';
+import '../cameras/camera-setup-catalog';
 
 const authIdentities = new WeakMap<QueryClient, { token: string | null; id: number }>();
 let nextScopeId = 0;
@@ -267,6 +269,8 @@ interface ScopedReview {
 }
 
 export interface PpeMonitoringViewProps {
+  initialSelection?: { siteId?: string; cameraId?: string };
+  onOpenSetup?: (context: { siteId: string; cameraId?: string }) => void;
   apiUrl?: string;
   sharedSession?: SharedSession | null;
   onNavigate?: (
@@ -286,6 +290,8 @@ export function PpeMonitoringView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
   sharedSession,
   onNavigate,
+  onOpenSetup,
+  initialSelection,
 }: PpeMonitoringViewProps = {}) {
   const auth = useAuth();
   const { t } = useLocale();
@@ -346,8 +352,10 @@ export function PpeMonitoringView({
   >(null);
   const [registrationFeedback, setRegistrationFeedback] = useState<string | null>(null);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(!isAiWorkPaused);
-  const [requestedSiteId, setSelectedSiteId] = useState<string>('');
-  const [requestedCameraId, setSelectedCameraId] = useState<string>('');
+  const [requestedSiteId, setSelectedSiteId] = useState<string>(initialSelection?.siteId ?? '');
+  const [requestedCameraId, setSelectedCameraId] = useState<string>(
+    initialSelection?.cameraId ?? '',
+  );
   const [applyingCameraScope, setApplyingCameraScope] = useState<string | null>(null);
   const expiredScopeRef = useRef<string | null>(null);
 
@@ -449,9 +457,14 @@ export function PpeMonitoringView({
     token && sessionScope && sitesInfiniteQuery.isLoading && !sitesInfiniteQuery.data,
   );
 
+  const holdLinkedSite = Boolean(
+    initialSelection?.siteId && initialSelection.siteId === requestedSiteId,
+  );
   const selectedSiteId = visibleAuthorizedSites.some((site) => site.id === requestedSiteId)
     ? requestedSiteId
-    : (visibleAuthorizedSites[0]?.id ?? '');
+    : holdLinkedSite
+      ? ''
+      : (visibleAuthorizedSites[0]?.id ?? '');
 
   // 2. Load preview-eligible cameras for selected site - Explicit Accumulative Pagination
   const previewCamerasInfiniteQuery = useInfiniteQuery({
@@ -550,11 +563,16 @@ export function PpeMonitoringView({
     !previewCamerasInfiniteQuery.data,
   );
 
+  const holdLinkedCamera = Boolean(
+    initialSelection?.cameraId && initialSelection.cameraId === requestedCameraId,
+  );
   const selectedCameraId = visibleAuthorizedCameras.some(
     (camera) => camera.id === requestedCameraId,
   )
     ? requestedCameraId
-    : (visibleAuthorizedCameras[0]?.id ?? '');
+    : holdLinkedCamera
+      ? ''
+      : (visibleAuthorizedCameras[0]?.id ?? '');
 
   if (requestedSiteId !== selectedSiteId && selectedSiteId) {
     setSelectedSiteId(selectedSiteId);
@@ -1387,7 +1405,8 @@ export function PpeMonitoringView({
       {/* Monitoring Scope (Primary Selectors) & Secondary Configuration Actions */}
       <div
         className={`grid grid-cols-1 gap-4 items-stretch min-w-0 w-full max-w-full ${
-          canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
+          !onOpenSetup &&
+          (canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback)
             ? 'xl:grid-cols-[minmax(0,1fr)_360px]'
             : ''
         }`}
@@ -1435,6 +1454,9 @@ export function PpeMonitoringView({
                 }
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
+                {!selectedSiteId && visibleAuthorizedSites.length > 0 && (
+                  <option value="">{tr('safety:cameraSetup.chooseSite')}</option>
+                )}
                 {visibleAuthorizedSites.map((site) => (
                   <option key={site.id} value={site.id}>
                     {site.code} · {site.name}
@@ -1542,6 +1564,9 @@ export function PpeMonitoringView({
                 }
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-900 min-w-0 max-w-full truncate transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
+                {!selectedCameraId && visibleAuthorizedCameras.length > 0 && (
+                  <option value="">{tr('safety:cameraSetup.chooseCamera')}</option>
+                )}
                 {visibleAuthorizedCameras.map((camera) => (
                   <option key={camera.id} value={camera.id}>
                     {camera.code} · {camera.name}
@@ -1652,6 +1677,15 @@ export function PpeMonitoringView({
             </div>
           )}
 
+          {((holdLinkedSite && !selectedSiteId && sitesInfiniteQuery.isSuccess) ||
+            (holdLinkedCamera &&
+              selectedSiteId &&
+              !selectedCameraId &&
+              previewCamerasInfiniteQuery.isSuccess)) && (
+            <p role="status" className="text-xs text-slate-600">
+              {tr('safety:cameraSetup.linkedSelection')}
+            </p>
+          )}
           {isSiteSettledEmpty && (
             <div
               role="status"
@@ -1675,96 +1709,113 @@ export function PpeMonitoringView({
           )}
         </section>
 
-        <section
-          aria-label={t('ppe.layout.configuration')}
-          className={
-            canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
-              ? 'rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full'
-              : 'sr-only'
-          }
-        >
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              {t('ppe.layout.configuration')}
-            </h2>
-          </div>
-
-          <div className="flex flex-col gap-2 min-w-0 w-full">
-            {/* Authorized Configure PPE by Zone trigger */}
-            {canOpenZonePpe && (
+        {onOpenSetup ? (
+          (canOpenZonePpe || canRegisterCamera || canManageCamera) && (
+            <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  setIsZonePpeOpen(true);
-                }}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                 disabled={!selectedSiteId}
-                className="w-full min-w-0 rounded-lg border border-[#0F172A] bg-[#0F172A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                onClick={() =>
+                  onOpenSetup({ siteId: selectedSiteId, cameraId: selectedCamera?.id })
+                }
               >
-                <IconShield className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{t('ppe.admin.configureByZone')}</span>
-              </button>
-            )}
-
-            {(canRegisterCamera || canManageCamera) && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0 w-full">
-                {/* Global Admin Register camera trigger */}
-                {canRegisterCamera && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRegistrationFeedback(null);
-                      setIsRegisterCameraOpen(true);
-                    }}
-                    className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-                  >
-                    <IconCamera className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{t('ppe.admin.registerCamera')}</span>
-                  </button>
-                )}
-
-                {/* Global Admin Manage camera trigger */}
-                {canManageCamera && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRegistrationFeedback(null);
-                      setIsManageCameraOpen(true);
-                    }}
-                    className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-                  >
-                    <IconCamera className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{t('ppe.admin.manageCamera')}</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {registrationFeedback && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800 flex items-center justify-between gap-2 w-full"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <IconCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                <span className="truncate">
-                  {registrationFeedback === 'ppe.admin.registrationSuccess'
-                    ? t('ppe.admin.registrationSuccess')
-                    : registrationFeedback}
-                </span>
-              </div>
-              <button
-                type="button"
-                aria-label={t('ppe.admin.dismissStatusAria')}
-                onClick={() => setRegistrationFeedback(null)}
-                className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold shrink-0 cursor-pointer"
-              >
-                {t('ppe.admin.dismiss')}
+                {tr('safety:cameraSetup.title')}
               </button>
             </div>
-          )}
-        </section>
+          )
+        ) : (
+          <section
+            aria-label={t('ppe.layout.configuration')}
+            className={
+              canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
+                ? 'rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full'
+                : 'sr-only'
+            }
+          >
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                {t('ppe.layout.configuration')}
+              </h2>
+            </div>
+
+            <div className="flex flex-col gap-2 min-w-0 w-full">
+              {/* Authorized Configure PPE by Zone trigger */}
+              {canOpenZonePpe && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsZonePpeOpen(true);
+                  }}
+                  disabled={!selectedSiteId}
+                  className="w-full min-w-0 rounded-lg border border-[#0F172A] bg-[#0F172A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                >
+                  <IconShield className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{t('ppe.admin.configureByZone')}</span>
+                </button>
+              )}
+
+              {(canRegisterCamera || canManageCamera) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0 w-full">
+                  {/* Global Admin Register camera trigger */}
+                  {canRegisterCamera && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRegistrationFeedback(null);
+                        setIsRegisterCameraOpen(true);
+                      }}
+                      className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    >
+                      <IconCamera className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{t('ppe.admin.registerCamera')}</span>
+                    </button>
+                  )}
+
+                  {/* Global Admin Manage camera trigger */}
+                  {canManageCamera && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRegistrationFeedback(null);
+                        setIsManageCameraOpen(true);
+                      }}
+                      className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    >
+                      <IconCamera className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{t('ppe.admin.manageCamera')}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {registrationFeedback && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800 flex items-center justify-between gap-2 w-full"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <IconCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span className="truncate">
+                    {registrationFeedback === 'ppe.admin.registrationSuccess'
+                      ? t('ppe.admin.registrationSuccess')
+                      : registrationFeedback}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label={t('ppe.admin.dismissStatusAria')}
+                  onClick={() => setRegistrationFeedback(null)}
+                  className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold shrink-0 cursor-pointer"
+                >
+                  {t('ppe.admin.dismiss')}
+                </button>
+              </div>
+            )}
+          </section>
+        )}
       </div>
 
       {/* Viewing Controls Bar: View Mode Switcher, Quick Camera Strip & Polling Cadence */}

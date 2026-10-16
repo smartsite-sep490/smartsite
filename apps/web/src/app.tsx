@@ -70,6 +70,9 @@ const LiveMonitoringView = React.lazy(() =>
 const PpeMonitoringView = React.lazy(() =>
   import('./components/ppe/PpeMonitoringView').then((m) => ({ default: m.PpeMonitoringView })),
 );
+const CameraSetupView = React.lazy(() =>
+  import('./components/cameras/CameraSetupView').then((m) => ({ default: m.CameraSetupView })),
+);
 const RestrictedZoneView = React.lazy(() =>
   import('./components/zones/RestrictedZoneView').then((m) => ({ default: m.RestrictedZoneView })),
 );
@@ -360,11 +363,25 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
             />
             <Route
+              path="/camera-setup"
+              element={<CameraSetupView apiUrl={apiUrl} sharedSession={sharedSession} />}
+            />
+            <Route
               path="/ppe"
               element={
                 <PpeMonitoringView
+                  key={location.search}
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
+                  initialSelection={{
+                    siteId: new URLSearchParams(location.search).get('siteId') ?? undefined,
+                    cameraId: new URLSearchParams(location.search).get('cameraId') ?? undefined,
+                  }}
+                  onOpenSetup={(context) => {
+                    const params = new URLSearchParams({ siteId: context.siteId });
+                    if (context.cameraId) params.set('cameraId', context.cameraId);
+                    navigate(`/camera-setup?${params}`);
+                  }}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />
               }

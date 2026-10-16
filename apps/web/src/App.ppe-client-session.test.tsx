@@ -123,7 +123,7 @@ async function mountReadyPpeSessionHarness() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  await screen.findByRole('button', { name: /configure ppe by zone/i }, { timeout: 8000 });
+  await screen.findByRole('button', { name: /camera setup/i }, { timeout: 8000 });
   expect(await screen.findByRole('option', { name: /CAM-01 · Camera 01/i })).not.toBeNull();
   return {
     cache,
@@ -165,7 +165,7 @@ it('retries PPE listSites HTTP 401 via Main session refresh exactly once with th
   expect(authRef.current?.isSessionExpired).toBe(false);
   expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(screen.queryByRole('button', { name: /^sign in$/i })).toBeNull();
-  expect(await screen.findByRole('button', { name: /configure ppe by zone/i })).not.toBeNull();
+  expect(await screen.findByRole('button', { name: /camera setup/i })).not.toBeNull();
 });
 
 it('clears the private PPE scope and triggers session expiration when PPE listSites 401 refresh also fails with 401', async () => {
