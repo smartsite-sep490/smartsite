@@ -162,7 +162,7 @@ export class MainZonePermissionCommandService {
       operation,
       value,
       async (manager) => {
-        const admin = await this.authorize(manager, value, kind);
+        const admin = await this.authorize(manager, value, kind, true);
         const sourceId =
           'permissionId' in value
             ? await this.revoke(manager, value, kind, admin)
@@ -187,7 +187,7 @@ export class MainZonePermissionCommandService {
         return rows[0] as { id: string; [key: string]: unknown };
       },
       async (manager) => {
-        await this.authorize(manager, value, kind);
+        await this.authorize(manager, value, kind, true);
       },
     ).catch((error: unknown) => {
       if (
@@ -224,17 +224,19 @@ export class MainZonePermissionCommandService {
     manager: EntityManager,
     value: WorkCommand,
     kind: Kind,
+    publicRoute = false,
   ): Promise<boolean> {
     const users = await manager.query(
       'SELECT id FROM app_user WHERE id=$1 AND is_active AND NOT must_change_password FOR SHARE',
       [value.actorUserId],
     );
     const roles: { role: string; site_id: string | null }[] = await manager.query(
-      "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL) OR (role=$2 AND site_id=$3)) FOR SHARE",
+      "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL AND $4) OR (role=$2 AND site_id=$3)) FOR SHARE",
       [
         value.actorUserId,
         kind === 'contractor' ? 'SITE_MANAGER' : 'CONTRACTOR_REPRESENTATIVE',
         value.siteId,
+        !publicRoute || kind !== 'contractor',
       ],
     );
     if (!users.length || !roles.length) forbidden();

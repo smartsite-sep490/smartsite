@@ -13,6 +13,7 @@ import { FaceGateService } from './face-gate.service.js';
 import { WorkerGatePermissionsService } from './worker-gate-permissions.service.js';
 import { WorkerGatePermissionsController } from './worker-gate-permissions.controller.js';
 import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.js';
+import { MainZonePermissionCommandService } from '../../zones/main-zone-permission-command.service.js';
 
 @Module({
   imports: [
@@ -35,7 +36,8 @@ import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.
     FaceGateService,
     WorkerGatePermissionsService,
     SiteAccessSetupQueryService,
+    MainZonePermissionCommandService,
   ],
-  exports: [SiteAccessSetupQueryService],
+  exports: [SiteAccessSetupQueryService, MainZonePermissionCommandService],
 })
 export class WorkforceAccessModule {}

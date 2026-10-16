@@ -108,6 +108,22 @@ const workerInput = (f: Fixture) => ({
   validUntil: '2027-10-01T00:00:00.000007Z',
 });
 const base = (f: Fixture) => `/sites/${f.site}/access-setup`;
+test('public Contractor writes require an exact scoped Manager even when the account is also Admin', async () => {
+  const f = await fixture(),
+    other = await fixture();
+  await withApi(f, async (request) => {
+    const path = `${base(f)}/contractor-zone-permissions`;
+    assert.equal((await request(path, contractorInput(f))).status, 403);
+    const managerRole = randomUUID();
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+      [managerRole, f.actor, other.site],
+    );
+    assert.equal((await request(path, contractorInput(f))).status, 403);
+    await db.query('UPDATE user_role_assignment SET site_id=$2 WHERE id=$1', [managerRole, f.site]);
+    assert.equal((await request(path, contractorInput(f))).status, 201);
+  });
+});
 async function optionsData(f: Fixture) {
   await seedPair(f);
   const foreign = await fixture();
@@ -217,7 +233,7 @@ async function withApi(
   }
 }
 test('actual public anchored Contractor grant retains main path, permission response and source fact', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await withApi(f, async (request) => {
     const r = await request(`${base(f)}/contractor-zone-permissions`, contractorInput(f));
     assert.equal(r.status, 201);
@@ -402,7 +418,7 @@ test('actual public anchored Worker grant retains approved assignment and Contra
 });
 for (const kind of ['contractor', 'worker'] as const)
   test(`actual public anchored ${kind} revoke retains main path and id-only response`, async () => {
-    const f = await fixture();
+    const f = await fixture(kind === 'contractor' ? 'SITE_MANAGER' : 'ADMIN');
     await seedPair(f);
     await withApi(f, async (request) => {
       const id = kind === 'contractor' ? f.cp : f.wp;
@@ -436,7 +452,7 @@ async function role(f: Fixture, r: string, site = f.site) {
 }
 
 test('four public permission writes bind original bearer, actor facts, witness, audit and policy increments', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await withApi(f, async (request, guard) => {
     const original = guard.authenticateRequest.bind(guard);
     let claims = 0;
@@ -452,8 +468,13 @@ test('four public permission writes bind original bearer, actor facts, witness, 
       [`${base(f)}/worker-zone-permissions`, workerInput(f)],
       [`${base(f)}/worker-zone-permissions/${f.wp}/revoke`, undefined],
       [`${base(f)}/contractor-zone-permissions/${f.cp}/revoke`, undefined],
-    ] as const)
+    ] as const) {
+      await role(
+        f,
+        path.includes('/worker-zone-permissions') ? 'CONTRACTOR_REPRESENTATIVE' : 'SITE_MANAGER',
+      );
       assert.equal((await request(path, body)).status, 201);
+    }
     assert.equal(claims, 4);
     assert.equal(await policy(f), 5);
     const facts = await db.query(
@@ -627,7 +648,7 @@ for (const op of [
   'worker-revoke',
 ] as const)
   test(`actual logout before public ${op} transaction claim denies all side effects`, async () => {
-    const f = await fixture();
+    const f = await fixture(op.startsWith('contractor') ? 'SITE_MANAGER' : 'ADMIN');
     if (op !== 'contractor-grant') await seedPair(f, op !== 'worker-grant');
     const before = await commands(),
       v = await policy(f);
@@ -726,7 +747,7 @@ test('public permission active account and changed temporary password are rechec
   }
 });
 test('public grants retain exact repeat requestId with no duplicate audit/fact/policy and reject changed requests', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     s = service();
   const first = await s.publicGrantContractor(f.site, contractorInput(f), ctx(f)),
     v = await policy(f);
@@ -749,6 +770,7 @@ test('public grants retain exact repeat requestId with no duplicate audit/fact/p
     ),
     status(409),
   );
+  await role(f, 'CONTRACTOR_REPRESENTATIVE');
   const wp = await s.publicGrantWorker(f.site, workerInput(f), ctx(f)),
     v2 = await policy(f);
   assert.deepEqual(await s.publicGrantWorker(f.site, workerInput(f), ctx(f)), wp);
@@ -801,7 +823,7 @@ test('public Worker grant refuses unapproved/open-ended assignment, revoked Cont
   }
 });
 test('public permission intervals retain one microsecond and reject outside-parent or reversed intervals', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     s = service();
   await s.publicGrantContractor(
     f.site,
@@ -821,7 +843,7 @@ test('public permission intervals retain one microsecond and reject outside-pare
     )[0].exact,
     true,
   );
-  const other = await fixture();
+  const other = await fixture('SITE_MANAGER');
   await assert.rejects(
     s.publicGrantContractor(
       other.site,
@@ -839,6 +861,7 @@ test('public permission intervals retain one microsecond and reject outside-pare
     status(409),
   );
   await seedPair(other, false);
+  await role(other, 'CONTRACTOR_REPRESENTATIVE');
   await assert.rejects(
     s.publicGrantWorker(
       other.site,
@@ -849,9 +872,10 @@ test('public permission intervals retain one microsecond and reject outside-pare
   );
 });
 test('public Contractor grant and both revokes refuse cross-Site anchors without orphan command', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     other = await fixture();
   await seedPair(f);
+  await role(f, 'SITE_MANAGER', other.site);
   const n = await commands(),
     s = service();
   await assert.rejects(
@@ -859,11 +883,12 @@ test('public Contractor grant and both revokes refuse cross-Site anchors without
     status(404),
   );
   await assert.rejects(s.publicRevoke(other.site, f.cp, 'contractor', ctx(f)), status(404));
+  await role(f, 'CONTRACTOR_REPRESENTATIVE', other.site);
   await assert.rejects(s.publicRevoke(other.site, f.wp, 'worker', ctx(f)), status(404));
   assert.equal(await commands(), n);
 });
 test('public revokes remain possible after participation deactivation and assignment expiry', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await seedPair(f);
   await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
     f.participation,
@@ -871,12 +896,14 @@ test('public revokes remain possible after participation deactivation and assign
   await db.query("UPDATE worker_site_zone_assignment SET valid_until='2026-10-02Z' WHERE id=$1", [
     f.assignment,
   ]);
+  await role(f, 'CONTRACTOR_REPRESENTATIVE');
   await service().publicRevoke(f.site, f.wp, 'worker', ctx(f));
+  await role(f, 'SITE_MANAGER');
   await service().publicRevoke(f.site, f.cp, 'contractor', ctx(f));
   assert.equal(await policy(f), 3);
 });
 test('actual permission grant DTO rejects client actor/command, extra fields and missing/invalid offset dates', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await withApi(f, async (request) => {
     for (const body of [
       { ...contractorInput(f), actorUserId: randomUUID() },
@@ -898,7 +925,7 @@ test('actual permission grant DTO rejects client actor/command, extra fields and
   });
 });
 test('public permission partial journal and disabled permission/Site captures fail before source changes', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO test_permission_witness');
   try {
     await assert.rejects(
@@ -920,6 +947,7 @@ test('public permission partial journal and disabled permission/Site captures fa
     }
   }
   await seedPair(f, false);
+  await role(f, 'CONTRACTOR_REPRESENTATIVE');
   await db.query(
     'ALTER TABLE worker_zone_permission DISABLE TRIGGER trg_mf06_capture_worker_zone_permission',
   );
@@ -932,7 +960,7 @@ test('public permission partial journal and disabled permission/Site captures fa
   }
 });
 test('permission source-fact failure rolls back grant, audit, policy and journal command together', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     n = await commands(),
     v = await policy(f);
   await db.query(
@@ -961,7 +989,7 @@ test('permission source-fact failure rolls back grant, audit, policy and journal
   }
 });
 test('postcommit permission witness failure retains committed response and explicitly unconfirmed history', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await db.query(
     "CREATE FUNCTION test_permission_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_permission_witness_failure()",
   );

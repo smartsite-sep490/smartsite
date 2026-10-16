@@ -2,8 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import source from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
 import { ContractorZoneRegrant1791940000001 } from '../../src/database/migrations/1791940000001-ContractorZoneRegrant.js';
 import {
@@ -20,8 +19,10 @@ import {
   ContractorZonePermissionEntity,
 } from '../../src/database/entities/index.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const source = isolated.dataSource;
 test('date-only contractor Zone grants use inclusive local days, DST, participation bounds, scope and retry', async () => {
-  await source.initialize();
+  await isolated.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
     contractorId = randomUUID(),
@@ -227,14 +228,71 @@ test('date-only contractor Zone grants use inclusive local days, DST, participat
     });
     assert.equal(legacy.validFrom.toISOString(), '2026-10-12T04:00:00.000Z');
     assert.equal(legacy.validUntil.toISOString(), '2026-10-12T05:00:00.000Z');
+    await source.query(
+      "UPDATE contractor_site_participation SET valid_from='2026-10-15T00:00:00.000001Z',valid_until='2026-10-15T23:00:00.000009Z' WHERE id=$1",
+      [participationId],
+    );
+    const preciseInput = {
+      ...input,
+      requestId: randomUUID(),
+      startDate: '2026-10-15',
+      endDate: '2026-10-15',
+      timezone: 'UTC',
+    };
+    const beforePolicy = (
+      await source.query('SELECT access_policy_version AS n FROM site WHERE id=$1', [siteId])
+    )[0].n;
+    const precise = await service.grantContractor(actor, siteId, preciseInput, {
+      actorUserId: userId,
+    });
+    const [bounds] = await source.query(
+      'SELECT g.valid_from=p.valid_from AS same_from,g.valid_until=p.valid_until AS same_until FROM contractor_zone_permission g JOIN contractor_site_participation p ON p.id=g.site_contractor_id WHERE g.id=$1',
+      [precise.id],
+    );
+    assert.deepEqual(bounds, { same_from: true, same_until: true });
+    assert.equal(
+      (await source.query('SELECT access_policy_version AS n FROM site WHERE id=$1', [siteId]))[0]
+        .n,
+      beforePolicy + 1,
+    );
+    await source.query(
+      'UPDATE contractor_zone_permission SET revoked_at=clock_timestamp() WHERE id=$1',
+      [precise.id],
+    );
+    const counts = () =>
+      source.query(
+        `SELECT (SELECT count(*)::int FROM contractor_zone_permission) AS permissions,
+      (SELECT count(*)::int FROM audit_log) AS audits,(SELECT count(*)::int FROM mf06_authority_command) AS commands,
+      (SELECT count(*)::int FROM mf06_authority_fact) AS facts,(SELECT access_policy_version FROM site WHERE id=$1) AS policy`,
+        [siteId],
+      );
+    const beforeFailure = await counts();
+    await source.query(
+      "CREATE FUNCTION test_date_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic date audit failure' USING ERRCODE='23514'; END $$; CREATE TRIGGER test_date_audit_failure BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION test_date_audit_failure()",
+    );
+    try {
+      await assert.rejects(
+        service.grantContractor(
+          actor,
+          siteId,
+          { ...preciseInput, requestId: randomUUID() },
+          { actorUserId: userId },
+        ),
+        { code: '23514' },
+      );
+      assert.deepEqual(await counts(), beforeFailure);
+    } finally {
+      await source.query(
+        'DROP TRIGGER test_date_audit_failure ON audit_log; DROP FUNCTION test_date_audit_failure()',
+      );
+    }
+    await service.grantContractor(actor, siteId, preciseInput, { actorUserId: userId });
+    assert.equal(
+      (await source.query('SELECT access_policy_version AS n FROM site WHERE id=$1', [siteId]))[0]
+        .n,
+      beforePolicy + 1,
+    );
   } finally {
-    await cleanupSiteAccess(source, [siteId, otherSiteId]);
-    await source.getRepository(ZoneEntity).delete([zoneId, foreignZoneId]);
-    await source.getRepository(ContractorSiteParticipationEntity).delete(participationId);
-    await source.getRepository(ContractorEntity).delete(contractorId);
-    await source.getRepository(UserRoleAssignmentEntity).delete({ userId });
-    await source.getRepository(UserEntity).delete(userId);
-    await source.getRepository(SiteEntity).delete([siteId, otherSiteId]);
-    await source.destroy();
+    await isolated.dispose();
   }
 });
