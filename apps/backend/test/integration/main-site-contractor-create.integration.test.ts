@@ -27,6 +27,20 @@ after(async () => {
   await database.dispose();
 });
 type Kind = 'CONTRACTOR';
+test('site Contractor without a code receives a generated unique code through the registered HTTP route', async () => {
+  const f = await fixture();
+  await withApi(f, async (call) => {
+    const first = await call('CONTRACTOR', { name: 'Synthetic generated Contractor' });
+    assert.equal(first.status, 201, await first.clone().text());
+    const second = await call('CONTRACTOR', { name: 'Synthetic second Contractor' });
+    assert.equal(second.status, 201, await second.clone().text());
+    const a = (await first.json()) as { id: string; code: string };
+    const b = (await second.json()) as { id: string; code: string };
+    assert.match(a.code, /^CTR-[0-9A-F-]{36}$/);
+    assert.notEqual(a.code, b.code);
+    assert.notEqual(a.id, b.id);
+  });
+});
 async function fixture() {
   const f = {
     actor: randomUUID(),

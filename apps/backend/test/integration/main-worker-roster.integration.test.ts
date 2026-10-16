@@ -358,7 +358,14 @@ test('Concurrent account-first preparation returns one Worker and one INSERT fac
   const f = await fixture();
   await withApi(f, async (call) => {
     const responses = await Promise.all([call('PREPARE'), call('PREPARE')]);
-    assert(responses.every((r) => r.status === 201));
+    assert(
+      responses.every((r) => r.status === 201),
+      JSON.stringify(
+        await Promise.all(
+          responses.map(async (r) => ({ status: r.status, body: await r.clone().json() })),
+        ),
+      ),
+    );
     const rows = (await Promise.all(responses.map((r) => r.json()))) as { id: string }[];
     const first = rows[0],
       second = rows[1];

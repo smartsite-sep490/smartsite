@@ -38,7 +38,8 @@ export class MainWorkforceCreateService {
     context: MainConfigurationCommandContext,
   ): Promise<ContractorEntity> {
     const siteId = uuid(siteIdValue).toLowerCase();
-    const value = command(CreateContractorDto, input);
+    const validated = command(CreateContractorDto, input);
+    const value = { ...validated, code: validated.code ?? `CTR-${randomUUID().toUpperCase()}` };
     try {
       return await executeMainConfigurationCommand(
         this.source,
