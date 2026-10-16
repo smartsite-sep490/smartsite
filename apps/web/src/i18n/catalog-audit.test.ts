@@ -3,6 +3,35 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import en from './locales/en.json';
+import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+
+it('includes the shared gate catalog in the UI translations', () => {
+  for (const gate of SITE_GATES) expect(`gates.${gate.id}` in en, gate.id).toBe(true);
+});
+
+it('includes every access tab in the catalog, including keys composed at runtime', () => {
+  const filename = path.resolve('src/components/access/AccessControlView.tsx');
+  const source = ts.createSourceFile(
+    filename,
+    readFileSync(filename, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const tabs = source.statements.find(
+    (node): node is ts.TypeAliasDeclaration =>
+      ts.isTypeAliasDeclaration(node) && node.name.text === 'AccessSubTab',
+  );
+  expect(tabs && ts.isUnionTypeNode(tabs.type)).toBe(true);
+  if (!tabs || !ts.isUnionTypeNode(tabs.type)) return;
+  for (const type of tabs.type.types) {
+    if (!ts.isLiteralTypeNode(type) || !ts.isStringLiteral(type.literal)) continue;
+    for (const field of ['code', 'label', 'subLabel', 'description'])
+      expect(
+        `access.tabs.${type.literal.text}.${field}` in en,
+        `${type.literal.text}.${field}`,
+      ).toBe(true);
+  }
+});
 
 it('scans every production UI source for missing keys and untranslated visible literals', () => {
   const root = path.resolve('src');
@@ -30,6 +59,9 @@ it('scans every production UI source for missing keys and untranslated visible l
     'description',
     'helperText',
     'emptyMessage',
+    'subtitle',
+    'searchPlaceholder',
+    'zoneName',
   ]);
   function scan(dir: string) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -61,9 +93,23 @@ it('scans every production UI source for missing keys and untranslated visible l
             'severity',
             'effect',
             'restrictionPolicy',
+            'authorization',
+            'reasonCode',
+            'outcome',
+            'technicalOutcome',
+            'assignmentStatus',
+            'hoursStatus',
+            'presence',
           ].includes(node.name.text)
         ) {
           report(node, `unlocalized enum ${node.getText(source)}`);
+        } else if (
+          ts.isPropertyAccessExpression(node) &&
+          node.name.text === 'message' &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === 'error'
+        ) {
+          report(node, `unlocalized error ${node.getText(source)}`);
         } else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
           if (/[A-Za-zÀ-ỹ]{2}/.test(node.text) && !brands.has(node.text))
             report(node, `visible expression literal ${node.text}`);
@@ -95,7 +141,7 @@ it('scans every production UI source for missing keys and untranslated visible l
       function visit(node: ts.Node) {
         if (
           ts.isCallExpression(node) &&
-          ['tr', 'translate'].includes(node.expression.getText(source)) &&
+          ['tr', 't', 'translate'].includes(node.expression.getText(source)) &&
           node.arguments[0]
         ) {
           checkTranslationKey(node.arguments[0]);

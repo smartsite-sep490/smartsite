@@ -130,6 +130,23 @@ export const backendEnvironmentSchema = z
   .object({
     ...databaseFields,
     PORT: integer(3000, 1, 65535),
+    RESEND_API_KEY: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined)
+      .pipe(
+        z
+          .string()
+          .regex(/^re_[A-Za-z0-9_-]+$/, 'must be a Resend API key')
+          .optional(),
+      ),
+    RESEND_FROM_EMAIL: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined)
+      .pipe(z.email().optional()),
     CORS_ORIGINS: originsSchema.optional(),
     AUTH_JWT_SECRET: z
       .string({ error: 'must be a string' })
@@ -256,6 +273,13 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    if (Boolean(config.RESEND_API_KEY) !== Boolean(config.RESEND_FROM_EMAIL)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['RESEND_FROM_EMAIL'],
+        message: 'configure both RESEND_API_KEY and RESEND_FROM_EMAIL to enable visitor email',
+      });
+    }
     if (config.LOG_FORMAT === 'pretty' && config.NODE_ENV !== 'development') {
       context.addIssue({
         code: 'custom',

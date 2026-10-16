@@ -23,17 +23,22 @@ test('new Site Manager can use the supplied password for visitor workflows and v
     dataSource,
     new AuthTokenService(new JwtService(), createTestConfig()),
   );
-  const access = new QrAccessService(dataSource);
+  const access = new QrAccessService(dataSource, undefined, undefined, createTestConfig());
   const registration = {
     requestId: randomUUID(),
     accessKey: randomBytes(32).toString('hex'),
     visitorName: 'Synthetic tour representative',
     company: 'Synthetic group',
     contact: 'synthetic@example.test',
+    email: 'synthetic@example.test',
     hostName: 'Synthetic host',
     purpose: 'Tour',
     targetArea: 'Office',
     groupSize: 20,
+    members: Array.from({ length: 20 }, (_, i) => ({
+      fullName: `Synthetic visitor ${i}`,
+      identityNumber: String(i + 1).padStart(12, '0'),
+    })),
     gateId: 'gate-north-01',
     validFrom: new Date(Date.now() - 60_000).toISOString(),
     validUntil: new Date(Date.now() + 3600_000).toISOString(),
@@ -88,11 +93,29 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       await access.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })
     ).pass;
     assert.ok(pass);
-    const entry = await access.visitorGate(actor, siteId, registration.gateId, {
+    const securityAccount = await users.create({
+      username: `security-${randomUUID()}`,
+      displayName: 'Synthetic Security',
+      temporaryPassword: 'InitialDemo2026!',
+      roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId }],
+    });
+    userIds.push(securityAccount.id);
+    await auth.changePassword(securityAccount.id, 'InitialDemo2026!', 'NewDemo2026!');
+    const security = (
+      await auth.login(securityAccount.username, 'NewDemo2026!', AuthClientType.MOBILE)
+    ).user;
+    await assert.rejects(access.visitorGate(actor, siteId, registration.gateId, {} as never));
+    const entry = await access.visitorGate(security, siteId, registration.gateId, {
       requestId: randomUUID(),
       token: pass.token,
       direction: 'IN',
       count: 20,
+      expectedVersion: 2,
+      attendees: visit.members!.map((m) => ({
+        memberId: m.id,
+        fullName: m.fullName,
+        identityNumber: m.identityNumber,
+      })),
     });
     assert.equal(entry.visit.enteredCount, 20);
     assert.equal(entry.visit.decidedByUserId, account.id);

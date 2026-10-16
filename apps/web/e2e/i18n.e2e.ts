@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import en from '../src/i18n/locales/en.json' with { type: 'json' };
+import vi from '../src/i18n/locales/vi.json' with { type: 'json' };
 
 const site = {
   id: 'synthetic-site',
@@ -21,14 +23,19 @@ const roles = [
   'SECURITY_OFFICER',
 ] as const;
 
-async function mockApi(page: Page, signedIn: boolean) {
+async function mockApi(page: Page, signedIn: boolean, accountRoles: readonly string[] = roles) {
+  await page.routeWebSocket(/.*/, (socket) => socket.close());
   const user = {
     id: 'synthetic-account',
     username: 'qa.i18n',
     displayName: 'QA i18n',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: roles.map((role) => ({ role, siteId: role === 'ADMIN' ? null : site.id })),
+    roleAssignments: accountRoles.map((role) => ({
+      role,
+      siteId: role === 'ADMIN' ? null : site.id,
+      ...(role === 'CONTRACTOR_REPRESENTATIVE' ? { contractorId: contractor.id } : {}),
+    })),
   };
   await page.route('http://localhost:3000/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, '');
@@ -40,6 +47,43 @@ async function mockApi(page: Page, signedIn: boolean) {
     } else if (pathname.endsWith('/auth/me')) body = user;
     else if (pathname.endsWith('/health')) body = { status: 'ok' };
     else if (pathname === '/sites') body = { items: [site], total: 1 };
+    else if (pathname === '/contractor-dashboard/scopes')
+      body = {
+        items: [
+          {
+            siteId: site.id,
+            siteCode: site.code,
+            siteName: site.name,
+            contractorId: contractor.id,
+            contractorName: contractor.name,
+          },
+        ],
+      };
+    else if (pathname.endsWith('/dashboard'))
+      body = { workerCount: 0, teamCount: 0, unassignedWorkerCount: 0 };
+    else if (pathname.endsWith('/my-team'))
+      body = {
+        workerId: 'qa-worker',
+        workerCode: 'W000001',
+        displayName: 'QA Worker',
+        teamId: null,
+      };
+    else if (pathname.endsWith('/access-logs'))
+      body = {
+        items: [
+          {
+            id: 'qa-log',
+            createdAt: site.createdAt,
+            workerName: 'QA Worker',
+            contractorName: contractor.name,
+            direction: 'IN',
+            method: 'FACE',
+            gateId: 'gate-north-01',
+            decision: { authorization: 'ALLOWED', reasonCode: 'VALID_ASSIGNMENT' },
+          },
+        ],
+        total: 1,
+      };
     else if (pathname.endsWith('/manager-overview'))
       body = {
         site,
@@ -67,6 +111,16 @@ async function mockApi(page: Page, signedIn: boolean) {
         visitorPasses: [],
       };
     else if (pathname.endsWith('/me/notifications')) body = { ...empty, unreadCount: 0 };
+    else if (pathname.endsWith('/safety-overview'))
+      body = {
+        site,
+        date: new URL(route.request().url()).searchParams.get('date'),
+        timezone: 'Asia/Saigon',
+        updatedAt: site.createdAt,
+        teams: empty,
+        unassignedWorkers: empty,
+      };
+    else if (pathname.endsWith('/safety-overview/team-options')) body = empty;
     else if (pathname.includes('/attendance')) {
       status = 403;
       body = { message: 'Attendance is outside your scope', code: 'FORBIDDEN' };
@@ -130,11 +184,57 @@ async function checkLayout(page: Page) {
   expect(problems).toEqual([]);
 }
 
+async function checkLanguage(page: Page, language: 'en' | 'vi') {
+  const expected = language === 'vi' ? vi : en;
+  const other = language === 'vi' ? en : vi;
+  const wrongLanguage = Object.entries(other)
+    .filter(
+      ([key, text]) =>
+        text !== expected[key as keyof typeof expected] &&
+        !['Smart', 'Site', 'SmartSite', 'English', 'Tiếng Việt', 'QR', 'Camera', 'Web'].includes(
+          text,
+        ) &&
+        !text.includes('{{') &&
+        text.length >= 4 &&
+        /[a-zÀ-ỹ]/i.test(text),
+    )
+    .map(([, text]) => text);
+  const leaks = await page.evaluate((wrong) => {
+    const dictionary = new Set(wrong);
+    const leaks = new Set<string>();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const el = node.parentElement;
+      if (
+        !el ||
+        el.closest('script, style, [aria-hidden="true"], [data-authored-content]') ||
+        !el.getClientRects().length
+      )
+        continue;
+      const text = node.textContent?.trim() ?? '';
+      if (dictionary.has(text)) leaks.add(text);
+    }
+    for (const el of document.querySelectorAll<HTMLElement>(
+      'input, button, select, textarea, img',
+    )) {
+      if (!el.getClientRects().length) continue;
+      for (const attr of ['aria-label', 'placeholder', 'title', 'alt']) {
+        const text = el.getAttribute(attr)?.trim() ?? '';
+        if (dictionary.has(text)) leaks.add(`${attr}: ${text}`);
+      }
+    }
+    return [...leaks];
+  }, wrongLanguage);
+  expect(leaks, `untranslated visible copy in ${language}`).toEqual([]);
+}
+
 for (const language of ['en', 'vi']) {
   for (const width of [320, 390, 768, 1024, 1440]) {
     test(`${language} ${width}px: all existing routes fit and show localized controls`, async ({
       page,
     }, testInfo) => {
+      test.setTimeout(120_000);
       await page.setViewportSize({ width, height: 960 });
       await page.addInitScript((lang) => {
         localStorage.setItem('smartsite-language', lang);
@@ -143,6 +243,9 @@ for (const language of ['en', 'vi']) {
       for (const path of [
         '/dashboard',
         '/worker-onboarding',
+        '/contractor-teams',
+        '/assigned-work',
+        '/accounts',
         '/site-setup',
         '/schedule-setup',
         '/workforce',
@@ -160,6 +263,7 @@ for (const language of ['en', 'vi']) {
         await expect(page.locator('html')).toHaveAttribute('lang', language);
         expect((await page.locator('body').innerText()).length).toBeGreaterThan(30);
         await checkLayout(page);
+        await checkLanguage(page, language as 'en' | 'vi');
         if (path === '/worker-onboarding' || path === '/site-setup')
           await testInfo.attach(path.slice(1), {
             body: await page.screenshot({ fullPage: true }),
@@ -179,11 +283,97 @@ for (const language of ['en', 'vi']) {
         await expect(page.locator('[data-language-switcher]').first()).toBeVisible();
         await page.waitForTimeout(1200);
         await checkLayout(page);
+        await checkLanguage(page, language as 'en' | 'vi');
         await testInfo.attach(path === '/' ? 'landing' : path.slice(1), {
           body: await page.screenshot({ fullPage: true }),
           contentType: 'image/png',
         });
       }
+    });
+  }
+}
+
+const roleRoutes: Record<string, string[]> = {
+  ADMIN: ['/accounts', '/site-setup', '/access'],
+  SITE_MANAGER: ['/dashboard', '/site-setup', '/schedule-setup', '/workforce', '/access'],
+  CONTRACTOR_REPRESENTATIVE: [
+    '/contractor-teams',
+    '/worker-onboarding',
+    '/assigned-work',
+    '/schedule-setup',
+    '/workforce',
+    '/access',
+  ],
+  SAFETY_OFFICER: [
+    '/dashboard',
+    '/live-monitoring',
+    '/incidents',
+    '/ppe',
+    '/zones',
+    '/account/password',
+  ],
+  SECURITY_OFFICER: ['/access'],
+  WORKER: ['/worker-summary', '/workforce', '/access'],
+};
+for (const [role, paths] of Object.entries(roleRoutes)) {
+  for (const width of role === 'SAFETY_OFFICER' ? [320, 390, 1440] : [390, 1440]) {
+    test(`${role} ${width}px switches both ways on every allowed workspace`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(90_000);
+      await page.setViewportSize({ width, height: 960 });
+      await page.addInitScript(() => localStorage.setItem('smartsite-language', 'en'));
+      await mockApi(page, true, [role]);
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      for (const path of paths) {
+        await page.goto(path);
+        await expect(page.locator('[data-language-switcher]').first()).toBeVisible();
+        await page.waitForTimeout(400);
+        if (role === 'SAFETY_OFFICER' && ['/dashboard', '/incidents'].includes(path)) {
+          await expect(page).toHaveURL(/\/incidents$/);
+          await expect(
+            page.getByText(en['safety_workspace.no_teams_found_for_this_selection'], {
+              exact: true,
+            }),
+          ).toBeVisible();
+          await expect(page.getByRole('alert')).toHaveCount(0);
+        }
+        if (role === 'CONTRACTOR_REPRESENTATIVE' && path === '/contractor-teams') {
+          await page.getByRole('button', { name: en['common.create_team'], exact: true }).click();
+          await page.locator('#create-team-name').fill('QA authored team / tổ kiểm thử');
+        }
+        for (const language of ['vi', 'en'] as const) {
+          if (path === '/contractor-teams') {
+            // The modal covers the navbar; change the same i18n instance without closing its draft.
+            await page.evaluate(async (lang) => {
+              const modulePath = '/src/i18n/index.ts';
+              const { default: i18n } = await import(modulePath);
+              await i18n.changeLanguage(lang);
+            }, language);
+          } else {
+            await page.locator('[data-language-switcher]').first().click();
+            await page
+              .getByRole('button', {
+                name: language === 'vi' ? 'Tiếng Việt' : 'English',
+                exact: true,
+              })
+              .click();
+          }
+          await expect(page.locator('html')).toHaveAttribute('lang', language);
+          await checkLanguage(page, language);
+          await checkLayout(page);
+          if (path === '/contractor-teams')
+            await expect(page.locator('#create-team-name')).toHaveValue(
+              'QA authored team / tổ kiểm thử',
+            );
+        }
+        await testInfo.attach(`${role}-${path.slice(1)}`, {
+          body: await page.screenshot({ fullPage: true }),
+          contentType: 'image/png',
+        });
+      }
+      expect(errors).toEqual([]);
     });
   }
 }

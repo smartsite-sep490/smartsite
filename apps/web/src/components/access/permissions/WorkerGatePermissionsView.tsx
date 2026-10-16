@@ -1,7 +1,8 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError } from '../../../i18n/messages';
-import { translate as tr } from '../../../i18n';
+import { localizedGateName } from '../../../i18n/labels';
+import { translate as tr, uiLocale } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -119,7 +120,9 @@ export function GatePermissionEditor({
                       className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
                     <div>
-                      <span className="block text-sm font-bold text-slate-900">{gate.name}</span>
+                      <span className="block text-sm font-bold text-slate-900">
+                        {localizedGateName(gate.id)}
+                      </span>
                       <span className="block font-mono text-[11px] text-slate-400">{gate.id}</span>
                     </div>
                   </div>
@@ -197,11 +200,13 @@ export function WorkerGatePermissionsView({
   token,
   siteId,
   sessionScope,
+  readOnly = false,
 }: {
   apiUrl: string;
   token: string;
   siteId: string;
   sessionScope: string;
+  readOnly?: boolean;
 }) {
   useTranslation();
 
@@ -473,19 +478,35 @@ export function WorkerGatePermissionsView({
                 </div>
               )}
 
-              {permissions.data && !permissions.isFetching && (
-                <GatePermissionEditor
-                  key={`${workerId}:${permissions.data.items.map((item) => item.id).join(',')}`}
-                  snapshot={permissions.data}
-                  client={client}
-                  token={token}
-                  siteId={siteId}
-                  onSaved={(value) => {
-                    queryClient.setQueryData(key, value);
-                    setSavedWorkerId(value.workerId);
-                  }}
-                />
-              )}
+              {permissions.data &&
+                !permissions.isFetching &&
+                (readOnly ? (
+                  <div className="space-y-3">
+                    <p className="font-semibold">{tr('gatePerm.readOnlyTitle')}</p>
+                    {permissions.data.items.map((item) => (
+                      <p key={item.id}>
+                        {localizedGateName(item.gateId)} ·{' '}
+                        {new Date(item.validFrom).toLocaleString(uiLocale())} —{' '}
+                        {item.validUntil
+                          ? new Date(item.validUntil).toLocaleString(uiLocale())
+                          : tr('gatePerm.noExpiry')}
+                      </p>
+                    ))}
+                    {!permissions.data.items.length && <p>{tr('gatePerm.noGrants')}</p>}
+                  </div>
+                ) : (
+                  <GatePermissionEditor
+                    key={`${workerId}:${permissions.data.items.map((item) => item.id).join(',')}`}
+                    snapshot={permissions.data}
+                    client={client}
+                    token={token}
+                    siteId={siteId}
+                    onSaved={(value) => {
+                      queryClient.setQueryData(key, value);
+                      setSavedWorkerId(value.workerId);
+                    }}
+                  />
+                ))}
             </div>
           )}
         </div>

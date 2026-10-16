@@ -304,18 +304,25 @@ export class ContractorTeamsService {
     actor: AuthenticatedUser,
     siteId: string,
     contractorId: string,
+    readOnly = false,
   ): Promise<ContractorDashboardScope> {
     const user = await m.getRepository(UserEntity).findOneBy({ id: actor.id, isActive: true });
+    const managerRead =
+      readOnly &&
+      (await m
+        .getRepository(UserRoleAssignmentEntity)
+        .existsBy({ userId: actor.id, siteId, role: UserRole.SITE_MANAGER }));
     if (
       actor.mustChangePassword ||
       user?.mustChangePassword ||
       !user ||
-      !(await m
-        .getRepository(UserRoleAssignmentEntity)
-        .existsBy({ userId: actor.id, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE })) ||
-      !(await m
-        .getRepository(ContractorRepresentativeAssignmentEntity)
-        .existsBy({ userId: actor.id, siteId, contractorId })) ||
+      (!managerRead &&
+        (!(await m
+          .getRepository(UserRoleAssignmentEntity)
+          .existsBy({ userId: actor.id, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE })) ||
+          !(await m
+            .getRepository(ContractorRepresentativeAssignmentEntity)
+            .existsBy({ userId: actor.id, siteId, contractorId })))) ||
       !(await hasActiveContractorParticipation(m, contractorId, siteId))
     )
       this.forbidden();
@@ -448,7 +455,7 @@ export class ContractorTeamsService {
       contractorId = uuid(contractorValue).toLowerCase(),
       value = command(ContractorTeamQueryDto, input),
       pagination = page(value.offset, value.limit);
-    await this.scope(this.source.manager, actor, siteId, contractorId);
+    await this.scope(this.source.manager, actor, siteId, contractorId, true);
     const q = this.source
       .getRepository(ContractorTeamEntity)
       .createQueryBuilder('t')
@@ -476,7 +483,7 @@ export class ContractorTeamsService {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
       id = uuid(idValue).toLowerCase();
-    await this.scope(this.source.manager, actor, siteId, contractorId);
+    await this.scope(this.source.manager, actor, siteId, contractorId, true);
     const team = await this.source
       .getRepository(ContractorTeamEntity)
       .findOneBy({ id, siteId, contractorId });
@@ -493,7 +500,7 @@ export class ContractorTeamsService {
       contractorId = uuid(contractorValue).toLowerCase(),
       value = command(ContractorTeamWorkersQueryDto, input),
       pagination = page(value.offset, value.limit);
-    await this.scope(this.source.manager, actor, siteId, contractorId);
+    await this.scope(this.source.manager, actor, siteId, contractorId, true);
     if (value.teamId && value.unassigned) invalid('Choose either a team or unassigned workers');
     if (
       value.teamId &&

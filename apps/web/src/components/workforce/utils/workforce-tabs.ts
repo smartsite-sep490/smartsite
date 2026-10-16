@@ -3,7 +3,7 @@ export function getWorkforceTabs(roles: string[]) {
   const isContractorRep = roles.includes('CONTRACTOR_REPRESENTATIVE');
 
   const showSchedule = isWorker;
-  const showReview = isContractorRep;
+  const showReview = isContractorRep || roles.includes('SITE_MANAGER') || roles.includes('ADMIN');
 
   return {
     showSchedule,

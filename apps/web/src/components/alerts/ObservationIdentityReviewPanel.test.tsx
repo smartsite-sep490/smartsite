@@ -958,10 +958,13 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
       </QueryClientProvider>,
     );
 
-    // Decode error for Blob B must be displayed
+    // Unknown decoder text uses the localized fallback; decoding still fails closed.
     await waitFor(() => {
-      expect(screen.getByText('Lỗi giải mã ảnh Blob B')).not.toBeNull();
+      expect(screen.getByText(i18n.t('errors.unexpected'))).not.toBeNull();
     });
+    expect(
+      (screen.getByRole('button', { name: /Xác nhận danh tính/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('closes ImageBitmap even if component unmounts before decode handler settles', async () => {

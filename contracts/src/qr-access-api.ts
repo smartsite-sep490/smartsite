@@ -1,14 +1,39 @@
 import type { FaceGateVerificationResponse, GateAccessLogResponse } from './identity-access-api.js';
+export interface VisitorMemberInput {
+  fullName: string;
+  identityNumber: string;
+}
+export interface VisitorMemberResponse extends VisitorMemberInput {
+  id: string;
+  inside: boolean;
+  registeredFullName: string;
+  registeredIdentityNumber: string;
+}
+export interface VisitorAttendanceInput extends VisitorMemberInput {
+  memberId: string;
+}
+export interface VisitorAttendanceResponse extends VisitorAttendanceInput {
+  replacedFrom?: VisitorMemberInput;
+}
+export interface VisitorQrPreviewResponse {
+  visit: VisitResponse;
+  direction: 'IN' | 'OUT';
+  expiresAt: string | null;
+}
 export interface CreateVisitCommand {
   requestId: string;
   accessKey: string;
   visitorName: string;
   company: string;
   contact: string;
+  email: string;
+  language?: 'en' | 'vi';
   hostName: string;
   purpose: string;
   targetArea: string;
   groupSize: number;
+  /** Required for groups of two or more, including the representative if attending. */
+  members?: VisitorMemberInput[];
   gateId: string;
   validFrom: string;
   validUntil: string;
@@ -20,10 +45,13 @@ export interface VisitResponse {
   visitorName: string;
   company: string;
   contact: string;
+  email?: string | null;
+  emailStatus?: 'NOT_REQUESTED' | 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
   hostName: string;
   purpose: string;
   targetArea: string;
   groupSize: number;
+  members?: VisitorMemberResponse[];
   gateId: string;
   validFrom: string;
   validUntil: string;
@@ -41,7 +69,8 @@ export interface VisitResponse {
 }
 export interface QrPassResponse {
   token: string;
-  expiresAt: string;
+  /** Visitor codes have no token expiry; approval and visit schedule still apply. */
+  expiresAt: string | null;
   direction?: 'IN' | 'OUT';
 }
 export interface VisitorPassResponse {
@@ -61,8 +90,10 @@ export interface VerifyQrCommand {
   requestId: string;
 }
 export interface VisitorGateCommand extends VerifyQrCommand {
-  /** Legacy clients may send the complete approved headcount; partial groups are rejected. */
+  /** Legacy visits without a roster retain whole-group confirmation. */
   count?: number;
+  expectedVersion?: number;
+  attendees?: VisitorAttendanceInput[];
 }
 export interface WorkerQrVerificationResponse {
   attempt?: import('./access-flow-api.js').AccessAttemptResponse;
@@ -79,4 +110,5 @@ export interface VisitorGateEventResponse {
   count: number;
   createdAt: string;
   visit: VisitResponse;
+  attendees?: VisitorAttendanceResponse[];
 }

@@ -873,8 +873,8 @@ export function ContractorDashboardView({
           </div>
 
           {/* ── NAVIGATION TABS (Teams vs Workers) ─────────────────────────────────── */}
-          <div className="flex items-center justify-between border-b border-slate-200 pt-2">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pt-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('overview')}

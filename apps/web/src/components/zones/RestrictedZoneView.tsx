@@ -1,7 +1,7 @@
 import { useManagementClient } from '../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
-import { localizedLabel } from '../../i18n/labels';
+import { localizedLabel, localizedDetectionLabel } from '../../i18n/labels';
 import { useTranslation } from 'react-i18next';
 import { useRealtimePreview } from '../cameras/useRealtimePreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
@@ -63,9 +63,12 @@ interface ZoneReviewItem {
   person: string;
   zone: string;
   camera: string;
+  regionId?: string;
+  unknownTrack?: boolean;
   identity: string;
   authorization: string;
   result: string;
+  active: boolean;
   time: string;
 }
 
@@ -89,7 +92,7 @@ export function RestrictedZoneView({
   authenticatedSession,
   onSignOut,
 }: RestrictedZoneViewProps) {
-  useTranslation();
+  const { t } = useTranslation();
 
   const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
@@ -99,9 +102,13 @@ export function RestrictedZoneView({
   const [localSession, setSession] = useState<LoginResponse | null>(null);
   const session = authenticatedSession ?? localSession;
   const externalSession = authenticatedSession !== undefined;
-  const canConfigure =
+  const canRead =
     !externalSession ||
-    session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null);
+    session?.user.roleAssignments.some(
+      ({ role, siteId }) =>
+        (role === 'ADMIN' && siteId === null) ||
+        (siteId !== null && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role)),
+    );
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -283,7 +290,7 @@ export function RestrictedZoneView({
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
       const isGlobalAdmin = result.user.roleAssignments.some(
-        ({ role, siteId }) => role === 'ADMIN' && siteId === null,
+        ({ role, siteId }) => role === 'SITE_MANAGER' && siteId !== null,
       );
       if (!isGlobalAdmin) {
         await client.logout('WEB').catch(() => undefined);
@@ -355,17 +362,22 @@ export function RestrictedZoneView({
   const sites = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, 'sites'],
     queryFn: () => client.listSites(apiToken, { limit: 100 }),
-    enabled: !!canConfigure && apiToken.length > 0,
+    enabled: !!canRead && apiToken.length > 0,
   });
 
   const selectedSiteId = sites.data?.items.some((site) => site.id === requestedSiteId)
     ? requestedSiteId
     : (sites.data?.items[0]?.id ?? '');
+  const canConfigure =
+    !session ||
+    session.user.roleAssignments.some(
+      (r) => r.role === 'SITE_MANAGER' && r.siteId === selectedSiteId,
+    );
 
   const cameras = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
     queryFn: () => client.listCameras(apiToken, selectedSiteId, { limit: 100 }),
-    enabled: !!canConfigure && apiToken.length > 0 && selectedSiteId.length > 0,
+    enabled: !!canRead && apiToken.length > 0 && selectedSiteId.length > 0,
   });
 
   const selectedCameraId = cameras.data?.items.some((cam) => cam.id === requestedCameraId)
@@ -381,10 +393,7 @@ export function RestrictedZoneView({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
     queryFn: () => client.listRegions(apiToken, selectedSiteId, selectedCameraId, { limit: 100 }),
     enabled:
-      !!canConfigure &&
-      apiToken.length > 0 &&
-      selectedSiteId.length > 0 &&
-      selectedCameraId.length > 0,
+      !!canRead && apiToken.length > 0 && selectedSiteId.length > 0 && selectedCameraId.length > 0,
   });
 
   const activeRegions = useMemo(
@@ -514,6 +523,7 @@ export function RestrictedZoneView({
   });
 
   const handleSaveToBackend = () => {
+    if (!canConfigure) return;
     if (!session || !apiToken) return;
     if (!selectedSiteId || !selectedCamera || !selectedRegion) return;
     const vars: SavePolygonMutationVariables = {
@@ -584,13 +594,13 @@ export function RestrictedZoneView({
       return resolveCameraAndWorkArea(
         preview.frame.cameraExternalId,
         testDetection?.regionId,
-        tr('monitoring_utils.chua_co_ma_camera'),
+        t('monitoring_utils.chua_co_ma_camera'),
       );
     }
     if (selectedCamera) {
       const regionLabel = selectedRegion
-        ? tr('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
-        : tr('common.restricted_zone');
+        ? t('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
+        : t('common.restricted_zone');
       return {
         camera: `${selectedCamera.code} · ${selectedCamera.name}`,
         workArea: regionLabel,
@@ -598,7 +608,7 @@ export function RestrictedZoneView({
     }
     const rawCamera = testDetection?.cameraExternalId || aiTimeline?.cameraExternalId;
     return resolveCameraAndWorkArea(rawCamera, testDetection?.regionId, 'CAM-04');
-  }, [preview, selectedCamera, selectedRegion, testDetection, aiTimeline]);
+  }, [preview, selectedCamera, selectedRegion, testDetection, aiTimeline, t]);
 
   const exportZone = () => {
     const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
@@ -673,18 +683,20 @@ export function RestrictedZoneView({
                 .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
                 .toString()
                 .padStart(2, '0')}`,
-              person: tr('messages.2c6bb8488230', { value1: observation.trackId }),
+              person: t('messages.2c6bb8488230', { value1: observation.trackId }),
               zone: context.workArea,
               camera: context.camera,
-              identity: tr('common.unknown'),
-              authorization: tr('common.backend_evaluation_required'),
-              result: tr('common.technical_entry'),
+              regionId: observation.regionId,
+              identity: t('common.unknown'),
+              authorization: t('common.backend_evaluation_required'),
+              result: t('common.technical_entry'),
+              active: true,
             };
           }),
       )
       .slice(-20)
       .reverse();
-  }, [aiTimeline]);
+  }, [aiTimeline, t]);
 
   // Truly filters the loaded Zone events list
   const displayedEvents = useMemo(() => {
@@ -711,11 +723,14 @@ export function RestrictedZoneView({
           : tr('common.unknown_person'),
       zone: context.workArea,
       camera: context.camera,
+      regionId: testDetection.regionId,
+      unknownTrack: testDetection.trackId === null,
       identity: tr('common.unknown'),
       authorization: tr('common.backend_evaluation_required'),
       result: testDetection.active
         ? tr('common.zone_entry_observation_f1b9fa')
         : tr('common.scanning_video_e63c77'),
+      active: testDetection.active,
       time: isLive ? clockTime : testDetection.timecode,
     });
   };
@@ -723,7 +738,7 @@ export function RestrictedZoneView({
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Admin Session & Backend Camera/Region Configuration Bar */}
-      {!canConfigure ? (
+      {!canRead ? (
         <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
           {tr('auth.error.forbidden')}
         </p>
@@ -981,7 +996,7 @@ export function RestrictedZoneView({
               <h4 className="text-xs font-bold uppercase tracking-wider text-red-800">
                 {tr('restricted_zone_view.configuration_version_conflict_http_409')}
               </h4>
-              <p className="mt-0.5 text-xs text-red-700">{conflictMessage}</p>
+              <p className="mt-0.5 text-xs text-red-700">{localizeMessage(conflictMessage)}</p>
             </div>
           </div>
           <button
@@ -1118,74 +1133,76 @@ export function RestrictedZoneView({
                 ))}
             </svg>
 
-            <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
-              <div className="flex items-center gap-2">
-                {!isEditingZone ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsEditingZone(true)}
-                      disabled={
-                        isLive && selectedCamera?.externalId !== preview?.frame.cameraExternalId
-                      }
-                      title={
-                        isLive
-                          ? tr(
-                              'restricted_zone_view.select_the_matching_backend_camera_before_editing_this_preview',
-                            )
-                          : tr('common.edit_zone_draft')
-                      }
-                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
-                    >
-                      {tr('common.edit_zone_8924f0')}
-                    </button>
-                    {isDraftMode && (
-                      <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm ">
-                        {tr('common.unsaved_draft')}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {session && selectedCamera && selectedRegion ? (
+            {canConfigure && (
+              <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
+                <div className="flex items-center gap-2">
+                  {!isEditingZone ? (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={handleSaveToBackend}
-                        disabled={savePolygonMutation.isPending}
-                        className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+                        onClick={() => setIsEditingZone(true)}
+                        disabled={
+                          isLive && selectedCamera?.externalId !== preview?.frame.cameraExternalId
+                        }
+                        title={
+                          isLive
+                            ? tr(
+                                'restricted_zone_view.select_the_matching_backend_camera_before_editing_this_preview',
+                              )
+                            : tr('common.edit_zone_draft')
+                        }
+                        className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                       >
-                        {savePolygonMutation.isPending
-                          ? tr('common.saving_to_backend')
-                          : tr('common.save_to_backend')}
+                        {tr('common.edit_zone_8924f0')}
                       </button>
-                    ) : null}
-                    <button
-                      onClick={saveDraft}
-                      className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 cursor-pointer"
-                    >
-                      {tr('common.save_local_draft')}
-                    </button>
-                    <button
-                      onClick={resetToAuthoritative}
-                      className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
-                    >
-                      {session && selectedRegion
-                        ? tr('common.reset_to_server')
-                        : tr('labels.RESET')}
-                    </button>
-                    <button
-                      onClick={exportZone}
-                      className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B] cursor-pointer"
-                    >
-                      {tr('common.export_draft_json')}
-                    </button>
-                  </>
+                      {isDraftMode && (
+                        <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm ">
+                          {tr('common.unsaved_draft')}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      {session && selectedCamera && selectedRegion ? (
+                        <button
+                          onClick={handleSaveToBackend}
+                          disabled={savePolygonMutation.isPending}
+                          className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+                        >
+                          {savePolygonMutation.isPending
+                            ? tr('common.saving_to_backend')
+                            : tr('common.save_to_backend')}
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={saveDraft}
+                        className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 cursor-pointer"
+                      >
+                        {tr('common.save_local_draft')}
+                      </button>
+                      <button
+                        onClick={resetToAuthoritative}
+                        className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
+                      >
+                        {session && selectedRegion
+                          ? tr('common.reset_to_server')
+                          : tr('labels.RESET')}
+                      </button>
+                      <button
+                        onClick={exportZone}
+                        className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B] cursor-pointer"
+                      >
+                        {tr('common.export_draft_json')}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {saveStatusMessage && (
+                  <div className="rounded bg-black/75 px-2.5 py-1 text-[10px] font-medium text-amber-200 backdrop-blur-sm border border-amber-500/30">
+                    {localizeMessage(saveStatusMessage)}
+                  </div>
                 )}
               </div>
-              {saveStatusMessage && (
-                <div className="rounded bg-black/75 px-2.5 py-1 text-[10px] font-medium text-amber-200 backdrop-blur-sm border border-amber-500/30">
-                  {localizeMessage(saveStatusMessage)}
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Render one bounding box per active zone-entry track */}
             {!isLive &&
@@ -1203,7 +1220,7 @@ export function RestrictedZoneView({
                   >
                     <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
                       {tr('ppe_monitoring_view.value_track_value', {
-                        value1: detection.label,
+                        value1: localizedDetectionLabel(detection.label),
                         value2: detection.trackId,
                       })}
                     </div>
@@ -1691,13 +1708,21 @@ export function RestrictedZoneView({
               <p>
                 {tr('restricted_zone_view.you_are_reviewing_a_restricted_zone_intrusion_at')}{' '}
                 <strong className="text-[#2F3437]">
-                  {selectedIncident.zone} ({selectedIncident.camera})
+                  {
+                    resolveCameraAndWorkArea(selectedIncident.camera, selectedIncident.regionId)
+                      .workArea
+                  }{' '}
+                  ({selectedIncident.camera})
                 </strong>
                 {tr('restricted_zone_view.ai_detected_worker')}{' '}
-                <strong className="text-[#2F3437]">{selectedIncident.person}</strong>{' '}
+                <strong className="text-[#2F3437]">
+                  {selectedIncident.unknownTrack
+                    ? tr('common.unknown_person')
+                    : tr('messages.2c6bb8488230', { value1: selectedIncident.trackId })}
+                </strong>{' '}
                 {tr('common.with_status')}{' '}
                 <strong className="text-[#2F3437]">
-                  {localizedLabel(selectedIncident.authorization)}
+                  {localizeMessage(localizedLabel(selectedIncident.authorization))}
                 </strong>
                 .
               </p>

@@ -1,0 +1,26 @@
+# Phân chức năng SmartSite theo vai trò
+
+Cập nhật 16/10/2026 theo main `3ce0358` và yêu cầu cập nhật của người dùng. Xem [đối chiếu chức năng mới](main-feature-parity.md). Chỉ mô tả chức năng có trong code, không xác nhận đã hoàn thành toàn bộ FR/ADD.
+
+| Vai trò                   | Quyền thao tác                                                                                                                                                                              | Giới hạn                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Administrator             | Tài khoản, role/scope, khóa/mở, đặt lại mật khẩu; danh mục nhà thầu, công trường, gán quản lý                                                                                               | Quan sát nghiệp vụ, không ngầm có quyền duyệt, quét cổng, đăng ký mặt, xác minh hoặc gán lịch. Ẩn Nhân sự/Thiết lập lịch và chặn truy cập trực tiếp. |
+| Site Manager              | Zone/camera, nhà thầu tham gia Site, ca/phiên bản/gán lịch, quyền cổng/nhà thầu-khu vực; xét phân công, sửa công, tăng ca/nghỉ/đối soát; duyệt khách; khắc phục được giao                   | Đúng Site. Chỉ xem đổi ca/hoán đổi theo quyết định cập nhật; không có máy quét cổng.                                                                 |
+| Contractor Representative | Nhóm, thành viên và quyền khu vực nhóm; tài khoản/hồ sơ Worker; đăng ký mặt có đồng ý; gửi phân công/cấp quyền trong quyền đã được cấp; duyệt đổi ca/hoán đổi; phiếu và khắc phục được giao | Đúng nhà thầu/Site còn quyền. Không tự duyệt, không duyệt công, không quét cổng, không mở giám sát an toàn chung.                                    |
+| Safety Officer            | Kiểm tra an toàn, xác minh/bác bỏ cảnh báo, định danh quan sát, giao/kiểm tra khắc phục, sự cố và phiếu kiểm tra                                                                            | Đúng Site/hồ sơ; không quản trị tài khoản hoặc quét cổng; không tự xác minh kết quả do mình nộp.                                                     |
+| Security Officer          | Xác minh mặt/QR/thủ công có lý do, ghi công nhân vào/ra; đối chiếu đoàn và ghi khách vào/ra                                                                                                 | Cổng tại Site được giao; không duyệt khách, cấp quyền, đăng ký mặt, duyệt công/lịch hoặc mở an toàn.                                                 |
+| Worker                    | QR/mặt cá nhân, lịch/công cá nhân; gửi/theo dõi sửa công, tăng ca/nghỉ, đổi ca/hoán đổi; bên nhận hoán đổi đồng ý/từ chối                                                                   | Theo hồ sơ của tài khoản; không duyệt/quét người khác, không mở an toàn chung.                                                                       |
+
+Người dùng chọn quyền duyệt **đổi ca/hoán đổi theo main**, thuộc Đại diện nhà thầu. Hoán đổi cần bên còn lại đồng ý trước; backend kiểm tra lại lịch, nhóm, xung đột, nhà thầu và hiệu lực trước khi áp dụng nguyên tử. Tên trạng thái lịch sử `PENDING_MANAGER` được giữ để tương thích dữ liệu/API, không có nghĩa Site Manager được duyệt MF07.
+
+Menu/route dùng chung `workspace-access.ts`. Tính quyền theo role tại **Site đang chọn**, không kế thừa nghiệp vụ từ Admin. Tài khoản kiêm nhiệm dùng hợp các role được gán rõ ràng; quyền tại A không áp dụng sang B. Backend kiểm tra độc lập với ẩn UI.
+
+Nhóm ở `/contractor-teams`; tài khoản Worker ở `/worker-onboarding`. Dùng endpoint chính thức của main, sinh mã tuần tự `W000001`, ... và mật khẩu mặc định `12345678`; chỉ lưu hash. Theo chính sách main, đổi mật khẩu là tự nguyện. Tạo tài khoản không tự duyệt phân công/cấp quyền vào. Không dùng lại implementation cấp tài khoản trùng endpoint từ nhánh cũ.
+
+Ẩn nhóm An toàn với Worker, Đại diện và Bảo vệ. Đại diện nhận khắc phục/phiếu trong **Công việc được giao** (`/assigned-work`), dữ liệu do backend giới hạn. Thông báo dẫn tới workspace này khi người nhận không có role giám sát.
+
+Khách có tab hồ sơ/phê duyệt và tab bàn cổng riêng. Không có công tắc giả role: Admin quan sát, Manager duyệt, Security xác minh/ghi vào ra. Giữ email duyệt/từ chối/hủy và danh sách đoàn từ nhánh hiện tại.
+
+Giữ thông báo Manager cũ; chờ duyệt MF07 mới gửi Đại diện. MF03 gửi hàng chờ công cho Manager. Migration không xóa thông báo để vượt kiểm tra schema.
+
+IoT, tiến độ MF10, chứng chỉ đầy đủ, host khách có xác thực/chống tự duyệt và phân bảo vệ từng cổng vẫn cần backlog riêng. IoT/tiến độ mẫu tiếp tục ẩn; không mở rộng quyền để giả lập chức năng chưa có.

@@ -1,4 +1,4 @@
-import { localizedLabel } from '../../i18n/labels';
+import { localizedLabel, localizedDetectionLabel } from '../../i18n/labels';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useRealtimePreview } from '../cameras/useRealtimePreview';
@@ -39,6 +39,8 @@ interface PpeReviewItem {
   ppeItem?: 'HARD_HAT' | 'SAFETY_VEST';
   worker: string;
   camera: string;
+  regionId?: string;
+  unknownTrack?: boolean;
   workArea: string;
   issue: string;
   confidence: string;
@@ -58,7 +60,7 @@ export interface PpeMonitoringViewProps {
 }
 
 export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
-  useTranslation();
+  const { t } = useTranslation();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const pausedViolationRef = useRef<string | null>(null);
@@ -139,7 +141,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
       null
     );
   }, [ppeDetections]);
-  const ppeResultState = useMemo(() => getPpeResultState(ppeDetections), [ppeDetections]);
+  const ppeResultState = getPpeResultState(ppeDetections);
 
   // Derive cameraExternalId and human-readable work area directly from active detection or timeline
   const activeCameraContext = useMemo(() => {
@@ -148,13 +150,14 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
         testDetection?.cameraExternalId ||
         aiTimeline?.cameraExternalId,
       testDetection?.regionId,
-      tr('monitoring_utils.chua_co_ma_camera'),
+      t('monitoring_utils.chua_co_ma_camera'),
     );
   }, [
     preview?.frame.cameraExternalId,
     testDetection?.cameraExternalId,
     testDetection?.regionId,
     aiTimeline?.cameraExternalId,
+    t,
   ]);
 
   // Snapshot PPE: only auto-pause when playing timeline fixture; do not pause local video on websocket frames
@@ -234,7 +237,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             const context = resolveCameraAndWorkArea(
               entry.event.cameraExternalId,
               observation.regionId,
-              tr('monitoring_utils.chua_co_ma_camera'),
+              t('monitoring_utils.chua_co_ma_camera'),
             );
             return {
               id: entry.event.eventId,
@@ -250,23 +253,24 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                 .padStart(2, '0')}:${Math.floor(entry.videoTimeSeconds % 60)
                 .toString()
                 .padStart(2, '0')}`,
-              worker: tr('messages.2c6bb8488230', { value1: observation.trackId }),
+              worker: t('messages.2c6bb8488230', { value1: observation.trackId }),
               camera: context.camera,
+              regionId: observation.regionId,
               workArea: context.workArea,
-              issue: tr('messages.6bbb6eca45dd', {
+              issue: t('messages.6bbb6eca45dd', {
                 value1:
                   observation.ppeItem === 'HARD_HAT'
-                    ? tr('common.hard_hat_b1ff71')
-                    : tr('common.safety_vest'),
+                    ? t('common.hard_hat_b1ff71')
+                    : t('common.safety_vest'),
               }),
               confidence: person?.confidence ? `${Math.round(person.confidence * 100)}%` : '—',
-              status: tr('common.technical_observation'),
+              status: t('common.technical_observation'),
             };
           }),
       )
       .slice(-20)
       .reverse();
-  }, [aiTimeline]);
+  }, [aiTimeline, t]);
 
   // Truly filters the loaded PPE events list
   const displayedEvents = useMemo(() => {
@@ -292,6 +296,8 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
           ? tr('messages.2c6bb8488230', { value1: testDetection.trackId })
           : tr('common.unknown_worker_c1ef7f'),
       camera: context.camera,
+      regionId: testDetection.regionId,
+      unknownTrack: testDetection.trackId === null,
       workArea: context.workArea,
       issue: testDetection.label,
       confidence:
@@ -367,7 +373,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                     className={`absolute pointer-events-none border-[1.6px] transition-all duration-300 ${
                       isConfirmedPpeDetection(detection) ? 'border-[#F66B17]' : 'border-emerald-400'
                     }`}
-                    data-testid="mf04-test-detection"
+                    data-testid="ppe-test-detection"
                     style={{
                       top: `${detection.boundingBox.y1 * 100}%`,
                       width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
@@ -381,7 +387,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
                       }`}
                     >
                       {tr('ppe_monitoring_view.value_track_value', {
-                        value1: detection.label,
+                        value1: localizedDetectionLabel(detection.label),
                         value2: detection.trackId,
                       })}
                     </div>
@@ -712,7 +718,7 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             {!isLive && violationSnapshot && (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 p-3"
-                data-testid="mf04-evidence-capture"
+                data-testid="ppe-evidence-capture"
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest text-red-700">
                   {tr('ppe_monitoring_view.evidence_captured_value', {
@@ -948,12 +954,27 @@ export function PpeMonitoringView({ onNavigate }: PpeMonitoringViewProps = {}) {
             <div className="space-y-4 text-sm text-[#6B6B6B]">
               <p>
                 {tr('ppe_monitoring_view.ai_detected_an_observation_for')}{' '}
-                <strong className="text-[#2F3437]">{selectedReview.worker}</strong>{' '}
+                <strong className="text-[#2F3437]">
+                  {selectedReview.unknownTrack
+                    ? tr('common.unknown_worker_c1ef7f')
+                    : tr('messages.2c6bb8488230', { value1: selectedReview.trackId })}
+                </strong>{' '}
                 {tr('common.in_582967')}{' '}
-                <strong className="text-[#2F3437]">{selectedReview.workArea}</strong> (
-                {selectedReview.camera}
+                <strong className="text-[#2F3437]">
+                  {
+                    resolveCameraAndWorkArea(selectedReview.camera, selectedReview.regionId)
+                      .workArea
+                  }
+                </strong>{' '}
+                ({selectedReview.camera}
                 {tr('common.observation_b1add8')}{' '}
-                <strong className="text-[#2F3437]">{localizedLabel(selectedReview.issue)}</strong>{' '}
+                <strong className="text-[#2F3437]">
+                  {selectedReview.ppeItem
+                    ? tr('monitoring_utils.missing_item', {
+                        item: localizedLabel(selectedReview.ppeItem),
+                      })
+                    : localizedDetectionLabel(selectedReview.issue)}
+                </strong>{' '}
                 {tr('common.confidence_793412')} {selectedReview.confidence}).
               </p>
               <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">

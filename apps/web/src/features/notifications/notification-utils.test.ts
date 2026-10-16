@@ -180,3 +180,36 @@ it('preserves authored Safety bodies even when they exactly match known system c
   expect(formatNotificationDisplayMessage({ event: 'CHECKLIST_RECORDED', message })).toBe(message);
   expect(formatNotificationTitle({ event: 'CHECKLIST_RECORDED', title: message })).toBe(message);
 });
+
+it('switches generated time-request notices both ways without translating authored names and reasons', async () => {
+  const name = 'Shift change awaiting review';
+  const reason = 'Checklist report recorded\n<keep this reason>';
+  const request = {
+    event: 'TIME_REQUESTED' as const,
+    message: `${name} requested overtime: ${reason}`,
+  };
+  const review = {
+    event: 'TIME_REJECTED' as const,
+    message: `Attendance correction rejected: ${reason}`,
+  };
+  await i18n.changeLanguage('vi');
+  expect(formatNotificationDisplayMessage(request)).toBe(`${name} gửi yêu cầu tăng ca: ${reason}`);
+  expect(formatNotificationDisplayMessage(review)).toBe(`Sửa công: Bị từ chối Lý do: ${reason}`);
+  expect(
+    formatNotificationDisplayMessage({
+      event: 'TIME_APPROVED',
+      message: `Duplicate IN ignored: ${reason}`,
+    }),
+  ).toBe(`Đã loại lượt vào trùng: ${reason}`);
+  expect(formatNotificationTitle({ event: 'TIME_REQUESTED', title: 'TIME REQUESTED' })).toBe(
+    translate('notifications.TIME_REQUESTED'),
+  );
+  await i18n.changeLanguage('en');
+  expect(formatNotificationDisplayMessage(request)).toBe(request.message);
+  expect(formatNotificationDisplayMessage(review)).toBe(
+    `Attendance correction: Rejected Reason: ${reason}`,
+  );
+  expect(formatNotificationTitle({ event: 'TIME_REQUESTED', title: 'TIME REQUESTED' })).toBe(
+    'Time request',
+  );
+});

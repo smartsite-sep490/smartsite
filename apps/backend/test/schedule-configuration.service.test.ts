@@ -166,7 +166,7 @@ test('ScheduleConfigurationService validates worker schedule fields before datab
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
   const siteId = randomUUID();
   await assert.rejects(
-    service.createWorkerSchedule(contractorRepresentativeActor(siteId), siteId, randomUUID(), {
+    service.createWorkerSchedule(siteManagerActor(siteId), siteId, randomUUID(), {
       workerId: randomUUID(),
       shiftId: randomUUID(),
       workDate: '01-10-2026',
@@ -218,7 +218,7 @@ test('ScheduleConfigurationService denies a Site Manager outside the assigned Si
   );
 });
 
-test('ScheduleConfigurationService does not allow a Site Manager to assign a worker schedule', async () => {
+test('ScheduleConfigurationService does not allow a Contractor Representative to assign a worker schedule', async () => {
   const service = new ScheduleConfigurationService(undefined as unknown as DataSource);
   const siteId = randomUUID();
   const siteManager: AuthenticatedUser = {
@@ -227,7 +227,7 @@ test('ScheduleConfigurationService does not allow a Site Manager to assign a wor
     displayName: 'Site Manager',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
+    roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
   };
 
   await assert.rejects(

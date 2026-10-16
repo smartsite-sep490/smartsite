@@ -106,7 +106,13 @@ export function DashboardView({ onNavigate, apiUrl: apiUrlProp }: DashboardViewP
   ];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div
+      className={
+        roles.includes('SAFETY_OFFICER')
+          ? 'space-y-6 max-w-7xl mx-auto'
+          : 'space-y-6 max-w-7xl mx-auto text-[#071A2B] animate-in fade-in duration-200'
+      }
+    >
       {/* Header */}
       <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
@@ -125,7 +131,9 @@ export function DashboardView({ onNavigate, apiUrl: apiUrlProp }: DashboardViewP
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div
+        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 ${roles.includes('SAFETY_OFFICER') ? 'gap-5' : 'gap-4'}`}
+      >
         {stats.map((s, idx) => (
           <div
             key={idx}

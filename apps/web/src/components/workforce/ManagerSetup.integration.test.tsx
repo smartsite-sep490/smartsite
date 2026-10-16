@@ -25,7 +25,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('manager sees only their Site and can create multiple contractors and Zones without Admin actions', async () => {
+it('manager sees only their Site and can configure Zones without administrative organization creation', async () => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
     items: ['a', 'b'].map((id) => ({
       id: `site-${id}`,
@@ -39,6 +39,9 @@ it('manager sees only their Site and can create multiple contractors and Zones w
     items: [],
     total: 0,
   });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'contractorParticipationOptions').mockResolvedValue(
+    { items: [{ id: 'contractor-a', code: 'A', name: 'Contractor A', isActive: true }] },
+  );
   const globalUsers = vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers');
   const representatives = vi
     .spyOn(SmartSiteManagementClient.prototype, 'listSiteRepresentatives')
@@ -115,20 +118,8 @@ it('manager sees only their Site and can create multiple contractors and Zones w
     offset: 0,
     limit: 100,
   });
-  for (const code of ['FIRST', 'SECOND']) {
-    await user.click(screen.getByRole('button', { name: 'Add Contractor' }));
-    expect(screen.queryByLabelText(/Contractor Code/)).toBeNull();
-    await user.type(screen.getByLabelText(/Contractor Name/), `${code} contractor`);
-    await user.click(screen.getByRole('button', { name: 'Register Contractor' }));
-    await waitFor(() =>
-      expect(createContractor).toHaveBeenCalledWith('manager-token', 'site-a', {
-        name: `${code} contractor`,
-      }),
-    );
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Register Contractor' })).toBeNull(),
-    );
-  }
+  expect(screen.queryByRole('button', { name: 'Add Contractor' })).toBeNull();
+  expect(createContractor).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button', { name: 'New Zone' }));
   expect(screen.queryByLabelText('Zone code')).toBeNull();
   await user.type(screen.getByLabelText('Zone name'), 'Work area');

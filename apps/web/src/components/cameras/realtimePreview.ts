@@ -96,7 +96,7 @@ function detections(value: unknown, camera: string, mode: 'ppe' | 'zone'): Video
       confidence: item.confidence,
       confirmedMissingItems: missing as VideoTestDetection['confirmedMissingItems'],
       eventId: `REALTIME-${mode}-TRACK-${item.trackId}`,
-      label: `${mode === 'ppe' ? 'MF04' : 'MF05'} ${item.label}`,
+      label: item.label,
       ppeStatus: status,
       regionId: (item.regionId ?? undefined) as string | undefined,
       timecode: 'LIVE',

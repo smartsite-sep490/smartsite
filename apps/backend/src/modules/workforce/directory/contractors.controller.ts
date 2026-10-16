@@ -16,7 +16,7 @@ import type { ContractorEntity } from '../../../database/entities/contractor.ent
 import type { ContractorRepresentativeAssignmentEntity } from '../../../database/entities/contractor-representative-assignment.entity.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { SiteManagerGuard } from '../../auth/site-manager.guard.js';
-import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { pagination } from '../../../common/http/pagination.js';
 import { AssignContractorRepresentativeDto, CreateContractorDto } from './dto/workforce.dto.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
@@ -58,7 +58,7 @@ export class ContractorsController {
   constructor(private readonly workforce: WorkforceConfigurationService) {}
 
   @Post('contractors')
-  @UseGuards(SiteManagerGuard)
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async create(
     @Req() request: AuthenticatedRequest,
@@ -73,6 +73,12 @@ export class ContractorsController {
       resourceId: contractor.id,
     });
     return contractorResponse(contractor, siteId);
+  }
+
+  @Get('contractor-participation-options')
+  @UseGuards(SiteManagerGuard)
+  participationOptions(@Param('siteId') siteId: string) {
+    return this.workforce.participationOptions(siteId);
   }
 
   @Post('contractors/:contractorId/representatives')

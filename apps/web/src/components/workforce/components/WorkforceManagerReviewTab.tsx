@@ -42,10 +42,12 @@ export function WorkforceManagerReviewTab({
   apiUrl,
   siteId,
   token,
+  canReview = false,
 }: {
   apiUrl: string;
   siteId: string;
   token: string;
+  canReview?: boolean;
 }) {
   useTranslation();
 
@@ -92,6 +94,7 @@ export function WorkforceManagerReviewTab({
   const { data: coworkers } = useQuery({
     queryKey: ['coworkers', siteId],
     queryFn: () => client.listCoworkers(token, siteId, { limit: 25 }),
+    enabled: false,
   });
 
   const { data: shifts } = useQuery({
@@ -659,27 +662,31 @@ export function WorkforceManagerReviewTab({
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isOperating}
-                        onClick={() => openRejectModal('CHANGE', change.id)}
-                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                      >
-                        {tr('common.reject')}
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        isLoading={approveChange.isPending && approveChange.variables === change.id}
-                        disabled={isOperating}
-                        onClick={() => approveChange.mutate(change.id)}
-                        leftIcon={<IconCheck className="w-3 h-3 text-emerald-400" />}
-                      >
-                        {tr('common.approve_change')}
-                      </Button>
-                    </div>
+                    {canReview && (
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isOperating}
+                          onClick={() => openRejectModal('CHANGE', change.id)}
+                          className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                        >
+                          {tr('common.reject')}
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          isLoading={
+                            approveChange.isPending && approveChange.variables === change.id
+                          }
+                          disabled={isOperating}
+                          onClick={() => approveChange.mutate(change.id)}
+                          leftIcon={<IconCheck className="w-3 h-3 text-emerald-400" />}
+                        >
+                          {tr('common.approve_change')}
+                        </Button>
+                      </div>
+                    )}
                   </Card>
                 );
               })}
@@ -767,27 +774,29 @@ export function WorkforceManagerReviewTab({
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isOperating}
-                        onClick={() => openRejectModal('SWAP', swap.id)}
-                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                      >
-                        {tr('common.reject')}
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        isLoading={approveSwap.isPending && approveSwap.variables === swap.id}
-                        disabled={isOperating}
-                        onClick={() => approveSwap.mutate(swap.id)}
-                        leftIcon={<IconCheck className="w-3 h-3 text-emerald-400" />}
-                      >
-                        {tr('common.approve_swap')}
-                      </Button>
-                    </div>
+                    {canReview && (
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isOperating}
+                          onClick={() => openRejectModal('SWAP', swap.id)}
+                          className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                        >
+                          {tr('common.reject')}
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          isLoading={approveSwap.isPending && approveSwap.variables === swap.id}
+                          disabled={isOperating}
+                          onClick={() => approveSwap.mutate(swap.id)}
+                          leftIcon={<IconCheck className="w-3 h-3 text-emerald-400" />}
+                        >
+                          {tr('common.approve_swap')}
+                        </Button>
+                      </div>
+                    )}
                   </Card>
                 );
               })}
@@ -887,7 +896,9 @@ export function WorkforceManagerReviewTab({
                             }
                             dot
                           >
-                            {localizedLabel(item.status)}
+                            {item.status === 'PENDING_MANAGER'
+                              ? tr('common.pending_contractor_review')
+                              : localizedLabel(item.status)}
                           </Badge>
                         </td>
                         <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">
@@ -1017,7 +1028,7 @@ export function WorkforceManagerReviewTab({
               disabled={!rejectReason.trim()}
               isLoading={rejectChange.isPending || rejectSwap.isPending}
               onClick={() => {
-                if (!rejectTarget || !rejectReason.trim()) return;
+                if (!canReview || !rejectTarget || !rejectReason.trim()) return;
                 if (rejectTarget.type === 'CHANGE') {
                   rejectChange.mutate({ id: rejectTarget.id, reason: rejectReason.trim() });
                 } else {

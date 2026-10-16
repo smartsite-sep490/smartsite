@@ -11,6 +11,7 @@ import type {
   ObservationIdentityWorkerResponse,
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
+import '../../i18n';
 
 // Polyfill URL.createObjectURL and ResizeObserver for jsdom
 if (typeof URL.createObjectURL !== 'function') {

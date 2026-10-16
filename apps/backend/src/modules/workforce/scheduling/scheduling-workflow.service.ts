@@ -1058,6 +1058,7 @@ export class SchedulingWorkflowService {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedRequestId = uuid(requestId);
     this.assertPasswordChanged(actor);
+    if (!this.hasSiteRole(actor, UserRole.SITE_MANAGER, scopedSiteId)) this.forbidden();
     return this.dataSource.transaction(async (manager) => {
       const seed = await manager
         .getRepository(AbsenceRequestEntity)
@@ -1083,12 +1084,8 @@ export class SchedulingWorkflowService {
       const absentWorker = await manager
         .getRepository(WorkerEntity)
         .findOneBy({ id: request.workerId, siteId: scopedSiteId, isActive: true });
-      await this.assertContractorRepresentativeAuthority(
-        manager,
-        actor,
-        scopedSiteId,
-        absentWorker?.contractorId ?? null,
-      );
+      if (!absentWorker) this.forbidden();
+      await this.assertWorkerParticipation(manager, absentWorker);
       if (request.requestedByUserId === actor.id) this.forbidden();
       if (request.status !== AbsenceRequestStatus.PENDING_MANAGER)
         conflict('Request is not pending manager review');
@@ -1158,6 +1155,7 @@ export class SchedulingWorkflowService {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedRequestId = uuid(requestId);
     this.assertPasswordChanged(actor);
+    if (!this.hasSiteRole(actor, UserRole.SITE_MANAGER, scopedSiteId)) this.forbidden();
     return this.dataSource.transaction(async (manager) => {
       const seed = await manager
         .getRepository(AbsenceRequestEntity)
@@ -1183,12 +1181,8 @@ export class SchedulingWorkflowService {
       const absentWorker = await manager
         .getRepository(WorkerEntity)
         .findOneBy({ id: request.workerId, siteId: scopedSiteId, isActive: true });
-      await this.assertContractorRepresentativeAuthority(
-        manager,
-        actor,
-        scopedSiteId,
-        absentWorker?.contractorId ?? null,
-      );
+      if (!absentWorker) this.forbidden();
+      await this.assertWorkerParticipation(manager, absentWorker);
       if (request.requestedByUserId === actor.id) this.forbidden();
       if (request.status !== AbsenceRequestStatus.PENDING_MANAGER)
         conflict('Request is not pending manager review');
@@ -1208,7 +1202,8 @@ export class SchedulingWorkflowService {
     if (
       actor.roleAssignments.some(
         (a) =>
-          a.role === UserRole.ADMIN || (a.role === UserRole.SITE_MANAGER && a.siteId === siteId),
+          (a.role === UserRole.ADMIN && a.siteId === null) ||
+          (a.role === UserRole.SITE_MANAGER && a.siteId === siteId),
       )
     ) {
       return { type: 'ALL' };

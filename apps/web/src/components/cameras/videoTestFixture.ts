@@ -124,7 +124,11 @@ function detectionFor(
       cameraExternalId: timeline?.cameraExternalId,
       confidence: null,
       eventId: timeline ? `${type}-NO-EVENT` : `${type}-WAITING-FOR-AI-RUN`,
-      label: timeline ? `${type} NO EVENT` : tr('messages.b311e13b57dd', { value1: type }),
+      get label() {
+        return timeline
+          ? tr('monitoring_utils.no_event', { flow: type })
+          : tr('messages.b311e13b57dd', { value1: type });
+      },
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       regionId: undefined,
       timecode: formatTimecode(videoTimeline.currentTime),
@@ -138,8 +142,8 @@ function detectionFor(
   );
   const detail =
     type === 'MF04'
-      ? `MISSING ${match.observation.ppeItem === 'HARD_HAT' ? tr('common.hard_hat_32979e') : tr('common.safety_vest_9ecea3')}`
-      : tr('common.zone_entry');
+      ? `MISSING ${match.observation.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
+      : 'ZONE ENTRY';
   const ppeStatus = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' } as Record<
     'HARD_HAT' | 'SAFETY_VEST',
     'PRESENT' | 'MISSING' | 'UNKNOWN'
@@ -222,8 +226,8 @@ export function getPpeVideoTestDetections(
       eventId: match.entry.event.eventId,
       get label() {
         return missingItem
-          ? `MF04 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? tr('common.hard_hat_32979e') : tr('common.safety_vest_9ecea3')}`
-          : tr('common.mf04_ppe_ok');
+          ? `MF04 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
+          : 'MF04 PPE OK';
       },
       ppeStatus,
       regionId: missingItem?.regionId ?? trackObservations[0]?.regionId,
@@ -269,7 +273,7 @@ export function getZoneVideoTestDetections(
       confidence: observation.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
       get label() {
-        return tr('common.mf05_zone_entry');
+        return 'MF05 ZONE ENTRY';
       },
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       regionId: observation.regionId,

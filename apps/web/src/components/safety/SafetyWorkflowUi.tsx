@@ -1,4 +1,4 @@
-import { localizeMessage } from '../../i18n/messages';
+import { localizedError } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import {
@@ -141,7 +141,7 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
         : tr('common.request_failed');
   return (
     <div className="space-y-3 rounded-lg border border-red-200 bg-[var(--semantic-red-bg)] p-3 text-sm text-[var(--semantic-red-text)]">
-      <p role="alert">{localizeMessage(message)}</p>
+      <p role="alert">{localizedError(message)}</p>
       {retry && (
         <button className={buttonClass} type="button" onClick={retry}>
           {conflict ? tr('common.reload_data') : tr('common.retry')}

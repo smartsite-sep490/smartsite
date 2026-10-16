@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { VisitResponse } from '@smartsite/contracts';
 import { VisitorRegistrationView } from './VisitorRegistrationView';
+import i18n from '../../../i18n';
 
 afterEach(() => {
   cleanup();
@@ -14,6 +15,7 @@ afterEach(() => {
 });
 
 it('routes a representative group registration to the selected site and shows QR only after approval', async () => {
+  await i18n.changeLanguage('en');
   const user = userEvent.setup();
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -61,18 +63,31 @@ it('routes a representative group registration to the selected site and shows QR
   await user.selectOptions(screen.getByLabelText('Registration Site'), 'site-beta');
   await user.type(screen.getByLabelText('Representative Full Name'), visit.visitorName);
   await user.type(screen.getByLabelText('Contact Phone / Email'), visit.contact);
+  await user.type(screen.getByLabelText('Email for QR delivery'), 'synthetic@example.test');
   await user.type(screen.getByLabelText('Host Contact at Site'), visit.hostName);
   await user.type(screen.getByLabelText('Visit Purpose'), visit.purpose);
   await user.type(screen.getByLabelText('Target Visit Area'), visit.targetArea);
   await user.click(await screen.findByLabelText('Beta office'));
   await user.clear(screen.getByLabelText('Total Visitors (Headcount)'));
-  await user.type(screen.getByLabelText('Total Visitors (Headcount)'), '20');
+  await user.type(screen.getByLabelText('Total Visitors (Headcount)'), '2');
+  for (let i = 1; i <= 2; i++) {
+    await user.type(screen.getByLabelText(`Full name — visitor ${i}`), `Synthetic visitor ${i}`);
+    await user.type(
+      screen.getByLabelText(`Citizen ID — visitor ${i}`),
+      String(i).padStart(12, '0'),
+    );
+  }
   await user.click(screen.getByRole('button', { name: 'Submit for Site Manager Approval' }));
   await screen.findByText('Status: Pending Site Manager Approval');
   expect(register).toHaveBeenCalledWith(
     'site-beta',
     expect.objectContaining({
-      groupSize: 20,
+      groupSize: 2,
+      email: 'synthetic@example.test',
+      members: [
+        { fullName: 'Synthetic visitor 1', identityNumber: '000000000001' },
+        { fullName: 'Synthetic visitor 2', identityNumber: '000000000002' },
+      ],
       visitorName: visit.visitorName,
       zoneIds: ['zone-beta'],
     }),

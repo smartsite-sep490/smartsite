@@ -112,9 +112,9 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
       </QueryClientProvider>,
     );
 
-    // Initial tab is PPE Monitoring (MF04)
-    expect(screen.getByRole('button', { name: /PPE Monitoring.*MF04/i })).not.toBeNull();
-    const zonesTabButton = screen.getByRole('button', { name: /Restricted Zones.*MF05/i });
+    // Initial tab is PPE Monitoring
+    expect(screen.getAllByRole('button', { name: /PPE Monitoring/i })[0]).not.toBeNull();
+    const zonesTabButton = screen.getAllByRole('button', { name: /Restricted Zones/i })[0]!;
 
     // Switch to Restricted Zones sub-tab
     await user.click(zonesTabButton);

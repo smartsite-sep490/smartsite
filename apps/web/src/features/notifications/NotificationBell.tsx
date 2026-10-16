@@ -2,6 +2,7 @@ import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
+import '../../i18n';
 import * as Popover from '@radix-ui/react-popover';
 import { useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -52,10 +53,12 @@ export function NotificationBell({
   apiUrl,
   userId,
   enabled = true,
+  assignedWork = false,
 }: {
   apiUrl: string;
   userId: string;
   enabled?: boolean;
+  assignedWork?: boolean;
 }) {
   useTranslation();
 
@@ -69,7 +72,13 @@ export function NotificationBell({
   const [targetSingleDelete, setTargetSingleDelete] = useState<UserNotificationResponse | null>(
     null,
   );
-  const [deleteMessage, setDeleteMessage] = useState('');
+  const [deletedCount, setDeletedCount] = useState<number | 'single' | null>(null);
+  const deleteMessage =
+    deletedCount === null
+      ? ''
+      : deletedCount === 'single'
+        ? tr('common.notification_deleted')
+        : tr('counts.deletedNotifications', { count: deletedCount });
   const hasSession = !!accessToken;
   const key = ['notifications', apiUrl, userId];
 
@@ -117,7 +126,7 @@ export function NotificationBell({
     onSuccess: (_result, notification) => {
       void queryClient.invalidateQueries({ queryKey: key });
       setOpen(false);
-      navigate(notificationHref(notification));
+      navigate(notificationHref(notification, assignedWork));
     },
   });
 
@@ -132,7 +141,7 @@ export function NotificationBell({
     mutationFn: () => client.deleteReadNotifications(accessToken!),
     onSuccess: async (result) => {
       setConfirmDelete(false);
-      setDeleteMessage(tr('counts.deletedNotifications', { count: result.deleted }));
+      setDeletedCount(result.deleted);
       await queryClient.resetQueries({ queryKey: key });
     },
   });
@@ -141,7 +150,7 @@ export function NotificationBell({
     mutationFn: (id: string) => client.deleteNotification(accessToken!, id),
     onSuccess: async () => {
       setTargetSingleDelete(null);
-      setDeleteMessage(tr('common.notification_deleted'));
+      setDeletedCount('single');
       await queryClient.resetQueries({ queryKey: key });
     },
   });
@@ -171,7 +180,7 @@ export function NotificationBell({
           setTargetSingleDelete(null);
         }
         if (!deleteRead.isPending && !deleteSingle.isPending) {
-          setDeleteMessage('');
+          setDeletedCount(null);
         }
       }}
     >
@@ -256,7 +265,7 @@ export function NotificationBell({
                     setTargetSingleDelete(null);
                     deleteRead.reset();
                     deleteSingle.reset();
-                    setDeleteMessage('');
+                    setDeletedCount(null);
                   }}
                   className={`flex-1 sm:flex-initial px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     readStatus === filter
@@ -279,7 +288,7 @@ export function NotificationBell({
                 onClick={() => {
                   setConfirmDelete(true);
                   setTargetSingleDelete(null);
-                  setDeleteMessage('');
+                  setDeletedCount(null);
                   deleteRead.reset();
                   deleteSingle.reset();
                 }}
@@ -558,7 +567,7 @@ export function NotificationBell({
                                   e.stopPropagation();
                                   setTargetSingleDelete(item);
                                   setConfirmDelete(false);
-                                  setDeleteMessage('');
+                                  setDeletedCount(null);
                                   deleteSingle.reset();
                                   deleteRead.reset();
                                 }}
