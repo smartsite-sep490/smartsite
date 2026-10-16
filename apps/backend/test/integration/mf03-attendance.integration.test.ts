@@ -2,8 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import {
   AccessAttemptEntity,
   GateEventEntity,
@@ -34,10 +33,12 @@ import { AttendanceService } from '../../src/modules/workforce/attendance/attend
 import { workDateAt } from '../../src/modules/workforce/attendance/attendance-calculation.js';
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 test('MF03: interval totals, missing checkout, notifications, approvals, scope and database concurrency', async (t) => {
   // Keep generated day shifts away from midnight in both UTC and the site timezone.
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 9, 8, 2) });
-  await dataSource.initialize();
+  await isolated.initialize();
   const siteId = randomUUID(),
     contractorId = randomUUID(),
     workerId = randomUUID(),
@@ -1074,24 +1075,6 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     assert.equal((await days.timeRequests(repActor, siteId, { kind: 'OVERTIME' })).total, 0);
     assert.equal((await notifications.list(repActor)).items.length, 0);
   } finally {
-    await cleanupSiteAccess(dataSource, [siteId]);
-    await dataSource.query('DELETE FROM absence_request WHERE site_id=$1', [siteId]);
-    await dataSource.query(
-      'DELETE FROM attendance_schedule_conflict WHERE schedule_id IN (SELECT id FROM worker_schedule WHERE site_id=$1)',
-      [siteId],
-    );
-    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM contractor_representative_assignment WHERE site_id=$1', [
-      siteId,
-    ]);
-    await dataSource.query('DELETE FROM worker WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM contractor_site_participation WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM contractor WHERE id=$1', [contractorId]);
-    await dataSource.query('DELETE FROM user_role_assignment WHERE user_id=ANY($1)', [ids]);
-    await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [ids]);
-    await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);
-    await dataSource.destroy();
+    await isolated.dispose();
   }
 });

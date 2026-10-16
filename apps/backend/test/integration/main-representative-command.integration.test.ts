@@ -33,7 +33,7 @@ after(async () => {
 
 type Kind = 'GRANT' | 'ASSIGN';
 
-async function fixture() {
+async function fixture(kind: Kind = 'GRANT') {
   const f = {
     actor: randomUUID(),
     site: randomUUID(),
@@ -47,10 +47,6 @@ async function fixture() {
     "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password,is_active) VALUES($1,$1::uuid::text,'Synthetic admin actor','not-login',false,true)",
     [f.actor],
   );
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
-  );
   await db.query("INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Site')", [
     f.site,
   ]);
@@ -58,6 +54,12 @@ async function fixture() {
     "INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Other Site')",
     [f.otherSite],
   );
+  await db.query('INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)', [
+    randomUUID(),
+    f.actor,
+    kind === 'GRANT' ? 'ADMIN' : 'SITE_MANAGER',
+    kind === 'GRANT' ? null : f.site,
+  ]);
   await db.query(
     "INSERT INTO contractor(id,code,name,is_active) VALUES($1,$1::uuid::text,'Synthetic Contractor',true)",
     [f.contractor],
@@ -257,7 +259,7 @@ test('Representative global grant permits inactive target user and contractor if
 });
 
 test('Representative site assignment creates both grant and assignment when grant missing', async () => {
-  const f = await fixture();
+  const f = await fixture('ASSIGN');
   assert.equal(await grantCount(f.contractor, f.target), 0);
   assert.equal(await assignmentCount(f.site, f.contractor, f.target), 0);
 
@@ -299,7 +301,7 @@ test('Representative site assignment creates both grant and assignment when gran
 });
 
 test('Representative site assignment creates only assignment when grant already exists', async () => {
-  const f = await fixture();
+  const f = await fixture('ASSIGN');
   const grantId = randomUUID();
   await db.query(
     'INSERT INTO contractor_representative_grant(id,contractor_id,user_id) VALUES($1,$2,$3)',
@@ -322,7 +324,7 @@ test('Representative site assignment creates only assignment when grant already 
 });
 
 test('Representative site assignment repeat idempotent call is no-op with no fake facts', async () => {
-  const f = await fixture();
+  const f = await fixture('ASSIGN');
   await withApi(f, async (call) => {
     const first = await call('ASSIGN');
     assert.equal(first.status, 201);
@@ -340,7 +342,7 @@ test('Representative site assignment repeat idempotent call is no-op with no fak
 });
 
 test('Representative site assignment requires active target, active contractor, exact role, current participation', async () => {
-  const f = await fixture();
+  const f = await fixture('ASSIGN');
   await withApi(f, async (call) => {
     assert.equal((await call('ASSIGN', { userId: randomUUID() })).status, 404);
 
@@ -438,7 +440,7 @@ test('Representative global synthetic unique-source collision maps409 and rolls 
 });
 
 test('Representative site assignment source failure rolls back newly created grant and facts', async () => {
-  const f = await fixture();
+  const f = await fixture('ASSIGN');
   assert.equal(await grantCount(f.contractor, f.target), 0);
   assert.equal(await assignmentCount(f.site, f.contractor, f.target), 0);
 
@@ -481,13 +483,13 @@ test('Representative site assignment source failure rolls back newly created gra
 
 for (const kind of ['GRANT', 'ASSIGN'] as const) {
   test('Representative ' + kind + ' retains the MAIN password-change-required reason', async () => {
-    const f = await fixture();
+    const f = await fixture(kind);
     await withApi(f, async (call) => {
       await db.query('UPDATE app_user SET must_change_password=true WHERE id=$1', [f.actor]);
       const response = await call(kind);
       assert.equal(response.status, 403);
       const error = (await response.json()) as { code: string };
-      assert.equal(error.code, 'PASSWORD_CHANGE_REQUIRED');
+      assert.equal(error.code, kind === 'GRANT' ? 'PASSWORD_CHANGE_REQUIRED' : 'FORBIDDEN');
       assert.equal(await grantCount(f.contractor, f.target), 0);
       assert.equal(await assignmentCount(f.site, f.contractor, f.target), 0);
     });
@@ -497,14 +499,14 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
       kind +
       ' strict actor/command DTO and path validation fails without changes',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call) => {
         for (const extra of [{ actorUserId: f.actor }, { commandId: randomUUID() }]) {
           assert.equal((await call(kind, { userId: f.target, ...extra })).status, 400);
         }
         assert.equal((await call(kind, undefined, 'invalid')).status, 400);
         if (kind === 'ASSIGN') {
-          assert.equal((await call(kind, undefined, f.contractor, 'invalid')).status, 400);
+          assert.equal((await call(kind, undefined, f.contractor, 'invalid')).status, 403);
         }
         assert.equal(await grantCount(f.contractor, f.target), 0);
         assert.equal(await assignmentCount(f.site, f.contractor, f.target), 0);
@@ -512,12 +514,13 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
     },
   );
 
-  test('Representative ' + kind + ' non-admin actor receives 403 Forbidden', async () => {
-    const f = await fixture();
-    await db.query(
-      "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
-      [f.actor, f.site],
-    );
+  test('Representative ' + kind + ' inappropriate actor receives 403 Forbidden', async () => {
+    const f = await fixture(kind);
+    await db.query('UPDATE user_role_assignment SET role=$3,site_id=$2 WHERE user_id=$1', [
+      f.actor,
+      kind === 'GRANT' ? f.site : null,
+      kind === 'GRANT' ? 'SITE_MANAGER' : 'ADMIN',
+    ]);
     await withApi(f, async (call) => {
       assert.equal((await call(kind)).status, 403);
       assert.equal(await grantCount(f.contractor, f.target), 0);
@@ -529,7 +532,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
     test(
       'Representative ' + kind + ' ' + change + ' before claim refuses the source mutation',
       async () => {
-        const f = await fixture();
+        const f = await fixture(kind);
         await withApi(f, async (call, guard, logout) => {
           let enter!: () => void, release!: () => void;
           const claimed = new Promise<void>((r) => (enter = r)),
@@ -554,8 +557,12 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
             if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
             if (change === 'ROLE')
               await db.query(
-                "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
-                [f.actor, f.site],
+                'UPDATE user_role_assignment SET role=$3,site_id=$2 WHERE user_id=$1',
+                [
+                  f.actor,
+                  kind === 'GRANT' ? f.site : null,
+                  kind === 'GRANT' ? 'SITE_MANAGER' : 'ADMIN',
+                ],
               );
             if (change === 'DEACTIVATE')
               await db.query('UPDATE app_user SET is_active=false WHERE id=$1', [f.actor]);
@@ -589,7 +596,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
   test(
     'Representative ' + kind + ' disabled or partial capture fails closed without writes',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       const tables =
         kind === 'GRANT'
           ? ['contractor_representative_grant']
@@ -623,7 +630,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
   test(
     'Representative ' + kind + ' postcommit witness failure keeps committed response unconfirmed',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call, _g, _l, apiDb) => {
         const original = apiDb.query.bind(apiDb);
         apiDb.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {

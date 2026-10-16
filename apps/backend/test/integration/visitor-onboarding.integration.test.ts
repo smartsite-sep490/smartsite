@@ -10,11 +10,12 @@ import { SiteConfigurationService } from '../../src/modules/sites/site-configura
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AuthClientType, UserRole } from '../../src/database/entities/index.js';
 import { createTestConfig } from '../support/config.js';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 test('new Site Manager can use the supplied password for visitor workflows and voluntarily change it', async () => {
-  await dataSource.initialize();
+  await isolated.initialize();
   const siteId = randomUUID();
   const userIds: string[] = [];
   const sites = new SiteConfigurationService(dataSource);
@@ -97,21 +98,6 @@ test('new Site Manager can use the supplied password for visitor workflows and v
     assert.equal(entry.visit.enteredCount, 20);
     assert.equal(entry.visit.decidedByUserId, account.id);
   } finally {
-    try {
-      await cleanupSiteAccess(dataSource, [siteId]);
-      await dataSource.query(
-        'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
-        [siteId],
-      );
-      await dataSource.query(
-        'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
-        [siteId],
-      );
-      await dataSource.query('DELETE FROM visitor_visit WHERE site_id=$1', [siteId]);
-      await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [userIds]);
-      await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);
-    } finally {
-      await dataSource.destroy();
-    }
+    await isolated.dispose();
   }
 });

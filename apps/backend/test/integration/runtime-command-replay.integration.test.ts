@@ -26,7 +26,7 @@ test(
   async (t) => {
     const databaseUrl = new URL(resolveTestDatabaseUrl());
     assert.equal(databaseUrl.port, '5433', 'Dedicated test database only');
-    const isolated = createIsolatedTestDatabase({ legacy: true });
+    const isolated = createIsolatedTestDatabase({ canonical: true });
     const db = isolated.dataSource;
     const evidenceRoot = await mkdtemp(join(tmpdir(), 'smartsite-runtime-replay-'));
     const children: { process: ChildProcess; exited: Promise<void> }[] = [];
@@ -210,7 +210,17 @@ test(
       externalId: adminName,
       name: 'Synthetic metadata Camera',
     });
-    const zone = await create(`/sites/${site.id}/zones`, {
+    const managerName = `replay-manager-${randomBytes(6).toString('hex')}`;
+    await create('/users', {
+      username: managerName,
+      displayName: 'Synthetic replay Site Manager',
+      temporaryPassword: reviewerInitial,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+    });
+    const managerToken = await login(managerName, reviewerInitial);
+    const createScoped = (route: string, body: unknown) =>
+      request(route, 201, { method: 'POST', body, token: managerToken });
+    const zone = await createScoped(`/sites/${site.id}/zones`, {
       code: 'REPLAY',
       name: 'Synthetic replay Zone',
       type: 'STANDARD',

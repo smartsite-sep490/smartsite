@@ -9,7 +9,9 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
@@ -42,11 +44,10 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     try {
       if (resources.app) await resources.app.close();
     } finally {
-      if (dataSource.isInitialized) await dataSource.destroy();
+      await isolated.dispose();
     }
   });
-  if (dataSource.isInitialized) await dataSource.destroy();
-  await dataSource.initialize();
+  await isolated.initialize();
   const environment = validateEnvironment({
     NODE_ENV: 'test',
     DATABASE_URL: process.env.TEST_DATABASE_URL,
@@ -70,10 +71,6 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   resources.app = app;
   await configureApplication(app);
   await app.listen(0, '127.0.0.1');
-  t.after(async () => {
-    await app.close();
-    if (dataSource.isInitialized) await dataSource.destroy();
-  });
   const url = await app.getUrl();
   const baseUrl = url.replace('127.0.0.1', 'localhost');
 

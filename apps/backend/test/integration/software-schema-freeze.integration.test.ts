@@ -3,14 +3,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { mkdtemp, readFile } from 'node:fs/promises';
-import { join, isAbsolute } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { withSoftwareSchemaFreeze } from '../../src/database/software-schema-freeze.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
+import { recoveryPostgresTools } from '../support/recovery-postgres-tools.js';
 
 test('software snapshot blocks owned writes, permits unrelated namespace writes, and releases after callback failure', async (t) => {
   const own = createIsolatedTestDatabase(),
@@ -94,13 +93,16 @@ test('software snapshot waits for a preceding writer then captures committed row
 test(
   'software freeze exports a snapshot accepted by an independent bounded PostgreSQL dump',
   {
-    skip: process.env.SMARTSITE_TEST_PG_BIN
-      ? false
-      : 'Explicit existing PostgreSQL client binaries required',
+    skip:
+      process.env.SMARTSITE_TEST_PG_BIN || process.env.SMARTSITE_TEST_PG_CONTAINER
+        ? false
+        : 'Explicit existing PostgreSQL client binaries required',
   },
   async (t) => {
-    const bin = process.env.SMARTSITE_TEST_PG_BIN;
-    assert.ok(bin && isAbsolute(bin));
+    const postgres = recoveryPostgresTools(
+      process.env.SMARTSITE_TEST_PG_BIN,
+      process.env.SMARTSITE_TEST_PG_CONTAINER,
+    );
     const own = createIsolatedTestDatabase();
     t.after(() => own.dispose());
     await own.initialize();
@@ -112,25 +114,33 @@ test(
     assert.equal(url.port, '5433');
     await withSoftwareSchemaFreeze(db, schema, async (snapshot) => {
       const file = join(root, 'database.dump');
-      await promisify(execFile)(
-        join(bin, process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump'),
-        ['--schema', schema, '--snapshot', snapshot.snapshotId, '--format=custom', '--file', file],
+      postgres(
+        'pg_dump',
+        [
+          '-h',
+          url.hostname,
+          '-p',
+          url.port,
+          '-U',
+          decodeURIComponent(url.username),
+          '-d',
+          'smartsite_test',
+          '--schema',
+          schema,
+          '--snapshot',
+          snapshot.snapshotId,
+          '--format=custom',
+          '--file',
+          file,
+        ],
         {
-          windowsHide: true,
-          timeout: 5000,
-          env: {
-            ...process.env,
-            PGHOST: url.hostname,
-            PGPORT: url.port,
-            PGUSER: decodeURIComponent(url.username),
-            PGPASSWORD: decodeURIComponent(url.password),
-            PGDATABASE: 'smartsite_test',
-          },
+          ...process.env,
+          PGPASSWORD: decodeURIComponent(url.password),
         },
       );
       const bytes = await readFile(file);
       assert.equal(bytes.subarray(0, 5).toString(), 'PGDMP');
-      assert.equal(snapshot.tables.find((row) => row.name === 'mf06_authority_source')?.rows, 15);
+      assert.equal(snapshot.tables.find((row) => row.name === 'mf06_authority_source')?.rows, 18);
     });
   },
 );

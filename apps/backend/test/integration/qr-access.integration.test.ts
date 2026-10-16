@@ -31,11 +31,12 @@ import {
   WorkerScheduleEntity,
   UserNotificationEntity,
 } from '../../src/database/entities/index.js';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 test('real PostgreSQL visitor approval, group counts, expiring QR, replay and worker fallback authorization', async () => {
-  await dataSource.initialize();
+  await isolated.initialize();
   const sites: [string, string, string] = [randomUUID(), randomUUID(), randomUUID()];
   const users: [string, string, string, string] = [
     randomUUID(),
@@ -669,40 +670,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       /unavailable/,
     );
   } finally {
-    await cleanupSiteAccess(dataSource, sites);
-    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.query(
-      'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1)) OR fallback_session_id IN (SELECT id FROM qr_fallback_session WHERE site_id = ANY($1))',
-      [sites],
-    );
-    await dataSource.query(
-      'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1))',
-      [sites],
-    );
-    const representatives = await dataSource.query<{ representative_visitor_id: string }[]>(
-      'SELECT representative_visitor_id FROM visitor_visit WHERE site_id = ANY($1)',
-      [sites],
-    );
-    await dataSource.query('DELETE FROM visitor_visit WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query('DELETE FROM visitor WHERE id = ANY($1)', [
-      representatives.map((v) => v.representative_visitor_id),
-    ]);
-    await dataSource.query('DELETE FROM qr_fallback_session WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query('DELETE FROM gate_access_log WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query('DELETE FROM worker_gate_permission WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query('DELETE FROM face_profile WHERE worker_id = $1', [workerId]);
-    await dataSource.query('DELETE FROM worker_site_zone_assignment WHERE worker_id = $1', [
-      workerId,
-    ]);
-    await dataSource.query('DELETE FROM worker WHERE id = $1', [workerId]);
-    await dataSource.query('DELETE FROM contractor_site_participation WHERE contractor_id = $1', [
-      contractorId,
-    ]);
-    await dataSource.query('DELETE FROM contractor WHERE id = $1', [contractorId]);
-    await dataSource.query('DELETE FROM app_user WHERE id = ANY($1)', [users]);
-    await dataSource.query('DELETE FROM site WHERE id = ANY($1)', [sites]);
-    await dataSource.destroy();
+    await isolated.dispose();
   }
 });

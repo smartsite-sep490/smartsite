@@ -13,7 +13,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 
 test(
-  'actual compiled main native app.close drains an admitted MAIN39 transaction before pool shutdown',
+  'actual compiled main native app.close drains an admitted MAIN56 transaction before pool shutdown',
   { timeout: 40_000 },
   async (t) => {
     const url = new URL(resolveTestDatabaseUrl());
@@ -166,7 +166,7 @@ test(
     assert.deepEqual(await control('READY'), {
       type: 'READY',
       entrypoint: 'main.ts',
-      registeredMigrations: 39,
+      registeredMigrations: 56,
       productionConfig: true,
     });
     const login = await request('/auth/login', 'POST', {
@@ -200,6 +200,27 @@ test(
     );
     assert.equal(siteResponse.status, 201);
     const site = await siteResponse.json();
+    const managerName = `drain-manager-${randomBytes(6).toString('hex')}`;
+    const managerResponse = await request(
+      '/users',
+      'POST',
+      {
+        username: managerName,
+        displayName: 'Synthetic drain Site Manager',
+        temporaryPassword: changed,
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+      },
+      token,
+    );
+    assert.equal(managerResponse.status, 201);
+    const managerLogin = await request('/auth/login', 'POST', {
+      username: managerName,
+      password: changed,
+      clientType: 'WEB',
+    });
+    assert.equal(managerLogin.status, 200);
+    token = (await managerLogin.json()).accessToken;
+    secrets.push(token);
     await held.connect();
     await held.startTransaction();
     await held.query('LOCK TABLE zone IN ACCESS EXCLUSIVE MODE');

@@ -50,7 +50,7 @@ test(
   'real HTTP ingestion, Workforce identity review and evidence remain scoped after restart',
   { timeout: 60_000 },
   async (t) => {
-    const isolated = createIsolatedTestDatabase({ legacy: true });
+    const isolated = createIsolatedTestDatabase({ canonical: true });
     const db = isolated.dataSource;
     const evidenceRoot = await mkdtemp(join(tmpdir(), 'smartsite-business-http-'));
     let app: NestExpressApplication | undefined;
@@ -133,7 +133,7 @@ test(
       return result.accessToken;
     };
     let admin = await login('business-admin', 'InitialAdmin123!');
-    await request('/sites', { token: admin, expected: 403 });
+    await request('/sites', { token: admin });
     await request('/auth/change-password', {
       method: 'POST',
       token: admin,
@@ -145,6 +145,13 @@ test(
       request<T>(route, { method: 'POST', token: admin, body, expected: 201 });
     const site = await create<SiteResponse>('/sites', { code: 'BIZ-A', name: 'Synthetic Site A' });
     const other = await create<SiteResponse>('/sites', { code: 'BIZ-B', name: 'Synthetic Site B' });
+    await create<AccountResponse>('/users', {
+      username: 'business-manager',
+      displayName: 'Synthetic Site Manager',
+      temporaryPassword: 'InitialManager123!',
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+    });
+    const manager = await login('business-manager', 'InitialManager123!');
     const reviewer = await create<AccountResponse>('/users', {
       username: 'business-safety',
       displayName: 'Synthetic Safety',
@@ -172,12 +179,17 @@ test(
       externalId: 'SYNTHETIC-CAM',
       name: 'Synthetic Camera',
     });
-    const zone = await create<ZoneResponse>(`/sites/${site.id}/zones`, {
-      code: 'BIZ-ZONE',
-      name: 'Synthetic Zone',
-      type: 'RESTRICTED',
-      restrictionPolicy: 'AUTHORIZATION_REQUIRED',
-      requiredPpe: ['HARD_HAT'],
+    const zone = await request<ZoneResponse>(`/sites/${site.id}/zones`, {
+      method: 'POST',
+      token: manager,
+      expected: 201,
+      body: {
+        code: 'BIZ-ZONE',
+        name: 'Synthetic Zone',
+        type: 'RESTRICTED',
+        restrictionPolicy: 'AUTHORIZATION_REQUIRED',
+        requiredPpe: ['HARD_HAT'],
+      },
     });
     const { region } = await create<RegionMutationResponse>(
       `/sites/${site.id}/cameras/${camera.id}/regions`,

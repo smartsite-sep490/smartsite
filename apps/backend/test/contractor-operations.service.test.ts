@@ -51,6 +51,15 @@ function dataSourceFor(
     onTransaction?: (isolation: string) => void;
   },
 ): DataSource {
+  const businessQuery = manager.query?.bind(manager);
+  Object.assign(manager, {
+    query: async (sql: string, params?: unknown[]) => {
+      // These domain doubles model Legacy24; keep compatibility reads out of business SQL counts.
+      if (sql.includes('c.relname=ANY($1::text[]) LIMIT 1')) return [];
+      if (businessQuery) return businessQuery(sql, params);
+      throw new Error(`Unexpected EntityManager.query: ${sql}`);
+    },
+  });
   return {
     transaction: async <T>(
       isolationOrWork: string | ((tx: EntityManager) => Promise<T>),
@@ -561,8 +570,7 @@ for (const scenario of [
         validUntil: scenario.until,
       }),
       (error: unknown) =>
-        error instanceof PublicHttpException &&
-        error.publicPayload.code === scenario.expectedCode,
+        error instanceof PublicHttpException && error.publicPayload.code === scenario.expectedCode,
     );
     if (scenario.expectedLookup) {
       assert.ok(
@@ -593,8 +601,7 @@ function domainReviewFixtureFor(options: {
     version: options.version ?? 1,
     status: options.status,
     validFrom: new Date(assignmentStart),
-    validUntil:
-      options.validUntil === null ? null : new Date(options.validUntil ?? assignmentEnd),
+    validUntil: options.validUntil === null ? null : new Date(options.validUntil ?? assignmentEnd),
     requestedByUserId: IDs.actor,
     safetyReviewedByUserId: null as string | null,
     siteManagerDecidedByUserId: null as string | null,
@@ -901,9 +908,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       site_id: role === UserRole.ADMIN ? null : IDs.site,
     },
   ];
-  const participations = options.participations ?? [
-    participation(assignmentStart, assignmentEnd),
-  ];
+  const participations = options.participations ?? [participation(assignmentStart, assignmentEnd)];
   const clockNow = new Date(fixedClockIso);
 
   const assignmentState = {
@@ -1076,7 +1081,8 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
         return [{ valid: Number.isFinite(from) && Number.isFinite(until) && until > from }];
       }
       if (
-        sql === 'SELECT contractor_id FROM worker WHERE id=$1 AND site_id=$2 AND is_active FOR SHARE'
+        sql ===
+        'SELECT contractor_id FROM worker WHERE id=$1 AND site_id=$2 AND is_active FOR SHARE'
       ) {
         observedTags.push('check:worker_for_share');
         const workerSite = options.workerSiteId ?? IDs.site;
@@ -1457,8 +1463,7 @@ for (const scenario of [
         harness.context,
       ),
       (error: unknown) =>
-        error instanceof PublicHttpException &&
-        error.publicPayload.code === scenario.expectedCode,
+        error instanceof PublicHttpException && error.publicPayload.code === scenario.expectedCode,
     );
     assert.ok(
       harness.observedTags.includes('journal:command_insert'),

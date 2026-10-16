@@ -32,7 +32,7 @@ test(
   },
 );
 test(
-  'production migration graph includes pinned current Main and four Safety slots without rewriting historical migrations',
+  'production migration graph includes pinned current Main, four Safety slots and additive team history without rewriting historical migrations',
   { skip: repository ? false : 'Explicit pinned source repository required' },
   () => {
     assert.ok(repository);
@@ -65,10 +65,11 @@ test(
       'Mf06MainAuthorityJournal1791590400002',
       'SafetyFaceProvenance1791590400003',
       'Mf06ImmutableAssessments1791590400004',
+      'Mf06TeamAuthorityHistory1792281600000',
     ];
     assert.deepEqual([...actual].sort(), [...expected].sort());
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
-    assert.equal(new Set(expected).size, names.length + 4);
+    assert.equal(new Set(expected).size, names.length + 5);
     assert.equal(registered.synchronize, false);
     assert.equal(registered.migrationsRun, false);
     const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');

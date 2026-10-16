@@ -218,7 +218,7 @@ test(
     let token: string;
     let cookie: string;
     await t.test(
-      'existing WEB login requires password change, revokes the old token, and issues secure cookie attributes',
+      'existing WEB login permits optional password change, revokes the old token on change, and issues secure cookie attributes',
       async () => {
         await request('/sites', 401);
         await request('/auth/login', 400, { method: 'POST', body: {} });
@@ -228,7 +228,7 @@ test(
         });
         const oldToken = first.data.accessToken;
         secrets.push(oldToken);
-        await request('/sites', 403, { token: oldToken });
+        await request('/sites', 200, { token: oldToken });
         await request('/auth/change-password', 204, {
           method: 'POST',
           token: oldToken,
@@ -267,9 +267,26 @@ test(
           token,
           body: { code: 'CAM', externalId: username, name: 'Synthetic metadata Camera' },
         });
-        const zone = await request(`/sites/${siteId}/zones`, 201, {
+        const managerName = `runtime-manager-${randomBytes(6).toString('hex')}`;
+        await request('/users', 201, {
           method: 'POST',
           token,
+          body: {
+            username: managerName,
+            displayName: 'Synthetic runtime Site Manager',
+            temporaryPassword: changedPassword,
+            roleAssignments: [{ role: 'SITE_MANAGER', siteId }],
+          },
+        });
+        const managerLogin = await request('/auth/login', 200, {
+          method: 'POST',
+          body: { username: managerName, password: changedPassword, clientType: 'WEB' },
+        });
+        const managerToken = managerLogin.data.accessToken as string;
+        secrets.push(managerToken);
+        const zone = await request(`/sites/${siteId}/zones`, 201, {
+          method: 'POST',
+          token: managerToken,
           body: {
             code: 'ZONE',
             name: 'Synthetic Zone',
@@ -296,7 +313,7 @@ test(
         await request(route, 409, { method: 'POST', token, body });
         await request(`/sites/${siteId}/zones/${zone.data.id}`, 200, {
           method: 'PATCH',
-          token,
+          token: managerToken,
           body: { name: 'Renamed runtime Zone' },
         });
         const stored = await db.query('SELECT name FROM zone WHERE id=$1 AND site_id=$2', [

@@ -2,33 +2,16 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
-import { ErdVisitorAccess1791504000000 } from '../../src/database/migrations/1791504000000-ErdVisitorAccess.js';
-import { QrAccess1791417600000 } from '../../src/database/migrations/1791417600000-QrAccess.js';
-import { ErdZonePermissions1791504000003 } from '../../src/database/migrations/1791504000003-ErdZonePermissions.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import { ZoneRestrictionPolicy } from '../../src/database/entities/enums.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 const service = new ZoneEntryAuthorizationService();
 const evaluatedAt = new Date('2026-10-11T12:00:00.000Z');
 before(async () => {
   await database.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    // Exact retained-main DDL, intentionally not registered on the unreconciled graph.
-    await new QrAccess1791417600000().up(runner);
-    await new ErdVisitorAccess1791504000000().up(runner);
-    await new ErdZonePermissions1791504000003().up(runner);
-    await runner.commitTransaction();
-  } catch (error) {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    throw error;
-  } finally {
-    await runner.release();
-  }
 });
 after(() => database.dispose());
 
@@ -64,9 +47,9 @@ async function fixture() {
     [participation, contractor, site],
   );
   await db.query(
-    `INSERT INTO worker_site_zone_assignment(id,worker_id,contractor_id,site_id,zone_ids,status,valid_from,valid_until,requested_by_user_id,site_contractor_id)
-    VALUES($1,$2,$3,$4,ARRAY[$5::uuid],'APPROVED','2026-10-11T01:00:00Z','2026-10-11T23:00:00Z',$6,$7)`,
-    [assignment, worker, contractor, site, zone, actor, participation],
+    `INSERT INTO worker_site_zone_assignment(id,worker_id,site_id,zone_ids,status,valid_from,valid_until,requested_by_user_id,site_contractor_id)
+    VALUES($1,$2,$3,ARRAY[$4::uuid],'APPROVED','2026-10-11T01:00:00Z','2026-10-11T23:00:00Z',$5,$6)`,
+    [assignment, worker, site, zone, actor, participation],
   );
   await db.query(
     `INSERT INTO contractor_zone_permission(id,site_contractor_id,zone_id,valid_from,valid_until,granted_by)

@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { IsNull } from 'typeorm';
-import source from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ScheduleAssignmentService } from '../../src/modules/workforce/scheduling/schedule-assignment.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { ScheduleChangeNotifications1791849600002 } from '../../src/database/migrations/1791849600002-ScheduleChangeNotifications.js';
@@ -32,8 +31,10 @@ import {
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const source = isolated.dataSource;
 test('team assignments: scope, finite recurrence, stale preview, concurrent retry, exceptions, protected attendance and rollback', async (t) => {
-  await source.initialize();
+  await isolated.initialize();
   const siteId = randomUUID(),
     contractorId = randomUUID(),
     repId = randomUUID(),
@@ -577,25 +578,6 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     await assert.rejects(service.list(rep, siteId, contractorId));
   } finally {
     t.mock.timers.reset();
-    await cleanupSiteAccess(source, [siteId]);
-    await source.getRepository(ScheduleAssignmentBatchEntity).delete({ siteId });
-    await source.getRepository(WorkerScheduleEntity).delete({ siteId });
-    await source.getRepository(ContractorTeamMembershipEntity).delete({ siteId });
-    await source.getRepository(ContractorTeamEntity).delete({ siteId });
-    await source.getRepository(ContractorShiftAssignmentEntity).delete({ siteId });
-    await source.getRepository(ShiftEntity).delete({ siteId });
-    await source.getRepository(ScheduleVersionEntity).delete({ siteId });
-    await source.getRepository(WorkerEntity).delete({ siteId });
-    await source.getRepository(ContractorRepresentativeAssignmentEntity).delete({ siteId });
-    await source.getRepository(ContractorSiteParticipationEntity).delete({ siteId });
-    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: repId });
-    await source.getRepository(AccessAuditEntity).delete({ siteId });
-    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: workerUserIds[0]! });
-    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: workerUserIds[1]! });
-    await source.getRepository(UserEntity).delete(repId);
-    await source.getRepository(UserEntity).delete(workerUserIds);
-    await source.getRepository(ContractorEntity).delete(contractorId);
-    await source.getRepository(SiteEntity).delete(siteId);
-    await source.destroy();
+    await isolated.dispose();
   }
 });

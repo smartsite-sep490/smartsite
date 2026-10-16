@@ -19,17 +19,15 @@ import { validateEnvironment } from '../../src/config/environment.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
-import { AuthSessionEntity } from '../../src/database/entities/index.js';
 import { DataSource, In } from 'typeorm';
 
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { StorageService } from '../../src/integrations/storage/storage.service.js';
 import { ConfigService } from '@nestjs/config';
 import {
   AiObservationEventEntity,
-  UserNotificationEntity,
   UserEntity,
   UserRole,
   UserRoleAssignmentEntity,
@@ -54,35 +52,12 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
-import dataSource from '../support/test-data-source.js';
-const fixtureSites: string[] = [],
-  fixtureUsers: string[] = [],
-  fixtureContractors: string[] = [];
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 const passwordHash = hashPassword('Mf08Test123!');
-after(async () => {
-  if (!dataSource.isInitialized) await dataSource.initialize();
-  // Dedicated ephemeral test DB only: TRUNCATE bypasses append-only history for fixture cleanup.
-  await dataSource.query(
-    'TRUNCATE safety_workflow_audit, safety_task, corrective_action_submission, corrective_action, safety_evidence, incident CASCADE',
-  );
-  await dataSource.getRepository(SafetyAlertEntity).delete({ siteId: In(fixtureSites) });
-  await dataSource.getRepository(AuthSessionEntity).delete({ userId: In(fixtureUsers) });
-  await dataSource.getRepository(UserRoleAssignmentEntity).delete({ userId: In(fixtureUsers) });
-  await dataSource
-    .getRepository(UserNotificationEntity)
-    .delete({ recipientUserId: In(fixtureUsers) });
-  await dataSource
-    .getRepository(ContractorRepresentativeAssignmentEntity)
-    .delete({ userId: In(fixtureUsers) });
-  await dataSource.getRepository(UserEntity).delete(fixtureUsers);
-  await dataSource.getRepository(WorkerEntity).delete({ siteId: In(fixtureSites) });
-  await dataSource
-    .getRepository(ContractorSiteParticipationEntity)
-    .delete({ siteId: In(fixtureSites) });
-  await dataSource.getRepository(ContractorEntity).delete(fixtureContractors);
-  await dataSource.getRepository(SiteEntity).delete(fixtureSites);
-  await dataSource.destroy();
-});
+before(() => isolated.initialize());
+after(() => isolated.dispose());
 const failure = (code: string) => (error: unknown) =>
   error instanceof PublicHttpException && error.publicPayload.code === code;
 
@@ -90,7 +65,6 @@ async function fixture() {
   if (!dataSource.isInitialized) await dataSource.initialize();
   const site = randomUUID(),
     other = randomUUID();
-  fixtureSites.push(site, other);
   await dataSource.getRepository(SiteEntity).save([
     { id: site, code: site, name: 'Synthetic A' },
     { id: other, code: other, name: 'Synthetic B' },
@@ -109,7 +83,6 @@ async function fixture() {
   ] as const) {
     const id = randomUUID();
     ids[name] = id;
-    fixtureUsers.push(id);
     await dataSource.getRepository(UserEntity).save({
       id,
       username: id,
@@ -125,7 +98,6 @@ async function fixture() {
   }
   const contractor = randomUUID(),
     otherContractor = randomUUID();
-  fixtureContractors.push(contractor, otherContractor);
   await dataSource.getRepository(ContractorEntity).save([
     { id: contractor, code: contractor, name: 'Synthetic contractor A', isActive: true },
     { id: otherContractor, code: otherContractor, name: 'Synthetic contractor B', isActive: true },
@@ -1141,7 +1113,7 @@ test('Legacy closed Incident can confirm responsibility without rewriting closed
 });
 
 test('Incident source subjects use verified identity, reject mixed contractors and preserve candidates', async () => {
-  const f = await observationIdentityFixture();
+  const f = await observationIdentityFixture(dataSource);
   const contractors = [randomUUID(), randomUUID()];
   const actor = f.actorIds[0]!;
   try {

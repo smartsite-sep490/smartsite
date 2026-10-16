@@ -23,16 +23,9 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
         Number((a.name ?? a.constructor.name).slice(-13)) -
         Number((b.name ?? b.constructor.name).slice(-13)),
     );
-    const baseline = migrations.filter(
-      (m) =>
-        !(m.name ?? m.constructor.name).startsWith('Erd') &&
-        // Team Zone permissions depend on ERD Contractor permissions; they are not a legacy baseline.
-        !(m.name ?? m.constructor.name).startsWith('TeamZonePermissions') &&
-        !(m.name ?? m.constructor.name).startsWith('ContractorZoneRegrant') &&
-        !(m.name ?? m.constructor.name).startsWith('SingleTeamZone') &&
-        m.name !== 'ShiftBreak1791763200001' &&
-        !(m.name ?? m.constructor.name).startsWith('Mf03'),
-    );
+    const boundary = migrations.findIndex((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
+    assert.ok(boundary > 0);
+    const baseline = migrations.slice(0, boundary);
     const access = migrations.filter((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
     for (const migration of baseline) await migration.up(runner);
     for (const migration of access) await migration.up(runner);

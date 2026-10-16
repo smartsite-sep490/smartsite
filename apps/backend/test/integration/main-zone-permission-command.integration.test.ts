@@ -4,10 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import type { DataSource } from 'typeorm';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-import { QrAccess1791417600000 } from '../../src/database/migrations/1791417600000-QrAccess.js';
-import { ErdVisitorAccess1791504000000 } from '../../src/database/migrations/1791504000000-ErdVisitorAccess.js';
-import { ErdZonePermissions1791504000003 } from '../../src/database/migrations/1791504000003-ErdZonePermissions.js';
-import { Mf06MainAuthorityJournal1791590400002 } from '../../src/database/migrations/1791590400002-Mf06MainAuthorityJournal.js';
 
 interface Permission {
   id: string;
@@ -35,7 +31,7 @@ interface Writer {
   revokeWorker(input: unknown): Promise<Result>;
 }
 let WriterClass: (new (source: DataSource) => Writer) | undefined;
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   try {
@@ -49,31 +45,6 @@ before(async () => {
   }
   if (!WriterClass) return;
   await database.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    await new QrAccess1791417600000().up(runner);
-    await new ErdVisitorAccess1791504000000().up(runner);
-    const gate = await import(
-      new URL('../../src/database/migrations/1791504000001-ErdGateFlow.js', import.meta.url).href
-    );
-    await new gate.ErdGateFlow1791504000001().up(runner);
-    await new ErdZonePermissions1791504000003().up(runner);
-    const audit = await import(
-      new URL('../../src/database/migrations/1791504000004-ErdAccessAudit.js', import.meta.url).href
-    );
-    const policy = await import(
-      new URL('../../src/database/migrations/1791504000006-ErdAccessPolicy.js', import.meta.url)
-        .href
-    );
-    await new audit.ErdAccessAudit1791504000004().up(runner);
-    await new policy.ErdAccessPolicy1791504000006().up(runner);
-    await new Mf06MainAuthorityJournal1791590400002().up(runner);
-    await runner.commitTransaction();
-  } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    await runner.release();
-  }
 });
 after(async () => {
   await database.dispose();

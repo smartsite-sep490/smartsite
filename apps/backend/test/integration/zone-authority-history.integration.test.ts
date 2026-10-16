@@ -1,8 +1,10 @@
+import { LEGACY_ENTITIES } from '../support/legacy24/data-source.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { DataSource, type MigrationInterface } from 'typeorm';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
+import { LEGACY_TEST_MIGRATIONS } from '../support/legacy-test-migrations.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 
 const migrationName = 'ZoneAuthorityHistory1791417600000';
@@ -14,7 +16,11 @@ async function isolated<T>(
   run: (db: DataSource, migrations: MigrationInterface[]) => Promise<T>,
 ): Promise<T> {
   const schema = `zone_authority_${randomUUID().replaceAll('-', '')}`;
-  const options = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
+  const options = {
+    ...buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() }),
+    migrations: [...LEGACY_TEST_MIGRATIONS],
+    entities: [...LEGACY_ENTITIES],
+  };
   if (options.type !== 'postgres') throw new Error('Dedicated PostgreSQL required');
   const control = new DataSource(options);
   const db = new DataSource({
