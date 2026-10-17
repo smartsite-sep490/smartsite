@@ -67,7 +67,7 @@ function recoveryScenario(main37 = false, linux = false) {
       const image = JSON.parse(docker(['image', 'inspect', linuxImage!, '--format', '{{json .}}']));
       assert.equal(image.Id, linuxImage);
       assert.equal(image.Config.User, 'node');
-      assert.deepEqual(image.Config.Cmd, ['node', 'qualified-dist/main.js']);
+      assert.deepEqual(image.Config.Cmd, ['node', 'release-dist/main.js']);
     }
     const sourceMedia = join(root, 'source-media');
     const backupMedia = join(root, 'backup-media');
@@ -122,7 +122,10 @@ function recoveryScenario(main37 = false, linux = false) {
     });
     await isolated.initialize();
     if (linux)
-      assert.equal(Number((await db.query('SELECT count(*) AS n FROM migrations'))[0].n), 39);
+      assert.equal(
+        Number((await db.query('SELECT count(*) AS n FROM migrations'))[0].n),
+        db.migrations.length,
+      );
     let missingRuntimeMigrations: string[] = [];
     if (main37) {
       assert.equal(
@@ -312,6 +315,8 @@ function recoveryScenario(main37 = false, linux = false) {
           '128',
           '--memory',
           '384m',
+          '--cpus',
+          '1',
           '--stop-timeout',
           '45',
           '--env-file',
@@ -370,7 +375,7 @@ function recoveryScenario(main37 = false, linux = false) {
       }
       throw new Error('Actual main liveness/readiness-boundary deadline exceeded');
     }
-    const first = await start(sourceMedia);
+    let first = await start(sourceMedia);
     const login = async (password: string) => {
       const result = await (
         await request('/auth/login', 200, { username, password, clientType: 'WEB' })
@@ -536,6 +541,35 @@ function recoveryScenario(main37 = false, linux = false) {
         }
       | undefined;
     if (linux) {
+      // Separate account provisioning from the recovery journey without changing login throttling.
+      await stop(first);
+      first = await start(sourceMedia);
+      const contractor = await create(`/sites/${site.id}/contractors`, {
+        code: username,
+        name: 'Synthetic recovery Contractor',
+      });
+      await create(
+        `/contractors/${contractor.id}/participations`,
+        { siteId: site.id, validFrom: '2020-01-01T00:00:00Z', validUntil: null },
+        managerToken,
+      );
+      const representativeUsername = `${username}-representative`;
+      await create(
+        `/sites/${site.id}/contractors/${contractor.id}/representative-accounts`,
+        {
+          username: representativeUsername,
+          displayName: 'Synthetic recovery Representative',
+          temporaryPassword: initial,
+        },
+        managerToken,
+      );
+      const representativeLogin = await request('/auth/login', 200, {
+        username: representativeUsername,
+        password: initial,
+        clientType: 'WEB',
+      });
+      const representativeToken = (await representativeLogin.json()).accessToken;
+      secrets.push(representativeToken);
       const safetyUsername = `${username}-safety`;
       await create('/users', {
         username: safetyUsername,
@@ -566,10 +600,15 @@ function recoveryScenario(main37 = false, linux = false) {
       assert.ok(cookie, 'WEB session must provide its refresh cookie');
       secrets.push(cookie);
       secrets.push(safetyToken);
-      const worker = await create(`/sites/${site.id}/workers`, {
-        externalId: 'SYNTHETIC-RESTORE-WORKER',
-        displayName: 'Synthetic manual reference only',
-      });
+      const worker = await create(
+        `/sites/${site.id}/workers`,
+        {
+          contractorId: contractor.id,
+          externalId: 'SYNTHETIC-RESTORE-WORKER',
+          displayName: 'Synthetic manual reference only',
+        },
+        representativeToken,
+      );
       const event = references[0]!;
       const route = `/sites/${site.id}/safety-alerts/${event.alertId}/detections/${event.eventId}/identity-subjects/0/decisions`;
       const command = {
@@ -1007,7 +1046,7 @@ test(
   recoveryScenario(true),
 );
 test(
-  'owned Linux canonical MAIN39 DB and all evidence files restore into actual production main',
+  'owned Linux canonical runtime graph DB and all evidence files restore into actual production main',
   {
     timeout: 180_000,
     skip:

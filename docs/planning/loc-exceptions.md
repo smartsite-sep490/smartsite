@@ -180,3 +180,16 @@ nanosecond, scope, cancellation and record-hiding checks are unchanged. Existing
 locale tests cover every reason and language switching without another request.
 Owner: Root; independent source review: Agy p8. Extract the dialog's presentation
 before adding another feature; this exception does not increase the size target.
+
+## Current Linux recovery fixture compatibility, 17 October
+
+Root permits the existing operational recovery integration fixture to grow from
+1019 to1058 lines only to use Main's actual Contractor/Representative Worker
+provisioning chain, retain production login throttling, and pin the qualified
+fresh artifact entrypoint. The registered migration count follows the canonical
+fixture; the guarded runner separately verifies the61-migration image. No
+restore, history, private-media, role, replay or integrity assertions are removed.
+The actual current-image Linux opt-in passes with all three owned SIGTERM exits0.
+Owner: Root; Agy p8 supplied bounded static review, not execution acceptance.
+Abnormal process exit retains its schema for investigation. Extract actor setup
+before adding any new scenario; this exception does not raise the size limit.
