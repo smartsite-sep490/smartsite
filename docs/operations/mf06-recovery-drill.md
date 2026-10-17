@@ -6,12 +6,13 @@ The configuration-only website state helper deliberately refuses nonempty busine
 
 ## Profiles and prerequisites
 
-The Backend integration test `test/integration/operational-recovery.integration.test.ts` has two profiles:
+The Backend integration test `test/integration/operational-recovery.integration.test.ts` has three explicitly selected scenarios:
 
-- The canonical source-registry profile uses approved MAIN35 plus the four reserved Safety slots (39), including completed synthetic MF06 history and journal/consent storage.
+- The canonical source-registry profile uses the current runtime graph: 61 migrations on Main `0dd7d27` plus the integrated Safety work. It includes completed synthetic MF06 history and journal/consent storage. The 17 October native Windows drill restored 90 fixture tables and two synthetic evidence files; these counts describe that fixture, not every deployed database.
 - The opt-in MAIN profile loads the exact 35 migrations from approved commit `2e98619ac94be775ef43f4cb3076f00a59b88df1`, then request migration0001 and immutable assessment migration0004. The helper compares every snapshot source with Git and every compiled module with a fresh deterministic transpilation before importing it. This test-only list never changes production registration.
+- The Linux scenario requires an explicitly qualified image digest. Its historical image/39-migration assumptions and Worker-creation actor need compatibility review before qualification against current Main. A native Windows result does not cover this branch.
 
-Both profiles require `TEST_DATABASE_URL` for the dedicated loopback `smartsite_test` user/database on port5433, and `SMARTSITE_TEST_PG_BIN` pointing to an existing PostgreSQL client binary directory. Do not put credentials in commands, committed env files or reports. The MAIN profile additionally requires `SMARTSITE_TEST_SOURCE_REPO` and `SMARTSITE_TEST_MAIN_SNAPSHOT`, both absolute paths. Missing explicit inputs produce a skipped scenario, not passing recovery evidence.
+Native scenarios require `TEST_DATABASE_URL` for the dedicated loopback `smartsite_test` user/database on port5433, and `SMARTSITE_TEST_PG_BIN` pointing to an existing PostgreSQL client binary directory. Do not put credentials in commands, committed env files or reports. The MAIN profile additionally requires `SMARTSITE_TEST_SOURCE_REPO` and `SMARTSITE_TEST_MAIN_SNAPSHOT`, both absolute paths. Linux additionally requires `SMARTSITE_TEST_LINUX_RECOVERY_IMAGE`. Missing explicit inputs produce a skipped scenario, not passing recovery evidence.
 
 Compile tests into a fresh exclusive output, with the existing installed workspace dependencies resolvable from that output. Set `TEMP`/`TMP` to the approved task data directory on D. Never overwrite a running website's frozen Backend build or reuse another attempt's outputs. Run the compiled integration file with Node's test runner and retain the command, exit status and unredacted-secret-free result artifacts.
 
@@ -30,7 +31,9 @@ Compile tests into a fresh exclusive output, with the existing installed workspa
 
 ## Explicit readiness boundary
 
-The canonical runtime registers39 migrations. The retained MAIN37 predecessor lacks `Mf06MainAuthorityJournal1791590400002` and `SafetyFaceProvenance1791590400003`; its recovery scenario explicitly requires liveness200 and readiness503 before and after restore, with that exact difference recorded. The canonical MAIN39 recovery scenario requires readiness200. Older source24 results belong to their original source commit, not this registry.
+The current canonical runtime registers61 migrations and its completed native drill requires readiness200 before and after restore. The historical MAIN37 scenario was written for the original39-migration runtime, where its only missing migrations were `Mf06MainAuthorityJournal1791590400002` and `SafetyFaceProvenance1791590400003`. Its exact-two assertion and mutation setup are not current61 qualification; this scenario remains open until its historical fixture/runtime boundary is reconciled. Do not change the production registry or mark it passed from the native canonical result.
+
+Separately, the 17 October `canonical-main-migrations` MAIN35 opt-in actually upgraded a populated approved35 snapshot to61, retaining prior data and DENY while leaving consent and authority epoch unadopted. That proves the tested upgrade boundary, not MAIN37 backup/restore or production disaster recovery. Older source24/39 results retain their original source scope.
 
 This negative boundary does not qualify a production MAIN rollout. Do not stamp a missing migration, bypass readiness or register the legacy history on MAIN merely to make a probe pass. The canonical graph preserves all approved MAIN migration bodies and applies additive approved Safety migrations; existing legacy history remains preserved when upgrading a previously migrated database. Migration readiness is separate from writer closure, a trusted authority epoch and deployment acceptance.
 
