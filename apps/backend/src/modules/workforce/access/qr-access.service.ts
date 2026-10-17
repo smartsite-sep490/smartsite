@@ -996,23 +996,36 @@ export class QrAccessService {
   ): Promise<QrPassResponse> {
     requireSiteRole(actor, siteId, [UserRole.WORKER], false);
     const value = command(IssueWorkerQrCommand, input);
+    if (
+      (!value.direction && !value.fallbackSessionId) ||
+      (value.direction && value.fallbackSessionId)
+    )
+      invalid('Choose a passage direction');
     return this.source.transaction(async (manager) => {
-      const session = await manager.getRepository(QrFallbackSessionEntity).findOne({
-        where: { id: value.fallbackSessionId, siteId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!session || session.consumedAt || session.expiresAt.getTime() <= Date.now())
+      const session = value.fallbackSessionId
+        ? await manager.getRepository(QrFallbackSessionEntity).findOne({
+            where: { id: value.fallbackSessionId, siteId },
+            lock: { mode: 'pessimistic_write' },
+          })
+        : null;
+      if (
+        value.fallbackSessionId &&
+        (!session || session.consumedAt || session.expiresAt.getTime() <= Date.now())
+      )
         conflict('Fallback session is unavailable or expired');
+      const direction = session?.direction ?? value.direction!;
       const worker = await manager.getRepository(WorkerEntity).findOneBy({
         siteId,
         userId: actor.id,
-        ...(session.direction === 'IN' ? { isActive: true } : {}),
+        ...(direction === 'IN' ? { isActive: true } : {}),
       });
       if (!worker) forbidden('No active worker linked to this account at this site');
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`worker-qr:${worker.id}`]);
       return this.issue(
         manager,
-        { workerId: worker.id, fallbackSessionId: session.id },
-        session.expiresAt,
+        { workerId: worker.id, ...(session ? { fallbackSessionId: session.id } : {}) },
+        session?.expiresAt ?? expiresInFiveMinutes(),
+        { siteId, direction },
       );
     });
   }
@@ -1034,7 +1047,13 @@ export class QrAccessService {
     const bound =
       context ?? (fallback ? { siteId: fallback.siteId, direction: fallback.direction } : null);
     if (!bound) conflict('QR requires a site and direction');
-    const token = `SSQ-${randomBytes(32).toString('hex')}`;
+    let token: string;
+    do {
+      token = subject.workerId ? newVisitorCode() : `SSQ-${randomBytes(32).toString('hex')}`;
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `qr-credential:${hash(token)}`,
+      ]);
+    } while (await manager.getRepository(QrCredentialEntity).existsBy({ tokenHash: hash(token) }));
     await manager.getRepository(QrCredentialEntity).save({
       id: randomUUID(),
       tokenHash: hash(token),
@@ -1357,11 +1376,19 @@ export class QrAccessService {
       const subjectCredential = await manager
         .getRepository(QrCredentialEntity)
         .findOneBy({ tokenHash: hash(value.token) });
-      if (!subjectCredential?.workerId || !subjectCredential.fallbackSessionId)
-        invalid('A worker QR is required');
+      if (!subjectCredential?.workerId) invalid('A worker QR is required');
+      if (
+        value.fallbackSessionId &&
+        subjectCredential.fallbackSessionId &&
+        value.fallbackSessionId !== subjectCredential.fallbackSessionId
+      )
+        forbidden('QR does not belong to this gate fallback session');
+      const fallbackSessionId = subjectCredential.fallbackSessionId ?? value.fallbackSessionId;
+      if (!fallbackSessionId)
+        conflict('Security must open a gate fallback session before verifying the code');
       const session = await manager.getRepository(QrFallbackSessionEntity).findOne({
         where: {
-          id: subjectCredential.fallbackSessionId,
+          id: fallbackSessionId,
           siteId,
           gateId,
           operatorUserId: actor.id,
@@ -1462,6 +1489,7 @@ export class QrAccessService {
       credential.requestHash = fingerprint;
       credential.result = result;
       session.consumedAt = now;
+      credential.fallbackSessionId = session.id;
       await manager.getRepository(QrCredentialEntity).save(credential);
       await manager.getRepository(QrFallbackSessionEntity).save(session);
       return result;

@@ -107,11 +107,13 @@ Copy the Backend example without replacing an existing configuration, start Post
 
 ```sh
 node -e "const fs=require('node:fs'); if (!fs.existsSync('apps/backend/.env')) fs.copyFileSync('apps/backend/.env.example','apps/backend/.env')"
-docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60
+pnpm dev:db
 pnpm --filter @smartsite/backend db:migrate:run
 ```
 
 Start the development applications:
+
+`pnpm dev:db` starts only the local PostgreSQL service and requires Docker Desktop to be running. It reuses the existing development volume and does not build application images.
 
 ```sh
 pnpm dev
@@ -269,7 +271,7 @@ use the same encryption key and compatible model. Losing/changing the key requir
 
 See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instructions.
 
-CI currently verifies Android and iOS JavaScript exports. Emulator, simulator, and physical-device validation remain separate steps.
+Mobile now connects Worker and Contractor Representative authentication, scoped schedules/attendance/requests, Worker onboarding/teams/Zone permissions, notifications and assigned safety work to the shared Backend APIs. See the Mobile guide for the exact supported operations and permission boundaries. Automated checks include mobile session/workflow tests and Android/iOS JavaScript exports. Emulator, simulator, and physical-device validation remain separate steps.
 
 ## Environment Configuration
 

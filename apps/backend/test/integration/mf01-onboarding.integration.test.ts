@@ -857,7 +857,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       },
     );
     await t.test(
-      'the linked Worker can start their own enrollment and expired consent cannot be used',
+      'the linked Worker cannot enroll themselves or manage their face profile',
       async () => {
         await dataSource.getRepository(WorkerEntity).update(worker.id, { userId: workerAccountId });
         const workerActor = {
@@ -865,20 +865,48 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
           mustChangePassword: false,
           roleAssignments: [{ role: UserRole.WORKER, siteId }],
         };
-        const ownSession = await enrollment.start(workerActor, worker.id, {
+        await assert.rejects(
+          enrollment.start(workerActor, worker.id, {
+            consentVersion: 'synthetic-v3',
+          }),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.getProfile(workerActor, worker.id),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.revokeProfile(workerActor, worker.id),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.revokeProfile(workerActor, worker.id, true),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.assessSampleQuality(workerActor, worker.id, sample, 'front'),
+          publicError('FORBIDDEN'),
+        );
+        assert.equal((await enrollment.getProfile(representative, worker.id)).id, profile.id);
+      },
+    );
+    await t.test(
+      'expired consent cannot be used in a representative enrollment session',
+      async () => {
+        const supervisedSession = await enrollment.start(representative, worker.id, {
           consentVersion: 'synthetic-v3',
         });
         await dataSource
           .getRepository(FaceEnrollmentSessionEntity)
-          .update(ownSession.id, { expiresAt: new Date(Date.now() - 60_000) });
+          .update(supervisedSession.id, { expiresAt: new Date(Date.now() - 60_000) });
         await assert.rejects(
-          enrollment.confirmConsent(ownSession.id, {
-            consentToken: ownSession.consentToken,
+          enrollment.confirmConsent(supervisedSession.id, {
+            consentToken: supervisedSession.consentToken,
             workerConfirmed: true,
           }),
           /unavailable/,
         );
-        await enrollment.cancel(workerActor, ownSession.id);
+        await enrollment.cancel(representative, supervisedSession.id);
       },
     );
 

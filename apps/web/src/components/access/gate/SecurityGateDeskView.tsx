@@ -11,7 +11,7 @@ import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@sm
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import type {
   QrFallbackResponse,
-  VerifyQrCommand,
+  WorkerQrVerificationCommand,
   AccessAttemptResponse,
   GateEventResponse,
 } from '@smartsite/contracts';
@@ -52,7 +52,7 @@ export interface GateDeskEventRecord {
 }
 
 export interface SecurityGateDeskViewProps {
-  canManualVerify?: boolean;
+  isSecurityOfficer?: boolean;
   apiUrl: string;
   token?: string;
   sessionScope: string;
@@ -95,7 +95,7 @@ function getGateFaceMessage(reasonCode: string): string {
 }
 
 export function SecurityGateDeskView({
-  canManualVerify = false,
+  isSecurityOfficer = false,
   apiUrl,
   token,
   sessionScope,
@@ -144,8 +144,6 @@ export function SecurityGateDeskView({
   const [repeatNotice, setRepeatNotice] = useState('');
   const [separatePassage, setSeparatePassage] = useState(false);
   const [confirmedEvent, setConfirmedEvent] = useState<GateEventResponse | null>(null);
-  const [manualWorkerId, setManualWorkerId] = useState('');
-  const [manualIdentityConfirmed, setManualIdentityConfirmed] = useState(false);
   const handleNoScheduleDenial = useCallback(() => {
     setCurrentAttempt((attempt) =>
       attempt ? { ...attempt, status: 'DENIED', scheduleStatus: 'NO_SCHEDULE' } : null,
@@ -161,50 +159,6 @@ export function SecurityGateDeskView({
     setRepeatNotice('');
     setSeparatePassage(false);
   }, []);
-  const manualWorkers = useQuery({
-    queryKey: ['access-control', apiUrl, sessionScope, selectedSiteId, 'manual-worker-choices'],
-    enabled: canManualVerify && !!token && !!selectedSiteId,
-    queryFn: () => client.listWorkers(token!, selectedSiteId, { limit: 100 }),
-  });
-  const manualRequest = useRef<{ fingerprint: string; id: string } | null>(null);
-  const manual = useMutation({
-    mutationFn: () => {
-      const fingerprint = JSON.stringify([
-        selectedSiteId,
-        selectedGateId,
-        direction,
-        manualWorkerId,
-        reviewNote,
-      ]);
-      if (manualRequest.current?.fingerprint !== fingerprint)
-        manualRequest.current = { fingerprint, id: crypto.randomUUID() };
-      return client.manuallyVerifyWorker(token!, selectedSiteId, selectedGateId, {
-        requestId: manualRequest.current.id,
-        workerId: manualWorkerId,
-        direction,
-        identityConfirmed: true,
-        reviewNote: reviewNote.trim(),
-      });
-    },
-    onSuccess: (attempt) => {
-      const worker = manualWorkers.data?.items.find((w) => w.id === manualWorkerId);
-      setCurrentAttempt(attempt);
-      setLastDecision(null);
-      setCandidateWorker(
-        worker
-          ? {
-              id: worker.id,
-              userId: worker.userId ?? null,
-              username: '',
-              externalId: worker.externalId,
-              displayName: worker.displayName,
-              contractorName: '',
-              assignmentStatus: attempt.status,
-            }
-          : null,
-      );
-    },
-  });
   const passageKey = useRef<{ attemptId: string; idempotencyKey: string } | null>(null);
   const passage = useMutation({
     mutationFn: () => {
@@ -261,7 +215,7 @@ export function SecurityGateDeskView({
   const qrResultMessage = qrResult
     ? `${localizedLabel(qrResult.authorization)}: ${qrResult.worker.displayName} · ${getSafeReasonMessage(qrResult.reasonCode)}`
     : '';
-  const qrCommand = useRef<VerifyQrCommand | null>(null);
+  const qrCommand = useRef<WorkerQrVerificationCommand | null>(null);
   const fallbackMutation = useMutation({
     mutationFn: () =>
       client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction),
@@ -271,7 +225,7 @@ export function SecurityGateDeskView({
     },
   });
   const qrVerification = useMutation({
-    mutationFn: (input: VerifyQrCommand) =>
+    mutationFn: (input: WorkerQrVerificationCommand) =>
       client.verifyWorkerQr(token!, selectedSiteId, selectedGateId, input),
     onSuccess: (r) => {
       setRepeatNotice('');
@@ -560,12 +514,16 @@ export function SecurityGateDeskView({
     if (!fallback || !token) return;
     const old = qrCommand.current;
     const input =
-      old && old.token === qrCodeInput.trim() && old.direction === fallback.direction
+      old &&
+      old.token === qrCodeInput.trim() &&
+      old.direction === fallback.direction &&
+      old.fallbackSessionId === fallback.id
         ? old
         : {
             token: qrCodeInput.trim(),
             direction: fallback.direction,
             requestId: crypto.randomUUID(),
+            fallbackSessionId: fallback.id,
           };
     qrCommand.current = input;
     setQrResult(null);
@@ -1068,14 +1026,6 @@ export function SecurityGateDeskView({
                       {tr('common.direction_value', { value1: localizedLabel(fallback.direction) })}
                     </span>
                   </div>
-                  <p className="text-xs text-blue-800">
-                    {tr(
-                      'security_gate_desk_view.provide_this_session_code_to_the_worker_to_enter_in_my_qr_pass',
-                    )}
-                  </p>
-                  <div className="rounded-xl border border-blue-200 bg-white p-2.5 font-mono text-xs text-blue-950 font-bold break-all select-all shadow-inner">
-                    {fallback.id}
-                  </div>
                   <p className="text-[11px] text-blue-700">
                     {tr('common.expires')}{' '}
                     <span className="font-semibold">
@@ -1119,7 +1069,9 @@ export function SecurityGateDeskView({
                 <input
                   id="qr-code-input"
                   type="text"
-                  placeholder={tr('common.ssq')}
+                  placeholder={tr('security_gate_desk_view.worker_code_example')}
+                  autoCapitalize="characters"
+                  autoComplete="off"
                   disabled={qrProcessing}
                   value={qrCodeInput}
                   onChange={(e) => setQrCodeInput(e.target.value)}
@@ -1151,66 +1103,6 @@ export function SecurityGateDeskView({
         </div>
       )}
 
-      {canManualVerify && (
-        <section className="space-y-3 rounded-xl border bg-white p-5">
-          <h3 className="font-semibold">{tr('common.security_manual_verification')}</h3>
-          <label className="block text-xs">
-            {tr('common.worker_profile')}
-            <select
-              value={manualWorkerId}
-              onChange={(e) => {
-                setManualWorkerId(e.target.value);
-                setManualIdentityConfirmed(false);
-              }}
-              className="mt-1 block w-full rounded border p-2"
-            >
-              <option value="">{tr('common.select_worker')}</option>
-              {manualWorkers.data?.items.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.displayName} · {w.externalId}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-xs">
-            {tr('common.verification_reason')}
-            <input
-              className="mt-1 block w-full rounded border p-2"
-              value={reviewNote}
-              maxLength={1000}
-              onChange={(e) => setReviewNote(e.target.value)}
-            />
-          </label>
-          <label className="block text-xs">
-            <input
-              type="checkbox"
-              checked={manualIdentityConfirmed}
-              onChange={(e) => setManualIdentityConfirmed(e.target.checked)}
-            />{' '}
-            {tr('security_gate_desk_view.i_physically_verified_this_worker_apos_s_identity')}
-          </label>
-          <button
-            className="rounded border px-4 py-2 text-sm disabled:opacity-50"
-            disabled={
-              !manualIdentityConfirmed || !manualWorkerId || !reviewNote.trim() || manual.isPending
-            }
-            onClick={() => manual.mutate()}
-          >
-            {tr('common.verify_worker_manually')}
-          </button>
-          {manualWorkers.error && <p role="alert">{localizedError(manualWorkers.error.message)}</p>}
-          {manual.error && <p role="alert">{localizedError(manual.error.message)}</p>}
-          {manual.data?.status === 'DENIED' && (
-            <p role="alert">
-              {manual.data.scheduleStatus === 'NO_SCHEDULE'
-                ? getSafeReasonMessage('NO_SCHEDULE')
-                : tr(
-                    'security_gate_desk_view.worker_identity_verified_site_entry_permission_was_denied',
-                  )}
-            </p>
-          )}
-        </section>
-      )}
       {currentAttempt &&
         ['READY', 'PENDING'].includes(currentAttempt.status) &&
         candidateWorker && (
@@ -1250,7 +1142,7 @@ export function SecurityGateDeskView({
                   (!separatePassage || reviewNote.trim().length < 5)) ||
                 (direction === 'IN' &&
                   currentAttempt.scheduleStatus !== 'SCHEDULED' &&
-                  !canManualVerify)
+                  !isSecurityOfficer)
               }
               onClick={() => passage.mutate()}
             >
@@ -1261,7 +1153,7 @@ export function SecurityGateDeskView({
                 passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED')) && (
               <div className="space-y-2">
                 <p role="status">{localizedError(repeatNotice || passage.error?.message)}</p>
-                {canManualVerify && (
+                {isSecurityOfficer && (
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -1281,7 +1173,7 @@ export function SecurityGateDeskView({
             {passage.error && <p role="alert">{localizedError(passage.error.message)}</p>}
             {direction === 'IN' &&
               currentAttempt.scheduleStatus !== 'SCHEDULED' &&
-              !canManualVerify && (
+              !isSecurityOfficer && (
                 <p className="text-sm text-amber-700">
                   {tr(
                     'security_gate_desk_view.security_must_verify_and_confirm_entry_outside_a_scheduled_shift',
@@ -1291,7 +1183,7 @@ export function SecurityGateDeskView({
           </section>
         )}
       {passage.isSuccess && <p role="status">{tr('common.actual_passage_recorded')}</p>}
-      {confirmedEvent && canManualVerify && (
+      {confirmedEvent && isSecurityOfficer && (
         <section className="space-y-3 rounded-xl border bg-white p-5">
           <p className="text-sm">
             {tr(

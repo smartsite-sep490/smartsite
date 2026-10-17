@@ -9,11 +9,36 @@ import {
   RegisterVisitCommand,
   VerifyVisitorQrCommand,
   VerifyWorkerQrCommand,
+  IssueWorkerQrCommand,
   CameraFallbackCommand,
   ConfirmPassageCommand,
 } from '../src/modules/workforce/access/qr-access.commands.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
 
+test('worker issues its own code by direction and Security accepts short or legacy credentials', () => {
+  const requestId = randomUUID();
+  assert.equal(command(IssueWorkerQrCommand, { direction: 'IN' }).direction, 'IN');
+  assert.equal(command(IssueWorkerQrCommand, { direction: 'OUT' }).direction, 'OUT');
+  const legacy = randomUUID();
+  assert.equal(
+    command(IssueWorkerQrCommand, { fallbackSessionId: legacy }).fallbackSessionId,
+    legacy,
+  );
+  assert.throws(() => command(IssueWorkerQrCommand, { fallbackSessionId: 'ABCD2345' }));
+  assert.throws(() => command(IssueWorkerQrCommand, { direction: 'SIDE' }));
+  assert.equal(
+    command(VerifyWorkerQrCommand, {
+      token: ' abcd2345 ',
+      direction: 'IN',
+      requestId,
+      fallbackSessionId: legacy,
+    }).token,
+    'ABCD2345',
+  );
+  command(VerifyWorkerQrCommand, { token: 'SSQ-' + 'a'.repeat(64), direction: 'OUT', requestId });
+  for (const token of ['', 'ABCD1234', 'ABCD234', 'ABCD23456', 'ABCDO234', 'ABCDI234', 'ABCD 2345'])
+    assert.throws(() => command(VerifyWorkerQrCommand, { token, direction: 'IN', requestId }));
+});
 test('separate-passage confirmation does not coerce booleans or accept forged authority fields', () => {
   const input = {
     idempotencyKey: randomUUID(),

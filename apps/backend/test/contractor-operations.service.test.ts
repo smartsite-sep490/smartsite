@@ -61,16 +61,73 @@ function serviceFor({ hasGrant }: { hasGrant: boolean }) {
   return { service, savedWorkers };
 }
 
-function enrollmentServiceFor(worker: Partial<WorkerEntity>, actor: WorkforceActor) {
+function enrollmentServiceFor(
+  worker: Partial<WorkerEntity>,
+  actor: WorkforceActor,
+  { hasGrant = true, activeParticipation = true } = {},
+) {
   const manager = {
     getRepository(target: unknown) {
       if (target === WorkerEntity) return { findOneBy: async () => worker };
+      if (target === ContractorRepresentativeGrantEntity)
+        return { findOneBy: async () => (hasGrant ? { id: 'grant' } : null) };
+      if (target === ContractorEntity)
+        return { findOneBy: async () => ({ id: worker.contractorId, isActive: true }) };
+      if (target === ContractorSiteParticipationEntity)
+        return {
+          findBy: async () =>
+            activeParticipation ? [{ validFrom: new Date('2020-01-01'), validUntil: null }] : [],
+        };
       throw new Error('Unexpected repository');
     },
   } as unknown as EntityManager;
   const service = new ContractorOperationsService({} as never);
   return service.requireWorkerEnrollmentAccess(manager, actor, worker.id!);
 }
+
+test('ContractorOperationsService denies Worker self-enrollment even for their own active linked profile', async () => {
+  const worker = {
+    id: '00000000-0000-4000-8000-000000000010',
+    userId: IDs.actor,
+    siteId: IDs.site,
+    contractorId: IDs.contractor,
+    isActive: true,
+  };
+  for (const roleAssignments of [
+    [{ role: UserRole.WORKER, siteId: IDs.site }],
+    [{ role: UserRole.WORKER, siteId: '00000000-0000-4000-8000-000000000011' }],
+    [],
+  ]) {
+    await assert.rejects(
+      enrollmentServiceFor(worker, { id: IDs.actor, mustChangePassword: false, roleAssignments }),
+      (error: unknown) =>
+        error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+    );
+  }
+});
+
+test('ContractorOperationsService permits enrollment only for an active Worker inside the Representative Site and Contractor grant', async () => {
+  const worker = {
+    id: '00000000-0000-4000-8000-000000000010',
+    userId: '00000000-0000-4000-8000-000000000012',
+    siteId: IDs.site,
+    contractorId: IDs.contractor,
+    isActive: true,
+  };
+  assert.equal(await enrollmentServiceFor(worker, representative()), worker);
+  for (const [target, actor, options] of [
+    [worker, representative(), { hasGrant: false }],
+    [worker, representative(), { activeParticipation: false }],
+    [{ ...worker, isActive: false }, representative(), {}],
+    [{ ...worker, siteId: '00000000-0000-4000-8000-000000000011' }, representative(), {}],
+  ] as const) {
+    await assert.rejects(
+      enrollmentServiceFor(target, actor, options),
+      (error: unknown) =>
+        error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+    );
+  }
+});
 
 test('ContractorOperationsService creates a worker only inside the actor contractor grant and active Site participation', async () => {
   const { service, savedWorkers } = serviceFor({ hasGrant: true });
