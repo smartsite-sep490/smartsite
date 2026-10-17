@@ -26,7 +26,7 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Cho phép SmartSite chụp ảnh khuôn mặt và bằng chứng cho công việc bạn chọn.",
+          "cameraPermission": "Cho phép SmartSite chụp ảnh bằng chứng cho công việc bạn chọn.",
           "photosPermission": "Cho phép SmartSite chọn ảnh bằng chứng cho công việc bạn chọn.",
           "microphonePermission": false
         }

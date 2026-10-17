@@ -16,7 +16,7 @@ import { useWorkspace } from '../../features/workspace/workspace-context';
 import { useQuery } from '@tanstack/react-query';
 import { allPages, localDate, required, useCommand } from '../../features/shared/data';
 import { useTranslation } from '../../i18n';
-import { IconCalendar, IconSwap, IconClock, IconChevronDown } from '../common/Icons';
+import { IconChevronDown } from '../common/Icons';
 
 interface WorkerRequestModalProps {
   visible: boolean;
@@ -40,7 +40,6 @@ export function WorkerRequestModal({
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [targetCoworkerId, setTargetCoworkerId] = useState('');
   const [targetShiftId, setTargetShiftId] = useState('');
-  const [workDate, setWorkDate] = useState(() => localDate());
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false);
   const [showSwapDropdown, setShowSwapDropdown] = useState(false);
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);

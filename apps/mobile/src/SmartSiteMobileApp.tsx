@@ -47,7 +47,7 @@ export type NavigationTarget = {
 
 function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
   const { t } = useTranslation();
-  const { scope, user, client, token, queryKey } = useWorkspace();
+  const { scope, client, token, queryKey } = useWorkspace();
   const [navigation, navigate] = useState<NavigationTarget>({ route: 'home' });
   const back = () => navigate({ route: 'home' });
 

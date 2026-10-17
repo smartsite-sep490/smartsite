@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import i18n, { setLanguage, translate, uiLanguage } from './index';
+import { setLanguage, translate, uiLanguage } from './index';
 import vi from './locales/vi.json';
 import en from './locales/en.json';
 

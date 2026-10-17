@@ -333,9 +333,7 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
             accessibilityLabel={t('contractorHome.pendingRequests')}
             style={({ pressed }) => [
               homeStyles.compactActionRow,
-              Boolean(pendingRequests.data?.total)
-                ? homeStyles.urgentRowHighlight
-                : homeStyles.normalRow,
+              pendingRequests.data?.total ? homeStyles.urgentRowHighlight : homeStyles.normalRow,
               pressed && { opacity: 0.85 },
             ]}
             onPress={() => navigate({ route: 'requests' })}
@@ -411,7 +409,7 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
                 {t('contractorHome.assignedChecklists')}
               </Text>
               <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
-                {Boolean(safetyChecklists.data?.total)
+                {safetyChecklists.data?.total
                   ? t('contractorHome.safetyChecklistsSub', { count: safetyChecklists.data?.total })
                   : t('contractorHome.safetyTasksDefault')}
               </Text>

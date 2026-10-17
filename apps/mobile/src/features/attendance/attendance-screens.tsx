@@ -38,14 +38,8 @@ import { DateTimeField } from '../shared/date-time-field';
 import type { AttendanceSessionResponse, AttendanceDaysResponse } from '@smartsite/api-client';
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { AttendanceReport } from './attendance-report';
-import { colors } from '../../theme/colors';
 import { useTranslation } from '../../i18n';
-import {
-  IconClock,
-  IconAlert,
-  IconChevronDown,
-  IconChevronUp,
-} from '../../components/common/Icons';
+import { IconChevronDown, IconChevronUp } from '../../components/common/Icons';
 
 export function AttendanceScreen({
   initialDayId,

@@ -24,12 +24,13 @@ import {
 } from '../shared/ui';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useTranslation } from '../../i18n';
-import { IconBriefcase, IconClock } from '../../components/common/Icons';
+import { IconBriefcase } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 
 export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey, workerId } = useWorkspace();
+  const [today] = useState(() => localDate());
   const [from, setFrom] = useState(() => initialDate ?? localDate()),
     [to, setTo] = useState(() => initialDate ?? localDate(new Date(Date.now() + 30 * 86400000)));
   const [range, setRange] = useState({ fromDate: from, toDate: to }),
@@ -64,7 +65,7 @@ export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
     );
   const baseDate = new Date(from);
   const dayIndex = isNaN(baseDate.getTime()) ? 0 : (baseDate.getDay() + 6) % 7;
-  const monday = new Date(isNaN(baseDate.getTime()) ? Date.now() : baseDate);
+  const monday = new Date(isNaN(baseDate.getTime()) ? today : baseDate);
   monday.setDate(monday.getDate() - dayIndex);
 
   const dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];

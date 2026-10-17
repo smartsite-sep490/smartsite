@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Text, Image } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import { colors } from '../../theme/colors';
 import smartSiteSymbol from '../../../assets/smartsite-symbol-transparent.png';
 import smartSiteLogoHorizontalDark from '../../../assets/smartsite-logo-horizontal-dark.png';
@@ -758,29 +758,3 @@ export function IconFaceScan({ size = 28, color = colors.primary }: IconProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  logoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hexagonShape: {
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  logoBarsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-  },
-  logoBuilding: {
-    borderTopLeftRadius: 1.5,
-    borderTopRightRadius: 1.5,
-  },
-});
