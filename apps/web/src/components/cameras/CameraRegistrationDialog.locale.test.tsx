@@ -74,6 +74,18 @@ it('switches EN -> VI -> EN on CameraRegistrationDialog while preserving dirty d
   // Attempt close via dialog Close button -> opens dialog-owned discard confirmation
   fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
   expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  expect(
+    screen.getByRole('button', {
+      name: 'Keep editing',
+      description: 'Discard unsaved camera changes?',
+    }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole('button', {
+      name: 'Discard changes',
+      description: 'Discard unsaved camera changes?',
+    }),
+  ).toBeTruthy();
   expect(onClose).not.toHaveBeenCalled();
 
   // Switch EN -> VI while discard confirmation is open
@@ -82,10 +94,21 @@ it('switches EN -> VI -> EN on CameraRegistrationDialog while preserving dirty d
   });
   expect(screen.getByRole('dialog', { name: 'Đăng ký camera' })).toBeTruthy();
   expect(screen.getByText('Hủy các thay đổi camera chưa lưu?')).toBeTruthy();
+  expect(
+    screen.getByRole('button', {
+      name: 'Hủy thay đổi',
+      description: 'Hủy các thay đổi camera chưa lưu?',
+    }),
+  ).toBeTruthy();
   expect((screen.getByLabelText('Mã camera') as HTMLInputElement).value).toBe('CAM-DLG-01');
 
   // Keep editing in VI and submit
-  fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }));
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Tiếp tục chỉnh sửa',
+      description: 'Hủy các thay đổi camera chưa lưu?',
+    }),
+  );
   fireEvent.submit(screen.getByRole('form', { name: 'Đăng ký camera' }));
 
   await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
