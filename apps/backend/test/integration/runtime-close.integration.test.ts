@@ -166,7 +166,7 @@ test(
     assert.deepEqual(await control('READY'), {
       type: 'READY',
       entrypoint: 'main.ts',
-      registeredMigrations: 61,
+      registeredMigrations: db.migrations.length,
       productionConfig: true,
     });
     const login = await request('/auth/login', 'POST', {
@@ -252,7 +252,7 @@ test(
     }
     assert.ok(blockedPid, 'Actual admitted Zone transaction must reach the held SQL boundary');
     const [{ count: commandsBefore }] = await db.query(
-      "SELECT count(*)::int AS count FROM mf06_authority_command WHERE operation='ZONE_CREATE'",
+      "SELECT count(*)::int AS count FROM authorization_history_command WHERE operation='ZONE_CREATE'",
     );
     assert.equal(commandsBefore, 0, 'Other connections cannot see the uncommitted command');
     child.send('BEGIN_DRAIN');
@@ -309,7 +309,7 @@ test(
       'Runtime pool connection is closed after drain',
     );
     const rows = await db.query(
-      "SELECT z.id, c.command_id, f.source_id, w.transaction_id=c.transaction_id AND f.transaction_id=c.transaction_id AS witnessed FROM zone z JOIN mf06_authority_fact f ON f.source_id=z.id JOIN mf06_authority_command c ON c.command_id=f.command_id JOIN mf06_authority_commit_witness w ON w.command_id=c.command_id WHERE z.site_id=$1 AND z.code='ADMITTED' AND c.operation='ZONE_CREATE'",
+      "SELECT z.id, c.command_id, f.source_id, w.transaction_id=c.transaction_id AND f.transaction_id=c.transaction_id AS witnessed FROM zone z JOIN authorization_history_revision f ON f.source_id=z.id JOIN authorization_history_command c ON c.command_id=f.command_id JOIN authorization_history_commit_receipt w ON w.command_id=c.command_id WHERE z.site_id=$1 AND z.code='ADMITTED' AND c.operation='ZONE_CREATE'",
       [site.id],
     );
     assert.equal(rows.length, 1);

@@ -257,7 +257,8 @@ test('historical permission projection stays ALLOW after current Contractor perm
   if (latest.status !== 'PROJECTED') throw Error('Expected private projection');
   assert.deepEqual(latest.effects, []);
   assert.equal(
-    (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0].epoch_id,
+    (await db.query('SELECT epoch_id FROM authorization_history_control WHERE singleton=1'))[0]
+      .epoch_id,
     null,
   );
 });

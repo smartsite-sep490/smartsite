@@ -158,7 +158,7 @@ async function withApi(
 
 async function factsFor(id: string) {
   return db.query(
-    'SELECT f.source_kind,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+    'SELECT f.source_kind,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
     [id],
   );
 }
@@ -417,12 +417,16 @@ test('Contractor catalog writes do not require unrelated Site participation capt
 test('site Contractor refuses a partial journal without creation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
-    await db.query('ALTER TABLE mf06_authority_control RENAME TO mf06_authority_control_held');
+    await db.query(
+      'ALTER TABLE authorization_history_control RENAME TO mf06_authority_control_held',
+    );
     try {
       assert.equal((await call('CONTRACTOR')).status, 503);
       assert.equal(await countCreated(f), 0);
     } finally {
-      await db.query('ALTER TABLE mf06_authority_control_held RENAME TO mf06_authority_control');
+      await db.query(
+        'ALTER TABLE mf06_authority_control_held RENAME TO authorization_history_control',
+      );
     }
   });
 });
@@ -435,14 +439,16 @@ test('Contractor source failure rolls back catalog create and authority command 
     await db.query(
       'CREATE TRIGGER test_refuse_auto_participation BEFORE INSERT ON contractor FOR EACH ROW EXECUTE FUNCTION test_refuse_auto_participation()',
     );
-    const before = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+    const before = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+    )[0].n;
     try {
       const response = await call('CONTRACTOR');
       assert.equal(response.status, 500);
       assert(!(await response.text()).includes('Synthetic participation refusal'));
       assert.equal(await countCreated(f), 0);
       assert.equal(
-        (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+        (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
         before,
       );
     } finally {
@@ -456,7 +462,7 @@ test('site Contractor witness failure preserves committed sources with unconfirm
   await withApi(f, async (call, _guard, _logout, apiDb) => {
     const original = apiDb.query.bind(apiDb);
     apiDb.query = (async (sql: string, parameters?: unknown[], runner?: QueryRunner) => {
-      if (sql.startsWith('INSERT INTO mf06_authority_commit_witness'))
+      if (sql.startsWith('INSERT INTO authorization_history_commit_receipt'))
         throw new Error('Synthetic witness failure');
       return original(sql, parameters, runner);
     }) as typeof apiDb.query;

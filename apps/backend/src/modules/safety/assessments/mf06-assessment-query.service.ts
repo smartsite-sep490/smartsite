@@ -22,13 +22,13 @@ export class Mf06AssessmentQueryService {
       pagination = page(offset, limit);
     return this.snapshot(scope, async (manager) => {
       const [count] = await manager.query(
-        "SELECT count(*)::text AS total FROM mf06_assessment WHERE site_id=$1 AND provenance<>'SYNTHETIC_TEST'",
+        "SELECT count(*)::text AS total FROM zone_entry_assessment WHERE site_id=$1 AND provenance<>'SYNTHETIC_TEST'",
         [scope],
       );
       const total = Number(count?.total);
       if (!Number.isSafeInteger(total) || total < 0) throw this.unavailable();
       const rows = (await manager.query(
-        "SELECT assessment_id FROM mf06_assessment WHERE site_id=$1 AND provenance<>'SYNTHETIC_TEST' ORDER BY assessed_at DESC,assessment_id ASC OFFSET $2 LIMIT $3",
+        "SELECT assessment_id FROM zone_entry_assessment WHERE site_id=$1 AND provenance<>'SYNTHETIC_TEST' ORDER BY assessed_at DESC,assessment_id ASC OFFSET $2 LIMIT $3",
         [scope, pagination.offset, pagination.limit],
       )) as { assessment_id: string }[];
       const store = new Mf06AssessmentStore(this.db),
@@ -63,7 +63,12 @@ export class Mf06AssessmentQueryService {
     return readMf06Snapshot(
       this.db,
       scope,
-      ['site', 'mf06_assessment', 'mf06_authority_artifact', 'mf06_assessment_request'],
+      [
+        'site',
+        'zone_entry_assessment',
+        'zone_entry_authority_artifact',
+        'zone_entry_assessment_request',
+      ],
       operation,
       () => this.unavailable(),
     );

@@ -92,15 +92,6 @@ test('manager overview: generated codes, Site isolation, current roster and date
     mustChangePassword: false,
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
   };
-  const otherManagerId = randomUUID();
-  await source.query(
-    "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Other synthetic manager','unused',false)",
-    [otherManagerId],
-  );
-  await source.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-    [randomUUID(), otherManagerId, other.id],
-  );
   const contractors = await Promise.all([
     createContractor(site.id, { name: 'Alpha' }),
     createContractor(site.id, { name: 'Beta' }),

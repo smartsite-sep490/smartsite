@@ -26,7 +26,7 @@ import { Mf06EnqueueService } from '../../src/modules/safety/assessments/mf06-en
 // Test Database & Synthetic Fixtures Setup
 // -----------------------------------------------------------------------------
 
-const isolated = createIsolatedTestDatabase({ legacy: true });
+const isolated = createIsolatedTestDatabase({ canonical: true });
 const db = isolated.dataSource;
 
 before(async () => {

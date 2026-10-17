@@ -4,7 +4,7 @@ import { ZoneEntryAssessmentRequestEntity } from './zone-entry-assessment-reques
 export type Mf06AssessmentJobStatus = 'PENDING' | 'CLAIMED' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
 /** Operational head only; transitions and lease ownership require the later CAS worker. */
-@Entity({ name: 'mf06_assessment_job' })
+@Entity({ name: 'zone_entry_assessment_job' })
 @ForeignKey(() => ZoneEntryAssessmentRequestEntity, ['requestId'], ['requestId'], {
   name: 'fk_mf06_job_request',
   onDelete: 'RESTRICT',

@@ -36,7 +36,7 @@ function safeIntegerTransformer(minimum: number): ValueTransformer {
 }
 
 /** Immutable technical request; BOUND does not identify a Worker or grant access. */
-@Entity({ name: 'mf06_assessment_request' })
+@Entity({ name: 'zone_entry_assessment_request' })
 @Unique('uq_mf06_request_binding', [
   'eventId',
   'personObservationIndex',

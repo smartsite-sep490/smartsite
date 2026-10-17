@@ -17,7 +17,7 @@ after(() => database.dispose());
 
 test('canonical registry captures team, membership, permission and assignment Zone membership without widening frozen V1', async () => {
   const sources = await db.query(
-    "SELECT source_kind,fields FROM mf06_authority_source WHERE source_kind IN ('TEAM','TEAM_MEMBERSHIP','TEAM_PERMISSION','ASSIGNMENT') ORDER BY source_kind",
+    "SELECT source_kind,fields FROM authorization_history_source WHERE source_kind IN ('TEAM','TEAM_MEMBERSHIP','TEAM_PERMISSION','ASSIGNMENT') ORDER BY source_kind",
   );
   assert.deepEqual(
     sources.map((row: { source_kind: string }) => row.source_kind),
@@ -49,7 +49,7 @@ test('team source mutation and journal facts roll back together; unattributed ch
         [team, site, contractor, actor],
       );
       const facts = await manager.query(
-        'SELECT command_id,source_kind FROM mf06_authority_fact WHERE source_id=$1',
+        'SELECT command_id,source_kind FROM authorization_history_revision WHERE source_id=$1',
         [team],
       );
       assert.deepEqual(facts, [{ command_id: null, source_kind: 'TEAM' }]);
@@ -59,20 +59,22 @@ test('team source mutation and journal facts roll back together; unattributed ch
   );
   assert.deepEqual(await db.query('SELECT id FROM contractor_team WHERE id=$1', [team]), []);
   assert.deepEqual(
-    await db.query('SELECT fact_id FROM mf06_authority_fact WHERE source_id=$1', [team]),
+    await db.query('SELECT fact_id FROM authorization_history_revision WHERE source_id=$1', [team]),
     [],
   );
   await db.query(
     "INSERT INTO contractor_team(id,site_id,contractor_id,name,normalized_name,created_by) VALUES($1,$2,$3,'Synthetic team','synthetic team',$4)",
     [team, site, contractor, actor],
   );
-  const gaps = await db.query('SELECT reason FROM mf06_authority_gap WHERE source_id=$1', [team]);
+  const gaps = await db.query('SELECT reason FROM authorization_history_gap WHERE source_id=$1', [
+    team,
+  ]);
   assert(gaps.some((row: { reason: string }) => row.reason === 'UNATTRIBUTED_WRITE'));
   await db.query('UPDATE contractor_team SET is_active=false WHERE id=$1', [team]);
   assert.equal(
     (
       await db.query(
-        "SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_kind='TEAM' AND source_id=$1",
+        "SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_kind='TEAM' AND source_id=$1",
         [team],
       )
     )[0].n,
@@ -234,7 +236,7 @@ test('real team commands attribute facts and historical replay survives revoke a
   const at = await clock();
   assert.deepEqual(await read(at), ['ALLOW']);
   const facts = await db.query(
-    'SELECT f.source_kind,c.actor_user_id,w.command_id IS NOT NULL AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=ANY($1::uuid[])',
+    'SELECT f.source_kind,c.actor_user_id,w.command_id IS NOT NULL AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=ANY($1::uuid[])',
     [[f.team, membership.membershipId, permission.id]],
   );
   assert.equal(facts.length, 3);
@@ -262,9 +264,11 @@ test('real team commands attribute facts and historical replay survives revoke a
 test('team permission command failure rolls back permission, fact, head, audit and command together', async () => {
   const f = await commandFixture(),
     permission = randomUUID();
-  const commands = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+  const commands = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+  )[0].n;
   await db.query(
-    "CREATE FUNCTION test_team_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='TEAM_PERMISSION' THEN RAISE EXCEPTION 'Synthetic team fact failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_team_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_team_fact_failure()",
+    "CREATE FUNCTION test_team_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='TEAM_PERMISSION' THEN RAISE EXCEPTION 'Synthetic team fact failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_team_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_team_fact_failure()",
   );
   try {
     await assert.rejects(
@@ -279,8 +283,8 @@ test('team permission command failure rolls back permission, fact, head, audit a
     );
     for (const [table, column] of [
       ['team_zone_permission', 'id'],
-      ['mf06_authority_fact', 'source_id'],
-      ['mf06_authority_head', 'source_id'],
+      ['authorization_history_revision', 'source_id'],
+      ['authorization_history_head', 'source_id'],
       ['audit_log', 'entity_id'],
     ]) {
       assert.deepEqual(
@@ -289,19 +293,21 @@ test('team permission command failure rolls back permission, fact, head, audit a
       );
     }
     assert.equal(
-      (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+      (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
       commands,
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_team_fact_failure ON mf06_authority_fact; DROP FUNCTION test_team_fact_failure()',
+      'DROP TRIGGER test_team_fact_failure ON authorization_history_revision; DROP FUNCTION test_team_fact_failure()',
     );
   }
 });
 
 test('role removal and cross-Site team commands are denied before writing authority attempts', async () => {
   const f = await commandFixture();
-  const commands = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+  const commands = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+  )[0].n;
   const forbidden = (error: unknown) =>
     (error as { getStatus?: () => number }).getStatus?.() === 403;
   await assert.rejects(
@@ -320,7 +326,7 @@ test('role removal and cross-Site team commands are denied before writing author
     forbidden,
   );
   assert.equal(
-    (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+    (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
     commands,
   );
 });

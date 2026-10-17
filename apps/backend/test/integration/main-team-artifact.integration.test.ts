@@ -62,7 +62,7 @@ for (const version of [MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_AUTHORITY_ARCHIVE_FOR
       [event, 'a'.repeat(64), camera, camera, session, capturedAt, JSON.stringify(raw)],
     );
     await db.query(
-      `INSERT INTO mf06_assessment_request(request_id,event_id,payload_hash,person_observation_index,zone_observation_index,subject_binding_status,track_id,site_id,camera_id,camera_external_id,stream_session_id,region_id,geometry_version,zone_id,captured_at,requested_purpose,request_revision,binding_hash)
+      `INSERT INTO zone_entry_assessment_request(request_id,event_id,payload_hash,person_observation_index,zone_observation_index,subject_binding_status,track_id,site_id,camera_id,camera_external_id,stream_session_id,region_id,geometry_version,zone_id,captured_at,requested_purpose,request_revision,binding_hash)
       VALUES($1,$2,$3,0,1,'BOUND',7,$4,$5,$5::uuid::text,$6,$7,3,$8,$9,'INITIAL_OBSERVATION_ASSESSMENT',1,$10)`,
       [
         request,
@@ -78,7 +78,7 @@ for (const version of [MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_AUTHORITY_ARCHIVE_FOR
       ],
     );
     await db.query(
-      `INSERT INTO mf06_assessment_job(request_id,status,attempt_count,head_revision,lease_token,lease_expires_at,next_attempt_at,deadline_at)
+      `INSERT INTO zone_entry_assessment_job(request_id,status,attempt_count,head_revision,lease_token,lease_expires_at,next_attempt_at,deadline_at)
       VALUES($1,'CLAIMED',1,2,$2,clock_timestamp()+interval '1 minute',clock_timestamp(),clock_timestamp()+interval '2 minutes')`,
       [request, token],
     );
@@ -157,12 +157,12 @@ for (const version of [MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_AUTHORITY_ARCHIVE_FOR
     if (retry.state === 'REPLAY') assert.deepEqual(retry.assessment, first.assessment);
     assert.equal(await store.replay(request, command, randomUUID()), null);
     const [counts] = await db.query(
-      'SELECT (SELECT count(*)::int FROM mf06_authority_artifact WHERE request_id=$1) AS artifacts,(SELECT count(*)::int FROM mf06_assessment WHERE request_id=$1) AS assessments',
+      'SELECT (SELECT count(*)::int FROM zone_entry_authority_artifact WHERE request_id=$1) AS artifacts,(SELECT count(*)::int FROM zone_entry_assessment WHERE request_id=$1) AS assessments',
       [request],
     );
     assert.deepEqual(counts, { artifacts: 1, assessments: 1 });
     await assert.rejects(
-      db.query('UPDATE mf06_authority_artifact SET body=body WHERE request_id=$1', [request]),
+      db.query('UPDATE zone_entry_authority_artifact SET body=body WHERE request_id=$1', [request]),
       (error: unknown) => (error as { code: string }).code === '23514',
     );
   });

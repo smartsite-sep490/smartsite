@@ -137,6 +137,10 @@ const payloadSchema = z.strictObject({
   sources: z.array(sourceSchema),
 });
 const range = { valid_from: instant, valid_until: instant.nullable() };
+const polygonRing = z
+  .array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
+  .min(3)
+  .max(256);
 const rowSchemas: Record<string, z.ZodType> = {
   USER_ACCOUNT: z.strictObject({
     id,
@@ -255,10 +259,7 @@ const rowSchemas: Record<string, z.ZodType> = {
     id,
     camera_id: id,
     zone_id: id,
-    polygon: z
-      .array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
-      .min(3)
-      .max(256),
+    polygon: z.union([polygonRing, z.strictObject({ coordinates: polygonRing })]),
     coordinate_space: z.literal('NORMALIZED_0_1'),
     version,
     is_active: z.boolean(),

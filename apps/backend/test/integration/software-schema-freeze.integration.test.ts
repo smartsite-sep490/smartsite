@@ -140,7 +140,10 @@ test(
       );
       const bytes = await readFile(file);
       assert.equal(bytes.subarray(0, 5).toString(), 'PGDMP');
-      assert.equal(snapshot.tables.find((row) => row.name === 'mf06_authority_source')?.rows, 18);
+      assert.equal(
+        snapshot.tables.find((row) => row.name === 'authorization_history_source')?.rows,
+        18,
+      );
     });
   },
 );

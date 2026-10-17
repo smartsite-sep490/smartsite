@@ -226,7 +226,7 @@ test('actual public assignment request stores retained-main participation anchor
     assert.equal(stored.site_contractor_id, f.participation);
     const fact = (
       await db.query(
-        'SELECT c.actor_user_id,c.operation FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+        'SELECT c.actor_user_id,c.operation FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
         [a.id],
       )
     )[0];
@@ -285,7 +285,8 @@ const status = (n: number) => (e: unknown) =>
   (e as { getStatus?: () => number }).getStatus?.() === n;
 const service = () => new MainAssignmentCommandService(db);
 async function countCommands() {
-  return (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n as number;
+  return (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0]
+    .n as number;
 }
 async function role(
   f: Fixture,
@@ -338,7 +339,7 @@ test('all four real HTTP assignment writes reauthenticate original bearer in the
     assert.equal(claims, 4);
     assert.equal(await policyVersion(f), 3);
     const facts = await db.query(
-      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY revision',
+      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY revision',
       [a.id],
     );
     assert.deepEqual(
@@ -549,7 +550,7 @@ test('public time DTO retains date-only compatibility and exact offset microseco
   assert.equal(
     (
       await db.query(
-        "SELECT (after_payload->>'valid_until')::timestamptz-(after_payload->>'valid_from')::timestamptz=interval '1 microsecond' AS exact FROM mf06_authority_fact WHERE source_id=$1",
+        "SELECT (after_payload->>'valid_until')::timestamptz-(after_payload->>'valid_from')::timestamptz=interval '1 microsecond' AS exact FROM authorization_history_revision WHERE source_id=$1",
         [b.id],
       )
     )[0].exact,
@@ -578,9 +579,10 @@ test('public assignment concurrent decisions have one winner and exact repeat re
   assert.equal(await policyVersion(f), v);
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1', [
-        b.id,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
+        [b.id],
+      )
     )[0].n,
     3,
   );
@@ -588,11 +590,15 @@ test('public assignment concurrent decisions have one winner and exact repeat re
 test('public journal partial install and disabled assignment/Site captures fail closed', async () => {
   const f = await fixture(),
     a = await seeded(f);
-  await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO test_assignment_witness');
+  await db.query(
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO test_assignment_witness',
+  );
   try {
     await assert.rejects(service().publicRequest(f.worker, f.input, ctx(f)), status(503));
   } finally {
-    await db.query('ALTER TABLE test_assignment_witness RENAME TO mf06_authority_commit_witness');
+    await db.query(
+      'ALTER TABLE test_assignment_witness RENAME TO authorization_history_commit_receipt',
+    );
   }
   await asRole(f, 'SITE_MANAGER');
   for (const table of ['worker_site_zone_assignment', 'site']) {
@@ -614,7 +620,7 @@ test('public assignment source-fact failure rolls back mutation, audit, policy i
     )[0].n;
   await asRole(f, 'SITE_MANAGER');
   await db.query(
-    "CREATE FUNCTION test_assignment_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ASSIGNMENT' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_assignment_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_assignment_fact_failure()",
+    "CREATE FUNCTION test_assignment_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ASSIGNMENT' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_assignment_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_assignment_fact_failure()",
   );
   try {
     await assert.rejects(
@@ -634,28 +640,28 @@ test('public assignment source-fact failure rolls back mutation, audit, policy i
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_assignment_fact_failure ON mf06_authority_fact;DROP FUNCTION test_assignment_fact_failure()',
+      'DROP TRIGGER test_assignment_fact_failure ON authorization_history_revision;DROP FUNCTION test_assignment_fact_failure()',
     );
   }
 });
 test('postcommit public assignment witness failure retains committed success without unsafe duplicate-create advice', async () => {
   const f = await fixture();
   await db.query(
-    "CREATE FUNCTION test_assignment_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic witness failure';END $$;CREATE TRIGGER test_assignment_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_assignment_witness_failure()",
+    "CREATE FUNCTION test_assignment_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic witness failure';END $$;CREATE TRIGGER test_assignment_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_assignment_witness_failure()",
   );
   try {
     const a = await service().publicRequest(f.worker, f.input, ctx(f));
     assert.equal(a.status, 'PENDING');
     const record = (
       await db.query(
-        'SELECT w.command_id FROM mf06_authority_fact f LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+        'SELECT w.command_id FROM authorization_history_revision f LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
         [a.id],
       )
     )[0];
     assert.equal(record.command_id, null);
   } finally {
     await db.query(
-      'DROP TRIGGER test_assignment_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_assignment_witness_failure()',
+      'DROP TRIGGER test_assignment_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_assignment_witness_failure()',
     );
   }
 });

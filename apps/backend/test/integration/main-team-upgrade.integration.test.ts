@@ -17,7 +17,12 @@ for (const preJournal of [false, true]) {
       migrations: preJournal
         ? production.slice(0, 35)
         : production.filter(
-            (m) => typeof m !== 'function' || m.name !== 'Mf06TeamAuthorityHistory1792281600000',
+            (m) =>
+              typeof m !== 'function' ||
+              ![
+                'Mf06TeamAuthorityHistory1792281600000',
+                'ZoneEntryPhysicalStorage1792454400000',
+              ].includes(m.name),
           ),
     });
     t.after(() => isolated.dispose());
@@ -64,7 +69,16 @@ for (const preJournal of [false, true]) {
     );
     if (preJournal) {
       await db.destroy();
-      db.setOptions({ migrations: production.slice(0, -1) });
+      db.setOptions({
+        migrations: production.filter(
+          (m) =>
+            typeof m !== 'function' ||
+            ![
+              'Mf06TeamAuthorityHistory1792281600000',
+              'ZoneEntryPhysicalStorage1792454400000',
+            ].includes(m.name),
+        ),
+      });
       await db.initialize();
       await db.runMigrations();
       assert.deepEqual(
@@ -84,9 +98,15 @@ for (const preJournal of [false, true]) {
     await db.destroy();
     db.setOptions({ migrations: production });
     await db.initialize();
-    assert.equal((await db.runMigrations()).length, 1);
-    assert.deepEqual(await db.query('SELECT * FROM mf06_authority_fact ORDER BY fact_id'), facts);
-    assert.deepEqual(await db.query('SELECT * FROM mf06_authority_gap ORDER BY gap_id'), gaps);
+    assert.equal((await db.runMigrations()).length, 2);
+    assert.deepEqual(
+      await db.query('SELECT * FROM authorization_history_revision ORDER BY fact_id'),
+      facts,
+    );
+    assert.deepEqual(
+      await db.query('SELECT * FROM authorization_history_gap ORDER BY gap_id'),
+      gaps,
+    );
     const context = { actorUserId: actor, reauthorize: async () => {} };
     const baseline = await new MainAuthorityBaselineService(db).capture(context, 'a'.repeat(64));
     await executeMainConfigurationCommand(db, context, 'TEAM_ARCHIVE', { team }, async (m) => {
@@ -134,7 +154,7 @@ for (const preJournal of [false, true]) {
     if (result.status === 'RECONSTRUCTED') assert.equal(result.authorityCoverageEstablished, false);
     assert.deepEqual(
       await db.query(
-        'SELECT * FROM mf06_authority_fact WHERE fact_id=ANY($1::uuid[]) ORDER BY fact_id',
+        'SELECT * FROM authorization_history_revision WHERE fact_id=ANY($1::uuid[]) ORDER BY fact_id',
         [facts.map((f: { fact_id: string }) => f.fact_id)],
       ),
       facts,

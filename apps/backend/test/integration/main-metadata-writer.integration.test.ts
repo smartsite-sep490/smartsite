@@ -79,7 +79,7 @@ const status = (n: number) => (e: unknown) =>
 async function attribution(id: string, operation: string, witnessed: true | null = true) {
   const row = (
     await db.query(
-      'SELECT c.command_id,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+      'SELECT c.command_id,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
       [id],
     )
   )[0];
@@ -127,7 +127,10 @@ test('locked policy allows an exact no-op but refuses changed PPE and leaves no 
     z = await zone(f);
   await db.query('UPDATE zone SET configuration_locked=true WHERE id=$1', [z.id]);
   const count = (
-    await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1', [z.id])
+    await db.query(
+      'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
+      [z.id],
+    )
   )[0].n;
   assert.equal(
     (await f.zones.updatePolicy(f.siteId, z.id, policy, f.ctx)).configurationLocked,
@@ -135,19 +138,22 @@ test('locked policy allows an exact no-op but refuses changed PPE and leaves no 
   );
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1', [
-        z.id,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
+        [z.id],
+      )
     )[0].n,
     count,
   );
-  const commands = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+  const commands = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+  )[0].n;
   await assert.rejects(
     f.zones.updatePolicy(f.siteId, z.id, { ...policy, requiredPpe: [] }, f.ctx),
     status(409),
   );
   assert.equal(
-    (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+    (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
     commands,
   );
 });
@@ -189,7 +195,7 @@ test('partial installed journal refuses Site and Zone creation', async () => {
   const f = await fixture(),
     admin = await fixture('ADMIN');
   await db.query(
-    'ALTER TABLE mf06_authority_commit_witness RENAME TO test_metadata_hidden_witness',
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO test_metadata_hidden_witness',
   );
   try {
     await assert.rejects(
@@ -199,7 +205,7 @@ test('partial installed journal refuses Site and Zone creation', async () => {
     await assert.rejects(zone(f), status(503));
   } finally {
     await db.query(
-      'ALTER TABLE test_metadata_hidden_witness RENAME TO mf06_authority_commit_witness',
+      'ALTER TABLE test_metadata_hidden_witness RENAME TO authorization_history_commit_receipt',
     );
   }
 });
@@ -224,7 +230,7 @@ test('disabled owning capture triggers refuse metadata writes', async () => {
 test('source fact failure atomically rolls back a Zone and its actor command', async () => {
   const f = await fixture();
   await db.query(
-    "CREATE FUNCTION test_metadata_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ZONE_POLICY' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_metadata_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_metadata_fact_failure()",
+    "CREATE FUNCTION test_metadata_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ZONE_POLICY' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_metadata_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_metadata_fact_failure()",
   );
   try {
     await assert.rejects(zone(f));
@@ -235,7 +241,7 @@ test('source fact failure atomically rolls back a Zone and its actor command', a
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_command WHERE actor_user_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_command WHERE actor_user_id=$1',
           [f.actorUserId],
         )
       )[0].n,
@@ -243,7 +249,7 @@ test('source fact failure atomically rolls back a Zone and its actor command', a
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_metadata_fact_failure ON mf06_authority_fact;DROP FUNCTION test_metadata_fact_failure()',
+      'DROP TRIGGER test_metadata_fact_failure ON authorization_history_revision;DROP FUNCTION test_metadata_fact_failure()',
     );
   }
 });
@@ -251,8 +257,11 @@ test('actor-free internal metadata writes remain unattributed instead of inventi
   const f = await fixture(),
     z = await f.zones.create(f.siteId, { code: randomUUID(), name: 'Internal Zone', ...policy });
   assert.equal(
-    (await db.query('SELECT command_id FROM mf06_authority_fact WHERE source_id=$1', [z.id]))[0]
-      .command_id,
+    (
+      await db.query('SELECT command_id FROM authorization_history_revision WHERE source_id=$1', [
+        z.id,
+      ])
+    )[0].command_id,
     null,
   );
   assert.equal(
@@ -381,7 +390,7 @@ test('actual AppModule Zone HTTP writes bind the assigned Manager bearer actor i
     );
     assert.equal(updated.status, 200);
     assert.equal((await attribution(z.id, 'ZONE_POLICY_UPDATE')).actor_user_id, f.actorUserId);
-    assert.equal(claims, 2);
+    assert.equal(claims, 3);
   });
 });
 
@@ -406,7 +415,9 @@ for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as con
         }
         await original(r, manager);
       };
-      const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+      const count = (
+        await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+      )[0].n;
       const code = randomUUID();
       const pending =
         target === 'SITE_CREATE'
@@ -447,7 +458,7 @@ for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as con
           'SAFETY_VEST',
         ]);
       assert.equal(
-        (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+        (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
         count,
       );
     });
@@ -457,12 +468,9 @@ test('main metadata duplicate codes and wrong Site policy writes retain existing
   const f = await fixture(),
     z = await zone(f);
   const site = await f.sites.create({ code: randomUUID(), name: 'Unique Site' }, f.ctx);
-  await managerRole(f.actorUserId, site.id);
-  const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
-  await assert.rejects(
-    admin.sites.create({ code: site.code, name: 'Duplicate' }, admin.ctx),
-    status(409),
-  );
+  const count = (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0]
+    .n;
+  await assert.rejects(f.sites.create({ code: site.code, name: 'Duplicate' }, f.ctx), status(409));
   await assert.rejects(
     f.zones.create(f.siteId, { code: z.code, name: 'Duplicate', ...policy }, f.ctx),
     status(409),
@@ -475,27 +483,25 @@ test('main metadata duplicate codes and wrong Site policy writes retain existing
   assert.equal(await f.zones.referenceName(f.siteId, null), null);
   assert.equal(await f.zones.referenceName(f.siteId, z.id), z.name);
   assert.equal(
-    (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+    (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
     count,
   );
 });
 
 test('postcommit metadata witness failure keeps committed DTO successful while historical proof remains unconfirmed', async () => {
-  const f = await fixture(),
-    admin = await fixture('ADMIN');
+  const f = await fixture();
   await db.query(
-    "CREATE FUNCTION test_metadata_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic witness failure';END $$;CREATE TRIGGER test_metadata_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_metadata_witness_failure()",
+    "CREATE FUNCTION test_metadata_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic witness failure';END $$;CREATE TRIGGER test_metadata_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_metadata_witness_failure()",
   );
   try {
     const site = await f.sites.create({ code: randomUUID(), name: 'Committed Site' }, f.ctx);
-    await managerRole(f.actorUserId, site.id);
     const z = await f.zones.create(
       f.siteId,
       { code: randomUUID(), name: 'Committed Zone', ...policy },
       f.ctx,
     );
     for (const [id, op, actor] of [
-      [site.id, 'SITE_CREATE', admin.actorUserId],
+      [site.id, 'SITE_CREATE', f.actorUserId],
       [z.id, 'ZONE_CREATE', f.actorUserId],
     ]) {
       const row = await attribution(id!, op!, null);
@@ -504,7 +510,7 @@ test('postcommit metadata witness failure keeps committed DTO successful while h
     }
   } finally {
     await db.query(
-      'DROP TRIGGER test_metadata_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_metadata_witness_failure()',
+      'DROP TRIGGER test_metadata_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_metadata_witness_failure()',
     );
   }
 });

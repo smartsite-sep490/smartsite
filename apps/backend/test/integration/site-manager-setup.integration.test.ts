@@ -8,7 +8,6 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteRepresentativesService } from '../../src/modules/users/site-representatives.controller.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
-import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import { UserEntity, UserRole } from '../../src/database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../src/database/entities/user-role-assignment.entity.js';
 

@@ -268,12 +268,12 @@ function assertNoForbiddenFieldsInSnapshot(snapshot: Record<string, unknown>) {
 
 async function assertBaselineTableExistsInCurrentSchema() {
   const tableCheck = await db.query(
-    "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'mf06_authority_baseline'",
+    "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'authorization_history_baseline'",
   );
   assert.equal(
     tableCheck.length,
     1,
-    'mf06_authority_baseline table must exist in current_schema()',
+    'authorization_history_baseline table must exist in current_schema()',
   );
 }
 
@@ -393,7 +393,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 18 
 
   // 5. Database invariants: epoch STAGING, baseline_at populated, control NULL, no READY
   const epochRows = await db.query(
-    'SELECT epoch_id, state, baseline_at FROM mf06_authority_epoch WHERE epoch_id = $1',
+    'SELECT epoch_id, state, baseline_at FROM authorization_history_epoch WHERE epoch_id = $1',
     [record.epochId],
   );
   assert.equal(epochRows.length, 1);
@@ -404,7 +404,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 18 
   );
 
   const controlRows = await db.query(
-    'SELECT epoch_id FROM mf06_authority_control WHERE singleton = 1',
+    'SELECT epoch_id FROM authorization_history_control WHERE singleton = 1',
   );
   assert.equal(
     controlRows[0].epoch_id,
@@ -414,7 +414,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 18 
 
   // 6. Command bound and commit witness verified (default operation name MAIN_AUTHORITY_BASELINE)
   const commandRows = await db.query(
-    'SELECT command_id, actor_user_id, operation FROM mf06_authority_command WHERE command_id = $1',
+    'SELECT command_id, actor_user_id, operation FROM authorization_history_command WHERE command_id = $1',
     [record.commandId],
   );
   assert.equal(commandRows.length, 1);
@@ -422,7 +422,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 18 
   assert.equal(commandRows[0].operation, 'MAIN_AUTHORITY_BASELINE');
 
   const witnessRows = await db.query(
-    'SELECT command_id FROM mf06_authority_commit_witness WHERE command_id = $1',
+    'SELECT command_id FROM authorization_history_commit_receipt WHERE command_id = $1',
     [record.commandId],
   );
   assert.equal(witnessRows.length, 1, 'Commit witness must be recorded for baseline command');
@@ -455,7 +455,7 @@ test('Snapshot artifact remains immutable in database when source tables are sub
   await assertBaselineTableExistsInCurrentSchema();
 
   const baselineRows = await db.query(
-    'SELECT snapshot_hash, snapshot_json FROM mf06_authority_baseline WHERE epoch_id = $1',
+    'SELECT snapshot_hash, snapshot_json FROM authorization_history_baseline WHERE epoch_id = $1',
     [initialRecord.epochId],
   );
   assert.equal(baselineRows.length, 1);
@@ -497,8 +497,9 @@ test('Capture rejects invalid declaredWriterManifestHash formats with 400 Bad Re
   ];
 
   // Capture count before to verify no increment in shared schema
-  const beforeEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const beforeEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
 
   for (const invalid of invalidManifests) {
     await assert.rejects(
@@ -514,8 +515,9 @@ test('Capture rejects invalid declaredWriterManifestHash formats with 400 Bad Re
   }
 
   // Ensure zero epoch increments occurred
-  const afterEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const afterEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
   assert.equal(afterEpochs, beforeEpochs, 'Epoch count must not increase on validation failure');
 });
 
@@ -608,8 +610,9 @@ test('Interrupted source registry or disabled source capture fails closed with 5
   const service = new MainAuthorityBaselineService(db);
   const manifest = 'cafebebe01234567'.repeat(4);
 
-  const beforeEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const beforeEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
 
   // Temporarily disable one source trigger
   await db.query('ALTER TABLE app_user DISABLE TRIGGER trg_mf06_capture_app_user');
@@ -621,8 +624,9 @@ test('Interrupted source registry or disabled source capture fails closed with 5
     );
 
     // Verify zero orphan epochs were retained
-    const afterEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-      .n as number;
+    const afterEpochs = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+    )[0].n as number;
     assert.equal(afterEpochs, beforeEpochs, 'Epoch count must not increase on capture failure');
   } finally {
     await db.query('ALTER TABLE app_user ENABLE TRIGGER trg_mf06_capture_app_user');
@@ -638,23 +642,23 @@ test('Direct SQL mutation guards prevent raw UPDATE, DELETE, or TRUNCATE on base
 
   // Attempting raw UPDATE
   await assert.rejects(
-    async () => db.query("UPDATE mf06_authority_baseline SET snapshot_hash = 'tampered'"),
+    async () => db.query("UPDATE authorization_history_baseline SET snapshot_hash = 'tampered'"),
     /immutable/i,
-    'Direct UPDATE on mf06_authority_baseline must be blocked by immutable guard',
+    'Direct UPDATE on authorization_history_baseline must be blocked by immutable guard',
   );
 
   // Attempting raw DELETE
   await assert.rejects(
-    async () => db.query('DELETE FROM mf06_authority_baseline'),
+    async () => db.query('DELETE FROM authorization_history_baseline'),
     /immutable/i,
-    'Direct DELETE on mf06_authority_baseline must be blocked by immutable guard',
+    'Direct DELETE on authorization_history_baseline must be blocked by immutable guard',
   );
 
   // Attempting raw TRUNCATE
   await assert.rejects(
-    async () => db.query('TRUNCATE mf06_authority_baseline'),
+    async () => db.query('TRUNCATE authorization_history_baseline'),
     /immutable/i,
-    'Direct TRUNCATE on mf06_authority_baseline must be blocked by immutable guard',
+    'Direct TRUNCATE on authorization_history_baseline must be blocked by immutable guard',
   );
 });
 
@@ -683,7 +687,7 @@ test('Service signature and database default enforce DB-owned clock and source g
   );
 
   const epochRows = await db.query(
-    'SELECT baseline_at FROM mf06_authority_epoch WHERE epoch_id = $1',
+    'SELECT baseline_at FROM authorization_history_epoch WHERE epoch_id = $1',
     [record.epochId],
   );
   assert.equal(epochRows.length, 1);
@@ -708,13 +712,14 @@ test('Synthetic baseline insert trigger failure atomically rolls back authority 
 
   await assertBaselineTableExistsInCurrentSchema();
 
-  const beforeEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const beforeEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
   const beforeBaselines = (
-    await db.query('SELECT count(*)::int AS n FROM mf06_authority_baseline')
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_baseline')
   )[0].n as number;
   const beforeCommands = (
-    await db.query('SELECT count(*)::int AS n FROM mf06_authority_command')
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
   )[0].n as number;
 
   // Install actual synthetic PostgreSQL BEFORE INSERT trigger to induce an in-transaction write failure
@@ -724,8 +729,8 @@ test('Synthetic baseline insert trigger failure atomically rolls back authority 
       RAISE EXCEPTION 'Synthetic baseline insert failure' USING ERRCODE = '23514';
     END;
     $$;
-    DROP TRIGGER IF EXISTS trg_test_fail_baseline ON mf06_authority_baseline;
-    CREATE TRIGGER trg_test_fail_baseline BEFORE INSERT ON mf06_authority_baseline
+    DROP TRIGGER IF EXISTS trg_test_fail_baseline ON authorization_history_baseline;
+    CREATE TRIGGER trg_test_fail_baseline BEFORE INSERT ON authorization_history_baseline
     FOR EACH ROW EXECUTE FUNCTION trg_test_fail_baseline_fn();
   `);
 
@@ -736,20 +741,23 @@ test('Synthetic baseline insert trigger failure atomically rolls back authority 
     );
 
     // Verify zero count difference across command, epoch, and baseline (full atomic rollback)
-    const afterEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-      .n as number;
+    const afterEpochs = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+    )[0].n as number;
     const afterBaselines = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_baseline')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_baseline')
     )[0].n as number;
     const afterCommands = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
     )[0].n as number;
 
     assert.equal(afterEpochs, beforeEpochs, 'Epoch must be rolled back on baseline insert failure');
     assert.equal(afterBaselines, beforeBaselines, 'Baseline must be rolled back on insert failure');
     assert.equal(afterCommands, beforeCommands, 'Command must be rolled back on insert failure');
   } finally {
-    await db.query('DROP TRIGGER IF EXISTS trg_test_fail_baseline ON mf06_authority_baseline');
+    await db.query(
+      'DROP TRIGGER IF EXISTS trg_test_fail_baseline ON authorization_history_baseline',
+    );
     await db.query('DROP FUNCTION IF EXISTS trg_test_fail_baseline_fn()');
   }
 });
@@ -768,7 +776,7 @@ test('Post-commit witness insertion failure retains committed STAGING baseline w
 
   const originalQuery = failingDb.query.bind(failingDb);
   failingDb.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {
-    if (sql.startsWith('INSERT INTO mf06_authority_commit_witness')) {
+    if (sql.startsWith('INSERT INTO authorization_history_commit_receipt')) {
       throw new Error('Synthetic post-commit witness insertion failure');
     }
     return originalQuery(sql, params, runner);
@@ -788,9 +796,10 @@ test('Post-commit witness insertion failure retains committed STAGING baseline w
       'witnessConfirmed must be false on witness failure',
     );
 
-    const epochRows = await db.query('SELECT state FROM mf06_authority_epoch WHERE epoch_id = $1', [
-      record.epochId,
-    ]);
+    const epochRows = await db.query(
+      'SELECT state FROM authorization_history_epoch WHERE epoch_id = $1',
+      [record.epochId],
+    );
     assert.equal(epochRows.length, 1);
     assert.equal(epochRows[0].state, 'STAGING', 'Committed baseline epoch must remain intact');
   } catch (err) {

@@ -98,7 +98,7 @@ export class MainAuthorityCapturedStateReader {
       fields: string[];
       protocol_version: string;
     }[] = await manager.query(
-      'SELECT source_kind,table_name,fields,protocol_version FROM mf06_authority_source ORDER BY source_kind COLLATE "C"',
+      'SELECT source_kind,table_name,fields,protocol_version FROM authorization_history_source ORDER BY source_kind COLLATE "C"',
     );
     const expected = MAIN_AUTHORITY_SOURCES.map(([kind, table, fields]) => ({
       source_kind: kind,
@@ -115,12 +115,12 @@ export class MainAuthorityCapturedStateReader {
         to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS archived_at,
         e.writer_manifest_hash,b.source_registry_hash,b.snapshot_hash,b.snapshot_json::text AS snapshot_text,b.row_count,
         b.hash_algorithm='POSTGRES_JSONB_TEXT_SHA256_V1' AND b.snapshot_hash=encode(sha256(convert_to(b.snapshot_json::text,'UTF8')),'hex') AS baseline_hash_valid,
-        b.source_registry_hash=(SELECT encode(sha256(convert_to(jsonb_agg(to_jsonb(s) ORDER BY source_kind COLLATE "C")::text,'UTF8')),'hex') FROM mf06_authority_source s) AS registry_hash_valid,
+        b.source_registry_hash=(SELECT encode(sha256(convert_to(jsonb_agg(to_jsonb(s) ORDER BY source_kind COLLATE "C")::text,'UTF8')),'hex') FROM authorization_history_source s) AS registry_hash_valid,
         b.transaction_id=c.transaction_id AND c.operation='MAIN_AUTHORITY_BASELINE' AND b.captured_at=e.baseline_at AS origin_valid,
         COALESCE(w.transaction_id=c.transaction_id AND w.confirmed_at<=$2::timestamptz,false) AS witness_known,
         $2::timestamptz<b.captured_at AS before_baseline,$2::timestamptz>statement_timestamp() AS future
-      FROM mf06_authority_baseline b JOIN mf06_authority_epoch e USING(epoch_id)
-      JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id)
+      FROM authorization_history_baseline b JOIN authorization_history_epoch e USING(epoch_id)
+      JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id)
       WHERE b.epoch_id=$1`,
       [scope.epochId, scope.capturedAt],
     );
@@ -139,7 +139,7 @@ export class MainAuthorityCapturedStateReader {
       sources: Sources;
     };
     const [roundtrip]: { exact: boolean }[] = await manager.query(
-      'SELECT snapshot_json=$2::jsonb AS exact FROM mf06_authority_baseline WHERE epoch_id=$1',
+      'SELECT snapshot_json=$2::jsonb AS exact FROM authorization_history_baseline WHERE epoch_id=$1',
       [scope.epochId, JSON.stringify(base)],
     );
     if (
@@ -177,13 +177,13 @@ export class MainAuthorityCapturedStateReader {
     if (base.sources.reduce((sum, s) => sum + s.rows.length, 0) !== baseline.row_count)
       return unavailable('BASELINE_INTEGRITY_UNAVAILABLE');
     const gaps = await manager.query(
-      'SELECT 1 FROM mf06_authority_gap WHERE observed_at>$1::timestamptz AND observed_at<=$2::timestamptz LIMIT 1',
+      'SELECT 1 FROM authorization_history_gap WHERE observed_at>$1::timestamptz AND observed_at<=$2::timestamptz LIMIT 1',
       [baseline.captured_at, scope.capturedAt],
     );
     if (gaps.length) return unavailable('HISTORY_GAP');
     const [budget]: { n: number; bytes: string }[] = await manager.query(
       `
-      WITH selected AS (SELECT before_payload,after_payload FROM mf06_authority_fact
+      WITH selected AS (SELECT before_payload,after_payload FROM authorization_history_revision
         WHERE observed_at>$1::timestamptz AND observed_at<=$2::timestamptz LIMIT 2049)
       SELECT count(*)::int AS n,COALESCE(sum(COALESCE(octet_length(before_payload::text),0)+COALESCE(octet_length(after_payload::text),0)),0)::text AS bytes FROM selected`,
       [baseline.captured_at, scope.capturedAt],
@@ -200,13 +200,13 @@ export class MainAuthorityCapturedStateReader {
     const facts: Fact[] = await manager.query(
       `
       SELECT f.fact_id,f.source_kind,f.source_id,f.revision::text,f.operation,
-        COALESCE((SELECT max(prior.revision) FROM mf06_authority_fact prior WHERE prior.source_kind=f.source_kind AND prior.source_id=f.source_id AND prior.observed_at<=$1::timestamptz),0)::text AS base_revision,
+        COALESCE((SELECT max(prior.revision) FROM authorization_history_revision prior WHERE prior.source_kind=f.source_kind AND prior.source_id=f.source_id AND prior.observed_at<=$1::timestamptz),0)::text AS base_revision,
         f.before_payload::text AS before_text,f.after_payload::text AS after_text,
         COALESCE(c.transaction_id=f.transaction_id AND w.transaction_id=f.transaction_id AND w.confirmed_at>=f.observed_at AND w.confirmed_at<=$2::timestamptz,false) AS known,
         f.hash_algorithm='POSTGRES_JSONB_TEXT_SHA256_V1'
         AND f.before_hash IS NOT DISTINCT FROM CASE WHEN f.before_payload IS NOT NULL THEN encode(sha256(convert_to(f.before_payload::text,'UTF8')),'hex') END
         AND f.after_hash IS NOT DISTINCT FROM CASE WHEN f.after_payload IS NOT NULL THEN encode(sha256(convert_to(f.after_payload::text,'UTF8')),'hex') END AS hashes_valid
-      FROM mf06_authority_fact f LEFT JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id)
+      FROM authorization_history_revision f LEFT JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id)
       WHERE f.observed_at>$1::timestamptz AND f.observed_at<=$2::timestamptz
       ORDER BY f.source_kind COLLATE "C",f.source_id,f.revision LIMIT 2049`,
       [baseline.captured_at, scope.capturedAt],
@@ -231,7 +231,7 @@ export class MainAuthorityCapturedStateReader {
       const [exact]: { value: boolean }[] = await manager.query(
         `
         SELECT NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS d(fact_id UUID,before_payload JSONB,after_payload JSONB)
-          LEFT JOIN mf06_authority_fact f USING(fact_id)
+          LEFT JOIN authorization_history_revision f USING(fact_id)
           WHERE f.fact_id IS NULL OR f.before_payload IS DISTINCT FROM d.before_payload OR f.after_payload IS DISTINCT FROM d.after_payload) AS value`,
         [JSON.stringify(documents)],
       );

@@ -11,7 +11,8 @@ import { createIsolatedTestDatabase } from './support/isolated-test-database.js'
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
 const previousMain = '3ce035888d18b61f8b70bd7c1eada4ae8d799d74';
-const currentMain = '0dd7d277ac858c79c25eab88b29c9b00d3ece541';
+const currentMain = '0ef7b6901cde852e5660e8a58f1a194e16ac560a';
+const retainedChecklist = '7bb4501692830f185a367fc0e2fbf06685f725b2';
 test(
   'owned test database defaults to release graph; historical24 requires an explicit test-only selection',
   {
@@ -67,18 +68,28 @@ test(
       'SafetyFaceProvenance1791590400003',
       'Mf06ImmutableAssessments1791590400004',
       'Mf06TeamAuthorityHistory1792281600000',
+      'PrepareNotificationCompatibility1792010000000',
+      'CompleteNotificationCompatibility1792368000001',
+      'ZoneEntryPhysicalStorage1792454400000',
     ];
     assert.deepEqual([...actual].sort(), [...expected].sort());
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
-    assert.equal(new Set(expected).size, names.length + 5);
+    assert.equal(new Set(expected).size, expected.length);
     assert.equal(registered.synchronize, false);
     assert.equal(registered.migrationsRun, false);
     const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+    // Retain the already-applied Tuấn Checklist bytes; later forward migrations
+    // reconcile Main's Manager notification CHECK without rewriting this history.
     for (const match of options.matchAll(/from '\.\/migrations\/([\w-]+)\.js'/g)) {
       const path = `apps/backend/src/database/migrations/${match[1]}.ts`;
       assert.equal(
         digest(readFileSync(join(repository, path))),
-        digest(original(path, currentMain)),
+        digest(
+          original(
+            path,
+            path.endsWith('/1792195200000-SafetyChecklists.ts') ? retainedChecklist : currentMain,
+          ),
+        ),
         path,
       );
     }

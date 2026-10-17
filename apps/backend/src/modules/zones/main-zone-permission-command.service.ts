@@ -277,12 +277,12 @@ export class MainZonePermissionCommandService {
       );
       if (context[0]?.value) conflict('Nested authority commands are not supported');
       const inserted = await manager.query(
-        'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id',
+        'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id',
         [commandId, value.actorUserId, operation, hash],
       );
       if (!inserted.length) {
         const previous = await manager.query(
-          'SELECT request_hash,operation,actor_user_id FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT request_hash,operation,actor_user_id FROM authorization_history_command WHERE command_id=$1',
           [commandId],
         );
         if (
@@ -304,7 +304,7 @@ export class MainZonePermissionCommandService {
             ? await this.createContractor(manager, value)
             : await this.createWorker(manager, value);
       await manager.query(
-        "INSERT INTO mf06_zone_permission_command_result(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,$3::text,mf06_zone_permission_response($2,$3::text),'')",
+        "INSERT INTO zone_permission_command_receipt(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,$3::text,mf06_zone_permission_response($2,$3::text),'')",
         [commandId, sourceId, kind],
       );
       const permission = await this.result(manager, commandId, kind);
@@ -322,7 +322,7 @@ export class MainZonePermissionCommandService {
     // Postcommit upper bound only. Existing witness must not be recertified after transaction aging.
     try {
       await this.source.query(
-        'INSERT INTO mf06_authority_commit_witness(command_id,transaction_id) SELECT command_id,transaction_id FROM mf06_authority_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM mf06_authority_commit_witness w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
+        'INSERT INTO authorization_history_commit_receipt(command_id,transaction_id) SELECT command_id,transaction_id FROM authorization_history_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM authorization_history_commit_receipt w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
         [commandId],
       );
     } catch {
@@ -513,7 +513,7 @@ export class MainZonePermissionCommandService {
     kind: Kind,
   ): Promise<MainZonePermissionCommandResult['permission']> {
     const rows = await manager.query(
-      "SELECT kind,result_json,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM mf06_zone_permission_command_result WHERE command_id=$1",
+      "SELECT kind,result_json,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM zone_permission_command_receipt WHERE command_id=$1",
       [commandId],
     );
     const parsed = resultSchema.safeParse(rows[0]?.result_json);

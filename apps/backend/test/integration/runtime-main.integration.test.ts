@@ -325,18 +325,6 @@ test(
           body: { code: username, name: 'Synthetic runtime Site' },
         });
         siteId = site.data.id;
-        const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
-          username,
-        ]);
-        await db.query(
-          "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
-          [actorId, siteId],
-        );
-        const camera = await request(`/sites/${siteId}/cameras`, 201, {
-          method: 'POST',
-          token,
-          body: { code: 'CAM', externalId: username, name: 'Synthetic metadata Camera' },
-        });
         const managerName = `runtime-manager-${randomBytes(6).toString('hex')}`;
         await request('/users', 201, {
           method: 'POST',
@@ -354,6 +342,12 @@ test(
         });
         const managerToken = managerLogin.data.accessToken as string;
         secrets.push(managerToken);
+        const camera = await request(`/sites/${siteId}/cameras`, 201, {
+          method: 'POST',
+          token: managerToken,
+          body: { code: 'CAM', externalId: username, name: 'Synthetic metadata Camera' },
+        });
+
         const zone = await request(`/sites/${siteId}/zones`, 201, {
           method: 'POST',
           token: managerToken,
@@ -378,9 +372,9 @@ test(
             ],
           },
         };
-        const region = await request(route, 201, { method: 'POST', token, body });
+        const region = await request(route, 201, { method: 'POST', token: managerToken, body });
         assert.equal(region.data.region.zoneId, zone.data.id);
-        await request(route, 409, { method: 'POST', token, body });
+        await request(route, 409, { method: 'POST', token: managerToken, body });
         await request(`/sites/${siteId}/zones/${zone.data.id}`, 200, {
           method: 'PATCH',
           token: managerToken,

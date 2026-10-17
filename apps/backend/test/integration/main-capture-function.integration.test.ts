@@ -59,10 +59,10 @@ async function fixture() {
 
 async function counts() {
   return (
-    await db.query(`SELECT (SELECT count(*)::int FROM mf06_authority_command) AS commands,
-    (SELECT count(*)::int FROM mf06_authority_fact) AS facts,
-    (SELECT count(*)::int FROM mf06_authority_gap) AS gaps,
-    (SELECT count(*)::int FROM mf06_authority_commit_witness) AS witnesses`)
+    await db.query(`SELECT (SELECT count(*)::int FROM authorization_history_command) AS commands,
+    (SELECT count(*)::int FROM authorization_history_revision) AS facts,
+    (SELECT count(*)::int FROM authorization_history_gap) AS gaps,
+    (SELECT count(*)::int FROM authorization_history_commit_receipt) AS witnesses`)
   )[0];
 }
 
@@ -80,7 +80,7 @@ const damagedFunctions = [
   [
     'witness omits committed transaction check',
     'mf06_authority_witness_guard',
-    'CREATE OR REPLACE FUNCTION mf06_authority_witness_guard() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$ BEGIN SELECT transaction_id INTO NEW.transaction_id FROM mf06_authority_command WHERE command_id=NEW.command_id; NEW.confirmed_at:=clock_timestamp(); RETURN NEW; END $$',
+    'CREATE OR REPLACE FUNCTION mf06_authority_witness_guard() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$ BEGIN SELECT transaction_id INTO NEW.transaction_id FROM authorization_history_command WHERE command_id=NEW.command_id; NEW.confirmed_at:=clock_timestamp(); RETURN NEW; END $$',
   ],
   [
     'internal guard omits hash ownership',
@@ -269,7 +269,7 @@ test('canonical function bodies and attributes permit facts, witness and private
     },
   );
   const [fact] = await db.query(
-    'SELECT c.actor_user_id,w.command_id AS witness FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+    'SELECT c.actor_user_id,w.command_id AS witness FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
     [f.zone],
   );
   assert.equal(fact.actor_user_id, f.actor);

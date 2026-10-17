@@ -1,14 +1,18 @@
 # MF05/MF06 database and private-media recovery drill
 
+Current local graph65 and the fresh frozen-lockfile Linux build are recorded separately in the [17/10 database handoff](../database/tuan-db-erd-handoff.md). The source/image/profile pins and results below are historical receipts and must not be relabeled as the new naming migration proof.
+
+For the current procedure, use the handoff's qualified source/image and owned-schema runner. PostgreSQL tools may come from `SMARTSITE_TEST_PG_BIN` or the explicitly owned `SMARTSITE_TEST_PG_CONTAINER`. The current standard runner creates and drops its own UUID schema; it does not migrate a public/default fixture. Retain both current and historical receipts with their original profile labels.
+
 This is an isolated software verification procedure, not a production restore command or acceptance. It starts no model, camera, Face service or assessment worker. Never use it against an operational database, a default/public schema or a cloud connection.
 
 The configuration-only website state helper deliberately refuses nonempty business tables. Do not extend its seven-table allowlist and replay historical assessment rows as ordinary inserts: the immutable assessment guard requires a currently claimed lease, assigns new timestamps and finalizes the job. Completed historical state cannot be reconstructed that way.
 
-## Profiles and prerequisites
+## Historical profiles and prerequisites
 
 The Backend integration test `test/integration/operational-recovery.integration.test.ts` has three explicitly selected scenarios:
 
-- The canonical source-registry profile uses the current runtime graph: 61 migrations on Main `0dd7d27` plus the integrated Safety work. It includes completed synthetic MF06 history and journal/consent storage. The 17 October native Windows drill restored 90 fixture tables and two synthetic evidence files; these counts describe that fixture, not every deployed database.
+- The previously qualified canonical source-registry profile used 61 migrations on Main `0dd7d27` plus the integrated Safety work. It included completed synthetic MF06 history and journal/consent storage. That 17 October native Windows drill restored 90 fixture tables and two synthetic evidence files; these counts describe that fixture, not every deployed database.
 - The opt-in MAIN profile loads the exact 35 migrations from approved commit `2e98619ac94be775ef43f4cb3076f00a59b88df1`, then request migration0001 and immutable assessment migration0004. The helper compares every snapshot source with Git and every compiled module with a fresh deterministic transpilation before importing it. The current61-runtime negative-boundary drill restored63 fixture tables and two synthetic evidence files, including immutable completed MF06 history, while readiness correctly remained503. This test-only list never changes production registration.
 - The Linux scenario requires an explicitly qualified image digest and the fresh `release-dist/main.js` entrypoint. The 17 October current61 drill passed using the existing scoped Manager and Contractor Representative provisioning routes, without weakening login throttling. It restored 90 fixture tables and two synthetic evidence files, retained manual-command replay, and stopped all three owned Linux runtimes through SIGTERM with exit0. A native Windows result does not cover this branch.
 

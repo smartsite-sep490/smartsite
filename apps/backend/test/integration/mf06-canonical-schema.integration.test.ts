@@ -9,7 +9,7 @@ after(() => canonical.dispose());
 
 test('canonical request/job columns and foreign key bindings match their persisted contracts', async () => {
   const db = canonical.dataSource;
-  for (const table of ['mf06_assessment_request', 'mf06_assessment_job']) {
+  for (const table of ['zone_entry_assessment_request', 'zone_entry_assessment_job']) {
     const metadata = db.entityMetadatas.find((entity) => entity.tableName === table);
     assert.ok(metadata);
     const actual = await db.query(

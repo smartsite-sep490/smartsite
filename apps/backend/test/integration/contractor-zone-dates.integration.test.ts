@@ -262,8 +262,8 @@ test('date-only contractor Zone grants use inclusive local days, DST, participat
     const counts = () =>
       source.query(
         `SELECT (SELECT count(*)::int FROM contractor_zone_permission) AS permissions,
-      (SELECT count(*)::int FROM audit_log) AS audits,(SELECT count(*)::int FROM mf06_authority_command) AS commands,
-      (SELECT count(*)::int FROM mf06_authority_fact) AS facts,(SELECT access_policy_version FROM site WHERE id=$1) AS policy`,
+      (SELECT count(*)::int FROM audit_log) AS audits,(SELECT count(*)::int FROM authorization_history_command) AS commands,
+      (SELECT count(*)::int FROM authorization_history_revision) AS facts,(SELECT access_policy_version FROM site WHERE id=$1) AS policy`,
         [siteId],
       );
     const beforeFailure = await counts();

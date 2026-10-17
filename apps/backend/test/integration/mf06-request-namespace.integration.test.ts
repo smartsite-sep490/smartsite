@@ -65,10 +65,10 @@ test('Requests list and detail never fall through a second schema when selected 
   );
   for (const table of [
     'site',
-    'mf06_assessment',
-    'mf06_assessment_request',
-    'mf06_authority_artifact',
-    'mf06_assessment_job',
+    'zone_entry_assessment',
+    'zone_entry_assessment_request',
+    'zone_entry_authority_artifact',
+    'zone_entry_assessment_job',
   ]) {
     await first.query(`ALTER TABLE "${schema}"."${table}" RENAME TO fixture_saved_relation`);
     try {
@@ -222,7 +222,7 @@ test('actual AppModule Requests exposes sanitized503 for broken selected storage
       signal: AbortSignal.timeout(5000),
     });
   assert.equal((await read(list)).status, 200);
-  await db.query('ALTER TABLE mf06_assessment RENAME TO fixture_hidden_http_assessment');
+  await db.query('ALTER TABLE zone_entry_assessment RENAME TO fixture_hidden_http_assessment');
   try {
     assert.equal(
       (await read(list, false)).status,
@@ -239,7 +239,7 @@ test('actual AppModule Requests exposes sanitized503 for broken selected storage
         assert(!body.includes(value), 'Public error must omit private SQL/schema/token');
     }
   } finally {
-    await db.query('ALTER TABLE fixture_hidden_http_assessment RENAME TO mf06_assessment');
+    await db.query('ALTER TABLE fixture_hidden_http_assessment RENAME TO zone_entry_assessment');
   }
   const recovered = await read(list);
   assert.equal(recovered.status, 200);

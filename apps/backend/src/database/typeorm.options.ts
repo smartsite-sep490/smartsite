@@ -1,3 +1,4 @@
+import { ZoneEntryPhysicalStorage1792454400000 } from './migrations/1792454400000-ZoneEntryPhysicalStorage.js';
 import { PreserveManagerNotificationHistory1792368000000 } from './migrations/1792368000000-PreserveManagerNotificationHistory.js';
 import { SiteManagerReviewNotifications1792108800000 } from './migrations/1792108800000-SiteManagerReviewNotifications.js';
 import { VisitorRoster1792022400000 } from './migrations/1792022400000-VisitorRoster.js';
@@ -29,6 +30,8 @@ import { WorkerCodeSequence1791676800000 } from './migrations/1791676800000-Work
 import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08SafetyWorkflow.js';
 import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import type { DataSourceOptions } from 'typeorm';
+import { PrepareNotificationCompatibility1792010000000 } from './migrations/1792010000000-PrepareNotificationCompatibility.js';
+import { CompleteNotificationCompatibility1792368000001 } from './migrations/1792368000001-CompleteNotificationCompatibility.js';
 import {
   ENTITIES,
   ContractorZoneAccessGrantEntity,
@@ -90,6 +93,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     url: config.DATABASE_URL,
     synchronize: false,
     migrationsRun: false,
+    migrationsTransactionMode: 'all',
     connectTimeoutMS: timeoutMs,
     // PostgreSQL supplies gen_random_uuid(); connection startup must not install
     // extensions just because a read-only projection contains a generated UUID.
@@ -151,6 +155,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       TeamZonePermissions1791940000000,
       ContractorZoneRegrant1791940000001,
       SingleTeamZone1791940000002,
+      PrepareNotificationCompatibility1792010000000,
       AttendanceAbsence1792022400000,
       VisitorRoster1792022400000,
       SiteManagerReviewNotifications1792108800000,
@@ -160,6 +165,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ShiftExitGracePeriod1792281600000,
       AttendanceExitNotifications1792281600001,
       PreserveManagerNotificationHistory1792368000000,
+      CompleteNotificationCompatibility1792368000001,
+      ZoneEntryPhysicalStorage1792454400000,
     ],
     logging: false,
     extra: {

@@ -150,7 +150,10 @@ test(
       username: 'business-manager',
       displayName: 'Synthetic Site Manager',
       temporaryPassword: 'InitialManager123!',
-      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+      roleAssignments: [
+        { role: 'SITE_MANAGER', siteId: site.id },
+        { role: 'SITE_MANAGER', siteId: other.id },
+      ],
     });
     const manager = await login('business-manager', 'InitialManager123!');
     const reviewer = await create<AccountResponse>('/users', {
@@ -177,17 +180,25 @@ test(
       name: 'Synthetic business Contractor',
     });
     const createProfile = async (target: SiteResponse, label: string) => {
-      await create(`/contractors/${contractor.id}/participations`, {
-        siteId: target.id,
-        validFrom: '2020-01-01T00:00:00Z',
-        validUntil: null,
-      });
+      await create(
+        `/contractors/${contractor.id}/participations`,
+        {
+          siteId: target.id,
+          validFrom: '2020-01-01T00:00:00Z',
+          validUntil: null,
+        },
+        manager,
+      );
       const username = `business-rep-${label}`;
-      await create(`/sites/${target.id}/contractors/${contractor.id}/representative-accounts`, {
-        username,
-        displayName: 'Synthetic business Representative',
-        temporaryPassword: 'SyntheticRep123!',
-      });
+      await create(
+        `/sites/${target.id}/contractors/${contractor.id}/representative-accounts`,
+        {
+          username,
+          displayName: 'Synthetic business Representative',
+          temporaryPassword: 'SyntheticRep123!',
+        },
+        manager,
+      );
       const representative = await login(username, 'SyntheticRep123!');
       return create<WorkerResponse>(
         `/sites/${target.id}/workers`,
@@ -201,11 +212,15 @@ test(
     };
     const worker = await createProfile(site, 'A');
     const foreignWorker = await createProfile(other, 'B');
-    const camera = await create<CameraResponse>(`/sites/${site.id}/cameras`, {
-      code: 'BIZ-CAM',
-      externalId: 'SYNTHETIC-CAM',
-      name: 'Synthetic Camera',
-    });
+    const camera = await create<CameraResponse>(
+      `/sites/${site.id}/cameras`,
+      {
+        code: 'BIZ-CAM',
+        externalId: 'SYNTHETIC-CAM',
+        name: 'Synthetic Camera',
+      },
+      manager,
+    );
     const zone = await request<ZoneResponse>(`/sites/${site.id}/zones`, {
       method: 'POST',
       token: manager,
@@ -232,6 +247,7 @@ test(
           ],
         },
       },
+      manager,
     );
     const eventId = randomUUID(),
       streamSessionId = randomUUID();

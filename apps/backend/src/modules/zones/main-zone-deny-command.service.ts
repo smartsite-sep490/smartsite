@@ -86,13 +86,13 @@ export class MainZoneDenyCommandService {
       );
       if (context[0]?.value) conflict('Nested authority commands are not supported');
       const inserted: { command_id: string }[] = await manager.query(
-        'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id',
+        'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id',
         [commandId, value.actorUserId, operation, requestHash],
       );
       if (!inserted.length) {
         const previous: { request_hash: string; operation: string; actor_user_id: string }[] =
           await manager.query(
-            'SELECT request_hash,operation,actor_user_id FROM mf06_authority_command WHERE command_id=$1',
+            'SELECT request_hash,operation,actor_user_id FROM authorization_history_command WHERE command_id=$1',
             [commandId],
           );
         if (
@@ -142,7 +142,7 @@ export class MainZoneDenyCommandService {
         );
       }
       await manager.query(
-        "INSERT INTO mf06_zone_deny_command_result(command_id,source_id,result_json,result_hash) VALUES($1,$2,mf06_zone_deny_response($2),'')",
+        "INSERT INTO zone_access_denial_command_receipt(command_id,source_id,result_json,result_hash) VALUES($1,$2,mf06_zone_deny_response($2),'')",
         [commandId, sourceId],
       );
       const grant = await this.result(manager, commandId);
@@ -159,7 +159,7 @@ export class MainZoneDenyCommandService {
     // Separate connection after COMMIT. Witness time is an upper bound, never a commit timestamp.
     try {
       await this.source.query(
-        'INSERT INTO mf06_authority_commit_witness(command_id,transaction_id) SELECT command_id,transaction_id FROM mf06_authority_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM mf06_authority_commit_witness w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
+        'INSERT INTO authorization_history_commit_receipt(command_id,transaction_id) SELECT command_id,transaction_id FROM authorization_history_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM authorization_history_commit_receipt w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
         [commandId],
       );
     } catch {
@@ -173,7 +173,7 @@ export class MainZoneDenyCommandService {
     commandId: string,
   ): Promise<MainZoneDenyCommandResult['grant']> {
     const rows: { result_json: unknown; hash_valid: boolean }[] = await manager.query(
-      "SELECT result_json,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM mf06_zone_deny_command_result WHERE command_id=$1",
+      "SELECT result_json,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM zone_access_denial_command_receipt WHERE command_id=$1",
       [commandId],
     );
     const parsed = grantSchema.safeParse(rows[0]?.result_json);

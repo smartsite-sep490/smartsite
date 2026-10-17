@@ -23,7 +23,6 @@ import {
   ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
-import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';

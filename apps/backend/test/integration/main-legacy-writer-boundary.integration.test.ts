@@ -195,8 +195,8 @@ async function counts(db: DataSource) {
   (SELECT count(*)::int FROM worker) AS workers,(SELECT count(*)::int FROM contractor) AS contractors,
   (SELECT count(*)::int FROM contractor_site_participation) AS participations,
   (SELECT count(*)::int FROM worker_site_zone_assignment) AS allocations,
-  (SELECT count(*)::int FROM mf06_authority_command) AS commands,(SELECT count(*)::int FROM mf06_authority_fact) AS facts,
-  (SELECT count(*)::int FROM mf06_authority_gap) AS gaps,(SELECT count(*)::int FROM mf06_authority_commit_witness) AS witnesses`)
+  (SELECT count(*)::int FROM authorization_history_command) AS commands,(SELECT count(*)::int FROM authorization_history_revision) AS facts,
+  (SELECT count(*)::int FROM authorization_history_gap) AS gaps,(SELECT count(*)::int FROM authorization_history_commit_receipt) AS witnesses`)
   )[0];
 }
 for (const [name, call] of calls)
@@ -209,19 +209,19 @@ for (const [name, call] of calls)
   });
 
 const relations = [
-  'mf06_authority_source',
-  'mf06_authority_command',
-  'mf06_authority_epoch',
-  'mf06_authority_control',
-  'mf06_authority_head',
-  'mf06_authority_fact',
-  'mf06_authority_gap',
-  'mf06_authority_commit_witness',
-  'mf06_authority_baseline',
-  'mf06_assignment_command_result',
-  'mf06_participation_command_result',
-  'mf06_zone_permission_command_result',
-  'mf06_zone_deny_command_result',
+  'authorization_history_source',
+  'authorization_history_command',
+  'authorization_history_epoch',
+  'authorization_history_control',
+  'authorization_history_head',
+  'authorization_history_revision',
+  'authorization_history_gap',
+  'authorization_history_commit_receipt',
+  'authorization_history_baseline',
+  'worker_assignment_command_receipt',
+  'contractor_participation_command_receipt',
+  'zone_permission_command_receipt',
+  'zone_access_denial_command_receipt',
 ] as const;
 for (const relation of relations)
   test(`partial MAIN ${relation} refuses both raw legacy representative writers and legacy journal writer`, async () => {
@@ -299,11 +299,6 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
       f = await fixture(db, kind === 'GRANT' ? 'ADMIN' : 'SITE_MANAGER'),
       service = new MainRepresentativeCommandService(db);
     const context = { actorUserId: f.actor, reauthorize: async () => {} };
-    if (kind === 'ASSIGN')
-      await db.query(
-        "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-        [randomUUID(), f.actor, f.site],
-      );
     const result =
       kind === 'GRANT'
         ? await service.grant(f.contractor, { userId: f.target }, context)
@@ -312,7 +307,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
     assert.equal(result!.userId, f.target);
     const rows = await db.query(
       `SELECT c.actor_user_id,c.operation,f.source_kind,f.source_id,w.transaction_id=c.transaction_id AS witnessed
-  FROM mf06_authority_command c JOIN mf06_authority_fact f USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id)
+  FROM authorization_history_command c JOIN authorization_history_revision f USING(command_id) JOIN authorization_history_commit_receipt w USING(command_id)
   WHERE f.source_id=$1`,
       [result!.id],
     );
