@@ -73,7 +73,8 @@ import type {
   QrPassResponse,
   VisitorPassResponse,
   QrFallbackResponse,
-  VerifyQrCommand,
+  IssueWorkerQrCommand,
+  WorkerQrVerificationCommand,
   VisitorGateCommand,
   WorkerQrVerificationResponse,
   VisitorGateEventResponse,
@@ -150,7 +151,16 @@ import type {
 } from '@smartsite/contracts';
 export type { SchedulingRequestStatus };
 
-import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './index';
+/** React Native FormData uses URI-backed files instead of browser File objects. */
+export type NativeUploadFile = { uri: string; name: string; type: string };
+export type UploadFile = File | NativeUploadFile;
+function appendFile(form: FormData, field: string, file: Blob | NativeUploadFile, name?: string) {
+  if ('uri' in file) form.append(field, file as unknown as Blob);
+  else if (name) form.append(field, file, name);
+  else form.append(field, file);
+}
+
+import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './errors';
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
@@ -653,10 +663,20 @@ export class SmartSiteManagementClient {
       { status, ...review },
     );
   }
-  issueWorkerQr(token: string, siteId: string, fallbackSessionId: string) {
-    return this.request<QrPassResponse>('POST', `/sites/${pathId(siteId)}/worker-qr`, token, {
-      fallbackSessionId,
-    });
+  issueWorkerQr(
+    token: string,
+    siteId: string,
+    input: IssueWorkerQrCommand | string,
+    options?: RequestOptions,
+  ) {
+    return this.request<QrPassResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/worker-qr`,
+      token,
+      typeof input === 'string' ? { fallbackSessionId: input } : input,
+      undefined,
+      options,
+    );
   }
   openCameraQrFallback(token: string, siteId: string, gateId: string, direction: 'IN' | 'OUT') {
     return this.request<QrFallbackResponse>(
@@ -666,7 +686,12 @@ export class SmartSiteManagementClient {
       { direction, reason: 'CAMERA_UNAVAILABLE' },
     );
   }
-  verifyWorkerQr(token: string, siteId: string, gateId: string, input: VerifyQrCommand) {
+  verifyWorkerQr(
+    token: string,
+    siteId: string,
+    gateId: string,
+    input: WorkerQrVerificationCommand,
+  ) {
     return this.request<WorkerQrVerificationResponse>(
       'POST',
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-verifications`,
@@ -767,7 +792,7 @@ export class SmartSiteManagementClient {
   }
 
   private async runRequest<T>(
-    options: RequestOptions | undefined,
+    options: (RequestOptions & { sessionSignal?: AbortSignal }) | undefined,
     operation: (signal: AbortSignal | undefined) => Promise<T>,
   ): Promise<T> {
     if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
@@ -777,8 +802,16 @@ export class SmartSiteManagementClient {
     }
     const controller = new AbortController();
     const onAbort = () => controller.abort();
-    options?.signal?.addEventListener('abort', onAbort);
-    if (options?.signal?.aborted) controller.abort();
+    const signals = [
+      ...new Set(
+        [options?.signal, options?.sessionSignal].filter(
+          (signal): signal is AbortSignal => !!signal,
+        ),
+      ),
+    ];
+    for (const signal of signals) signal.addEventListener('abort', onAbort);
+    const aborted = () => signals.some((signal) => signal.aborted);
+    if (aborted()) controller.abort();
     let timedOut = false;
     const timeout =
       options?.timeoutMs === undefined
@@ -788,24 +821,24 @@ export class SmartSiteManagementClient {
             controller.abort();
           }, options.timeoutMs);
     const signal =
-      options?.signal || options?.timeoutMs !== undefined ? controller.signal : undefined;
+      signals.length || options?.timeoutMs !== undefined ? controller.signal : undefined;
     try {
-      if (options?.signal?.aborted) throw new ApiError('cancelled', 'Request cancelled.');
+      if (aborted()) throw new ApiError('cancelled', 'Request cancelled.');
       return await operation(signal);
     } catch (error) {
-      if (options?.signal?.aborted) throw new ApiError('cancelled', 'Request cancelled.');
+      if (aborted()) throw new ApiError('cancelled', 'Request cancelled.');
       if (timedOut) throw new ApiError('timeout', 'Backend request timed out.');
       if (error instanceof ApiError) throw error;
       throw new ApiError('network', 'Could not connect to the backend.');
     } finally {
       if (timeout) clearTimeout(timeout);
-      options?.signal?.removeEventListener('abort', onAbort);
+      for (const signal of signals) signal.removeEventListener('abort', onAbort);
     }
   }
 
   private async readBody<T>(read: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     if (!signal) return read();
-    if (signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
+    if (signal.aborted) throw new ApiError('cancelled', 'Request cancelled.');
     let onAbort: (() => void) | undefined;
     const remove = () => {
       if (!onAbort) return;
@@ -814,7 +847,7 @@ export class SmartSiteManagementClient {
     };
     try {
       return await new Promise<T>((resolve, reject) => {
-        onAbort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+        onAbort = () => reject(new ApiError('cancelled', 'Request cancelled.'));
         signal.addEventListener('abort', onAbort);
         read().then(resolve, reject);
       });
@@ -826,13 +859,11 @@ export class SmartSiteManagementClient {
   private requestOptions(
     token: string | undefined,
     options?: RequestOptions,
-  ): RequestOptions | undefined {
+  ): (RequestOptions & { sessionSignal?: AbortSignal }) | undefined {
     if (!token || !this.session) return options;
     return {
       ...options,
-      signal: options?.signal
-        ? AbortSignal.any([options.signal, this.session.signal])
-        : this.session.signal,
+      sessionSignal: this.session.signal,
     };
   }
 
@@ -1276,12 +1307,12 @@ export class SmartSiteManagementClient {
     siteId: string,
     id: string,
     input: import('@smartsite/contracts').SubmitChecklistCommand,
-    files: File[],
+    files: UploadFile[],
     options?: RequestOptions,
   ) {
     const form = new FormData();
-    form.set('command', JSON.stringify(input));
-    for (const file of files) form.append('files', file);
+    form.append('command', JSON.stringify(input));
+    for (const file of files) appendFile(form, 'files', file);
     return this.requestFormData<
       WorkflowMutationResponse<import('@smartsite/contracts').ChecklistDetailResponse>
     >(
@@ -1374,7 +1405,7 @@ export class SmartSiteManagementClient {
       | ReviewSubmissionCommand
       | ReopenIncidentCommand,
     actionId?: string,
-    file?: File,
+    file?: UploadFile,
     options?: RequestOptions,
   ) {
     const segment = {
@@ -1453,7 +1484,7 @@ export class SmartSiteManagementClient {
     id: string,
     operation: 'start' | 'submit' | 'verify' | 'return' | 'cancel',
     input: VersionCommand | SubmitSafetyResultCommand | ReasonCommand,
-    file?: File,
+    file?: UploadFile,
     options?: RequestOptions,
   ) {
     const path = `/sites/${pathId(siteId)}/safety-tasks/${pathId(id)}/${operation === 'submit' ? 'submissions' : operation}`;
@@ -1474,10 +1505,10 @@ export class SmartSiteManagementClient {
       options,
     );
   }
-  private resultForm(input: VersionCommand, file?: File) {
+  private resultForm(input: VersionCommand, file?: UploadFile) {
     const form = new FormData();
-    for (const [name, value] of Object.entries(input)) form.set(name, String(value));
-    if (file) form.set('file', file);
+    for (const [name, value] of Object.entries(input)) form.append(name, String(value));
+    if (file) appendFile(form, 'file', file);
     return form;
   }
   getWorkflowEvidence(
@@ -1996,9 +2027,9 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob) {
+  uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob | NativeUploadFile) {
     const form = new FormData();
-    form.append('sample', sample, 'face-sample.jpg');
+    appendFile(form, 'sample', sample, 'face-sample.jpg');
     return this.requestFormData<FaceEnrollmentSessionResponse>(
       'POST',
       `/face-enrollments/${pathId(sessionId)}/samples`,
@@ -2009,11 +2040,11 @@ export class SmartSiteManagementClient {
   checkFaceEnrollmentQuality(
     token: string,
     workerId: string,
-    sample: Blob,
+    sample: Blob | NativeUploadFile,
     target: EnrollmentCaptureTarget,
   ) {
     const form = new FormData();
-    form.append('sample', sample, 'face-quality-check.jpg');
+    appendFile(form, 'sample', sample, 'face-quality-check.jpg');
     form.append('target', target);
     return this.requestFormData<FaceEnrollmentQualityResponse>(
       'POST',

@@ -161,7 +161,7 @@ export class QrFallbackSessionEntity {
 @Entity({ name: 'qr_credential' })
 @Check(
   'chk_qr_subject',
-  '(visit_id IS NOT NULL AND worker_id IS NULL AND fallback_session_id IS NULL) OR (visit_id IS NULL AND worker_id IS NOT NULL AND fallback_session_id IS NOT NULL)',
+  '(visit_id IS NOT NULL AND worker_id IS NULL AND fallback_session_id IS NULL) OR (visit_id IS NULL AND worker_id IS NOT NULL)',
 )
 @Index('uq_qr_credential_token_hash', ['tokenHash'], { unique: true })
 @Check('chk_qr_direction', "direction IN ('IN','OUT')")

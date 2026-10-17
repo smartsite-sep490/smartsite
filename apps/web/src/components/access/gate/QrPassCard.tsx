@@ -99,6 +99,11 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
       )}
 
       {/* Countdown Timer */}
+      {pass.expiresAt !== null && remaining > 0 && /^[A-HJ-NP-Z2-9]{8}$/.test(pass.token) && (
+        <p className="select-all font-mono text-2xl font-extrabold tracking-widest text-slate-900">
+          {pass.token}
+        </p>
+      )}
       <div className="my-3">
         <div
           className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-sm font-mono font-bold ${

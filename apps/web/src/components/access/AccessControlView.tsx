@@ -188,7 +188,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       return siteRoles.includes('WORKER');
     }
     if (tab.id === 'worker-enrollment') {
-      return siteRoles.includes('CONTRACTOR_REPRESENTATIVE') || siteRoles.includes('WORKER');
+      return siteRoles.includes('CONTRACTOR_REPRESENTATIVE');
     }
     if (tab.id === 'gate-permissions') {
       return isGlobalAdmin || siteRoles.includes('SITE_MANAGER');
@@ -531,7 +531,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
           {activeTab === 'gate-desk' && (
             <SecurityGateDeskView
-              canManualVerify={siteRoles.includes('SECURITY_OFFICER')}
+              isSecurityOfficer={siteRoles.includes('SECURITY_OFFICER')}
               key={`${sessionScope}:${siteId}`}
               apiUrl={apiUrl}
               token={token}

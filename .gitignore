@@ -19,6 +19,8 @@ coverage/
 .test-build/
 .next/
 .expo/
+apps/mobile/android/
+apps/mobile/ios/
 .dart_tool/
 .flutter-plugins*
 .venv/
@@ -86,3 +88,6 @@ skills-lock.json
 # Browser QA artifacts
 apps/web/test-results/
 apps/web/playwright-report/
+
+# Private local agent artifacts
+.task-tools/

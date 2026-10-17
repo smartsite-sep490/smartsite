@@ -21,6 +21,8 @@ export type {
   VisitorPassResponse,
   QrFallbackResponse,
   VerifyQrCommand,
+  IssueWorkerQrCommand,
+  WorkerQrVerificationCommand,
   VisitorGateCommand,
   WorkerQrVerificationResponse,
   VisitorGateEventResponse,

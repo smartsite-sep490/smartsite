@@ -269,6 +269,7 @@ describe('Site Access ERD integration', () => {
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Revoke Contractor Zone' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Worker Biometrics/i })).toBeTruthy();
   });
   it('Site Manager can open its approval queue and configure Site permissions', async () => {
     authSessionMock.user = {
@@ -283,7 +284,7 @@ describe('Site Access ERD integration', () => {
     expect(screen.getByRole('button', { name: /Zone Permissions/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
   });
-  it('Worker sees personal QR and attendance without gate operations', async () => {
+  it('Worker sees personal QR and attendance without gate operations or self-enrollment', async () => {
     authSessionMock.user = {
       ...mockAdminLoginResponse.user,
       roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
@@ -292,6 +293,7 @@ describe('Site Access ERD integration', () => {
     await screen.findByRole('button', { name: 'Get My QR' });
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
     await screen.findByText(/Attendance/i);
   });
 
@@ -337,13 +339,9 @@ describe('Site Access ERD integration', () => {
     expect(
       tabs.getByRole('button', { name: /Worker entry \/ exit/i }).getAttribute('aria-current'),
     ).toBe('page');
-    await waitFor(() =>
-      expect(SmartSiteManagementClient.prototype.listWorkers).toHaveBeenCalledWith(
-        'mock-admin-token',
-        'site-alpha',
-        { limit: 100 },
-      ),
-    );
+    expect(SmartSiteManagementClient.prototype.listWorkers).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Worker profile')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Verify Worker manually' })).toBeNull();
     expect(SmartSiteManagementClient.prototype.accessSetup).not.toHaveBeenCalled();
     await user.click(tabs.getByRole('button', { name: /Visitor entry \/ exit/i }));
     await screen.findByText('Synthetic visitor');
