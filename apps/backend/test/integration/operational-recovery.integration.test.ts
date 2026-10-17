@@ -145,7 +145,15 @@ function recoveryScenario(main37 = false, linux = false) {
           return (migration as new () => { name: string }).prototype.constructor.name;
         })
         .filter((name) => !applied.has(name));
-      assert.deepEqual(missingRuntimeMigrations, MAIN37_MISSING_MAIN61_MIGRATIONS);
+      const expectedMissingMigrations = [...MAIN37_MISSING_MAIN61_MIGRATIONS];
+      const workerQrMigration = 'WorkerQrShortCodes1792454400000';
+      if (
+        registered.some(
+          (migration) => typeof migration === 'function' && migration.name === workerQrMigration,
+        )
+      )
+        expectedMissingMigrations.push(workerQrMigration);
+      assert.deepEqual(missingRuntimeMigrations, expectedMissingMigrations);
     }
     await control.initialize();
     const schema = db.driver.schema;
