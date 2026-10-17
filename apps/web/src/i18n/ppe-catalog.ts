@@ -686,11 +686,11 @@ export const PPE_EN_CATALOG = {
     'All AI model inference and live camera analysis are currently paused by operator configuration. Stored zone/region configurations and persisted safety alert records remain accessible through the workspaces below.',
   'liveOverview.ppe.title': 'PPE Monitoring',
   'liveOverview.ppe.description':
-    'Open the per-camera PPE workspace to manage zone PPE requirements, link camera observation regions, and inspect camera snapshot evidence when an authorized source is available.',
+    'View per-camera PPE observations and available snapshots. Configure cameras, regions and PPE in Camera setup.',
   'liveOverview.ppe.action': 'Open PPE Monitoring',
   'liveOverview.zones.title': 'Restricted Zones',
   'liveOverview.zones.description':
-    'Open the restricted zone workspace to configure polygon region geometry per camera and review technical zone entry observations and recorded assessment history.',
+    'Review zone-entry observations and saved assessments. Configure observation regions in Camera setup.',
   'liveOverview.zones.action': 'Open Restricted Zones',
   'liveOverview.incidents.title': 'Safety Alerts',
   'liveOverview.incidents.description':
@@ -1698,11 +1698,11 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
     'Toàn bộ suy luận mô hình AI và phân tích luồng camera hiện đang tạm dừng theo cấu hình vận hành. Các cấu hình khu vực/vùng quan sát đã lưu và bản ghi cảnh báo an toàn vẫn có thể truy cập qua các mục bên dưới.',
   'liveOverview.ppe.title': 'Giám sát Trang bị Bảo hộ',
   'liveOverview.ppe.description':
-    'Mở không gian làm việc PPE theo từng camera để cấu hình yêu cầu bảo hộ theo khu vực, liên kết vùng quan sát và kiểm tra bằng chứng ảnh chụp khi nguồn camera được cấp quyền khả dụng.',
+    'Xem quan sát PPE theo từng camera và ảnh chụp hiện có. Cấu hình camera, vùng quan sát và PPE tại Thiết lập camera.',
   'liveOverview.ppe.action': 'Vào Giám sát Trang bị Bảo hộ',
   'liveOverview.zones.title': 'Giám sát Khu vực Hạn chế',
   'liveOverview.zones.description':
-    'Mở không gian khu vực hạn chế để cấu hình đa giác vùng quan sát theo từng camera, xem các quan sát kỹ thuật khi có người đi vào vùng hạn chế và tra cứu lịch sử đánh giá đã lưu.',
+    'Xem xét quan sát ra vào khu vực và các đánh giá đã lưu. Cấu hình vùng quan sát tại Thiết lập camera.',
   'liveOverview.zones.action': 'Vào Giám sát Khu vực Hạn chế',
   'liveOverview.incidents.title': 'Cảnh báo An toàn',
   'liveOverview.incidents.description':
