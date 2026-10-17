@@ -11,9 +11,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 
 test(
-  'actual compiled main native app.close drains an admitted MAIN61 transaction before pool shutdown',
+  'actual compiled main native app.close drains an admitted release transaction before pool shutdown',
   { timeout: 40_000 },
   async (t) => {
     const url = new URL(resolveTestDatabaseUrl());
@@ -166,7 +167,7 @@ test(
     assert.deepEqual(await control('READY'), {
       type: 'READY',
       entrypoint: 'main.ts',
-      registeredMigrations: 61,
+      registeredMigrations: reviewedReleaseMigrationNames(db.options.migrations).length,
       productionConfig: true,
     });
     const login = await request('/auth/login', 'POST', {

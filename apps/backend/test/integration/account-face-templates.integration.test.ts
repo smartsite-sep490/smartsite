@@ -30,6 +30,7 @@ import type { FaceVerificationInput } from '../../src/modules/workforce/identity
 import type { FaceVerificationTechnicalOutcome } from '@smartsite/contracts';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 
 const database = createIsolatedTestDatabase({ canonical: true });
 const { dataSource } = database;
@@ -44,7 +45,7 @@ test('registered entity columns exist in the canonical migrated schema', async (
   const installedMigrations = (await dataSource.query('SELECT name FROM migrations')) as Array<{
     name: string;
   }>;
-  assert.equal(dataSource.migrations.length, 61);
+  reviewedReleaseMigrationNames(dataSource.migrations);
   assert.deepEqual(
     installedMigrations.map((migration) => migration.name).sort(),
     dataSource.migrations.map((migration) => migration.name ?? migration.constructor.name).sort(),
@@ -231,16 +232,14 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     contractorId,
   });
   for (const id of [workerId, secondWorkerId]) {
-    await dataSource
-      .getRepository(WorkerEntity)
-      .save({
-        id,
-        siteId,
-        contractorId,
-        externalId: id,
-        displayName: 'Synthetic worker',
-        isActive: true,
-      });
+    await dataSource.getRepository(WorkerEntity).save({
+      id,
+      siteId,
+      contractorId,
+      externalId: id,
+      displayName: 'Synthetic worker',
+      isActive: true,
+    });
   }
 
   const workforce = new MainWorkerRosterService(dataSource);

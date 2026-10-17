@@ -20,13 +20,14 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 
 const database = createIsolatedTestDatabase({ canonical: true });
 before(() => database.initialize());
 after(() => database.dispose());
 
 test('full AppModule configuration image works before any Region and withholds pixels after real session logout', async () => {
-  assert.equal(database.dataSource.migrations.length, 61);
+  reviewedReleaseMigrationNames(database.dataSource.migrations);
   assert.equal(await database.dataSource.showMigrations(), false);
   const suffix = randomUUID().slice(0, 8);
   const password = 'SyntheticFixture123!';

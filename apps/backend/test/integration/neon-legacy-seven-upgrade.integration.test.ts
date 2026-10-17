@@ -6,6 +6,7 @@ import { DataSource, type DataSourceOptions } from 'typeorm';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 import { DatabaseService } from '../../src/database/database.service.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 
 // Offline metadata fixture observed by a separate read-only Neon audit. These
 // tests never use cloud credentials, fetch cloud rows or call an AI service.
@@ -141,7 +142,7 @@ async function selectedRows(db: DataSource) {
   return result;
 }
 
-test('observed seven-migration prefix upgrades populated synthetic data to MAIN61 without inventing identity or grants', async () => {
+test('observed seven-migration prefix upgrades populated synthetic data to the reviewed release without inventing identity or grants', async () => {
   await withLegacySeven(async (legacy, upgrade) => {
     const fixture = await seed(legacy, 2147483647),
       before = await selectedRows(legacy);
@@ -153,7 +154,7 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN6
     assert.equal(
       await new DatabaseService(upgrade).isReady(),
       false,
-      'Reachable legacy7 is not release61 readiness',
+      'Reachable legacy7 is not release readiness',
     );
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
@@ -161,12 +162,21 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN6
       'Readiness must not auto-migrate',
     );
     await legacy.destroy();
+    const releaseNames = reviewedReleaseMigrationNames(upgrade.options.migrations);
     const applied = await upgrade.runMigrations({ transaction: 'all' });
-    assert.equal(applied.length, 54);
+    assert.equal(applied.length, releaseNames.length - observedPrefix.length);
+    assert.deepEqual(
+      applied.map((migration) => migration.name),
+      releaseNames
+        .filter((name) => !observedPrefix.includes(name))
+        .sort((left, right) => Number(left.slice(-13)) - Number(right.slice(-13))),
+    );
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
-      61,
+      releaseNames.length,
     );
+    const installed = (await upgrade.query('SELECT name FROM migrations')) as { name: string }[];
+    assert.deepEqual(installed.map((migration) => migration.name).sort(), [...releaseNames].sort());
     assert.equal(await new DatabaseService(upgrade).isReady(), true);
     const after = await selectedRows(upgrade);
     for (const [table, rows] of Object.entries(before)) {
