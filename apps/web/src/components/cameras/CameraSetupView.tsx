@@ -77,6 +77,9 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   const requestedSite = params.get('siteId');
   const site = requestedSite ? sites.rows.find((row) => row.id === requestedSite) : sites.rows[0];
   const capabilities = deriveZonePpeCapabilities(session.user, site?.id);
+  const canReadZones =
+    !revoked &&
+    session.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null);
   const canReadCameras = session.user.roleAssignments.some(
     ({ role, siteId }) =>
       (role === 'ADMIN' && siteId === null) ||
@@ -241,6 +244,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       {site && (
         <CameraSetupCatalog
           capabilities={capabilities}
+          canReadZones={canReadZones}
           canReadCameras={canReadCameras}
           cameras={cameras}
           rows={rows}
@@ -272,9 +276,10 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       )}
       {site &&
         activeDialog?.kind === 'zones' &&
-        (capabilities.canManageZones || canManageCameras) && (
+        (canReadZones || capabilities.canManageZones || canManageCameras) && (
           <ZonePpeSetupDialog
             {...common}
+            canReadZones={canReadZones}
             canManageZones={capabilities.canManageZones}
             canManageRegions={canManageCameras}
           />

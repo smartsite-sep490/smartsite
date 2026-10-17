@@ -34,6 +34,7 @@ const en = {
   'cameraSetup.areas': 'Areas & PPE',
   'cameraSetup.areasHint': 'A camera can observe several areas. Each area has its own PPE policy.',
   'cameraSetup.zones': 'Configure PPE by Zone',
+  'cameraSetup.viewZones': 'View area policies',
   'cameraSetup.adminHint': 'The assigned Site Manager configures cameras and observation regions.',
   'cameraSetup.managerHint': 'The Site Manager defines PPE requirements for each area.',
   'cameraSetup.help': 'How to set up this site',
@@ -76,6 +77,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.areasHint':
     'Một camera có thể quan sát nhiều khu vực. Mỗi khu vực có chính sách PPE riêng.',
   'cameraSetup.zones': 'Cấu hình PPE theo khu vực',
+  'cameraSetup.viewZones': 'Xem chính sách khu vực',
   'cameraSetup.adminHint': 'Quản lý công trường được phân công thiết lập camera và vùng quan sát.',
   'cameraSetup.managerHint': 'Quản lý công trường quy định PPE cho từng khu vực.',
   'cameraSetup.help': 'Cách thiết lập công trường',

@@ -9,6 +9,7 @@ import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 export function CameraSetupCatalog({
   capabilities,
   canReadCameras,
+  canReadZones = false,
   cameras,
   rows,
   cameraError,
@@ -16,6 +17,7 @@ export function CameraSetupCatalog({
 }: {
   capabilities: ZonePpeCapabilities;
   canReadCameras: boolean;
+  canReadZones?: boolean;
   cameras: ReturnType<typeof useSetupCatalog<CameraResponse>>;
   rows: CameraResponse[];
   cameraError: ReactNode;
@@ -23,6 +25,7 @@ export function CameraSetupCatalog({
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
+  const canWriteZones = capabilities.canManageZones || canManageCameras;
   const primaryButton = CAMERA_BUTTON_STYLES.primary;
   const button = CAMERA_BUTTON_STYLES.secondary;
   const primarySurface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs';
@@ -144,9 +147,9 @@ export function CameraSetupCatalog({
         <section className={secondarySurface} aria-label={t('cameraSetup.areas')}>
           <h2 className="text-base font-semibold text-slate-900">{t('cameraSetup.areas')}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">{t('cameraSetup.areasHint')}</p>
-          {capabilities.canManageZones || canManageCameras ? (
+          {canWriteZones || canReadZones ? (
             <button className={`${button} mt-4`} type="button" onClick={() => open('zones')}>
-              {t('cameraSetup.zones')}
+              {t(canWriteZones ? 'cameraSetup.zones' : 'cameraSetup.viewZones')}
             </button>
           ) : (
             <p className="mt-3 text-sm text-slate-500">{t('cameraSetup.managerHint')}</p>

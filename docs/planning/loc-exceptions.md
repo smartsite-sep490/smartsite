@@ -225,3 +225,12 @@ No new role logic, API, session transport or runtime responsibility is added.
 The localized action and regressions stay in bounded Live view/test files.
 Extract route/session composition before unrelated growth; the size target
 and previously recorded extraction work remain unchanged.
+
+## Setup read-only area policies, 17 October
+
+Root permits CameraSetupView to grow from 284 to 289 physical lines to expose
+its existing Zone dialog to global Admin metadata readers. Both writer flags
+still come from the unchanged Site-scoped helper; no Backend permission changes.
+The existing client/session adapter remains authoritative for expiry handling.
+Owner: Root; UI catalog implementation Agy p7. Extract workspace composition
+before unrelated growth; this scoped exception does not raise the size target.
