@@ -12,8 +12,9 @@ import { loadMainRecoveryMigrations } from '../support/main-recovery-profile.js'
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
+const workerQrMigration = 'WorkerQrShortCodes1792454400000';
 // Keep the historical release54 prefix: exclude the checklist, three attendance
-// additions and Main's three later visitor/manager-notification migrations.
+// additions, later visitor/manager notifications and the new Worker QR migration.
 const afterRelease54 = new Set([
   'SafetyChecklists1792195200000',
   'AttendanceAbsence1792022400000',
@@ -22,6 +23,7 @@ const afterRelease54 = new Set([
   'VisitorRoster1792022400000',
   'SiteManagerReviewNotifications1792108800000',
   'PreserveManagerNotificationHistory1792368000000',
+  workerQrMigration,
 ]);
 for (const profile of [
   'fresh',
@@ -45,6 +47,12 @@ for (const profile of [
       const db = isolated.dataSource;
       const production = db.options.migrations;
       assert(Array.isArray(production));
+      const workerQrDelta = production.some(
+        (migration) => typeof migration === 'function' && migration.name === workerQrMigration,
+      )
+        ? 1
+        : 0;
+      const expectedReleaseCount = 61 + workerQrDelta;
       if (profile === 'populated-release54')
         db.setOptions({
           migrations: production.filter(
@@ -142,7 +150,8 @@ for (const profile of [
         const applied = await db.runMigrations();
         assert.equal(
           applied.length,
-          profile === 'populated-release54' ? 7 : profile === 'populated-main35' ? 26 : 38,
+          (profile === 'populated-release54' ? 7 : profile === 'populated-main35' ? 26 : 38) +
+            workerQrDelta,
         );
         for (const { table, fields, rows } of inventory)
           assert.deepEqual(
@@ -153,7 +162,7 @@ for (const profile of [
             table,
           );
       }
-      assert.equal(db.migrations.length, 61);
+      assert.equal(db.migrations.length, expectedReleaseCount);
       assert.equal(await new DatabaseService(db).isReady(), true);
       assert.deepEqual(await db.runMigrations(), []);
       const applied: { name: string }[] = await db.query(
@@ -170,7 +179,10 @@ for (const profile of [
           1,
         );
       }
-      assert.equal(applied.length, profile === 'populated-legacy24' ? 62 : 61);
+      assert.equal(
+        applied.length,
+        expectedReleaseCount + (profile === 'populated-legacy24' ? 1 : 0),
+      );
       assert.equal(
         (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
           .epoch_id,
