@@ -55,7 +55,7 @@ type HarnessProps = {
   user?: RoleUser | null;
   siteId?: string;
   load: (offset: number, signal: AbortSignal) => Promise<Page<CameraResponse>>;
-  open: (kind: 'register' | 'manage' | 'zones', cameraId?: string) => void;
+  open: (kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => void;
 };
 
 function CatalogHarness({ user = managerUser, siteId = SITE_ID, load, open }: HarnessProps) {
@@ -100,7 +100,8 @@ function mountCatalog(options?: Partial<Pick<HarnessProps, 'user' | 'siteId' | '
   activeClients.push(client);
   const load =
     options?.load ?? vi.fn().mockResolvedValue({ items: [activeCamera, inactiveCamera], total: 2 });
-  const open = vi.fn<(kind: 'register' | 'manage' | 'zones', cameraId?: string) => void>();
+  const open =
+    vi.fn<(kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => void>();
   const view = render(
     <QueryClientProvider client={client}>
       <CatalogHarness {...options} load={load} open={open} />
@@ -256,7 +257,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
   mountCatalog();
   await screen.findByText(activeCamera.name);
   expect(screen.getByRole('region', { name: 'Cameras' })).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Areas & PPE' })).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Setup steps' })).toBeTruthy();
   expect(screen.getAllByText('Camera code').length).toBeGreaterThan(0);
   expect(screen.getAllByText('Configuration status').length).toBeGreaterThan(0);
   expect(screen.getByText('2 shown · 2 returned by the catalog')).toBeTruthy();
@@ -266,7 +267,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
 
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('region', { name: 'Camera' })).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Khu vực & PPE' })).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Đăng ký camera' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cấu hình PPE theo khu vực' })).toBeTruthy();
   const viManageButton = screen.getByRole('button', { name: `Quản lý ${activeCamera.name}` });
@@ -276,7 +277,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
   expect(screen.getByText('Đã bật trong cấu hình')).toBeTruthy();
   expect(screen.getByText('Đã tắt trong cấu hình')).toBeTruthy();
   expect(screen.getByText('Đang hiện 2 · danh mục trả về 2')).toBeTruthy();
-  expect(screen.getByText('Cách thiết lập công trường')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   expect(screen.getByText(activeCamera.name)).toBeTruthy();
   expect(screen.getByText(activeCamera.code)).toBeTruthy();
 });

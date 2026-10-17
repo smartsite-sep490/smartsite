@@ -38,6 +38,7 @@ export interface ZonePpeCameraRegionDrawerProps {
     savedDraftKey: string,
     savedPoints: NormalizedPoint[],
   ) => void;
+  onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
   onClose: () => void;
 }
 
@@ -94,6 +95,7 @@ function ZonePpeCameraRegionDrawerContent(
     candidateReference,
     editingRegion,
     lastSavedDraft,
+    onDraftStateChange,
   } = props;
   const { t } = useLocale();
   const queryClient = useQueryClient();
@@ -114,12 +116,14 @@ function ZonePpeCameraRegionDrawerContent(
 
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const onDraftStateChangeRef = useRef(onDraftStateChange);
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       abortControllerRef.current?.abort();
+      onDraftStateChangeRef.current?.({ dirty: false, saving: false });
     };
   }, []);
 
@@ -253,6 +257,13 @@ function ZonePpeCameraRegionDrawerContent(
   };
 
   const { width, height, imageDataUrl } = frozenReference.frame;
+  const currentDraftKey = JSON.stringify(draftPoints);
+  const isDirty =
+    currentDraftKey !== JSON.stringify(initialPoints) && currentDraftKey !== lastSavedDraft;
+  useEffect(() => {
+    onDraftStateChangeRef.current = onDraftStateChange;
+    onDraftStateChange?.({ dirty: isDirty, saving: createRegionMutation.isPending });
+  }, [isDirty, createRegionMutation.isPending, onDraftStateChange]);
   const canvasFrame = useMemo(
     () => ({ width, height, imageDataUrl }),
     [height, imageDataUrl, width],

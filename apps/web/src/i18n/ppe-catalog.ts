@@ -444,6 +444,7 @@ export const PPE_EN_CATALOG = {
 
   'zoneSetup.dialog.title': 'Zone PPE configuration',
   'zoneSetup.dialog.description': 'Define requirements and camera regions for {siteName}.',
+  'zoneSetup.dialog.zonesDescription': 'Define PPE requirements for areas at {siteName}.',
   'zoneSetup.dialog.discardTitle': 'Discard unsaved Zone changes?',
   'zoneSetup.dialog.discardDescription': 'Your unsaved Zone fields and name changes will be lost.',
   'zoneSetup.dialog.keepEditing': 'Keep editing',
@@ -474,6 +475,7 @@ export const PPE_EN_CATALOG = {
   'zoneSetup.ppe.notAvailableNote': 'Not available as a zone requirement',
 
   'zoneSetup.action.cancel': 'Cancel',
+  'zoneSetup.action.clearForm': 'Clear form',
   'zoneSetup.action.saving': 'Saving...',
   'zoneSetup.action.saveZonePpe': 'Save Zone PPE',
 
@@ -493,7 +495,7 @@ export const PPE_EN_CATALOG = {
   'zoneSetup.create.error.default':
     'Failed to create zone. Please verify your inputs and network connection.',
   'zoneSetup.create.success':
-    'Zone "{code}" created successfully. Link this zone to a camera observation region in Zone Settings before AI monitoring can apply.',
+    'Zone "{code}" created successfully. Link this zone to a camera observation region when ready.',
 
   'zoneSetup.rename.validation.controlChars':
     'Zone name must not contain control characters or surrogates.',
@@ -539,6 +541,8 @@ export const PPE_EN_CATALOG = {
     'Configure and save at least one zone above to enable Camera Observation Region linking.',
   'zoneSetup.regionLink.emptyReadOnlyHint':
     'An assigned Site Manager must create and save at least one zone above to enable Camera Observation Region linking.',
+  'zoneSetup.regionLink.emptyTaskHint':
+    'Create and save an area policy in step 1 before linking observation regions.',
 
   'regionSetup.sectionAria': 'Link Zone to Camera Region',
   'regionSetup.title': 'Link Zone to Camera Region',
@@ -1453,6 +1457,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'zoneSetup.dialog.title': 'Cấu hình PPE Khu vực',
   'zoneSetup.dialog.description':
     'Thiết lập yêu cầu bảo hộ và vùng quan sát camera cho {siteName}.',
+  'zoneSetup.dialog.zonesDescription': 'Thiết lập yêu cầu bảo hộ cho các khu vực tại {siteName}.',
   'zoneSetup.dialog.discardTitle': 'Hủy các thay đổi Khu vực chưa lưu?',
   'zoneSetup.dialog.discardDescription':
     'Các thông tin trường Khu vực và thay đổi tên chưa lưu sẽ bị mất.',
@@ -1485,6 +1490,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'zoneSetup.ppe.notAvailableNote': 'Chưa hỗ trợ làm yêu cầu bắt buộc của khu vực',
 
   'zoneSetup.action.cancel': 'Hủy',
+  'zoneSetup.action.clearForm': 'Xóa nháp',
   'zoneSetup.action.saving': 'Đang lưu...',
   'zoneSetup.action.saveZonePpe': 'Lưu PPE Khu vực',
 
@@ -1505,7 +1511,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'zoneSetup.create.error.default':
     'Không thể tạo khu vực. Vui lòng kiểm tra thông tin nhập và kết nối mạng.',
   'zoneSetup.create.success':
-    'Đã tạo khu vực "{code}" thành công. Hãy liên kết khu vực này với vùng quan sát camera trong Thiết lập Khu vực trước khi áp dụng giám sát AI.',
+    'Đã tạo khu vực "{code}" thành công. Hãy gắn khu vực này với vùng quan sát của camera khi sẵn sàng.',
 
   'zoneSetup.rename.validation.controlChars':
     'Tên khu vực không được chứa ký tự điều khiển hoặc mã đại diện không hợp lệ.',
@@ -1552,6 +1558,8 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
     'Hãy cấu hình và lưu ít nhất một khu vực ở trên để bật liên kết Vùng quan sát của camera.',
   'zoneSetup.regionLink.emptyReadOnlyHint':
     'Chỉ huy công trường (Site Manager) được phân công cần tạo và lưu ít nhất một khu vực ở trên để bật liên kết Vùng quan sát của camera.',
+  'zoneSetup.regionLink.emptyTaskHint':
+    'Tạo và lưu chính sách khu vực ở bước 1 trước khi gắn vùng quan sát.',
 
   'regionSetup.sectionAria': 'Liên kết Khu vực với Vùng quan sát Camera',
   'regionSetup.title': 'Liên kết Khu vực với Vùng quan sát Camera',

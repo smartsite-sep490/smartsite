@@ -17,6 +17,7 @@ export interface ZonePpeSetupPanelProps {
   canManageZones: boolean;
   canManageRegions: boolean;
   canReadZones?: boolean;
+  section?: 'all' | 'zones' | 'regions';
   onClose: () => void;
   embedded?: boolean;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
@@ -74,6 +75,7 @@ function ZonePpeSetupPanelInternal({
   canManageZones,
   canManageRegions,
   canReadZones = false,
+  section = 'all',
   onClose,
   embedded = false,
   onDraftStateChange,
@@ -83,6 +85,8 @@ function ZonePpeSetupPanelInternal({
   const fallbackClient = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
   const client = providedClient ?? fallbackClient;
   const isMountedRef = useRef(true);
+  const showZoneSection = section !== 'regions';
+  const showRegionSection = section !== 'zones' && canManageRegions;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -215,8 +219,8 @@ function ZonePpeSetupPanelInternal({
   const isTransientNextPageError = useMemo(() => {
     if (!zonesQuery.isError) return false;
     if (isAuthOrScopeError(zonesQuery.error)) return false;
-    return zonesQuery.isFetchNextPageError && allZones.length > 0;
-  }, [zonesQuery.isError, zonesQuery.isFetchNextPageError, zonesQuery.error, allZones.length]);
+    return zonesQuery.isFetchNextPageError && Boolean(rawPages?.length);
+  }, [zonesQuery.isError, zonesQuery.isFetchNextPageError, zonesQuery.error, rawPages]);
 
   const isInitialError = useMemo(() => {
     if (!zonesQuery.isError) return false;
@@ -230,6 +234,13 @@ function ZonePpeSetupPanelInternal({
     if (isAuthRevoked || isInitialError) return [];
     return allZones;
   }, [isAuthRevoked, isInitialError, allZones]);
+
+  const isZonesSettledEmpty =
+    zonesQuery.isSuccess &&
+    !zonesQuery.isFetching &&
+    !zonesQuery.isError &&
+    !zonesQuery.hasNextPage &&
+    scopedZones.length === 0;
 
   // Revoke local edit/feedback before children render; a denied list must not resurrect a draft.
   if (
@@ -355,14 +366,18 @@ function ZonePpeSetupPanelInternal({
     },
   });
 
-  const dirty =
+  const [regionDraft, setRegionDraft] = useState({ dirty: false, saving: false });
+  const zoneDirty =
     canManageZones &&
     (zoneCode !== '' ||
       zoneName !== '' ||
       selectedPpe.length !== savedPpe.length ||
       selectedPpe.some((item) => !savedPpe.includes(item)) ||
       (editingZoneId !== null && editingZoneName !== originalZoneName));
-  const saving = canManageZones && (createZoneMutation.isPending || renameZoneMutation.isPending);
+  const dirty = zoneDirty || (canManageRegions && regionDraft.dirty);
+  const saving =
+    (canManageZones && (createZoneMutation.isPending || renameZoneMutation.isPending)) ||
+    (canManageRegions && regionDraft.saving);
   useEffect(() => {
     onDraftStateChange?.({ dirty, saving });
   }, [dirty, saving, onDraftStateChange]);
@@ -387,6 +402,27 @@ function ZonePpeSetupPanelInternal({
       prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item],
     );
     if (ppeErrorKey) setPpeErrorKey(null);
+  };
+
+  const handleClearCreateForm = () => {
+    if (
+      !canManageZones ||
+      isAuthRevoked ||
+      saving ||
+      isCreateSubmitting.current ||
+      isRenameSubmitting.current
+    ) {
+      return;
+    }
+    setZoneCode('');
+    setZoneName('');
+    setSelectedPpe([...savedPpe]);
+    setCodeErrorKey(null);
+    setNameErrorKey(null);
+    setPpeErrorKey(null);
+    setServerErrorKey(null);
+    setCreatedZoneCode(null);
+    zoneCodeInputRef.current?.focus();
   };
 
   const handleStartRename = (zone: ZoneResponse) => {
@@ -515,7 +551,7 @@ function ZonePpeSetupPanelInternal({
   return (
     <div
       role="region"
-      aria-label={t('zoneSetup.title')}
+      aria-label={t(section === 'regions' ? 'regionSetup.title' : 'zoneSetup.title')}
       className={`space-y-5 min-w-0 w-full max-w-full ${embedded ? '' : 'rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm'}`}
     >
       {!embedded && (
@@ -526,12 +562,18 @@ function ZonePpeSetupPanelInternal({
             </span>
             <div className="min-w-0">
               <h3 className="text-base font-bold text-slate-900 truncate">
-                {t('zoneSetup.title')}
+                {t(section === 'regions' ? 'regionSetup.title' : 'zoneSetup.title')}
               </h3>
               <p className="text-xs text-slate-500 truncate mt-0.5">
-                {t('zoneSetup.subtitlePrefix')}{' '}
-                <span className="font-semibold text-slate-900">{siteName}</span>
-                {t('zoneSetup.subtitleSuffix')}
+                {section === 'regions' ? (
+                  t('regionSetup.subtitle')
+                ) : (
+                  <>
+                    {t('zoneSetup.subtitlePrefix')}{' '}
+                    <span className="font-semibold text-slate-900">{siteName}</span>
+                    {t('zoneSetup.subtitleSuffix')}
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -546,334 +588,335 @@ function ZonePpeSetupPanelInternal({
         </div>
       )}
 
-      {canManageZones ? (
-        <>
-          {/* Server Error Banner (Safe public text only) */}
-          {serverError && (
-            <div
-              role="alert"
-              className="rounded-xl border border-red-200 bg-red-50/90 p-3 text-xs text-red-800 flex items-center gap-2"
-            >
-              <IconAlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-              <span>{serverError}</span>
-            </div>
-          )}
+      {showZoneSection &&
+        (canManageZones ? (
+          <>
+            {/* Server Error Banner (Safe public text only) */}
+            {serverError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50/90 p-3 text-xs text-red-800 flex items-center gap-2"
+              >
+                <IconAlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+                <span>{serverError}</span>
+              </div>
+            )}
 
-          {/* Success Banner (Truthful feedback regarding camera region connection) */}
-          {successFeedback && (
-            <div
-              role="status"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center gap-2"
-            >
-              <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-              <span>{successFeedback}</span>
-            </div>
-          )}
+            {/* Success Banner (Truthful feedback regarding camera region connection) */}
+            {successFeedback && (
+              <div
+                role="status"
+                className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center gap-2"
+              >
+                <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span>{successFeedback}</span>
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-4 min-w-0 w-full max-w-full">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0 w-full max-w-full">
-              <div className="min-w-0 w-full">
-                <label
-                  htmlFor="zone-code"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
-                >
-                  {t('zoneSetup.field.codeLabel')}
-                </label>
-                <input
-                  id="zone-code"
-                  name="zoneCode"
-                  type="text"
-                  ref={zoneCodeInputRef}
-                  maxLength={64}
-                  value={zoneCode}
-                  onChange={(e) => {
-                    setZoneCode(e.target.value);
-                    if (codeErrorKey) setCodeErrorKey(null);
-                  }}
-                  placeholder={t('zoneSetup.field.codePlaceholder')}
-                  disabled={createZoneMutation.isPending}
-                  aria-invalid={Boolean(codeError)}
-                  aria-describedby={codeError ? 'zone-code-error' : undefined}
-                  className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
-                />
-                {codeError && (
-                  <p
-                    id="zone-code-error"
-                    role="alert"
-                    className="text-[11px] text-red-600 mt-1 font-medium"
+            <form onSubmit={handleSubmit} className="space-y-4 min-w-0 w-full max-w-full">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0 w-full max-w-full">
+                <div className="min-w-0 w-full">
+                  <label
+                    htmlFor="zone-code"
+                    className="block text-xs font-semibold text-slate-700 mb-1"
                   >
-                    {codeError}
+                    {t('zoneSetup.field.codeLabel')}
+                  </label>
+                  <input
+                    id="zone-code"
+                    name="zoneCode"
+                    type="text"
+                    ref={zoneCodeInputRef}
+                    maxLength={64}
+                    value={zoneCode}
+                    onChange={(e) => {
+                      setZoneCode(e.target.value);
+                      if (codeErrorKey) setCodeErrorKey(null);
+                    }}
+                    placeholder={t('zoneSetup.field.codePlaceholder')}
+                    disabled={createZoneMutation.isPending}
+                    aria-invalid={Boolean(codeError)}
+                    aria-describedby={codeError ? 'zone-code-error' : undefined}
+                    className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
+                  />
+                  {codeError && (
+                    <p
+                      id="zone-code-error"
+                      role="alert"
+                      className="text-[11px] text-red-600 mt-1 font-medium"
+                    >
+                      {codeError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="min-w-0 w-full">
+                  <label
+                    htmlFor="zone-name"
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
+                    {t('zoneSetup.field.nameLabel')}
+                  </label>
+                  <input
+                    id="zone-name"
+                    name="zoneName"
+                    type="text"
+                    ref={zoneNameInputRef}
+                    maxLength={255}
+                    value={zoneName}
+                    onChange={(e) => {
+                      setZoneName(e.target.value);
+                      if (nameErrorKey) setNameErrorKey(null);
+                    }}
+                    placeholder={t('zoneSetup.field.namePlaceholder')}
+                    disabled={createZoneMutation.isPending}
+                    aria-invalid={Boolean(nameError)}
+                    aria-describedby={nameError ? 'zone-name-error' : undefined}
+                    className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
+                  />
+                  {nameError && (
+                    <p
+                      id="zone-name-error"
+                      role="alert"
+                      className="text-[11px] text-red-600 mt-1 font-medium"
+                    >
+                      {nameError}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* PPE Requirements Selection */}
+              <fieldset aria-describedby={ppeError ? 'zone-ppe-error' : undefined}>
+                <legend className="block text-xs font-semibold text-slate-700 mb-2">
+                  {t('zoneSetup.field.ppeLegend')}
+                </legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {/* Core 1: Hard Hat */}
+                  <label
+                    htmlFor="ppe-item-hard-hat"
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <input
+                      id="ppe-item-hard-hat"
+                      ref={firstPpeInputRef}
+                      aria-invalid={Boolean(ppeError)}
+                      aria-describedby={ppeError ? 'zone-ppe-error' : undefined}
+                      type="checkbox"
+                      checked={selectedPpe.includes('HARD_HAT')}
+                      onChange={() => togglePpe('HARD_HAT')}
+                      disabled={createZoneMutation.isPending}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                    <span className="text-xs font-medium text-slate-800">
+                      {t('zoneSetup.ppe.HARD_HAT')}{' '}
+                      <span className="text-[10px] text-emerald-700 font-bold">
+                        {t('zoneSetup.ppe.coreTag')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Core 2: Safety Vest */}
+                  <label
+                    htmlFor="ppe-item-safety-vest"
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <input
+                      id="ppe-item-safety-vest"
+                      type="checkbox"
+                      checked={selectedPpe.includes('SAFETY_VEST')}
+                      onChange={() => togglePpe('SAFETY_VEST')}
+                      disabled={createZoneMutation.isPending}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                    <span className="text-xs font-medium text-slate-800">
+                      {t('zoneSetup.ppe.SAFETY_VEST')}{' '}
+                      <span className="text-[10px] text-emerald-700 font-bold">
+                        {t('zoneSetup.ppe.coreTag')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Canonical 3: Gloves (Selectable with Experimental label) */}
+                  <label
+                    htmlFor="ppe-item-gloves"
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <input
+                      id="ppe-item-gloves"
+                      type="checkbox"
+                      checked={selectedPpe.includes('GLOVES')}
+                      onChange={() => togglePpe('GLOVES')}
+                      disabled={createZoneMutation.isPending}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                    <span className="text-xs font-medium text-slate-800">
+                      {t('zoneSetup.ppe.GLOVES')}{' '}
+                      <span className="text-[10px] text-sky-700 font-bold">
+                        {t('zoneSetup.ppe.experimentalTag')}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.experimentalNote')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Canonical 4: Boots (Selectable with Experimental label) */}
+                  <label
+                    htmlFor="ppe-item-boots"
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <input
+                      id="ppe-item-boots"
+                      type="checkbox"
+                      checked={selectedPpe.includes('BOOTS')}
+                      onChange={() => togglePpe('BOOTS')}
+                      disabled={createZoneMutation.isPending}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                    <span className="text-xs font-medium text-slate-800">
+                      {t('zoneSetup.ppe.BOOTS')}{' '}
+                      <span className="text-[10px] text-sky-700 font-bold">
+                        {t('zoneSetup.ppe.experimentalTag')}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.experimentalNote')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Canonical 5: Goggles (Selectable with Experimental label) */}
+                  <label
+                    htmlFor="ppe-item-goggles"
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <input
+                      id="ppe-item-goggles"
+                      type="checkbox"
+                      checked={selectedPpe.includes('GOGGLES')}
+                      onChange={() => togglePpe('GOGGLES')}
+                      disabled={createZoneMutation.isPending}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                    <span className="text-xs font-medium text-slate-800">
+                      {t('zoneSetup.ppe.GOGGLES')}{' '}
+                      <span className="text-[10px] text-sky-700 font-bold">
+                        {t('zoneSetup.ppe.experimentalTag')}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.experimentalNote')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Unsupported 1: Harness (Object detection only, NOT canonical requiredPpe) */}
+                  <label
+                    htmlFor="ppe-item-harness"
+                    className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
+                  >
+                    <input
+                      id="ppe-item-harness"
+                      type="checkbox"
+                      checked={false}
+                      disabled={true}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="text-xs text-slate-500">
+                      {t('zoneSetup.ppe.HARNESS')}{' '}
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.notAvailableNote')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Unsupported 2: Mask (Object detection only, NOT canonical requiredPpe) */}
+                  <label
+                    htmlFor="ppe-item-mask"
+                    className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
+                  >
+                    <input
+                      id="ppe-item-mask"
+                      type="checkbox"
+                      checked={false}
+                      disabled={true}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="text-xs text-slate-500">
+                      {t('zoneSetup.ppe.MASK')}{' '}
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.notAvailableNote')}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Unsupported 3: Hook (Object detection only, NOT canonical requiredPpe) */}
+                  <label
+                    htmlFor="ppe-item-hook"
+                    className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
+                  >
+                    <input
+                      id="ppe-item-hook"
+                      type="checkbox"
+                      checked={false}
+                      disabled={true}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="text-xs text-slate-500">
+                      {t('zoneSetup.ppe.HOOK')}{' '}
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.notAvailableNote')}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                {ppeError && (
+                  <p
+                    id="zone-ppe-error"
+                    role="alert"
+                    className="text-[11px] text-red-600 mt-2 font-medium"
+                  >
+                    {ppeError}
                   </p>
                 )}
-              </div>
+              </fieldset>
 
-              <div className="min-w-0 w-full">
-                <label
-                  htmlFor="zone-name"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+                <button
+                  type="button"
+                  onClick={handleClearCreateForm}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {t('zoneSetup.field.nameLabel')}
-                </label>
-                <input
-                  id="zone-name"
-                  name="zoneName"
-                  type="text"
-                  ref={zoneNameInputRef}
-                  maxLength={255}
-                  value={zoneName}
-                  onChange={(e) => {
-                    setZoneName(e.target.value);
-                    if (nameErrorKey) setNameErrorKey(null);
-                  }}
-                  placeholder={t('zoneSetup.field.namePlaceholder')}
+                  {t('zoneSetup.action.clearForm')}
+                </button>
+                <button
+                  type="submit"
                   disabled={createZoneMutation.isPending}
-                  aria-invalid={Boolean(nameError)}
-                  aria-describedby={nameError ? 'zone-name-error' : undefined}
-                  className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
-                />
-                {nameError && (
-                  <p
-                    id="zone-name-error"
-                    role="alert"
-                    className="text-[11px] text-red-600 mt-1 font-medium"
-                  >
-                    {nameError}
-                  </p>
-                )}
+                  className="rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
+                >
+                  {createZoneMutation.isPending ? (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      {t('zoneSetup.action.saving')}
+                    </>
+                  ) : (
+                    t('zoneSetup.action.saveZonePpe')
+                  )}
+                </button>
               </div>
-            </div>
-
-            {/* PPE Requirements Selection */}
-            <fieldset aria-describedby={ppeError ? 'zone-ppe-error' : undefined}>
-              <legend className="block text-xs font-semibold text-slate-700 mb-2">
-                {t('zoneSetup.field.ppeLegend')}
-              </legend>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                {/* Core 1: Hard Hat */}
-                <label
-                  htmlFor="ppe-item-hard-hat"
-                  className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-                >
-                  <input
-                    id="ppe-item-hard-hat"
-                    ref={firstPpeInputRef}
-                    aria-invalid={Boolean(ppeError)}
-                    aria-describedby={ppeError ? 'zone-ppe-error' : undefined}
-                    type="checkbox"
-                    checked={selectedPpe.includes('HARD_HAT')}
-                    onChange={() => togglePpe('HARD_HAT')}
-                    disabled={createZoneMutation.isPending}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="text-xs font-medium text-slate-800">
-                    {t('zoneSetup.ppe.HARD_HAT')}{' '}
-                    <span className="text-[10px] text-emerald-700 font-bold">
-                      {t('zoneSetup.ppe.coreTag')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Core 2: Safety Vest */}
-                <label
-                  htmlFor="ppe-item-safety-vest"
-                  className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-                >
-                  <input
-                    id="ppe-item-safety-vest"
-                    type="checkbox"
-                    checked={selectedPpe.includes('SAFETY_VEST')}
-                    onChange={() => togglePpe('SAFETY_VEST')}
-                    disabled={createZoneMutation.isPending}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="text-xs font-medium text-slate-800">
-                    {t('zoneSetup.ppe.SAFETY_VEST')}{' '}
-                    <span className="text-[10px] text-emerald-700 font-bold">
-                      {t('zoneSetup.ppe.coreTag')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Canonical 3: Gloves (Selectable with Experimental label) */}
-                <label
-                  htmlFor="ppe-item-gloves"
-                  className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-                >
-                  <input
-                    id="ppe-item-gloves"
-                    type="checkbox"
-                    checked={selectedPpe.includes('GLOVES')}
-                    onChange={() => togglePpe('GLOVES')}
-                    disabled={createZoneMutation.isPending}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="text-xs font-medium text-slate-800">
-                    {t('zoneSetup.ppe.GLOVES')}{' '}
-                    <span className="text-[10px] text-sky-700 font-bold">
-                      {t('zoneSetup.ppe.experimentalTag')}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block">
-                      {t('zoneSetup.ppe.experimentalNote')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Canonical 4: Boots (Selectable with Experimental label) */}
-                <label
-                  htmlFor="ppe-item-boots"
-                  className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-                >
-                  <input
-                    id="ppe-item-boots"
-                    type="checkbox"
-                    checked={selectedPpe.includes('BOOTS')}
-                    onChange={() => togglePpe('BOOTS')}
-                    disabled={createZoneMutation.isPending}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="text-xs font-medium text-slate-800">
-                    {t('zoneSetup.ppe.BOOTS')}{' '}
-                    <span className="text-[10px] text-sky-700 font-bold">
-                      {t('zoneSetup.ppe.experimentalTag')}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block">
-                      {t('zoneSetup.ppe.experimentalNote')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Canonical 5: Goggles (Selectable with Experimental label) */}
-                <label
-                  htmlFor="ppe-item-goggles"
-                  className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-                >
-                  <input
-                    id="ppe-item-goggles"
-                    type="checkbox"
-                    checked={selectedPpe.includes('GOGGLES')}
-                    onChange={() => togglePpe('GOGGLES')}
-                    disabled={createZoneMutation.isPending}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                  />
-                  <span className="text-xs font-medium text-slate-800">
-                    {t('zoneSetup.ppe.GOGGLES')}{' '}
-                    <span className="text-[10px] text-sky-700 font-bold">
-                      {t('zoneSetup.ppe.experimentalTag')}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block">
-                      {t('zoneSetup.ppe.experimentalNote')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Unsupported 1: Harness (Object detection only, NOT canonical requiredPpe) */}
-                <label
-                  htmlFor="ppe-item-harness"
-                  className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
-                >
-                  <input
-                    id="ppe-item-harness"
-                    type="checkbox"
-                    checked={false}
-                    disabled={true}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  <span className="text-xs text-slate-500">
-                    {t('zoneSetup.ppe.HARNESS')}{' '}
-                    <span className="text-[10px] text-slate-500 block">
-                      {t('zoneSetup.ppe.notAvailableNote')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Unsupported 2: Mask (Object detection only, NOT canonical requiredPpe) */}
-                <label
-                  htmlFor="ppe-item-mask"
-                  className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
-                >
-                  <input
-                    id="ppe-item-mask"
-                    type="checkbox"
-                    checked={false}
-                    disabled={true}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  <span className="text-xs text-slate-500">
-                    {t('zoneSetup.ppe.MASK')}{' '}
-                    <span className="text-[10px] text-slate-500 block">
-                      {t('zoneSetup.ppe.notAvailableNote')}
-                    </span>
-                  </span>
-                </label>
-
-                {/* Unsupported 3: Hook (Object detection only, NOT canonical requiredPpe) */}
-                <label
-                  htmlFor="ppe-item-hook"
-                  className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
-                >
-                  <input
-                    id="ppe-item-hook"
-                    type="checkbox"
-                    checked={false}
-                    disabled={true}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  <span className="text-xs text-slate-500">
-                    {t('zoneSetup.ppe.HOOK')}{' '}
-                    <span className="text-[10px] text-slate-500 block">
-                      {t('zoneSetup.ppe.notAvailableNote')}
-                    </span>
-                  </span>
-                </label>
-              </div>
-              {ppeError && (
-                <p
-                  id="zone-ppe-error"
-                  role="alert"
-                  className="text-[11px] text-red-600 mt-2 font-medium"
-                >
-                  {ppeError}
-                </p>
-              )}
-            </fieldset>
-
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200/80">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={createZoneMutation.isPending}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {t('zoneSetup.action.cancel')}
-              </button>
-              <button
-                type="submit"
-                disabled={createZoneMutation.isPending}
-                className="rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
-              >
-                {createZoneMutation.isPending ? (
-                  <>
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                    {t('zoneSetup.action.saving')}
-                  </>
-                ) : (
-                  t('zoneSetup.action.saveZonePpe')
-                )}
-              </button>
-            </div>
-          </form>
-        </>
-      ) : (
-        <div
-          role="note"
-          className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700"
-        >
-          {t('zoneSetup.readOnly.notice')}
-        </div>
-      )}
+            </form>
+          </>
+        ) : (
+          <div
+            role="note"
+            className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700"
+          >
+            {t('zoneSetup.readOnly.notice')}
+          </div>
+        ))}
 
       {/* Rename Success Feedback Banner */}
-      {canManageZones && renameSuccessFeedback && (
+      {showZoneSection && canManageZones && renameSuccessFeedback && (
         <div
           role="status"
           className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center gap-2"
@@ -884,23 +927,31 @@ function ZonePpeSetupPanelInternal({
       )}
 
       {/* Configured Zones on this Site */}
-      <div className="border-t border-slate-200/80 pt-4 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-800">{t('zoneSetup.list.heading')}</span>
-          <span className="text-[11px] text-slate-500">
-            {serverTotal > scopedZones.length
-              ? t('zoneSetup.list.showingCount', {
-                  shown: scopedZones.length,
-                  total: serverTotal,
-                })
-              : scopedZones.length === 1
-                ? t('zoneSetup.list.countOne', { count: scopedZones.length })
-                : t('zoneSetup.list.countOther', { count: scopedZones.length })}
-          </span>
-        </div>
+      <div
+        className={
+          showZoneSection ? 'border-t border-slate-200/80 pt-4 space-y-2.5' : 'space-y-2.5'
+        }
+      >
+        {showZoneSection && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-800">{t('zoneSetup.list.heading')}</span>
+            <span className="text-[11px] text-slate-500">
+              {serverTotal > scopedZones.length
+                ? t('zoneSetup.list.showingCount', {
+                    shown: scopedZones.length,
+                    total: serverTotal,
+                  })
+                : scopedZones.length === 1
+                  ? t('zoneSetup.list.countOne', { count: scopedZones.length })
+                  : t('zoneSetup.list.countOther', { count: scopedZones.length })}
+            </span>
+          </div>
+        )}
 
         {zonesQuery.isPending && (
-          <div className="text-xs text-slate-500 italic py-1">{t('zoneSetup.list.loading')}</div>
+          <div role="status" className="text-xs text-slate-500 italic py-1">
+            {t('zoneSetup.list.loading')}
+          </div>
         )}
 
         {isInitialError && (
@@ -957,13 +1008,13 @@ function ZonePpeSetupPanelInternal({
           </div>
         )}
 
-        {!zonesQuery.isPending && !isInitialError && !isAuthRevoked && scopedZones.length === 0 && (
-          <div className="text-xs text-slate-500 italic py-1">
+        {showZoneSection && isZonesSettledEmpty && (
+          <div role="status" className="text-xs text-slate-500 italic py-1">
             {t(canManageZones ? 'zoneSetup.list.empty' : 'zoneSetup.list.emptyReadOnly')}
           </div>
         )}
 
-        {!zonesQuery.isPending && scopedZones.length > 0 && (
+        {showZoneSection && !zonesQuery.isPending && scopedZones.length > 0 && (
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
             {scopedZones.map((zone) => {
               const isEditingThisZone = canManageZones && editingZoneId === zone.id;
@@ -1116,37 +1167,42 @@ function ZonePpeSetupPanelInternal({
                 </div>
               );
             })}
-
-            {/* Pagination Controls */}
-            {zonesQuery.hasNextPage && !isTransientNextPageError && !isAuthRevoked && (
-              <div className="pt-2 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (zonesQuery.isFetchingNextPage) return;
-                    void zonesQuery.fetchNextPage({ cancelRefetch: false });
-                  }}
-                  disabled={zonesQuery.isFetchingNextPage}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-2"
-                >
-                  {zonesQuery.isFetchingNextPage && (
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-700 border-t-transparent animate-spin mr-1.5" />
-                  )}
-                  {zonesQuery.isFetchingNextPage
-                    ? t('zoneSetup.list.loadingMore')
-                    : t('zoneSetup.list.loadMore')}
-                </button>
-              </div>
-            )}
           </div>
         )}
+
+        {/* Pagination Controls */}
+        {zonesQuery.hasNextPage &&
+          !isTransientNextPageError &&
+          !isInitialError &&
+          !isAuthRevoked && (
+            <div className="pt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  if (zonesQuery.isFetching) return;
+                  void zonesQuery.fetchNextPage({ cancelRefetch: false });
+                }}
+                disabled={zonesQuery.isFetching}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-2"
+              >
+                {zonesQuery.isFetchingNextPage && (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-700 border-t-transparent animate-spin mr-1.5" />
+                )}
+                {zonesQuery.isFetchingNextPage
+                  ? t('zoneSetup.list.loadingMore')
+                  : t('zoneSetup.list.loadMore')}
+              </button>
+            </div>
+          )}
       </div>
 
       {/* Link Zone to Camera Region (MF05) */}
-      {canManageRegions && (
-        <div className="border-t border-slate-200/80 pt-4">
+      {showRegionSection && (
+        <div className={showZoneSection ? 'border-t border-slate-200/80 pt-4' : ''}>
           {scopedZones.length > 0 ? (
             <ZonePpeCameraRegionPanel
+              embedded={section === 'regions'}
+              onDraftStateChange={setRegionDraft}
               apiUrl={apiUrl}
               client={client}
               token={token}
@@ -1155,17 +1211,22 @@ function ZonePpeSetupPanelInternal({
               siteId={siteId}
               zones={scopedZones}
             />
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-[#F8FAFC] p-4 text-center">
+          ) : isZonesSettledEmpty ? (
+            <div
+              role="status"
+              className="rounded-2xl border border-dashed border-slate-200 bg-[#F8FAFC] p-4 text-center"
+            >
               <span className="text-xs text-slate-500">
                 {t(
-                  canManageZones
-                    ? 'zoneSetup.regionLink.emptyHint'
-                    : 'zoneSetup.regionLink.emptyReadOnlyHint',
+                  section === 'regions'
+                    ? 'zoneSetup.regionLink.emptyTaskHint'
+                    : canManageZones
+                      ? 'zoneSetup.regionLink.emptyHint'
+                      : 'zoneSetup.regionLink.emptyReadOnlyHint',
                 )}
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>
@@ -1184,6 +1245,9 @@ export function ZonePpeSetupPanel(props: ZonePpeSetupPanelProps) {
     [queryClient, props.token],
   );
   if (!props.canReadZones && !props.canManageZones && !props.canManageRegions) {
+    return null;
+  }
+  if (props.section === 'regions' && !props.canManageRegions) {
     return null;
   }
   const scopeKey = getZonePpeScopeKey(queryClient, props);

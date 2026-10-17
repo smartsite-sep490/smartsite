@@ -26,9 +26,14 @@ vi.mock('./CameraManagementDialog', () => ({
   },
 }));
 vi.mock('../ppe/ZonePpeSetupDialog', () => ({
-  ZonePpeSetupDialog: (p: { canManageZones: boolean; canManageRegions: boolean }) => (
+  ZonePpeSetupDialog: (p: {
+    section?: string;
+    canManageZones: boolean;
+    canManageRegions: boolean;
+  }) => (
     <div role="dialog">
-      Zones {String(p.canManageZones)} Regions {String(p.canManageRegions)}
+      Section {p.section ?? 'all'} Zones {String(p.canManageZones)} Regions{' '}
+      {String(p.canManageRegions)}
     </div>
   ),
 }));
@@ -142,7 +147,7 @@ it('shows metadata including inactive cameras without claiming connection or req
 it('lets the scoped Site Manager configure camera regions and policy without preview requests', async () => {
   mount(manager());
   fireEvent.click(await screen.findByRole('button', { name: 'Configure PPE by Zone' }));
-  expect(screen.getByRole('dialog').textContent).toBe('Zones true Regions true');
+  expect(screen.getByRole('dialog').textContent).toBe('Section zones Zones true Regions true');
   expect(mocks.listCameras).toHaveBeenCalledOnce();
   expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
   expect(screen.queryByRole('link', { name: 'Open monitoring' })).toBeNull();

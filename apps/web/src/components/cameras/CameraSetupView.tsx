@@ -49,7 +49,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   const cache = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [dialog, setDialog] = useState<{
-    kind: 'register' | 'manage' | 'zones';
+    kind: 'register' | 'manage' | 'zones' | 'regions';
     siteId: string;
     cameraId?: string;
   } | null>(null);
@@ -130,7 +130,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       session.onSignOut?.();
     }
   };
-  const open = (kind: 'register' | 'manage' | 'zones', cameraId?: string) => {
+  const open = (kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => {
     if (site) setDialog({ kind, siteId: site.id, cameraId });
   };
   const close = () => setDialog(null);
@@ -278,10 +278,14 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         />
       )}
       {site &&
-        activeDialog?.kind === 'zones' &&
-        (canReadZones || capabilities.canManageZones || canManageCameras) && (
+        (activeDialog?.kind === 'zones' || activeDialog?.kind === 'regions') &&
+        (activeDialog.kind === 'regions'
+          ? canManageCameras
+          : canReadZones || capabilities.canManageZones) && (
           <ZonePpeSetupDialog
+            key={activeDialog.kind}
             {...common}
+            section={activeDialog.kind === 'regions' ? 'regions' : 'zones'}
             canReadZones={canReadZones}
             canManageZones={capabilities.canManageZones}
             canManageRegions={canManageCameras}

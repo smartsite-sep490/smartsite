@@ -11,6 +11,9 @@ export function ZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
   if (!props.canReadZones && !props.canManageZones && !props.canManageRegions) {
     return null;
   }
+  if (props.section === 'regions' && !props.canManageRegions) {
+    return null;
+  }
   return <ScopedZonePpeSetupDialog key={getZonePpeScopeKey(queryClient, props)} {...props} />;
 }
 
@@ -18,6 +21,7 @@ function ScopedZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
   const { t } = useLocale();
   const [draft, setDraft] = useState({ dirty: false, saving: false });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const isRegionsSection = props.section === 'regions';
   const requestClose = () => {
     if (draft.saving) return;
     if (draft.dirty) setConfirmDiscard(true);
@@ -27,8 +31,17 @@ function ScopedZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
     <PpeDialog
       open
       wide
-      title={t('zoneSetup.dialog.title')}
-      description={t('zoneSetup.dialog.description', { siteName: props.siteName })}
+      title={t(isRegionsSection ? 'regionSetup.title' : 'zoneSetup.dialog.title')}
+      description={
+        isRegionsSection
+          ? t('regionSetup.subtitle')
+          : t(
+              props.section === 'zones'
+                ? 'zoneSetup.dialog.zonesDescription'
+                : 'zoneSetup.dialog.description',
+              { siteName: props.siteName },
+            )
+      }
       onClose={requestClose}
       closeDisabled={draft.saving}
     >

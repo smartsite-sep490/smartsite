@@ -246,3 +246,18 @@ fallback/modifier behavior and validated Site/camera context. No new query,
 router dependency, permission or media responsibility is introduced. Owners:
 Root integration, Agy p7 camera UI, Agy p5 Zone UI. Extract cohesive workspace
 navigation before unrelated growth; these exceptions do not raise size targets.
+
+## Separate camera setup tasks and protect Region drafts, 17 October
+
+Root permits ZonePpeSetupPanel 1191→1255 physical lines to scope its existing
+writer to policies or Region prerequisites, keep partial-page retries usable,
+reset only the create draft, and aggregate Region dirty/saving state. The
+existing RegionPanel grows 1023→1034 and RegionDrawer 309→320 for an optional
+embedded header and the same draft-state callback; geometry, authorization,
+reference lifetime and mutation contracts remain unchanged. CameraSetupView
+292→296 only routes the existing dialog by task. The existing PPE catalog
+2031→2039 adds matching EN/VI guidance; new workflow and regression files stay
+bounded. Owner: Root; implementation/test support: Agy p5/p7/p8, independent
+review: existing Herdr Codex. Extract policy form/list and Region presentation
+before unrelated growth. This exception does not raise the normal size targets
+or establish browser, assistive-technology or production acceptance.

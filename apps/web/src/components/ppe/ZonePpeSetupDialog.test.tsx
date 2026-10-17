@@ -70,7 +70,7 @@ afterEach(async () => {
 });
 
 describe('Zone form unsaved close boundary', () => {
-  it.each(['close', 'backdrop', 'escape', 'cancel'])(
+  it.each(['close', 'backdrop', 'escape'])(
     'retains a create draft on %s until explicitly discarded',
     (action) => {
       render(<Harness />);
@@ -81,8 +81,6 @@ describe('Zone form unsaved close boundary', () => {
       if (action === 'backdrop') fireEvent.click(screen.getByTestId('ppe-dialog-backdrop'));
       if (action === 'escape')
         fireEvent.keyDown(screen.getByRole('textbox', { name: 'Zone Code' }), { key: 'Escape' });
-      if (action === 'cancel')
-        fireEvent.click(within(parent).getByRole('button', { name: 'Cancel' }));
       fireEvent.click(within(confirm()).getByRole('button', { name: 'Keep editing' }));
       expect((screen.getByRole('textbox', { name: 'Zone Code' }) as HTMLInputElement).value).toBe(
         'ASSEMBLY',

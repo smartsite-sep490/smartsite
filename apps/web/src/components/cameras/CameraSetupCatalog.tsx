@@ -5,6 +5,7 @@ import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import type { ZonePpeCapabilities } from '../ppe/zone-ppe-scope';
 import type { useSetupCatalog } from './useSetupCatalog';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
+import { CameraSetupWorkflow, type CameraSetupOpenKind } from './CameraSetupWorkflow';
 
 export function CameraSetupCatalog({
   capabilities,
@@ -23,7 +24,7 @@ export function CameraSetupCatalog({
   rows: CameraResponse[];
   requestedCameraId?: string | null;
   cameraError: ReactNode;
-  open: (kind: 'register' | 'manage' | 'zones', cameraId?: string) => void;
+  open: (kind: CameraSetupOpenKind, cameraId?: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
@@ -36,31 +37,24 @@ export function CameraSetupCatalog({
     !cameras.baseError &&
     !cameras.error,
   );
-  const primaryButton = CAMERA_BUTTON_STYLES.primary;
   const button = CAMERA_BUTTON_STYLES.secondary;
   const primarySurface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs';
-  const secondarySurface = 'min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-5';
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="space-y-6">
+      <CameraSetupWorkflow
+        canWriteZones={canWriteZones}
+        canReadZones={canReadZones}
+        canManageCameras={canManageCameras}
+        open={open}
+      />
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-              {t('cameraSetup.cameras')}
-            </h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
-              {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
-            </p>
-          </div>
-          {canManageCameras && (
-            <button
-              type="button"
-              className={`${primaryButton} shrink-0`}
-              onClick={() => open('register')}
-            >
-              {t('cameraSetup.register')}
-            </button>
-          )}
+        <div className="border-b border-slate-100 pb-4">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+            {t('cameraSetup.cameras')}
+          </h2>
+          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
+            {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
+          </p>
         </div>
         {canReadCameras && (
           <>
@@ -162,29 +156,6 @@ export function CameraSetupCatalog({
           </>
         )}
       </section>
-      <aside className="min-w-0 space-y-4">
-        <section className={secondarySurface} aria-label={t('cameraSetup.areas')}>
-          <h2 className="text-base font-semibold text-slate-900">{t('cameraSetup.areas')}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{t('cameraSetup.areasHint')}</p>
-          {canWriteZones || canReadZones ? (
-            <button className={`${button} mt-4`} type="button" onClick={() => open('zones')}>
-              {t(canWriteZones ? 'cameraSetup.zones' : 'cameraSetup.viewZones')}
-            </button>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500">{t('cameraSetup.managerHint')}</p>
-          )}
-        </section>
-        <details className={secondarySurface}>
-          <summary className="cursor-pointer rounded-lg text-sm font-semibold text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
-            {t('cameraSetup.help')}
-          </summary>
-          <ol className="mt-3 list-decimal space-y-2.5 pl-5 text-sm leading-6 text-slate-600">
-            <li>{t('cameraSetup.step1')}</li>
-            <li>{t('cameraSetup.step2')}</li>
-            <li>{t('cameraSetup.step3')}</li>
-          </ol>
-        </details>
-      </aside>
     </div>
   );
 }

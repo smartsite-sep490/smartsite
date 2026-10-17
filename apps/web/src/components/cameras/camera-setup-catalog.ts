@@ -42,10 +42,12 @@ const en = {
   'cameraSetup.adminHint': 'The assigned Site Manager configures cameras and observation regions.',
   'cameraSetup.managerHint': 'The Site Manager defines PPE requirements for each area.',
   'cameraSetup.help': 'How to set up this site',
+  'cameraSetup.workflowTitle': 'Setup steps',
   'cameraSetup.step1': 'The Site Manager creates areas and their PPE requirements.',
   'cameraSetup.step2': 'The Site Manager registers each camera.',
   'cameraSetup.step3':
     'The Site Manager links observation regions to areas. Source verification is separate.',
+  'cameraSetup.regionsAction': 'Link observation regions',
 };
 const vi: Record<keyof typeof en, string> = {
   'cameraSetup.title': 'Thiết lập camera',
@@ -89,9 +91,11 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.adminHint': 'Quản lý công trường được phân công thiết lập camera và vùng quan sát.',
   'cameraSetup.managerHint': 'Quản lý công trường quy định PPE cho từng khu vực.',
   'cameraSetup.help': 'Cách thiết lập công trường',
+  'cameraSetup.workflowTitle': 'Thứ tự thiết lập',
   'cameraSetup.step1': 'Quản lý công trường tạo khu vực và yêu cầu PPE.',
   'cameraSetup.step2': 'Quản lý công trường đăng ký từng camera.',
   'cameraSetup.step3':
     'Quản lý công trường gắn vùng quan sát với khu vực. Kiểm tra nguồn kết nối là bước riêng.',
+  'cameraSetup.regionsAction': 'Gắn vùng quan sát',
 };
 registerFeatureCatalog({ en, vi });

@@ -57,6 +57,7 @@ export function getZonePpeScopeKey(
     canManageZones?: boolean;
     canManageRegions?: boolean;
     canReadZones?: boolean;
+    section?: 'all' | 'zones' | 'regions';
   },
 ): string {
   return JSON.stringify([
@@ -68,5 +69,6 @@ export function getZonePpeScopeKey(
     Boolean(props.canManageZones),
     Boolean(props.canManageRegions),
     Boolean(props.canReadZones),
+    props.section ?? 'all',
   ]);
 }
