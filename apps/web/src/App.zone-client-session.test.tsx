@@ -115,7 +115,13 @@ async function mountReadyZoneDialogHarness() {
     items: [siteAlpha],
     total: 1,
   });
-  vi.spyOn(api.SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
+  const preview = vi
+    .spyOn(api.SmartSiteManagementClient.prototype, 'listPreviewCameras')
+    .mockResolvedValue({
+      items: [activeCamera],
+      total: 1,
+    });
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue({
     items: [activeCamera],
     total: 1,
   });
@@ -141,7 +147,7 @@ async function mountReadyZoneDialogHarness() {
     </QueryClientProvider>,
   );
   const setup = await screen.findByRole('button', { name: /camera setup/i }, { timeout: 8000 });
-  expect(await screen.findByRole('option', { name: /CAM-01 · Camera 01/i })).not.toBeNull();
+  expect(preview).not.toHaveBeenCalled();
   fireEvent.click(setup);
   const openBtn = await screen.findByRole(
     'button',

@@ -49,13 +49,13 @@ const activeCamera: api.CameraResponse = {
   configurationVersion: 1,
   createdAt: '2026-10-05T00:00:00Z',
 };
-const managerUser: api.AccountResponse = {
-  id: 'manager-1',
-  username: 'manager',
-  displayName: 'Site Manager',
+const officerUser: api.AccountResponse = {
+  id: 'officer-1',
+  username: 'officer',
+  displayName: 'Safety Officer',
   isActive: true,
   mustChangePassword: false,
-  roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-1' }],
+  roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-1' }],
 };
 
 function makeLoginResponse(accessToken: string, user: api.AccountResponse): api.LoginResponse {
@@ -96,8 +96,8 @@ async function mountReadyPpeSessionHarness() {
   });
   const refresh = vi
     .spyOn(api.SmartSiteManagementClient.prototype, 'refresh')
-    .mockResolvedValue(makeLoginResponse('token-manager-1', managerUser));
-  vi.spyOn(api.SmartSiteManagementClient.prototype, 'me').mockResolvedValue(managerUser);
+    .mockResolvedValue(makeLoginResponse('token-officer-1', officerUser));
+  vi.spyOn(api.SmartSiteManagementClient.prototype, 'me').mockResolvedValue(officerUser);
   vi.spyOn(api.SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
     items: [activeCamera],
     total: 1,
@@ -123,7 +123,7 @@ async function mountReadyPpeSessionHarness() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  await screen.findByRole('button', { name: /camera setup/i }, { timeout: 8000 });
+  await screen.findByRole('heading', { name: /PPE Compliance Monitoring/i }, { timeout: 8000 });
   expect(await screen.findByRole('option', { name: /CAM-01 · Camera 01/i })).not.toBeNull();
   return {
     cache,
@@ -150,22 +150,23 @@ it('retries PPE listSites HTTP 401 via Main session refresh exactly once with th
     await mountReadyPpeSessionHarness();
   refresh.mockClear();
   seenSiteAuthHeaders.length = 0;
-  refresh.mockResolvedValueOnce(makeLoginResponse('token-manager-2', managerUser));
-  setRejectTokenWith401('token-manager-1');
+  refresh.mockResolvedValueOnce(makeLoginResponse('token-officer-2', officerUser));
+  setRejectTokenWith401('token-officer-1');
   await act(async () => {
     await cache.refetchQueries({ queryKey: ['ppe-monitoring'] });
   });
   await waitFor(() => {
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(seenSiteAuthHeaders[0]).toBe('Bearer token-manager-1');
-    expect(seenSiteAuthHeaders).toContain('Bearer token-manager-2');
-    expect(seenSiteAuthHeaders.slice(1).every((h) => h === 'Bearer token-manager-2')).toBe(true);
+    expect(seenSiteAuthHeaders[0]).toBe('Bearer token-officer-1');
+    expect(seenSiteAuthHeaders).toContain('Bearer token-officer-2');
+    expect(seenSiteAuthHeaders.slice(1).every((h) => h === 'Bearer token-officer-2')).toBe(true);
   });
-  expect(authRef.current?.accessToken).toBe('token-manager-2');
+  expect(authRef.current?.accessToken).toBe('token-officer-2');
   expect(authRef.current?.isSessionExpired).toBe(false);
   expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(screen.queryByRole('button', { name: /^sign in$/i })).toBeNull();
-  expect(await screen.findByRole('button', { name: /camera setup/i })).not.toBeNull();
+  expect(await screen.findByRole('heading', { name: /PPE Compliance Monitoring/i })).not.toBeNull();
+  expect(screen.queryByRole('button', { name: /camera setup/i })).toBeNull();
 });
 
 it('clears the private PPE scope and triggers session expiration when PPE listSites 401 refresh also fails with 401', async () => {
@@ -179,7 +180,7 @@ it('clears the private PPE scope and triggers session expiration when PPE listSi
   expect(cache.getQueryCache().findAll({ queryKey: privateScopePrefix }).length).toBeGreaterThan(1);
   refresh.mockClear();
   refresh.mockRejectedValueOnce(new api.ApiError('http', 'Refresh session expired.', 401));
-  setRejectTokenWith401('token-manager-1');
+  setRejectTokenWith401('token-officer-1');
   await act(async () => {
     await cache.refetchQueries({ queryKey: ['ppe-monitoring'] });
   });
