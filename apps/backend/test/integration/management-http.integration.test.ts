@@ -298,10 +298,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       requiredPpe: [],
     };
     assert.equal((await post(`/sites/${site.id}/zones`, zoneInput, adminToken)).status, 403);
-    assert.equal(
-      (await post(`/sites/${randomUUID()}/zones`, zoneInput, managerToken)).status,
-      403,
-    );
+    assert.equal((await post(`/sites/${randomUUID()}/zones`, zoneInput, managerToken)).status, 403);
     const zoneResponse = await post(`/sites/${site.id}/zones`, zoneInput, managerToken);
     assert.equal(zoneResponse.status, 201);
     const zone = (await zoneResponse.json()) as { id: string };
@@ -387,7 +384,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const unavailableGrant = await post(
       `/sites/${site.id}/zones/${zone.id}/access-grants`,
       { workerId: worker.id, effect: 'ALLOW', validFrom: grantValidFrom, validUntil: null },
-      adminToken,
+      managerToken,
     );
     assert.equal(unavailableGrant.status, 409);
     const unavailableBody = (await unavailableGrant.json()) as ErrorResponseDto;
@@ -405,7 +402,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
         validFrom: grantValidFrom,
         validUntil: null,
       },
-      adminToken,
+      managerToken,
     );
     assert.equal(flatAllowWithContractorPermission.status, 409);
     const flatAllowBody = (await flatAllowWithContractorPermission.json()) as ErrorResponseDto;

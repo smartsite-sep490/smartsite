@@ -180,19 +180,19 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       externalId: `SYNTHETIC-NO-CAPTURE-${suffix}`,
       name: 'Camera cấu hình',
     };
-    const managerCamera = await request(
-      'POST',
-      `/sites/${site.id}/cameras`,
-      cameraInput,
-      manager.accessToken,
-    );
-    assert.equal(managerCamera.status, 403);
-    await managerCamera.json();
-    const cameraResponse = await request(
+    const adminCamera = await request(
       'POST',
       `/sites/${site.id}/cameras`,
       cameraInput,
       admin.accessToken,
+    );
+    assert.equal(adminCamera.status, 403);
+    await adminCamera.json();
+    const cameraResponse = await request(
+      'POST',
+      `/sites/${site.id}/cameras`,
+      cameraInput,
+      manager.accessToken,
     );
     assert.equal(cameraResponse.status, 201);
     const camera = (await cameraResponse.json()) as {
@@ -216,7 +216,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       'POST',
       regionPath,
       { zoneId: zone.id, expectedConfigurationVersion: camera.configurationVersion, polygon },
-      admin.accessToken,
+      manager.accessToken,
     );
     assert.equal(regionResponse.status, 201);
     const mutation = (await regionResponse.json()) as {
@@ -231,7 +231,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       'POST',
       regionPath,
       { zoneId: zone.id, expectedConfigurationVersion: camera.configurationVersion, polygon },
-      admin.accessToken,
+      manager.accessToken,
     );
     assert.equal(staleRegion.status, 409);
     await staleRegion.json();
@@ -239,7 +239,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       'PATCH',
       `/sites/${site.id}/cameras/${camera.id}`,
       { name: 'No policy mutation', status: 'INACTIVE' },
-      admin.accessToken,
+      manager.accessToken,
     );
     assert.equal(invalidCamera.status, 400);
     await invalidCamera.json();
