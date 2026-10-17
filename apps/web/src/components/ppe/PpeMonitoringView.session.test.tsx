@@ -162,11 +162,11 @@ describe('PpeMonitoringView Focused Session 401/403 & Scope Isolation Tests', ()
 
     // Delay the preview response for site-alpha to simulate late arrival
     let resolveDelayed401: () => void = () => {};
-    const delayedPromise = new Promise<Awaited<ReturnType<SmartSiteManagementClient['getCameraPreview']>>>((_, reject) => {
+    const delayedPromise = new Promise<
+      Awaited<ReturnType<SmartSiteManagementClient['getCameraPreview']>>
+    >((_, reject) => {
       resolveDelayed401 = () =>
-        reject(
-          new ApiError('http', 'Delayed 401 from previous site', 401, undefined),
-        );
+        reject(new ApiError('http', 'Delayed 401 from previous site', 401, undefined));
     });
     // Prevent unhandled rejection in node environment if query unmounts
     delayedPromise.catch(() => {});
@@ -292,7 +292,7 @@ describe('PpeMonitoringView Focused Session 401/403 & Scope Isolation Tests', ()
       user: {
         id: 'user-ctrl',
         displayName: 'Controlled User',
-        roleAssignments: [],
+        roleAssignments: [{ role: 'SAFETY_OFFICER' as const, siteId: 'site-alpha' }],
       },
       onSignOut,
     };

@@ -63,7 +63,11 @@ beforeEach(() => {
     user: {
       id: 'manager',
       displayName: 'Manager',
-      roleAssignments: sites.map(({ id }) => ({ role: 'SITE_MANAGER' as const, siteId: id })),
+      // This legacy inline-management journey needs both configuration and preview access.
+      roleAssignments: sites.flatMap(({ id }) => [
+        { role: 'SITE_MANAGER' as const, siteId: id },
+        { role: 'SAFETY_OFFICER' as const, siteId: id },
+      ]),
     },
     onSignOut: vi.fn(),
   };

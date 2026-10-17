@@ -466,6 +466,24 @@ export function PpeMonitoringView({
       ? ''
       : (visibleAuthorizedSites[0]?.id ?? '');
 
+  const canViewSiteCameras = useMemo(() => {
+    if (!isControlled) return true;
+    const user = sharedSession?.user;
+    if (
+      !user ||
+      user.mustChangePassword === true ||
+      !selectedSiteId ||
+      !Array.isArray(user.roleAssignments)
+    ) {
+      return false;
+    }
+    return user.roleAssignments.some(
+      ({ role, siteId }) =>
+        (role === 'ADMIN' && siteId === null) ||
+        (role === 'SAFETY_OFFICER' && siteId === selectedSiteId),
+    );
+  }, [isControlled, sharedSession, selectedSiteId]);
+
   // 2. Load preview-eligible cameras for selected site - Explicit Accumulative Pagination
   const previewCamerasInfiniteQuery = useInfiniteQuery({
     queryKey: [
@@ -507,6 +525,7 @@ export function PpeMonitoringView({
       token &&
       sessionScope &&
       selectedSiteId &&
+      canViewSiteCameras &&
       !isSitesBaseError &&
       (!isControlled || sharedSession !== null),
     ),
@@ -515,7 +534,7 @@ export function PpeMonitoringView({
   });
 
   const allFetchedCameras = useMemo(() => {
-    if (!previewCamerasInfiniteQuery.data?.pages) return [];
+    if (!canViewSiteCameras || !previewCamerasInfiniteQuery.data?.pages) return [];
     const seen = new Set<string>();
     const list: CameraResponse[] = [];
     for (const page of previewCamerasInfiniteQuery.data.pages) {
@@ -528,11 +547,13 @@ export function PpeMonitoringView({
       }
     }
     return list;
-  }, [previewCamerasInfiniteQuery.data, selectedSiteId]);
+  }, [canViewSiteCameras, previewCamerasInfiniteQuery.data, selectedSiteId]);
 
-  const cameraServerTotal = previewCamerasInfiniteQuery.data?.pages.at(-1)?.total ?? 0;
+  const cameraServerTotal = canViewSiteCameras
+    ? (previewCamerasInfiniteQuery.data?.pages.at(-1)?.total ?? 0)
+    : 0;
 
-  const camerasError = previewCamerasInfiniteQuery.error;
+  const camerasError = canViewSiteCameras ? previewCamerasInfiniteQuery.error : null;
   const isCamerasHard = isAuthOrScopeError(camerasError);
   const isCamerasBaseError = Boolean(
     isSitesBaseError ||
@@ -555,6 +576,7 @@ export function PpeMonitoringView({
   );
 
   const isCamerasInitialLoading = Boolean(
+    canViewSiteCameras &&
     token &&
     sessionScope &&
     selectedSiteId &&
@@ -564,7 +586,9 @@ export function PpeMonitoringView({
   );
 
   const holdLinkedCamera = Boolean(
-    initialSelection?.cameraId && initialSelection.cameraId === requestedCameraId,
+    canViewSiteCameras &&
+    initialSelection?.cameraId &&
+    initialSelection.cameraId === requestedCameraId,
   );
   const selectedCameraId = visibleAuthorizedCameras.some(
     (camera) => camera.id === requestedCameraId,
@@ -606,6 +630,7 @@ export function PpeMonitoringView({
   );
 
   const isCameraSettledEmpty = Boolean(
+    canViewSiteCameras &&
     token &&
     sessionScope &&
     (!isControlled || sharedSession !== null) &&
@@ -620,6 +645,7 @@ export function PpeMonitoringView({
   );
 
   const isCamerasRefreshing = Boolean(
+    canViewSiteCameras &&
     selectedSiteId &&
     previewCamerasInfiniteQuery.isFetching &&
     !previewCamerasInfiniteQuery.isFetchingNextPage &&
@@ -627,6 +653,8 @@ export function PpeMonitoringView({
     !isCamerasBaseError &&
     !isSitesBaseError,
   );
+
+  const hasNextCameraPage = Boolean(canViewSiteCameras && previewCamerasInfiniteQuery.hasNextPage);
 
   // Memo-derived query.data { items, total } facade for consistent consumer compatibility
   const sitesQuery = useMemo(
@@ -743,6 +771,8 @@ export function PpeMonitoringView({
         return;
       }
 
+      if (!canViewSiteCameras) return;
+
       setWallTileSnapshots((prev) => {
         const curr = prev[snapshot.scope.cameraId];
         if (
@@ -768,6 +798,7 @@ export function PpeMonitoringView({
       });
     },
     [
+      canViewSiteCameras,
       apiUrl,
       credentialId,
       sessionScope,
@@ -800,6 +831,7 @@ export function PpeMonitoringView({
 
   // Zero-flash Review Scope Guard: ensure active review matches current scope synchronously
   const isReviewScopeValid =
+    canViewSiteCameras &&
     selectedReview !== null &&
     selectedReview.scope.apiUrl === apiUrl &&
     selectedReview.scope.credentialId === credentialId &&
@@ -829,6 +861,18 @@ export function PpeMonitoringView({
   const selectedSite = useMemo(
     () => sitesQuery.data?.items.find((s) => s.id === selectedSiteId) ?? null,
     [sitesQuery.data, selectedSiteId],
+  );
+
+  const isCameraViewingRestricted = Boolean(
+    isControlled &&
+    sharedSession !== null &&
+    token &&
+    sessionScope &&
+    selectedSiteId &&
+    selectedSite &&
+    !isSitesBaseError &&
+    !isSitesInitialLoading &&
+    !canViewSiteCameras,
   );
 
   const selectedCamera = useMemo(
@@ -1580,9 +1624,7 @@ export function PpeMonitoringView({
                 isCamerasRefreshing ||
                 (isCamerasBaseError && !isSitesBaseError) ||
                 isTransientNextCamerasError ||
-                (!isCamerasBaseError &&
-                  !isTransientNextCamerasError &&
-                  previewCamerasInfiniteQuery.hasNextPage)) && (
+                (!isCamerasBaseError && !isTransientNextCamerasError && hasNextCameraPage)) && (
                 <div className="flex flex-wrap items-center gap-2 pt-0.5">
                   {isCamerasInitialLoading && (
                     <span
@@ -1636,23 +1678,21 @@ export function PpeMonitoringView({
                     </button>
                   )}
 
-                  {!isCamerasBaseError &&
-                    !isTransientNextCamerasError &&
-                    previewCamerasInfiniteQuery.hasNextPage && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (previewCamerasInfiniteQuery.isFetching) return;
-                          previewCamerasInfiniteQuery.fetchNextPage({ cancelRefetch: false });
-                        }}
-                        disabled={previewCamerasInfiniteQuery.isFetching}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 shrink-0 whitespace-nowrap"
-                      >
-                        {previewCamerasInfiniteQuery.isFetching
-                          ? t('ppe.scope.loadingMoreCameras')
-                          : t('ppe.scope.loadMoreCameras')}
-                      </button>
-                    )}
+                  {!isCamerasBaseError && !isTransientNextCamerasError && hasNextCameraPage && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (previewCamerasInfiniteQuery.isFetching) return;
+                        previewCamerasInfiniteQuery.fetchNextPage({ cancelRefetch: false });
+                      }}
+                      disabled={previewCamerasInfiniteQuery.isFetching}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 shrink-0 whitespace-nowrap"
+                    >
+                      {previewCamerasInfiniteQuery.isFetching
+                        ? t('ppe.scope.loadingMoreCameras')
+                        : t('ppe.scope.loadMoreCameras')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1698,13 +1738,23 @@ export function PpeMonitoringView({
             </div>
           )}
 
+          {isCameraViewingRestricted && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-xs text-slate-600 py-0.5 px-1 w-full"
+            >
+              {t('ppe.scope.noCameraMonitoringAccess')}
+            </p>
+          )}
+
           {isCameraSettledEmpty && (
             <div
               role="status"
               aria-live="polite"
               className="text-xs text-slate-500 italic py-0.5 px-1 w-full"
             >
-              {previewCamerasInfiniteQuery.hasNextPage
+              {hasNextCameraPage
                 ? t('ppe.empty.noCamerasLoadedYet')
                 : t('ppe.empty.noCamerasInScope')}
             </div>

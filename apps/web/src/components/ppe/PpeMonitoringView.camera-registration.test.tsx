@@ -70,7 +70,11 @@ beforeEach(() => {
     user: {
       id: 'admin',
       displayName: 'Administrator',
-      roleAssignments: [SITE_A, SITE_B].map((siteId) => ({ role: 'SITE_MANAGER', siteId })),
+      // Registration and the selected preview-list refresh exercise separate capabilities.
+      roleAssignments: [SITE_A, SITE_B].flatMap((siteId) => [
+        { role: 'SITE_MANAGER' as const, siteId },
+        { role: 'SAFETY_OFFICER' as const, siteId },
+      ]),
     },
     onSignOut: vi.fn(),
   };

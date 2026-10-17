@@ -77,6 +77,8 @@ export const PPE_EN_CATALOG = {
   'ppe.scope.retryMoreCameras': 'Retry loading more cameras',
   'ppe.scope.loadingMoreCameras': 'Loading more cameras…',
   'ppe.scope.loadMoreCameras': 'Load more cameras',
+  'ppe.scope.noCameraMonitoringAccess':
+    'This account does not have camera monitoring access to this site.',
 
   'ppe.admin.configureByZone': 'Configure PPE by Zone',
   'ppe.admin.registerCamera': 'Register camera',
@@ -1075,6 +1077,8 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'ppe.scope.retryMoreCameras': 'Thử tải thêm camera',
   'ppe.scope.loadingMoreCameras': 'Đang tải thêm camera…',
   'ppe.scope.loadMoreCameras': 'Tải thêm camera',
+  'ppe.scope.noCameraMonitoringAccess':
+    'Tài khoản này không có quyền giám sát camera tại công trường này.',
 
   'ppe.admin.configureByZone': 'Cấu hình PPE theo Khu vực',
   'ppe.admin.registerCamera': 'Đăng ký camera',

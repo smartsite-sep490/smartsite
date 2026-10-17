@@ -203,3 +203,16 @@ without a new Site-timezone contract, formatter abstraction or query behavior.
 Regression checks run under two host timezones; wire ISO precision remains intact.
 Owner: Root; implementation Agy p7. Extract the existing presentation before
 adding another feature; these bounded options do not raise the size target.
+
+## Controlled PPE viewer scope, 17 October
+
+Root permits the existing PpeMonitoringView parent to grow from 3467 to 3517
+physical lines for gating its current preview query and presentation by the
+controlled session's selected-Site viewing roles. It adds no API, runtime,
+geometry writer or permission grant. Existing configuration handoff stays
+independent; current-credential 401 handling precedes the wall snapshot role gate.
+Nine new regressions live in a separate bounded test file; existing inline
+configuration fixtures explicitly carry both configuration and viewing roles.
+Owner: Root; implementation Agy p7 and independent static review Agy p5. This
+bounded repair does not raise the size target or prove browser/production
+acceptance. Extract cohesive scope/query presentation before unrelated growth.
