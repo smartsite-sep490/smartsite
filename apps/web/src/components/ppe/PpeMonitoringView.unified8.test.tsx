@@ -167,7 +167,7 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
       strokeRect: vi.fn(),
       fillRect: vi.fn(),
       fillText: vi.fn(),
-      measureText: vi.fn((text: string) => ({ width: text.length * 8 } as TextMetrics)),
+      measureText: vi.fn((text: string) => ({ width: text.length * 8 }) as TextMetrics),
       font: '',
       lineWidth: 1,
       strokeStyle: '',
@@ -214,15 +214,72 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
       artifactId: 'model-unified8-weights-v1',
       artifactSha256: 'a'.repeat(64),
       detections: [
-        { classId: 0, className: 'Person', confidence: 0.98, boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 1, className: 'Hardhat', confidence: 0.95, boundingBox: { x1: 0.2, y1: 0.1, x2: 0.3, y2: 0.2, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 3, className: 'Safety Vest', confidence: 0.92, boundingBox: { x1: 0.2, y1: 0.25, x2: 0.4, y2: 0.55, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 5, className: 'Gloves', confidence: 0.88, boundingBox: { x1: 0.15, y1: 0.5, x2: 0.25, y2: 0.6, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 7, className: 'Boots', confidence: 0.91, boundingBox: { x1: 0.2, y1: 0.8, x2: 0.3, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 9, className: 'Goggles', confidence: 0.85, boundingBox: { x1: 0.22, y1: 0.15, x2: 0.28, y2: 0.18, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 11, className: 'Mask', confidence: 0.82, boundingBox: { x1: 0.22, y1: 0.18, x2: 0.28, y2: 0.22, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 13, className: 'fullbody-Harness', confidence: 0.89, boundingBox: { x1: 0.2, y1: 0.25, x2: 0.4, y2: 0.65, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 14, className: 'Lanyard-Hook', confidence: 0.87, boundingBox: { x1: 0.35, y1: 0.5, x2: 0.42, y2: 0.6, coordinateSpace: 'NORMALIZED_0_1' } },
+        {
+          classId: 0,
+          className: 'Person',
+          confidence: 0.98,
+          boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 1,
+          className: 'Hardhat',
+          confidence: 0.95,
+          boundingBox: { x1: 0.2, y1: 0.1, x2: 0.3, y2: 0.2, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 3,
+          className: 'Safety Vest',
+          confidence: 0.92,
+          boundingBox: { x1: 0.2, y1: 0.25, x2: 0.4, y2: 0.55, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 5,
+          className: 'Gloves',
+          confidence: 0.88,
+          boundingBox: { x1: 0.15, y1: 0.5, x2: 0.25, y2: 0.6, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 7,
+          className: 'Boots',
+          confidence: 0.91,
+          boundingBox: { x1: 0.2, y1: 0.8, x2: 0.3, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 9,
+          className: 'Goggles',
+          confidence: 0.85,
+          boundingBox: {
+            x1: 0.22,
+            y1: 0.15,
+            x2: 0.28,
+            y2: 0.18,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
+        {
+          classId: 11,
+          className: 'Mask',
+          confidence: 0.82,
+          boundingBox: {
+            x1: 0.22,
+            y1: 0.18,
+            x2: 0.28,
+            y2: 0.22,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
+        {
+          classId: 13,
+          className: 'fullbody-Harness',
+          confidence: 0.89,
+          boundingBox: { x1: 0.2, y1: 0.25, x2: 0.4, y2: 0.65, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 14,
+          className: 'Lanyard-Hook',
+          confidence: 0.87,
+          boundingBox: { x1: 0.35, y1: 0.5, x2: 0.42, y2: 0.6, coordinateSpace: 'NORMALIZED_0_1' },
+        },
       ],
     };
 
@@ -234,6 +291,8 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
         <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
       </QueryClientProvider>,
     );
+
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
 
     const section = screen.getByTestId('experimental-objects-section');
     expect(section).not.toBeNull();
@@ -275,9 +334,7 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
     expect(
       scoped.getByText(/Raw 15-class detector observations\. Object detection only/i),
     ).not.toBeNull();
-    expect(
-      scoped.getByText(/Zero detections do not certify safety clearance/i),
-    ).not.toBeNull();
+    expect(scoped.getByText(/Zero detections do not certify safety clearance/i)).not.toBeNull();
   });
 
   it('rawnegative: renders negative classes separately and does not invent negative Harness/Hook', () => {
@@ -288,9 +345,30 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
       artifactId: 'model-unified8-weights-v1',
       artifactSha256: 'b'.repeat(64),
       detections: [
-        { classId: 2, className: 'NO-Hardhat', confidence: 0.76, boundingBox: { x1: 0.1, y1: 0.1, x2: 0.2, y2: 0.2, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 4, className: 'NO-Safety Vest', confidence: 0.81, boundingBox: { x1: 0.1, y1: 0.2, x2: 0.3, y2: 0.4, coordinateSpace: 'NORMALIZED_0_1' } },
-        { classId: 12, className: 'NO-Mask', confidence: 0.74, boundingBox: { x1: 0.15, y1: 0.15, x2: 0.22, y2: 0.22, coordinateSpace: 'NORMALIZED_0_1' } },
+        {
+          classId: 2,
+          className: 'NO-Hardhat',
+          confidence: 0.76,
+          boundingBox: { x1: 0.1, y1: 0.1, x2: 0.2, y2: 0.2, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 4,
+          className: 'NO-Safety Vest',
+          confidence: 0.81,
+          boundingBox: { x1: 0.1, y1: 0.2, x2: 0.3, y2: 0.4, coordinateSpace: 'NORMALIZED_0_1' },
+        },
+        {
+          classId: 12,
+          className: 'NO-Mask',
+          confidence: 0.74,
+          boundingBox: {
+            x1: 0.15,
+            y1: 0.15,
+            x2: 0.22,
+            y2: 0.22,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
       ],
     };
 
@@ -303,15 +381,23 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
       </QueryClientProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
+
     const section = screen.getByTestId('experimental-objects-section');
     expect(section).not.toBeNull();
     const scoped = within(section);
 
     // Negative items rendered in separate container
     expect(scoped.getByText('Negative observations (raw detector)')).not.toBeNull();
-    expect(scoped.getByTestId('model-object-negative-NO-Hardhat')?.textContent).toContain('NO-Hardhat (76%)');
-    expect(scoped.getByTestId('model-object-negative-NO-Safety Vest')?.textContent).toContain('NO-Safety Vest (81%)');
-    expect(scoped.getByTestId('model-object-negative-NO-Mask')?.textContent).toContain('NO-Mask (74%)');
+    expect(scoped.getByTestId('model-object-negative-NO-Hardhat')?.textContent).toContain(
+      'NO-Hardhat (76%)',
+    );
+    expect(scoped.getByTestId('model-object-negative-NO-Safety Vest')?.textContent).toContain(
+      'NO-Safety Vest (81%)',
+    );
+    expect(scoped.getByTestId('model-object-negative-NO-Mask')?.textContent).toContain(
+      'NO-Mask (74%)',
+    );
 
     // Confirm no negative classes exist for Harness or Hook in the spec/UI
     expect(scoped.queryByTestId('model-object-negative-NO-Harness')).toBeNull();
@@ -342,6 +428,8 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
       </QueryClientProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
+
     const section = screen.getByTestId('experimental-objects-section');
     expect(section).not.toBeNull();
     const scoped = within(section);
@@ -368,6 +456,8 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
         <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
       </QueryClientProvider>,
     );
+
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
 
     expect(screen.queryByTestId('experimental-objects-section')).toBeNull();
     expect(screen.queryByText('Experimental objects')).toBeNull();
@@ -404,6 +494,8 @@ describe('Unified8 Real Raw-Object Eight-PPE Preview & Geometry', () => {
         <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
       </QueryClientProvider>,
     );
+
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
 
     const section = screen.getByTestId('experimental-objects-section');
     expect(section).not.toBeNull();

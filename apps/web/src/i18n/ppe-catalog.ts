@@ -289,9 +289,8 @@ export const PPE_EN_CATALOG = {
 
   'ppe.action.reviewAlert': 'Review Alert',
 
-  'ppe.diagnostics.title': 'Diagnostics, Zone Setup & Experimental Detector Controls',
-  'ppe.diagnostics.subtitle':
-    '15-class experimental raw detector observations, display focus presets, demo controls, and zone setup.',
+  'ppe.diagnostics.title': 'Technical diagnostics',
+  'ppe.diagnostics.subtitle': 'Experimental detector output and demo controls.',
   'ppe.diagnostics.collapseBtn': 'Collapse Diagnostics ↑',
   'ppe.diagnostics.expandBtn': 'Expand Diagnostics ↓',
   'ppe.diagnostics.experimentalObjectsTitle': 'Experimental objects',
@@ -1299,9 +1298,8 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
 
   'ppe.action.reviewAlert': 'Xác minh cảnh báo',
 
-  'ppe.diagnostics.title': 'Chẩn đoán, Thiết lập Khu vực & Điều khiển Bộ dò Thử nghiệm',
-  'ppe.diagnostics.subtitle':
-    'Quan sát thô 15 lớp từ bộ dò thử nghiệm, bộ lọc hiển thị trọng tâm, điều khiển demo và thiết lập khu vực.',
+  'ppe.diagnostics.title': 'Chẩn đoán kỹ thuật',
+  'ppe.diagnostics.subtitle': 'Kết quả nhận diện thử nghiệm và công cụ demo.',
   'ppe.diagnostics.collapseBtn': 'Thu gọn chẩn đoán ↑',
   'ppe.diagnostics.expandBtn': 'Mở rộng chẩn đoán ↓',
   'ppe.diagnostics.experimentalObjectsTitle': 'Vật thể thử nghiệm (bộ dò thô)',

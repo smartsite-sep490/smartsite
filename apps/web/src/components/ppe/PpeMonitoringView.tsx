@@ -351,7 +351,7 @@ export function PpeMonitoringView({
     number | null
   >(null);
   const [registrationFeedback, setRegistrationFeedback] = useState<string | null>(null);
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(!isAiWorkPaused);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [requestedSiteId, setSelectedSiteId] = useState<string>(initialSelection?.siteId ?? '');
   const [requestedCameraId, setSelectedCameraId] = useState<string>(
     initialSelection?.cameraId ?? '',
