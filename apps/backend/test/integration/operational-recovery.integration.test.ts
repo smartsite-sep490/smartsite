@@ -393,11 +393,6 @@ function recoveryScenario(main37 = false, linux = false) {
       code: `${username}-other`,
       name: 'Synthetic other Site',
     });
-    const camera = await create(`/sites/${site.id}/cameras`, {
-      code: 'RESTORE',
-      externalId: username,
-      name: 'Synthetic metadata Camera',
-    });
     const managerUsername = `${username}-manager`;
     await create('/users', {
       username: managerUsername,
@@ -412,6 +407,13 @@ function recoveryScenario(main37 = false, linux = false) {
     });
     const managerToken = (await managerLogin.json()).accessToken;
     secrets.push(managerToken);
+    const cameraInput = {
+      code: 'RESTORE',
+      externalId: username,
+      name: 'Synthetic metadata Camera',
+    };
+    await request(`/sites/${site.id}/cameras`, 403, cameraInput, token);
+    const camera = await create(`/sites/${site.id}/cameras`, cameraInput, managerToken);
     const zoneInput = {
       code: 'RESTORE',
       name: 'Synthetic recovery Zone',
@@ -421,7 +423,7 @@ function recoveryScenario(main37 = false, linux = false) {
     };
     await request(`/sites/${site.id}/zones`, 403, zoneInput, token);
     const zone = await create(`/sites/${site.id}/zones`, zoneInput, managerToken);
-    const { region } = await create(`/sites/${site.id}/cameras/${camera.id}/regions`, {
+    const regionInput = {
       zoneId: zone.id,
       expectedConfigurationVersion: 1,
       polygon: {
@@ -432,7 +434,13 @@ function recoveryScenario(main37 = false, linux = false) {
           [0, 1],
         ],
       },
-    });
+    };
+    await request(`/sites/${site.id}/cameras/${camera.id}/regions`, 403, regionInput, token);
+    const { region } = await create(
+      `/sites/${site.id}/cameras/${camera.id}/regions`,
+      regionInput,
+      managerToken,
+    );
     const references: {
       eventId: string;
       alertId: string;
@@ -960,7 +968,7 @@ function recoveryScenario(main37 = false, linux = false) {
           forcedWindowsQuiesceNotGraceful: !linux && process.platform === 'win32',
           actualLinuxContainers: linuxContainers,
           linuxImage: linux ? linuxImage : null,
-          profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_MAIN39',
+          profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_RUNTIME_GRAPH',
           completedMf06HistoryPreserved: !!completed,
           syntheticHistorySuppressed: !!completed,
           functionsTriggersMatched: true,

@@ -159,3 +159,14 @@ Root permits the optional navigation callback and denied-card action only;
 monitoring permission/query/evidence blocks are unchanged. Extract the existing
 view orchestration before adding another feature. Owner/reviewer: Root;
 independent Agy p8 review and 29 affected DOM checks are recorded separately.
+
+## Existing operational recovery fixture, 17 October
+
+Root permits `apps/backend/test/integration/operational-recovery.integration.test.ts`
+to grow from 1011 to 1019 lines solely to use the existing scoped Manager account
+for Camera/Region creation and explicitly retain Admin403 checks. No backup,
+restore, media-integrity, private-read or history assertions are removed. The
+native-client opt-in exposed the wrong-actor403 before the dump; the corrected
+dedicated5433 run reaches restore and passes. Extract its existing actor setup
+before adding another recovery scenario. Owner/reviewer: Root; Agy p5 provides
+bounded read-only review. This exception does not raise the test-size limit.
