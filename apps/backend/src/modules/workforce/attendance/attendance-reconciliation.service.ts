@@ -640,7 +640,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         worker,
         day.id,
         'MISSING_CHECKOUT',
-        'The shift ended more than five minutes ago and checkout is missing. Hours remain provisional.',
+        `Worker ${worker.displayName} (${worker.externalId}) is missing checkout for the shift on ${day.workDate}. The shift ended more than five minutes ago. Hours remain provisional.`,
         true,
         day.workDate,
       );
