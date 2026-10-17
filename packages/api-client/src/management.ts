@@ -834,6 +834,7 @@ export class SmartSiteManagementClient {
   private async runRequest<T>(
     options: RequestOptions | undefined,
     operation: (signal: AbortSignal | undefined) => Promise<T>,
+    cancellationMessage = 'Request cancelled.',
   ): Promise<T> {
     if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
       throw new RangeError(
@@ -855,10 +856,10 @@ export class SmartSiteManagementClient {
     const signal =
       options?.signal || options?.timeoutMs !== undefined ? controller.signal : undefined;
     try {
-      if (options?.signal?.aborted) throw new ApiError('cancelled', 'Request cancelled.');
+      if (options?.signal?.aborted) throw new ApiError('cancelled', cancellationMessage);
       return await operation(signal);
     } catch (error) {
-      if (options?.signal?.aborted) throw new ApiError('cancelled', 'Request cancelled.');
+      if (options?.signal?.aborted) throw new ApiError('cancelled', cancellationMessage);
       if (timedOut) throw new ApiError('timeout', 'Backend request timed out.');
       if (error instanceof ApiError) throw error;
       throw new ApiError('network', 'Could not connect to the backend.');
@@ -2649,6 +2650,21 @@ export class SmartSiteManagementClient {
     onFrame: (frame: CameraMediaFrame) => void,
     options?: CameraVideoStreamOptions,
   ): Promise<void> {
+    return this.runRequest(
+      this.requestOptions(token, { signal: options?.signal }),
+      (signal) =>
+        this.streamCameraVideoRequest(token, siteId, cameraId, onFrame, { ...options, signal }),
+      'Camera video stream request cancelled.',
+    );
+  }
+
+  private async streamCameraVideoRequest(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    onFrame: (frame: CameraMediaFrame) => void,
+    options?: CameraVideoStreamOptions,
+  ): Promise<void> {
     const sessionScopes = captureSessionScopes(token);
     const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/video-stream`;
     const callerSignal = this.requestOptions(token, options)?.signal;
@@ -2776,6 +2792,20 @@ export class SmartSiteManagementClient {
    * maximum 2,000,000 bytes bound, and validates x-camera-external-id if expectedCameraExternalId is provided.
    */
   async readRecordedCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RecordedCameraVideoOptions,
+  ): Promise<Blob> {
+    return this.runRequest(
+      this.requestOptions(token, { signal: options?.signal }),
+      (signal) =>
+        this.readRecordedCameraVideoRequest(token, siteId, cameraId, { ...options, signal }),
+      'Recorded camera video request cancelled.',
+    );
+  }
+
+  private async readRecordedCameraVideoRequest(
     token: string,
     siteId: string,
     cameraId: string,
