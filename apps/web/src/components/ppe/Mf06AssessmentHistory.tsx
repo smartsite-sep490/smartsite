@@ -9,7 +9,7 @@ import {
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
 import { IconClock, IconShield, IconCheck, IconX, IconAlertTriangle } from '../icons';
-import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
+import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
 
 export interface Mf06AssessmentHistoryProps {
   token: string | null;
@@ -74,11 +74,11 @@ const PURPOSE_KEYS: Record<Mf06AssessmentResponse['purpose'], TranslationKey> = 
   RETROSPECTIVE_REVIEW: 'mf06.detail.purpose.RETROSPECTIVE_REVIEW',
 };
 
-function formatTimestamp(isoString: string): string {
+function formatTimestamp(isoString: string, locale: Locale): string {
   try {
     const date = new Date(isoString);
     if (Number.isNaN(date.getTime())) return isoString;
-    return date.toLocaleString(undefined, {
+    return date.toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US', {
       year: 'numeric',
       month: 'short',
       day: '2-digit',
@@ -147,7 +147,7 @@ export function Mf06AssessmentHistory({
     'http://localhost:3000',
   client: injectedClient,
 }: Mf06AssessmentHistoryProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const queryClient = useQueryClient();
   const managementClient = useMemo(
     () => injectedClient ?? new SmartSiteManagementClient(apiUrl),
@@ -561,7 +561,7 @@ export function Mf06AssessmentHistory({
                         {t('mf06.detail.field.captured')}
                       </span>{' '}
                       <time dateTime={assessment.capturedAt} className="font-mono tabular-nums">
-                        {formatTimestamp(assessment.capturedAt)}
+                        {formatTimestamp(assessment.capturedAt, locale)}
                       </time>
                     </div>
                     <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
@@ -569,7 +569,7 @@ export function Mf06AssessmentHistory({
                         {t('mf06.detail.field.assessed')}
                       </span>{' '}
                       <time dateTime={assessment.assessedAt} className="font-mono tabular-nums">
-                        {formatTimestamp(assessment.assessedAt)}
+                        {formatTimestamp(assessment.assessedAt, locale)}
                       </time>
                     </div>
                   </div>

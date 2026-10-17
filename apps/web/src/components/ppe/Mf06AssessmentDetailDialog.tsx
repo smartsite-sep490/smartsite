@@ -17,7 +17,7 @@ import {
   MF06_BINDING_REASON_KEYS,
   registerMf06BindingCatalog,
 } from '../../i18n/mf06-binding-catalog';
-import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
+import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 
 export interface Mf06AssessmentDetailDialogProps {
@@ -91,11 +91,11 @@ const PURPOSE_KEYS: Record<Mf06AssessmentResponse['purpose'], TranslationKey> = 
   RETROSPECTIVE_REVIEW: 'mf06.detail.purpose.RETROSPECTIVE_REVIEW',
 };
 
-function formatIsoDisplay(isoString: string): string {
+function formatIsoDisplay(isoString: string, locale: Locale): string {
   try {
     const date = new Date(isoString);
     if (Number.isNaN(date.getTime())) return isoString;
-    return date.toLocaleString(undefined, {
+    return date.toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US', {
       year: 'numeric',
       month: 'short',
       day: '2-digit',
@@ -169,7 +169,7 @@ export function Mf06AssessmentDetailDialog({
   onAccessError,
 }: Mf06AssessmentDetailDialogProps) {
   registerMf06BindingCatalog();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const { t: translateBindingReason } = useTranslation(SAFETY_NAMESPACE);
   const queryClient = useQueryClient();
   const managementClient = useMemo(
@@ -541,7 +541,7 @@ export function Mf06AssessmentDetailDialog({
                     {record.capturedAt}
                   </time>
                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    {formatIsoDisplay(record.capturedAt)}
+                    {formatIsoDisplay(record.capturedAt, locale)}
                   </div>
                 </div>
               </div>
@@ -554,7 +554,7 @@ export function Mf06AssessmentDetailDialog({
                     {record.assessedAt}
                   </time>
                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    {formatIsoDisplay(record.assessedAt)}
+                    {formatIsoDisplay(record.assessedAt, locale)}
                   </div>
                 </div>
               </div>

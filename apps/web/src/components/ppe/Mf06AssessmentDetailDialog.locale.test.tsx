@@ -187,8 +187,21 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const TIMESTAMP_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+};
+function expectedTimestamp(isoString: string, localeTag: 'vi-VN' | 'en-US'): string {
+  return new Date(isoString).toLocaleString(localeTag, TIMESTAMP_OPTIONS);
+}
+
 describe('MF06 recorded assessment presentation locale', () => {
-  it('retranslates an unavailable immutable assessment without refetching or inferring unauthorized identity', async () => {
+  it('retranslates an unavailable immutable assessment and its display timestamps without refetching or inferring unauthorized identity', async () => {
     const fetch = vi.fn().mockResolvedValue(record);
     mount(fetch);
     const dialog = await screen.findByRole('dialog', { name: 'Đánh giá đã lưu' });
@@ -196,14 +209,38 @@ describe('MF06 recorded assessment presentation locale', () => {
     await screen.findByText('Chưa xác định được danh tính');
     expect(screen.queryByText('Không được phép')).toBeNull();
     expect(screen.getByText(record.assessmentId)).toBeDefined();
-    const time = dialog.querySelector('time');
-    expect(time?.getAttribute('datetime')).toBe(record.capturedAt);
+
+    const capturedTime = dialog.querySelector(`time[datetime="${record.capturedAt}"]`);
+    const assessedTime = dialog.querySelector(`time[datetime="${record.assessedAt}"]`);
+    expect(capturedTime?.getAttribute('datetime')).toBe(record.capturedAt);
+    expect(capturedTime?.textContent).toBe(record.capturedAt);
+    expect(assessedTime?.getAttribute('datetime')).toBe(record.assessedAt);
+    expect(assessedTime?.textContent).toBe(record.assessedAt);
+    expect(expectedTimestamp(record.capturedAt, 'vi-VN')).not.toBe(
+      expectedTimestamp(record.capturedAt, 'en-US'),
+    );
+    expect(capturedTime?.nextElementSibling?.textContent).toBe(
+      expectedTimestamp(record.capturedAt, 'vi-VN'),
+    );
+    expect(assessedTime?.nextElementSibling?.textContent).toBe(
+      expectedTimestamp(record.assessedAt, 'vi-VN'),
+    );
+
     if (!changeLocale) throw new Error('Locale setter missing');
     act(() => changeLocale?.('en'));
     await screen.findByRole('dialog', { name: 'Recorded assessment' });
     await screen.findByText('Identity Unavailable');
     expect(screen.getByRole('dialog')).toBe(dialog);
-    expect(time?.getAttribute('datetime')).toBe(record.capturedAt);
+    expect(capturedTime?.getAttribute('datetime')).toBe(record.capturedAt);
+    expect(capturedTime?.textContent).toBe(record.capturedAt);
+    expect(assessedTime?.getAttribute('datetime')).toBe(record.assessedAt);
+    expect(assessedTime?.textContent).toBe(record.assessedAt);
+    expect(capturedTime?.nextElementSibling?.textContent).toBe(
+      expectedTimestamp(record.capturedAt, 'en-US'),
+    );
+    expect(assessedTime?.nextElementSibling?.textContent).toBe(
+      expectedTimestamp(record.assessedAt, 'en-US'),
+    );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it('localizes a safe forbidden response without disclosing private transport diagnostics', async () => {

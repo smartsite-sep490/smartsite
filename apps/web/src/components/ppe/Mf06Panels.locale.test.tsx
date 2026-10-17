@@ -22,7 +22,7 @@ const assessment: Mf06AssessmentResponse = {
   eventId: '44444444-4444-4444-8444-444444444444',
   cameraId: '55555555-5555-4555-8555-555555555555',
   zoneId: '66666666-6666-4666-8666-666666666666',
-  capturedAt: '2026-10-12T10:00:00.000Z',
+  capturedAt: '2026-10-12T10:00:00.123456Z',
   assessedAt: '2026-10-12T10:00:02.000Z',
   purpose: 'INITIAL_OBSERVATION_ASSESSMENT',
   outcome: 'UNAVAILABLE',
@@ -45,6 +45,30 @@ const request: Mf06RequestStatusResponse = {
   deadlinePassed: false,
   assessmentId: null,
 };
+const deadlineRequest: Mf06RequestStatusResponse = {
+  ...request,
+  requestId: '77777777-7777-4777-8777-777777777777',
+  eventId: '88888888-8888-4888-8888-888888888888',
+  capturedAt: '2026-10-12T10:00:03.654321Z',
+  requestedAt: '2026-10-12T10:00:04.000Z',
+  jobStatus: 'CLAIMED',
+  attemptCount: 1,
+  deadlineAt: '2026-10-12T10:00:09.000Z',
+  deadlinePassed: false,
+  assessmentId: null,
+};
+const TIMESTAMP_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+};
+function expectedTimestamp(isoString: string, localeTag: 'vi-VN' | 'en-US'): string {
+  return new Date(isoString).toLocaleString(localeTag, TIMESTAMP_OPTIONS);
+}
 const page = <T,>(items: T[]) => ({ items, total: items.length, offset: 0, limit: 20 });
 let changeLocale: ((locale: Locale) => void) | undefined;
 const clients: QueryClient[] = [];
@@ -95,23 +119,41 @@ function english() {
 }
 
 describe('MF06 request and history presentation locale', () => {
-  it('switches the history labels without refetching immutable records or converting unavailable identity to unauthorized', async () => {
+  it('switches the history labels and timestamps without refetching immutable records or converting unavailable identity to unauthorized', async () => {
     const list = vi.fn().mockResolvedValue(page([assessment]));
-    mount({ listMf06Assessments: list } as unknown as SmartSiteManagementClient, 'history');
+    const { container } = mount(
+      { listMf06Assessments: list } as unknown as SmartSiteManagementClient,
+      'history',
+    );
     await screen.findByText('Lịch sử đánh giá khu vực hạn chế MF06');
     await screen.findByText('Chưa xác định được danh tính');
     expect(screen.queryByText('Không được phép')).toBeNull();
     expect(screen.getByText(assessment.assessmentId)).toBeDefined();
+
+    const capturedTime = container.querySelector(`time[datetime="${assessment.capturedAt}"]`);
+    const assessedTime = container.querySelector(`time[datetime="${assessment.assessedAt}"]`);
+    expect(capturedTime?.getAttribute('datetime')).toBe(assessment.capturedAt);
+    expect(assessedTime?.getAttribute('datetime')).toBe(assessment.assessedAt);
+    expect(expectedTimestamp(assessment.capturedAt, 'vi-VN')).not.toBe(
+      expectedTimestamp(assessment.capturedAt, 'en-US'),
+    );
+    expect(capturedTime?.textContent).toBe(expectedTimestamp(assessment.capturedAt, 'vi-VN'));
+    expect(assessedTime?.textContent).toBe(expectedTimestamp(assessment.assessedAt, 'vi-VN'));
+
     english();
     await screen.findByText('MF06 Restricted Zone Assessment History');
     await screen.findByText('Identity Unavailable');
     expect(screen.getByText(assessment.assessmentId)).toBeDefined();
+    expect(capturedTime?.getAttribute('datetime')).toBe(assessment.capturedAt);
+    expect(assessedTime?.getAttribute('datetime')).toBe(assessment.assessedAt);
+    expect(capturedTime?.textContent).toBe(expectedTimestamp(assessment.capturedAt, 'en-US'));
+    expect(assessedTime?.textContent).toBe(expectedTimestamp(assessment.assessedAt, 'en-US'));
     expect(list).toHaveBeenCalledTimes(1);
   });
-  it('keeps the selected request tab and NOT_QUEUED snapshot while switching locale without enqueue or refetch', async () => {
-    const requests = vi.fn().mockResolvedValue(page([request]));
+  it('keeps the selected request tab, NOT_QUEUED snapshot, and deadlineAt timestamps while switching locale without enqueue or refetch', async () => {
+    const requests = vi.fn().mockResolvedValue(page([request, deadlineRequest]));
     const history = vi.fn().mockResolvedValue(page([]));
-    mount(
+    const { container } = mount(
       {
         listMf06RequestStatuses: requests,
         listMf06Assessments: history,
@@ -121,10 +163,31 @@ describe('MF06 request and history presentation locale', () => {
     const tab = await screen.findByRole('tab', { name: 'Yêu cầu' });
     expect(tab.getAttribute('aria-selected')).toBe('true');
     await screen.findByText('Chưa vào hàng đợi');
+    await screen.findByText('Không có');
+
+    const trackedIsoValues = [
+      request.capturedAt,
+      request.requestedAt,
+      deadlineRequest.capturedAt,
+      deadlineRequest.requestedAt,
+      deadlineRequest.deadlineAt!,
+    ];
+    for (const iso of trackedIsoValues) {
+      const timeEl = container.querySelector(`time[datetime="${iso}"]`);
+      expect(timeEl?.getAttribute('datetime')).toBe(iso);
+      expect(timeEl?.textContent).toBe(expectedTimestamp(iso, 'vi-VN'));
+    }
+
     english();
     expect(screen.getByRole('tab', { name: 'Requests' })).toBe(tab);
     expect(tab.getAttribute('aria-selected')).toBe('true');
     await screen.findByText('Not Queued');
+    await screen.findByText('None');
+    for (const iso of trackedIsoValues) {
+      const timeEl = container.querySelector(`time[datetime="${iso}"]`);
+      expect(timeEl?.getAttribute('datetime')).toBe(iso);
+      expect(timeEl?.textContent).toBe(expectedTimestamp(iso, 'en-US'));
+    }
     expect(requests).toHaveBeenCalledTimes(1);
     expect(history).not.toHaveBeenCalled();
   });
