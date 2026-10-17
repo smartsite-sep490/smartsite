@@ -18,6 +18,7 @@ import { syntheticJpeg } from '../support/synthetic-jpeg.js';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 import {
   loadMainRecoveryMigrations,
+  MAIN37_MISSING_MAIN61_MIGRATIONS,
   seedCompletedRecoveryAssessment,
 } from '../support/main-recovery-profile.js';
 
@@ -144,10 +145,7 @@ function recoveryScenario(main37 = false, linux = false) {
           return (migration as new () => { name: string }).prototype.constructor.name;
         })
         .filter((name) => !applied.has(name));
-      assert.deepEqual(missingRuntimeMigrations, [
-        'Mf06MainAuthorityJournal1791590400002',
-        'SafetyFaceProvenance1791590400003',
-      ]);
+      assert.deepEqual(missingRuntimeMigrations, MAIN37_MISSING_MAIN61_MIGRATIONS);
     }
     await control.initialize();
     const schema = db.driver.schema;
@@ -365,7 +363,7 @@ function recoveryScenario(main37 = false, linux = false) {
         assert.equal(child.exitCode, null, 'Main exited during startup');
         try {
           // This is an operational restore drill, not production adoption of MAIN.
-          // Incomplete historical MAIN37 is unready for the canonical MAIN39 release.
+          // Incomplete historical MAIN37 is unready for the canonical MAIN61 release.
           await request('/health/live');
           await request('/health/ready', main37 ? 503 : 200);
           return owned;

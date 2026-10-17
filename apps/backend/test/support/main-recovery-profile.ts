@@ -15,6 +15,34 @@ import { MAIN_AUTHORITY_ARCHIVE_FORMAT } from '../../src/modules/zones/main-auth
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
 const digest = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
 
+// Exact negative boundary: approved MAIN35 + Safety0001/0004 is not current MAIN61.
+export const MAIN37_MISSING_MAIN61_MIGRATIONS = [
+  'Mf06MainAuthorityJournal1791590400002',
+  'SafetyFaceProvenance1791590400003',
+  'Mf03AttendanceReconciliation1791676800000',
+  'WorkerCodeSequence1791676800000',
+  'Mf03DailyOpenSessions1791676800001',
+  'OptionalPasswordChange1791676800002',
+  'Mf03AttendanceDuplicateReview1791676800003',
+  'ContractorTeams1791676800004',
+  'ShiftArchival1791763200000',
+  'ShiftBreak1791763200001',
+  'GateScheduleDenial1791849600000',
+  'ScheduleAssignmentBatches1791849600001',
+  'ScheduleChangeNotifications1791849600002',
+  'SingleSiteManager1791936000000',
+  'TeamZonePermissions1791940000000',
+  'ContractorZoneRegrant1791940000001',
+  'SingleTeamZone1791940000002',
+  'AttendanceAbsence1792022400000',
+  'VisitorRoster1792022400000',
+  'SiteManagerReviewNotifications1792108800000',
+  'SafetyChecklists1792195200000',
+  'ShiftExitGracePeriod1792281600000',
+  'AttendanceExitNotifications1792281600001',
+  'PreserveManagerNotificationHistory1792368000000',
+];
+
 /** Test-only approved MAIN snapshot. Never register these migrations in production options. */
 export async function loadMainRecoveryMigrations(repository: string, snapshot: string) {
   assert(isAbsolute(repository) && isAbsolute(snapshot));
