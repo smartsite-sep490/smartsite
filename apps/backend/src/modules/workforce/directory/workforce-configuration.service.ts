@@ -365,30 +365,6 @@ export class WorkforceConfigurationService {
           name: value.name,
           isActive: true,
         });
-        const participations = await manager
-          .getRepository(ContractorSiteParticipationEntity)
-          .findBy({
-            contractorId: contractor.id,
-            siteId: scopedSiteId,
-            isActive: true,
-          });
-        const now = new Date();
-        if (
-          !participations.some(
-            ({ validFrom, validUntil }) =>
-              validFrom.getTime() <= now.getTime() &&
-              (validUntil === null || validUntil.getTime() > now.getTime()),
-          )
-        ) {
-          await manager.getRepository(ContractorSiteParticipationEntity).save({
-            id: randomUUID(),
-            contractorId: contractor.id,
-            siteId: scopedSiteId,
-            validFrom: now,
-            validUntil: null,
-            isActive: true,
-          });
-        }
         return contractor;
       });
     } catch (error) {
@@ -472,6 +448,18 @@ export class WorkforceConfigurationService {
     );
   }
 
+  async participationOptions(siteId: string) {
+    if (!(await this.dataSource.getRepository(SiteEntity).existsBy({ id: uuid(siteId) })))
+      missing();
+    return {
+      items: await this.dataSource.getRepository(ContractorEntity).find({
+        where: { isActive: true },
+        select: { id: true, code: true, name: true, isActive: true },
+        order: { name: 'ASC', id: 'ASC' },
+      }),
+    };
+  }
+
   async listRepresentativeAssignments(
     siteId: string,
     offset = 0,
@@ -550,16 +538,16 @@ export class WorkforceConfigurationService {
     const query = this.dataSource
       .getRepository(ContractorEntity)
       .createQueryBuilder('contractor')
-      .innerJoin(
-        ContractorSiteParticipationEntity,
-        'participation',
-        'participation.contractor_id = contractor.id AND participation.site_id = :siteId AND participation.is_active = TRUE AND participation.valid_from <= :now AND (participation.valid_until IS NULL OR participation.valid_until > :now)',
-        { siteId: scopedSiteId, now },
-      )
       .distinct(true)
       .orderBy('contractor.name', 'ASC')
       .skip(pagination.offset)
       .take(pagination.limit);
+    query.innerJoin(
+      ContractorSiteParticipationEntity,
+      'participation',
+      'participation.contractor_id = contractor.id AND participation.site_id = :siteId AND participation.is_active = TRUE AND participation.valid_from <= :now AND (participation.valid_until IS NULL OR participation.valid_until > :now)',
+      { siteId: scopedSiteId, now },
+    );
     if (contractorIdScope)
       query.andWhere('contractor.id = :contractorIdScope', { contractorIdScope });
     const [items, total] = await query.getManyAndCount();

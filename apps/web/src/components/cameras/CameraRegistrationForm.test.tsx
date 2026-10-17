@@ -49,7 +49,7 @@ function mount(overrides: Partial<CameraRegistrationFormProps> = {}) {
     credentialId: 1,
     siteId: siteA,
     siteName: 'Site A',
-    isAdmin: true,
+    canManageCamera: true,
     onCreated: vi.fn(),
     onUnauthorized: vi.fn(),
     onCancel: vi.fn(),
@@ -241,12 +241,12 @@ it('clears the form on logout and ignores late success', async () => {
   expect(view.props.onCreated).not.toHaveBeenCalled();
 });
 
-it('does not expose registration to a non-Admin or a missing Site', () => {
+it('does not expose registration without write capability or a Site', () => {
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
-  const view = mount({ isAdmin: false });
+  const view = mount({ canManageCamera: false });
   expect(screen.queryByRole('form')).toBeNull();
-  view.rerender(view.ui({ isAdmin: true, siteId: null }));
+  view.rerender(view.ui({ canManageCamera: true, siteId: null }));
   expect(screen.queryByRole('form')).toBeNull();
   expect(fetcher).not.toHaveBeenCalled();
 });
@@ -372,7 +372,7 @@ it('links recognized DTO issues to fields without rendering their raw messages',
   expect(screen.getByRole('alert').textContent).not.toMatch(/SQL|secret|internal/);
 });
 
-it('clears revoked-role drafts and ignores an in-flight success after Admin access is lost', async () => {
+it('clears revoked-role drafts and ignores an in-flight success after camera-write access is lost', async () => {
   const pending = deferred<Response>();
   vi.stubGlobal(
     'fetch',
@@ -382,7 +382,7 @@ it('clears revoked-role drafts and ignores an in-flight success after Admin acce
   fill();
   submit();
   await act(async () => {});
-  view.rerender(view.ui({ isAdmin: false }));
+  view.rerender(view.ui({ canManageCamera: false }));
   expect(screen.queryByRole('form')).toBeNull();
   await act(async () => pending.resolve(Response.json(camera)));
   expect(view.props.onCreated).not.toHaveBeenCalled();

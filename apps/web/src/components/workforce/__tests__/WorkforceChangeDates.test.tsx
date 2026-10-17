@@ -72,6 +72,7 @@ it.each(['list', 'notification', 'history', 'missing-date'])(
           ]}
         >
           <WorkforceManagerReviewTab
+            canReview
             apiUrl="https://api.example.test"
             siteId="site-1"
             token="synthetic-token"

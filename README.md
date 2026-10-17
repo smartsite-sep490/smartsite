@@ -199,20 +199,40 @@ Site Manager forms generate Contractor and Zone codes on the Backend. The Dashbo
 
 Contractor details now show dated Zone assignments under each team, separately from Contractor Zone grants. Global Admin **Site Setup → Contractor Site directory** lists a Contractor's participation intervals across Sites with status and pagination. These reads retain role/data scope checks; manager-only accounts cannot query the global directory. Deploy Backend before Web; no schema migration is added. See [MF03/MF07 API flows](docs/mf03-mf07-api-flow.md) for fields and remaining historical limitations.
 
-Visitor registration is available at `/visits/register`, without a login. One representative registers
-the site, group size, contact, host, requested area, gate and schedule. The request appears in
+Visitor registration is available at `/visits/register`, without a login. Visitor/contact details appear
+before site/gate/host/schedule details. One representative provides an email address and registers
+the site, group size, contact, host, requested area, gate and schedule. Groups of two or more must
+include exactly that many names and 12-digit citizen IDs, including the representative if attending.
+Visitors can enter the list manually or import the first sheet of an `.xlsx` workbook (up to 2 MB,
+1,000 visitors); a localized template is available. IDs must be unique and retain leading zeros.
+The request appears in
 **Visitor Passes** for the Site Manager assigned to that site; only that scoped role may approve or
-reject it. This is an in-app approval queue, without email/SMS delivery. A site without an active
+reject it. A site without an active
 Site Manager rejects registration. The representative saves the private tracking link returned after
-submission, then opens it to see approval and the real QR pass. Tokens expire after five minutes,
-refresh automatically while the pass page is open, are stored hashed and consumed on confirmation.
-Refresh invalidates the previous unconsumed token. Security scans by camera, uploaded QR image or
-scanner/manual token, then confirms actual headcount for each IN/OUT. Counts cannot exceed the
-approved group size or people inside. Identical retries produce one event; departure remains possible
-after the schedule ends while people are inside. Requested area is recorded with approval, not an
-MF06 Zone grant or individual visitor identity. Keep the tracking link with the representative.
+submission, then opens it to see approval and the real QR pass. Approved visitors receive a stable,
+random eight-character booking code and QR with no automatic token expiry. Refresh retains the
+same code. Entry still requires approval, the approved site/gate and schedule; cancellation blocks
+entry and departure remains possible for people already inside. Worker fallback QR remains five-minute,
+single-use. Visitor codes are stored as a lookup hash and authenticated ciphertext, with a purpose-specific
+key derived from `AUTH_JWT_SECRET`; preserve this secret across restarts to recover existing visitor QRs.
+Security scans by camera, uploaded QR image or manual booking code, loads the roster, selects actual
+arrivals/departures and can replace an absent visitor's name/ID on entry. Names at checkout must match
+entry. The backend locks each visit, checks the roster version, rejects duplicate IDs, invalid slots,
+excess counts and inconsistent presence, and binds retries to one passage. History has one record per
+passage with actual headcount and expandable identity/replacement snapshots. Earlier count-only visits
+retain their whole-group/manual-reconciliation path. Requested area remains subject to Site Manager
+approval; QR does not bypass Zone policy. Keep the tracking link and code with the representative.
 
-Apply migration `QrAccess1791417600000` before the updated Backend/Web. Browser QR scanning requires
+To email the QR as a PNG attachment after approval, configure backend-only `RESEND_API_KEY` and
+`RESEND_FROM_EMAIL` together, using a sender verified in Resend. Both can remain blank for local
+development without outbound email. Email uses the registration language (English/Vietnamese).
+An approval persists the outgoing request before sending, uses a provider idempotency key, and retries
+transient failures with backoff up to five attempts. The Site Manager can retry a failed email from
+Visitor Passes. `SENT` means Resend accepted the request, not confirmed inbox delivery. A failed email
+does not undo approval; the visitor can still use the private tracking page.
+See [visitor QR and Resend setup](docs/operations/visitor-qr-email.md) for configuration and rollout.
+
+Apply migration `VisitorRoster1792022400000` before the updated Backend/Web (after the existing QR/ERD migrations). Browser QR scanning requires
 camera permission and HTTPS or localhost. If the face camera is unavailable, use another scanning
 device, an uploaded QR image or a scanner/manual token. Worker QR is available through Web on a
 phone; it is not an Expo native QR screen.

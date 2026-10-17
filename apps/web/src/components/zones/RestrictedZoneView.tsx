@@ -24,6 +24,7 @@ import { ApiError, type LoginResponse } from '@smartsite/api-client';
 import type { SharedSession } from '../../types/shared-session';
 import { useAuth } from '../../features/auth/auth-session';
 import { PpeDialog } from '../ppe/PpeDialog';
+import '../cameras/camera-setup-catalog';
 import { Mf06ZoneAssessmentPanel } from '../ppe/Mf06ZoneAssessmentPanel';
 
 import { IconAlertTriangle, IconClock, IconMaximize, IconGrid, IconKey, IconCheck } from '../icons';
@@ -41,18 +42,10 @@ import {
 } from '../cameras/monitoringUtils';
 import {
   DEFAULT_ZONE_POLYGON,
-  backendPolygonToPoints,
   clearLocalDraft,
-  formatConflictMessage,
-  isConflictError,
-  isMutationScopeActive,
-  planMutationCompletion,
-  preparePolygonSave,
   resolveActivePolygon,
   saveLocalDraft,
   type ActiveScope,
-  type RegionMutationResponse,
-  type SavePolygonMutationVariables,
 } from './zonePolygonAdapter';
 
 function isUnauthorizedError(error: unknown): boolean {
@@ -98,7 +91,6 @@ export interface RestrictedZoneViewProps {
 
 let nextMetadataCredential = 0;
 const allocateMetadataCredential = () => ++nextMetadataCredential;
-type ScopedPolygonMutationVariables = SavePolygonMutationVariables & { metadataCredential: number };
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
@@ -134,7 +126,6 @@ export function RestrictedZoneView({
 
   const [requestedSiteId, setRequestedSiteId] = useState('');
   const [requestedCameraId, setRequestedCameraId] = useState('');
-  const [requestedRegionId, setRequestedRegionId] = useState('');
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [isDraftMode, setIsDraftMode] = useState(false);
   const [staleDraftInfo, setStaleDraftInfo] = useState<{ version: number } | null>(null);
@@ -312,7 +303,7 @@ export function RestrictedZoneView({
       removeSessionQueries(prevScopeRef.current);
       setRequestedSiteId('');
       setRequestedCameraId('');
-      setRequestedRegionId('');
+
       setIsDraftMode(false);
       setStaleDraftInfo(null);
       clearTransientFeedback();
@@ -393,7 +384,7 @@ export function RestrictedZoneView({
     setSession(null);
     setRequestedSiteId('');
     setRequestedCameraId('');
-    setRequestedRegionId('');
+
     setIsDraftMode(false);
     setStaleDraftInfo(null);
     if (current) void client.logout('WEB').catch(() => undefined);
@@ -557,71 +548,21 @@ export function RestrictedZoneView({
     );
   };
 
-  const regions = useZoneMetadataPages({
-    queryKey: [
-      'zone-admin',
-      apiUrl,
-      sessionScope,
-      selectedSiteId,
-      selectedCameraId,
-      'regions',
-      'pages',
-      metadataCredential,
-    ],
-    read: (offset, signal) =>
-      client.listRegions(
-        apiToken,
-        selectedSiteId,
-        selectedCameraId,
-        offset ? { offset, limit: 100 } : { limit: 100 },
-        { signal },
-      ),
-    enabled:
-      canViewZone &&
-      isGlobalAdmin &&
-      apiToken.length > 0 &&
-      sessionScope.length > 0 &&
-      selectedSiteId.length > 0 &&
-      selectedCameraId.length > 0,
-  });
-
-  const activeRegions = useMemo(
-    () => regions.data?.items.filter((r) => r.isActive && r.cameraId === selectedCameraId) ?? [],
-    [regions.data?.items, selectedCameraId],
-  );
-
-  const selectableRegions = useMemo(
-    () =>
-      activeRegions.length > 0
-        ? activeRegions
-        : (regions.data?.items.filter((r) => r.cameraId === selectedCameraId) ?? []),
-    [activeRegions, regions.data?.items, selectedCameraId],
-  );
-
-  const selectedRegionId = selectableRegions.some((r) => r.id === requestedRegionId)
-    ? requestedRegionId
-    : (selectableRegions[0]?.id ?? '');
-
-  const selectedRegion = useMemo(
-    () => selectableRegions.find((r) => r.id === selectedRegionId),
-    [selectableRegions, selectedRegionId],
-  );
-
   useLayoutEffect(() => {
     activeScopeRef.current = {
       userId: effectiveUser?.id ?? null,
       sessionScope,
       siteId: selectedSiteId,
       cameraId: selectedCameraId,
-      regionId: selectedRegionId,
+      regionId: '',
     };
-  }, [effectiveUser?.id, sessionScope, selectedSiteId, selectedCameraId, selectedRegionId]);
+  }, [effectiveUser?.id, sessionScope, selectedSiteId, selectedCameraId]);
 
   const currentScopeKey = effectiveUser
-    ? `${sessionScope}:${metadataCredential}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}:v${selectedRegion?.version ?? 0}:c${selectedCamera?.configurationVersion ?? 0}`
+    ? `${sessionScope}:${metadataCredential}:${selectedSiteId}:${selectedCameraId}:c${selectedCamera?.configurationVersion ?? 0}`
     : 'fallback-camera-04';
   const currentIdentityScopeKey = effectiveUser
-    ? `${effectiveUser.id}:${sessionScope}:${metadataCredential}:${selectedSiteId}:${selectedCameraId}:${selectedRegion?.id ?? 'none'}`
+    ? `${effectiveUser.id}:${sessionScope}:${metadataCredential}:${selectedSiteId}:${selectedCameraId}`
     : 'fallback-camera-04';
 
   const [prevScopeKey, setPrevScopeKey] = useState(currentScopeKey);
@@ -637,9 +578,7 @@ export function RestrictedZoneView({
     const resolved = resolveActivePolygon({
       siteId: selectedSiteId || undefined,
       cameraId: selectedCameraId || undefined,
-      regionId: selectedRegion?.id,
       cameraConfigurationVersion: selectedCamera?.configurationVersion,
-      backendPolygon: selectedRegion?.polygon,
       fallback: DEFAULT_ZONE_POLYGON,
     });
     setZonePolygon(resolved.points);
@@ -650,167 +589,30 @@ export function RestrictedZoneView({
     setIsEditingZone(false);
   }
 
-  const savePolygonMutation = useMutation<
-    RegionMutationResponse,
-    unknown,
-    ScopedPolygonMutationVariables
-  >({
-    mutationFn: async (vars: ScopedPolygonMutationVariables) => {
-      const token =
-        vars.token || (isShared ? sharedSession?.accessToken : activeSession.current?.token);
-      if (!token) {
-        throw new Error(tr('restricted_zone_view.sign_in_as_admin_before_saving_to_backend'));
-      }
-      if (!isShared && (!activeSession.current || activeSession.current.userId !== vars.userId)) {
-        throw new Error(tr('restricted_zone_view.sign_in_as_admin_before_saving_to_backend'));
-      }
-      const payload = preparePolygonSave(
-        { configurationVersion: vars.expectedConfigurationVersion },
-        vars.points,
-      );
-      return client.updatePolygon(token, vars.siteId, vars.cameraId, vars.regionId, payload);
-    },
-    onSuccess: async (mutationResult, vars) => {
-      const plan = planMutationCompletion(apiUrl, vars);
-
-      // Invalidation targets the mutation's scope key (old query cache if scope rotated)
-      await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
-      await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
-
-      // Invalidation is asynchronous. Re-evaluate the live scope after every
-      // await so a completion from camera A or old token cannot modify active UI or clear new drafts.
-      if (
-        vars.token === credentialRef.current.token &&
-        vars.metadataCredential === credentialRef.current.id &&
-        isMutationScopeActive(activeScopeRef.current, vars)
-      ) {
-        clearLocalDraft(
-          plan.draftScopeToClear.siteId,
-          plan.draftScopeToClear.cameraId,
-          plan.draftScopeToClear.regionId,
-        );
-        setConflictMessage(null);
-        setStaleDraftInfo(null);
-        setIsDraftMode(false);
-        setIsEditingZone(false);
-        showStatusMessage(
-          tr('messages.f08e5d419230', {
-            value1: vars.cameraLabel,
-            value2: mutationResult.configurationVersion,
-          }),
-          5000,
-        );
-      }
-    },
-    onError: async (error, vars) => {
-      const plan = planMutationCompletion(apiUrl, vars);
-
-      if (isConflictError(error)) {
-        await queryClient.invalidateQueries({ queryKey: plan.invalidateSiteCamerasKey });
-        await queryClient.invalidateQueries({ queryKey: plan.invalidateCameraRegionsKey });
-      }
-
-      if (
-        vars.token === credentialRef.current.token &&
-        vars.metadataCredential === credentialRef.current.id &&
-        isMutationScopeActive(activeScopeRef.current, vars)
-      ) {
-        if (isConflictError(error)) {
-          setConflictMessage(formatConflictMessage(vars.cameraLabel));
-        } else {
-          showStatusMessage(
-            error instanceof Error ? error.message : tr('common.save_failed'),
-            5000,
-          );
-        }
-      }
-    },
-  });
-
-  const isMatchingLiveCamera =
-    !isAiWorkPaused &&
-    scopedPreview.status === 'LIVE' &&
-    Boolean(selectedCamera?.externalId && preview?.frame.cameraExternalId) &&
-    selectedCamera?.externalId === preview?.frame.cameraExternalId;
-
-  const canEditGeometry =
-    !isAiWorkPaused && (isGlobalAdmin ? isMatchingLiveCamera : !isControlled && !effectiveUser);
-
-  const handleSaveToBackend = () => {
-    if (!isGlobalAdmin || !effectiveUser || !apiToken) return;
-    if (!selectedSiteId || !selectedCamera || !selectedRegion) return;
-    if (!isMatchingLiveCamera) {
-      showStatusMessage('Cannot save polygon: camera snapshot is not live or does not match.');
-      return;
-    }
-    const vars: ScopedPolygonMutationVariables = {
-      metadataCredential,
-      userId: effectiveUser.id,
-      sessionScope,
-      token: apiToken,
-      siteId: selectedSiteId,
-      cameraId: selectedCamera.id,
-      regionId: selectedRegion.id,
-      cameraLabel: selectedCamera.code || selectedCamera.name || 'camera',
-      expectedConfigurationVersion: selectedCamera.configurationVersion,
-      points: zonePolygon,
-    };
-    savePolygonMutation.mutate(vars);
-  };
+  const canEditGeometry = !isAiWorkPaused && !isControlled && !effectiveUser;
+  const canOpenSetup =
+    isGlobalAdmin ||
+    Boolean(
+      effectiveUser?.roleAssignments.some(
+        (role) => role.role === 'SITE_MANAGER' && role.siteId === selectedSiteId,
+      ),
+    );
+  const setupParams = new URLSearchParams(selectedSiteId ? { siteId: selectedSiteId } : {});
+  if (selectedCamera?.siteId === selectedSiteId) setupParams.set('cameraId', selectedCamera.id);
 
   const saveDraft = () => {
-    if (effectiveUser && !isGlobalAdmin) return;
-    if (effectiveUser && !isMatchingLiveCamera) {
-      showStatusMessage('Cannot save draft: camera snapshot is not live or does not match.');
-      return;
-    }
-    if (effectiveUser) {
-      if (!selectedSiteId || !selectedCameraId || !selectedCamera || !selectedRegion) {
-        showStatusMessage(
-          tr('restricted_zone_view.wait_for_a_site_camera_and_region_before_saving_a_local_draft'),
-        );
-        return;
-      }
-      saveLocalDraft(
-        selectedSiteId,
-        selectedCameraId,
-        selectedRegion.id,
-        selectedCamera.configurationVersion,
-        zonePolygon,
-      );
-      setIsDraftMode(true);
-      setStaleDraftInfo(null);
-      showStatusMessage(
-        tr('messages.9b05f9ea0d7a', {
-          value1: selectedCamera.code,
-          value2: selectedCamera.configurationVersion,
-        }),
-      );
-    } else {
-      saveLocalDraft('demo-site', 'camera-04', 'default', 0, zonePolygon);
-      setIsDraftMode(true);
-      setStaleDraftInfo(null);
-      showStatusMessage(tr('restricted_zone_view.saved_to_browser_local_storage_camera_04_draft'));
-    }
+    if (effectiveUser || isControlled || isAiWorkPaused) return;
+    saveLocalDraft('demo-site', 'camera-04', 'default', 0, zonePolygon);
+    setIsDraftMode(true);
+    showStatusMessage(tr('restricted_zone_view.saved_to_browser_local_storage_camera_04_draft'));
     setIsEditingZone(false);
   };
-
   const resetToAuthoritative = () => {
-    if (effectiveUser && selectedSiteId && selectedCameraId && selectedRegion) {
-      clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion.id);
-      const authoritative = backendPolygonToPoints(selectedRegion.polygon, DEFAULT_ZONE_POLYGON);
-      setZonePolygon(authoritative);
-      setIsDraftMode(false);
-      setConflictMessage(null);
-      setStaleDraftInfo(null);
-      showStatusMessage(tr('restricted_zone_view.restored_authoritative_server_polygon'));
-    } else {
-      clearLocalDraft('demo-site', 'camera-04', 'default');
-      setZonePolygon(DEFAULT_ZONE_POLYGON);
-      setIsDraftMode(false);
-      setStaleDraftInfo(null);
-      showStatusMessage(tr('restricted_zone_view.reset_to_default_region'));
-    }
+    if (effectiveUser || isControlled) return;
+    clearLocalDraft('demo-site', 'camera-04', 'default');
+    setZonePolygon(DEFAULT_ZONE_POLYGON);
+    setIsDraftMode(false);
+    setStaleDraftInfo(null);
   };
 
   const activeCameraContext = useMemo(() => {
@@ -822,9 +624,7 @@ export function RestrictedZoneView({
       );
     }
     if (selectedCamera) {
-      const regionLabel = selectedRegion
-        ? localize('common.region_value', { value1: selectedRegion.id.slice(0, 8) })
-        : localize('common.restricted_zone');
+      const regionLabel = localize('common.restricted_zone');
       return {
         camera: `${selectedCamera.code} · ${selectedCamera.name}`,
         workArea: regionLabel,
@@ -834,9 +634,10 @@ export function RestrictedZoneView({
       camera: 'No Camera Selected',
       workArea: 'Restricted Zone',
     };
-  }, [preview, selectedCamera, selectedRegion, testDetection, localize]);
+  }, [preview, selectedCamera, testDetection, localize]);
 
   const exportZone = () => {
+    if (effectiveUser || isControlled || isAiWorkPaused) return;
     const cameraLabel = selectedCamera ? selectedCamera.code : activeCameraContext.camera;
     const draft = exportZoneBrowserDraft(zonePolygon, cameraLabel);
     const blobUrl = URL.createObjectURL(new Blob([draft.content], { type: 'application/json' }));
@@ -922,32 +723,18 @@ export function RestrictedZoneView({
     if (!sessionScope) return null;
     if (isUnauthorizedError(sites.error)) return sites.error;
     if (isUnauthorizedError(cameras.error)) return cameras.error;
-    if (isUnauthorizedError(regions.error)) return regions.error;
     if (scopedPreview.errorStatus === 401 && Boolean(sessionScope && selectedCameraId)) {
       return new ApiError('http', scopedPreview.error || 'Camera preview session expired', 401);
     }
-    if (
-      savePolygonMutation.variables &&
-      savePolygonMutation.variables.sessionScope === sessionScope &&
-      savePolygonMutation.variables.metadataCredential === metadataCredential &&
-      savePolygonMutation.variables.token === apiToken &&
-      isUnauthorizedError(savePolygonMutation.error)
-    ) {
-      return savePolygonMutation.error;
-    }
+
     return null;
   }, [
     sessionScope,
     sites.error,
     cameras.error,
-    regions.error,
     scopedPreview.errorStatus,
     scopedPreview.error,
     selectedCameraId,
-    savePolygonMutation.error,
-    savePolygonMutation.variables,
-    metadataCredential,
-    apiToken,
   ]);
 
   useEffect(() => {
@@ -1260,7 +1047,6 @@ export function RestrictedZoneView({
                   clearTransientFeedback();
                   setRequestedSiteId(siteId);
                   setRequestedCameraId('');
-                  setRequestedRegionId('');
                 }}
                 disabled={sites.isPending || !availableSites.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
@@ -1294,7 +1080,6 @@ export function RestrictedZoneView({
                   };
                   clearTransientFeedback();
                   setRequestedCameraId(cameraId);
-                  setRequestedRegionId('');
                 }}
                 disabled={cameras.isPending || !cameras.data?.items.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
@@ -1310,93 +1095,25 @@ export function RestrictedZoneView({
               <ZoneMetadataPaging query={cameras} kind="cameras" />
             </div>
 
-            {isGlobalAdmin ? (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="zone-region-geometry-select"
-                    className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
-                    title={t('restrictedZone.regionSelect.labelTitle')}
-                  >
-                    {t('restrictedZone.regionSelect.label')}
-                  </label>
-                  <span
-                    className="text-[9px] text-[#8C8C8C] font-normal"
-                    title={t('restrictedZone.regionSelect.editTargetTitle')}
-                  >
-                    {t('restrictedZone.regionSelect.editTarget')}
-                  </span>
-                </div>
-                <select
-                  id="zone-region-geometry-select"
-                  aria-label={t('restrictedZone.regionSelect.label')}
-                  title={t('restrictedZone.regionSelect.selectTitle')}
-                  value={selectedRegionId}
-                  onChange={(e) => {
-                    const regionId = e.target.value;
-                    activeScopeRef.current = {
-                      userId: effectiveUser.id,
-                      siteId: selectedSiteId,
-                      cameraId: selectedCameraId,
-                      regionId,
-                    };
-                    clearTransientFeedback();
-                    setRequestedRegionId(regionId);
-                  }}
-                  disabled={regions.isPending || selectableRegions.length === 0}
-                  className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
-                >
-                  {selectableRegions.map((region) => (
-                    <option key={region.id} value={region.id}>
-                      {tr('restricted_zone_view.region_value_vvalue_value', {
-                        value1: region.id.slice(0, 8),
-                        value2: region.version,
-                        value3: region.isActive ? tr('common.active_bdecc2') : '',
-                      })}
-                    </option>
-                  ))}
-                </select>
-                <ZoneMetadataPaging query={regions} kind="regions" />
-              </div>
-            ) : (
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
-                  {t('restrictedZone.scope.zoneScopeLabel')}
-                </label>
-                <div
-                  className="w-full rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-2.5 py-1.5 text-xs font-medium text-[#6B6B6B]"
-                  title={t('restrictedZone.scope.readOnlyTitle')}
-                >
-                  {t('restrictedZone.scope.readOnlyValue')}
-                </div>
-              </div>
-            )}
-
             <div className="flex items-center gap-2 pt-1 sm:pt-0">
-              {isGlobalAdmin ? (
-                isDraftMode ? (
-                  <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                    {tr('common.unsaved_local_draft')}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    {tr('common.server_synced_vvalue', {
-                      value1: selectedCamera?.configurationVersion ?? 0,
-                    })}
-                  </span>
-                )
-              ) : (
-                <span className="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                  {t('restrictedZone.scope.safetyOfficerBadge')}
-                </span>
+              {canOpenSetup && selectedSiteId && (
+                <a
+                  href={`/camera-setup?${setupParams.toString()}`}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  {tr('cameraSetup.title', { ns: 'safety' })}
+                </a>
               )}
+              <span className="text-xs text-slate-500">
+                {t('restrictedZone.scope.readOnlyValue')}
+              </span>
             </div>
           </div>
         </div>
       )}
 
       {/* Stale Draft Warning Banner */}
-      {isGlobalAdmin && staleDraftInfo && (
+      {!effectiveUser && staleDraftInfo && (
         <div
           role="alert"
           className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
@@ -1422,7 +1139,7 @@ export function RestrictedZoneView({
             type="button"
             onClick={() => {
               if (selectedSiteId && selectedCameraId) {
-                clearLocalDraft(selectedSiteId, selectedCameraId, selectedRegion?.id);
+                clearLocalDraft(selectedSiteId, selectedCameraId);
               }
               setStaleDraftInfo(null);
             }}
@@ -1434,7 +1151,7 @@ export function RestrictedZoneView({
       )}
 
       {/* HTTP 409 Conflict Banner */}
-      {isGlobalAdmin && conflictMessage && (
+      {!effectiveUser && conflictMessage && (
         <div
           role="alert"
           className="rounded-xl border border-red-300 bg-red-50 p-4 text-red-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 "
@@ -1557,7 +1274,13 @@ export function RestrictedZoneView({
               aria-label={tr('common.restricted_zone_editor')}
               style={{
                 visibility:
-                  isEditingZone && canEditGeometry ? 'visible' : preview ? 'hidden' : 'visible',
+                  effectiveUser || isControlled || isAiWorkPaused
+                    ? 'hidden'
+                    : isEditingZone && canEditGeometry
+                      ? 'visible'
+                      : preview
+                        ? 'hidden'
+                        : 'visible',
               }}
             >
               <polygon
@@ -1606,9 +1329,9 @@ export function RestrictedZoneView({
 
             <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
               <div className="flex items-center gap-2">
-                {!isGlobalAdmin && effectiveUser ? (
+                {effectiveUser ? (
                   <span className="rounded bg-slate-900/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-slate-300 backdrop-blur-sm border border-slate-700">
-                    {t('restrictedZone.controls.safetyOfficerReadOnlyBadge')}
+                    {t('restrictedZone.scope.readOnlyValue')}
                   </span>
                 ) : !isEditingZone ? (
                   <div className="flex items-center gap-2">
@@ -1634,17 +1357,6 @@ export function RestrictedZoneView({
                   </div>
                 ) : (
                   <>
-                    {effectiveUser && selectedCamera && selectedRegion ? (
-                      <button
-                        onClick={handleSaveToBackend}
-                        disabled={savePolygonMutation.isPending || !canEditGeometry}
-                        className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
-                      >
-                        {savePolygonMutation.isPending
-                          ? tr('common.saving_to_backend')
-                          : tr('common.save_to_backend')}
-                      </button>
-                    ) : null}
                     <button
                       onClick={saveDraft}
                       disabled={effectiveUser ? !canEditGeometry : false}
@@ -1656,9 +1368,7 @@ export function RestrictedZoneView({
                       onClick={resetToAuthoritative}
                       className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
                     >
-                      {effectiveUser && selectedRegion
-                        ? tr('common.reset_to_server')
-                        : t('restrictedZone.controls.resetBtn')}
+                      {t('restrictedZone.controls.resetBtn')}
                     </button>
                     <button
                       onClick={exportZone}

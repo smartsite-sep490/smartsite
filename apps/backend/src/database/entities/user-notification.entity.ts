@@ -42,7 +42,7 @@ export interface NotificationContent {
 @Check('chk_notification_deleted_read', 'deleted_at IS NULL OR read_at IS NOT NULL')
 @Check(
   'chk_notification_role',
-  "(recipient_role = 'WORKER' AND worker_id IS NOT NULL) OR (recipient_role IN ('CONTRACTOR_REPRESENTATIVE','SAFETY_OFFICER') AND worker_id IS NULL)",
+  "(recipient_role = 'WORKER' AND worker_id IS NOT NULL) OR (recipient_role IN ('CONTRACTOR_REPRESENTATIVE','SAFETY_OFFICER','SITE_MANAGER') AND worker_id IS NULL)",
 )
 @Check(
   'chk_notification_event',
@@ -86,7 +86,7 @@ export class UserNotificationEntity {
   workerId!: string | null;
 
   @Column({ name: 'recipient_role', type: 'varchar', length: 32 })
-  recipientRole!: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER';
+  recipientRole!: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SITE_MANAGER';
 
   @Column({ name: 'request_type', type: 'varchar', length: 16 })
   requestType!: 'CHANGE' | 'SWAP' | 'SAFETY' | 'ATTENDANCE' | 'SCHEDULE' | 'CHECKLIST';

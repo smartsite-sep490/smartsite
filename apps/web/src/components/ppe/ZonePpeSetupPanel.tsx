@@ -16,6 +16,7 @@ export interface ZonePpeSetupPanelProps {
   siteName: string;
   canManageZones: boolean;
   canManageRegions: boolean;
+  canReadZones?: boolean;
   onClose: () => void;
   embedded?: boolean;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
@@ -72,6 +73,7 @@ function ZonePpeSetupPanelInternal({
   siteName,
   canManageZones,
   canManageRegions,
+  canReadZones = false,
   onClose,
   embedded = false,
   onDraftStateChange,
@@ -174,7 +176,9 @@ function ZonePpeSetupPanelInternal({
       const nextOffset = currentOffset + lastPage.items.length;
       return nextOffset < lastPage.total ? nextOffset : undefined;
     },
-    enabled: Boolean((canManageZones || canManageRegions) && token && sessionScope && siteId),
+    enabled: Boolean(
+      (canReadZones || canManageZones || canManageRegions) && token && sessionScope && siteId,
+    ),
     gcTime: 0,
     retry: false,
   });
@@ -1179,7 +1183,7 @@ export function ZonePpeSetupPanel(props: ZonePpeSetupPanelProps) {
     () => getOpaqueTokenNonce(queryClient, props.token),
     [queryClient, props.token],
   );
-  if (!props.canManageZones && !props.canManageRegions) {
+  if (!props.canReadZones && !props.canManageZones && !props.canManageRegions) {
     return null;
   }
   const scopeKey = getZonePpeScopeKey(queryClient, props);

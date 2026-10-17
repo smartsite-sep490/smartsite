@@ -54,6 +54,8 @@ services:
       R2_BUCKET: ${R2_BUCKET:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
       EVIDENCE_LOCAL_ROOT: /var/lib/smartsite/demo-evidence
       LOG_LEVEL: info
       LOG_FORMAT: json

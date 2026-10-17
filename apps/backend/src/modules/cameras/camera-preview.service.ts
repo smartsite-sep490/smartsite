@@ -81,7 +81,7 @@ export class CameraPreviewService implements OnModuleDestroy {
     if (this.shuttingDown) unavailable();
     const { user } = await this.auth.authenticate(token);
     if (this.shuttingDown) unavailable();
-    assertSafetySiteAccess(user, siteId);
+    assertSafetySiteAccess(user, siteId, 'GET');
   }
 
   private async camera(siteId: string, cameraId: string) {

@@ -55,7 +55,7 @@ function manager(siteId = site.id): SharedSession {
     user: { ...admin.user, id: 'manager', roleAssignments: [{ role: 'SITE_MANAGER', siteId }] },
   };
 }
-function mount(session: SharedSession | null = admin, entry = '/camera-setup') {
+function mount(session: SharedSession | null = manager(), entry = '/camera-setup') {
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -83,7 +83,7 @@ beforeEach(() => {
 });
 it('does not let a callback from a closed dialog revoke a later dialog in the same Site', async () => {
   const signOut = vi.fn();
-  mount({ ...admin, onSignOut: signOut });
+  mount({ ...manager(), onSignOut: signOut });
   await screen.findByText(camera.name);
   fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
   const old = mocks.dialog!;
@@ -139,11 +139,11 @@ it('shows metadata including inactive cameras without claiming connection or req
   fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
   expect(screen.getByRole('dialog')).toBeTruthy();
 });
-it('lets the scoped Site Manager reach the existing policy writer without camera/preview permission', async () => {
+it('lets the scoped Site Manager configure camera regions and policy without preview requests', async () => {
   mount(manager());
   fireEvent.click(await screen.findByRole('button', { name: 'Configure PPE by Zone' }));
-  expect(screen.getByRole('dialog').textContent).toBe('Zones true Regions false');
-  expect(mocks.listCameras).not.toHaveBeenCalled();
+  expect(screen.getByRole('dialog').textContent).toBe('Zones true Regions true');
+  expect(mocks.listCameras).toHaveBeenCalledOnce();
   expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
   expect(screen.queryByRole('link', { name: 'Open monitoring' })).toBeNull();
 });
@@ -198,7 +198,7 @@ it('does not report an empty camera catalog on initial failure', async () => {
 });
 it('revokes rows and dialogs on a base refetch denial without signing out on403', async () => {
   const signOut = vi.fn();
-  const { cache } = mount({ ...admin, onSignOut: signOut });
+  const { cache } = mount({ ...manager(), onSignOut: signOut });
   await screen.findByText(camera.name);
   fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
   mocks.listCameras.mockRejectedValue(new ApiError('http', 'Forbidden', 403));
@@ -227,7 +227,7 @@ it('hides setup actions after role reassignment for the same account/session', a
   const { rerender } = mount();
   await screen.findByText(camera.name);
   fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
-  rerender({ ...admin, user: { ...admin.user, roleAssignments: [] } });
+  rerender({ ...manager(), user: { ...manager().user, roleAssignments: [] } });
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.queryByText(camera.name)).toBeNull();
 });
@@ -259,7 +259,7 @@ it('settles an empty Site catalog without a Load more control', async () => {
 it('revokes the current setup scope on401 and signs out once', async () => {
   const onSignOut = vi.fn();
   mocks.listCameras.mockRejectedValue(new ApiError('http', 'Expired', 401));
-  mount({ ...admin, onSignOut });
+  mount({ ...manager(), onSignOut });
   await screen.findByText('Sign in to manage configuration.');
   expect(onSignOut).toHaveBeenCalledOnce();
   expect(screen.queryByRole('button', { name: 'Register camera' })).toBeNull();
@@ -290,13 +290,22 @@ it('hides stale rows and actions when a later page fails during a base refetch',
 
 it('does not let an old popup401 sign out a replacement credential scope', async () => {
   const onSignOut = vi.fn();
-  const { rerender } = mount({ ...admin, onSignOut });
+  const { rerender } = mount({ ...manager(), onSignOut });
   await screen.findByText(camera.name);
   fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
   const old = mocks.dialog!;
-  rerender({ ...admin, accessToken: 'replacement', onSignOut });
+  rerender({ ...manager(), accessToken: 'replacement', onSignOut });
   await screen.findByText(camera.name);
   act(() => old.onUnauthorized?.());
   expect(screen.getByText(camera.name)).toBeTruthy();
   expect(onSignOut).not.toHaveBeenCalled();
+});
+
+it('shows current Main camera metadata to Admin without granting configuration writes', async () => {
+  mount(admin);
+  await screen.findByText(camera.name);
+  expect(screen.queryByRole('button', { name: 'Register camera' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Manage Gate camera' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
+  expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 });

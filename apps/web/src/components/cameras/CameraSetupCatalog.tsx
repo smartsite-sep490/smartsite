@@ -8,12 +8,14 @@ import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 
 export function CameraSetupCatalog({
   capabilities,
+  canReadCameras,
   cameras,
   rows,
   cameraError,
   open,
 }: {
   capabilities: ZonePpeCapabilities;
+  canReadCameras: boolean;
   cameras: ReturnType<typeof useSetupCatalog<CameraResponse>>;
   rows: CameraResponse[];
   cameraError: ReactNode;
@@ -41,7 +43,7 @@ export function CameraSetupCatalog({
         <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
           {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
         </p>
-        {capabilities.canManageRegions && (
+        {canReadCameras && (
           <>
             {cameras.isPending && (
               <p role="status" className="mt-5 text-sm text-slate-500">
@@ -59,9 +61,11 @@ export function CameraSetupCatalog({
                       {t(row.status === 'ACTIVE' ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
                     </p>
                   </div>
-                  <button type="button" className={button} onClick={() => open('manage', row.id)}>
-                    {t('cameraSetup.manage', { name: row.name })}
-                  </button>
+                  {canManageCameras && (
+                    <button type="button" className={button} onClick={() => open('manage', row.id)}>
+                      {t('cameraSetup.manage', { name: row.name })}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

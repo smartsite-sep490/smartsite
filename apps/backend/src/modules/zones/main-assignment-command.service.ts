@@ -188,10 +188,10 @@ export class MainAssignmentCommandService {
       `ASSIGNMENT_${operation}`,
       value,
       async (manager) => {
-        const admin = await this.authorize(manager, operation, value);
+        await this.authorize(manager, operation, value);
         const sourceId =
           'workerId' in value
-            ? await this.create(manager, value, admin)
+            ? await this.create(manager, value)
             : await this.transition(manager, operation, value);
         return this.readAssignment(manager, sourceId, value.siteId);
       },
@@ -252,7 +252,7 @@ export class MainAssignmentCommandService {
     manager: EntityManager,
     operation: Operation,
     value: WorkCommand,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const users = await manager.query(
       'SELECT id FROM app_user WHERE id=$1 AND is_active AND NOT must_change_password FOR SHARE',
       [value.actorUserId],
@@ -264,19 +264,16 @@ export class MainAssignmentCommandService {
           ? 'SAFETY_OFFICER'
           : 'SITE_MANAGER';
     const roles: { role: string; site_id: string | null }[] = await manager.query(
-      "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL) OR (role=$2 AND site_id=$3)) FOR SHARE",
+      'SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND role=$2 AND site_id=$3 FOR SHARE',
       [value.actorUserId, role, value.siteId],
     );
     if (!users.length || !roles.length) forbidden();
-    return roles.some((r) => r.role === 'ADMIN' && r.site_id === null);
   }
   private async representative(
     manager: EntityManager,
     value: WorkCommand,
     contractorId: string | null,
-    admin: boolean,
   ): Promise<void> {
-    if (admin) return;
     if (!contractorId) forbidden();
     if (
       !(
@@ -298,7 +295,7 @@ export class MainAssignmentCommandService {
       ...Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined)),
     });
     const result = await withZoneAuthorityTransaction(this.source, async (manager) => {
-      const admin = await this.authorize(manager, operation, value);
+      await this.authorize(manager, operation, value);
       const context = await manager.query(
         "SELECT current_setting('smartsite.mf06_command_id',true) AS value",
       );
@@ -322,13 +319,13 @@ export class MainAssignmentCommandService {
         const receipt = await this.result(manager, commandId);
         if (receipt.assignment.siteId !== value.siteId) unavailable();
         if (operation === 'REQUEST')
-          await this.representative(manager, value, receipt.contractorId, admin);
+          await this.representative(manager, value, receipt.contractorId);
         return { commandId, replayed: true, assignment: receipt.assignment };
       }
       await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [commandId]);
       const sourceId =
         'workerId' in value
-          ? await this.create(manager, value, admin)
+          ? await this.create(manager, value)
           : await this.transition(manager, operation, value);
       await manager.query(
         "INSERT INTO mf06_assignment_command_result(command_id,source_id,contractor_id,result_json,result_hash) SELECT $1,a.id,p.contractor_id,mf06_assignment_response(a.id),'' FROM worker_site_zone_assignment a LEFT JOIN contractor_site_participation p ON p.id=a.site_contractor_id WHERE a.id=$2",
@@ -356,7 +353,7 @@ export class MainAssignmentCommandService {
     return result;
   }
 
-  private async create(manager: EntityManager, value: Request, admin: boolean): Promise<string> {
+  private async create(manager: EntityManager, value: Request): Promise<string> {
     if (new Set(value.zoneIds).size !== value.zoneIds.length) conflict('Zone IDs must be unique');
     if (!value.validUntil) conflict('Worker assignment requires an expiry');
     const range = await manager.query(
@@ -370,7 +367,7 @@ export class MainAssignmentCommandService {
     );
     const worker = workers[0];
     if (!worker?.contractor_id) forbidden();
-    await this.representative(manager, value, worker.contractor_id, admin);
+    await this.representative(manager, value, worker.contractor_id);
     if (
       !(
         await manager.query('SELECT id FROM contractor WHERE id=$1 AND is_active FOR SHARE', [
@@ -430,6 +427,11 @@ export class MainAssignmentCommandService {
     value: Transition,
   ): Promise<string> {
     const current = await this.readAssignment(manager, value.assignmentId, value.siteId, true);
+    if (
+      (operation === 'SAFETY_REVIEW' || operation === 'DECISION') &&
+      current.requestedByUserId === value.actorUserId
+    )
+      forbidden();
     if (operation === 'SAFETY_REVIEW') {
       if (current.status !== 'PENDING') conflict('Assignment is not pending');
       await manager.query(

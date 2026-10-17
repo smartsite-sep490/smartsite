@@ -97,7 +97,7 @@ it('uses minute-only 24-hour controls and preserves seconds on the untouched rec
   fireEvent.change(screen.getByLabelText('Proposed out hour'), { target: { value: '17' } });
   fireEvent.change(screen.getByLabelText('Proposed out minute'), { target: { value: '05' } });
   fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Forgot checkout' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Send to Contractor Representative' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send to Site Manager' }));
   await waitFor(() => expect(api.requestAttendanceCorrection).toHaveBeenCalled());
   const payload = api.requestAttendanceCorrection.mock.calls.at(-1)![3];
   expect(payload.proposedInAt).toBe(recordedIn);
@@ -122,8 +122,7 @@ it('blocks another submission even when the pending correction is outside the da
   mount();
   expect(await screen.findByText(/Your attendance correction is awaiting/)).toBeTruthy();
   expect(
-    (screen.getByRole('button', { name: 'Send to Contractor Representative' }) as HTMLButtonElement)
-      .disabled,
+    (screen.getByRole('button', { name: 'Send to Site Manager' }) as HTMLButtonElement).disabled,
   ).toBe(true);
   expect((screen.getByLabelText('Session') as HTMLSelectElement).matches(':disabled')).toBe(true);
   expect(api.requestAttendanceCorrection).not.toHaveBeenCalled();

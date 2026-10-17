@@ -67,12 +67,12 @@ async function fixture(role?: string) {
     actorRole,
     actorRole === 'ADMIN' ? null : f.site,
   ]);
-  // Successful mixed-operation fixtures have the real Site Manager assignment.
+  // Mixed-operation fixtures carry each actual scoped writer role, not an Admin bypass.
   // Explicit fixture('ADMIN') remains Admin-only for role/capability boundaries.
   if (role === undefined)
     await db.query(
-      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-      [randomUUID(), f.actor, f.site],
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3),($4,$2,'CONTRACTOR_REPRESENTATIVE',$3)",
+      [randomUUID(), f.actor, f.site, randomUUID()],
     );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
@@ -85,6 +85,10 @@ async function fixture(role?: string) {
   await db.query(
     'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
     [randomUUID(), f.actor, f.contractor],
+  );
+  await db.query(
+    'INSERT INTO contractor_representative_assignment(id,user_id,contractor_id,site_id) VALUES($1,$2,$3,$4)',
+    [randomUUID(), f.actor, f.contractor, f.site],
   );
   await db.query(
     "INSERT INTO worker(id,site_id,contractor_id,external_id,display_name) VALUES($1,$2,$3,$1::uuid::text,'Synthetic Worker')",
@@ -271,10 +275,10 @@ for (const actorRole of ['ADMIN', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'])
         contractorPermissions: { id: string; validFrom: string; revokedAt: string | null }[];
         workerPermissions: { id: string }[];
       };
-      const manager = actorRole !== 'CONTRACTOR_REPRESENTATIVE';
-      assert.equal(result.canReviewAssignments, manager);
+      const canReadAll = actorRole !== 'CONTRACTOR_REPRESENTATIVE';
+      assert.equal(result.canReviewAssignments, actorRole === 'SITE_MANAGER');
       assert.equal(result.canGrantContractorZones, actorRole === 'SITE_MANAGER');
-      assert.equal(result.canGrantWorkerZones, actorRole !== 'SITE_MANAGER');
+      assert.equal(result.canGrantWorkerZones, actorRole === 'CONTRACTOR_REPRESENTATIVE');
       for (const [list, primary, secondary] of [
         [result.participations, f.participation, extra.participation],
         [result.workers, f.worker, extra.worker],
@@ -284,7 +288,7 @@ for (const actorRole of ['ADMIN', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'])
       ] as const)
         assert.deepEqual(
           new Set(list.map((row) => row.id)),
-          new Set(manager ? [primary, secondary] : [primary]),
+          new Set(canReadAll ? [primary, secondary] : [primary]),
         );
       assert.deepEqual(
         result.zones.map((row) => row.id),
@@ -349,10 +353,10 @@ test('access setup options does not disclose setup metadata to a temporary-passw
   });
 });
 
-test('access setup options Representative without contractor grants sees no contractor-owned metadata', async () => {
+test('access setup options Representative without scoped assignments sees no contractor-owned metadata', async () => {
   const f = await fixture('CONTRACTOR_REPRESENTATIVE');
   await optionsData(f);
-  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actor]);
+  await db.query('DELETE FROM contractor_representative_assignment WHERE user_id=$1', [f.actor]);
   await withApi(f, async (request) => {
     const response = await request(base(f), undefined, 'GET');
     assert.equal(response.status, 200);
@@ -489,10 +493,10 @@ test('four public permission writes bind original bearer, actor facts, witness, 
     );
   });
 });
-for (const change of ['logout', 'role', 'inactive-account', 'representative-grant'] as const)
+for (const change of ['logout', 'role', 'inactive-account', 'representative-assignment'] as const)
   test(`access setup options rechecks ${change} before a held authenticated read and discloses no stale metadata`, async () => {
     const f = await fixture(
-      change === 'representative-grant' ? 'CONTRACTOR_REPRESENTATIVE' : 'ADMIN',
+      change === 'representative-assignment' ? 'CONTRACTOR_REPRESENTATIVE' : 'ADMIN',
     );
     await optionsData(f);
     const n = await commands(),
@@ -533,12 +537,14 @@ for (const change of ['logout', 'role', 'inactive-account', 'representative-gran
         else if (change === 'inactive-account')
           await db.query('UPDATE app_user SET is_active=false WHERE id=$1', [f.actor]);
         else
-          await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actor]);
+          await db.query('DELETE FROM contractor_representative_assignment WHERE user_id=$1', [
+            f.actor,
+          ]);
       } finally {
         release();
       }
       const response = await pending;
-      if (change === 'representative-grant') {
+      if (change === 'representative-assignment') {
         assert.equal(response.status, 200);
         const result = (await response.json()) as {
           workers: unknown[];
@@ -696,11 +702,11 @@ test('public permission main Site Manager and Representative roles use current S
   await role(f, 'CONTRACTOR_REPRESENTATIVE', other.site);
   await assert.rejects(s.publicGrantWorker(f.site, workerInput(f), ctx(f)), status(403));
   await role(f, 'CONTRACTOR_REPRESENTATIVE');
-  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actor]);
+  await db.query('DELETE FROM contractor_representative_assignment WHERE user_id=$1', [f.actor]);
   await assert.rejects(s.publicGrantWorker(f.site, workerInput(f), ctx(f)), status(409));
   await db.query(
-    'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
-    [randomUUID(), f.actor, f.contractor],
+    'INSERT INTO contractor_representative_assignment(id,user_id,contractor_id,site_id) VALUES($1,$2,$3,$4)',
+    [randomUUID(), f.actor, f.contractor, f.site],
   );
   await s.publicGrantWorker(f.site, workerInput(f), ctx(f));
   await s.publicRevoke(f.site, f.wp, 'worker', ctx(f));
@@ -785,7 +791,7 @@ test('public concurrent revoke records a single timestamp/audit/source change an
     )[0].stamp,
     stamp,
   );
-  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actor]);
+  await db.query('DELETE FROM contractor_representative_assignment WHERE user_id=$1', [f.actor]);
   await assert.rejects(s.publicRevoke(f.site, f.wp, 'worker', ctx(f)), status(409));
 });
 test('public Worker grant refuses unapproved/open-ended assignment, revoked Contractor grant and inactive Worker', async () => {
@@ -864,10 +870,18 @@ test('public Contractor grant and both revokes refuse cross-Site anchors without
     s = service();
   await assert.rejects(
     s.publicGrantContractor(other.site, { ...contractorInput(f), requestId: randomUUID() }, ctx(f)),
+    status(403),
+  );
+  await assert.rejects(
+    s.publicGrantContractor(
+      other.site,
+      { ...contractorInput(f), requestId: randomUUID() },
+      ctx(other),
+    ),
     status(404),
   );
-  await assert.rejects(s.publicRevoke(other.site, f.cp, 'contractor', ctx(f)), status(404));
-  await assert.rejects(s.publicRevoke(other.site, f.wp, 'worker', ctx(f)), status(404));
+  await assert.rejects(s.publicRevoke(other.site, f.cp, 'contractor', ctx(other)), status(404));
+  await assert.rejects(s.publicRevoke(other.site, f.wp, 'worker', ctx(other)), status(404));
   assert.equal(await commands(), n);
 });
 test('public revokes remain possible after participation deactivation and assignment expiry', async () => {

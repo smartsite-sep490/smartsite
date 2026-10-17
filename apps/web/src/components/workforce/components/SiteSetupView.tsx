@@ -35,6 +35,7 @@ import {
   getSiteManagers,
   getReadySiteManagers,
 } from '../utils/site-setup-helpers';
+import { SiteOperationsSetupView } from './SiteOperationsSetupView';
 import { loadAllPages } from '../load-all-pages';
 
 interface SiteSetupViewProps {
@@ -52,11 +53,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const isAdmin =
     currentUser?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null) ?? false;
 
-  const isManager =
-    !isAdmin &&
-    (currentUser?.roleAssignments.some((r) => r.role === 'SITE_MANAGER' && r.siteId !== null) ??
-      false);
-  const canSetup = isAdmin || isManager;
+  const hasManagerRole =
+    currentUser?.roleAssignments.some((r) => r.role === 'SITE_MANAGER' && r.siteId !== null) ??
+    false;
+  const canSetup = isAdmin || hasManagerRole;
 
   // Navigation & Selection state
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
@@ -140,6 +140,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   }, [sites, selectedSiteId]);
 
   const activeSiteId = selectedSite?.id ?? null;
+  const isManager =
+    currentUser?.roleAssignments.some(
+      (r) => r.role === 'SITE_MANAGER' && r.siteId === activeSiteId,
+    ) ?? false;
 
   const contractorsQuery = useQuery({
     queryKey: [...setupKey, 'contractors', activeSiteId],
@@ -336,7 +340,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       const representative = siteRepresentatives.find((user) => user.id === existingRepId);
       setAssignRepError(null);
       setRepSuccessMsg(
-        tr('messages.b88c8ce7f3f0', { value1: representative?.username ?? 'selected account' }),
+        tr('messages.b88c8ce7f3f0', {
+          value1: representative?.username ?? tr('common.selected_account'),
+        }),
       );
       setExistingRepId('');
       setAssignRepContractorId('');
@@ -681,6 +687,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       </div>
 
       {/* Success Notification Banners */}
+      {isManager && <SiteOperationsSetupView apiUrl={apiUrl} participationOnly />}
       {isAdmin && <ContractorParticipationDirectory apiUrl={apiUrl} />}
       {(sitesQuery.isError ||
         usersQuery.isError ||
@@ -1016,7 +1023,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       </button>
                     )}
 
-                    {isManager && (
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1493,7 +1500,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   value={selectedManagerId}
                   onChange={setSelectedManagerId}
                   searchable
-                  searchPlaceholder="Search account..."
+                  searchPlaceholder={tr('common.search_account')}
                   options={assignableSiteManagers.map((manager) => ({
                     value: manager.id,
                     label: manager.displayName,
@@ -1946,7 +1953,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   value={existingRepId}
                   onChange={setExistingRepId}
                   searchable
-                  searchPlaceholder="Search representative..."
+                  searchPlaceholder={tr('common.search_representative')}
                   options={assignableRepresentatives.map((representative) => ({
                     value: representative.id,
                     label: representative.displayName,

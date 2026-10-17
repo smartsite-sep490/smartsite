@@ -12,13 +12,16 @@ import { loadMainRecoveryMigrations } from '../support/main-recovery-profile.js'
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
-// The release54 fixture predates the checklist migration and Main PR62's three
-// attendance migrations. Keep that historical starting point explicit.
+// Keep the historical release54 prefix: exclude the checklist, three attendance
+// additions and Main's three later visitor/manager-notification migrations.
 const afterRelease54 = new Set([
   'SafetyChecklists1792195200000',
   'AttendanceAbsence1792022400000',
   'ShiftExitGracePeriod1792281600000',
   'AttendanceExitNotifications1792281600001',
+  'VisitorRoster1792022400000',
+  'SiteManagerReviewNotifications1792108800000',
+  'PreserveManagerNotificationHistory1792368000000',
 ]);
 for (const profile of [
   'fresh',
@@ -57,6 +60,7 @@ for (const profile of [
         db.setOptions({ migrations: [...LEGACY_TEST_MIGRATIONS] });
       t.after(() => isolated.dispose());
       await isolated.initialize();
+      if (profile === 'populated-release54') assert.equal(db.migrations.length, 54);
       const site = randomUUID(),
         worker = randomUUID(),
         zone = randomUUID(),
@@ -138,7 +142,7 @@ for (const profile of [
         const applied = await db.runMigrations();
         assert.equal(
           applied.length,
-          profile === 'populated-release54' ? 4 : profile === 'populated-main35' ? 23 : 35,
+          profile === 'populated-release54' ? 7 : profile === 'populated-main35' ? 26 : 38,
         );
         for (const { table, fields, rows } of inventory)
           assert.deepEqual(
@@ -149,7 +153,7 @@ for (const profile of [
             table,
           );
       }
-      assert.equal(db.migrations.length, 58);
+      assert.equal(db.migrations.length, 61);
       assert.equal(await new DatabaseService(db).isReady(), true);
       assert.deepEqual(await db.runMigrations(), []);
       const applied: { name: string }[] = await db.query(
@@ -166,7 +170,7 @@ for (const profile of [
           1,
         );
       }
-      assert.equal(applied.length, profile === 'populated-legacy24' ? 59 : 58);
+      assert.equal(applied.length, profile === 'populated-legacy24' ? 62 : 61);
       assert.equal(
         (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
           .epoch_id,

@@ -7,7 +7,7 @@ import { describe, expect, it, vi, beforeEach, afterEach, type Mock } from 'vite
 import { RestrictedZoneView } from './RestrictedZoneView';
 import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
 import type { LoginResponse, SiteResponse, Page } from '@smartsite/api-client';
-import type { CameraResponse, RegionResponse, RegionMutationResponse } from './zonePolygonAdapter';
+import type { CameraResponse, RegionResponse } from './zonePolygonAdapter';
 import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import type { VideoTestDetection } from '../cameras/videoTestFixture';
 import { AuthContext } from '../../features/auth/auth-session';
@@ -200,18 +200,6 @@ describe('RestrictedZoneView HTTP 401 Session Expiry Integration', () => {
         );
       },
     },
-    {
-      target: 'regions',
-      setupMock: () => {
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
-          mockCamerasPage,
-        );
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockRejectedValue(
-          new ApiError('http', 'Unauthorized regions', 401),
-        );
-      },
-    },
   ])(
     'triggers session expiry and onSignOut when metadata query ($target) returns HTTP 401 in sharedSession',
     async ({ setupMock }) => {
@@ -309,104 +297,28 @@ describe('RestrictedZoneView HTTP 401 Session Expiry Integration', () => {
     expect(screen.getByText(/Session pending or expired/i)).toBeDefined();
   });
 
-  it('triggers session expiry and onSignOut when savePolygonMutation encounters HTTP 401', async () => {
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
-      mockCamerasPage,
-    );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue(
-      mockRegionsCam1Page,
-    );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon').mockRejectedValue(
-      new ApiError('http', 'Session token revoked', 401),
-    );
-
-    const user = userEvent.setup();
-    const onSignOut = vi.fn();
-    const sessionScope = 'scope-mutation-401';
-
-    render(
-      <AuthContext.Provider
-        value={{
-          accessToken: 'test-token',
-          sessionScope,
-          setAccessToken: vi.fn(),
-          isSessionExpired: false,
-          triggerSessionExpired,
-          dismissSessionExpired: vi.fn(),
-        }}
-      >
-        <QueryClientProvider client={queryClient}>
-          <RestrictedZoneView
-            sharedSession={{
-              accessToken: 'test-token',
-              user: {
-                id: 'admin-1',
-                displayName: 'Admin User',
-                roleAssignments: [{ role: 'ADMIN', siteId: null }],
-              },
-              sessionScope,
-              onSignOut,
-            }}
-          />
-        </QueryClientProvider>
-      </AuthContext.Provider>,
-    );
-
-    await screen.findByText(/Admin Session Active/i);
-    await user.click(await screen.findByRole('button', { name: /EDIT ZONE/i }));
-    const saveBtn = await screen.findByRole('button', { name: /SAVE TO BACKEND/i });
-    await user.click(saveBtn);
-
-    await waitFor(() => {
-      expect(triggerSessionExpired).toHaveBeenCalledTimes(1);
-      expect(triggerSessionExpired).toHaveBeenCalledWith(sessionScope);
-      expect(onSignOut).toHaveBeenCalledTimes(1);
-    });
-  });
-
   it.each([
-    {
-      scenario: 'changed sessionScope',
-      oldScope: 'scope-old',
-      oldToken: 'token-old',
-      newScope: 'scope-new',
-      newToken: 'token-new',
-    },
-    {
-      scenario: 'same reused sessionScope with a new token',
-      oldScope: 'scope-reused',
-      oldToken: 'token-old',
-      newScope: 'scope-reused',
-      newToken: 'token-new',
-    },
+    { scenario: 'changed sessionScope', oldScope: 'old', newScope: 'new' },
+    { scenario: 'reused scope', oldScope: 'same', newScope: 'same' },
   ])(
-    'late HTTP 401 response from OLD/superseded mutation ($scenario) does NOT logout or expire NEW session',
-    async ({ oldScope, oldToken, newScope, newToken }) => {
-      let rejectOldUpdate: (err: unknown) => void;
-      const oldUpdatePromise = new Promise<RegionMutationResponse>((_, reject) => {
-        rejectOldUpdate = reject;
+    'late401 from old metadata cannot expire a new credential ($scenario)',
+    async ({ oldScope, newScope }) => {
+      let rejectOld!: (error: unknown) => void;
+      const pending = new Promise<Page<SiteResponse>>((_, reject) => {
+        rejectOld = reject;
       });
-
-      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockImplementation((token) =>
+        token === 'old-token' ? pending : Promise.resolve(mockSitesPage),
+      );
       vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
         mockCamerasPage,
       );
-      vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue(
-        mockRegionsCam1Page,
-      );
-      vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon').mockImplementation(
-        () => oldUpdatePromise,
-      );
-
-      const user = userEvent.setup();
       const onSignOut = vi.fn();
-
-      const { rerender } = render(
+      const ui = (token: string, scope: string) => (
         <AuthContext.Provider
           value={{
-            accessToken: oldToken,
-            sessionScope: oldScope,
+            accessToken: token,
+            sessionScope: scope,
             setAccessToken: vi.fn(),
             isSessionExpired: false,
             triggerSessionExpired,
@@ -416,70 +328,35 @@ describe('RestrictedZoneView HTTP 401 Session Expiry Integration', () => {
           <QueryClientProvider client={queryClient}>
             <RestrictedZoneView
               sharedSession={{
-                accessToken: oldToken,
+                accessToken: token,
+                sessionScope: scope,
+                onSignOut,
                 user: {
                   id: 'admin-1',
                   displayName: 'Admin User',
                   roleAssignments: [{ role: 'ADMIN', siteId: null }],
                 },
-                sessionScope: oldScope,
-                onSignOut,
               }}
             />
           </QueryClientProvider>
-        </AuthContext.Provider>,
+        </AuthContext.Provider>
       );
-
-      await screen.findByText(/Admin Session Active/i);
-      await user.click(await screen.findByRole('button', { name: /EDIT ZONE/i }));
-      const saveBtn = await screen.findByRole('button', { name: /SAVE TO BACKEND/i });
-      await user.click(saveBtn);
-
-      // Rotate session before old mutation finishes
-      rerender(
-        <AuthContext.Provider
-          value={{
-            accessToken: newToken,
-            sessionScope: newScope,
-            setAccessToken: vi.fn(),
-            isSessionExpired: false,
-            triggerSessionExpired,
-            dismissSessionExpired: vi.fn(),
-          }}
-        >
-          <QueryClientProvider client={queryClient}>
-            <RestrictedZoneView
-              sharedSession={{
-                accessToken: newToken,
-                user: {
-                  id: 'admin-1',
-                  displayName: 'Admin User',
-                  roleAssignments: [{ role: 'ADMIN', siteId: null }],
-                },
-                sessionScope: newScope,
-                onSignOut,
-              }}
-            />
-          </QueryClientProvider>
-        </AuthContext.Provider>,
+      const view = render(ui('old-token', oldScope));
+      await waitFor(() =>
+        expect(SmartSiteManagementClient.prototype.listSites).toHaveBeenCalledWith(
+          'old-token',
+          expect.any(Object),
+          expect.any(Object),
+        ),
       );
-
-      await screen.findByText(/Admin Session Active/i);
-
-      // Now fail the old mutation from old token with HTTP 401
+      view.rerender(ui('new-token', newScope));
+      await screen.findByRole('option', { name: /CAM-01/ });
       await act(async () => {
-        rejectOldUpdate!(new ApiError('http', 'Old token expired', 401));
+        rejectOld(new ApiError('http', 'Old session expired', 401));
       });
-
-      // Must NOT expire new session!
-      expect(triggerSessionExpired).not.toHaveBeenCalledWith(newScope);
-      expect(triggerSessionExpired).not.toHaveBeenCalled();
       expect(onSignOut).not.toHaveBeenCalled();
-
-      // Protected Admin UI remains visible after old rejection
+      expect(triggerSessionExpired).not.toHaveBeenCalled();
       expect(screen.getByText(/Admin Session Active/i)).toBeDefined();
-      expect(screen.queryByText(/Session pending or expired/i)).toBeNull();
-      expect(screen.getByRole('button', { name: /EDIT ZONE/i })).toBeDefined();
     },
   );
 
@@ -603,63 +480,4 @@ describe('RestrictedZoneView HTTP 401 Session Expiry Integration', () => {
       expect(onSignOut).not.toHaveBeenCalled();
     },
   );
-
-  it('HTTP 403 Forbidden on savePolygonMutation does NOT trigger session expiry or onSignOut', async () => {
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
-      mockCamerasPage,
-    );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue(
-      mockRegionsCam1Page,
-    );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon').mockRejectedValue(
-      new ApiError('http', 'Forbidden region update', 403),
-    );
-
-    const user = userEvent.setup();
-    const onSignOut = vi.fn();
-    const sessionScope = 'scope-mutation-403';
-
-    render(
-      <AuthContext.Provider
-        value={{
-          accessToken: 'test-token',
-          sessionScope,
-          setAccessToken: vi.fn(),
-          isSessionExpired: false,
-          triggerSessionExpired,
-          dismissSessionExpired: vi.fn(),
-        }}
-      >
-        <QueryClientProvider client={queryClient}>
-          <RestrictedZoneView
-            sharedSession={{
-              accessToken: 'test-token',
-              user: {
-                id: 'admin-1',
-                displayName: 'Admin User',
-                roleAssignments: [{ role: 'ADMIN', siteId: null }],
-              },
-              sessionScope,
-              onSignOut,
-            }}
-          />
-        </QueryClientProvider>
-      </AuthContext.Provider>,
-    );
-
-    await screen.findByText(/Admin Session Active/i);
-    await user.click(await screen.findByRole('button', { name: /EDIT ZONE/i }));
-    const saveBtn = await screen.findByRole('button', { name: /SAVE TO BACKEND/i });
-    await user.click(saveBtn);
-
-    // Cho mutation hoàn tất reject
-    await waitFor(() => {
-      // Admin session active vẫn phải tồn tại (không bị chuyển sang pending/expired)
-      expect(screen.getByText(/Admin Session Active/i)).toBeDefined();
-    });
-
-    expect(triggerSessionExpired).not.toHaveBeenCalled();
-    expect(onSignOut).not.toHaveBeenCalled();
-  });
 });

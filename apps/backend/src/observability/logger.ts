@@ -22,7 +22,9 @@ function isSecretKey(key: string): boolean {
     /token|password|authorization|cookie|secret/.test(normalized) ||
     (normalized.includes('database') && normalized.includes('url')) ||
     normalized === 'directurl' ||
-    normalized.includes('accesskey')
+    normalized.includes('accesskey') ||
+    normalized.includes('apikey') ||
+    normalized.includes('bookingcode')
   );
 }
 
@@ -79,6 +81,7 @@ export function createHttpLoggerOptions(config: ConfigService<BackendEnvironment
     config.get('SMARTSITE_AI_SERVICE_TOKEN', { infer: true }),
     config.get('R2_ACCESS_KEY_ID', { infer: true }),
     config.get('R2_SECRET_ACCESS_KEY', { infer: true }),
+    config.get('RESEND_API_KEY', { infer: true }),
   ].filter((value): value is string => !!value);
   const redactText = (text: string): string =>
     secrets

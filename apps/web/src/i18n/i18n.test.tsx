@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n, { LANGUAGE_STORAGE_KEY, translate as tr, uiLocale } from './index';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import { localizedLabel } from './labels';
+import { localizedLabel, localizedDetectionLabel } from './labels';
 import { localizeMessage, localizedError } from './messages';
 import en from './locales/en.json';
 import vi from './locales/vi.json';
@@ -163,4 +163,38 @@ it('renders interpolated values as text, keeping markup out of the DOM', () => {
   render(<p>{tr('common.shift_value', { value1: '<img src=x onerror=alert(1)>' })}</p>);
   expect(document.querySelector('img')).toBeNull();
   expect(document.body.textContent).toContain('<img src=x');
+});
+
+it('translates live AI and replay labels and keeps unknown technical labels visible', async () => {
+  await i18n.changeLanguage('vi');
+  for (const label of [
+    'MISSING HARD HAT',
+    'MISSING SAFETY VEST',
+    'PPE CHECK PENDING',
+    'PPE COMPLIANT',
+    'PPE UNKNOWN',
+    'ZONE ENTRY',
+    'IN RESTRICTED ZONE',
+    'OUTSIDE ZONE',
+  ]) {
+    expect(localizedDetectionLabel(label)).not.toBe(label);
+    expect(localizedDetectionLabel(`MF04 ${label}`)).toBe(`MF04 ${localizedDetectionLabel(label)}`);
+  }
+  expect(localizedDetectionLabel('NEW_MODEL_LABEL')).toBe('NEW_MODEL_LABEL');
+  await i18n.changeLanguage('en');
+  expect(localizedDetectionLabel('MF04 MISSING HARD HAT')).toBe('MF04 Missing hard hat');
+});
+
+it('does not mistake Vietnamese names inside an unknown English error for translated UI', async () => {
+  const message = 'Worker Nguyễn An cannot use this contractor at the selected site';
+  await i18n.changeLanguage('vi');
+  expect(localizedError(message)).toBe(vi['errors.unexpected']);
+  expect(localizedError(vi['errors.attendance_reports_scope'])).toBe(
+    vi['errors.attendance_reports_scope'],
+  );
+  await i18n.changeLanguage('en');
+  expect(localizedError(message)).toBe(message);
+  expect(localizedError(vi['errors.attendance_reports_scope'])).toBe(
+    en['errors.attendance_reports_scope'],
+  );
 });

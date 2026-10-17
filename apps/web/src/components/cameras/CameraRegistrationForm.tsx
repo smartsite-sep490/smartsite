@@ -15,7 +15,7 @@ export interface CameraRegistrationFormProps {
   credentialId: number;
   siteId: string | null;
   siteName: string;
-  isAdmin: boolean;
+  canManageCamera: boolean;
   client?: SmartSiteManagementClient;
   onCreated?: (camera: CameraResponse) => void;
   onUnauthorized?: () => void;
@@ -64,7 +64,7 @@ export function CameraRegistrationForm(props: CameraRegistrationFormProps) {
     credentialId: props.credentialId,
     siteId: props.siteId ?? '',
   });
-  if (!props.isAdmin || !props.token || !props.sessionScope || !props.siteId) {
+  if (!props.canManageCamera || !props.token || !props.sessionScope || !props.siteId) {
     return (
       <p className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 px-3.5 py-2.5 text-xs leading-relaxed text-[#6B6B6B] break-words">
         {t('cameraSetup.register.authRequired')}
@@ -222,7 +222,7 @@ function ScopedCameraRegistrationForm(
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!active.current || submitting.current || blocked || !props.isAdmin) return;
+    if (!active.current || submitting.current || blocked || !props.canManageCamera) return;
     const input = { ...draft, code: draft.code.trim(), name: draft.name.trim() };
     const invalid = validate(input);
     setErrors(invalid);

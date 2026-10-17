@@ -1,4 +1,9 @@
-import type { VisitorGateEventResponse, WorkerQrVerificationResponse } from '@smartsite/contracts';
+import type {
+  VisitorAttendanceResponse,
+  VisitorMemberResponse,
+  VisitorGateEventResponse,
+  WorkerQrVerificationResponse,
+} from '@smartsite/contracts';
 import {
   Check,
   Column,
@@ -33,6 +38,14 @@ export class VisitorEntity {
   'entered_count >= 0 AND exited_count >= 0 AND exited_count <= entered_count AND entered_count - exited_count <= group_size',
 )
 @Check('chk_visit_version', 'version >= 1')
+@Check(
+  'chk_visit_members',
+  "jsonb_typeof(members) = 'array' AND (jsonb_array_length(members) = 0 OR jsonb_array_length(members) = group_size)",
+)
+@Index('uq_visit_booking_code', ['bookingCodeHash'], {
+  unique: true,
+  where: 'booking_code_hash IS NOT NULL',
+})
 @Index('idx_visitor_visit_site_status', ['siteId', 'status', 'createdAt'])
 export class VisitorVisitEntity {
   @PrimaryColumn({ type: 'uuid' })
@@ -64,6 +77,22 @@ export class VisitorVisitEntity {
   targetArea!: string;
   @Column({ name: 'group_size', type: 'integer' })
   groupSize!: number;
+  @Column({ type: 'jsonb', default: [] })
+  members!: VisitorMemberResponse[];
+  @Column({ type: 'varchar', length: 254, nullable: true }) email!: string | null;
+  @Column({ type: 'varchar', length: 2, default: 'en' }) language!: 'en' | 'vi';
+  @Column({ name: 'booking_code_hash', type: 'varchar', length: 64, nullable: true, select: false })
+  bookingCodeHash!: string | null;
+  @Column({ name: 'booking_code_ciphertext', type: 'text', nullable: true, select: false })
+  bookingCodeCiphertext!: string | null;
+  @Column({ name: 'email_status', type: 'varchar', length: 16, default: 'NOT_REQUESTED' })
+  emailStatus!: 'NOT_REQUESTED' | 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
+  @Column({ name: 'email_attempts', type: 'integer', default: 0 }) emailAttempts!: number;
+  @Column({ name: 'email_attempted_at', type: 'timestamptz', nullable: true })
+  emailAttemptedAt!: Date | null;
+  @Column({ name: 'email_sent_at', type: 'timestamptz', nullable: true }) emailSentAt!: Date | null;
+  @Column({ name: 'email_next_attempt_at', type: 'timestamptz', nullable: true })
+  emailNextAttemptAt!: Date | null;
   @Column({ name: 'gate_id', type: 'varchar', length: 64 })
   gateId!: string;
   @Column({ name: 'valid_from', type: 'timestamptz' })
@@ -170,6 +199,10 @@ export class QrCredentialEntity {
 @Entity({ name: 'visitor_gate_event' })
 @Check('chk_visitor_event_direction', "direction IN ('IN','OUT')")
 @Check('chk_visitor_event_count', 'count > 0')
+@Check(
+  'chk_event_attendees',
+  "jsonb_typeof(attendees) = 'array' AND (jsonb_array_length(attendees) = 0 OR jsonb_array_length(attendees) = count)",
+)
 @Index('idx_visitor_gate_event_visit', ['visitId', 'createdAt'])
 export class VisitorGateEventEntity {
   @PrimaryColumn({ type: 'uuid' })
@@ -186,6 +219,10 @@ export class VisitorGateEventEntity {
   direction!: 'IN' | 'OUT';
   @Column({ type: 'integer' })
   count!: number;
+  @Column({ type: 'jsonb', default: [] })
+  attendees!: VisitorAttendanceResponse[];
+  @Column({ name: 'request_hash', type: 'varchar', length: 64, nullable: true }) requestHash!:
+    string | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

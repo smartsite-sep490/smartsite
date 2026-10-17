@@ -48,9 +48,10 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     workerId = randomUUID(),
     userId = randomUUID(),
     repId = randomUUID(),
+    managerId = randomUUID(),
     securityId = randomUUID(),
     outsiderId = randomUUID();
-  const ids = [userId, repId, securityId, outsiderId];
+  const ids = [userId, repId, managerId, securityId, outsiderId];
   const notifications = new SchedulingNotificationService(dataSource),
     reconciliation = new AttendanceReconciliationService(dataSource, notifications),
     days = new AttendanceDaysService(dataSource, reconciliation),
@@ -64,7 +65,8 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     roleAssignments: [{ role, siteId }],
   });
   const workerActor = actor(userId, UserRole.WORKER),
-    repActor = actor(repId, UserRole.CONTRACTOR_REPRESENTATIVE);
+    repActor = actor(repId, UserRole.CONTRACTOR_REPRESENTATIVE),
+    managerActor = actor(managerId, UserRole.SITE_MANAGER);
   const date = '2026-10-01',
     at = (time: string | Date) =>
       time instanceof Date ? time : new Date(`${date}T${time}:00+07:00`);
@@ -84,6 +86,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     for (const [id, role] of [
       [userId, UserRole.WORKER],
       [repId, UserRole.CONTRACTOR_REPRESENTATIVE],
+      [managerId, UserRole.SITE_MANAGER],
       [securityId, UserRole.SECURITY_OFFICER],
       [outsiderId, UserRole.WORKER],
     ] as const)
@@ -365,10 +368,13 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         reviewNote: 'Wrong scope',
       }),
     );
-    await days.review(repActor, siteId, request.requestId, 'LEAVE', {
+    await assert.rejects(
+      days.review(repActor, siteId, request.requestId, 'LEAVE', { approve: true }),
+    );
+    await days.review(managerActor, siteId, request.requestId, 'LEAVE', {
       approve: true,
     });
-    await days.review(repActor, siteId, request.requestId, 'LEAVE', { approve: true });
+    await days.review(managerActor, siteId, request.requestId, 'LEAVE', { approve: true });
     assert.equal(
       (await notifications.list(workerActor)).items.some((n) => n.event === 'TIME_APPROVED'),
       true,
@@ -437,14 +443,14 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       .getRepository(ShiftEntity)
       .update({ id: futureShift.id }, { endsAt: new Date(+futureEnd + 3600000) });
     await assert.rejects(
-      days.review(repActor, siteId, changedOvertime.requestId, 'OVERTIME', {
+      days.review(managerActor, siteId, changedOvertime.requestId, 'OVERTIME', {
         approve: true,
         reviewNote: 'Must reject changed shift overlap',
       }),
       /outside/,
     );
     await dataSource.getRepository(ShiftEntity).update({ id: futureShift.id }, { endsAt: future });
-    await days.review(repActor, siteId, changedOvertime.requestId, 'OVERTIME', {
+    await days.review(managerActor, siteId, changedOvertime.requestId, 'OVERTIME', {
       approve: false,
       reviewNote: 'Cancel changed shift request',
     });
@@ -452,7 +458,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       (await notifications.list(workerActor)).items.some((n) => n.event === 'TIME_REJECTED'),
       true,
     );
-    await days.review(repActor, siteId, overtime.requestId, 'OVERTIME', {
+    await days.review(managerActor, siteId, overtime.requestId, 'OVERTIME', {
       approve: true,
     });
     assert.deepEqual(
@@ -472,7 +478,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     assert.equal(futureDay.regularMinutes, 120);
     assert.equal(futureDay.overtimeMinutes, 30);
     assert.equal(futureDay.status, 'NEEDS_REVIEW');
-    await days.acknowledge(repActor, siteId, futureDay.id, {
+    await days.acknowledge(managerActor, siteId, futureDay.id, {
       expectedVersion: futureDay.version,
       reviewNote: 'Verified early overtime departure',
     });
@@ -629,11 +635,11 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     });
     assert.equal((await days.detail(workerActor, siteId, day.id)).day.confirmedMinutes, null);
     const reviews = await Promise.allSettled([
-      attendance.reviewCorrection(repActor, siteId, correction.id, {
+      attendance.reviewCorrection(managerActor, siteId, correction.id, {
         approve: true,
         reviewNote: 'Verified late start',
       }),
-      attendance.reviewCorrection(repActor, siteId, correction.id, {
+      attendance.reviewCorrection(managerActor, siteId, correction.id, {
         approve: true,
         reviewNote: 'Competing approval',
       }),
@@ -675,7 +681,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       endsAt: leaveEnd.toISOString(),
       reason: 'Approved whole shift leave',
     });
-    await days.review(repActor, siteId, wholeLeaveId, 'LEAVE', {
+    await days.review(managerActor, siteId, wholeLeaveId, 'LEAVE', {
       approve: true,
       reviewNote: 'Approved whole shift',
     });
@@ -714,7 +720,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     const issueDay = await dataSource
       .getRepository(AttendanceDayEntity)
       .findOneByOrFail({ siteId, workerId, workDate: workDateAt(issueStart, 'Asia/Ho_Chi_Minh') });
-    const issueDetail = await days.detail(repActor, siteId, issueDay.id);
+    const issueDetail = await days.detail(managerActor, siteId, issueDay.id);
     const duplicate = issueDetail.sessions.find((session) => session.status === 'NEEDS_REVIEW')!;
     const missingEntry = issueDetail.sessions.find((session) => session.status === 'MISSING_IN')!;
     const openInterval = issueDetail.sessions.find((session) => session.status === 'MISSING_OUT')!;
@@ -734,15 +740,17 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         ignoreInput,
       ),
     );
-    await assert.rejects(days.ignoreDuplicate(repActor, randomUUID(), duplicate.id, ignoreInput));
     await assert.rejects(
-      days.ignoreDuplicate(repActor, siteId, duplicate.id, {
+      days.ignoreDuplicate(managerActor, randomUUID(), duplicate.id, ignoreInput),
+    );
+    await assert.rejects(
+      days.ignoreDuplicate(managerActor, siteId, duplicate.id, {
         ...ignoreInput,
         expectedSessionVersion: 999,
       }),
     );
     await assert.rejects(
-      days.ignoreDuplicate(repActor, siteId, missingEntry.id, {
+      days.ignoreDuplicate(managerActor, siteId, missingEntry.id, {
         ...ignoreInput,
         expectedSessionVersion: missingEntry.version,
       }),
@@ -751,14 +759,14 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       .getRepository(AttendanceEventEntity)
       .find({ where: { siteId }, order: { id: 'ASC' } });
     await Promise.all([
-      days.ignoreDuplicate(repActor, siteId, duplicate.id, ignoreInput),
-      days.ignoreDuplicate(repActor, siteId, duplicate.id, ignoreInput),
+      days.ignoreDuplicate(managerActor, siteId, duplicate.id, ignoreInput),
+      days.ignoreDuplicate(managerActor, siteId, duplicate.id, ignoreInput),
     ]);
     const ignored = (await days.detail(repActor, siteId, issueDay.id)).sessions.find(
       (session) => session.id === duplicate.id,
     )!;
     assert.equal(ignored.status, 'IGNORED');
-    assert.equal(ignored.ignoredBy, repId);
+    assert.equal(ignored.ignoredBy, managerId);
     assert.equal(ignored.ignoreReason, ignoreInput.reason);
     assert.equal(
       await dataSource
@@ -791,7 +799,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         reason: 'Verified actual entry before the unmatched exit',
       },
     );
-    await attendance.reviewCorrection(repActor, siteId, entryCorrection.id, {
+    await attendance.reviewCorrection(managerActor, siteId, entryCorrection.id, {
       approve: true,
       reviewNote: 'Entry confirmed by representative',
     });
@@ -843,7 +851,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
           assert.equal(detail.currentSchedule?.id, issueSchedule.id);
           assert.equal(detail.day.confirmedMinutes, null);
           await assert.rejects(
-            days.acknowledge(repActor, siteId, issueDay.id, {
+            days.acknowledge(managerActor, siteId, issueDay.id, {
               expectedVersion: detail.day.version,
               reviewNote: 'Cannot bypass changed schedule',
             }),
@@ -1268,7 +1276,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         );
         assert.equal(earlyDay.confirmedMinutes, null);
         assert.deepEqual(earlyDay.anomalies, ['EARLY_CHECKOUT', 'EXIT_DURATION_EXCEEDED']);
-        await days.acknowledge(repActor, siteId, earlyDay.id, {
+        await days.acknowledge(managerActor, siteId, earlyDay.id, {
           expectedVersion: earlyDay.version,
           reviewNote: 'Verified final early departure',
         });
@@ -1281,7 +1289,8 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     await dataSource
       .getRepository(ContractorRepresentativeAssignmentEntity)
       .delete({ siteId, userId: repId });
-    await assert.rejects(days.ignoreDuplicate(repActor, siteId, ignored.id, ignoreInput));
+    await dataSource.getRepository(UserRoleAssignmentEntity).delete({ userId: managerId, siteId });
+    await assert.rejects(days.ignoreDuplicate(managerActor, siteId, ignored.id, ignoreInput));
     assert.equal((await days.list(repActor, siteId, {})).items.length, 0);
     assert.equal((await days.timeRequests(repActor, siteId, { kind: 'OVERTIME' })).total, 0);
     assert.equal((await notifications.list(repActor)).items.length, 0);

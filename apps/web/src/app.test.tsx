@@ -28,7 +28,11 @@ function createDefaultUser(mustChangePassword = false): MockUserAccount {
     id: 'test-user-id',
     displayName: 'Test User',
     username: 'testuser',
-    roleAssignments: [],
+    roleAssignments: [
+      { role: 'ADMIN', siteId: null },
+      { role: 'SITE_MANAGER', siteId: 'site-1' },
+      { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-1' },
+    ],
     isActive: true,
     mustChangePassword,
   };
@@ -153,7 +157,7 @@ vi.mock('./components/workforce/components/WorkerOnboardingView', () => ({
 vi.mock('./components/access/AccessControlView', () => ({
   AccessControlView: ({ apiUrl }: { apiUrl: string }) => (
     <div data-testid="route-view" data-route="access" data-api-url={apiUrl}>
-      <h2>Access Control View</h2>
+      <h2>Security site access</h2>
     </div>
   ),
 }));
@@ -474,7 +478,7 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(routeState.refetchUser).toHaveBeenCalledTimes(1);
   });
 
-  it('redirects Worker-only /dashboard to /workforce, redirects Site Manager-only /access and /workforce to /site-setup, and renders /worker-onboarding and /incidents deep-link query params', async () => {
+  it('keeps Main role destinations and Contractor onboarding while preserving Safety deep-link context', async () => {
     accountState.data = {
       ...createDefaultUser(false),
       roleAssignments: [{ role: 'WORKER', siteId: 'site-1' }],
@@ -500,7 +504,7 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('heading', { name: 'Site Setup View' })).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Security site access' })).toBeDefined();
     managerAccessRender.unmount();
 
     const managerWorkforceRender = render(
@@ -510,9 +514,13 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('heading', { name: 'Site Setup View' })).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Workforce View' })).toBeDefined();
     managerWorkforceRender.unmount();
 
+    accountState.data = {
+      ...createDefaultUser(false),
+      roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-1' }],
+    };
     const onboardingRender = render(
       <MemoryRouter initialEntries={['/worker-onboarding']}>
         <QueryClientProvider client={queryClient}>
@@ -522,7 +530,10 @@ describe('App Navigation and Context Lifecycle', () => {
     );
     expect(await screen.findByRole('heading', { name: 'Worker Onboarding View' })).toBeDefined();
     onboardingRender.unmount();
-
+    accountState.data = {
+      ...createDefaultUser(false),
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-9' }],
+    };
     const deepLinkRender = render(
       <MemoryRouter initialEntries={['/incidents?siteId=site-9&incidentId=inc-42&actionId=act-7']}>
         <QueryClientProvider client={queryClient}>
@@ -535,6 +546,84 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.getByTestId('initial-incident-id').textContent).toBe('inc-42');
     expect(screen.getByTestId('initial-action-id').textContent).toBe('act-7');
     deepLinkRender.unmount();
+  });
+
+  it.each([
+    'SAFETY_OFFICER',
+    'SITE_MANAGER',
+    'CONTRACTOR_REPRESENTATIVE',
+    'SECURITY_OFFICER',
+    'WORKER',
+    'ADMIN',
+  ] as const)('allows a signed-in %s to choose the password form', async (role) => {
+    accountState.data!.roleAssignments = [{ role, siteId: role === 'ADMIN' ? null : 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={['/account/password']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Change your temporary password' }),
+    ).toBeTruthy();
+  });
+
+  it.each(['/login', '/dashboard'])(
+    'opens main Safety operations for a Safety-only account entering %s',
+    async (path) => {
+      accountState.data!.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }];
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <QueryClientProvider client={queryClient}>
+            <App />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      expect(await screen.findByRole('heading', { name: 'Safety Alerts Queue' })).toBeTruthy();
+    },
+  );
+
+  it.each([
+    '/login',
+    '/dashboard',
+    '/accounts',
+    '/workforce',
+    '/site-setup',
+    '/schedule-setup',
+    '/incidents',
+    '/ppe',
+    '/zones',
+    '/live-monitoring',
+    '/iot',
+    '/progress',
+  ])('keeps a Security-only account in its gate workspace when opening %s', async (path) => {
+    accountState.data!.roleAssignments = [{ role: 'SECURITY_OFFICER', siteId: 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Security site access' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'PPE Monitoring' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Safety Alerts Queue' })).toBeNull();
+  });
+
+  it('retains other explicitly assigned roles for a Security/Admin account', async () => {
+    accountState.data!.roleAssignments = [
+      { role: 'SECURITY_OFFICER', siteId: 'site-alpha' },
+      { role: 'ADMIN', siteId: null },
+    ];
+    render(
+      <MemoryRouter initialEntries={['/ppe']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
   });
 
   it('sets initialType when navigated with context, and clears it when navigating via sidebar without context', async () => {

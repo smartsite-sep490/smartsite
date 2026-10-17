@@ -840,7 +840,7 @@ export function WorkerEnrollmentView({
       {statusMessage && (
         <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-800 shadow-xs">
           <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span>{statusMessage}</span>
+          <span>{localizeMessage(statusMessage)}</span>
         </div>
       )}
 
@@ -1183,7 +1183,9 @@ export function WorkerEnrollmentView({
                 aria-live="polite"
                 className={`text-sm font-bold ${capturePhase === 'rejected' ? 'text-red-700' : capturePhase === 'accepted' ? 'text-emerald-700' : 'text-slate-800'}`}
               >
-                {qualityMessage ?? EN_CAPTURE_GUIDANCE[captureTargetForStep(currentStep)!].detail}
+                {localizeMessage(
+                  qualityMessage ?? EN_CAPTURE_GUIDANCE[captureTargetForStep(currentStep)!].detail,
+                )}
               </p>
               <div className="mt-3.5 flex flex-wrap gap-3">
                 <button

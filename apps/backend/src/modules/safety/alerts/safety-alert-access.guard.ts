@@ -11,11 +11,13 @@ import type { AuthenticatedRequest, AuthenticatedUser } from '../../auth/auth.se
 
 interface SiteScopedRequest extends AuthenticatedRequest {
   params?: { siteId?: string };
+  method?: string;
 }
 
 export function assertSafetySiteAccess(
   user: AuthenticatedUser | undefined,
   siteId: string | undefined,
+  method: string | undefined,
 ): void {
   if (!user) throw new UnauthorizedException();
   if (user.mustChangePassword) {
@@ -28,7 +30,9 @@ export function assertSafetySiteAccess(
   if (
     !user.roleAssignments.some(
       ({ role, siteId: assignedSiteId }) =>
-        (role === UserRole.ADMIN && assignedSiteId === null) ||
+        (['GET', 'HEAD'].includes(method ?? '') &&
+          role === UserRole.ADMIN &&
+          assignedSiteId === null) ||
         (role === UserRole.SAFETY_OFFICER &&
           assignedSiteId !== null &&
           normalizedSiteId !== undefined &&
@@ -45,7 +49,7 @@ export function assertSafetySiteAccess(
 export class SafetyAlertAccessGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<SiteScopedRequest>();
-    assertSafetySiteAccess(request.user, request.params?.siteId);
+    assertSafetySiteAccess(request.user, request.params?.siteId, request.method);
     return true;
   }
 }

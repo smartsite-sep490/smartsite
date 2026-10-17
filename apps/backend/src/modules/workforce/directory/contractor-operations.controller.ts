@@ -63,7 +63,6 @@ export class ContractorOperationsController {
   }
 
   @Post(':contractorId/participations')
-  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async createParticipation(
     @Req() request: AuthenticatedRequest,

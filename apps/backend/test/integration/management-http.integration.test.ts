@@ -141,20 +141,29 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const managerToken = ((await managerLogin.json()) as { accessToken: string }).accessToken;
     const contractorPath = `/sites/${site.id}/contractors`;
     const contractorInput = { code: `CTR-${suffix}`, name: 'HTTP contractor' };
-    assert.equal((await post(contractorPath, contractorInput, adminToken)).status, 403);
+    assert.equal((await post(contractorPath, contractorInput, managerToken)).status, 403);
     assert.equal(
       (await post(`/sites/${randomUUID()}/contractors`, contractorInput, managerToken)).status,
       403,
     );
-    const contractorResponse = await post(contractorPath, contractorInput, managerToken);
+    const contractorResponse = await post(contractorPath, contractorInput, adminToken);
     assert.equal(contractorResponse.status, 201);
     const contractor = (await contractorResponse.json()) as { id: string };
     const generatedContractor = await post(
       contractorPath,
       { name: 'Automatic code contractor' },
-      managerToken,
+      adminToken,
     );
     assert.equal(generatedContractor.status, 201);
+    const generatedBody = (await generatedContractor.clone().json()) as { id: string };
+    for (const id of [contractor.id, generatedBody.id]) {
+      const participation = await post(
+        `/contractors/${id}/participations`,
+        { siteId: site.id, validFrom: '2020-01-01T00:00:00Z', validUntil: null },
+        managerToken,
+      );
+      assert.equal(participation.status, 201);
+    }
     assert.match(
       ((await generatedContractor.json()) as { code: string }).code,
       /^CTR-[0-9A-F-]{36}$/,
@@ -261,6 +270,14 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       ).status,
       403,
     );
+    const representativeLogin = await post('/auth/login', {
+      username: repInput.username,
+      password: temporaryPassword,
+      clientType: 'MOBILE',
+    });
+    assert.equal(representativeLogin.status, 200);
+    const representativeToken = ((await representativeLogin.json()) as { accessToken: string })
+      .accessToken;
     const cameraResponse = await post(
       `/sites/${site.id}/cameras`,
       {
@@ -268,7 +285,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
         externalId: `AI-CAM-${suffix}`,
         name: 'Gate',
       },
-      adminToken,
+      managerToken,
     );
     assert.equal(cameraResponse.status, 201);
     const camera = (await cameraResponse.json()) as { id: string; configurationVersion: number };
@@ -341,8 +358,12 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     assert.equal(((await dateRetry.json()) as { id: string }).id, datePermission.id);
     const workerResponse = await post(
       `/sites/${site.id}/workers`,
-      { externalId: `WORKER-${suffix}`, displayName: 'Authorized Worker' },
-      adminToken,
+      {
+        contractorId: contractor.id,
+        externalId: `WORKER-${suffix}`,
+        displayName: 'Authorized Worker',
+      },
+      representativeToken,
     );
     assert.equal(workerResponse.status, 201);
     const worker = (await workerResponse.json()) as { id: string };
@@ -359,7 +380,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
         validFrom: '2026-09-28T00:00:00',
         validUntil: null,
       },
-      adminToken,
+      managerToken,
     );
     assert.equal(timezoneLessGrant.status, 400);
     const grantValidFrom = new Date(Date.now() + 60_000).toISOString();
@@ -405,7 +426,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
         validFrom: '2026-09-28T00:00:00.000Z',
         validUntil: null,
       },
-      adminToken,
+      managerToken,
     );
     assert.equal(denyGrantResponse.status, 201);
     const denyGrantBody = (await denyGrantResponse.json()) as { id: string; effect: string };
@@ -434,7 +455,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
         },
         expectedConfigurationVersion: camera.configurationVersion,
       },
-      adminToken,
+      managerToken,
     );
     assert.equal(regionResponse.status, 201);
     const created = (await regionResponse.json()) as {
@@ -495,7 +516,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       `${url}/api/v1/sites/${site.id}/zones/${zone.id}/access-grants/${grantListBody.items[0]!.id}/revoke`,
       {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${adminToken}` },
+        headers: { Authorization: `Bearer ${managerToken}` },
       },
     );
     assert.equal(revoked.status, 200);
@@ -517,7 +538,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       `${url}/api/v1/sites/${site.id}/cameras/${camera.id}/regions/${created.region.id}/polygon`,
       {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${managerToken}` },
         body: JSON.stringify({
           polygon: {
             coordinates: [

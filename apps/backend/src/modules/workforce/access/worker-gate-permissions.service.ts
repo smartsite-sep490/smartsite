@@ -80,7 +80,7 @@ export class WorkerGatePermissionsService {
     workerIdValue: string,
     input: SetGatePermissionsCommand,
   ) {
-    requireSiteRole(actor, siteIdValue, [UserRole.SITE_MANAGER]);
+    requireSiteRole(actor, siteIdValue, [UserRole.SITE_MANAGER], false);
     const siteId = uuid(siteIdValue),
       workerId = uuid(workerIdValue);
     const value = command(SetGatePermissionsCommand, input);

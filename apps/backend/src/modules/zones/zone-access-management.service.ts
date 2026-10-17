@@ -1,3 +1,4 @@
+import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsEnum, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator';
@@ -161,6 +162,7 @@ export class ZoneAccessManagementService {
         );
         return rows[0]!;
       },
+      mainSiteManagerAuthorization(context, siteId),
     );
   }
 
@@ -219,6 +221,7 @@ export class ZoneAccessManagementService {
         );
         return updated[0]!;
       },
+      mainSiteManagerAuthorization(context, siteId),
     );
   }
 

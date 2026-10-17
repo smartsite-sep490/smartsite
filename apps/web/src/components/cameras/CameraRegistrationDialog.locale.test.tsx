@@ -60,7 +60,7 @@ it('switches EN -> VI -> EN on CameraRegistrationDialog while preserving dirty d
         credentialId={1}
         siteId={SITE_ID}
         siteName="Site Alpha"
-        isAdmin={true}
+        canManageCamera={true}
         onCreated={onCreated}
       />
     </QueryClientProvider>,

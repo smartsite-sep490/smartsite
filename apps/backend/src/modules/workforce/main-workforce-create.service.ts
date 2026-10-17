@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { authorizeMainSiteManager } from '../../common/configuration/main-site-manager-authority.js';
 import { Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import {
@@ -15,7 +14,6 @@ import {
 } from '../../common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ContractorEntity } from '../../database/entities/contractor.entity.js';
-import { ContractorSiteParticipationEntity } from '../../database/entities/contractor-site-participation.entity.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import {
   CreateContractorCommand,
@@ -27,7 +25,7 @@ function forbidden(): never {
   throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
 }
 
-/** Existing public enrollment semantics with retained-main, actor-bound journal hooks. */
+/** Main catalog/Worker creation with actor-bound transactional history. */
 @Injectable()
 export class MainWorkforceCreateService {
   constructor(private readonly source: DataSource) {}
@@ -62,36 +60,8 @@ export class MainWorkforceCreateService {
             ...value,
             isActive: true,
           });
-          const participations = await manager
-            .getRepository(ContractorSiteParticipationEntity)
-            .createQueryBuilder('participation')
-            .where(
-              'participation.contractor_id=:contractorId AND participation.site_id=:siteId AND participation.is_active=TRUE',
-              { contractorId: contractor.id, siteId },
-            )
-            .setLock('pessimistic_read')
-            .getMany();
-          // Preserve MAIN's Date-based current interval check and open-ended auto-enrollment.
-          const at = new Date();
-          if (
-            !participations.some(
-              ({ validFrom, validUntil }) =>
-                validFrom.getTime() <= at.getTime() &&
-                (validUntil === null || validUntil.getTime() > at.getTime()),
-            )
-          ) {
-            await manager.getRepository(ContractorSiteParticipationEntity).save({
-              id: randomUUID(),
-              contractorId: contractor.id,
-              siteId,
-              validFrom: at,
-              validUntil: null,
-              isActive: true,
-            });
-          }
           return contractor;
         },
-        (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId),
       );
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
@@ -131,7 +101,6 @@ export class MainWorkforceCreateService {
         'CONTRACTOR_WORKER_CREATE',
         { contractorId, ...value, siteId },
         async (manager) => {
-          // Retained main: even a global Admin needs an active Contractor participation.
           // Lock the source rows so a concurrent eligibility change cannot go unnoticed.
           const contractor = (
             await manager.query('SELECT id,is_active FROM contractor WHERE id=$1 FOR SHARE', [
@@ -171,16 +140,9 @@ export class MainWorkforceCreateService {
   ): Promise<void> {
     const actor = uuid(actorValue).toLowerCase();
     const roles = await manager.query(
-      "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL) OR (role='CONTRACTOR_REPRESENTATIVE' AND site_id=$2)) FOR SHARE",
+      "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND role='CONTRACTOR_REPRESENTATIVE' AND site_id=$2 FOR SHARE",
       [actor, siteId],
     );
-    if (
-      roles.some(
-        (row: { role: string; site_id: string | null }) =>
-          row.role === 'ADMIN' && row.site_id === null,
-      )
-    )
-      return;
     if (!roles.length) forbidden();
     const grants = await manager.query(
       'SELECT id FROM contractor_representative_grant WHERE user_id=$1 AND contractor_id=$2 FOR SHARE',

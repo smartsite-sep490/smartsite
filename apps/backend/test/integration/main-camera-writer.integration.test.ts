@@ -41,7 +41,7 @@ before(async () => {
 after(async () => {
   await database.dispose();
 });
-async function fixture(role = 'ADMIN') {
+async function fixture(role = 'SITE_MANAGER') {
   const actorUserId = randomUUID(),
     siteId = randomUUID(),
     zoneId = randomUUID();
@@ -218,11 +218,20 @@ test('stale revision and foreign Site mutations fail without orphan commands or 
       { status: CameraStatus.INACTIVE, expectedConfigurationVersion: 1 },
       f.context,
     ),
+    status(403),
+  );
+  await assert.rejects(
+    f.service.setStatus(
+      other.siteId,
+      camera.id,
+      { status: CameraStatus.INACTIVE, expectedConfigurationVersion: 1 },
+      other.context,
+    ),
     status(404),
   );
   assert.equal((await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n, n);
 });
-for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
+for (const role of ['ADMIN', 'SAFETY_OFFICER', 'WORKER'])
   test(`late camera mutation rejects current ${role}`, async () => {
     const f = await fixture(role);
     await assert.rejects(create(f), status(403));

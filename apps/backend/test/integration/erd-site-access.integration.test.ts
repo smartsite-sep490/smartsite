@@ -14,7 +14,6 @@ import {
   ZoneType,
   ZoneRestrictionPolicy,
   WorkerSiteZoneAssignmentEntity,
-  WorkerGatePermissionEntity,
   AccessAttemptEntity,
   GateEventEntity,
   AttendanceEventEntity,
@@ -29,12 +28,13 @@ import { WorkerGatePermissionsService } from '../../src/modules/workforce/access
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 
+const database = createIsolatedTestDatabase({ canonical: true });
+const dataSource = database.dataSource;
+
 test('ERD: bounded permissions, gate confirmation, temporary passage and attendance corrections', async () => {
-  await dataSource.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
     contractorId = randomUUID(),
@@ -64,6 +64,11 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     attendance = new AttendanceService(dataSource);
   const gateId = 'gate-north-01';
   try {
+    await database.initialize();
+    const [{ owned_schema: ownedSchema }] = await dataSource.query(
+      'SELECT current_schema() AS owned_schema',
+    );
+    assert.match(ownedSchema, /^isolated_test_[0-9a-f]{32}$/);
     for (const id of [siteId, otherSiteId])
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic ERD site' });
     for (const id of users)
@@ -341,13 +346,13 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     );
     await assert.rejects(
       attendance.reviewCorrection(
-        actor(workerAccountId, UserRole.CONTRACTOR_REPRESENTATIVE),
+        actor(workerAccountId, UserRole.SITE_MANAGER),
         siteId,
         correction.id,
         { approve: true, reviewNote: 'Self review denied' },
       ),
     );
-    await attendance.reviewCorrection(rep, siteId, correction.id, {
+    await attendance.reviewCorrection(manager, siteId, correction.id, {
       approve: true,
     });
     const updatedSession = await dataSource
@@ -362,14 +367,16 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       .getRepository(AttendanceSessionEntity)
       .update(closed.id, { version: updatedSession.version + 1 });
     await assert.rejects(
-      attendance.reviewCorrection(rep, siteId, stale.id, {
+      attendance.reviewCorrection(manager, siteId, stale.id, {
         approve: true,
         reviewNote: 'Stale version denied',
       }),
       /changed/,
     );
-    await assert.rejects(attendance.reviewCorrection(rep, siteId, stale.id, { approve: false }));
-    await attendance.reviewCorrection(rep, siteId, stale.id, {
+    await assert.rejects(
+      attendance.reviewCorrection(manager, siteId, stale.id, { approve: false }),
+    );
+    await attendance.reviewCorrection(manager, siteId, stale.id, {
       approve: false,
       reviewNote: 'Recorded times changed',
     });
@@ -379,7 +386,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       requestId: randomUUID(),
       expectedSessionVersion: updatedSession.version + 1,
     });
-    await attendance.reviewCorrection(rep, siteId, resubmission.id, {
+    await attendance.reviewCorrection(manager, siteId, resubmission.id, {
       approve: false,
       reviewNote: 'No further change needed',
     });
@@ -458,23 +465,6 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await passage('OUT', true);
     assert.ok((await dataSource.getRepository(AccessAuditEntity).findBy({ siteId })).length > 10);
   } finally {
-    await cleanupSiteAccess(dataSource, [siteId, otherSiteId]);
-    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.getRepository(WorkerGatePermissionEntity).delete({ siteId });
-    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
-    await dataSource.getRepository(WorkerEntity).delete({ siteId });
-    await dataSource.getRepository(ContractorSiteParticipationEntity).delete({ siteId });
-    await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });
-    await dataSource
-      .getRepository(ContractorRepresentativeAssignmentEntity)
-      .delete({ contractorId });
-    await dataSource.getRepository(ContractorEntity).delete(contractorId);
-    await dataSource.getRepository(ZoneEntity).delete(zoneId);
-    await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId });
-    await dataSource.getRepository(UserEntity).delete(users);
-    await dataSource.getRepository(SiteEntity).delete([siteId, otherSiteId]);
-    await dataSource.destroy();
+    await database.dispose();
   }
 });

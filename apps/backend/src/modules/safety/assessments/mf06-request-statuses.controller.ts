@@ -119,7 +119,7 @@ export class Mf06RequestStatusesController {
       paging = pagination(query.offset as string | undefined, query.limit as string | undefined);
     const result = await this.query.list(scope, paging.offset, paging.limit);
     await this.auth.authenticateRequest(request);
-    assertSafetySiteAccess(request.user, scope);
+    assertSafetySiteAccess(request.user, scope, 'GET');
     return result;
   }
   @Get(':requestId')
@@ -139,7 +139,7 @@ export class Mf06RequestStatusesController {
     const scope = uuid(siteId).toLowerCase(),
       result = await this.query.get(scope, uuid(requestId).toLowerCase());
     await this.auth.authenticateRequest(request);
-    assertSafetySiteAccess(request.user, scope);
+    assertSafetySiteAccess(request.user, scope, 'GET');
     return result;
   }
 }

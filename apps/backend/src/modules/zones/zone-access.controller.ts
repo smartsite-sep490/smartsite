@@ -32,7 +32,8 @@ import { pagination } from '../../common/http/pagination.js';
 import type { ZoneAccessGrantEntity } from '../../database/entities/zone-access-grant.entity.js';
 import type { ZoneEntryDecisionEntity } from '../../database/entities/zone-entry-decision.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
-import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
 import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import {
   CreateZoneAccessGrantCommand,
@@ -86,7 +87,7 @@ const commonResponses = {
 @commonResponses.notFound
 @commonResponses.tooManyRequests
 @commonResponses.unavailable
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard, SiteConfigurationGuard)
 @Controller('sites/:siteId/zones/:zoneId/access-grants')
 export class ZoneAccessController {
   private readonly logger = new Logger(ZoneAccessController.name);
@@ -165,7 +166,7 @@ export class ZoneAccessController {
 @commonResponses.notFound
 @commonResponses.tooManyRequests
 @commonResponses.unavailable
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard, SiteConfigurationGuard)
 @Controller('sites/:siteId/zone-entry-decisions')
 export class ZoneEntryDecisionsController {
   constructor(private readonly access: ZoneAccessManagementService) {}

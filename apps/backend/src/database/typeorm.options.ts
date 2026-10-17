@@ -1,3 +1,6 @@
+import { PreserveManagerNotificationHistory1792368000000 } from './migrations/1792368000000-PreserveManagerNotificationHistory.js';
+import { SiteManagerReviewNotifications1792108800000 } from './migrations/1792108800000-SiteManagerReviewNotifications.js';
+import { VisitorRoster1792022400000 } from './migrations/1792022400000-VisitorRoster.js';
 import { Mf06AssessmentRequests1791590400001 } from './migrations/1791590400001-Mf06AssessmentRequests.js';
 import { Mf06MainAuthorityJournal1791590400002 } from './migrations/1791590400002-Mf06MainAuthorityJournal.js';
 import { SafetyFaceProvenance1791590400003 } from './migrations/1791590400003-SafetyFaceProvenance.js';
@@ -97,27 +100,27 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       CameraRegionConfiguration1790035200000,
       UserAuthentication1790121600000,
       SafetyAlertReadIndex1790467200000,
-      ScopedJwtAuthentication1790553600000,
       Mf06ZoneAuthorization1790553600000,
+      ScopedJwtAuthentication1790553600000,
       SafetyAlertReviews1790640000000,
-      WorkforceTimeScheduling1790726400000,
       IdentityAccessScope1790726400000,
-      Mf07WorkforceAccessScope1790812800000,
+      WorkforceTimeScheduling1790726400000,
       FaceEnrollmentMetadata1790812800000,
+      Mf07WorkforceAccessScope1790812800000,
       ZoneEntryTrackIdRange1790812800001,
-      Mf07AbsenceScheduleVersion1790899200000,
       AccountFaceTemplates1790899200000,
+      Mf07AbsenceScheduleVersion1790899200000,
       ObservationIdentityReview1790899200000,
-      ScheduleVersionUnique1790985600000,
       GateAccessLogs1790985600000,
+      ScheduleVersionUnique1790985600000,
       WorkerGatePermissions1790992800000,
       Mf08SafetyWorkflow1791000000000,
       AllowMultipleWorkerShiftsPerDay1791072000000,
       ContractorShiftAssignments1791158400000,
       SchedulingRequestReviewReasons1791244800000,
       Mf07SharedContractorCompatibility1791331200000,
-      QrAccess1791417600000,
       Mf07Notifications1791417600000,
+      QrAccess1791417600000,
       ErdVisitorAccess1791504000000,
       IncidentContractorResponsibility1791504000000,
       Mf07NotificationDeletion1791504000000,
@@ -148,9 +151,12 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ContractorZoneRegrant1791940000001,
       SingleTeamZone1791940000002,
       AttendanceAbsence1792022400000,
+      VisitorRoster1792022400000,
+      SiteManagerReviewNotifications1792108800000,
       SafetyChecklists1792195200000,
       ShiftExitGracePeriod1792281600000,
       AttendanceExitNotifications1792281600001,
+      PreserveManagerNotificationHistory1792368000000,
     ],
     logging: false,
     extra: {

@@ -45,7 +45,7 @@ function mount(overrides: Partial<CameraManagementDialogProps> = {}) {
     siteId: SITE,
     siteName: 'Site A',
     camera: { ...camera },
-    isAdmin: true,
+    canManageCamera: true,
     onUpdated: vi.fn(),
     onUnauthorized: vi.fn(),
     ...overrides,
@@ -204,7 +204,7 @@ it('does not let reused credentialId and sessionScope accept a late old-token su
 it.each([
   { token: null },
   { sessionScope: null },
-  { isAdmin: false },
+  { canManageCamera: false },
   { siteId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
 ])('does not offer mutation controls for an invalid authorized scope %j', (patch) => {
   const fetcher = vi.fn();

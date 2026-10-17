@@ -37,8 +37,8 @@ async function fixture() {
     f.site,
   ]);
   await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), f.actor, f.site],
   );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
@@ -265,19 +265,19 @@ test('public participation missing or malformed Contractor/Site fails without so
   const f = await fixture();
   await withApi(f, async (request) => {
     assert.equal((await request(f.input, randomUUID())).status, 404);
-    assert.equal((await request({ ...f.input, siteId: randomUUID() })).status, 404);
+    assert.equal((await request({ ...f.input, siteId: randomUUID() })).status, 403);
     assert.equal((await request(f.input, 'bad-id')).status, 400);
     assert.equal(await count(f), 0);
   });
 });
-test('public participation requires current global Admin even for scoped configuration roles', async () => {
+test('public participation requires the current Site Manager and rejects global Admin and other roles', async () => {
   const f = await fixture();
   await withApi(f, async (request) => {
-    for (const role of ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER']) {
+    for (const role of ['ADMIN', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER']) {
       await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
         f.actor,
         role,
-        f.site,
+        role === 'ADMIN' ? null : f.site,
       ]);
       assert.equal((await request(f.input)).status, 403);
     }
@@ -317,7 +317,7 @@ for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const)
           if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
           if (change === 'ROLE')
             await db.query(
-              "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
+              "UPDATE user_role_assignment SET role='SAFETY_OFFICER',site_id=$2 WHERE user_id=$1",
               [f.actor, f.site],
             );
           if (change === 'DEACTIVATE')

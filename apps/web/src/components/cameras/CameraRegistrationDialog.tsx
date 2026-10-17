@@ -15,7 +15,7 @@ export interface CameraRegistrationDialogProps {
   credentialId: number;
   siteId: string | null;
   siteName: string;
-  isAdmin: boolean;
+  canManageCamera: boolean;
   client?: SmartSiteManagementClient;
   onCreated?: (camera: CameraResponse) => void;
   onUnauthorized?: () => void;
@@ -35,7 +35,7 @@ export function CameraRegistrationDialog({
   credentialId,
   siteId,
   siteName,
-  isAdmin,
+  canManageCamera,
   client,
   onCreated,
   onUnauthorized,
@@ -103,7 +103,7 @@ export function CameraRegistrationDialog({
             credentialId={credentialId}
             siteId={siteId}
             siteName={siteName}
-            isAdmin={isAdmin}
+            canManageCamera={canManageCamera}
             client={client}
             onCreated={onCreated}
             onUnauthorized={onUnauthorized}

@@ -5,10 +5,9 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { RestrictedZoneView } from './RestrictedZoneView';
-import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
+import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { LoginResponse, SiteResponse, Page } from '@smartsite/api-client';
 import {
-  getDraftStorageKey,
   loadLocalDraft,
   saveLocalDraft,
   type CameraResponse,
@@ -508,8 +507,8 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     await screen.findByText(/Admin Session Active/i);
     await waitFor(() => {
       const comboboxes = screen.getAllByRole('combobox');
-      expect(comboboxes.length).toBe(3);
-      expect((comboboxes[2] as HTMLSelectElement).value).toBe('reg-1');
+      expect(comboboxes.length).toBe(2);
+      expect((comboboxes[1] as HTMLSelectElement).value).toBe('cam-1');
     });
   }
 
@@ -519,352 +518,25 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
         <RestrictedZoneView authenticatedSession={mockAdminLogin} />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(listRegionsSpy).toHaveBeenCalled());
+    await waitFor(() => expect(listCamerasSpy).toHaveBeenCalled());
     expect(SmartSiteManagementClient.prototype.login).not.toHaveBeenCalled();
     view.unmount();
     expect(SmartSiteManagementClient.prototype.logout).not.toHaveBeenCalled();
   });
 
-  it('Admin login loads real-shaped Site/Camera/Region responses and displays server synced state', async () => {
+  it('Admin login loads monitoring metadata without starting configuration reads or writes', async () => {
     const user = userEvent.setup();
-
     render(
       <QueryClientProvider client={queryClient}>
         <RestrictedZoneView />
       </QueryClientProvider>,
     );
-
     await performAdminLogin(user);
-
-    expect(listSitesSpy).toHaveBeenCalledWith(
-      'mock-admin-token',
-      { limit: 100 },
-      { signal: expect.any(AbortSignal) },
-    );
-    expect(listCamerasSpy).toHaveBeenCalledWith(
-      'mock-admin-token',
-      'site-alpha',
-      { limit: 100 },
-      { signal: expect.any(AbortSignal) },
-    );
-    expect(listRegionsSpy).toHaveBeenCalledWith(
-      'mock-admin-token',
-      'site-alpha',
-      'cam-1',
-      {
-        limit: 100,
-      },
-      { signal: expect.any(AbortSignal) },
-    );
-
-    const comboboxes = screen.getAllByRole('combobox');
-    expect(comboboxes).toHaveLength(3);
-    expect((comboboxes[0] as HTMLSelectElement).value).toBe('site-alpha');
-    expect((comboboxes[1] as HTMLSelectElement).value).toBe('cam-1');
-    expect((comboboxes[2] as HTMLSelectElement).value).toBe('reg-1');
-
-    expect(screen.getByText(/Server Synced \(v3\)/i)).not.toBeNull();
-  });
-
-  it('clarifies region selector is for geometry editing target without filtering live AI detections', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RestrictedZoneView />
-      </QueryClientProvider>,
-    );
-
-    await performAdminLogin(user);
-
-    expect(screen.getByLabelText(/Region \(Geometry Editing\)/i)).not.toBeNull();
-    expect(screen.getByText(/Edit Target/i)).not.toBeNull();
-  });
-
-  it('SAVE TO BACKEND sends selected IDs and expectedConfigurationVersion with exact normalized coordinates', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RestrictedZoneView />
-      </QueryClientProvider>,
-    );
-
-    await performAdminLogin(user);
-
-    await user.click(screen.getByRole('button', { name: /EDIT ZONE/i }));
-    const saveBtn = await screen.findByRole('button', { name: /SAVE TO BACKEND/i });
-    await user.click(saveBtn);
-
-    expect(updatePolygonSpy).toHaveBeenCalledTimes(1);
-    expect(updatePolygonSpy).toHaveBeenCalledWith(
-      'mock-admin-token',
-      'site-alpha',
-      'cam-1',
-      'reg-1',
-      {
-        expectedConfigurationVersion: 3,
-        polygon: {
-          coordinates: [
-            [0.1, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-            [0.1, 0.8],
-          ],
-        },
-      },
-    );
-  });
-
-  it('success uses returned configuration version and clears only the matching draft', async () => {
-    const user = userEvent.setup();
-
-    // Pre-seed two distinct local drafts
-    saveLocalDraft('site-alpha', 'cam-1', 'reg-1', 3, [
-      [0.1, 0.1],
-      [0.8, 0.1],
-      [0.8, 0.8],
-    ]);
-    saveLocalDraft('site-alpha', 'cam-2', 'reg-2', 5, [
-      [0.2, 0.2],
-      [0.7, 0.2],
-      [0.7, 0.7],
-    ]);
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RestrictedZoneView />
-      </QueryClientProvider>,
-    );
-
-    await performAdminLogin(user);
-
-    await user.click(screen.getByRole('button', { name: /EDIT ZONE/i }));
-    await user.click(screen.getByRole('button', { name: /SAVE TO BACKEND/i }));
-
-    await screen.findByText(/Saved polygon to CAM-01 \(version 4\)\./i);
-
-    // Verify raw storage key is null directly before any load cleanup can occur
-    expect(localStorage.getItem(getDraftStorageKey('site-alpha', 'cam-1', 'reg-1'))).toBeNull();
-    // And loadLocalDraft with the original version 3 confirms absence
-    expect(loadLocalDraft('site-alpha', 'cam-1', 'reg-1', 3).status).toBe('none');
-
-    // cam-2 draft on different camera must remain intact in raw storage and valid
-    expect(localStorage.getItem(getDraftStorageKey('site-alpha', 'cam-2', 'reg-2'))).not.toBeNull();
-    expect(loadLocalDraft('site-alpha', 'cam-2', 'reg-2', 5).status).toBe('valid');
-  });
-
-  it('409 reloads server config and displays conflict banner without auto-overwriting', async () => {
-    const user = userEvent.setup();
-
-    const updatedCamerasPage: Page<CameraResponse> = {
-      items: [
-        {
-          id: 'cam-1',
-          siteId: 'site-alpha',
-          externalId: 'CAM-01',
-          code: 'CAM-01',
-          name: 'Primary Gate Camera',
-          status: 'ACTIVE',
-          configurationVersion: 4,
-          createdAt: '2026-09-30T00:00:00Z',
-        },
-        mockCamerasPage.items[1]!,
-      ],
-      total: 2,
-    };
-
-    const updatedRegionsCam1Page: Page<RegionResponse> = {
-      items: [
-        {
-          id: 'reg-1',
-          cameraId: 'cam-1',
-          zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.2, 0.2],
-              [0.9, 0.2],
-              [0.9, 0.9],
-              [0.2, 0.9],
-            ],
-          },
-          coordinateSpace: 'NORMALIZED_0_1',
-          version: 2,
-          isActive: true,
-          createdAt: '2026-09-30T00:00:00Z',
-        },
-      ],
-      total: 1,
-    };
-
-    updatePolygonSpy.mockRejectedValueOnce(new ApiError('http', 'Configuration conflict', 409));
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RestrictedZoneView />
-      </QueryClientProvider>,
-    );
-
-    await performAdminLogin(user);
-
-    // Initial query call counts
-    const initialCameraQueryCalls = listCamerasSpy.mock.calls.length;
-    const initialRegionQueryCalls = listRegionsSpy.mock.calls.length;
-
-    // Subsequent refetch returns updated camera configuration and geometry from server
-    listCamerasSpy.mockResolvedValue(updatedCamerasPage);
-    listRegionsSpy.mockImplementation((_token: string, _siteId: string, cameraId: string) => {
-      if (cameraId === 'cam-2') return Promise.resolve(mockRegionsCam2Page);
-      return Promise.resolve(updatedRegionsCam1Page);
-    });
-
-    await user.click(screen.getByRole('button', { name: /EDIT ZONE/i }));
-    await user.click(screen.getByRole('button', { name: /SAVE TO BACKEND/i }));
-
-    const conflictAlert = await screen.findByText(
-      (_content, element) =>
-        element?.getAttribute('role') === 'alert' &&
-        element.textContent?.includes('Configuration Version Conflict (HTTP 409)') === true,
-    );
-    expect(conflictAlert.textContent).toContain('Configuration Version Conflict (HTTP 409)');
-    expect(conflictAlert.textContent).toContain(
-      'Camera CAM-01 was modified by another operator or process',
-    );
-    expect(screen.getByRole('button', { name: /Load Server Version/i })).not.toBeNull();
-
-    // 409 invalidates queries: assert listCameras and listRegions were refetched
-    await waitFor(() => {
-      expect(listCamerasSpy.mock.calls.length).toBeGreaterThan(initialCameraQueryCalls);
-      expect(listRegionsSpy.mock.calls.length).toBeGreaterThan(initialRegionQueryCalls);
-    });
-
-    // Crucial: updatePolygon was NOT automatically retried / overwritten
-    expect(updatePolygonSpy).toHaveBeenCalledTimes(1);
-
-    // Prepare mock for next explicit save
-    updatePolygonSpy.mockResolvedValueOnce({
-      configurationVersion: 5,
-      region: {
-        ...updatedRegionsCam1Page.items[0]!,
-        version: 3,
-      },
-    });
-
-    // Click "Load Server Version"
-    await user.click(screen.getByRole('button', { name: /Load Server Version/i }));
-
-    // Banner should disappear and public UI should reflect server synced version 4
-    expect(document.contains(conflictAlert)).toBe(false);
-    await screen.findByText(/Server Synced \(v4\)/i);
-    expect(screen.getByText(/Restored authoritative server polygon\./i)).not.toBeNull();
-
-    // Next explicit save sends expectedConfigurationVersion: 4 and new server coordinates
-    await user.click(screen.getByRole('button', { name: /EDIT ZONE/i }));
-    await user.click(screen.getByRole('button', { name: /SAVE TO BACKEND/i }));
-
-    expect(updatePolygonSpy).toHaveBeenCalledTimes(2);
-    expect(updatePolygonSpy).toHaveBeenLastCalledWith(
-      'mock-admin-token',
-      'site-alpha',
-      'cam-1',
-      'reg-1',
-      {
-        expectedConfigurationVersion: 4,
-        polygon: {
-          coordinates: [
-            [0.2, 0.2],
-            [0.9, 0.2],
-            [0.9, 0.9],
-            [0.2, 0.9],
-          ],
-        },
-      },
-    );
-  });
-
-  it('switching scope during mutation does not apply stale result to new camera', async () => {
-    const user = userEvent.setup();
-
-    let resolveMutation!: (value: unknown) => void;
-    updatePolygonSpy.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveMutation = resolve;
-      }),
-    );
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RestrictedZoneView />
-      </QueryClientProvider>,
-    );
-
-    await performAdminLogin(user);
-
-    await user.click(screen.getByRole('button', { name: /EDIT ZONE/i }));
-    await user.click(screen.getByRole('button', { name: /SAVE TO BACKEND/i }));
-
-    // User switches to cam-2 before mutation resolves
-    const comboboxes = screen.getAllByRole('combobox');
-    expect(comboboxes[1]).toBeDefined();
-    await user.selectOptions(comboboxes[1]!, 'cam-2');
-
-    // Await selected reg-2 public state and server synced v5 on cam-2
-    await waitFor(() => {
-      const selects = screen.getAllByRole('combobox');
-      expect((selects[1] as HTMLSelectElement).value).toBe('cam-2');
-      expect((selects[2] as HTMLSelectElement).value).toBe('reg-2');
-    });
-    await screen.findByText(/Server Synced \(v5\)/i);
-
-    // Resolve deferred mutation inside awaited act() so stale response is fully consumed
-    await act(async () => {
-      resolveMutation({
-        configurationVersion: 4,
-        region: {
-          id: 'reg-1',
-          cameraId: 'cam-1',
-          zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.1, 0.1],
-              [0.8, 0.1],
-              [0.8, 0.8],
-            ],
-          },
-          coordinateSpace: 'NORMALIZED_0_1',
-          version: 2,
-          isActive: true,
-          createdAt: '2026-09-30T00:00:00Z',
-        },
-      });
-    });
-
-    // Assert camera 2 version/region 2 state remains completely unchanged and no CAM-01 success banner appears
-    expect(screen.queryByText(/Saved polygon to CAM-01/i)).toBeNull();
-    const finalComboboxes = screen.getAllByRole('combobox');
-    expect((finalComboboxes[1] as HTMLSelectElement).value).toBe('cam-2');
-    expect((finalComboboxes[2] as HTMLSelectElement).value).toBe('reg-2');
-    expect(screen.getByText(/Server Synced \(v5\)/i)).not.toBeNull();
-  });
-
-  it('preserves camera mismatch guard when live preview does not match selected camera', async () => {
-    state.preview = mockPreview(mockZoneDetection(5)); // cameraExternalId: 'CAM-02'
-    const user = userEvent.setup();
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RestrictedZoneView />
-      </QueryClientProvider>,
-    );
-
-    await performAdminLogin(user);
-
-    // Selected camera is CAM-01, preview is CAM-02 -> EDIT ZONE button should be disabled
-    const editBtn = screen.getByRole('button', { name: /EDIT ZONE/i });
-    expect(editBtn.getAttribute('disabled')).not.toBeNull();
-    expect(editBtn.getAttribute('title')).toContain(
-      'Select the matching Backend camera before editing this preview',
-    );
+    expect(listSitesSpy).toHaveBeenCalled();
+    expect(listCamerasSpy).toHaveBeenCalled();
+    expect(listRegionsSpy).not.toHaveBeenCalled();
+    expect(updatePolygonSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Edit Zone|Save to Backend/i })).toBeNull();
   });
 
   it('unauthenticated state hides SAVE TO BACKEND and only allows local draft storage', async () => {
@@ -963,95 +635,6 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       expect(listSitesSpy).not.toHaveBeenCalled();
     });
 
-    it.each([false, true])(
-      'delayed polygon result after same-user token rotation preserves new draft (reused scope: %s)',
-      async (reuseScope) => {
-        let resolveUpdate: (
-          value: Awaited<ReturnType<SmartSiteManagementClient['updatePolygon']>>,
-        ) => void;
-        const updatePromise = new Promise<
-          Awaited<ReturnType<SmartSiteManagementClient['updatePolygon']>>
-        >((resolve) => {
-          resolveUpdate = resolve;
-        });
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesPage);
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue(
-          mockCamerasPage,
-        );
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue(
-          mockCamerasPage,
-        );
-        vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue(
-          mockRegionsCam1Page,
-        );
-        vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon').mockImplementation(
-          () => updatePromise,
-        );
-
-        const user = userEvent.setup();
-        const { rerender } = render(
-          <QueryClientProvider client={queryClient}>
-            <RestrictedZoneView
-              sharedSession={{
-                accessToken: 'token-1',
-                user: {
-                  id: 'admin-1',
-                  displayName: 'Admin User',
-                  roleAssignments: [{ role: 'ADMIN', siteId: null }],
-                },
-                sessionScope: 'scope-1',
-              }}
-            />
-          </QueryClientProvider>,
-        );
-
-        await screen.findByText(/Admin Session Active/i);
-        await user.click(await screen.findByRole('button', { name: /EDIT ZONE/i }));
-        const saveBtn = await screen.findByRole('button', { name: /SAVE TO BACKEND/i });
-        await user.click(saveBtn);
-
-        // Now create a local draft under scope-2
-        saveLocalDraft('site-alpha', 'cam-1', 'reg-1', 3, [
-          [0.2, 0.2],
-          [0.3, 0.3],
-          [0.4, 0.4],
-        ]);
-
-        // Rotate token / sessionScope to scope-2 for same user
-        rerender(
-          <QueryClientProvider client={queryClient}>
-            <RestrictedZoneView
-              sharedSession={{
-                accessToken: 'token-2',
-                user: {
-                  id: 'admin-1',
-                  displayName: 'Admin User',
-                  roleAssignments: [{ role: 'ADMIN', siteId: null }],
-                },
-                sessionScope: reuseScope ? 'scope-1' : 'scope-2',
-              }}
-            />
-          </QueryClientProvider>,
-        );
-
-        // Complete delayed mutation from scope-1
-        const baseRegion = mockRegionsCam1Page.items[0]!;
-        await act(async () => {
-          resolveUpdate!({
-            configurationVersion: 4,
-            region: {
-              ...baseRegion,
-              version: 2,
-            },
-          });
-        });
-
-        // Draft must NOT be cleared by the old mutation!
-        const draftAfter = loadLocalDraft('site-alpha', 'cam-1', 'reg-1', 3);
-        expect(draftAfter.status).toBe('valid');
-      },
-    );
-
     it('restricted user (Worker) is denied without firing protected queries or signing out of app', async () => {
       const listSitesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listSites');
       const onSignOut = vi.fn();
@@ -1147,7 +730,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
 
       // Verify Safety Officer Session is admitted
       expect(await screen.findByText(/Safety Officer Session Active \(Read-Only\)/i)).toBeDefined();
-      expect(screen.getAllByText(/Safety Officer \(Read-Only\)/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Restricted Zone \(Read-Only\)/i).length).toBeGreaterThan(0);
 
       // Only assigned site (site-alpha) should be in the dropdown
       const siteSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
@@ -1343,100 +926,43 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       state.previewOptions = null;
     });
 
-    it('switching language (en -> vi -> en) preserves selected Site, camera, region, local polygon draft, and deep-link navigation', async () => {
+    it('switching language preserves monitoring scope, historical browser draft and Safety navigation', async () => {
       const user = userEvent.setup();
       const onNavigate = vi.fn();
-
-      // Pre-save a local draft for site-beta / cam-beta-1 / region-beta-2 (config v2)
       saveLocalDraft('site-beta', 'cam-beta-1', 'region-beta-2', 2, [
         [0.15, 0.2],
         [0.85, 0.2],
         [0.85, 0.85],
         [0.15, 0.85],
       ]);
-
+      const savedDraft = loadLocalDraft('site-beta', 'cam-beta-1', 'region-beta-2', 2);
       render(
         <QueryClientProvider client={queryClient}>
           <RestrictedZoneView sharedSession={adminSession} onNavigate={onNavigate} />
         </QueryClientProvider>,
       );
-
       await screen.findByRole('option', { name: /Công trường Beta/i });
-
-      // Select Site Beta -> Camera Beta 02 -> Region Beta 2
-      const siteSelect = document.getElementById('zone-site-select') as HTMLSelectElement;
-      await user.selectOptions(siteSelect, 'site-beta');
-
+      await user.selectOptions(document.getElementById('zone-site-select')!, 'site-beta');
       await screen.findByRole('option', { name: /Camera Beta 02/i });
-      const regionSelect = document.getElementById(
-        'zone-region-geometry-select',
-      ) as HTMLSelectElement;
-      await waitFor(() => expect(regionSelect.options.length).toBe(2));
-      await user.selectOptions(regionSelect, 'region-beta-2');
-
-      expect(siteSelect.value).toBe('site-beta');
-      expect((document.getElementById('zone-camera-select') as HTMLSelectElement).value).toBe(
-        'cam-beta-1',
-      );
-      expect(regionSelect.value).toBe('region-beta-2');
-      expect(screen.getByText('Unsaved Local Draft')).toBeDefined();
-
-      // Switch shared single-runtime i18n engine to Vietnamese
-      await act(async () => {
-        await i18n.changeLanguage('vi');
-      });
-
-      // Visible captions retranslate to Vietnamese
-      expect(screen.getByText('Phiên quản trị viên đang hoạt động')).toBeDefined();
-      expect(screen.getByText('Bản nháp chưa lưu')).toBeDefined();
-      expect(screen.getByText('CHI TIẾT PHÁT HIỆN')).toBeDefined();
-
-      // Selected Site, Camera, Region, and local draft mode remain preserved
-      expect((document.getElementById('zone-site-select') as HTMLSelectElement).value).toBe(
-        'site-beta',
-      );
-      expect((document.getElementById('zone-camera-select') as HTMLSelectElement).value).toBe(
-        'cam-beta-1',
-      );
-      expect(
-        (document.getElementById('zone-region-geometry-select') as HTMLSelectElement).value,
-      ).toBe('region-beta-2');
-      expect(loadLocalDraft('site-beta', 'cam-beta-1', 'region-beta-2', 2)?.points).toEqual([
-        [0.15, 0.2],
-        [0.85, 0.2],
-        [0.85, 0.85],
-        [0.15, 0.85],
-      ]);
-
-      // Open Incident Review modal in Vietnamese and navigate to Safety Alerts
-      const reviewBtnVi = screen.getByRole('button', { name: /Xem xét sự cố/i });
-      await user.click(reviewBtnVi);
-
-      expect(screen.getByRole('heading', { name: 'Xem xét và xử lý' })).toBeDefined();
-
-      const modalNavigateBtnVi = screen.getByRole('button', {
-        name: /Xem xét trong Cảnh báo An toàn/i,
-      });
-      await user.click(modalNavigateBtnVi);
-
+      for (const language of ['vi', 'en']) {
+        await act(async () => {
+          await i18n.changeLanguage(language);
+        });
+        expect((document.getElementById('zone-site-select') as HTMLSelectElement).value).toBe(
+          'site-beta',
+        );
+        expect((document.getElementById('zone-camera-select') as HTMLSelectElement).value).toBe(
+          'cam-beta-1',
+        );
+        expect(document.getElementById('zone-region-geometry-select')).toBeNull();
+        expect(loadLocalDraft('site-beta', 'cam-beta-1', 'region-beta-2', 2)).toEqual(savedDraft);
+      }
+      await user.click(screen.getByRole('button', { name: /View in Safety Alerts/i }));
       expect(onNavigate).toHaveBeenCalledWith('incidents', {
         alertType: 'RESTRICTED_ZONE_INTRUSION',
         siteId: 'site-beta',
       });
-
-      // Switch back to English and verify captions restore with selections & draft intact
-      await act(async () => {
-        await i18n.changeLanguage('en');
-      });
-
-      expect(screen.getByText('Admin Session Active')).toBeDefined();
-      expect(screen.getByText('Unsaved Local Draft')).toBeDefined();
-      expect((document.getElementById('zone-site-select') as HTMLSelectElement).value).toBe(
-        'site-beta',
-      );
-      expect(
-        (document.getElementById('zone-region-geometry-select') as HTMLSelectElement).value,
-      ).toBe('region-beta-2');
+      expect(updatePolygonSpy).not.toHaveBeenCalled();
     });
 
     it('paused mode (VITE_AI_WORK_PAUSED=true) across language switches retranslates paused banner and viewport while keeping preview polling disabled and preventing geometry editing', async () => {
@@ -1460,8 +986,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       expect(screen.queryByText('ppe.controls.paused')).toBeNull();
       expect(state.previewOptions?.enabled).toBe(false);
 
-      const editBtnEn = screen.getByRole('button', { name: /EDIT ZONE/i }) as HTMLButtonElement;
-      expect(editBtnEn.disabled).toBe(true);
+      expect(screen.queryByRole('button', { name: /EDIT ZONE/i })).toBeNull();
       expect(container.querySelectorAll('circle').length).toBe(0);
 
       // Switch to Vietnamese
@@ -1477,10 +1002,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
 
       // Paused guards remain strictly enforced after language switch
       expect(state.previewOptions?.enabled).toBe(false);
-      const editBtnVi = screen.getByRole('button', {
-        name: /SỬA KHU VỰC/i,
-      }) as HTMLButtonElement;
-      expect(editBtnVi.disabled).toBe(true);
+      expect(screen.queryByRole('button', { name: /SỬA KHU VỰC/i })).toBeNull();
       expect(container.querySelectorAll('circle').length).toBe(0);
     });
   });

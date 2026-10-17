@@ -1,16 +1,14 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
+import { localizedError } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNotificationRequest } from '../hooks/useNotificationRequest';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ShiftSwapRequestResponse,
-  WorkerScheduleResponse,
-} from '@smartsite/api-client';
+import { ShiftSwapRequestResponse, WorkerScheduleResponse } from '@smartsite/api-client';
 import {
   formatShiftTime,
   formatShiftRange,
@@ -831,7 +829,7 @@ export function WorkforceScheduleTab({
               </p>
               <p className="text-[11px] text-rose-700 mt-0.5">
                 {myTeamQuery.error instanceof Error
-                  ? myTeamQuery.error.message
+                  ? localizedError(myTeamQuery.error.message)
                   : tr('workforce_schedule_tab.please_try_again_to_check_shift_swap_eligibility')}
               </p>
             </div>
@@ -889,7 +887,7 @@ export function WorkforceScheduleTab({
       )}
 
       {/* 3. Sub-Tabs */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {(
           [
             {
@@ -1525,7 +1523,9 @@ export function WorkforceScheduleTab({
                             }
                             dot
                           >
-                            {localizedLabel(req.status)}
+                            {req.status === 'PENDING_MANAGER'
+                              ? tr('common.pending_contractor_review')
+                              : localizedLabel(req.status)}
                           </Badge>
                         </td>
                         <td className="py-3.5 px-4 text-slate-400 text-[11px] font-mono">

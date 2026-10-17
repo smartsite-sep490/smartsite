@@ -77,9 +77,14 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   const requestedSite = params.get('siteId');
   const site = requestedSite ? sites.rows.find((row) => row.id === requestedSite) : sites.rows[0];
   const capabilities = deriveZonePpeCapabilities(session.user, site?.id);
+  const canReadCameras = session.user.roleAssignments.some(
+    ({ role, siteId }) =>
+      (role === 'ADMIN' && siteId === null) ||
+      (siteId === site?.id && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role)),
+  );
   const cameras = useSetupCatalog<CameraResponse>(
     [...key, site?.id, 'cameras'],
-    Boolean(site && capabilities.canManageRegions && !revoked),
+    Boolean(site && canReadCameras && !revoked),
     (offset, signal) =>
       client.listCameras(session.accessToken, site!.id, { offset, limit: 20 }, { signal }),
   );
@@ -134,7 +139,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     credentialId,
     siteId: site?.id ?? '',
     siteName: site?.name ?? '',
-    isAdmin: capabilities.canManageRegions,
+    canManageCamera: capabilities.canManageRegions,
     onClose: () => {
       if (isCurrentDialog()) close();
     },
@@ -229,6 +234,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       {site && (
         <CameraSetupCatalog
           capabilities={capabilities}
+          canReadCameras={canReadCameras}
           cameras={cameras}
           rows={rows}
           cameraError={errorNotice(cameras)}

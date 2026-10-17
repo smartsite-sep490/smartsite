@@ -39,7 +39,7 @@ function mount(kind: 'register' | 'manage', status: 'ACTIVE' | 'INACTIVE' = 'ACT
     credentialId: 1,
     siteId,
     siteName: 'Site Alpha',
-    isAdmin: true,
+    canManageCamera: true,
   };
   render(
     <QueryClientProvider client={query}>

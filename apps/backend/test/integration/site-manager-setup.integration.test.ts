@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { participateContractor } from '../support/contractor-participation.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteRepresentativesService } from '../../src/modules/users/site-representatives.controller.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
@@ -79,15 +80,22 @@ test('Site Manager representative creation is atomic, scoped and supports multip
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: other.id }],
   });
   const creation = new MainWorkforceCreateService(source);
+  const admin = await users.create({
+    username: `admin-${randomUUID()}`,
+    displayName: 'Catalog Admin',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  });
   const createContractor = (name: string) =>
     creation.createSiteContractor(
       site.id,
       { code: `C-${randomUUID()}`, name },
-      { actorUserId: manager!.id },
+      { actorUserId: admin!.id },
     );
   const first = await createContractor('First contractor');
   const second = await createContractor('Second contractor');
   for (const contractor of [first, second]) {
+    await participateContractor(source, site.id, contractor.id);
     const user = await reps.create(site.id, contractor.id, input(), { actorUserId: manager!.id });
     assert.deepEqual(user!.roleAssignments, [
       { role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: site.id },

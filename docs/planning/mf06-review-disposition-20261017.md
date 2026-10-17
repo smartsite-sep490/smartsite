@@ -1,5 +1,32 @@
 # MF06 review disposition — 17 October 2026
 
+## Integration update — later17 October, verified local candidate
+
+This checkpoint integrates Main0dd with feature HEAD48f1916. Source markers are
+resolved; final Git state is recorded separately by the local commit receipt.
+Main role ownership is reconciled in writers, Web capabilities and
+focused tests; pinned registry is61. Actual PG5433 fresh/release54/Main35/legacy24
+upgrade and Checklist preservation checks now pass. Exact approved ExcelJS/qrcode
+packages installed in the D sandbox using foreground npm, scripts disabled;
+the earlier command rejection did not establish a global installation ban.
+Backend/Web source+test type diagnostics, production Backend compile and Web
+bundle pass using exact installed package mappings. Latest executions of nine
+real PG integration suites have106 distinct passes; Excel reader3PASS. The ERD scenario
+now uses a file-owned canonical migrated schema. These checks are not the full
+native frozen-install pipeline, model/Face accuracy, browser or release approval.
+The independent integration review found contradictory Contractor guards and a
+lost notification destination. Both were reproduced and fixed with regression
+tests. Admin catalog creation no longer auto-enrolls a Contractor; Site Manager
+participation stays separate. Read-only Admin Zone access remains separate from
+Manager writers, including scope revocation. Full Web run1647PASS/2FAIL was
+followed by67PASS in the four affected files after the final two failures were
+repaired:1649 distinct cases across those runs, not one all-green full run.
+The final static correction review closes those concrete findings only.
+Native frozen-install/full pipeline, local rollout and production/browser gates
+remain open. No AI or GitHub merge. Detailed evidence is in the local
+main-0dd7d27-integration-20261017-v1 run folder and its integration progress review.
+The trial-aborted/CI statements below are historical, not current merge state.
+
 Source review only. Reviewed feature HEAD49c80e5 and fetched Main0dd7d27;
 no Backend execution, database inspection, AI or deployment was performed.
 The screenshot's findings are not six automatically confirmed runtime defects.

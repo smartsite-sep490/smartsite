@@ -31,13 +31,13 @@ const en = {
   'cameraSetup.areas': 'Areas & PPE',
   'cameraSetup.areasHint': 'A camera can observe several areas. Each area has its own PPE policy.',
   'cameraSetup.zones': 'Configure PPE by Zone',
-  'cameraSetup.adminHint': 'A system administrator manages cameras and observation regions.',
+  'cameraSetup.adminHint': 'The assigned Site Manager configures cameras and observation regions.',
   'cameraSetup.managerHint': 'The Site Manager defines PPE requirements for each area.',
   'cameraSetup.help': 'How to set up this site',
   'cameraSetup.step1': 'The Site Manager creates areas and their PPE requirements.',
-  'cameraSetup.step2': 'An administrator registers each camera.',
+  'cameraSetup.step2': 'The Site Manager registers each camera.',
   'cameraSetup.step3':
-    'An administrator links observation regions to areas. Source verification is separate.',
+    'The Site Manager links observation regions to areas. Source verification is separate.',
 };
 const vi: Record<keyof typeof en, string> = {
   'cameraSetup.title': 'Thiết lập camera',
@@ -70,12 +70,12 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.areasHint':
     'Một camera có thể quan sát nhiều khu vực. Mỗi khu vực có chính sách PPE riêng.',
   'cameraSetup.zones': 'Cấu hình PPE theo khu vực',
-  'cameraSetup.adminHint': 'Quản trị viên quản lý camera và vùng quan sát.',
+  'cameraSetup.adminHint': 'Quản lý công trường được phân công thiết lập camera và vùng quan sát.',
   'cameraSetup.managerHint': 'Quản lý công trường quy định PPE cho từng khu vực.',
   'cameraSetup.help': 'Cách thiết lập công trường',
   'cameraSetup.step1': 'Quản lý công trường tạo khu vực và yêu cầu PPE.',
-  'cameraSetup.step2': 'Quản trị viên đăng ký từng camera.',
+  'cameraSetup.step2': 'Quản lý công trường đăng ký từng camera.',
   'cameraSetup.step3':
-    'Quản trị viên gắn vùng quan sát với khu vực. Kiểm tra nguồn kết nối là bước riêng.',
+    'Quản lý công trường gắn vùng quan sát với khu vực. Kiểm tra nguồn kết nối là bước riêng.',
 };
 registerFeatureCatalog({ en, vi });

@@ -57,14 +57,25 @@ test('configuration image independently serves verified LIVE and REPLAY referenc
   }
 });
 
-test('non-global-admin roles, password-change-required, inactive user, wrong camera, inactive camera and unmapped source fail before fetch', async () => {
+test('out-of-scope roles, password-change-required, inactive user, wrong camera, inactive camera and unmapped source fail before fetch', async () => {
   const roleCases: Array<{
     mutate: (s: Awaited<ReturnType<typeof fixture>>['state']) => void;
     expected: number;
   }> = [
     { mutate: (s) => (s.revoked = true), expected: 401 },
-    { mutate: (s) => (s.roleAssignments = [{ role: 'SITE_MANAGER', siteId }]), expected: 403 },
-    { mutate: (s) => (s.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId }]), expected: 403 },
+    {
+      mutate: (s) => (s.roleAssignments = [{ role: 'SITE_MANAGER', siteId: otherId }]),
+      expected: 403,
+    },
+    {
+      mutate: (s) => (s.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: otherId }]),
+      expected: 403,
+    },
+    { mutate: (s) => (s.roleAssignments = [{ role: 'WORKER', siteId }]), expected: 403 },
+    {
+      mutate: (s) => (s.roleAssignments = [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId }]),
+      expected: 403,
+    },
     { mutate: (s) => (s.roleAssignments = [{ role: 'ADMIN', siteId }]), expected: 403 },
     { mutate: (s) => (s.mustChangePassword = true), expected: 403 },
     { mutate: (s) => (s.userActive = false), expected: 403 },
@@ -79,6 +90,18 @@ test('non-global-admin roles, password-change-required, inactive user, wrong cam
     tc.mutate(f.state);
     await assert.rejects(f.service.read('token', siteId, cameraId), status(tc.expected));
     assert.equal(f.state.upstreamCalls, 0);
+  }
+});
+
+test('Main scoped Manager and Safety can read a reference without changing configuration', async () => {
+  for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER']) {
+    const f = await fixture();
+    f.state.roleAssignments = [{ role, siteId }];
+    const result = await f.service.read('synthetic-scoped-reader', siteId, cameraId);
+    assert.equal(result.siteId, siteId);
+    assert.equal(result.configurationVersion, 4);
+    assert.equal(f.state.configurationVersion, 4);
+    assert.ok(f.state.authCalls >= 2);
   }
 });
 
@@ -102,7 +125,7 @@ test('held upstream read and final camera read refuse mid-flight logout (401) or
     const pending = f.service.read('token', siteId, cameraId);
     await startedFetch;
     if (kind === 'logout') f.state.revoked = true;
-    else f.state.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId }];
+    else f.state.roleAssignments = [{ role: 'WORKER', siteId }];
     releaseFetch();
 
     await assert.rejects(pending, status(kind === 'logout' ? 401 : 403));
@@ -130,7 +153,7 @@ test('revoked session (401) and role loss (403) take priority over upstream fail
       const f = await fixture();
       f.setFetch(async () => {
         if (authFailure === 'revoked') f.state.revoked = true;
-        else f.state.roleAssignments = [{ role: 'SITE_MANAGER', siteId }];
+        else f.state.roleAssignments = [{ role: 'SITE_MANAGER', siteId: otherId }];
         if (competingFailure === 'revision409') f.state.configurationVersion = 5;
         if (competingFailure === 'upstream503') {
           return new Response('private-sentinel', { status: 503 });

@@ -35,6 +35,10 @@ import { configurationCommandContext } from '../../auth/configuration-command-co
 import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { MainWorkerRosterService } from '../main-worker-roster.service.js';
 import { CreateWorkerDto } from './dto/workforce.dto.js';
+import { MainWorkforceCreateService } from '../main-workforce-create.service.js';
+import { invalid } from '../../../common/configuration/commands.js';
+import { requireSiteRole } from '../access/qr-access.service.js';
+import { UserRole } from '../../../database/entities/user.entity.js';
 import {
   LinkWorkerAccountCommand,
   WorkforceConfigurationService,
@@ -71,6 +75,7 @@ export class WorkforceController {
     private readonly workforce: WorkforceConfigurationService,
     private readonly roster: MainWorkerRosterService,
     private readonly auth: UserAuthGuard,
+    private readonly creator: MainWorkforceCreateService,
   ) {}
 
   @Post('for-account')
@@ -120,16 +125,20 @@ export class WorkforceController {
   }
 
   @Post()
-  @UseGuards(AdminGuard)
   @ApiCreatedResponse({ type: WorkerResponseDto })
   async create(
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: CreateWorkerDto,
   ) {
-    const worker = await this.roster.create(
-      siteId,
-      input,
+    requireSiteRole(request.user!, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    if (!input.contractorId || input.userId)
+      invalid(
+        'Create a contractor Worker profile first; account linking is a separate administrative action',
+      );
+    const worker = await this.creator.createWorker(
+      input.contractorId,
+      { siteId, externalId: input.externalId, displayName: input.displayName },
       configurationCommandContext(request, this.auth),
     );
     this.logger.log({

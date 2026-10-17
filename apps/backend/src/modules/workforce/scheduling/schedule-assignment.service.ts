@@ -80,21 +80,27 @@ export class ScheduleAssignmentService {
     actor: AuthenticatedUser,
     siteId: string,
     contractorId: string,
+    readOnly = false,
   ) {
-    if (
-      actor.mustChangePassword ||
-      !(await m.getRepository(UserEntity).existsBy({ id: actor.id, isActive: true })) ||
-      !(await m
-        .getRepository(UserRoleAssignmentEntity)
-        .existsBy({ userId: actor.id, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE })) ||
-      !(await m
+    const user = await m.getRepository(UserEntity).findOneBy({ id: actor.id, isActive: true });
+    const roles = await m.getRepository(UserRoleAssignmentEntity).findBy({ userId: actor.id });
+    const manager = roles.some((r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId);
+    const representativeRead =
+      readOnly &&
+      roles.some((r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === siteId) &&
+      (await m
         .getRepository(ContractorRepresentativeAssignmentEntity)
-        .existsBy({ userId: actor.id, siteId, contractorId })) ||
+        .existsBy({ userId: actor.id, siteId, contractorId }));
+    if (
+      !user ||
+      actor.mustChangePassword ||
+      user.mustChangePassword ||
+      (!manager && !representativeRead) ||
       !(await hasActiveContractorParticipation(m, contractorId, siteId))
     )
       throw new PublicHttpException(403, {
         code: 'FORBIDDEN',
-        message: 'Schedule assignment is outside your contractor scope',
+        message: 'Schedule assignment is outside your Site scope',
       });
   }
   private view(batch: ScheduleAssignmentBatchEntity): ScheduleAssignmentBatchResponse {
@@ -329,7 +335,7 @@ export class ScheduleAssignmentService {
       contractorId = uuid(contractor),
       pagination = page(offset, limit);
     return this.source.transaction(async (m) => {
-      await this.scope(m, actor, siteId, contractorId);
+      await this.scope(m, actor, siteId, contractorId, true);
       const [items, total] = await m.getRepository(ScheduleAssignmentBatchEntity).findAndCount({
         where: { siteId, contractorId },
         order: { createdAt: 'DESC', id: 'DESC' },

@@ -666,8 +666,12 @@ export function PpeMonitoringView({
     activeSiteIdRef.current = selectedSiteId;
   }, [selectedSiteId]);
 
+  const zonePpeCapabilities = useMemo(
+    () => deriveZonePpeCapabilities(effectiveUser, selectedSiteId),
+    [effectiveUser, selectedSiteId],
+  );
   const canRegisterCamera = Boolean(
-    isGlobalAdmin &&
+    zonePpeCapabilities.canManageRegions &&
     token &&
     sessionScope &&
     (!isControlled || sharedSession !== null) &&
@@ -688,12 +692,10 @@ export function PpeMonitoringView({
     setRegistrationFeedback(null);
   }
 
-  const zonePpeCapabilities = useMemo(
-    () => deriveZonePpeCapabilities(effectiveUser, selectedSiteId),
-    [effectiveUser, selectedSiteId],
-  );
   const canOpenZonePpe =
-    (zonePpeCapabilities.canManageZones || zonePpeCapabilities.canManageRegions) &&
+    (isGlobalAdmin || zonePpeCapabilities.canManageZones || zonePpeCapabilities.canManageRegions) &&
+    Boolean(token && sessionScope && selectedSiteId) &&
+    !isSitesBaseError &&
     ![sitesQuery.error, previewCamerasQuery.error, meQuery.error].some(
       (error) => error instanceof ApiError && error.status === 401,
     );
@@ -835,7 +837,7 @@ export function PpeMonitoringView({
   );
 
   const canManageCamera = Boolean(
-    isGlobalAdmin &&
+    zonePpeCapabilities.canManageRegions &&
     token &&
     sessionScope &&
     (!isControlled || sharedSession !== null) &&
@@ -1710,7 +1712,7 @@ export function PpeMonitoringView({
         </section>
 
         {onOpenSetup ? (
-          (canOpenZonePpe || canRegisterCamera || canManageCamera) && (
+          (isGlobalAdmin || canOpenZonePpe || canRegisterCamera || canManageCamera) && (
             <div className="flex justify-end">
               <button
                 type="button"
@@ -2833,6 +2835,7 @@ export function PpeMonitoringView({
           siteName={selectedSite?.name || selectedSite?.code || selectedSiteId}
           canManageZones={zonePpeCapabilities.canManageZones}
           canManageRegions={zonePpeCapabilities.canManageRegions}
+          canReadZones={isGlobalAdmin}
           onClose={() => setIsZonePpeOpen(false)}
         />
       )}
@@ -2848,7 +2851,7 @@ export function PpeMonitoringView({
           credentialId={credentialId}
           siteId={selectedSiteId}
           siteName={selectedSite?.name || selectedSite?.code || selectedSiteId}
-          isAdmin={isGlobalAdmin}
+          canManageCamera={zonePpeCapabilities.canManageRegions}
           client={client}
           onCreated={(createdCamera) => {
             if (
@@ -2918,7 +2921,7 @@ export function PpeMonitoringView({
           siteId={selectedSiteId}
           siteName={selectedSite?.name || selectedSite?.code || selectedSiteId}
           camera={selectedCamera}
-          isAdmin={isGlobalAdmin}
+          canManageCamera={zonePpeCapabilities.canManageRegions}
           client={client}
           onUpdated={(updatedCamera) => {
             if (

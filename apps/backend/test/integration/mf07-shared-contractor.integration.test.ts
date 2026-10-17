@@ -1,7 +1,8 @@
+import { participateContractor } from '../support/contractor-participation.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { ContractorRepresentativeGrantEntity } from '../../src/database/entities/contractor-representative-grant.entity.js';
 import { ContractorSiteParticipationEntity } from '../../src/database/entities/contractor-site-participation.entity.js';
 import { ZoneRestrictionPolicy, ZoneType } from '../../src/database/entities/enums.js';
@@ -17,14 +18,14 @@ import { MainAssignmentCommandService } from '../../src/modules/zones/main-assig
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 import { SchedulingWorkflowService } from '../../src/modules/workforce/scheduling/scheduling-workflow.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const database = createIsolatedTestDatabase({ canonical: true });
+const dataSource = database.dataSource;
+before(() => database.initialize());
+after(() => database.dispose());
 
 test('MF07 Site setup reuses one Contractor across Sites and shares Representative grants with main', async () => {
-  await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
   const [siteA, siteB, siteC] = [randomUUID(), randomUUID(), randomUUID()];
   await dataSource.getRepository(SiteEntity).save([
@@ -82,6 +83,12 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
       siteId,
     })),
   );
+  await dataSource.getRepository(UserRoleAssignmentEntity).save({
+    id: randomUUID(),
+    userId: admin.id,
+    role: UserRole.ADMIN,
+    siteId: null,
+  });
   const main = new MainWorkforceCreateService(dataSource);
   const representatives = new MainRepresentativeCommandService(dataSource);
   const assignments = new MainAssignmentCommandService(dataSource);
@@ -91,6 +98,8 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
   const first = await main.createSiteContractor(siteA, input, context);
   const second = await main.createSiteContractor(siteB, input, context);
   assert.equal(first.id, second.id);
+  await participateContractor(dataSource, siteA, first.id);
+  await participateContractor(dataSource, siteB, first.id);
   assert.equal((await workforce.listContractors(admin, siteA)).total, 1);
   assert.equal((await workforce.listContractors(admin, siteB)).total, 1);
   assert.equal((await workforce.listContractors(admin, siteC)).total, 0);
