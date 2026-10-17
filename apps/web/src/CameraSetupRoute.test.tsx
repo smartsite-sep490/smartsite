@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ vi.mock('./features/auth/auth-session', () => ({
       displayName: 'Actor',
       isActive: true,
       mustChangePassword: false,
-      roleAssignments: [{ role: state.role, siteId: null }],
+      roleAssignments: [{ role: state.role, siteId: state.role === 'ADMIN' ? null : 'site-1' }],
     },
     isPending: false,
     isError: false,
@@ -93,4 +93,26 @@ it('keeps the setup route behind the existing authentication gate', async () => 
   mount('/camera-setup');
   expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy();
   expect(screen.queryByText('Setup for actor')).toBeNull();
+});
+
+it.each(['ADMIN', 'SITE_MANAGER'])(
+  'offers setup from the real overview to %s through existing navigation',
+  async (role) => {
+    state.role = role;
+    mount('/live-monitoring');
+    await screen.findByRole('heading', { name: 'Safety Monitoring Overview' });
+    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'Camera setup' }));
+    await screen.findByRole('heading', { name: 'Setup for actor' });
+    expect(screen.getByTestId('location').textContent).toBe('/camera-setup');
+  },
+);
+
+it('does not offer setup from the overview to a Safety Officer without setup access', async () => {
+  state.role = 'SAFETY_OFFICER';
+  mount('/live-monitoring');
+  await screen.findByRole('heading', { name: 'Safety Monitoring Overview' });
+  expect(
+    within(screen.getByRole('main')).queryByRole('button', { name: 'Camera setup' }),
+  ).toBeNull();
+  expect(screen.getByTestId('location').textContent).toBe('/live-monitoring');
 });

@@ -397,7 +397,12 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
             <Route
               path="/live-monitoring"
-              element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
+              element={
+                <LiveMonitoringView
+                  onNavigate={(tab) => onNavigate(tab)}
+                  canOpenCameraSetup={allowedTabs.includes('camera-setup')}
+                />
+              }
             />
             <Route
               path="/camera-setup"

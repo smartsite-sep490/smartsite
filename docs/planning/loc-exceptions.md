@@ -216,3 +216,12 @@ configuration fixtures explicitly carry both configuration and viewing roles.
 Owner: Root; implementation Agy p7 and independent static review Agy p5. This
 bounded repair does not raise the size target or prove browser/production
 acceptance. Extract cohesive scope/query presentation before unrelated growth.
+
+## Live overview setup entry, 17 October
+
+Root permits six additional lines in the grandfathered `apps/web/src/app.tsx`
+for passing its existing `allowedTabs` setup capability to LiveMonitoringView.
+No new role logic, API, session transport or runtime responsibility is added.
+The localized action and regressions stay in bounded Live view/test files.
+Extract route/session composition before unrelated growth; the size target
+and previously recorded extraction work remain unchanged.

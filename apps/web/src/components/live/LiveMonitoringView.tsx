@@ -3,28 +3,43 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '../../i18n/ppe-locale';
 import type { ActiveTab } from '../layout/AppLayout';
 import { IconHardHat, IconShield, IconAlertTriangle } from '../icons';
+import '../cameras/camera-setup-catalog';
 
 export interface LiveMonitoringViewProps {
   onNavigate: (tab: ActiveTab) => void;
+  canOpenCameraSetup?: boolean;
 }
 
-export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
-  useTranslation();
+export function LiveMonitoringView({
+  onNavigate,
+  canOpenCameraSetup = false,
+}: LiveMonitoringViewProps) {
+  const { t: tSafety } = useTranslation('safety');
   const { t } = useLocale();
   const isAiWorkPaused =
-    import.meta.env.VITE_AI_WORK_PAUSED === 'true' ||
-    import.meta.env.VITE_AI_WORK_PAUSED === true;
+    import.meta.env.VITE_AI_WORK_PAUSED === 'true' || import.meta.env.VITE_AI_WORK_PAUSED === true;
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
       {/* Header & Truthful Navigation/Configuration Scope Notice */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#2F3437] tracking-tight">
-          {t('liveOverview.title')}
-        </h1>
-        <p className="text-sm text-[#6B6B6B] mt-2 max-w-3xl leading-relaxed">
-          {t('liveOverview.subtitle')}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#2F3437] tracking-tight">
+            {t('liveOverview.title')}
+          </h1>
+          <p className="text-sm text-[#6B6B6B] mt-2 max-w-3xl leading-relaxed">
+            {t('liveOverview.subtitle')}
+          </p>
+        </div>
+        {canOpenCameraSetup && (
+          <button
+            type="button"
+            onClick={() => onNavigate('camera-setup')}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            {tSafety('cameraSetup.title')}
+          </button>
+        )}
       </div>
 
       {/* Truthful AI Paused Banner (when VITE_AI_WORK_PAUSED=true) */}
@@ -59,9 +74,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
               <IconHardHat className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#111111]">
-                {t('liveOverview.ppe.title')}
-              </h2>
+              <h2 className="text-base font-bold text-[#111111]">{t('liveOverview.ppe.title')}</h2>
               <p className="mt-1.5 text-xs leading-5 text-[#6B6B6B]">
                 {t('liveOverview.ppe.description')}
               </p>
