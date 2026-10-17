@@ -413,20 +413,22 @@ export class WorkforceConfigurationService {
     const scopedSiteId = uuid(siteId);
     const scopedContractorId = uuid(contractorId);
     const value = command(AssignContractorRepresentativeDto, input);
-    const [contractor, user, assignment, participations] = await Promise.all([
-      manager.getRepository(ContractorEntity).findOneBy({ id: scopedContractorId, isActive: true }),
-      manager.getRepository(UserEntity).findOneBy({ id: value.userId, isActive: true }),
-      manager.getRepository(UserRoleAssignmentEntity).findOneBy({
-        userId: value.userId,
-        role: UserRole.CONTRACTOR_REPRESENTATIVE,
-        siteId: scopedSiteId,
-      }),
-      manager.getRepository(ContractorSiteParticipationEntity).findBy({
-        contractorId: scopedContractorId,
-        siteId: scopedSiteId,
-        isActive: true,
-      }),
-    ]);
+    const contractor = await manager
+      .getRepository(ContractorEntity)
+      .findOneBy({ id: scopedContractorId, isActive: true });
+    const user = await manager
+      .getRepository(UserEntity)
+      .findOneBy({ id: value.userId, isActive: true });
+    const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOneBy({
+      userId: value.userId,
+      role: UserRole.CONTRACTOR_REPRESENTATIVE,
+      siteId: scopedSiteId,
+    });
+    const participations = await manager.getRepository(ContractorSiteParticipationEntity).findBy({
+      contractorId: scopedContractorId,
+      siteId: scopedSiteId,
+      isActive: true,
+    });
     const now = Date.now();
     if (
       !contractor ||
