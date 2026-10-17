@@ -131,3 +131,31 @@ then ran the dedicated PostgreSQL suites. Existing catalog exception now include
 eight additional EN/VI source-status entries from Main integration (2027 lines,
 370 above6035df7); no polling, transport or policy change. No size-based test
 removal, geometry/authorization relaxation or production acceptance is implied.
+
+## Main actor/session fixture repair, 17 October
+
+Root reviewed this bounded growth against the actual command services and real
+PostgreSQL runs. Agy p5/p7 supplied independent read-only fixture reviews; their
+blanket acceptance wording does not replace Root's checks. Baseline: cbe38ca.
+
+| Test under `apps/backend/test/integration/`        | Baseline | Current | Reason                                                                                                                                      |
+| -------------------------------------------------- | -------: | ------: | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main-public-assignment.integration.test.ts`       |      681 |     775 | Separate real Requester/Safety/Manager sessions, original-bearer logout barriers, operation-to-actor facts and explicit self-review denial. |
+| `main-zone-permission-command.integration.test.ts` |      610 |     665 | Separate scoped actors and exact injected audit rollback, retaining every permission interval/replay/concurrency assertion.                 |
+| `main-worker-roster.integration.test.ts`           |      480 |     523 | Distinguish public Representative profile creation from internal Admin account-pair commands without dropping either contract.              |
+| `site-access-authority-http.integration.test.ts`   |      601 |     627 | Provision and authenticate a real scoped Representative rather than grant Worker permission as Admin.                                       |
+| `runtime-command-replay.integration.test.ts`       |      412 |     433 | Real Contractor/participation/Representative setup before the original process-restart response-loss journey.                               |
+| `safety-business-http.integration.test.ts`         |      404 |     430 | Real scoped profile setup and separate bootstrap/business app phases; fixed login throttle and original restart assertions retained.        |
+
+Owner: Root. Before adding another journey to these files, extract their existing
+actor/session fixture setup into purpose-specific test support, then rerun the
+same assertions. Do not shorten tests, compress formatting or change frozen
+historical fixtures to satisfy a line count. This is a scoped exception, not a
+general increase to the 400-line test target or 700-line review threshold.
+
+The preceding denied-Zone setup handoff also grew the existing
+`RestrictedZoneView.tsx` by 27 lines and `app.tsx` by one (5ff6b20 to cbe38ca).
+Root permits the optional navigation callback and denied-card action only;
+monitoring permission/query/evidence blocks are unchanged. Extract the existing
+view orchestration before adding another feature. Owner/reviewer: Root;
+independent Agy p8 review and 29 affected DOM checks are recorded separately.
