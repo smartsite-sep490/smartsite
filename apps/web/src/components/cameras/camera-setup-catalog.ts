@@ -12,6 +12,10 @@ const en = {
   'cameraSetup.chooseCamera': 'Choose a camera',
   'cameraSetup.linkedSelection':
     'The linked selection is not in the loaded list. Load more or choose an available item.',
+  'cameraSetup.linkedCameraMore':
+    'The linked camera is not on the loaded pages. Load more cameras to look for it.',
+  'cameraSetup.linkedCameraUnavailable':
+    'The linked camera is unavailable in this site’s catalog. Check the link or choose another site.',
   'cameraSetup.sitesMore': 'Load more sites',
   'cameraSetup.camerasMore': 'Load more cameras',
   'cameraSetup.cameras': 'Cameras',
@@ -54,6 +58,10 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.chooseCamera': 'Chọn camera',
   'cameraSetup.linkedSelection':
     'Lựa chọn trong liên kết chưa có trong danh sách đã tải. Tải thêm hoặc chọn mục khả dụng.',
+  'cameraSetup.linkedCameraMore':
+    'Camera trong liên kết chưa có trên các trang đã tải. Tải thêm camera để tìm.',
+  'cameraSetup.linkedCameraUnavailable':
+    'Camera trong liên kết không có trong danh mục của công trường này. Kiểm tra liên kết hoặc chọn công trường khác.',
   'cameraSetup.sitesMore': 'Tải thêm công trường',
   'cameraSetup.camerasMore': 'Tải thêm camera',
   'cameraSetup.cameras': 'Camera',

@@ -204,7 +204,9 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
               setParams({ siteId: event.target.value });
             }}
           >
-            <option value="">{t('cameraSetup.chooseSite')}</option>
+            <option value="" disabled>
+              {t('cameraSetup.chooseSite')}
+            </option>
             {sites.rows.map((row) => (
               <option key={row.id} value={row.id}>
                 {row.code} · {row.name}
@@ -248,6 +250,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           canReadCameras={canReadCameras}
           cameras={cameras}
           rows={rows}
+          requestedCameraId={params.get('cameraId')}
           cameraError={errorNotice(cameras)}
           open={open}
         />

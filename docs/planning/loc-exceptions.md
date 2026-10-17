@@ -234,3 +234,15 @@ still come from the unchanged Site-scoped helper; no Backend permission changes.
 The existing client/session adapter remains authoritative for expiry handling.
 Owner: Root; UI catalog implementation Agy p7. Extract workspace composition
 before unrelated growth; this scoped exception does not raise the size target.
+
+## Scoped setup selection and SPA handoff, 17 October
+
+Root permits CameraSetupView 289→292 physical lines to disable its placeholder
+and pass the existing linked camera ID into its separate catalog. Root permits
+app.tsx 644→646 lines by reusing one existing URL-encoding handler for PPE and
+Zone setup navigation. RestrictedZoneView 1985→2003 lines only extends its
+existing callback and intercepts unmodified primary links, preserving native
+fallback/modifier behavior and validated Site/camera context. No new query,
+router dependency, permission or media responsibility is introduced. Owners:
+Root integration, Agy p7 camera UI, Agy p5 Zone UI. Extract cohesive workspace
+navigation before unrelated growth; these exceptions do not raise size targets.

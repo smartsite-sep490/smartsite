@@ -12,6 +12,7 @@ export function CameraSetupCatalog({
   canReadZones = false,
   cameras,
   rows,
+  requestedCameraId = null,
   cameraError,
   open,
 }: {
@@ -20,12 +21,21 @@ export function CameraSetupCatalog({
   canReadZones?: boolean;
   cameras: ReturnType<typeof useSetupCatalog<CameraResponse>>;
   rows: CameraResponse[];
+  requestedCameraId?: string | null;
   cameraError: ReactNode;
   open: (kind: 'register' | 'manage' | 'zones', cameraId?: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
   const canWriteZones = capabilities.canManageZones || canManageCameras;
+  const showLinkedCameraNotice = Boolean(
+    requestedCameraId &&
+    !rows.some((row) => row.id === requestedCameraId) &&
+    cameras.isSuccess &&
+    !cameras.isFetching &&
+    !cameras.baseError &&
+    !cameras.error,
+  );
   const primaryButton = CAMERA_BUTTON_STYLES.primary;
   const button = CAMERA_BUTTON_STYLES.secondary;
   const primarySurface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs';
@@ -116,6 +126,15 @@ export function CameraSetupCatalog({
             {cameras.settledEmpty && (
               <p role="status" className="py-5 text-sm text-slate-500">
                 {t('cameraSetup.noCameras')}
+              </p>
+            )}
+            {showLinkedCameraNotice && (
+              <p role="status" className="mt-4 text-sm text-slate-600">
+                {t(
+                  cameras.hasNextPage
+                    ? 'cameraSetup.linkedCameraMore'
+                    : 'cameraSetup.linkedCameraUnavailable',
+                )}
               </p>
             )}
             {!cameras.baseError && cameras.isSuccess && (

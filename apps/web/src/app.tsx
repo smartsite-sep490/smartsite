@@ -345,6 +345,12 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     return <Navigate to={`/${defaultWorkspace(currentUser.roleAssignments ?? [])}`} replace />;
   }
 
+  const openCameraSetup = (context?: { siteId: string; cameraId?: string }) => {
+    const params = new URLSearchParams(context ? { siteId: context.siteId } : {});
+    if (context?.cameraId) params.set('cameraId', context.cameraId);
+    navigate(params.size ? `/camera-setup?${params}` : '/camera-setup');
+  };
+
   return (
     <AppLayout onSelectTab={onNavigate}>
       <RouteErrorBoundary key={location.pathname}>
@@ -419,11 +425,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                     siteId: new URLSearchParams(location.search).get('siteId') ?? undefined,
                     cameraId: new URLSearchParams(location.search).get('cameraId') ?? undefined,
                   }}
-                  onOpenSetup={(context) => {
-                    const params = new URLSearchParams({ siteId: context.siteId });
-                    if (context.cameraId) params.set('cameraId', context.cameraId);
-                    navigate(`/camera-setup?${params}`);
-                  }}
+                  onOpenSetup={openCameraSetup}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />
               }
@@ -434,7 +436,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 <RestrictedZoneView
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
-                  onOpenSetup={() => navigate('/camera-setup')}
+                  onOpenSetup={openCameraSetup}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />
               }

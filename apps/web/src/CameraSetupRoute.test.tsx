@@ -37,6 +37,20 @@ vi.mock('./components/cameras/CameraSetupView', () => ({
     <h1>Setup for {sharedSession.user.id}</h1>
   ),
 }));
+vi.mock('./components/zones/RestrictedZoneView', () => ({
+  RestrictedZoneView: ({
+    onOpenSetup,
+  }: {
+    onOpenSetup: (context?: { siteId: string; cameraId?: string }) => void;
+  }) => (
+    <>
+      <button onClick={() => onOpenSetup({ siteId: 'site 1', cameraId: 'cam/1' })}>
+        Configure selected Zone camera
+      </button>
+      <button onClick={() => onOpenSetup()}>Open Zone setup</button>
+    </>
+  ),
+}));
 vi.mock('./components/ppe/PpeMonitoringView', () => ({
   PpeMonitoringView: ({
     onOpenSetup,
@@ -115,4 +129,14 @@ it('does not offer setup from the overview to a Safety Officer without setup acc
     within(screen.getByRole('main')).queryByRole('button', { name: 'Camera setup' }),
   ).toBeNull();
   expect(screen.getByTestId('location').textContent).toBe('/live-monitoring');
+});
+
+it.each([
+  ['Configure selected Zone camera', '/camera-setup?siteId=site+1&cameraId=cam%2F1'],
+  ['Open Zone setup', '/camera-setup'],
+])('routes %s through the app without losing its available selection', async (action, expected) => {
+  mount('/zones');
+  fireEvent.click(await screen.findByRole('button', { name: action }));
+  await screen.findByRole('heading', { name: 'Setup for actor' });
+  expect(screen.getByTestId('location').textContent).toBe(expected);
 });

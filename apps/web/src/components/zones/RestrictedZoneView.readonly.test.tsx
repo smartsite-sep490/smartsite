@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RestrictedZoneView } from './RestrictedZoneView';
 import type { SharedSession } from '../../types/shared-session';
@@ -66,12 +66,16 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
-function mount(roles: SharedSession['user']['roleAssignments']) {
+function mount(
+  roles: SharedSession['user']['roleAssignments'],
+  onOpenSetup?: (context?: { siteId: string; cameraId?: string }) => void,
+) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   caches.push(cache);
   render(
     <QueryClientProvider client={cache}>
       <RestrictedZoneView
+        onOpenSetup={onOpenSetup}
         sharedSession={{
           accessToken: 'synthetic-token',
           sessionScope: 'synthetic-scope',
@@ -92,6 +96,39 @@ it('keeps authenticated Admin monitoring read-only and routes configuration to e
   expect(mocks.updatePolygon).not.toHaveBeenCalled();
   const link = await screen.findByRole('link', { name: 'Camera setup' });
   expect(link.getAttribute('href')).toBe(`/camera-setup?siteId=${siteId}&cameraId=${cameraId}`);
+});
+it('prevents full-page reload on normal click and delegates loaded site and camera IDs to onOpenSetup', async () => {
+  const onOpenSetup = vi.fn<(context?: { siteId: string; cameraId?: string }) => void>();
+  mount([{ role: 'ADMIN', siteId: null }], onOpenSetup);
+  await screen.findByRole('option', { name: /Gate/ });
+  const link = await screen.findByRole('link', { name: 'Camera setup' });
+  expect(link.getAttribute('href')).toBe(`/camera-setup?siteId=${siteId}&cameraId=${cameraId}`);
+  expect(fireEvent.click(link)).toBe(false);
+  expect(onOpenSetup).toHaveBeenCalledOnce();
+  expect(onOpenSetup).toHaveBeenCalledWith({ siteId, cameraId });
+  expect(mocks.listRegions).not.toHaveBeenCalled();
+  expect(mocks.updatePolygon).not.toHaveBeenCalled();
+});
+it('preserves native browser tab navigation on modified click without invoking onOpenSetup', async () => {
+  const onOpenSetup = vi.fn<(context?: { siteId: string; cameraId?: string }) => void>();
+  mount([{ role: 'ADMIN', siteId: null }], onOpenSetup);
+  await screen.findByRole('option', { name: /Gate/ });
+  const link = await screen.findByRole('link', { name: 'Camera setup' });
+  expect(link.getAttribute('href')).toBe(`/camera-setup?siteId=${siteId}&cameraId=${cameraId}`);
+  expect(fireEvent.click(link, { ctrlKey: true })).toBe(true);
+  expect(fireEvent.click(link, { metaKey: true })).toBe(true);
+  expect(fireEvent.click(link, { shiftKey: true })).toBe(true);
+  expect(fireEvent.click(link, { altKey: true })).toBe(true);
+  expect(fireEvent.click(link, { button: 1 })).toBe(true);
+  expect(onOpenSetup).not.toHaveBeenCalled();
+});
+it('respects a click already cancelled by another handler', async () => {
+  const onOpenSetup = vi.fn();
+  mount([{ role: 'ADMIN', siteId: null }], onOpenSetup);
+  const link = await screen.findByRole('link', { name: 'Camera setup' });
+  link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+  expect(fireEvent.click(link)).toBe(false);
+  expect(onOpenSetup).not.toHaveBeenCalled();
 });
 it('does not turn scoped Safety monitoring into configuration-write access', async () => {
   mount([{ role: 'SAFETY_OFFICER', siteId }]);

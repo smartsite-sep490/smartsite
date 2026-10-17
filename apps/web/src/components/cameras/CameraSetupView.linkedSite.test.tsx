@@ -271,4 +271,96 @@ describe('CameraSetupView Deep-Linked Site Selection Hint', () => {
     expect(screen.queryByText(EN_LINKED_HINT)).toBeNull();
     expect(screen.queryByText(camera2.name)).toBeNull();
   });
+
+  it('does not offer a selectable empty Site that silently restores the first Site', async () => {
+    mocks.listSites.mockResolvedValue({ items: [site1, site2], total: 2 });
+    mocks.listCameras.mockResolvedValue({ items: [camera2], total: 1 });
+    mount();
+    await screen.findByText(camera2.name);
+    const placeholder = screen.getByRole('option', { name: 'Choose a site' }) as HTMLOptionElement;
+    expect(placeholder.disabled).toBe(true);
+    expect((screen.getByRole('combobox', { name: 'Site' }) as HTMLSelectElement).value).toBe(
+      site2.id,
+    );
+  });
+
+  it('explains a linked camera on a later page and clears the notice when that camera loads', async () => {
+    mocks.listSites.mockResolvedValue({ items: [site1], total: 1 });
+    mocks.listCameras.mockResolvedValueOnce({ items: [camera1], total: 2 }).mockResolvedValueOnce({
+      items: [{ ...camera1, id: 'cam-later', name: 'Later camera' }],
+      total: 2,
+    });
+    mount(manager(), '/camera-setup?siteId=site-1&cameraId=cam-later');
+    await screen.findByText(camera1.name);
+    const notice = screen.getByText(
+      'The linked camera is not on the loaded pages. Load more cameras to look for it.',
+    );
+    expect(notice.getAttribute('role')).toBe('status');
+    expect(
+      screen.queryByText(
+        'The linked camera is unavailable in this site’s catalog. Check the link or choose another site.',
+      ),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Load more cameras' }));
+    await screen.findByText('Later camera');
+    expect(notice.isConnected).toBe(false);
+    expect(mocks.listCameras.mock.calls[1]?.[2]).toEqual({ offset: 1, limit: 20 });
+    expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
+  });
+
+  it('reports an unavailable linked camera only after a settled catalog and clears the context on Site change', async () => {
+    let resolve!: (value: unknown) => void;
+    mocks.listSites.mockResolvedValue({ items: [site1, site2], total: 2 });
+    mocks.listCameras
+      .mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      )
+      .mockResolvedValueOnce({ items: [camera2], total: 1 });
+    mount(manager(), '/camera-setup?siteId=site-1&cameraId=cam-missing');
+    await screen.findByRole('option', { name: 'S1 · North Site' });
+    const text =
+      'The linked camera is unavailable in this site’s catalog. Check the link or choose another site.';
+    expect(screen.queryByText(text)).toBeNull();
+    await act(async () => resolve({ items: [{ ...camera2, id: 'cam-missing' }], total: 1 }));
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.getByText(text).getAttribute('role')).toBe('status');
+    await act(async () => changeUiLanguage('vi'));
+    const translated =
+      'Camera trong liên kết không có trong danh mục của công trường này. Kiểm tra liên kết hoặc chọn công trường khác.';
+    expect(screen.getByText(translated)).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Công trường' }), {
+      target: { value: site2.id },
+    });
+    await screen.findByText(camera2.name);
+    expect(screen.queryByText(translated)).toBeNull();
+    expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403, 404])(
+    'does not describe a failed %s camera read as an unavailable linked camera',
+    async (status) => {
+      mocks.listSites.mockResolvedValue({ items: [site1], total: 1 });
+      mocks.listCameras.mockRejectedValue(new ApiError('http', 'Denied', status));
+      mount(manager(), '/camera-setup?siteId=site-1&cameraId=cam-missing');
+      await waitFor(() => expect(mocks.listCameras).toHaveBeenCalledOnce());
+      await screen.findByText(
+        status === 401
+          ? 'Sign in to manage configuration.'
+          : 'Configuration access is unavailable for this scope.',
+      );
+      expect(
+        screen.queryByText(
+          'The linked camera is unavailable in this site’s catalog. Check the link or choose another site.',
+        ),
+      ).toBeNull();
+      expect(
+        screen.queryByText(
+          'The linked camera is not on the loaded pages. Load more cameras to look for it.',
+        ),
+      ).toBeNull();
+    },
+  );
 });

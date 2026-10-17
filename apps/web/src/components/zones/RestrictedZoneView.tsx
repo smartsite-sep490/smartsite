@@ -78,7 +78,7 @@ export interface RestrictedZoneViewProps {
   authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
   onSignOut?: () => void;
   apiUrl?: string;
-  onOpenSetup?: () => void;
+  onOpenSetup?: (context?: { siteId: string; cameraId?: string }) => void;
   onNavigate?: (
     tab: 'incidents',
     context?: {
@@ -887,7 +887,7 @@ export function RestrictedZoneView({
             <div className="mt-5">
               <button
                 type="button"
-                onClick={onOpenSetup}
+                onClick={() => onOpenSetup()}
                 className="rounded-lg border border-[#EAEAEA] bg-white px-4 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F5F5F5] transition-colors shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
               >
                 {tr('cameraSetup.title', { ns: 'safety' })}
@@ -1126,6 +1126,24 @@ export function RestrictedZoneView({
               {canOpenSetup && selectedSiteId && (
                 <a
                   href={`/camera-setup?${setupParams.toString()}`}
+                  onClick={(event) => {
+                    if (
+                      !onOpenSetup ||
+                      event.defaultPrevented ||
+                      event.button !== 0 ||
+                      event.ctrlKey ||
+                      event.metaKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    ) {
+                      return;
+                    }
+                    event.preventDefault();
+                    onOpenSetup({
+                      siteId: selectedSiteId,
+                      cameraId: setupParams.get('cameraId') ?? undefined,
+                    });
+                  }}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
                 >
                   {tr('cameraSetup.title', { ns: 'safety' })}
