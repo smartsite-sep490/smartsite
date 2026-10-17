@@ -463,7 +463,7 @@ describe('durable Web notification bell', () => {
     });
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
-    expect(await screen.findByText('ENTRY DENIED NO SCHEDULE')).toBeTruthy();
+    expect(await screen.findByText('Entry denied: no schedule')).toBeTruthy();
     expect(
       screen.getByText(
         'You are not scheduled for a shift on 2026-10-11 at this site and entry is not permitted. Please contact your contractor representative.',

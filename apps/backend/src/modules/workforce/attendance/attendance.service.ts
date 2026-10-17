@@ -122,7 +122,7 @@ export class AttendanceService {
     gateEventId: string,
     input: RecordAttendanceCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER, UserRole.WORKER]);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER, UserRole.WORKER], false);
     const value = command(RecordAttendanceCommand, input);
     uuid(gateEventId);
     return this.source.transaction(async (manager) => {
@@ -144,9 +144,7 @@ export class AttendanceService {
       if (!worker) missing();
       if (
         !actor.roleAssignments.some(
-          (r) =>
-            (r.role === UserRole.ADMIN && r.siteId === null) ||
-            (r.role === UserRole.SECURITY_OFFICER && r.siteId === siteId),
+          (r) => r.role === UserRole.SECURITY_OFFICER && r.siteId === siteId,
         )
       )
         await this.requireSelf(manager, actor, siteId, worker.id);
@@ -261,19 +259,7 @@ export class AttendanceService {
       UserRole.WORKER,
       UserRole.CONTRACTOR_REPRESENTATIVE,
       UserRole.SITE_MANAGER,
-      UserRole.SECURITY_OFFICER,
     ]);
-    const admin = actor.roleAssignments.some((r) => r.role === UserRole.ADMIN && r.siteId === null);
-    const siteStaff =
-      admin ||
-      actor.roleAssignments.some(
-        (r) =>
-          r.siteId === siteId &&
-          [UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER].includes(r.role),
-      );
-    const isRepresentative = actor.roleAssignments.some(
-      (r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE,
-    );
     const workers: WorkerEntity[] = [];
     for (const worker of await this.source
       .getRepository(WorkerEntity)
@@ -326,7 +312,9 @@ export class AttendanceService {
       canRequestCorrection: actor.roleAssignments.some(
         (r) => r.role === UserRole.WORKER && r.siteId === siteId,
       ),
-      canReviewCorrection: isRepresentative && !siteStaff,
+      canReviewCorrection: actor.roleAssignments.some(
+        (r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId,
+      ),
       sessions: sessions.map((s) =>
         response(
           s,
@@ -462,7 +450,7 @@ export class AttendanceService {
     correctionId: string,
     input: ReviewAttendanceCorrectionCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
+    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
     uuid(correctionId);
     const value = command(ReviewAttendanceCorrectionCommand, input);
     const reviewNote = value.reviewNote ?? null;

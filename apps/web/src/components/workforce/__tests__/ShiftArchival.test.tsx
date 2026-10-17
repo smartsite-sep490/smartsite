@@ -68,7 +68,7 @@ beforeEach(() => {
   );
 });
 it('loads workers beyond the first page and uses the form contractor for the schedules table', async () => {
-  session.role = 'CONTRACTOR_REPRESENTATIVE';
+  session.role = 'SITE_MANAGER';
   const worker = (index: number) => ({
     id: `worker-${index}`,
     siteId: 'site-1',
@@ -109,6 +109,25 @@ it('loads workers beyond the first page and uses the form contractor for the sch
   vi.spyOn(SmartSiteManagementClient.prototype, 'listScheduleAssignments').mockResolvedValue({
     items: [],
     total: 0,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'accessSetup').mockResolvedValue({
+    canReviewAssignments: true,
+    canGrantContractorZones: true,
+    canGrantWorkerZones: false,
+    participations: [
+      {
+        id: 'p',
+        contractorId: 'contractor',
+        name: 'Synthetic',
+        validFrom: '2020-01-01T00:00:00Z',
+        validUntil: null,
+      },
+    ],
+    workers: [],
+    zones: [],
+    assignments: [],
+    contractorPermissions: [],
+    workerPermissions: [],
   });
   mount();
   fireEvent.click(await screen.findByRole('tab', { name: /Worker Assignment/ }));

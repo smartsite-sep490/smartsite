@@ -4,6 +4,7 @@ import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
 import { AlertWorkContext } from '../safety/AlertWorkContext';
 import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
+import { localizedError } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -76,10 +77,10 @@ function errorMessage(error: unknown): string {
         'safety_alerts_view.this_alert_changed_while_you_were_reviewing_it_the_latest_record_has_been_loaded_r',
       );
     if (error.code === 'network') return tr('safety_alerts_view.could_not_connect_to_the_backend');
-    return error.message;
+    return localizedError(error.message);
   }
   return error instanceof Error
-    ? error.message
+    ? localizedError(error.message)
     : tr('access_control_view.the_request_could_not_be_completed');
 }
 
@@ -297,8 +298,7 @@ export function SafetyAlertsView({
       const canReviewSafetyAlerts = result.user.roleAssignments.some(
         ({ role, siteId }) =>
           (role === 'ADMIN' && siteId === null) ||
-          (['SAFETY_OFFICER', 'CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'].includes(role) &&
-            siteId !== null),
+          (['SAFETY_OFFICER', 'SITE_MANAGER'].includes(role) && siteId !== null),
       );
       if (!canReviewSafetyAlerts) {
         await client.logout().catch(() => undefined);
@@ -371,28 +371,34 @@ export function SafetyAlertsView({
   const isGlobalAdmin =
     session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null) ??
     false;
-  const safetyOfficerSiteIds = useMemo(
+  const siteIdsForCurrentTab = useMemo(
     () =>
       new Set(
         session?.user.roleAssignments.flatMap(({ role, siteId }) =>
-          ['SAFETY_OFFICER', 'CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'].includes(role) &&
-          siteId !== null
+          siteId &&
+          (['SAFETY_OFFICER', 'SITE_MANAGER'].includes(role) ||
+            (['Incidents', 'Checklists'].includes(workspaceTab) &&
+              role === 'CONTRACTOR_REPRESENTATIVE'))
             ? [siteId]
             : [],
         ) ?? [],
       ),
-    [session],
+    [session, workspaceTab],
   );
   const visibleSites = useMemo(
     () =>
-      sites.data?.items.filter((site) => isGlobalAdmin || safetyOfficerSiteIds.has(site.id)) ?? [],
-    [isGlobalAdmin, safetyOfficerSiteIds, sites.data?.items],
+      sites.data?.items.filter((site) => isGlobalAdmin || siteIdsForCurrentTab.has(site.id)) ?? [],
+    [isGlobalAdmin, siteIdsForCurrentTab, sites.data?.items],
   );
 
   const selectedSiteId = visibleSites.some((site) => site.id === requestedSiteId)
     ? requestedSiteId
     : (visibleSites[0]?.id ?? '');
 
+  const canReviewSafety =
+    session?.user.roleAssignments.some(
+      (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
+    ) ?? false;
   const canAlerts =
     isGlobalAdmin ||
     session?.user.roleAssignments.some(
@@ -401,7 +407,9 @@ export function SafetyAlertsView({
   const canTasks =
     isGlobalAdmin ||
     session?.user.roleAssignments.some(
-      (r) => ['SAFETY_OFFICER', 'SITE_MANAGER'].includes(r.role) && r.siteId === selectedSiteId,
+      (r) =>
+        ['SAFETY_OFFICER', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r.role) &&
+        r.siteId === selectedSiteId,
     );
   const alerts = useQuery({
     queryKey: [
@@ -1014,7 +1022,7 @@ export function SafetyAlertsView({
                     {tr('common.evidence_amp_sources')}
                   </h3>
                   <div
-                    className={`mt-2 space-y-2 ${safetyOfficerSiteIds.has(selectedSiteId) ? '' : 'max-h-80 overflow-auto'}`}
+                    className={`mt-2 space-y-2 ${canReviewSafety ? '' : 'max-h-80 overflow-auto'}`}
                   >
                     {detail.data.detections.map((detection) => (
                       <div
@@ -1051,7 +1059,7 @@ export function SafetyAlertsView({
                           siteId={selectedSiteId}
                           alertId={detail.data.id}
                           detection={detection}
-                          canReviewIdentity={safetyOfficerSiteIds.has(selectedSiteId)}
+                          canReviewIdentity={canReviewSafety}
                         />
                       </div>
                     ))}

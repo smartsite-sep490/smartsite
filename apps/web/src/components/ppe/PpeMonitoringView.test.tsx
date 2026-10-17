@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, act } from '@testing-library/react';
+import i18n from '../../i18n';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -67,11 +68,40 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
     state.preview = mockPreview(mockDetection(7));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
     queryClient.clear();
     vi.restoreAllMocks();
     state.preview = null;
+    await i18n.changeLanguage('en');
+  });
+
+  it('updates camera context, AI labels and an open review when switching languages on the same frame', async () => {
+    await i18n.changeLanguage('en');
+    const detection = { ...mockDetection(7), regionId: 'qa-zone' };
+    state.preview = mockPreview(detection);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Review Alert' }));
+    expect(document.body.textContent).toContain('Region qa-zone');
+    expect(document.body.textContent).toContain('Track #7');
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(document.body.textContent).toContain('Vùng quan sát qa-zone');
+    expect(document.body.textContent).toContain('Đối tượng #7');
+    expect(document.body.textContent).toContain('Thiếu mũ bảo hộ');
+    expect(document.body.textContent).not.toContain('Region qa-zone');
+    expect(document.body.textContent).not.toContain('Track #7');
+    expect(document.body.textContent).not.toContain('Missing Hard Hat');
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+    expect(document.body.textContent).toContain('Region qa-zone');
+    expect(screen.getByRole('heading', { name: 'Violation Review' })).toBeTruthy();
   });
 
   it('renders "View in Safety Alerts" action and navigates to incidents with PPE_VIOLATION context', async () => {

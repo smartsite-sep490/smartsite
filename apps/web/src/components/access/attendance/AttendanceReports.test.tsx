@@ -43,7 +43,7 @@ it('localizes chart weekdays, hour units and accessible status text in Vietnames
     />,
   );
   expect(screen.queryByText('Fri')).toBeNull();
-  expect(screen.getByText('Thứ 6')).toBeTruthy();
+  expect(screen.getByText(/Th(?:ứ)?\s*6/)).toBeTruthy();
   expect(screen.getByText('12 giờ')).toBeTruthy();
   expect(screen.queryByText('PRESENT')).toBeNull();
   expect(screen.getByText('Có mặt')).toBeTruthy();

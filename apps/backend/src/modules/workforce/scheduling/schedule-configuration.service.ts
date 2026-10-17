@@ -209,14 +209,9 @@ export class ScheduleConfigurationService {
     worker: WorkerEntity,
     shiftId: string,
   ): Promise<void> {
-    this.assertPasswordChanged(user);
-    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId)) this.forbidden();
+    this.assertScheduleWriter(user, siteId);
     if (!worker.contractorId) this.forbidden();
 
-    const representative = await manager
-      .getRepository(ContractorRepresentativeAssignmentEntity)
-      .findOneBy({ siteId, contractorId: worker.contractorId, userId: user.id });
-    if (!representative) this.forbidden();
     if (!(await hasActiveContractorParticipation(manager, worker.contractorId, siteId)))
       this.forbidden();
 
@@ -357,8 +352,7 @@ export class ScheduleConfigurationService {
     input: CreateWorkerScheduleDto,
   ): Promise<WorkerScheduleEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    this.assertPasswordChanged(user);
-    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)) this.forbidden();
+    this.assertScheduleWriter(user, scopedSiteId);
     const scopedScheduleVersionId = uuid(scheduleVersionId);
     const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {

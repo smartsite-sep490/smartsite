@@ -1,3 +1,4 @@
+import { participateContractor } from '../support/contractor-participation.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -64,6 +65,9 @@ test('manager overview: generated codes, Site isolation, current roster and date
   ]);
   assert.equal(new Set(contractors.map((c) => c.code)).size, 3);
   contractors.forEach((c) => assert.match(c.code, /^CTR-[0-9A-F-]{36}$/));
+  await Promise.all(
+    contractors.map((c, i) => participateContractor(source, i === 2 ? other.id : site.id, c.id)),
+  );
   const contractor = contractors[0]!;
   const zoneInput = {
     name: 'Area',

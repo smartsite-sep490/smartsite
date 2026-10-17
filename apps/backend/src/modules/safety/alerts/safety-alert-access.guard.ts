@@ -11,6 +11,7 @@ import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 
 interface SiteScopedRequest extends AuthenticatedRequest {
   params?: { siteId?: string };
+  method?: string;
 }
 
 @Injectable()
@@ -29,7 +30,9 @@ export class SafetyAlertAccessGuard implements CanActivate {
     const normalizedSiteId = siteId?.toLowerCase();
     const allowed = user.roleAssignments.some(
       ({ role, siteId: assignedSiteId }) =>
-        (role === UserRole.ADMIN && assignedSiteId === null) ||
+        (['GET', 'HEAD'].includes(request.method ?? '') &&
+          role === UserRole.ADMIN &&
+          assignedSiteId === null) ||
         (role === UserRole.SAFETY_OFFICER &&
           assignedSiteId !== null &&
           normalizedSiteId !== undefined &&

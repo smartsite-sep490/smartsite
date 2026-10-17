@@ -62,6 +62,7 @@ test('QR commands reject fabricated authorization, subject IDs, invalid counts a
     visitorName: 'Synthetic visitor',
     company: '',
     contact: 'synthetic@example.test',
+    email: 'synthetic@example.test',
     hostName: 'Synthetic host',
     purpose: 'Synthetic tour',
     targetArea: 'Office',

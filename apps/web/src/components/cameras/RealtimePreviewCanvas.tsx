@@ -1,4 +1,4 @@
-import { localizedLabel } from '../../i18n/labels';
+import { localizedDetectionLabel } from '../../i18n/labels';
 import { translate as tr, uiLanguage } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useLayoutEffect, useRef } from 'react';
@@ -49,7 +49,7 @@ export function RealtimePreviewCanvas({
       context.strokeStyle = detection.active ? '#F66B17' : '#d6d3d1';
       context.fillStyle = context.strokeStyle;
       context.strokeRect(x, y, (box.x2 - box.x1) * frame.width, (box.y2 - box.y1) * frame.height);
-      const label = localizedLabel(detection.label) + ' · #' + detection.trackId;
+      const label = localizedDetectionLabel(detection.label) + ' · #' + detection.trackId;
       const width = Math.min(context.measureText(label).width, frame.width - 8);
       const labelX = Math.max(4, Math.min(x, frame.width - width - 4));
       context.fillText(label, labelX, Math.max(16, y - 5), frame.width - 8);

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getWorkforceTabs } from '../utils/workforce-tabs';
-import { filterContractorReviewRequests, filterManagerReviewRequests } from '../utils/WorkforceManagerReviewUtils';
+import {
+  filterContractorReviewRequests,
+  filterManagerReviewRequests,
+} from '../utils/WorkforceManagerReviewUtils';
 import { splitWorkerSwapRequests } from '../utils/WorkforceScheduleUtils';
 
 describe('WorkforceView & MF07 Workflow Logic', () => {
@@ -21,23 +24,23 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
   });
 
   // ── Scenario 3: Site Manager visibility (No Review tab for Site Manager) ───
-  it('Site Manager has no Review tab (Contractor Review is exclusive to Contractor Rep)', () => {
+  it('Site Manager has the approval workspace', () => {
     const tabs = getWorkforceTabs(['SITE_MANAGER']);
     expect(tabs.showSchedule).toBe(false);
-    expect(tabs.showReview).toBe(false);
+    expect(tabs.showReview).toBe(true);
   });
 
-  it('System Admin has no Worker schedule or Contractor Review tab', () => {
+  it('System Admin observes requests without a personal Worker schedule', () => {
     const tabs = getWorkforceTabs(['ADMIN']);
     expect(tabs.showSchedule).toBe(false);
-    expect(tabs.showReview).toBe(false);
-    expect(tabs.defaultTab).toBe('schedule');
+    expect(tabs.showReview).toBe(true);
+    expect(tabs.defaultTab).toBe('review');
   });
 
   it('Multiple roles combines visibility and prioritizes the personal Worker schedule', () => {
     const tabs1 = getWorkforceTabs(['WORKER', 'SITE_MANAGER']);
     expect(tabs1.showSchedule).toBe(true);
-    expect(tabs1.showReview).toBe(false);
+    expect(tabs1.showReview).toBe(true);
     expect(tabs1.defaultTab).toBe('schedule');
 
     const tabs2 = getWorkforceTabs(['CONTRACTOR_REPRESENTATIVE', 'WORKER']);
@@ -50,7 +53,6 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
     expect(tabs3.showReview).toBe(true);
     expect(tabs3.defaultTab).toBe('review');
   });
-
 
   // ── Scenario 4: Hard-refresh / transient session cache ─────────────────────
   it('Workforce handles hard refresh with empty roleAssignments cleanly (no auth-session cache error)', () => {
@@ -79,7 +81,10 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
       { id: 's4', status: 'REJECTED', reason: 'Rejected swap' },
     ];
 
-    const { pendingChanges, pendingSwaps } = filterContractorReviewRequests(directChanges, swapRequests);
+    const { pendingChanges, pendingSwaps } = filterContractorReviewRequests(
+      directChanges,
+      swapRequests,
+    );
 
     // 1. Direct change in PENDING_MANAGER is visible to Contractor Review
     expect(pendingChanges).toHaveLength(1);
@@ -129,20 +134,20 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
       return {
         canAccess: isAdmin || isManager || isContractorRep,
         canManageShiftsAndVersions: isManager,
-        canAssignWorker: isContractorRep,
+        canAssignWorker: isManager,
       };
     };
 
     // 1. Contractor Representative: can access and assign worker, read-only shift/version
     const repPerms = getScheduleSetupPermissions(['CONTRACTOR_REPRESENTATIVE']);
     expect(repPerms.canAccess).toBe(true);
-    expect(repPerms.canAssignWorker).toBe(true);
+    expect(repPerms.canAssignWorker).toBe(false);
     expect(repPerms.canManageShiftsAndVersions).toBe(false);
 
     // 2. Site Manager: can access, can manage shift/version, CANNOT assign workers (tab hidden)
     const managerPerms = getScheduleSetupPermissions(['SITE_MANAGER']);
     expect(managerPerms.canAccess).toBe(true);
-    expect(managerPerms.canAssignWorker).toBe(false);
+    expect(managerPerms.canAssignWorker).toBe(true);
     expect(managerPerms.canManageShiftsAndVersions).toBe(true);
 
     // 3. Admin: can view setup, but cannot manage shifts or assign workers
@@ -225,8 +230,14 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
     queryClientMock.invalidateQueries({ queryKey: ['swap-requests', siteId] });
     queryClientMock.invalidateQueries({ queryKey: ['worker-schedules', siteId] });
 
-    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['shift-change-requests', siteId] });
-    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['swap-requests', siteId] });
-    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['worker-schedules', siteId] });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['shift-change-requests', siteId],
+    });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['swap-requests', siteId],
+    });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['worker-schedules', siteId],
+    });
   });
 });

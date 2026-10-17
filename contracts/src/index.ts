@@ -24,6 +24,11 @@ export type {
   VisitorGateCommand,
   WorkerQrVerificationResponse,
   VisitorGateEventResponse,
+  VisitorMemberInput,
+  VisitorMemberResponse,
+  VisitorAttendanceInput,
+  VisitorAttendanceResponse,
+  VisitorQrPreviewResponse,
 } from './qr-access-api.js';
 
 export * from './observation-identity-management.js';

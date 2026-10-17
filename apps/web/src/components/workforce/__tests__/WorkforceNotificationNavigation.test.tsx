@@ -173,6 +173,33 @@ describe('notification request navigation', () => {
     expect(screen.queryByText('Shift Swap Approved')).toBeNull();
   });
 
+  it('lets a Site Manager observe a pending swap without approval or rejection actions', async () => {
+    user = {
+      id: 'manager-1',
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-2' }],
+    };
+    mount('review', 'pending', { ...request, status: 'PENDING_MANAGER' });
+    await screen.findByText(/Synthetic request outside first page/);
+    expect(screen.queryByRole('button', { name: 'Approve Swap' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+  });
+
+  it('does not use a representative role from another Site to approve the current Site', async () => {
+    user = {
+      id: 'manager-rep',
+      mustChangePassword: false,
+      roleAssignments: [
+        { role: 'SITE_MANAGER', siteId: 'site-2' },
+        { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-1' },
+      ],
+    };
+    mount('review', 'pending', { ...request, status: 'PENDING_MANAGER' });
+    await screen.findByText(/Synthetic request outside first page/);
+    expect(screen.queryByRole('button', { name: 'Approve Swap' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+  });
+
   it('opens the correct Site and shows an already-applied incoming swap in worker history', async () => {
     user = {
       id: 'user-b',

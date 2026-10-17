@@ -55,12 +55,14 @@ test('SafetyAlertReviewService validates the command before database access', as
 
 function contextFor(input: {
   siteId: string;
+  method?: string;
   mustChangePassword?: boolean;
   assignments: Array<{ role: UserRole; siteId: string | null }>;
 }): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => ({
+        method: input.method ?? 'GET',
         params: { siteId: input.siteId },
         user: {
           id: randomUUID(),

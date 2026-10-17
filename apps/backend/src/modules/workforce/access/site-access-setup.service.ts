@@ -15,7 +15,7 @@ import {
   ContractorZonePermissionEntity,
   WorkerZonePermissionEntity,
   ContractorSiteParticipationEntity,
-  ContractorRepresentativeGrantEntity,
+  ContractorRepresentativeAssignmentEntity,
   ContractorEntity,
   WorkerEntity,
   WorkerSiteZoneAssignmentEntity,
@@ -78,36 +78,36 @@ export class SiteAccessSetupService {
     siteId: string,
     contractorId: string,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
     if (
-      !this.isAdmin(actor) &&
       !(await manager
-        .getRepository(ContractorRepresentativeGrantEntity)
-        .existsBy({ userId: actor.id, contractorId }))
+        .getRepository(ContractorRepresentativeAssignmentEntity)
+        .existsBy({ userId: actor.id, contractorId, siteId }))
     )
       conflict('Representative does not manage this contractor');
   }
   async options(actor: WorkforceActor, siteId: string): Promise<AccessSetupResponse> {
     requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER, UserRole.CONTRACTOR_REPRESENTATIVE]);
-    const siteManager =
-      this.isAdmin(actor) ||
-      actor.roleAssignments.some((r) => r.siteId === siteId && r.role === UserRole.SITE_MANAGER);
+    const siteManager = actor.roleAssignments.some(
+      (r) => r.siteId === siteId && r.role === UserRole.SITE_MANAGER,
+    );
     let participations = await this.source
       .getRepository(ContractorSiteParticipationEntity)
       .findBy({ siteId, isActive: true });
-    if (!siteManager) {
+    if (!siteManager && !this.isAdmin(actor)) {
       const grants = await this.source
-        .getRepository(ContractorRepresentativeGrantEntity)
-        .findBy({ userId: actor.id });
+        .getRepository(ContractorRepresentativeAssignmentEntity)
+        .findBy({ userId: actor.id, siteId });
       participations = participations.filter((p) =>
         grants.some((g) => g.contractorId === p.contractorId),
       );
     }
     const contractors = await this.source.getRepository(ContractorEntity).find();
     const workers = await this.source.getRepository(WorkerEntity).findBy({ siteId });
-    const scopedWorkers = siteManager
-      ? workers
-      : workers.filter((w) => participations.some((p) => p.contractorId === w.contractorId));
+    const scopedWorkers =
+      siteManager || this.isAdmin(actor)
+        ? workers
+        : workers.filter((w) => participations.some((p) => p.contractorId === w.contractorId));
     const assignments = (
       await this.source.getRepository(WorkerSiteZoneAssignmentEntity).findBy({ siteId })
     ).filter((a) => scopedWorkers.some((w) => w.id === a.workerId));
@@ -126,11 +126,9 @@ export class SiteAccessSetupService {
       canGrantContractorZones: actor.roleAssignments.some(
         (r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId,
       ),
-      canGrantWorkerZones:
-        this.isAdmin(actor) ||
-        actor.roleAssignments.some(
-          (r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE,
-        ),
+      canGrantWorkerZones: actor.roleAssignments.some(
+        (r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE,
+      ),
       participations: participations.map((p) => ({
         id: p.id,
         contractorId: p.contractorId,
@@ -278,7 +276,7 @@ export class SiteAccessSetupService {
       );
   }
   async grantWorker(actor: WorkforceActor, siteId: string, input: GrantWorkerZoneCommand) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
     const value = command(GrantWorkerZoneCommand, input);
     return this.source.transaction(async (manager) => {
       const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).findOne({
@@ -372,6 +370,7 @@ export class SiteAccessSetupService {
       actor,
       siteId,
       kind === 'contractor' ? [UserRole.SITE_MANAGER] : [UserRole.CONTRACTOR_REPRESENTATIVE],
+      false,
     );
     if (
       kind === 'contractor' &&
@@ -384,7 +383,7 @@ export class SiteAccessSetupService {
     uuid(permissionId);
     return this.source.transaction(async (manager) => {
       if (kind === 'contractor') {
-        requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
+        requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
         const permission = await manager
           .getRepository(ContractorZonePermissionEntity)
           .findOne({ where: { id: permissionId }, lock: { mode: 'pessimistic_write' } });

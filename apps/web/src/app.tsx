@@ -1,5 +1,4 @@
 import { translate as tr } from './i18n';
-import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -17,7 +16,6 @@ import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { AccessControlView } from './components/access/AccessControlView';
 import { VisitorRegistrationView } from './components/access/visitor/VisitorRegistrationView';
-import { IconRadio, IconTrendingUp } from './components/icons';
 import {
   useAuth,
   useRestoreSession,
@@ -26,13 +24,18 @@ import {
   SessionExpiredModal,
 } from './features/auth/auth-session';
 import { LoginScreen } from './features/auth/LoginScreen';
-import { AuthErrorNotice } from './features/auth/AuthErrorNotice';
-import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
 import { RegisterScreen } from './features/auth/RegisterScreen';
+import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
 import { WorkforceView } from './components/workforce/components/WorkforceView';
 import { SiteSetupView } from './components/workforce/components/SiteSetupView';
 import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
+import { useTranslation } from 'react-i18next';
+import { AccountsView } from './features/accounts/AccountsView';
+import { AssignedWorkView } from './components/contractor/AssignedWorkView';
+import { ContractorDashboardView } from './components/contractor/ContractorDashboardView';
+import { WorkerDashboardView } from './components/dashboard/WorkerDashboardView';
 import { WorkerOnboardingView } from './components/workforce/components/WorkerOnboardingView';
+import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -50,14 +53,13 @@ interface ProtectedRoutesProps {
 }
 
 function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
-  useTranslation();
-  const navigate = useNavigate();
-
+  const { t } = useTranslation();
   const { accessToken } = useAuth();
   const currentUser = useCurrentUser(apiUrl);
   const profile = currentUser;
   const logout = useLogout(apiUrl);
   const location = useLocation();
+  const navigate = useNavigate();
   const incidentLink = new URLSearchParams(location.search);
 
   if (!accessToken) {
@@ -67,32 +69,54 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
   if (currentUser.isPending) {
     return (
       <main className="min-h-screen flex items-center justify-center" role="status">
-        {tr('common.loading_your_account')}
+        {t('auth.loadingAccount')}
       </main>
     );
   }
   if (currentUser.isError) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p role="alert">{tr('app.could_not_load_your_account')}</p>
+        <p role="alert">{t('auth.loadAccountError')}</p>
         <button type="button" onClick={() => currentUser.refetch()}>
-          {tr('common.try_again')}
+          {t('accounts.retry')}
         </button>
       </main>
     );
   }
-
-  const roles = currentUser.data?.roleAssignments.map((r) => r.role) ?? [];
-  const isManagerOnly =
-    roles.includes('SITE_MANAGER') &&
-    !roles.includes('ADMIN') &&
-    !roles.includes('CONTRACTOR_REPRESENTATIVE');
-  if (isManagerOnly && ['/access', '/workforce'].includes(location.pathname.replace(/\/$/, '')))
-    return <Navigate to="/site-setup" replace />;
+  const allowedTabs = workspaceTabs(currentUser.data?.roleAssignments ?? []);
+  const fallback = defaultWorkspace(currentUser.data?.roleAssignments ?? []);
+  if (allowedTabs.length === 0) {
+    return (
+      <main className="p-8" role="status">
+        {t('auth.noAssignedRoles')}
+        <button type="button" className="ml-4 underline" onClick={() => logout.mutate()}>
+          {t('shell.signOut')}
+        </button>
+      </main>
+    );
+  }
+  if (
+    location.pathname !== '/account/password' &&
+    !allowedTabs.includes(location.pathname.slice(1))
+  ) {
+    return <Navigate to={`/${fallback}`} replace />;
+  }
 
   return (
     <AppLayout onSelectTab={onNavigate}>
       <Routes>
+        <Route
+          path="/account/password"
+          element={
+            <ChangePasswordScreen
+              apiUrl={apiUrl}
+              onCancel={() => navigate(`/${fallback}`)}
+              onComplete={() =>
+                navigate('/login', { state: { passwordChanged: true }, replace: true })
+              }
+            />
+          }
+        />
         <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
         <Route
           path="/dashboard"
@@ -102,28 +126,28 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             ) : defaultAuthTab === 'workforce' ? (
               <Navigate to="/workforce" replace />
             ) : (
-              <DashboardView
-                apiUrl={apiUrl}
-                onNavigate={(tab, context) => onNavigate(tab, context)}
-              />
+              <DashboardView onNavigate={(tab) => onNavigate(tab)} />
             )
           }
         />
+        <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+        <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
+        <Route path="/accounts" element={<AccountsView apiUrl={apiUrl} />} />
         <Route
-          path="/account/password"
+          path="/assigned-work"
           element={
-            <ChangePasswordScreen
-              apiUrl={apiUrl}
-              onCancel={() => navigate(`/${defaultAuthTab}`)}
-              onComplete={() =>
-                navigate('/login', { state: { passwordChanged: true }, replace: true })
-              }
-            />
+            <AssignedWorkView apiUrl={apiUrl} token={accessToken} user={currentUser.data!} />
           }
         />
-        <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+        <Route
+          path="/contractor-teams"
+          element={<ContractorDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
+        />
+        <Route
+          path="/worker-summary"
+          element={<WorkerDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
+        />
         <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
-        <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
         <Route
@@ -138,7 +162,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           path="/zones"
           element={
             <RestrictedZoneView
-              authenticatedSession={profile.data ? { accessToken, user: profile.data } : undefined}
+              authenticatedSession={{ accessToken, user: currentUser.data! }}
               onSignOut={() => logout.mutate()}
               apiUrl={apiUrl}
               onNavigate={(tab, context) => onNavigate(tab, context)}
@@ -155,7 +179,6 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 onSignOut={() => logout.mutate()}
                 apiUrl={apiUrl}
                 initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
-                initialChecklistId={incidentLink.get('checklistId') ?? undefined}
                 initialIncidentId={incidentLink.get('incidentId') ?? undefined}
                 initialActionId={incidentLink.get('actionId') ?? undefined}
                 initialAlertId={alertsContext?.alertId}
@@ -164,46 +187,12 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               />
             ) : profile.isError ? (
               <div role="alert">
-                {tr('app.could_not_load_your_account')}{' '}
-                <button onClick={() => void profile.refetch()}>{tr('common.retry')}</button>
+                {t('auth.loadAccountError')}{' '}
+                <button onClick={() => void profile.refetch()}>{t('accounts.retry')}</button>
               </div>
             ) : (
-              <p role="status">{tr('common.loading_your_account_8fa5b7')}</p>
+              <p role="status">{t('auth.loadingAccount')}</p>
             )
-          }
-        />
-        <Route
-          path="/iot"
-          element={
-            <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
-                <IconRadio className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-bold text-[#041D2E]">
-                {tr('common.iot_environmental_sensors')}
-              </h2>
-              <p className="text-sm text-[#62748E] max-w-md mx-auto">
-                {tr(
-                  'app.environmental_air_quality_noise_thresholds_crane_wind_speed_and_perimeter_beams',
-                )}
-              </p>
-            </div>
-          }
-        />
-        <Route
-          path="/progress"
-          element={
-            <div className="bg-white p-8 rounded-xl border border-[#E2E8F0] shadow-xs max-w-4xl mx-auto text-center space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
-                <IconTrendingUp className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-bold text-[#041D2E]">
-                {tr('common.construction_progress_monitoring')}
-              </h2>
-              <p className="text-sm text-[#62748E] max-w-md mx-auto">
-                {tr('app.4d_bim_overlay_photogrammetry_site_scans_and_milestone_progress_tracking')}
-              </p>
-            </div>
           }
         />
         <Route path="*" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
@@ -219,8 +208,6 @@ function PublicOnlyRoute({
   children: React.ReactNode;
   defaultAuthTab: string;
 }) {
-  useTranslation();
-
   const { accessToken } = useAuth();
   if (accessToken) {
     return <Navigate to={`/${defaultAuthTab}`} replace />;
@@ -229,29 +216,14 @@ function PublicOnlyRoute({
 }
 
 export function App() {
-  useTranslation();
-
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const location = useLocation();
-  const {
-    accessToken,
-    isSessionExpired,
-    dismissSessionExpired,
-    logoutUnconfirmed,
-    passwordChanged,
-  } = useAuth();
-  const restoringSession = useRestoreSession(apiUrl);
-  const isRestoringSession = restoringSession.isLoading;
+  const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
+  const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
   const currentUserQuery = useCurrentUser(apiUrl);
   const currentUser = currentUserQuery.data;
 
-  const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isWorkerOnly =
-    roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
-  const safetyDefault =
-    roles.includes('SAFETY_OFFICER') &&
-    !roles.some((r) => ['ADMIN', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r));
-  const defaultAuthTab = safetyDefault ? 'incidents' : isWorkerOnly ? 'workforce' : 'dashboard';
+  const defaultAuthTab = defaultWorkspace(currentUser?.roleAssignments ?? []);
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check
@@ -279,25 +251,6 @@ export function App() {
     );
   }
 
-  if (restoringSession.isError && !accessToken) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <section className="max-w-md space-y-4 rounded-xl border bg-white p-6">
-          <h1 className="font-bold">{tr('auth.session.restore')}</h1>
-          <AuthErrorNotice error={restoringSession.error} />
-          <button
-            type="button"
-            disabled={restoringSession.isFetching}
-            onClick={() => void restoringSession.refetch()}
-            className="rounded-lg bg-[#071A2B] text-white px-4 py-2"
-          >
-            {tr('common.retry')}
-          </button>
-        </section>
-      </main>
-    );
-  }
-
   if (accessToken && currentUserQuery.isError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
@@ -305,19 +258,15 @@ export function App() {
           role="alert"
           className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
         >
-          <h1 className="text-lg font-bold text-slate-900">
-            {tr('app.could_not_load_your_account_03c0b0')}
-          </h1>
-          <p className="text-sm text-slate-600">
-            {tr('app.your_permissions_could_not_be_loaded_please_try_again')}
-          </p>
+          <h1 className="text-lg font-bold text-slate-900">{t('auth.loadAccountError')}</h1>
+          <p className="text-sm text-slate-600">{t('auth.loadAccountErrorDesc')}</p>
           <button
             type="button"
             disabled={currentUserQuery.isFetching}
             onClick={() => void currentUserQuery.refetch()}
             className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-blue-600"
           >
-            {tr('common.retry')}
+            {t('accounts.retry')}
           </button>
         </div>
       </div>
@@ -347,13 +296,6 @@ export function App() {
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
               <LoginScreen
-                notice={
-                  logoutUnconfirmed
-                    ? tr('auth.session.logoutWarning')
-                    : passwordChanged || location.state?.passwordChanged
-                      ? tr('auth.password.success')
-                      : undefined
-                }
                 onBack={() => navigate('/')}
                 onNavigateToRegister={() => navigate('/register')}
               />

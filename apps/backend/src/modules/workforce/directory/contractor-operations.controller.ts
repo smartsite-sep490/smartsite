@@ -1,4 +1,3 @@
-import { SiteManagerGuard } from '../../auth/site-manager.guard.js';
 import { Body, Controller, Logger, Param, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -14,7 +13,7 @@ import {
 } from '@nestjs/swagger';
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
-import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
 import {
   ContractorOperationsService,
   CreateContractorCommand,
@@ -40,7 +39,7 @@ export class ContractorOperationsController {
   constructor(private readonly contractors: ContractorOperationsService) {}
 
   @Post()
-  @UseGuards(SiteManagerGuard)
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async create(@Req() request: AuthenticatedRequest, @Body() input: CreateContractorCommand) {
     const contractor = await this.contractors.createContractor(request.user!, input);
@@ -53,7 +52,6 @@ export class ContractorOperationsController {
   }
 
   @Post(':contractorId/participations')
-  @UseGuards(SiteManagerGuard)
   @ApiCreatedResponse()
   async createParticipation(
     @Req() request: AuthenticatedRequest,
@@ -76,7 +74,7 @@ export class ContractorOperationsController {
   }
 
   @Post(':contractorId/representative-grants')
-  @UseGuards(SiteManagerGuard)
+  @UseGuards(AdminGuard)
   @ApiCreatedResponse()
   async grantRepresentative(
     @Req() request: AuthenticatedRequest,

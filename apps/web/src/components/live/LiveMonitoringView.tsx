@@ -91,7 +91,11 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
         return tr('common.person');
       },
       key: 'person',
-      render: (item) => <span className="font-semibold text-[#2F3437]">{item.person}</span>,
+      render: (item) => (
+        <span data-authored-content className="font-semibold text-[#2F3437]">
+          {item.person}
+        </span>
+      ),
     },
     {
       get header() {
@@ -157,7 +161,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
       <div className="w-full">
         <CameraFeed
           cameraId="CAM-04"
-          zoneName="CRANE OPERATION AREA"
+          zoneName={tr('common.crane_operation_area')}
           imageUrl="/assets/crane-camera-view.png"
         >
           {/* Zone Polygon */}
@@ -191,7 +195,7 @@ export function LiveMonitoringView({ onNavigate }: LiveMonitoringViewProps) {
       {/* Combined Active Events Table */}
       <EventsTable
         title={tr('common.active_safety_detections')}
-        subtitle="Combined feed of PPE and Zone events across the site."
+        subtitle={tr('live_monitoring_view.combined_feed')}
         data={events}
         columns={columns}
         keyExtractor={(item) => item.id}

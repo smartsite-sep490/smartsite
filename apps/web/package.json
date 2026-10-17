@@ -19,6 +19,7 @@
     "@smartsite/contracts": "workspace:*",
     "@tanstack/react-query": "5.103.1",
     "date-fns": "4.4.0",
+    "exceljs": "4.4.0",
     "gsap": "3.15.0",
     "i18next": "26.4.4",
     "i18next-browser-languagedetector": "8.2.1",

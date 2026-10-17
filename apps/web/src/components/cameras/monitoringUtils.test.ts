@@ -391,5 +391,15 @@ describe('monitoringUtils', () => {
       expect(violationsOnly.length).toBe(1);
       expect(violationsOnly[0]?.trackId).toBe(10);
     });
+
+    it('keeps the same active events when their display text changes language', () => {
+      for (const result of ['Technical entry', 'Lượt vào được quan sát']) {
+        const events = [
+          { id: 'active', trackId: 10, zone: 'qa-region', result, active: true },
+          { id: 'inactive', trackId: 20, zone: 'qa-region', result: 'Zone entry', active: false },
+        ];
+        expect(filterZoneEvents(events, { activeOnly: true }).map((e) => e.id)).toEqual(['active']);
+      }
+    });
   });
 });
