@@ -1,5 +1,9 @@
 # Owner ERD baseline
 
+For the current proposed naming integration and its open approval/test gates,
+see the [18 October integration handoff](tuan-db-erd-handoff.md). The checkpoint
+observations below remain historical; preserve this baseline during integration.
+
 `ERD-Logical.dbml` preserves the owner's supplied ERD semantics. The original
 Downloads file is untouched. This repository copy normalizes CRLF to LF under
 `.gitattributes` and removes trailing spaces from two empty `//` comment lines
