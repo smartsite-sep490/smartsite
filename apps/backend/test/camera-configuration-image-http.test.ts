@@ -11,7 +11,8 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AuthService } from '../src/modules/auth/auth.service.js';
-import { AdminGuard, UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
+import { UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
+import { SiteConfigurationGuard } from '../src/modules/auth/site-configuration.guard.js';
 import { CameraConfigurationService } from '../src/modules/cameras/camera-configuration.service.js';
 import { CameraConfigurationImageService } from '../src/modules/cameras/camera-configuration-image.service.js';
 import { HttpExceptionFilter } from '../src/common/http/http-exception.filter.js';
@@ -25,12 +26,13 @@ const jpeg = Buffer.from([
   255, 216, 255, 192, 0, 17, 8, 0, 80, 0, 120, 3, 1, 17, 0, 2, 17, 0, 3, 17, 0, 255, 217,
 ]);
 
-test('configuration-image HTTP uses real auth/Admin/throttle guards and rejects source substitution before upstream', async (t) => {
+test('configuration-image HTTP uses real auth/Site/throttle guards and rejects source substitution before upstream', async (t) => {
   const { CameraConfigurationImageController } = await import(
     new URL('../src/modules/cameras/camera-configuration-image.controller.js', import.meta.url).href
   );
   let sourceReads = 0;
   let role = 'ADMIN';
+  let assignedSite = siteId;
   let mustChangePassword = false;
   const source = createServer((request, response) => {
     sourceReads++;
@@ -70,7 +72,7 @@ test('configuration-image HTTP uses real auth/Admin/throttle guards and rejects 
     providers: [
       CameraConfigurationImageService,
       UserAuthGuard,
-      AdminGuard,
+      SiteConfigurationGuard,
       { provide: APP_GUARD, useClass: ThrottlerGuard },
       {
         provide: ConfigService,
@@ -87,7 +89,7 @@ test('configuration-image HTTP uses real auth/Admin/throttle guards and rejects 
               user: {
                 isActive: true,
                 mustChangePassword,
-                roleAssignments: [{ role, siteId: role === 'ADMIN' ? null : siteId }],
+                roleAssignments: [{ role, siteId: role === 'ADMIN' ? null : assignedSite }],
               },
             };
           },
@@ -125,8 +127,12 @@ test('configuration-image HTTP uses real auth/Admin/throttle guards and rejects 
     (await fetch(path, { headers: { Authorization: 'Bearer bad.session.signature' } })).status,
     401,
   );
+  for (role of ['WORKER', 'SECURITY_OFFICER', 'CONTRACTOR_REPRESENTATIVE'])
+    assert.equal((await fetch(path, { headers })).status, 403);
+  assignedSite = otherId;
   for (role of ['SAFETY_OFFICER', 'SITE_MANAGER'])
     assert.equal((await fetch(path, { headers })).status, 403);
+  assignedSite = siteId;
   role = 'ADMIN';
   mustChangePassword = true;
   assert.equal((await fetch(path, { headers })).status, 403);
@@ -135,19 +141,21 @@ test('configuration-image HTTP uses real auth/Admin/throttle guards and rejects 
   assert.equal((await fetch(path.replace(siteId, otherId), { headers })).status, 404);
   assert.equal((await fetch(path.replace(cameraId, 'invalid-id'), { headers })).status, 400);
   assert.equal(sourceReads, 0);
-  const response = await fetch(path, { headers });
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get('cache-control'), 'no-store');
-  assert.equal(response.headers.get('x-request-id'), headers['X-Request-Id']);
-  const image = await response.json();
-  assert.equal(image.configurationVersion, 4);
-  assert.equal(image.frame.imageSha256, createHash('sha256').update(jpeg).digest('hex'));
-  assert.equal(sourceReads, 1);
-  assert.equal(JSON.stringify(image).includes('smartsite_local_dev_service_token_only'), false);
+  for (role of ['ADMIN', 'SITE_MANAGER', 'SAFETY_OFFICER']) {
+    const response = await fetch(path, { headers });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(response.headers.get('x-request-id'), headers['X-Request-Id']);
+    const image = await response.json();
+    assert.equal(image.configurationVersion, 4);
+    assert.equal(image.frame.imageSha256, createHash('sha256').update(jpeg).digest('hex'));
+    assert.equal(JSON.stringify(image).includes('smartsite_local_dev_service_token_only'), false);
+  }
+  assert.equal(sourceReads, 3);
   // This fixture bucket verifies the actual global guard, not capacity or production limits.
   const statuses = [];
   for (let i = 0; i < 100; i++)
     statuses.push((await fetch(path + '?forbidden=1', { headers })).status);
   assert.ok(statuses.includes(429));
-  assert.equal(sourceReads, 1);
+  assert.equal(sourceReads, 3);
 });

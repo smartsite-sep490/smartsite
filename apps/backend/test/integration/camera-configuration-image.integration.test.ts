@@ -145,11 +145,40 @@ test('full AppModule configuration image works before any Region and withholds p
     );
     assert.equal(siteResponse.status, 201);
     const site = (await siteResponse.json()) as { id: string };
+    const cameraCommand = {
+      code: `CFG-${suffix}`,
+      name: 'Synthetic source without Region',
+      externalId,
+    };
+    const adminCameraResponse = await request(
+      'POST',
+      `/sites/${site.id}/cameras`,
+      cameraCommand,
+      session.accessToken,
+    );
+    assert.equal(adminCameraResponse.status, 403);
+    const managerUsername = `configuration-manager-${suffix}`;
+    await new UsersService(
+      database.dataSource,
+      new SiteConfigurationService(database.dataSource),
+    ).create({
+      username: managerUsername,
+      displayName: 'Synthetic configuration Manager',
+      temporaryPassword: password,
+      roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
+    });
+    const managerLogin = await request('POST', '/auth/login', {
+      username: managerUsername,
+      password,
+      clientType: 'MOBILE',
+    });
+    assert.equal(managerLogin.status, 200);
+    const managerSession = (await managerLogin.json()) as { accessToken: string };
     const cameraResponse = await request(
       'POST',
       `/sites/${site.id}/cameras`,
-      { code: `CFG-${suffix}`, name: 'Synthetic source without Region', externalId },
-      session.accessToken,
+      cameraCommand,
+      managerSession.accessToken,
     );
     assert.equal(cameraResponse.status, 201);
     const camera = (await cameraResponse.json()) as { id: string; configurationVersion: number };

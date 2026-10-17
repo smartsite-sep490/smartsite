@@ -78,10 +78,10 @@ before(async () => {
 after(async () => {
   await database.dispose();
 });
-async function fixture(role = 'ADMIN') {
+async function fixture(role = 'CONTRACTOR_REPRESENTATIVE') {
   assert.ok(WriterClass, 'Retained-main assignment command writer is not implemented');
-  const actorUserId = randomUUID(),
-    siteId = randomUUID(),
+  const actorUserId: string = randomUUID();
+  const siteId = randomUUID(),
     contractorId = randomUUID(),
     participationId = randomUUID(),
     workerId = randomUUID(),
@@ -121,6 +121,7 @@ async function fixture(role = 'ADMIN') {
   );
   return {
     actorUserId,
+    actors: { [role]: actorUserId } as Record<string, string>,
     siteId,
     contractorId,
     participationId,
@@ -163,17 +164,30 @@ async function version(f: Fixture) {
     .access_policy_version;
 }
 async function asRole(f: Fixture, role: string) {
-  await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
-    f.actorUserId,
-    role,
-    role === 'ADMIN' ? null : f.siteId,
-  ]);
+  if (!f.actors[role]) {
+    const actor = randomUUID();
+    await db.query(
+      "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic separate actor','not-a-runtime-password',false)",
+      [actor],
+    );
+    await db.query(
+      'INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), actor, role, role === 'ADMIN' ? null : f.siteId],
+    );
+    if (role === 'CONTRACTOR_REPRESENTATIVE')
+      await db.query(
+        'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+        [randomUUID(), actor, f.contractorId],
+      );
+    f.actors[role] = actor;
+  }
+  f.actorUserId = f.actors[role]!;
 }
 async function pending(f: Fixture) {
   const roles = await db.query('SELECT role FROM user_role_assignment WHERE user_id=$1', [
     f.actorUserId,
   ]);
-  await asRole(f, 'ADMIN');
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
   const r = await f.service.request(input(f));
   await asRole(f, roles[0].role);
   return r;
@@ -203,7 +217,7 @@ test('request preserves PENDING version1, exact participation scope, requester a
     [['ASSIGNMENT', true]],
   );
 });
-for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
+for (const role of ['ADMIN', 'SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
   test(`assignment request rejects ${role} without Contractor Representative ownership`, async () => {
     const f = await fixture(role);
     await assert.rejects(f.service.request(input(f)), status(403));
@@ -279,7 +293,9 @@ test('Site Manager may approve PENDING directly; optional expectedVersion and tr
 test('reviewed assignment decision honors expectedVersion and refuses a stale editor', async () => {
   const f = await fixture(),
     r = await f.service.request(input(f));
+  await asRole(f, 'SAFETY_OFFICER');
   await f.service.safetyReview(scoped(f, r));
+  await asRole(f, 'SITE_MANAGER');
   await assert.rejects(
     f.service.decision({ ...scoped(f, r), approve: true, expectedVersion: 1 }),
     status(409),
@@ -298,6 +314,7 @@ for (const mutation of [
   test(`approval rejects ${mutation} without policy/audit mutation`, async () => {
     const f = await fixture(),
       r = await f.service.request(input(f));
+    await asRole(f, 'SITE_MANAGER');
     if (mutation === 'inactive-worker')
       await db.query('UPDATE worker SET is_active=false WHERE id=$1', [f.workerId]);
     if (mutation === 'inactive-participation')
@@ -322,6 +339,7 @@ for (const mutation of [
 test('rejection remains possible when Worker eligibility has changed', async () => {
   const f = await fixture(),
     r = await f.service.request(input(f));
+  await asRole(f, 'SITE_MANAGER');
   await db.query('UPDATE worker SET is_active=false WHERE id=$1', [f.workerId]);
   const d = await f.service.decision({
     ...scoped(f, r),
@@ -340,10 +358,30 @@ test('review and decision retain separate Site roles and scoped assignment owner
   await asRole(f, 'SAFETY_OFFICER');
   await assert.rejects(f.service.decision({ ...scoped(f, r), approve: true }), status(403));
 });
+
+for (const role of ['SAFETY_OFFICER', 'SITE_MANAGER'])
+  test(`requester cannot self-review after acquiring ${role}`, async () => {
+    const f = await fixture(),
+      r = await f.service.request(input(f));
+    await db.query(
+      'INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), f.actorUserId, role, f.siteId],
+    );
+    const command = scoped(f, r);
+    await assert.rejects(
+      role === 'SAFETY_OFFICER'
+        ? f.service.safetyReview(command)
+        : f.service.decision({ ...command, approve: true }),
+      status(403),
+    );
+    assert.equal((await audits(f)).length, 1);
+    assert.equal(await version(f), 1);
+  });
 test('versioned revoke retains first timestamp/note/actor and exact retry creates no duplicate audit', async () => {
   const f = await fixture(),
-    r = await f.service.request(input(f)),
-    d = await f.service.decision({ ...scoped(f, r), approve: true }),
+    r = await f.service.request(input(f));
+  await asRole(f, 'SITE_MANAGER');
+  const d = await f.service.decision({ ...scoped(f, r), approve: true }),
     value = {
       ...scoped(f, r),
       expectedVersion: d.assignment.version,
@@ -365,6 +403,7 @@ test('versioned revoke retains first timestamp/note/actor and exact retry create
 test('revoke refuses PENDING, wrong expectedVersion and wrong role', async () => {
   const f = await fixture(),
     r = await f.service.request(input(f));
+  await asRole(f, 'SITE_MANAGER');
   await assert.rejects(
     f.service.revoke({ ...scoped(f, r), expectedVersion: 1, reviewNote: 'No' }),
     status(409),
@@ -384,8 +423,10 @@ test('same command replays its original response after later review and source d
   const f = await fixture(),
     value = input(f),
     r = await f.service.request(value);
+  await asRole(f, 'SITE_MANAGER');
   await f.service.decision({ ...scoped(f, r), approve: true });
   await db.query('DELETE FROM worker_site_zone_assignment WHERE id=$1', [r.assignment.id]);
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
   const replay = await f.service.request(value);
   assert.equal(replay.replayed, true);
   assert.deepEqual(replay.assignment, r.assignment);
@@ -419,11 +460,12 @@ test('concurrent same command requests create one assignment and one audit', asy
 });
 test('concurrent different decisions have one version winner and no extra Site increment', async () => {
   const f = await fixture(),
-    r = await f.service.request(input(f)),
-    results = await Promise.allSettled([
-      f.service.decision({ ...scoped(f, r), expectedVersion: 1, approve: true }),
-      f.service.decision({ ...scoped(f, r), expectedVersion: 1, approve: false }),
-    ]);
+    r = await f.service.request(input(f));
+  await asRole(f, 'SITE_MANAGER');
+  const results = await Promise.allSettled([
+    f.service.decision({ ...scoped(f, r), expectedVersion: 1, approve: true }),
+    f.service.decision({ ...scoped(f, r), expectedVersion: 1, approve: false }),
+  ]);
   assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
   assert.equal(results.filter((r) => r.status === 'rejected' && status(409)(r.reason)).length, 1);
   assert.equal(await version(f), 2);
@@ -445,13 +487,17 @@ test('command reuse with changed body conflicts and strict inputs reject invente
 });
 test('audit failure rolls back assignment approval, Site version, command and facts', async () => {
   const f = await fixture(),
-    r = await f.service.request(input(f)),
-    value = { ...scoped(f, r), approve: true };
+    r = await f.service.request(input(f));
+  await asRole(f, 'SITE_MANAGER');
+  const value = { ...scoped(f, r), approve: true };
   await db.query(
     `CREATE FUNCTION test_assignment_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.site_id='${f.siteId}'::uuid AND NEW.action='WORKER_ASSIGNMENT_REVIEWED' THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END $$;CREATE TRIGGER test_assignment_audit_failure BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION test_assignment_audit_failure()`,
   );
   try {
-    await assert.rejects(f.service.decision(value));
+    await assert.rejects(
+      f.service.decision(value),
+      (error: unknown) => (error as Error).message === 'synthetic audit failure',
+    );
     assert.equal(
       (
         await db.query('SELECT status,version FROM worker_site_zone_assignment WHERE id=$1', [
@@ -461,6 +507,15 @@ test('audit failure rolls back assignment approval, Site version, command and fa
       'PENDING',
     );
     assert.equal(await version(f), 1);
+    assert.equal((await audits(f)).length, 1);
+    assert.equal(
+      (
+        await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE command_id=$1', [
+          value.commandId,
+        ])
+      )[0].n,
+      0,
+    );
     assert.equal(
       (
         await db.query(
