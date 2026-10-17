@@ -224,7 +224,7 @@ describe('MF03 interactive UI', () => {
       const card = within(await screen.findByRole('region', { name: 'Submitted request' }));
       await card.findByText('Pending approval');
       expect(screen.queryByRole('button', { name: 'Submit request' })).toBeNull();
-      expect(card.getByText(/Waiting for your Site Manager/)).toBeTruthy();
+      expect(card.getByText(/Waiting for your Contractor Representative/)).toBeTruthy();
       expect(api.requestAttendanceTime).toHaveBeenCalledTimes(1);
       status = result;
       await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
@@ -452,7 +452,7 @@ describe('MF03 interactive UI', () => {
     expect(
       (
         screen.getByRole('button', {
-          name: 'Send to Site Manager',
+          name: 'Send to Contractor Representative',
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -461,7 +461,9 @@ describe('MF03 interactive UI', () => {
     fireEvent.change(screen.getByLabelText('Reason'), {
       target: { value: 'Actual entry confirmed' },
     });
-    await userEvent.click(screen.getByRole('button', { name: 'Send to Site Manager' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Send to Contractor Representative' }),
+    );
     await waitFor(() =>
       expect(api.requestAttendanceCorrection).toHaveBeenCalledWith(
         'synthetic-token',
@@ -593,7 +595,9 @@ describe('MF03 interactive UI', () => {
     });
     fireEvent.change(screen.getByLabelText('Proposed out minute'), { target: { value: '00' } });
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Correct late start' } });
-    await userEvent.click(screen.getByRole('button', { name: 'Send to Site Manager' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Send to Contractor Representative' }),
+    );
     await screen.findByText('Awaiting confirmation');
     await screen.findByText('No confirmed hours in this range.');
     expect(api.requestAttendanceCorrection).toHaveBeenCalledWith(

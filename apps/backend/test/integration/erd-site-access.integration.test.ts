@@ -354,7 +354,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
         { approve: true, reviewNote: 'Self review denied' },
       ),
     );
-    await attendance.reviewCorrection(manager, siteId, correction.id, {
+    await attendance.reviewCorrection(rep, siteId, correction.id, {
       approve: true,
     });
     const updatedSession = await dataSource
@@ -369,16 +369,14 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       .getRepository(AttendanceSessionEntity)
       .update(closed.id, { version: updatedSession.version + 1 });
     await assert.rejects(
-      attendance.reviewCorrection(manager, siteId, stale.id, {
+      attendance.reviewCorrection(rep, siteId, stale.id, {
         approve: true,
         reviewNote: 'Stale version denied',
       }),
       /changed/,
     );
-    await assert.rejects(
-      attendance.reviewCorrection(manager, siteId, stale.id, { approve: false }),
-    );
-    await attendance.reviewCorrection(manager, siteId, stale.id, {
+    await assert.rejects(attendance.reviewCorrection(rep, siteId, stale.id, { approve: false }));
+    await attendance.reviewCorrection(rep, siteId, stale.id, {
       approve: false,
       reviewNote: 'Recorded times changed',
     });
@@ -388,7 +386,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       requestId: randomUUID(),
       expectedSessionVersion: updatedSession.version + 1,
     });
-    await attendance.reviewCorrection(manager, siteId, resubmission.id, {
+    await attendance.reviewCorrection(rep, siteId, resubmission.id, {
       approve: false,
       reviewNote: 'No further change needed',
     });

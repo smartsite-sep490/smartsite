@@ -102,7 +102,7 @@ test('non-Security actors cannot scan faces/QR, open fallback, or confirm gate p
   );
 });
 
-test('Admin cannot grant operational permissions or approve attendance corrections; representative cannot review attendance', async () => {
+test('Admin cannot grant operational permissions; attendance corrections require a representative role', async () => {
   const source = undefined as unknown as DataSource;
   const user = actor(UserRole.ADMIN);
   await assert.rejects(
@@ -120,11 +120,7 @@ test('Admin cannot grant operational permissions or approve attendance correctio
     new SiteAccessSetupService(source).grantContractor(user, site, {} as never),
     denied,
   );
-  for (const role of [
-    UserRole.ADMIN,
-    UserRole.CONTRACTOR_REPRESENTATIVE,
-    UserRole.SECURITY_OFFICER,
-  ]) {
+  for (const role of [UserRole.ADMIN, UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER]) {
     await assert.rejects(
       new AttendanceService(source).reviewCorrection(actor(role), site, randomUUID(), {
         approve: true,

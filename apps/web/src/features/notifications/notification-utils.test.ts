@@ -12,6 +12,20 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it('identifies the worker missing checkout in both languages without translating their name', async () => {
+    const item = {
+      event: 'MISSING_CHECKOUT' as const,
+      message:
+        'Worker Nguyễn An (W000001) is missing checkout for the shift on 2026-10-16. The shift ended more than five minutes ago. Hours remain provisional.',
+    };
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      'Công nhân Nguyễn An (W000001) thiếu lượt check-out cho ca ngày 2026-10-16. Ca đã kết thúc hơn năm phút. Giờ làm hiện là tạm tính.',
+    );
+    await i18n.changeLanguage('en');
+    expect(formatNotificationDisplayMessage(item)).toBe(item.message);
+  });
+
   it('translates the exit-policy reminder from the server and preserves configured limits', async () => {
     const item = {
       event: 'EARLY_EXIT' as const,
