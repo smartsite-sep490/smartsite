@@ -142,16 +142,16 @@ test(
       body: { currentPassword: 'InitialAdmin123!', newPassword: 'ChangedAdmin123!' },
     });
     admin = await login('business-admin', 'ChangedAdmin123!');
-    const create = <T>(route: string, body: unknown) =>
-      request<T>(route, { method: 'POST', token: admin, body, expected: 201 });
+    const create = <T>(route: string, body: unknown, token = admin) =>
+      request<T>(route, { method: 'POST', token, body, expected: 201 });
     const site = await create<SiteResponse>('/sites', { code: 'BIZ-A', name: 'Synthetic Site A' });
     const other = await create<SiteResponse>('/sites', { code: 'BIZ-B', name: 'Synthetic Site B' });
     const [{ id: adminId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
       'business-admin',
     ]);
     await db.query(
-      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-      [randomUUID(), adminId, site.id],
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3),($4,$2,'SITE_MANAGER',$5)",
+      [randomUUID(), adminId, site.id, randomUUID(), other.id],
     );
     const reviewer = await create<AccountResponse>('/users', {
       username: 'business-safety',
@@ -167,14 +167,40 @@ test(
       body: { currentPassword: 'InitialSafety123!', newPassword: 'ChangedSafety123!' },
     });
     safety = await login('business-safety', 'ChangedSafety123!');
-    const worker = await create<WorkerResponse>(`/sites/${site.id}/workers`, {
-      externalId: 'SYNTHETIC-A',
-      displayName: 'Synthetic Worker A',
+    // Separate account bootstrap from the business journey without weakening the fixed login throttle.
+    await app!.close();
+    app = undefined;
+    if (!db.isInitialized) await db.initialize();
+    base = await startApp();
+    const contractor = await create<{ id: string }>(`/sites/${site.id}/contractors`, {
+      code: 'SYNTHETIC-BIZ-CTR',
+      name: 'Synthetic business Contractor',
     });
-    const foreignWorker = await create<WorkerResponse>(`/sites/${other.id}/workers`, {
-      externalId: 'SYNTHETIC-B',
-      displayName: 'Synthetic Worker B',
-    });
+    const createProfile = async (target: SiteResponse, label: string) => {
+      await create(`/contractors/${contractor.id}/participations`, {
+        siteId: target.id,
+        validFrom: '2020-01-01T00:00:00Z',
+        validUntil: null,
+      });
+      const username = `business-rep-${label}`;
+      await create(`/sites/${target.id}/contractors/${contractor.id}/representative-accounts`, {
+        username,
+        displayName: 'Synthetic business Representative',
+        temporaryPassword: 'SyntheticRep123!',
+      });
+      const representative = await login(username, 'SyntheticRep123!');
+      return create<WorkerResponse>(
+        `/sites/${target.id}/workers`,
+        {
+          contractorId: contractor.id,
+          externalId: `SYNTHETIC-${label}`,
+          displayName: `Synthetic Worker ${label}`,
+        },
+        representative,
+      );
+    };
+    const worker = await createProfile(site, 'A');
+    const foreignWorker = await createProfile(other, 'B');
     const camera = await create<CameraResponse>(`/sites/${site.id}/cameras`, {
       code: 'BIZ-CAM',
       externalId: 'SYNTHETIC-CAM',
