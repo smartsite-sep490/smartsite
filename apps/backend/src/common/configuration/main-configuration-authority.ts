@@ -176,7 +176,7 @@ export async function executeMainConfigurationCommand<T>(
                     : operation === 'MAIN_REPRESENTATIVE_GRANT'
                       ? ['contractor_representative_grant']
                       : operation === 'SITE_CONTRACTOR_CREATE'
-                        ? ['contractor', 'contractor_site_participation']
+                        ? ['contractor']
                         : operation === 'CONTRACTOR_CREATE'
                           ? ['contractor']
                           : operation === 'CONTRACTOR_WORKER_CREATE' ||
