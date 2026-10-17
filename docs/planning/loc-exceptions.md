@@ -170,3 +170,13 @@ native-client opt-in exposed the wrong-actor403 before the dump; the corrected
 dedicated5433 run reaches restore and passes. Extract its existing actor setup
 before adding another recovery scenario. Owner/reviewer: Root; Agy p5 provides
 bounded read-only review. This exception does not raise the test-size limit.
+
+## MF06 binding reason localization, 17 October
+
+Root permits `apps/web/src/components/ppe/Mf06AssessmentDetailDialog.tsx` to
+grow from 595 to 607 physical lines only for the existing translated mismatch
+alert. The 13-reason catalog lives in a separate 71-line feature file; UUID,
+nanosecond, scope, cancellation and record-hiding checks are unchanged. Existing
+locale tests cover every reason and language switching without another request.
+Owner: Root; independent source review: Agy p8. Extract the dialog's presentation
+before adding another feature; this exception does not increase the size target.

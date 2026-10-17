@@ -67,54 +67,69 @@ export function areUuidsEqual(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+export type AssessmentBindingMismatchCode =
+  | 'ASSESSMENT_ID_MISMATCH'
+  | 'SITE_ID_MISMATCH'
+  | 'REQUEST_ID_MISMATCH'
+  | 'EVENT_ID_MISMATCH'
+  | 'CAMERA_ID_MISMATCH'
+  | 'ZONE_ID_MISMATCH'
+  | 'PURPOSE_MISMATCH'
+  | 'CAPTURED_AT_PRECISION_MISMATCH'
+  | 'OUTCOME_MISMATCH'
+  | 'REASON_CODE_MISMATCH'
+  | 'PROVENANCE_MISMATCH'
+  | 'EVALUATOR_VERSION_MISMATCH'
+  | 'ASSESSED_AT_PRECISION_MISMATCH';
+
 /**
  * Validates that loaded assessment matches the expected target context.
- * Returns null if valid, or an error reason string if invalid.
+ * Returns null if valid, or a typed stable internal mismatch reason code if invalid.
  */
 export function validateAssessmentBinding(
   loaded: Mf06AssessmentResponse,
   expected: AssessmentTargetContext,
-): string | null {
+): AssessmentBindingMismatchCode | null {
   if (!areUuidsEqual(loaded.assessmentId, expected.assessmentId)) {
-    return 'Assessment ID mismatch';
+    return 'ASSESSMENT_ID_MISMATCH';
   }
   if (!areUuidsEqual(loaded.siteId, expected.siteId)) {
-    return 'Site ID mismatch';
+    return 'SITE_ID_MISMATCH';
   }
   if (!areUuidsEqual(loaded.requestId, expected.requestId)) {
-    return 'Request ID mismatch';
+    return 'REQUEST_ID_MISMATCH';
   }
   if (!areUuidsEqual(loaded.eventId, expected.eventId)) {
-    return 'Event ID mismatch';
+    return 'EVENT_ID_MISMATCH';
   }
   if (!areUuidsEqual(loaded.cameraId, expected.cameraId)) {
-    return 'Camera ID mismatch';
+    return 'CAMERA_ID_MISMATCH';
   }
   if (!areUuidsEqual(loaded.zoneId, expected.zoneId)) {
-    return 'Zone ID mismatch';
+    return 'ZONE_ID_MISMATCH';
   }
   if (loaded.purpose !== expected.purpose) {
-    return 'Purpose mismatch';
+    return 'PURPOSE_MISMATCH';
   }
   if (!areExactRfc3339Equal(loaded.capturedAt, expected.capturedAt)) {
-    return 'CapturedAt precision mismatch';
+    return 'CAPTURED_AT_PRECISION_MISMATCH';
   }
 
   // History-origin immutable checks
   if (expected.outcome && loaded.outcome !== expected.outcome) {
-    return 'Outcome mismatch';
+    return 'OUTCOME_MISMATCH';
   }
   if (expected.reasonCode && loaded.reasonCode !== expected.reasonCode) {
-    return 'Reason code mismatch';
+    return 'REASON_CODE_MISMATCH';
   }
   if (expected.provenance && loaded.provenance !== expected.provenance) {
-    return 'Provenance mismatch';
+    return 'PROVENANCE_MISMATCH';
   }
   if (expected.evaluatorVersion && loaded.evaluatorVersion !== expected.evaluatorVersion) {
-    return 'Evaluator version mismatch';
+    return 'EVALUATOR_VERSION_MISMATCH';
   }
   if (expected.assessedAt && !areExactRfc3339Equal(loaded.assessedAt, expected.assessedAt)) {
-    return 'AssessedAt precision mismatch';
+    return 'ASSESSED_AT_PRECISION_MISMATCH';
   }
 
   return null;

@@ -11,8 +11,14 @@ import {
   areUuidsEqual,
   type AssessmentTargetContext,
 } from './mf06AssessmentDetailBinding';
+import { useTranslation } from 'react-i18next';
 import { IconClock, IconCheck, IconX, IconAlertTriangle } from '../icons';
+import {
+  MF06_BINDING_REASON_KEYS,
+  registerMf06BindingCatalog,
+} from '../../i18n/mf06-binding-catalog';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 
 export interface Mf06AssessmentDetailDialogProps {
   open: boolean;
@@ -162,7 +168,9 @@ export function Mf06AssessmentDetailDialog({
   onUnauthorized,
   onAccessError,
 }: Mf06AssessmentDetailDialogProps) {
+  registerMf06BindingCatalog();
   const { t } = useLocale();
+  const { t: translateBindingReason } = useTranslation(SAFETY_NAMESPACE);
   const queryClient = useQueryClient();
   const managementClient = useMemo(
     () => injectedClient ?? new SmartSiteManagementClient(apiUrl),
@@ -489,7 +497,11 @@ export function Mf06AssessmentDetailDialog({
           >
             <div className="flex items-center gap-2 font-medium">
               <IconAlertTriangle className="w-4 h-4 flex-shrink-0" />
-              <span>{t('mf06.detail.validationMismatch', { reason: validationError })}</span>
+              <span>
+                {t('mf06.detail.validationMismatch', {
+                  reason: translateBindingReason(MF06_BINDING_REASON_KEYS[validationError]),
+                })}
+              </span>
             </div>
           </div>
         )}

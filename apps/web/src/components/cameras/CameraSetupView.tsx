@@ -230,6 +230,13 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
             {t('cameraSetup.noSites')}
           </p>
         )}
+        {Boolean(
+          requestedSite && !site && !sites.isPending && !sites.baseError && sites.rows.length > 0,
+        ) && (
+          <p role="status" className="mt-3 text-sm text-slate-500">
+            {t('cameraSetup.linkedSelection')}
+          </p>
+        )}
       </section>
       {site && (
         <CameraSetupCatalog
