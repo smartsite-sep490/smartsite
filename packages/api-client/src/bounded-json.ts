@@ -2,7 +2,7 @@ import {
   parseCameraConfigurationImageResponse,
   type CameraConfigurationImageResponse,
 } from '@smartsite/contracts/camera-configuration-image';
-import { ApiError } from './index';
+import { ApiError } from './errors';
 
 export const MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES = 1_500_000;
 

@@ -1,8 +1,5 @@
-import {
-  parseCameraMediaFrame,
-  type CameraMediaFrame,
-} from '@smartsite/contracts/camera-preview';
-import { ApiError } from './index';
+import { parseCameraMediaFrame, type CameraMediaFrame } from '@smartsite/contracts/camera-preview';
+import { ApiError } from './errors';
 
 export const MAX_CAMERA_STREAM_LINE_BYTES = 262144; // 262,144 bytes = 256 KB max NDJSON line
 
@@ -54,11 +51,17 @@ export function validateCameraMediaFrameEnvelope(
   const currentTime = options?.now ? options.now() : Date.now();
   const capturedTime = Date.parse(frame.capturedAt);
   if (!Number.isFinite(capturedTime)) {
-    throw new ApiError('invalid-response', 'Camera media frame has an invalid capturedAt timestamp.');
+    throw new ApiError(
+      'invalid-response',
+      'Camera media frame has an invalid capturedAt timestamp.',
+    );
   }
   const ageMs = currentTime - capturedTime;
   if (ageMs >= 2000) {
-    throw new ApiError('invalid-response', `Camera media frame is stale (${ageMs}ms old >= 2000ms limit).`);
+    throw new ApiError(
+      'invalid-response',
+      `Camera media frame is stale (${ageMs}ms old >= 2000ms limit).`,
+    );
   }
   const futureMs = capturedTime - currentTime;
   if (futureMs > 1000) {
@@ -213,11 +216,17 @@ export async function processCameraMediaNdjsonStream(
       }
     }
   } catch (error) {
-    if (options?.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+    if (
+      options?.signal?.aborted ||
+      (error instanceof DOMException && error.name === 'AbortError')
+    ) {
       throw new ApiError('cancelled', 'Stream reading was cancelled.');
     }
     if (error instanceof ApiError) throw error;
-    throw new ApiError('network', error instanceof Error ? error.message : 'Error reading media stream.');
+    throw new ApiError(
+      'network',
+      error instanceof Error ? error.message : 'Error reading media stream.',
+    );
   } finally {
     options?.signal?.removeEventListener('abort', onAbort);
     try {

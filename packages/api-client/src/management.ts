@@ -170,7 +170,7 @@ import {
   type CameraVideoStreamOptions,
 } from './camera-media-stream';
 
-import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './index';
+import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './errors';
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
 import type { CameraConfigurationImageResponse } from '@smartsite/contracts/camera-configuration-image';
 import {
