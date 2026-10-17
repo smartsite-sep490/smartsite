@@ -193,3 +193,13 @@ The actual current-image Linux opt-in passes with all three owned SIGTERM exits0
 Owner: Root; Agy p8 supplied bounded static review, not execution acceptance.
 Abnormal process exit retains its schema for investigation. Extract actor setup
 before adding any new scenario; this exception does not raise the size limit.
+
+## Explicit MF06 timestamp timezone, 17 October
+
+Root permits two Intl options per existing formatter: AssessmentHistory657 to659,
+ZoneAssessmentPanel832 to834 and AssessmentDetailDialog607 to609 physical lines.
+They enforce the reviewed visible-timezone requirement through explicit UTC,
+without a new Site-timezone contract, formatter abstraction or query behavior.
+Regression checks run under two host timezones; wire ISO precision remains intact.
+Owner: Root; implementation Agy p7. Extract the existing presentation before
+adding another feature; these bounded options do not raise the size target.

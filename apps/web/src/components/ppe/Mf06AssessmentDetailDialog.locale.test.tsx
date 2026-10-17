@@ -195,6 +195,8 @@ const TIMESTAMP_OPTIONS: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
   second: '2-digit',
   hour12: false,
+  timeZone: 'UTC',
+  timeZoneName: 'short',
 };
 function expectedTimestamp(isoString: string, localeTag: 'vi-VN' | 'en-US'): string {
   return new Date(isoString).toLocaleString(localeTag, TIMESTAMP_OPTIONS);
@@ -225,6 +227,8 @@ describe('MF06 recorded assessment presentation locale', () => {
     expect(assessedTime?.nextElementSibling?.textContent).toBe(
       expectedTimestamp(record.assessedAt, 'vi-VN'),
     );
+    expect(capturedTime?.nextElementSibling?.textContent).toContain('UTC');
+    expect(assessedTime?.nextElementSibling?.textContent).toContain('UTC');
 
     if (!changeLocale) throw new Error('Locale setter missing');
     act(() => changeLocale?.('en'));
@@ -241,6 +245,8 @@ describe('MF06 recorded assessment presentation locale', () => {
     expect(assessedTime?.nextElementSibling?.textContent).toBe(
       expectedTimestamp(record.assessedAt, 'en-US'),
     );
+    expect(capturedTime?.nextElementSibling?.textContent).toContain('UTC');
+    expect(assessedTime?.nextElementSibling?.textContent).toContain('UTC');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it('localizes a safe forbidden response without disclosing private transport diagnostics', async () => {

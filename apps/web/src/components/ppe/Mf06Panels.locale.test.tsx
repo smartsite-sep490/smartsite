@@ -65,6 +65,8 @@ const TIMESTAMP_OPTIONS: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
   second: '2-digit',
   hour12: false,
+  timeZone: 'UTC',
+  timeZoneName: 'short',
 };
 function expectedTimestamp(isoString: string, localeTag: 'vi-VN' | 'en-US'): string {
   return new Date(isoString).toLocaleString(localeTag, TIMESTAMP_OPTIONS);
@@ -139,6 +141,8 @@ describe('MF06 request and history presentation locale', () => {
     );
     expect(capturedTime?.textContent).toBe(expectedTimestamp(assessment.capturedAt, 'vi-VN'));
     expect(assessedTime?.textContent).toBe(expectedTimestamp(assessment.assessedAt, 'vi-VN'));
+    expect(capturedTime?.textContent).toContain('UTC');
+    expect(assessedTime?.textContent).toContain('UTC');
 
     english();
     await screen.findByText('MF06 Restricted Zone Assessment History');
@@ -148,6 +152,8 @@ describe('MF06 request and history presentation locale', () => {
     expect(assessedTime?.getAttribute('datetime')).toBe(assessment.assessedAt);
     expect(capturedTime?.textContent).toBe(expectedTimestamp(assessment.capturedAt, 'en-US'));
     expect(assessedTime?.textContent).toBe(expectedTimestamp(assessment.assessedAt, 'en-US'));
+    expect(capturedTime?.textContent).toContain('UTC');
+    expect(assessedTime?.textContent).toContain('UTC');
     expect(list).toHaveBeenCalledTimes(1);
   });
   it('keeps the selected request tab, NOT_QUEUED snapshot, and deadlineAt timestamps while switching locale without enqueue or refetch', async () => {
@@ -176,6 +182,7 @@ describe('MF06 request and history presentation locale', () => {
       const timeEl = container.querySelector(`time[datetime="${iso}"]`);
       expect(timeEl?.getAttribute('datetime')).toBe(iso);
       expect(timeEl?.textContent).toBe(expectedTimestamp(iso, 'vi-VN'));
+      expect(timeEl?.textContent).toContain('UTC');
     }
 
     english();
@@ -187,6 +194,7 @@ describe('MF06 request and history presentation locale', () => {
       const timeEl = container.querySelector(`time[datetime="${iso}"]`);
       expect(timeEl?.getAttribute('datetime')).toBe(iso);
       expect(timeEl?.textContent).toBe(expectedTimestamp(iso, 'en-US'));
+      expect(timeEl?.textContent).toContain('UTC');
     }
     expect(requests).toHaveBeenCalledTimes(1);
     expect(history).not.toHaveBeenCalled();
