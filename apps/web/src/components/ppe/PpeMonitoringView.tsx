@@ -3293,7 +3293,7 @@ export function PpeMonitoringView({
       </div>
 
       {/* Live AI Observations status or Replay Observations Table */}
-      {isLive ? (
+      {isLive || isAiWorkPaused ? (
         <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-3 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1 min-w-0">

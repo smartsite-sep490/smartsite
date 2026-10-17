@@ -374,9 +374,7 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
 
     // Truthful feedback: saved zone requires camera observation region connection before AI applies
     expect(
-      await screen.findByText(
-        /Link this zone to a camera observation region in Zone Settings before AI monitoring can apply/i,
-      ),
+      await screen.findByText(/Link this zone to a camera observation region when ready\./i),
     ).toBeDefined();
 
     // Inputs reset after successful creation

@@ -29,13 +29,12 @@ export function CameraSetupCatalog({
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
   const canWriteZones = capabilities.canManageZones || canManageCameras;
+  const hasLoadedCameraPages = Boolean(cameras.data?.pages.length) && !cameras.baseError;
   const showLinkedCameraNotice = Boolean(
     requestedCameraId &&
     !rows.some((row) => row.id === requestedCameraId) &&
-    cameras.isSuccess &&
-    !cameras.isFetching &&
-    !cameras.baseError &&
-    !cameras.error,
+    hasLoadedCameraPages &&
+    !cameras.isFetching,
   );
   const button = CAMERA_BUTTON_STYLES.secondary;
   const primarySurface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs';
@@ -131,7 +130,7 @@ export function CameraSetupCatalog({
                 )}
               </p>
             )}
-            {!cameras.baseError && cameras.isSuccess && (
+            {hasLoadedCameraPages && (
               <p className="mt-4 text-xs text-slate-500">
                 {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
               </p>
