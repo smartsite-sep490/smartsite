@@ -807,7 +807,10 @@ test('enforces real command actor/scope/version bounds, Team fallback, and fail-
     contractorCommand.commandId,
     workerCommand.commandId,
   ];
-  for (const relation of ['mf06_authority_command', 'mf06_authority_commit_witness']) {
+  for (const relation of [
+    'authorization_history_command',
+    'authorization_history_commit_receipt',
+  ]) {
     const [{ n }] = await source.query(
       `SELECT count(*)::int AS n FROM ${relation} WHERE command_id=ANY($1::uuid[])`,
       [commandIds],
@@ -820,7 +823,7 @@ test('enforces real command actor/scope/version bounds, Team fallback, and fail-
     source_id: string;
     bound: boolean;
   }> = await source.query(
-    'SELECT f.command_id,f.source_kind,f.source_id,f.transaction_id=c.transaction_id AS bound FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE f.command_id=ANY($1::uuid[])',
+    'SELECT f.command_id,f.source_kind,f.source_id,f.transaction_id=c.transaction_id AS bound FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE f.command_id=ANY($1::uuid[])',
     [commandIds],
   );
   assert.deepEqual(

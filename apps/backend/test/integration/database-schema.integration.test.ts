@@ -14,14 +14,16 @@ import {
   ZoneType,
 } from '../../src/database/entities/index.js';
 import { parseNormalizedCapturedAt } from '../../src/integrations/ai/ai-ingestion.service.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
-  if (!dataSource.isInitialized) await dataSource.initialize();
+  if (!dataSource.isInitialized) await isolated.initialize();
   try {
     return await fn(dataSource);
   } finally {
-    if (dataSource.isInitialized) await dataSource.destroy();
+    await isolated.dispose();
   }
 }
 

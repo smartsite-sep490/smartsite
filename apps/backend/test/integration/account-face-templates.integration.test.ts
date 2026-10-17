@@ -44,7 +44,7 @@ test('registered entity columns exist in the canonical migrated schema', async (
   const installedMigrations = (await dataSource.query('SELECT name FROM migrations')) as Array<{
     name: string;
   }>;
-  assert.equal(dataSource.migrations.length, 61);
+  assert.equal(dataSource.migrations.length, installedMigrations.length);
   assert.deepEqual(
     installedMigrations.map((migration) => migration.name).sort(),
     dataSource.migrations.map((migration) => migration.name ?? migration.constructor.name).sort(),
@@ -231,16 +231,14 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     contractorId,
   });
   for (const id of [workerId, secondWorkerId]) {
-    await dataSource
-      .getRepository(WorkerEntity)
-      .save({
-        id,
-        siteId,
-        contractorId,
-        externalId: id,
-        displayName: 'Synthetic worker',
-        isActive: true,
-      });
+    await dataSource.getRepository(WorkerEntity).save({
+      id,
+      siteId,
+      contractorId,
+      externalId: id,
+      displayName: 'Synthetic worker',
+      isActive: true,
+    });
   }
 
   const workforce = new MainWorkerRosterService(dataSource);

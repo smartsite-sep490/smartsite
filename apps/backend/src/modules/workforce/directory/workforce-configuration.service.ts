@@ -27,6 +27,7 @@ import {
   CreateWorkerDto,
 } from './dto/workforce.dto.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
+import { requireLegacyAuthoritySchema } from '../../zones/legacy-authority-schema.js';
 
 /** Safe read projection; account, face, and contractor data stay in their owning workflows. */
 export type WorkerReviewReference = Pick<
@@ -223,24 +224,25 @@ export class WorkforceConfigurationService {
       .getManyAndCount();
     return { items: rows.map(({ id, displayName }) => ({ id, displayName })), total };
   }
-  private async assertWorkerAssignment(siteId: string, contractorId: string, userId: string) {
-    const [contractor, user, assignment] = await Promise.all([
-      this.dataSource
-        .getRepository(ContractorEntity)
-        .findOneBy({ id: contractorId, isActive: true }),
-      this.dataSource.getRepository(UserEntity).findOneBy({ id: userId, isActive: true }),
-      this.dataSource
-        .getRepository(UserRoleAssignmentEntity)
-        .findOneBy({ userId, role: UserRole.WORKER, siteId }),
-    ]);
+  private async assertWorkerAssignment(
+    manager: EntityManager,
+    siteId: string,
+    contractorId: string,
+    userId: string,
+  ) {
+    const contractor = await manager
+      .getRepository(ContractorEntity)
+      .findOneBy({ id: contractorId, isActive: true });
+    const user = await manager.getRepository(UserEntity).findOneBy({ id: userId, isActive: true });
+    const assignment = await manager
+      .getRepository(UserRoleAssignmentEntity)
+      .findOneBy({ userId, role: UserRole.WORKER, siteId });
     if (!contractor || !user || !assignment) missing();
-    const participations = await this.dataSource
-      .getRepository(ContractorSiteParticipationEntity)
-      .findBy({
-        contractorId,
-        siteId,
-        isActive: true,
-      });
+    const participations = await manager.getRepository(ContractorSiteParticipationEntity).findBy({
+      contractorId,
+      siteId,
+      isActive: true,
+    });
     const now = Date.now();
     if (
       !participations.some(
@@ -257,6 +259,7 @@ export class WorkforceConfigurationService {
     const siteId = uuid(siteIdValue);
     const value = command(LinkWorkerAccountCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const user = await manager
         .getRepository(UserEntity)
         .createQueryBuilder('user')
@@ -294,6 +297,7 @@ export class WorkforceConfigurationService {
     const value = command(LinkWorkerAccountCommand, input);
     try {
       return await this.dataSource.transaction(async (manager) => {
+        await requireLegacyAuthoritySchema(manager);
         const worker = await manager
           .getRepository(WorkerEntity)
           .createQueryBuilder('worker')
@@ -323,24 +327,32 @@ export class WorkforceConfigurationService {
     await refuseLegacyMainWriter(this.dataSource.manager);
     const scopedSiteId = uuid(siteId);
     const value = command(CreateWorkerDto, input);
-    const site = await this.dataSource.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
-    if (!site) missing();
     if (!!value.contractorId !== !!value.userId)
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
         message: 'Worker contractor and user assignments must be set together',
       });
-    if (value.contractorId && value.userId)
-      await this.assertWorkerAssignment(scopedSiteId, value.contractorId, value.userId);
     try {
-      return await this.dataSource.getRepository(WorkerEntity).save({
-        id: randomUUID(),
-        siteId: scopedSiteId,
-        contractorId: value.contractorId ?? null,
-        userId: value.userId ?? null,
-        externalId: value.externalId,
-        displayName: value.displayName,
-        isActive: true,
+      return await this.dataSource.transaction(async (manager) => {
+        await requireLegacyAuthoritySchema(manager);
+        const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
+        if (!site) missing();
+        if (value.contractorId && value.userId)
+          await this.assertWorkerAssignment(
+            manager,
+            scopedSiteId,
+            value.contractorId,
+            value.userId,
+          );
+        return manager.getRepository(WorkerEntity).save({
+          id: randomUUID(),
+          siteId: scopedSiteId,
+          contractorId: value.contractorId ?? null,
+          userId: value.userId ?? null,
+          externalId: value.externalId,
+          displayName: value.displayName,
+          isActive: true,
+        });
       });
     } catch (error) {
       knownUnique(error, ['uq_worker_site_external_id', 'uq_worker_site_user']);
@@ -354,6 +366,7 @@ export class WorkforceConfigurationService {
     const code = value.code ?? `CTR-${randomUUID().toUpperCase()}`;
     try {
       return await this.dataSource.transaction(async (manager) => {
+        await requireLegacyAuthoritySchema(manager);
         const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
         if (!site) missing();
         let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code });
@@ -379,9 +392,10 @@ export class WorkforceConfigurationService {
   ): Promise<ContractorRepresentativeAssignmentEntity> {
     await refuseLegacyMainWriter(this.dataSource.manager);
     try {
-      return await this.dataSource.transaction((manager) =>
-        this.assignRepresentativeInTransaction(manager, siteId, contractorId, input),
-      );
+      return await this.dataSource.transaction(async (manager) => {
+        await requireLegacyAuthoritySchema(manager);
+        return this.assignRepresentativeInTransaction(manager, siteId, contractorId, input);
+      });
     } catch (error) {
       knownUnique(error, [
         'uq_contractor_representative_assignment',
@@ -399,20 +413,22 @@ export class WorkforceConfigurationService {
     const scopedSiteId = uuid(siteId);
     const scopedContractorId = uuid(contractorId);
     const value = command(AssignContractorRepresentativeDto, input);
-    const [contractor, user, assignment, participations] = await Promise.all([
-      manager.getRepository(ContractorEntity).findOneBy({ id: scopedContractorId, isActive: true }),
-      manager.getRepository(UserEntity).findOneBy({ id: value.userId, isActive: true }),
-      manager.getRepository(UserRoleAssignmentEntity).findOneBy({
-        userId: value.userId,
-        role: UserRole.CONTRACTOR_REPRESENTATIVE,
-        siteId: scopedSiteId,
-      }),
-      manager.getRepository(ContractorSiteParticipationEntity).findBy({
-        contractorId: scopedContractorId,
-        siteId: scopedSiteId,
-        isActive: true,
-      }),
-    ]);
+    const contractor = await manager
+      .getRepository(ContractorEntity)
+      .findOneBy({ id: scopedContractorId, isActive: true });
+    const user = await manager
+      .getRepository(UserEntity)
+      .findOneBy({ id: value.userId, isActive: true });
+    const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOneBy({
+      userId: value.userId,
+      role: UserRole.CONTRACTOR_REPRESENTATIVE,
+      siteId: scopedSiteId,
+    });
+    const participations = await manager.getRepository(ContractorSiteParticipationEntity).findBy({
+      contractorId: scopedContractorId,
+      siteId: scopedSiteId,
+      isActive: true,
+    });
     const now = Date.now();
     if (
       !contractor ||

@@ -1,3 +1,4 @@
+import { ZONE_ENTRY_STORAGE_NAMES } from '../../src/common/configuration/zone-entry-storage-profile-v1.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -9,13 +10,18 @@ import { ZoneRestrictionPolicy } from '../../src/database/entities/enums.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { LEGACY_TEST_MIGRATIONS } from '../support/legacy-test-migrations.js';
 import { loadMainRecoveryMigrations } from '../support/main-recovery-profile.js';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
 // Keep the historical release54 prefix: exclude the checklist, three attendance
 // additions and Main's three later visitor/manager-notification migrations.
 const afterRelease54 = new Set([
+  'PrepareNotificationCompatibility1792010000000',
+  'CompleteNotificationCompatibility1792368000001',
+  'ZoneEntryPhysicalStorage1792454400000',
   'SafetyChecklists1792195200000',
+  'Mf06TeamAuthorityHistory1792281600000',
   'AttendanceAbsence1792022400000',
   'ShiftExitGracePeriod1792281600000',
   'AttendanceExitNotifications1792281600001',
@@ -139,12 +145,38 @@ for (const profile of [
         await db.destroy();
         db.setOptions({ migrations: production });
         await db.initialize();
-        const applied = await db.runMigrations();
-        assert.equal(
-          applied.length,
-          profile === 'populated-release54' ? 7 : profile === 'populated-main35' ? 26 : 38,
+        const beforeNames = new Set(
+          (await db.query('SELECT name FROM migrations')).map((r: { name: string }) => r.name),
         );
-        for (const { table, fields, rows } of inventory)
+        const pendingCount = db.migrations.filter(
+          (m) => !beforeNames.has(m.name ?? m.constructor.name),
+        ).length;
+        const applied = await db.runMigrations();
+        assert.equal(applied.length, pendingCount);
+        for (const entry of inventory) {
+          const { fields, rows } = entry;
+          const table =
+            ZONE_ENTRY_STORAGE_NAMES[entry.table as keyof typeof ZONE_ENTRY_STORAGE_NAMES] ??
+            entry.table;
+          if (table === 'authorization_history_source') {
+            const expected = MAIN_AUTHORITY_V2_SOURCES.map(([source_kind, table_name, fields]) => ({
+              source_kind,
+              table_name,
+              fields,
+              protocol_version: 'MAIN_ROW_JOURNAL_V1',
+            }));
+            assert.deepEqual(
+              await db.query(
+                'SELECT to_jsonb(s)::text AS row FROM authorization_history_source s ORDER BY to_jsonb(s)::text',
+              ),
+              await db.query(
+                'SELECT value::text AS row FROM jsonb_array_elements($1::jsonb) ORDER BY value::text',
+                [JSON.stringify(expected)],
+              ),
+              table,
+            );
+            continue;
+          }
           assert.deepEqual(
             await db.query(
               `SELECT to_jsonb(r)::text AS row FROM (SELECT ${fields.map((f) => `"${f}"`).join(',')} FROM "${table}") r ORDER BY to_jsonb(r)::text`,
@@ -152,8 +184,9 @@ for (const profile of [
             rows,
             table,
           );
+        }
       }
-      assert.equal(db.migrations.length, 61);
+      assert.equal(db.migrations.length, production.length);
       assert.equal(await new DatabaseService(db).isReady(), true);
       assert.deepEqual(await db.runMigrations(), []);
       const applied: { name: string }[] = await db.query(
@@ -170,23 +203,28 @@ for (const profile of [
           1,
         );
       }
-      assert.equal(applied.length, profile === 'populated-legacy24' ? 62 : 61);
+      assert.equal(applied.length, production.length + (profile === 'populated-legacy24' ? 1 : 0));
       assert.equal(
-        (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
+        (await db.query('SELECT epoch_id FROM authorization_history_control WHERE singleton=1'))[0]
           .epoch_id,
         null,
       );
       for (const table of [
-        'mf06_authority_epoch',
-        'mf06_authority_fact',
-        'mf06_authority_head',
+        'authorization_history_epoch',
+        'authorization_history_revision',
+        'authorization_history_head',
         'safety_face_consent',
         'safety_face_consent_revocation',
       ]) {
         const retained =
           profile === 'populated-release54'
-            ? (inventory.find((entry) => entry.table === table)?.rows.length ?? 0)
-            : profile !== 'fresh' && ['mf06_authority_fact', 'mf06_authority_head'].includes(table)
+            ? (inventory.find(
+                (entry) =>
+                  (ZONE_ENTRY_STORAGE_NAMES[entry.table as keyof typeof ZONE_ENTRY_STORAGE_NAMES] ??
+                    entry.table) === table,
+              )?.rows.length ?? 0)
+            : profile !== 'fresh' &&
+                ['authorization_history_revision', 'authorization_history_head'].includes(table)
               ? 1
               : 0;
         assert.equal(
@@ -198,7 +236,7 @@ for (const profile of [
       if (profile !== 'fresh') {
         if (profile !== 'populated-release54') {
           const facts = await db.query(
-            'SELECT source_kind,source_id,operation,epoch_id,before_payload,after_payload FROM mf06_authority_fact',
+            'SELECT source_kind,source_id,operation,epoch_id,before_payload,after_payload FROM authorization_history_revision',
           );
           assert.equal(facts.length, 1);
           assert.equal(facts[0].source_kind, 'USER_ACCOUNT');

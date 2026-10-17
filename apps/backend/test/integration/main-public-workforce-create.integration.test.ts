@@ -227,7 +227,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
         assert.equal(row.isActive, true);
         const fact = (
           await db.query(
-            'SELECT f.source_kind,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+            'SELECT f.source_kind,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
             [row.id],
           )
         )[0];
@@ -293,7 +293,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
         assert.equal(
           (
             await db.query(
-              'SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1',
+              'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
               [row.id],
             )
           )[0].n,
@@ -367,13 +367,15 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
         } finally {
           await db.query('ALTER TABLE ' + table + ' ENABLE TRIGGER trg_mf06_capture_' + table);
         }
-        await db.query('ALTER TABLE mf06_authority_control RENAME TO mf06_authority_control_held');
+        await db.query(
+          'ALTER TABLE authorization_history_control RENAME TO mf06_authority_control_held',
+        );
         try {
           assert.equal((await call(kind)).status, 503);
           assert.equal(await createdCount(f, kind), 0);
         } finally {
           await db.query(
-            'ALTER TABLE mf06_authority_control_held RENAME TO mf06_authority_control',
+            'ALTER TABLE mf06_authority_control_held RENAME TO authorization_history_control',
           );
         }
       });
@@ -388,7 +390,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
         apiDb.query = async (...args: Parameters<DataSource['query']>) => {
           if (
             typeof args[0] === 'string' &&
-            args[0].startsWith('INSERT INTO mf06_authority_commit_witness')
+            args[0].startsWith('INSERT INTO authorization_history_commit_receipt')
           )
             throw new Error('Synthetic witness failure');
           return original(...args);
@@ -398,7 +400,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
         const row = (await response.json()) as { id: string };
         assert.equal(await createdCount(f, kind), 1);
         const facts = await db.query(
-          'SELECT w.command_id FROM mf06_authority_fact f LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+          'SELECT w.command_id FROM authorization_history_revision f LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
           [row.id],
         );
         assert.equal(facts.length, 1);

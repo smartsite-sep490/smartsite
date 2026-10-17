@@ -1,11 +1,19 @@
+import { ArchiveInputError, safeInput } from './main-authority-json.js';
 import type { Mf06AssessmentPurpose } from '../../database/entities/zone-entry-assessment-request.entity.js';
 import { computeCanonicalPayloadHash, PPE_ITEMS } from '@smartsite/contracts';
 import { z } from 'zod';
 import { MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../common/configuration/main-team-authority-sources.js';
 import { CameraStatus, ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 
 export const MAIN_AUTHORITY_ARCHIVE_FORMAT = 'MF06_MAIN_AUTHORITY_ARCHIVE_V1';
+export const MAIN_AUTHORITY_ARCHIVE_FORMAT_V2 = 'MF06_MAIN_AUTHORITY_ARCHIVE_V2';
+export const MAIN_AUTHORITY_ARCHIVE_FORMATS = [
+  MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
+] as const;
+type ArchiveFormat = (typeof MAIN_AUTHORITY_ARCHIVE_FORMATS)[number];
 export interface MainAuthorityArchiveContext {
   siteId: string;
   zoneId: string;
@@ -14,7 +22,7 @@ export interface MainAuthorityArchiveContext {
   purpose: Mf06AssessmentPurpose;
 }
 export interface MainAuthorityArchivePayload {
-  version: typeof MAIN_AUTHORITY_ARCHIVE_FORMAT;
+  version: ArchiveFormat;
   context: MainAuthorityArchiveContext;
   archivedAt: string;
   baseline: {
@@ -32,7 +40,7 @@ export interface MainAuthorityArchivePayload {
   }[];
 }
 export interface MainAuthorityArchive {
-  format: typeof MAIN_AUTHORITY_ARCHIVE_FORMAT;
+  format: ArchiveFormat;
   sha256: string;
   payload: MainAuthorityArchivePayload;
 }
@@ -57,91 +65,7 @@ export type MainAuthorityArchiveResult =
       identityEstablished: false;
     };
 
-const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_ROWS = 2048;
-const MAX_JSON_NODES = 100000;
-const MAX_DEPTH = 32;
-class ArchiveInputError extends Error {
-  constructor(readonly reason: 'RESOURCE_LIMIT' | 'MALFORMED_ARCHIVE') {
-    super(reason);
-  }
-}
-type Json = null | boolean | string | number | Json[] | { [key: string]: Json };
-function materialize(
-  value: unknown,
-  budget = { nodes: 0, bytes: 0 },
-  ancestors = new Set<object>(),
-  depth = 0,
-): Json {
-  if (++budget.nodes > MAX_JSON_NODES || depth > MAX_DEPTH)
-    throw new ArchiveInputError('RESOURCE_LIMIT');
-  if (value === null || typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    if (value.length > MAX_BYTES) throw new ArchiveInputError('RESOURCE_LIMIT');
-    budget.bytes += Buffer.byteLength(value, 'utf8');
-    if (budget.bytes > MAX_BYTES) throw new ArchiveInputError('RESOURCE_LIMIT');
-    return value;
-  }
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)))
-      throw new ArchiveInputError('MALFORMED_ARCHIVE');
-    return value;
-  }
-  if (typeof value !== 'object') throw new ArchiveInputError('MALFORMED_ARCHIVE');
-  const array = Array.isArray(value),
-    proto = Object.getPrototypeOf(value);
-  if (
-    (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) ||
-    ancestors.has(value) ||
-    Object.getOwnPropertySymbols(value).length
-  )
-    throw new ArchiveInputError('MALFORMED_ARCHIVE');
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  ancestors.add(value);
-  try {
-    if (array) {
-      const length = descriptors.length?.value as unknown;
-      if (
-        typeof length !== 'number' ||
-        !Number.isSafeInteger(length) ||
-        length < 0 ||
-        length > MAX_JSON_NODES
-      )
-        throw new ArchiveInputError('RESOURCE_LIMIT');
-      if (Object.keys(descriptors).length !== length + 1)
-        throw new ArchiveInputError('MALFORMED_ARCHIVE');
-      const copy: Json[] = [];
-      for (let i = 0; i < length; i++) {
-        const descriptor = descriptors[String(i)];
-        if (!descriptor || !('value' in descriptor) || !descriptor.enumerable)
-          throw new ArchiveInputError('MALFORMED_ARCHIVE');
-        copy.push(materialize(descriptor.value, budget, ancestors, depth + 1));
-      }
-      return copy;
-    }
-    const copy: { [key: string]: Json } = Object.create(null) as { [key: string]: Json };
-    for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (
-        ['__proto__', 'prototype', 'constructor', 'toJSON'].includes(key) ||
-        !descriptor.enumerable ||
-        !('value' in descriptor)
-      )
-        throw new ArchiveInputError('MALFORMED_ARCHIVE');
-      budget.bytes += Buffer.byteLength(key, 'utf8');
-      if (budget.bytes > MAX_BYTES) throw new ArchiveInputError('RESOURCE_LIMIT');
-      copy[key] = materialize(descriptor.value, budget, ancestors, depth + 1);
-    }
-    return copy;
-  } finally {
-    ancestors.delete(value);
-  }
-}
-function safeInput(value: unknown): Json {
-  const copy = materialize(value);
-  if (Buffer.byteLength(JSON.stringify(copy), 'utf8') > MAX_BYTES)
-    throw new ArchiveInputError('RESOURCE_LIMIT');
-  return copy;
-}
 /** Offset-aware PostgreSQL precision. Never round interval/header instants through JS Date. */
 function micros(value: string): bigint | null {
   const parts =
@@ -200,7 +124,7 @@ const sourceSchema = z.strictObject({
   rows: z.array(z.record(z.string(), z.unknown())),
 });
 const payloadSchema = z.strictObject({
-  version: z.literal(MAIN_AUTHORITY_ARCHIVE_FORMAT),
+  version: z.enum(MAIN_AUTHORITY_ARCHIVE_FORMATS),
   context: contextSchema,
   archivedAt: z.string().max(40),
   baseline: z.strictObject({
@@ -213,6 +137,10 @@ const payloadSchema = z.strictObject({
   sources: z.array(sourceSchema),
 });
 const range = { valid_from: instant, valid_until: instant.nullable() };
+const polygonRing = z
+  .array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
+  .min(3)
+  .max(256);
 const rowSchemas: Record<string, z.ZodType> = {
   USER_ACCOUNT: z.strictObject({
     id,
@@ -236,6 +164,24 @@ const rowSchemas: Record<string, z.ZodType> = {
     is_active: z.boolean(),
   }),
   CONTRACTOR: z.strictObject({ id, is_active: z.boolean() }),
+  TEAM: z.strictObject({ id, site_id: id, contractor_id: id, is_active: z.boolean() }),
+  TEAM_MEMBERSHIP: z.strictObject({
+    id,
+    site_id: id,
+    contractor_id: id,
+    team_id: id,
+    worker_id: id,
+    joined_at: instant,
+    left_at: instant.nullable(),
+  }),
+  TEAM_PERMISSION: z.strictObject({
+    id,
+    team_id: id,
+    contractor_zone_permission_id: id,
+    valid_from: instant,
+    valid_until: instant,
+    revoked_at: instant.nullable(),
+  }),
   REPRESENTATIVE_GRANT: z.strictObject({ id, user_id: id, contractor_id: id, created_at: instant }),
   REPRESENTATIVE_ASSIGNMENT: z.strictObject({
     id,
@@ -313,10 +259,7 @@ const rowSchemas: Record<string, z.ZodType> = {
     id,
     camera_id: id,
     zone_id: id,
-    polygon: z
-      .array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
-      .min(3)
-      .max(256),
+    polygon: z.union([polygonRing, z.strictObject({ coordinates: polygonRing })]),
     coordinate_space: z.literal('NORMALIZED_0_1'),
     version,
     is_active: z.boolean(),
@@ -355,15 +298,16 @@ function validatePayload(
   if (at < base) return unavailable('PRE_BASELINE');
   if (payload.sources.reduce((sum, source) => sum + source.rows.length, 0) > MAX_ROWS)
     return unavailable('RESOURCE_LIMIT');
-  if (payload.sources.length !== MAIN_AUTHORITY_SOURCES.length)
-    return unavailable('SOURCE_REGISTRY_MISMATCH');
-  const registry = new Map(
-    MAIN_AUTHORITY_SOURCES.map(([kind, table, fields]) => [kind, { table, fields }]),
-  );
+  const inventory =
+    payload.version === MAIN_AUTHORITY_ARCHIVE_FORMAT_V2
+      ? MAIN_AUTHORITY_V2_SOURCES
+      : MAIN_AUTHORITY_SOURCES;
+  if (payload.sources.length !== inventory.length) return unavailable('SOURCE_REGISTRY_MISMATCH');
+  const registry = new Map(inventory.map(([kind, table, fields]) => [kind, { table, fields }]));
   const seenKinds = new Set<string>(),
     rows = new Map<string, Record<string, unknown>[]>();
   for (const source of payload.sources) {
-    const entry = registry.get(source.sourceKind as (typeof MAIN_AUTHORITY_SOURCES)[number][0]);
+    const entry = registry.get(source.sourceKind as (typeof inventory)[number][0]);
     if (
       !entry ||
       seenKinds.has(source.sourceKind) ||
@@ -375,8 +319,23 @@ function validatePayload(
     seenKinds.add(source.sourceKind);
     const seenIds = new Set<string>();
     for (const row of source.rows) {
-      if (!rowSchemas[source.sourceKind]?.safeParse(row).success)
+      let checked = row;
+      if (
+        payload.version === MAIN_AUTHORITY_ARCHIVE_FORMAT_V2 &&
+        source.sourceKind === 'ASSIGNMENT'
+      ) {
+        const { zone_ids, ...legacy } = row;
+        if (!z.array(id).max(2048).safeParse(zone_ids).success)
+          return unavailable('MALFORMED_ARCHIVE');
+        checked = legacy;
+      }
+      if (!rowSchemas[source.sourceKind]?.safeParse(checked).success)
         return unavailable('MALFORMED_ARCHIVE');
+      if (
+        typeof row.left_at === 'string' &&
+        micros(row.left_at)! < micros(row.joined_at as string)!
+      )
+        return unavailable('INVALID_TIME');
       const key = (row.id as string).toLowerCase();
       if (seenIds.has(key)) return unavailable('MALFORMED_ARCHIVE');
       seenIds.add(key);
@@ -422,7 +381,7 @@ function freeze<T>(value: T): T {
 }
 function accepted(payload: MainAuthorityArchivePayload): MainAuthorityArchiveResult {
   const archive = freeze<MainAuthorityArchive>({
-    format: MAIN_AUTHORITY_ARCHIVE_FORMAT,
+    format: payload.version,
     sha256: computeCanonicalPayloadHash(payload),
     payload,
   });
@@ -447,7 +406,7 @@ export function sealMainAuthorityArchive(
       input &&
       typeof input === 'object' &&
       !Array.isArray(input) &&
-      input.version !== MAIN_AUTHORITY_ARCHIVE_FORMAT
+      !MAIN_AUTHORITY_ARCHIVE_FORMATS.some((version) => input.version === version)
     )
       return unavailable('UNSUPPORTED_VERSION');
     const parsed = validatePayload(input, expected);
@@ -464,10 +423,11 @@ export function decodeStoredMainAuthorityArchive(
     const input = safeInput(value);
     if (!input || typeof input !== 'object' || Array.isArray(input))
       return unavailable('MALFORMED_ARCHIVE');
-    if (input.format !== MAIN_AUTHORITY_ARCHIVE_FORMAT) return unavailable('UNSUPPORTED_VERSION');
+    if (!MAIN_AUTHORITY_ARCHIVE_FORMATS.some((version) => input.format === version))
+      return unavailable('UNSUPPORTED_VERSION');
     const envelope = z
       .strictObject({
-        format: z.literal(MAIN_AUTHORITY_ARCHIVE_FORMAT),
+        format: z.enum(MAIN_AUTHORITY_ARCHIVE_FORMATS),
         sha256: digest,
         payload: z.unknown(),
       })
@@ -485,6 +445,8 @@ export function decodeStoredMainAuthorityArchive(
     const { sha256: expectedDigest, ...context } = wanted.data;
     void expectedDigest;
     const parsed = validatePayload(envelope.data.payload, context);
+    if (!('status' in parsed) && parsed.version !== envelope.data.format)
+      return unavailable('UNSUPPORTED_VERSION');
     return 'status' in parsed ? parsed : accepted(parsed);
   } catch (error) {
     return rejection(error);

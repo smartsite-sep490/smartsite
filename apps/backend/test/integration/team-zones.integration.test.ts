@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { IsNull } from 'typeorm';
-import source from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ContractorTeamsService } from '../../src/modules/workforce/teams/contractor-teams.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import { TeamZonePermissions1791940000000 } from '../../src/database/migrations/1791940000000-TeamZonePermissions.js';
@@ -29,8 +28,10 @@ import {
   ZoneAccessGrantEntity,
   ZoneAccessEffect,
 } from '../../src/database/entities/index.js';
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const source = isolated.dataSource;
 test('team Zones: migration scope constraints, bounded date grants, retries, inherited authorization and live revocation', async () => {
-  await source.initialize();
+  await isolated.initialize();
   const siteId = randomUUID(),
     otherSite = randomUUID(),
     contractorId = randomUUID(),
@@ -360,20 +361,6 @@ test('team Zones: migration scope constraints, bounded date grants, retries, inh
     await source.getRepository(UserRoleAssignmentEntity).delete({ userId: repId });
     await assert.rejects(service.zoneSetup(actor, siteId, contractorId, team.id), { status: 403 });
   } finally {
-    await cleanupSiteAccess(source, [siteId, otherSite]);
-    await source.getRepository(ZoneAccessGrantEntity).delete({ siteId });
-    await source.getRepository(ContractorTeamMembershipEntity).delete({ siteId });
-    await source.getRepository(ContractorTeamEntity).delete({ contractorId });
-    await source.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
-    await source.getRepository(WorkerEntity).delete({ siteId });
-    await source.getRepository(ContractorZonePermissionEntity).delete(cpId);
-    await source.getRepository(ZoneEntity).delete(zoneId);
-    await source.getRepository(ContractorRepresentativeAssignmentEntity).delete({ contractorId });
-    await source.getRepository(ContractorSiteParticipationEntity).delete(participationId);
-    await source.getRepository(ContractorEntity).delete(contractorId);
-    await source.getRepository(UserRoleAssignmentEntity).delete({ userId: repId });
-    await source.getRepository(UserEntity).delete([repId, otherUser]);
-    await source.getRepository(SiteEntity).delete([siteId, otherSite]);
-    await source.destroy();
+    await isolated.dispose();
   }
 });

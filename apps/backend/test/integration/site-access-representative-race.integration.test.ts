@@ -128,7 +128,7 @@ async function seedSiteContractorAndApprovedWorkerAssignment(
   const fixturePassword = 'SyntheticFixture123!';
 
   const [controlRow] = (await database.dataSource.query(
-    'SELECT singleton, epoch_id FROM mf06_authority_control WHERE singleton = 1',
+    'SELECT singleton, epoch_id FROM authorization_history_control WHERE singleton = 1',
   )) as Array<{ singleton: number; epoch_id: string | null }>;
   assert.equal(controlRow?.singleton, 1);
   assert.equal(controlRow?.epoch_id, null);
@@ -360,12 +360,12 @@ test('grantWorker rejects a global Contractor grant without the exact Site repre
     0,
   );
   const workerFacts = (await database.dataSource.query(
-    "SELECT fact_id FROM mf06_authority_fact WHERE source_kind = 'WORKER_PERMISSION' AND source_id = $1",
+    "SELECT fact_id FROM authorization_history_revision WHERE source_kind = 'WORKER_PERMISSION' AND source_id = $1",
     [rejectedRequestId],
   )) as Array<{ fact_id: string }>;
   assert.deepEqual(workerFacts, []);
   const permissionGaps = (await database.dataSource.query(
-    "SELECT gap_id FROM mf06_authority_gap WHERE source_kind = 'WORKER_PERMISSION'",
+    "SELECT gap_id FROM authorization_history_gap WHERE source_kind = 'WORKER_PERMISSION'",
   )) as Array<{ gap_id: string }>;
   assert.deepEqual(permissionGaps, []);
 });

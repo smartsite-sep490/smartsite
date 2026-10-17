@@ -1,14 +1,18 @@
 # MF05/MF06 database and private-media recovery drill
 
+Current local graph65 and the fresh frozen-lockfile Linux build are recorded separately in the [17/10 database handoff](../database/tuan-db-erd-handoff.md). The source/image/profile pins and results below are historical receipts and must not be relabeled as the new naming migration proof.
+
+For the current procedure, use the handoff's qualified source/image and owned-schema runner. PostgreSQL tools may come from `SMARTSITE_TEST_PG_BIN` or the explicitly owned `SMARTSITE_TEST_PG_CONTAINER`. The current standard runner creates and drops its own UUID schema; it does not migrate a public/default fixture. Retain both current and historical receipts with their original profile labels.
+
 This is an isolated software verification procedure, not a production restore command or acceptance. It starts no model, camera, Face service or assessment worker. Never use it against an operational database, a default/public schema or a cloud connection.
 
 The configuration-only website state helper deliberately refuses nonempty business tables. Do not extend its seven-table allowlist and replay historical assessment rows as ordinary inserts: the immutable assessment guard requires a currently claimed lease, assigns new timestamps and finalizes the job. Completed historical state cannot be reconstructed that way.
 
-## Profiles and prerequisites
+## Historical profiles and prerequisites
 
 The Backend integration test `test/integration/operational-recovery.integration.test.ts` has three explicitly selected scenarios:
 
-- The canonical source-registry profile uses the current runtime graph: 61 migrations on Main `0dd7d27` plus the integrated Safety work. It includes completed synthetic MF06 history and journal/consent storage. The 17 October native Windows drill restored 90 fixture tables and two synthetic evidence files; these counts describe that fixture, not every deployed database.
+- The previously qualified canonical source-registry profile used 61 migrations on Main `0dd7d27` plus the integrated Safety work. It included completed synthetic MF06 history and journal/consent storage. That 17 October native Windows drill restored 90 fixture tables and two synthetic evidence files; these counts describe that fixture, not every deployed database.
 - The opt-in MAIN profile loads the exact 35 migrations from approved commit `2e98619ac94be775ef43f4cb3076f00a59b88df1`, then request migration0001 and immutable assessment migration0004. The helper compares every snapshot source with Git and every compiled module with a fresh deterministic transpilation before importing it. The current61-runtime negative-boundary drill restored63 fixture tables and two synthetic evidence files, including immutable completed MF06 history, while readiness correctly remained503. This test-only list never changes production registration.
 - The Linux scenario requires an explicitly qualified image digest and the fresh `release-dist/main.js` entrypoint. The 17 October current61 drill passed using the existing scoped Manager and Contractor Representative provisioning routes, without weakening login throttling. It restored 90 fixture tables and two synthetic evidence files, retained manual-command replay, and stopped all three owned Linux runtimes through SIGTERM with exit0. A native Windows result does not cover this branch.
 
@@ -18,7 +22,7 @@ Compile tests into a fresh exclusive output, with the existing installed workspa
 
 ## What the drill verifies
 
-1. Create and migrate one fresh file-owned `isolated_test_<32hex>` namespace; verify the dedicated URL and its resolved schema. Require `public.app_user` to be absent. This does not assert every public relation is absent.
+1. Create and migrate one fresh file-owned `isolated_test_<32hex>` namespace; verify the dedicated URL and its resolved schema. Verify its `app_user` is a distinct relation from any public preflight fixture. The standard runner may retain frozen Legacy24 tables in public; do not migrate, clear or restore those tables as part of this drill.
 2. Start actual compiled `main.js` with production configuration, no provider overrides, a synthetic account and an empty preview-source map. Create scoped configuration and two synthetic observation/evidence fixtures. These transport inputs are not AI inference or human ground truth.
 3. In the MAIN profile, create a synthetic request, a claimed job, an attached authority artifact and an UNAVAILABLE assessment through the normal guards in one transaction. Verify finalization to `SUCCEEDED`, revision3 and cleared lease. The synthetic artifact declarations do not activate an epoch or prove authority writer coverage.
 4. Stop the owned fixture API and wait for its terminal state before DB/media capture. On Windows this is forced quiescence, not graceful shutdown acceptance. There are no other writers to this fixture. Do not generalize this to a mixed production writer environment.
@@ -36,6 +40,8 @@ The current canonical runtime registers61 migrations and its completed native dr
 Separately, the 17 October `canonical-main-migrations` MAIN35 opt-in actually upgraded a populated approved35 snapshot to61, retaining prior data and DENY while leaving consent and authority epoch unadopted. That proves the tested upgrade boundary; the MAIN37 backup/restore result proves historical preservation with readiness refusal. Neither proves production disaster recovery. Older source24/39 results retain their original source scope.
 
 This negative boundary does not qualify a production MAIN rollout. Do not stamp a missing migration, bypass readiness or register the legacy history on MAIN merely to make a probe pass. The canonical graph preserves all approved MAIN migration bodies and applies additive approved Safety migrations; existing legacy history remains preserved when upgrading a previously migrated database. Migration readiness is separate from writer closure, a trusted authority epoch and deployment acceptance.
+
+The [merged-source qualification](2026-10-16-tuan-main-sync-merge.md#gate-nâng-cấp-db-còn-mở) separately records a populated56 Checklist-notification upgrade refusal. A successful restore of an already canonical59 fixture does not close that upgrade gate.
 
 ## Gates still open
 

@@ -10,7 +10,10 @@ import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { MAIN_AUTHORITY_SOURCES } from '../../src/common/configuration/main-authority-sources.js';
 import { Mf06AssessmentRequests1791590400001 } from '../../src/database/migrations/1791590400001-Mf06AssessmentRequests.js';
 import { Mf06ImmutableAssessments1791590400004 } from '../../src/database/migrations/1791590400004-Mf06ImmutableAssessments.js';
-import { MAIN_AUTHORITY_ARCHIVE_FORMAT } from '../../src/modules/zones/main-authority-archive-codec.js';
+import {
+  MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  decodeStoredMainAuthorityArchive,
+} from '../../src/modules/zones/main-authority-archive-codec.js';
 
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
 const digest = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
@@ -91,7 +94,22 @@ export async function loadMainRecoveryMigrations(repository: string, snapshot: s
 export async function seedCompletedRecoveryAssessment(
   db: DataSource,
   context: { siteId: string; zoneId: string; cameraId: string; regionId: string; eventId: string },
+  historical = false,
 ) {
+  // Explicit frozen MAIN37 storage; never infer a fallback from missing current tables.
+  const tables = historical
+    ? {
+        request: 'mf06_assessment_request',
+        job: 'mf06_assessment_job',
+        assessment: 'mf06_assessment',
+        artifact: 'mf06_authority_artifact',
+      }
+    : {
+        request: 'zone_entry_assessment_request',
+        job: 'zone_entry_assessment_job',
+        assessment: 'zone_entry_assessment',
+        artifact: 'zone_entry_authority_artifact',
+      };
   const requestId = randomUUID(),
     artifactId = randomUUID(),
     assessmentId = randomUUID();
@@ -107,7 +125,7 @@ export async function seedCompletedRecoveryAssessment(
     );
     assert.ok(event);
     await manager.query(
-      `INSERT INTO mf06_assessment_request
+      `INSERT INTO ${tables.request}
        (request_id,event_id,payload_hash,person_observation_index,zone_observation_index,
         subject_binding_status,track_id,site_id,camera_id,camera_external_id,stream_session_id,
         region_id,geometry_version,zone_id,captured_at,requested_purpose,request_revision,binding_hash)
@@ -127,7 +145,7 @@ export async function seedCompletedRecoveryAssessment(
       ],
     );
     await manager.query(
-      `INSERT INTO mf06_assessment_job
+      `INSERT INTO ${tables.job}
        (request_id,status,attempt_count,head_revision,lease_token,lease_expires_at,next_attempt_at,deadline_at)
        VALUES($1,'CLAIMED',1,2,$2,clock_timestamp()+interval '2 minutes',clock_timestamp(),clock_timestamp()+interval '5 minutes')`,
       [requestId, lease],
@@ -136,10 +154,12 @@ export async function seedCompletedRecoveryAssessment(
     for (const [sourceKind, tableName, fields] of MAIN_AUTHORITY_SOURCES) {
       // Identifiers come only from the fixed code-owned public field mask.
       assert(/^[a-z_]+$/.test(tableName) && fields.every((field) => /^[a-z_]+$/.test(field)));
-      const rows = await manager.query(
-        `SELECT ${fields.map((field) => `"${field}"`).join(',')} FROM "${tableName}"`,
+      // PostgreSQL JSON preserves timestamp precision and bounded version numbers.
+      const projection: { row: Record<string, unknown> }[] = await manager.query(
+        `SELECT to_jsonb(r) AS row FROM (SELECT ${fields.map((field) => `"${field}"`).join(',')}
+          FROM "${tableName}") r`,
       );
-      sources.push({ sourceKind, tableName, fields, rows });
+      sources.push({ sourceKind, tableName, fields, rows: projection.map(({ row }) => row) });
     }
     const payload = {
       version: MAIN_AUTHORITY_ARCHIVE_FORMAT,
@@ -148,7 +168,7 @@ export async function seedCompletedRecoveryAssessment(
         zoneId: context.zoneId,
         workerId: null,
         capturedAt: event.captured_at,
-        purpose: 'INITIAL_OBSERVATION_ASSESSMENT',
+        purpose: 'INITIAL_OBSERVATION_ASSESSMENT' as const,
       },
       archivedAt: new Date().toISOString(),
       baseline: {
@@ -161,17 +181,36 @@ export async function seedCompletedRecoveryAssessment(
       sources,
     };
     const sha256 = computeCanonicalPayloadHash(payload);
+    const archive = JSON.parse(
+      JSON.stringify({ format: MAIN_AUTHORITY_ARCHIVE_FORMAT, sha256, payload }),
+    );
+    const checked = decodeStoredMainAuthorityArchive(archive, { ...payload.context, sha256 });
+    assert.equal(
+      checked.status,
+      'VALID',
+      checked.status === 'UNAVAILABLE' ? checked.reason : undefined,
+    );
+    const commandHash = computeCanonicalPayloadHash({
+      claim: { requestId, leaseToken: lease, headRevision: 2 },
+      commandId,
+      siteId: context.siteId,
+      bindingHash: binding,
+      outcome: 'UNAVAILABLE',
+      reasonCode: 'AUTHORITY_UNAVAILABLE',
+      evaluatorVersion: 'synthetic-recovery/v1',
+      provenance: 'SYNTHETIC_TEST',
+      workerId: null,
+      profileRevision: null,
+      frameSha256: null,
+      cropSha256: null,
+      authorityArtifact: sha256,
+    });
     await manager.query(
-      'INSERT INTO mf06_authority_artifact(artifact_id,request_id,sha256,body,body_hash) VALUES($1,$2,$3,$4::jsonb,$3)',
-      [
-        artifactId,
-        requestId,
-        sha256,
-        JSON.stringify({ format: MAIN_AUTHORITY_ARCHIVE_FORMAT, sha256, payload }),
-      ],
+      `INSERT INTO ${tables.artifact}(artifact_id,request_id,sha256,body,body_hash) VALUES($1,$2,$3,$4::jsonb,$3)`,
+      [artifactId, requestId, sha256, JSON.stringify(archive)],
     );
     await manager.query(
-      `INSERT INTO mf06_assessment
+      `INSERT INTO ${tables.assessment}
        (assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,outcome,
         reason_code,evaluator_version,provenance,authority_artifact_id,claim_head_revision,claim_lease_token)
        VALUES($1,$2,$3,$4,$5,$6,$7,'UNAVAILABLE','AUTHORITY_UNAVAILABLE',
@@ -180,7 +219,7 @@ export async function seedCompletedRecoveryAssessment(
         assessmentId,
         requestId,
         commandId,
-        'c'.repeat(64),
+        commandHash,
         context.siteId,
         context.eventId,
         binding,
@@ -189,7 +228,7 @@ export async function seedCompletedRecoveryAssessment(
       ],
     );
     const [job] = await manager.query(
-      'SELECT status,head_revision,lease_token,lease_expires_at FROM mf06_assessment_job WHERE request_id=$1',
+      `SELECT status,head_revision,lease_token,lease_expires_at FROM ${tables.job} WHERE request_id=$1`,
       [requestId],
     );
     assert.deepEqual(job, {

@@ -120,6 +120,22 @@ const workerInput = (f: Fixture) => ({
   validUntil: '2027-10-01T00:00:00.000007Z',
 });
 const base = (f: Fixture) => `/sites/${f.site}/access-setup`;
+test('public Contractor writes require an exact scoped Manager even when the account is also Admin', async () => {
+  const f = await fixture('ADMIN'),
+    other = await fixture('ADMIN');
+  await withApi(f, async (request) => {
+    const path = `${base(f)}/contractor-zone-permissions`;
+    assert.equal((await request(path, contractorInput(f))).status, 403);
+    const managerRole = randomUUID();
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+      [managerRole, f.actor, other.site],
+    );
+    assert.equal((await request(path, contractorInput(f))).status, 403);
+    await db.query('UPDATE user_role_assignment SET site_id=$2 WHERE id=$1', [managerRole, f.site]);
+    assert.equal((await request(path, contractorInput(f))).status, 201);
+  });
+});
 async function optionsData(f: Fixture) {
   await seedPair(f);
   const foreign = await fixture();
@@ -229,7 +245,7 @@ async function withApi(
   }
 }
 test('actual public anchored Contractor grant retains main path, permission response and source fact', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await withApi(f, async (request) => {
     const r = await request(`${base(f)}/contractor-zone-permissions`, contractorInput(f));
     assert.equal(r.status, 201);
@@ -241,7 +257,7 @@ test('actual public anchored Contractor grant retains main path, permission resp
     assert.equal(p.siteId, undefined);
     const fact = (
       await db.query(
-        'SELECT c.actor_user_id,c.operation FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+        'SELECT c.actor_user_id,c.operation FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
         [f.cp],
       )
     )[0];
@@ -414,7 +430,7 @@ test('actual public anchored Worker grant retains approved assignment and Contra
 });
 for (const kind of ['contractor', 'worker'] as const)
   test(`actual public anchored ${kind} revoke retains main path and id-only response`, async () => {
-    const f = await fixture();
+    const f = await fixture(kind === 'contractor' ? 'SITE_MANAGER' : 'CONTRACTOR_REPRESENTATIVE');
     await seedPair(f);
     await withApi(f, async (request) => {
       const id = kind === 'contractor' ? f.cp : f.wp;
@@ -437,7 +453,8 @@ async function policy(f: Fixture) {
     .n as number;
 }
 async function commands() {
-  return (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n as number;
+  return (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0]
+    .n as number;
 }
 async function role(f: Fixture, r: string, site = f.site) {
   await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
@@ -448,7 +465,7 @@ async function role(f: Fixture, r: string, site = f.site) {
 }
 
 test('four public permission writes bind original bearer, actor facts, witness, audit and policy increments', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await withApi(f, async (request, guard) => {
     const original = guard.authenticateRequest.bind(guard);
     let claims = 0;
@@ -464,12 +481,17 @@ test('four public permission writes bind original bearer, actor facts, witness, 
       [`${base(f)}/worker-zone-permissions`, workerInput(f)],
       [`${base(f)}/worker-zone-permissions/${f.wp}/revoke`, undefined],
       [`${base(f)}/contractor-zone-permissions/${f.cp}/revoke`, undefined],
-    ] as const)
+    ] as const) {
+      await role(
+        f,
+        path.includes('/worker-zone-permissions') ? 'CONTRACTOR_REPRESENTATIVE' : 'SITE_MANAGER',
+      );
       assert.equal((await request(path, body)).status, 201);
+    }
     assert.equal(claims, 4);
     assert.equal(await policy(f), 5);
     const facts = await db.query(
-      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=ANY($1::uuid[]) ORDER BY c.operation',
+      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=ANY($1::uuid[]) ORDER BY c.operation',
       [[f.cp, f.wp]],
     );
     assert.deepEqual(
@@ -641,7 +663,7 @@ for (const op of [
   'worker-revoke',
 ] as const)
   test(`actual logout before public ${op} transaction claim denies all side effects`, async () => {
-    const f = await fixture();
+    const f = await fixture(op.startsWith('contractor') ? 'SITE_MANAGER' : 'ADMIN');
     if (op !== 'contractor-grant') await seedPair(f, op !== 'worker-grant');
     const before = await commands(),
       v = await policy(f);
@@ -740,7 +762,7 @@ test('public permission active account and changed temporary password are rechec
   }
 });
 test('public grants retain exact repeat requestId with no duplicate audit/fact/policy and reject changed requests', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     s = service();
   const first = await s.publicGrantContractor(f.site, contractorInput(f), ctx(f)),
     v = await policy(f);
@@ -749,9 +771,10 @@ test('public grants retain exact repeat requestId with no duplicate audit/fact/p
   assert.equal(await policy(f), v);
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1', [
-        f.cp,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
+        [f.cp],
+      )
     )[0].n,
     1,
   );
@@ -763,6 +786,7 @@ test('public grants retain exact repeat requestId with no duplicate audit/fact/p
     ),
     status(409),
   );
+  await role(f, 'CONTRACTOR_REPRESENTATIVE');
   const wp = await s.publicGrantWorker(f.site, workerInput(f), ctx(f)),
     v2 = await policy(f);
   assert.deepEqual(await s.publicGrantWorker(f.site, workerInput(f), ctx(f)), wp);
@@ -815,7 +839,7 @@ test('public Worker grant refuses unapproved/open-ended assignment, revoked Cont
   }
 });
 test('public permission intervals retain one microsecond and reject outside-parent or reversed intervals', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     s = service();
   await s.publicGrantContractor(
     f.site,
@@ -835,7 +859,7 @@ test('public permission intervals retain one microsecond and reject outside-pare
     )[0].exact,
     true,
   );
-  const other = await fixture();
+  const other = await fixture('SITE_MANAGER');
   await assert.rejects(
     s.publicGrantContractor(
       other.site,
@@ -853,6 +877,7 @@ test('public permission intervals retain one microsecond and reject outside-pare
     status(409),
   );
   await seedPair(other, false);
+  await role(other, 'CONTRACTOR_REPRESENTATIVE');
   await assert.rejects(
     s.publicGrantWorker(
       other.site,
@@ -863,7 +888,7 @@ test('public permission intervals retain one microsecond and reject outside-pare
   );
 });
 test('public Contractor grant and both revokes refuse cross-Site anchors without orphan command', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     other = await fixture();
   await seedPair(f);
   const n = await commands(),
@@ -885,7 +910,7 @@ test('public Contractor grant and both revokes refuse cross-Site anchors without
   assert.equal(await commands(), n);
 });
 test('public revokes remain possible after participation deactivation and assignment expiry', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await seedPair(f);
   await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
     f.participation,
@@ -893,12 +918,14 @@ test('public revokes remain possible after participation deactivation and assign
   await db.query("UPDATE worker_site_zone_assignment SET valid_until='2026-10-02Z' WHERE id=$1", [
     f.assignment,
   ]);
+  await role(f, 'CONTRACTOR_REPRESENTATIVE');
   await service().publicRevoke(f.site, f.wp, 'worker', ctx(f));
+  await role(f, 'SITE_MANAGER');
   await service().publicRevoke(f.site, f.cp, 'contractor', ctx(f));
   assert.equal(await policy(f), 3);
 });
 test('actual permission grant DTO rejects client actor/command, extra fields and missing/invalid offset dates', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await withApi(f, async (request) => {
     for (const body of [
       { ...contractorInput(f), actorUserId: randomUUID() },
@@ -920,15 +947,19 @@ test('actual permission grant DTO rejects client actor/command, extra fields and
   });
 });
 test('public permission partial journal and disabled permission/Site captures fail before source changes', async () => {
-  const f = await fixture();
-  await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO test_permission_witness');
+  const f = await fixture('SITE_MANAGER');
+  await db.query(
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO test_permission_witness',
+  );
   try {
     await assert.rejects(
       service().publicGrantContractor(f.site, contractorInput(f), ctx(f)),
       status(503),
     );
   } finally {
-    await db.query('ALTER TABLE test_permission_witness RENAME TO mf06_authority_commit_witness');
+    await db.query(
+      'ALTER TABLE test_permission_witness RENAME TO authorization_history_commit_receipt',
+    );
   }
   for (const table of ['contractor_zone_permission', 'site']) {
     await db.query(`ALTER TABLE ${table} DISABLE TRIGGER trg_mf06_capture_${table}`);
@@ -942,6 +973,7 @@ test('public permission partial journal and disabled permission/Site captures fa
     }
   }
   await seedPair(f, false);
+  await role(f, 'CONTRACTOR_REPRESENTATIVE');
   await db.query(
     'ALTER TABLE worker_zone_permission DISABLE TRIGGER trg_mf06_capture_worker_zone_permission',
   );
@@ -954,11 +986,11 @@ test('public permission partial journal and disabled permission/Site captures fa
   }
 });
 test('permission source-fact failure rolls back grant, audit, policy and journal command together', async () => {
-  const f = await fixture(),
+  const f = await fixture('SITE_MANAGER'),
     n = await commands(),
     v = await policy(f);
   await db.query(
-    "CREATE FUNCTION test_permission_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_permission_fact_failure()",
+    "CREATE FUNCTION test_permission_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_permission_fact_failure()",
   );
   try {
     await assert.rejects(service().publicGrantContractor(f.site, contractorInput(f), ctx(f)));
@@ -978,14 +1010,14 @@ test('permission source-fact failure rolls back grant, audit, policy and journal
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_permission_fact_failure ON mf06_authority_fact;DROP FUNCTION test_permission_fact_failure()',
+      'DROP TRIGGER test_permission_fact_failure ON authorization_history_revision;DROP FUNCTION test_permission_fact_failure()',
     );
   }
 });
 test('postcommit permission witness failure retains committed response and explicitly unconfirmed history', async () => {
-  const f = await fixture();
+  const f = await fixture('SITE_MANAGER');
   await db.query(
-    "CREATE FUNCTION test_permission_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_permission_witness_failure()",
+    "CREATE FUNCTION test_permission_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_permission_witness_failure()",
   );
   try {
     const p = await service().publicGrantContractor(f.site, contractorInput(f), ctx(f));
@@ -993,7 +1025,7 @@ test('postcommit permission witness failure retains committed response and expli
     assert.equal(
       (
         await db.query(
-          'SELECT w.command_id FROM mf06_authority_fact f LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+          'SELECT w.command_id FROM authorization_history_revision f LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
           [f.cp],
         )
       )[0].command_id,
@@ -1001,7 +1033,7 @@ test('postcommit permission witness failure retains committed response and expli
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_permission_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_permission_witness_failure()',
+      'DROP TRIGGER test_permission_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_permission_witness_failure()',
     );
   }
 });

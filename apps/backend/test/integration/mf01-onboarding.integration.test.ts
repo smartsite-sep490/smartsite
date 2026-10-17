@@ -1,3 +1,5 @@
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -30,8 +32,6 @@ import {
   type CreateContractorWorkerCommand,
   type CreateWorkerSiteZoneAssignmentCommand,
 } from '../../src/modules/workforce/directory/contractor-operations.service.js';
-import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
-import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { ContractorWorkerAccountsService } from '../../src/modules/workforce/directory/contractor-worker-accounts.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';

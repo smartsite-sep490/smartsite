@@ -82,36 +82,33 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     if (!byTable.has(row.table_name)) byTable.set(row.table_name, new Set());
     byTable.get(row.table_name)!.add(row.column_name);
   }
-  assert.deepEqual(
-    [...(byTable.get('app_user') ?? [])].sort(),
-    [
-      'created_at',
-      'display_name',
-      'id',
-      'is_active',
-      'must_change_password',
-      'password_hash',
-      'updated_at',
-      'username',
-    ],
-  );
-  assert.deepEqual(
-    [...(byTable.get('auth_session') ?? [])].sort(),
-    [
-      'client_type',
-      'created_at',
-      'expires_at',
-      'id',
-      'last_refreshed_at',
-      'refresh_token_hash',
-      'revoked_at',
-      'user_id',
-    ],
-  );
-  assert.deepEqual(
-    [...(byTable.get('user_role_assignment') ?? [])].sort(),
-    ['created_at', 'id', 'role', 'site_id', 'user_id'],
-  );
+  assert.deepEqual([...(byTable.get('app_user') ?? [])].sort(), [
+    'created_at',
+    'display_name',
+    'id',
+    'is_active',
+    'must_change_password',
+    'password_hash',
+    'updated_at',
+    'username',
+  ]);
+  assert.deepEqual([...(byTable.get('auth_session') ?? [])].sort(), [
+    'client_type',
+    'created_at',
+    'expires_at',
+    'id',
+    'last_refreshed_at',
+    'refresh_token_hash',
+    'revoked_at',
+    'user_id',
+  ]);
+  assert.deepEqual([...(byTable.get('user_role_assignment') ?? [])].sort(), [
+    'created_at',
+    'id',
+    'role',
+    'site_id',
+    'user_id',
+  ]);
   const constraints = (await dataSource.query(`
     SELECT conname FROM pg_constraint
     WHERE conrelid IN ('app_user'::regclass, 'auth_session'::regclass, 'user_role_assignment'::regclass)
@@ -161,11 +158,7 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     (error: { status?: number }) => error.status === 401,
   );
 
-  const login = await auth.login(
-    `ADMIN.ONE.${suffix}`,
-    'NewAdmin123!',
-    AuthClientType.WEB,
-  );
+  const login = await auth.login(`ADMIN.ONE.${suffix}`, 'NewAdmin123!', AuthClientType.WEB);
   assert.equal(login.user.mustChangePassword, false);
   const authenticated = await auth.authenticate(login.accessToken);
   assert.equal(authenticated.user.id, admin.id);
@@ -229,7 +222,11 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     0,
   );
 
-  const workerLogin = await auth.login(worker.username, 'StrongPassword!123', AuthClientType.MOBILE);
+  const workerLogin = await auth.login(
+    worker.username,
+    'StrongPassword!123',
+    AuthClientType.MOBILE,
+  );
   assert.equal(workerLogin.user.mustChangePassword, false);
   await assert.rejects(
     () => auth.changePassword(worker.id, 'StrongPassword!123', 'weak'),
@@ -455,10 +452,7 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     () => adminGuard.canActivate(createHttpExecutionContext(tempWorkerReq)),
     isPasswordChangeRequired,
   );
-  await assert.rejects(
-    () => sitesController.list(tempWorkerReq),
-    isPasswordChangeRequired,
-  );
+  await assert.rejects(() => sitesController.list(tempWorkerReq), isPasswordChangeRequired);
   await assert.rejects(
     () =>
       sites.create(
@@ -536,8 +530,8 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   assert.equal(resetLogin.user.mustChangePassword, false);
 
   const authorityCommands = (await dataSource.query(
-    `SELECT operation FROM mf06_authority_command c
-     JOIN mf06_authority_commit_witness w ON w.command_id = c.command_id
+    `SELECT operation FROM authorization_history_command c
+     JOIN authorization_history_commit_receipt w ON w.command_id = c.command_id
      ORDER BY c.started_at ASC`,
   )) as { operation: string }[];
   assert.deepEqual(
@@ -570,11 +564,7 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     .getRepository(AuthSessionEntity)
     .countBy({ userId: worker.id, revokedAt: IsNull() });
   assert.equal(activeSessionsAfterReset, 0);
-  const secondResetLogin = await auth.login(
-    worker.username,
-    'SecondReset123!',
-    AuthClientType.WEB,
-  );
+  const secondResetLogin = await auth.login(worker.username, 'SecondReset123!', AuthClientType.WEB);
   assert.equal(secondResetLogin.user.mustChangePassword, false);
   await auth.logout(secondResetLogin.refreshToken, AuthClientType.WEB);
 
@@ -620,10 +610,10 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
     users.setStatus(admin.id, secondAdmin.id, { isActive: false }),
     users.setStatus(secondAdmin.id, admin.id, { isActive: false }),
   ]);
-  assert.deepEqual(
-    concurrentDeactivate.map((item) => item.status).sort(),
-    ['fulfilled', 'rejected'],
-  );
+  assert.deepEqual(concurrentDeactivate.map((item) => item.status).sort(), [
+    'fulfilled',
+    'rejected',
+  ]);
   const rejectedDeactivate = concurrentDeactivate.find(
     (item): item is PromiseRejectedResult => item.status === 'rejected',
   );

@@ -146,13 +146,16 @@ test(
       request<T>(route, { method: 'POST', token, body, expected: 201 });
     const site = await create<SiteResponse>('/sites', { code: 'BIZ-A', name: 'Synthetic Site A' });
     const other = await create<SiteResponse>('/sites', { code: 'BIZ-B', name: 'Synthetic Site B' });
-    const [{ id: adminId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
-      'business-admin',
-    ]);
-    await db.query(
-      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3),($4,$2,'SITE_MANAGER',$5)",
-      [randomUUID(), adminId, site.id, randomUUID(), other.id],
-    );
+    await create<AccountResponse>('/users', {
+      username: 'business-manager',
+      displayName: 'Synthetic Site Manager',
+      temporaryPassword: 'InitialManager123!',
+      roleAssignments: [
+        { role: 'SITE_MANAGER', siteId: site.id },
+        { role: 'SITE_MANAGER', siteId: other.id },
+      ],
+    });
+    const manager = await login('business-manager', 'InitialManager123!');
     const reviewer = await create<AccountResponse>('/users', {
       username: 'business-safety',
       displayName: 'Synthetic Safety',
@@ -177,17 +180,25 @@ test(
       name: 'Synthetic business Contractor',
     });
     const createProfile = async (target: SiteResponse, label: string) => {
-      await create(`/contractors/${contractor.id}/participations`, {
-        siteId: target.id,
-        validFrom: '2020-01-01T00:00:00Z',
-        validUntil: null,
-      });
+      await create(
+        `/contractors/${contractor.id}/participations`,
+        {
+          siteId: target.id,
+          validFrom: '2020-01-01T00:00:00Z',
+          validUntil: null,
+        },
+        manager,
+      );
       const username = `business-rep-${label}`;
-      await create(`/sites/${target.id}/contractors/${contractor.id}/representative-accounts`, {
-        username,
-        displayName: 'Synthetic business Representative',
-        temporaryPassword: 'SyntheticRep123!',
-      });
+      await create(
+        `/sites/${target.id}/contractors/${contractor.id}/representative-accounts`,
+        {
+          username,
+          displayName: 'Synthetic business Representative',
+          temporaryPassword: 'SyntheticRep123!',
+        },
+        manager,
+      );
       const representative = await login(username, 'SyntheticRep123!');
       return create<WorkerResponse>(
         `/sites/${target.id}/workers`,
@@ -201,17 +212,26 @@ test(
     };
     const worker = await createProfile(site, 'A');
     const foreignWorker = await createProfile(other, 'B');
-    const camera = await create<CameraResponse>(`/sites/${site.id}/cameras`, {
-      code: 'BIZ-CAM',
-      externalId: 'SYNTHETIC-CAM',
-      name: 'Synthetic Camera',
-    });
-    const zone = await create<ZoneResponse>(`/sites/${site.id}/zones`, {
-      code: 'BIZ-ZONE',
-      name: 'Synthetic Zone',
-      type: 'RESTRICTED',
-      restrictionPolicy: 'AUTHORIZATION_REQUIRED',
-      requiredPpe: ['HARD_HAT'],
+    const camera = await create<CameraResponse>(
+      `/sites/${site.id}/cameras`,
+      {
+        code: 'BIZ-CAM',
+        externalId: 'SYNTHETIC-CAM',
+        name: 'Synthetic Camera',
+      },
+      manager,
+    );
+    const zone = await request<ZoneResponse>(`/sites/${site.id}/zones`, {
+      method: 'POST',
+      token: manager,
+      expected: 201,
+      body: {
+        code: 'BIZ-ZONE',
+        name: 'Synthetic Zone',
+        type: 'RESTRICTED',
+        restrictionPolicy: 'AUTHORIZATION_REQUIRED',
+        requiredPpe: ['HARD_HAT'],
+      },
     });
     const { region } = await create<RegionMutationResponse>(
       `/sites/${site.id}/cameras/${camera.id}/regions`,
@@ -227,6 +247,7 @@ test(
           ],
         },
       },
+      manager,
     );
     const eventId = randomUUID(),
       streamSessionId = randomUUID();

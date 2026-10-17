@@ -302,12 +302,12 @@ export class MainAssignmentCommandService {
       if (context[0]?.value) conflict('Nested authority commands are not supported');
       const op = 'MAIN_ASSIGNMENT_' + operation;
       const inserted = await manager.query(
-        'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id',
+        'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id',
         [commandId, value.actorUserId, op, requestHash],
       );
       if (!inserted.length) {
         const previous = await manager.query(
-          'SELECT request_hash,operation,actor_user_id FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT request_hash,operation,actor_user_id FROM authorization_history_command WHERE command_id=$1',
           [commandId],
         );
         if (
@@ -328,7 +328,7 @@ export class MainAssignmentCommandService {
           ? await this.create(manager, value)
           : await this.transition(manager, operation, value);
       await manager.query(
-        "INSERT INTO mf06_assignment_command_result(command_id,source_id,contractor_id,result_json,result_hash) SELECT $1,a.id,p.contractor_id,mf06_assignment_response(a.id),'' FROM worker_site_zone_assignment a LEFT JOIN contractor_site_participation p ON p.id=a.site_contractor_id WHERE a.id=$2",
+        "INSERT INTO worker_assignment_command_receipt(command_id,source_id,contractor_id,result_json,result_hash) SELECT $1,a.id,p.contractor_id,mf06_assignment_response(a.id),'' FROM worker_site_zone_assignment a LEFT JOIN contractor_site_participation p ON p.id=a.site_contractor_id WHERE a.id=$2",
         [commandId, sourceId],
       );
       const receipt = await this.result(manager, commandId);
@@ -344,7 +344,7 @@ export class MainAssignmentCommandService {
     });
     try {
       await this.source.query(
-        'INSERT INTO mf06_authority_commit_witness(command_id,transaction_id) SELECT command_id,transaction_id FROM mf06_authority_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM mf06_authority_commit_witness w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
+        'INSERT INTO authorization_history_commit_receipt(command_id,transaction_id) SELECT command_id,transaction_id FROM authorization_history_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM authorization_history_commit_receipt w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
         [commandId],
       );
     } catch {
@@ -536,7 +536,7 @@ export class MainAssignmentCommandService {
   }
   private async result(manager: EntityManager, commandId: string): Promise<Receipt> {
     const rows = await manager.query(
-      "SELECT result_json,contractor_id,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM mf06_assignment_command_result WHERE command_id=$1",
+      "SELECT result_json,contractor_id,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM worker_assignment_command_receipt WHERE command_id=$1",
       [commandId],
     );
     const parsed = assignmentSchema.safeParse(rows[0]?.result_json);

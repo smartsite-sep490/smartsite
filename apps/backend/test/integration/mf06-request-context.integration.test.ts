@@ -19,7 +19,7 @@ import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/m
 import { selectZoneEntrySubject } from '../../src/modules/safety/identity/observation-identity-subject.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
-const isolated = createIsolatedTestDatabase({ legacy: true });
+const isolated = createIsolatedTestDatabase({ canonical: true });
 const db = isolated.dataSource;
 const reader = new Mf06RequestContextReader(db);
 before(() => isolated.initialize());

@@ -93,6 +93,22 @@ Reviewer/owner: Root; implementation and independent regression workers were act
 Herdr Agy p7/p5, with p8 independent read-only review. No role grant or Backend
 permission bypass is implied. Context telemetry remains unknown.
 
+## Tuấn Backend MF05/MF06, 16 October
+
+The [scoped Backend exceptions](../operations/mf05-mf06-tuan-backend-report.md#loc-exceptions)
+record baseline/current physical counts, owner, review scope and follow-up for
+bounded authority, transaction, fixture and recovery changes from bundle v4.
+
+## Tuấn Main-sync merge fixture, 16 October
+
+`apps/backend/test/integration/mf07-scheduling-queries.integration.test.ts`
+grows from1155 physical lines at907b4ca to1159 in the combined candidate. Owner:
+Tuấn. The four-line delta scopes the canonical fixture inside its test and
+registers cleanup before initialization; incoming Shift assertions remain.
+Keep this existing suite for the merge; extract its shared setup/query journeys
+before further feature growth. Independent merge review found no new issue in
+these resolutions; release and populated56 upgrade acceptance remain separate.
+
 ## Main login role-resolution repair, 16 October
 
 | Path                   | Baseline | Current | Reason and follow-up                                                                                                                                                                                                                                                                      |

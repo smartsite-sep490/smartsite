@@ -14,7 +14,7 @@ for (const configuredPort of [false, true])
   test(
     'image healthcheck rejects live/unready main and recovers with ' +
       (configuredPort ? 'configured port' : 'default image port'),
-    { timeout: 30_000 },
+    { timeout: 45_000 },
     async (t) => {
       const databaseUrl = new URL(resolveTestDatabaseUrl());
       assert.equal(databaseUrl.hostname, '127.0.0.1');
@@ -107,7 +107,9 @@ for (const configuredPort of [false, true])
           signal: AbortSignal.timeout(2000),
         });
       let started = false;
-      for (let attempt = 0; attempt < 40 && !started; attempt++) {
+      // Match the image's 15s startup grace on a cold/shared desktop.
+      const startupDeadline = Date.now() + 15_000;
+      while (Date.now() < startupDeadline && !started) {
         assert.equal(child.exitCode, null, 'Owned main exited before readiness');
         try {
           started = (await read('ready')).status === 200;

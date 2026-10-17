@@ -175,34 +175,34 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
   const unqueued = await seedAssessment(db, 'UNAVAILABLE', first.siteId, false);
   const other = await seedAssessment(db, 'UNAVAILABLE', undefined, false);
   await db.query(
-    "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='CLAIMED',attempt_count=1,lease_token=$2,lease_expires_at=deadline_at WHERE request_id=$1",
+    "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='CLAIMED',attempt_count=1,lease_token=$2,lease_expires_at=deadline_at WHERE request_id=$1",
     [claimed.requestId, randomUUID()],
   );
   await db.query(
-    "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='FAILED',last_error_code='PRIVATE_FAILURE' WHERE request_id=$1",
+    "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='FAILED',last_error_code='PRIVATE_FAILURE' WHERE request_id=$1",
     [failed.requestId],
   );
   await db.query(
-    "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='CANCELLED' WHERE request_id=$1",
+    "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='CANCELLED' WHERE request_id=$1",
     [cancelled.requestId],
   );
   // File-owned absent-job fixture: production job heads are intentionally not deletable.
-  await db.query('ALTER TABLE mf06_assessment_job DISABLE TRIGGER trg_mf06_job_head_update');
-  await db.query('ALTER TABLE mf06_assessment_job DISABLE TRIGGER trg_mf06_b2_job_complete');
+  await db.query('ALTER TABLE zone_entry_assessment_job DISABLE TRIGGER trg_mf06_job_head_update');
+  await db.query('ALTER TABLE zone_entry_assessment_job DISABLE TRIGGER trg_mf06_b2_job_complete');
   try {
     const removed = await db.query(
-      'DELETE FROM mf06_assessment_job WHERE request_id=$1 RETURNING request_id',
+      'DELETE FROM zone_entry_assessment_job WHERE request_id=$1 RETURNING request_id',
       [unqueued.requestId],
     );
     assert.ok(removed);
     const [remaining] = await db.query(
-      'SELECT count(*)::int AS total FROM mf06_assessment_job WHERE request_id=$1',
+      'SELECT count(*)::int AS total FROM zone_entry_assessment_job WHERE request_id=$1',
       [unqueued.requestId],
     );
     assert.equal(remaining.total, 0);
   } finally {
-    await db.query('ALTER TABLE mf06_assessment_job ENABLE TRIGGER trg_mf06_job_head_update');
-    await db.query('ALTER TABLE mf06_assessment_job ENABLE TRIGGER trg_mf06_b2_job_complete');
+    await db.query('ALTER TABLE zone_entry_assessment_job ENABLE TRIGGER trg_mf06_job_head_update');
+    await db.query('ALTER TABLE zone_entry_assessment_job ENABLE TRIGGER trg_mf06_b2_job_complete');
   }
   const query = new Mf06RequestStatusQueryService(
     db,
@@ -319,7 +319,9 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
     [unqueued, 'NOT_QUEUED'],
   ] as const;
   const before = (
-    await db.query('SELECT to_jsonb(j) AS value FROM mf06_assessment_job j ORDER BY request_id')
+    await db.query(
+      'SELECT to_jsonb(j) AS value FROM zone_entry_assessment_job j ORDER BY request_id',
+    )
   ).map((row: { value: unknown }) => row.value);
   for (const [fixture, status] of states)
     await t.test(`public ${status} exposes exactly safe13 fields`, async () => {
@@ -350,7 +352,7 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
     async () => {
       const page = await query.list(first.siteId, 0, 2);
       const expected = await db.query(
-        "SELECT r.request_id FROM mf06_assessment_request r LEFT JOIN mf06_assessment a ON a.request_id=r.request_id WHERE r.site_id=$1 AND (a.assessment_id IS NULL OR a.provenance<>'SYNTHETIC_TEST') ORDER BY r.captured_at DESC,r.request_id DESC",
+        "SELECT r.request_id FROM zone_entry_assessment_request r LEFT JOIN zone_entry_assessment a ON a.request_id=r.request_id WHERE r.site_id=$1 AND (a.assessment_id IS NULL OR a.provenance<>'SYNTHETIC_TEST') ORDER BY r.captured_at DESC,r.request_id DESC",
         [first.siteId],
       );
       assert.equal(page.total, 6);
@@ -376,7 +378,9 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
   );
   await t.test('reads preserve every persisted job head', async () => {
     const after = (
-      await db.query('SELECT to_jsonb(j) AS value FROM mf06_assessment_job j ORDER BY request_id')
+      await db.query(
+        'SELECT to_jsonb(j) AS value FROM zone_entry_assessment_job j ORDER BY request_id',
+      )
     ).map((row: { value: unknown }) => row.value);
     assert.deepEqual(after, before);
   });
@@ -384,11 +388,13 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
     'expired deadline annotates PENDING and CLAIMED without changing status',
     async () => {
       // File-owned expired-clock fixture; production created_at remains immutable.
-      await db.query('ALTER TABLE mf06_assessment_job DISABLE TRIGGER trg_mf06_job_head_update');
+      await db.query(
+        'ALTER TABLE zone_entry_assessment_job DISABLE TRIGGER trg_mf06_job_head_update',
+      );
       try {
         for (const fixture of [pending, claimed]) {
           await db.query(
-            "UPDATE mf06_assessment_job SET created_at=transaction_timestamp()-interval '3 hours',deadline_at=transaction_timestamp()-interval '1 hour',lease_expires_at=CASE WHEN status='CLAIMED' THEN transaction_timestamp()-interval '2 hours' ELSE NULL END WHERE request_id=$1",
+            "UPDATE zone_entry_assessment_job SET created_at=transaction_timestamp()-interval '3 hours',deadline_at=transaction_timestamp()-interval '1 hour',lease_expires_at=CASE WHEN status='CLAIMED' THEN transaction_timestamp()-interval '2 hours' ELSE NULL END WHERE request_id=$1",
             [fixture.requestId],
           );
           const result = await query.get(first.siteId, fixture.requestId);
@@ -396,61 +402,67 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
           assert.equal(result.jobStatus, fixture === pending ? 'PENDING' : 'CLAIMED');
         }
       } finally {
-        await db.query('ALTER TABLE mf06_assessment_job ENABLE TRIGGER trg_mf06_job_head_update');
+        await db.query(
+          'ALTER TABLE zone_entry_assessment_job ENABLE TRIGGER trg_mf06_job_head_update',
+        );
       }
     },
   );
   await t.test('job success without validated assessment fails closed', async () => {
     await db.query(
-      "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='SUCCEEDED' WHERE request_id=$1",
+      "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='SUCCEEDED' WHERE request_id=$1",
       [pending.requestId],
     );
     await assert.rejects(() => query.get(first.siteId, pending.requestId), hasStatus(503));
     await assert.rejects(() => query.list(first.siteId), hasStatus(503));
     await db.query(
-      "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='PENDING' WHERE request_id=$1",
+      "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='PENDING' WHERE request_id=$1",
       [pending.requestId],
     );
   });
   await t.test('a completed record with mismatched operational status fails closed', async () => {
-    await db.query('ALTER TABLE mf06_assessment_job DISABLE TRIGGER trg_mf06_b2_job_complete');
+    await db.query(
+      'ALTER TABLE zone_entry_assessment_job DISABLE TRIGGER trg_mf06_b2_job_complete',
+    );
     try {
       await db.query(
-        "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='FAILED' WHERE request_id=$1",
+        "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='FAILED' WHERE request_id=$1",
         [first.requestId],
       );
       await assert.rejects(() => query.get(first.siteId, first.requestId), hasStatus(503));
       await db.query(
-        "UPDATE mf06_assessment_job SET head_revision=head_revision+1,status='SUCCEEDED' WHERE request_id=$1",
+        "UPDATE zone_entry_assessment_job SET head_revision=head_revision+1,status='SUCCEEDED' WHERE request_id=$1",
         [first.requestId],
       );
     } finally {
-      await db.query('ALTER TABLE mf06_assessment_job ENABLE TRIGGER trg_mf06_b2_job_complete');
+      await db.query(
+        'ALTER TABLE zone_entry_assessment_job ENABLE TRIGGER trg_mf06_b2_job_complete',
+      );
     }
   });
   await t.test(
     'stored assessment command corruption cannot produce a success response',
     async () => {
       await db.query(
-        'ALTER TABLE mf06_assessment DISABLE TRIGGER trg_mf06_b2_assessment_immutable',
+        'ALTER TABLE zone_entry_assessment DISABLE TRIGGER trg_mf06_b2_assessment_immutable',
       );
       const [original] = await db.query(
-        'SELECT command_hash FROM mf06_assessment WHERE assessment_id=$1',
+        'SELECT command_hash FROM zone_entry_assessment WHERE assessment_id=$1',
         [first.assessmentId],
       );
       try {
-        await db.query('UPDATE mf06_assessment SET command_hash=$2 WHERE assessment_id=$1', [
+        await db.query('UPDATE zone_entry_assessment SET command_hash=$2 WHERE assessment_id=$1', [
           first.assessmentId,
           '0'.repeat(64),
         ]);
         await assert.rejects(() => query.get(first.siteId, first.requestId), hasStatus(503));
-        await db.query('UPDATE mf06_assessment SET command_hash=$2 WHERE assessment_id=$1', [
+        await db.query('UPDATE zone_entry_assessment SET command_hash=$2 WHERE assessment_id=$1', [
           first.assessmentId,
           original.command_hash,
         ]);
       } finally {
         await db.query(
-          'ALTER TABLE mf06_assessment ENABLE TRIGGER trg_mf06_b2_assessment_immutable',
+          'ALTER TABLE zone_entry_assessment ENABLE TRIGGER trg_mf06_b2_assessment_immutable',
         );
       }
     },
@@ -458,11 +470,11 @@ test('canonical39 persisted request states remain scoped, validated and read-onl
   await t.test(
     'missing selected-namespace job relation never falls back through search_path',
     async () => {
-      await db.query('ALTER TABLE mf06_assessment_job RENAME TO fixture_hidden_job');
+      await db.query('ALTER TABLE zone_entry_assessment_job RENAME TO fixture_hidden_job');
       try {
         await assert.rejects(() => query.list(first.siteId), hasStatus(503));
       } finally {
-        await db.query('ALTER TABLE fixture_hidden_job RENAME TO mf06_assessment_job');
+        await db.query('ALTER TABLE fixture_hidden_job RENAME TO zone_entry_assessment_job');
       }
     },
   );
@@ -550,7 +562,7 @@ async function seedAssessment(
     evidence: [],
   });
   const [created] = await db.query(
-    'SELECT request_id FROM mf06_assessment_request WHERE event_id=$1',
+    'SELECT request_id FROM zone_entry_assessment_request WHERE event_id=$1',
     [eventId],
   );
   assert.ok(created?.request_id);
@@ -563,7 +575,7 @@ async function seedAssessment(
   }).claim();
   assert.ok(claim);
   const [request] = await db.query(
-    'SELECT binding_hash FROM mf06_assessment_request WHERE request_id=$1',
+    'SELECT binding_hash FROM zone_entry_assessment_request WHERE request_id=$1',
     [claim.requestId],
   );
   const result = await new Mf06AssessmentStore(db).finalize({

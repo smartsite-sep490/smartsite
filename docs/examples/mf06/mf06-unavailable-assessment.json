@@ -1,0 +1,15 @@
+{
+  "assessmentId": "8fe6a9b6-67f6-4ebc-99dd-6159f6951abd",
+  "requestId": "a7c64413-4586-4364-a31c-5a309d81b319",
+  "siteId": "d44448fd-0b4e-4593-a10d-fd48936b21a5",
+  "eventId": "64014f57-18f8-4803-b045-a03e8d9d7f65",
+  "cameraId": "78db5f67-c310-4aad-a545-97c5654d4c43",
+  "zoneId": "09318d15-4fb2-4a6b-8d8a-de9ccf2bfe57",
+  "capturedAt": "2026-10-16T00:00:00Z",
+  "assessedAt": "2026-10-16T00:00:01Z",
+  "purpose": "INITIAL_OBSERVATION_ASSESSMENT",
+  "outcome": "UNAVAILABLE",
+  "reasonCode": "SERVICE_DISABLED",
+  "evaluatorVersion": "synthetic-handoff-example-v1",
+  "provenance": "UNAVAILABLE"
+}

@@ -26,7 +26,10 @@ before(() => database.initialize());
 after(() => database.dispose());
 
 test('full AppModule configuration image works before any Region and withholds pixels after real session logout', async () => {
-  assert.equal(database.dataSource.migrations.length, 61);
+  assert.equal(
+    database.dataSource.migrations.length,
+    (await database.dataSource.query('SELECT count(*)::int n FROM migrations'))[0].n,
+  );
   assert.equal(await database.dataSource.showMigrations(), false);
   const suffix = randomUUID().slice(0, 8);
   const password = 'SyntheticFixture123!';
