@@ -12,6 +12,20 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it('identifies the worker missing checkout in both languages without translating their name', async () => {
+    const item = {
+      event: 'MISSING_CHECKOUT' as const,
+      message:
+        'Worker Nguyễn An (W000001) is missing checkout for the shift on 2026-10-16. The shift ended more than five minutes ago. Hours remain provisional.',
+    };
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      'Công nhân Nguyễn An (W000001) thiếu lượt check-out cho ca ngày 2026-10-16. Ca đã kết thúc hơn năm phút. Giờ làm hiện là tạm tính.',
+    );
+    await i18n.changeLanguage('en');
+    expect(formatNotificationDisplayMessage(item)).toBe(item.message);
+  });
+
   it('translates the exit-policy reminder from the server and preserves configured limits', async () => {
     const item = {
       event: 'EARLY_EXIT' as const,
@@ -179,4 +193,37 @@ it('preserves authored Safety bodies even when they exactly match known system c
   await i18n.changeLanguage('en');
   expect(formatNotificationDisplayMessage({ event: 'CHECKLIST_RECORDED', message })).toBe(message);
   expect(formatNotificationTitle({ event: 'CHECKLIST_RECORDED', title: message })).toBe(message);
+});
+
+it('switches generated time-request notices both ways without translating authored names and reasons', async () => {
+  const name = 'Shift change awaiting review';
+  const reason = 'Checklist report recorded\n<keep this reason>';
+  const request = {
+    event: 'TIME_REQUESTED' as const,
+    message: `${name} requested overtime: ${reason}`,
+  };
+  const review = {
+    event: 'TIME_REJECTED' as const,
+    message: `Attendance correction rejected: ${reason}`,
+  };
+  await i18n.changeLanguage('vi');
+  expect(formatNotificationDisplayMessage(request)).toBe(`${name} gửi yêu cầu tăng ca: ${reason}`);
+  expect(formatNotificationDisplayMessage(review)).toBe(`Sửa công: Bị từ chối Lý do: ${reason}`);
+  expect(
+    formatNotificationDisplayMessage({
+      event: 'TIME_APPROVED',
+      message: `Duplicate IN ignored: ${reason}`,
+    }),
+  ).toBe(`Đã loại lượt vào trùng: ${reason}`);
+  expect(formatNotificationTitle({ event: 'TIME_REQUESTED', title: 'TIME REQUESTED' })).toBe(
+    translate('notifications.TIME_REQUESTED'),
+  );
+  await i18n.changeLanguage('en');
+  expect(formatNotificationDisplayMessage(request)).toBe(request.message);
+  expect(formatNotificationDisplayMessage(review)).toBe(
+    `Attendance correction: Rejected Reason: ${reason}`,
+  );
+  expect(formatNotificationTitle({ event: 'TIME_REQUESTED', title: 'TIME REQUESTED' })).toBe(
+    'Time request',
+  );
 });

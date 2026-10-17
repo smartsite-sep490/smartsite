@@ -45,6 +45,12 @@ vi.mock('./components/dashboard/DashboardView', () => ({
 vi.mock('./components/workforce/components/WorkforceView', () => ({
   WorkforceView: () => <div>Worker schedule</div>,
 }));
+vi.mock('./components/contractor/ContractorDashboardView', () => ({
+  ContractorDashboardView: () => <div>Contractor teams</div>,
+}));
+vi.mock('./components/access/AccessControlView', () => ({
+  AccessControlView: () => <div>Scoped Site access</div>,
+}));
 vi.mock('./components/workforce/components/SiteSetupView', () => ({
   SiteSetupView: () => <div>Site Manager setup</div>,
 }));
@@ -137,12 +143,36 @@ it('redirects a Worker opening or refreshing /dashboard to /workforce', async ()
   expect(state.dashboardRender).not.toHaveBeenCalled();
 });
 
+it.each(['WORKER', 'CONTRACTOR_REPRESENTATIVE'])(
+  'blocks direct safety URLs for %s',
+  async (role) => {
+    state.accessToken = 'synthetic-token';
+    profile([role]);
+    mount('/incidents');
+    await screen.findByText(role === 'WORKER' ? 'Worker schedule' : 'Contractor teams');
+    expect(screen.getByTestId('location').textContent).toBe(
+      role === 'WORKER' ? '/workforce' : '/contractor-teams',
+    );
+  },
+);
+
 it.each(['ADMIN', 'SITE_MANAGER'])(
   'retains Dashboard for %s after profile loading',
   async (role) => {
     state.accessToken = 'synthetic-token';
     profile([role]);
     mount('/login');
+    await screen.findByText('Management dashboard');
+    expect(screen.getByTestId('location').textContent).toBe('/dashboard');
+  },
+);
+
+it.each(['/workforce', '/schedule-setup'])(
+  'redirects an Admin-only account opening %s to Dashboard',
+  async (path) => {
+    state.accessToken = 'synthetic-token';
+    profile(['ADMIN']);
+    mount(path);
     await screen.findByText('Management dashboard');
     expect(screen.getByTestId('location').textContent).toBe('/dashboard');
   },
@@ -166,14 +196,13 @@ it('redirects unauthenticated visitors to login', async () => {
 });
 
 it.each(['/access', '/workforce'])(
-  'redirects Site Manager opening %s to their setup page',
+  'retains Site Manager access to %s with its scoped capabilities',
   async (path) => {
     state.accessToken = 'synthetic-token';
     profile(['SITE_MANAGER']);
     mount(path);
-    await screen.findByText('Site Manager setup');
-    expect(screen.getByTestId('location').textContent).toBe('/site-setup');
-    expect(screen.queryByText('Worker schedule')).toBeNull();
+    await screen.findByText(path === '/access' ? 'Scoped Site access' : 'Worker schedule');
+    expect(screen.getByTestId('location').textContent).toBe(path);
   },
 );
 

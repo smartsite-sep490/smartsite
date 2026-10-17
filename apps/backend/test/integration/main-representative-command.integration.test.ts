@@ -61,6 +61,10 @@ async function fixture(kind: Kind = 'GRANT') {
     kind === 'GRANT' ? null : f.site,
   ]);
   await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), f.actor, f.site],
+  );
+  await db.query(
     "INSERT INTO contractor(id,code,name,is_active) VALUES($1,$1::uuid::text,'Synthetic Contractor',true)",
     [f.contractor],
   );
@@ -489,7 +493,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
       const response = await call(kind);
       assert.equal(response.status, 403);
       const error = (await response.json()) as { code: string };
-      assert.equal(error.code, kind === 'GRANT' ? 'PASSWORD_CHANGE_REQUIRED' : 'FORBIDDEN');
+      assert.equal(error.code, kind === 'ASSIGN' ? 'FORBIDDEN' : 'PASSWORD_CHANGE_REQUIRED');
       assert.equal(await grantCount(f.contractor, f.target), 0);
       assert.equal(await assignmentCount(f.site, f.contractor, f.target), 0);
     });
@@ -506,6 +510,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
         }
         assert.equal((await call(kind, undefined, 'invalid')).status, 400);
         if (kind === 'ASSIGN') {
+          // Main's Site Manager guard denies the unknown scope before DTO/path validation.
           assert.equal((await call(kind, undefined, f.contractor, 'invalid')).status, 403);
         }
         assert.equal(await grantCount(f.contractor, f.target), 0);
@@ -514,13 +519,13 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
     },
   );
 
-  test('Representative ' + kind + ' inappropriate actor receives 403 Forbidden', async () => {
-    const f = await fixture(kind);
-    await db.query('UPDATE user_role_assignment SET role=$3,site_id=$2 WHERE user_id=$1', [
-      f.actor,
-      kind === 'GRANT' ? f.site : null,
-      kind === 'GRANT' ? 'SITE_MANAGER' : 'ADMIN',
-    ]);
+  test('Representative ' + kind + ' Safety-only actor receives 403 Forbidden', async () => {
+    const f = await fixture();
+    await db.query('DELETE FROM user_role_assignment WHERE user_id=$1', [f.actor]);
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SAFETY_OFFICER',$3)",
+      [randomUUID(), f.actor, f.site],
+    );
     await withApi(f, async (call) => {
       assert.equal((await call(kind)).status, 403);
       assert.equal(await grantCount(f.contractor, f.target), 0);
@@ -555,15 +560,13 @@ for (const kind of ['GRANT', 'ASSIGN'] as const) {
               ),
             ]);
             if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
-            if (change === 'ROLE')
+            if (change === 'ROLE') {
+              await db.query('DELETE FROM user_role_assignment WHERE user_id=$1', [f.actor]);
               await db.query(
-                'UPDATE user_role_assignment SET role=$3,site_id=$2 WHERE user_id=$1',
-                [
-                  f.actor,
-                  kind === 'GRANT' ? f.site : null,
-                  kind === 'GRANT' ? 'SITE_MANAGER' : 'ADMIN',
-                ],
+                "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SAFETY_OFFICER',$3)",
+                [randomUUID(), f.actor, f.site],
               );
+            }
             if (change === 'DEACTIVATE')
               await db.query('UPDATE app_user SET is_active=false WHERE id=$1', [f.actor]);
             if (change === 'TEMP_PASSWORD')

@@ -29,7 +29,8 @@ import { pagination } from '../../common/http/pagination.js';
 import type { ZoneEntity } from '../../database/entities/zone.entity.js';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { configurationCommandContext } from '../auth/configuration-command-context.js';
-import { SiteManagerGuard, SiteSetupReadGuard } from '../auth/site-manager.guard.js';
+import { SiteManagerGuard } from '../auth/site-manager.guard.js';
+import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import {
   CreateZoneCommand,
@@ -61,7 +62,7 @@ function zoneResponse(zone: ZoneEntity) {
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
 @ApiServiceUnavailableResponse({ type: ErrorResponseDto })
-@UseGuards(UserAuthGuard, SiteSetupReadGuard)
+@UseGuards(UserAuthGuard, SiteConfigurationGuard)
 @Controller('sites/:siteId/zones')
 export class ZonesController {
   private readonly logger = new Logger(ZonesController.name);

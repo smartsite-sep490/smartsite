@@ -78,6 +78,7 @@ import type {
   VisitorGateCommand,
   WorkerQrVerificationResponse,
   VisitorGateEventResponse,
+  VisitorQrPreviewResponse,
   ConfirmPassageCommand,
   GateEventResponse,
   AccessSetupResponse,
@@ -648,6 +649,14 @@ export class SmartSiteManagementClient {
       token,
     );
   }
+  retryVisitorEmail(token: string, siteId: string, visitId: string) {
+    return this.request<VisitResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/visits/${pathId(visitId)}/email`,
+      token,
+      {},
+    );
+  }
   decideVisit(
     token: string,
     siteId: string,
@@ -689,6 +698,21 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/visitor-gate-events`,
       token,
       input,
+    );
+  }
+  previewVisitorQr(token: string, siteId: string, gateId: string, qrToken: string) {
+    return this.request<VisitorQrPreviewResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/visitor-qr-preview`,
+      token,
+      { token: qrToken },
+    );
+  }
+  listVisitorEvents(token: string, siteId: string) {
+    return this.request<{ items: VisitorGateEventResponse[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/visitor-gate-events`,
+      token,
     );
   }
 
@@ -2998,6 +3022,12 @@ export class SmartSiteManagementClient {
   }
 
   // Workforce / MF07 Endpoints
+  contractorParticipationOptions(token: string, siteId: string) {
+    return this.request<{
+      items: Array<Pick<ContractorResponse, 'id' | 'code' | 'name' | 'isActive'>>;
+    }>('GET', `/sites/${pathId(siteId)}/contractor-participation-options`, token);
+  }
+
   listContractors(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<ContractorResponse>>(
       'GET',

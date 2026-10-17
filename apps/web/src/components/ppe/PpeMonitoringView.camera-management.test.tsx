@@ -60,7 +60,11 @@ beforeEach(() => {
   session = {
     accessToken: 'token-current',
     sessionScope: 'session-current',
-    user: { id: 'admin', displayName: 'Admin', roleAssignments: [{ role: 'ADMIN', siteId: null }] },
+    user: {
+      id: 'manager',
+      displayName: 'Manager',
+      roleAssignments: sites.map(({ id }) => ({ role: 'SITE_MANAGER' as const, siteId: id })),
+    },
     onSignOut: vi.fn(),
   };
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
@@ -375,7 +379,7 @@ it('closes camera management immediately on Site change and suppresses the old r
   expect(screen.queryByRole('option', { name: 'LAPTOP-01 · Entrance camera changed' })).toBeNull();
 });
 
-it('removes the dialog when the Admin role is lost, with no additional mutation', async () => {
+it('removes the dialog when the Site Manager role is lost, with no additional mutation', async () => {
   const view = mount();
   await open();
   view.changeSession({

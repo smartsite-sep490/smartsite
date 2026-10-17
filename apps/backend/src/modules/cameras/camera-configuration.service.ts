@@ -1,3 +1,4 @@
+import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { Injectable } from '@nestjs/common';
@@ -131,6 +132,7 @@ export class CameraConfigurationService {
             status: CameraStatus.ACTIVE,
             configurationVersion: 1,
           }),
+        mainSiteManagerAuthorization(context, siteId),
       );
     } catch (error) {
       knownUnique(error, ['uq_camera_external_id', 'uq_camera_site_code']);
@@ -178,18 +180,23 @@ export class CameraConfigurationService {
     context?: MainConfigurationCommandContext,
   ): Promise<CameraEntity> {
     const value = command(RenameCameraCommand, input);
-    return executeMainMetadataMutation(this.dataSource, context, async (manager) => {
-      const repository = manager.getRepository(CameraEntity);
-      const camera = await repository.findOne({
-        where: { id: uuid(cameraId), siteId: uuid(siteId) },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!camera) return missing();
-      if (camera.name === value.name) return camera;
-      await repository.update({ id: camera.id, siteId: camera.siteId }, { name: value.name });
-      camera.name = value.name;
-      return camera;
-    });
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const repository = manager.getRepository(CameraEntity);
+        const camera = await repository.findOne({
+          where: { id: uuid(cameraId), siteId: uuid(siteId) },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!camera) return missing();
+        if (camera.name === value.name) return camera;
+        await repository.update({ id: camera.id, siteId: camera.siteId }, { name: value.name });
+        camera.name = value.name;
+        return camera;
+      },
+      mainSiteManagerAuthorization(context, siteId),
+    );
   }
 
   private async lockCamera(
@@ -324,6 +331,7 @@ export class CameraConfigurationService {
         await this.snapshot(manager, camera, true);
         return camera;
       },
+      mainSiteManagerAuthorization(context, siteId),
     );
   }
 
@@ -402,6 +410,7 @@ export class CameraConfigurationService {
         await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
       },
+      mainSiteManagerAuthorization(context, siteId),
     );
   }
 
@@ -488,6 +497,7 @@ export class CameraConfigurationService {
         await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
       },
+      mainSiteManagerAuthorization(context, siteId),
     );
   }
 }

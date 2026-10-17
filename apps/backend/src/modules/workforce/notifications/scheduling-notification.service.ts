@@ -33,7 +33,7 @@ export const schedulingScope = `
   AND ((n.recipient_role = 'WORKER' AND EXISTS (SELECT 1 FROM worker w WHERE w.id = n.worker_id
     AND w.user_id = n.recipient_user_id AND w.site_id = n.site_id
     AND w.contractor_id = n.contractor_id AND w.is_active = true))
-    OR (n.recipient_role = 'CONTRACTOR_REPRESENTATIVE' AND EXISTS
+    OR n.recipient_role = 'SITE_MANAGER' OR (n.recipient_role = 'CONTRACTOR_REPRESENTATIVE' AND EXISTS
       (SELECT 1 FROM contractor_representative_assignment a WHERE a.user_id = n.recipient_user_id
         AND a.site_id = n.site_id AND a.contractor_id = n.contractor_id)))`;
 
@@ -56,7 +56,7 @@ const checklistScope = `
    AND EXISTS(SELECT 1 FROM contractor c WHERE c.id=n.contractor_id AND c.is_active)
    AND EXISTS(SELECT 1 FROM contractor_site_participation p WHERE p.site_id=n.site_id AND p.contractor_id=n.contractor_id AND p.is_active AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP)))))`;
 
-const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role='WORKER')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})))`;
+const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role<>'CONTRACTOR_REPRESENTATIVE')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
   UserNotificationEntity,
@@ -517,7 +517,8 @@ export class SchedulingNotificationService {
           tab: 'incidents',
         },
       };
-    const review = n.recipientRole === 'CONTRACTOR_REPRESENTATIVE';
+    const review =
+      n.recipientRole === 'CONTRACTOR_REPRESENTATIVE' || n.recipientRole === 'SITE_MANAGER';
     const pending = n.event === 'CHANGE_REQUESTED' || n.event === 'SWAP_CONFIRMED';
     return {
       id: n.id,
@@ -568,6 +569,34 @@ export class SchedulingNotificationService {
         .skip(pagination.offset)
         .take(pagination.limit)
         .getManyAndCount();
+      // Legacy representative notices contain no worker name. Resolve only days
+      // belonging to the already authorized notification's Site and Contractor.
+      const missingCheckoutIds = items
+        .filter((n) => n.requestType === 'ATTENDANCE' && n.event === 'MISSING_CHECKOUT')
+        .map((n) => n.id);
+      if (missingCheckoutIds.length) {
+        const workers: Array<{
+          notification_id: string;
+          display_name: string;
+          external_id: string;
+          work_date: string;
+        }> = await manager.query(
+          `SELECT n.id AS notification_id, w.display_name, w.external_id, d.work_date::text
+           FROM user_notification n
+           JOIN attendance_day d ON d.id::text = COALESCE(n.content->>'dayId', n.request_id::text) AND d.site_id = n.site_id
+           JOIN worker w ON w.id = d.worker_id AND w.site_id = n.site_id AND w.contractor_id = n.contractor_id
+           WHERE n.id = ANY($1::uuid[])`,
+          [missingCheckoutIds],
+        );
+        for (const n of items) {
+          const worker = workers.find((w) => w.notification_id === n.id);
+          if (worker)
+            n.content = {
+              ...n.content,
+              message: `Worker ${worker.display_name} (${worker.external_id}) is missing checkout for the shift on ${worker.work_date}. The shift ended more than five minutes ago. Hours remain provisional.`,
+            };
+        }
+      }
       return { items: items.map((n) => this.response(n)), total, unreadCount };
     });
   }

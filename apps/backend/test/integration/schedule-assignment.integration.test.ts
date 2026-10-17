@@ -50,7 +50,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     displayName: 'Synthetic rep',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
   };
   const notifications = new SchedulingNotificationService(source);
   const service = new ScheduleAssignmentService(source, notifications);
@@ -71,7 +71,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     });
     await source
       .getRepository(UserRoleAssignmentEntity)
-      .save({ id: randomUUID(), userId: repId, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE });
+      .save({ id: randomUUID(), userId: repId, siteId, role: UserRole.SITE_MANAGER });
     await source.getRepository(ContractorSiteParticipationEntity).save({
       id: randomUUID(),
       siteId,
@@ -217,9 +217,9 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     assert.equal(await source.getRepository(WorkerScheduleEntity).countBy({ siteId }), 40);
     const reader = new ScheduleConfigurationService(source);
     assert.equal((await reader.listWorkerSchedules(rep, siteId, { contractorId })).total, 40);
-    await assert.rejects(
-      reader.listWorkerSchedules(rep, siteId, { contractorId: randomUUID() }),
-      /Forbidden/,
+    assert.equal(
+      (await reader.listWorkerSchedules(rep, siteId, { contractorId: randomUUID() })).total,
+      0,
     );
     await assert.rejects(
       reader.listWorkerSchedules({ ...rep, roleAssignments: [] }, siteId, { contractorId }),

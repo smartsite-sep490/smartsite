@@ -44,7 +44,7 @@ test('registered entity columns exist in the canonical migrated schema', async (
   const installedMigrations = (await dataSource.query('SELECT name FROM migrations')) as Array<{
     name: string;
   }>;
-  assert.equal(dataSource.migrations.length, 59);
+  assert.equal(dataSource.migrations.length, 61);
   assert.deepEqual(
     installedMigrations.map((migration) => migration.name).sort(),
     dataSource.migrations.map((migration) => migration.name ?? migration.constructor.name).sort(),
@@ -214,10 +214,33 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     },
   ]);
 
+  await dataSource
+    .getRepository(ContractorEntity)
+    .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });
+  await dataSource.getRepository(ContractorSiteParticipationEntity).save({
+    id: participationId,
+    contractorId,
+    siteId,
+    validFrom: new Date(Date.now() - 60_000),
+    validUntil: null,
+    isActive: true,
+  });
+  await dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
+    id: randomUUID(),
+    userId: contractorRepId,
+    contractorId,
+  });
   for (const id of [workerId, secondWorkerId]) {
     await dataSource
       .getRepository(WorkerEntity)
-      .save({ id, siteId, externalId: id, displayName: 'Synthetic worker', isActive: true });
+      .save({
+        id,
+        siteId,
+        contractorId,
+        externalId: id,
+        displayName: 'Synthetic worker',
+        isActive: true,
+      });
   }
 
   const workforce = new MainWorkerRosterService(dataSource);
@@ -239,7 +262,11 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
 
   // Unlinked worker enrollment, consent, quality, cancellation, failure rollback, and renewal
-  const unlinkedSession = await enrollment.start(actor, secondWorkerId, {
+  await assert.rejects(
+    enrollment.start(actor, secondWorkerId, { consentVersion: 'synthetic-v1' }),
+    forbiddenEnrollment,
+  );
+  const unlinkedSession = await enrollment.start(contractorRepActor, secondWorkerId, {
     consentVersion: 'synthetic-v1',
   });
   assert.equal(unlinkedSession.consentedAt, null);
@@ -248,11 +275,11 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
 
   const sample = { mimetype: 'image/jpeg', buffer: Buffer.from('synthetic-jpeg'), size: 14 };
   await assert.rejects(
-    enrollment.submitSample(actor, unlinkedSession.id, sample),
+    enrollment.submitSample(contractorRepActor, unlinkedSession.id, sample),
     /confirm consent/,
   );
   await assert.rejects(
-    enrollment.assessSampleQuality(actor, secondWorkerId, sample, 'front'),
+    enrollment.assessSampleQuality(contractorRepActor, secondWorkerId, sample, 'front'),
     /Worker consent is required before face quality assessment/,
   );
   await assert.rejects(
@@ -270,38 +297,50 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   assert.equal(consentedUnlinkedSession.consentMethod, 'SUPERVISED_WORKER_CONFIRMATION');
 
   const qualityAccepted = await enrollment.assessSampleQuality(
-    actor,
+    contractorRepActor,
     secondWorkerId,
     sample,
     'front',
   );
   assert.equal(qualityAccepted.status, 'ACCEPTED');
   await assert.rejects(
-    enrollment.assessSampleQuality(actor, secondWorkerId, sample, 'INVALID' as 'front'),
+    enrollment.assessSampleQuality(
+      contractorRepActor,
+      secondWorkerId,
+      sample,
+      'INVALID' as 'front',
+    ),
     /Invalid face capture target/,
   );
 
   // Cannot complete before 3 accepted samples, and wrong actor cannot hijack session
-  const collectingSession = await enrollment.submitSample(actor, unlinkedSession.id, sample);
+  const collectingSession = await enrollment.submitSample(
+    contractorRepActor,
+    unlinkedSession.id,
+    sample,
+  );
   assert.equal(collectingSession.status, FaceEnrollmentSessionStatus.COLLECTING);
   assert.equal(collectingSession.acceptedSampleCount, 1);
-  await assert.rejects(enrollment.complete(actor, unlinkedSession.id), /three accepted samples/);
+  await assert.rejects(
+    enrollment.complete(contractorRepActor, unlinkedSession.id),
+    /three accepted samples/,
+  );
   await assert.rejects(enrollment.submitSample(siteManagerActor, unlinkedSession.id, sample));
-  await enrollment.submitSample(actor, unlinkedSession.id, sample);
-  await enrollment.submitSample(actor, unlinkedSession.id, sample);
+  await enrollment.submitSample(contractorRepActor, unlinkedSession.id, sample);
+  await enrollment.submitSample(contractorRepActor, unlinkedSession.id, sample);
 
-  const unlinkedProfile = await enrollment.complete(actor, unlinkedSession.id);
+  const unlinkedProfile = await enrollment.complete(contractorRepActor, unlinkedSession.id);
   assert.equal(unlinkedProfile.userId, null);
   assert.equal(unlinkedProfile.status, 'ACTIVE');
   assert.equal(unlinkedProfile.consentMethod, 'SUPERVISED_WORKER_CONFIRMATION');
 
-  await enrollment.revokeProfile(actor, secondWorkerId, true);
-  assert.equal((await enrollment.getProfile(actor, secondWorkerId)).status, 'DELETED');
+  await enrollment.revokeProfile(contractorRepActor, secondWorkerId, true);
+  assert.equal((await enrollment.getProfile(contractorRepActor, secondWorkerId)).status, 'DELETED');
 
-  const cancelledSession = await enrollment.start(actor, secondWorkerId, {
+  const cancelledSession = await enrollment.start(contractorRepActor, secondWorkerId, {
     consentVersion: 'synthetic-v2',
   });
-  await enrollment.cancel(actor, cancelledSession.id);
+  await enrollment.cancel(contractorRepActor, cancelledSession.id);
   await assert.rejects(
     enrollment.confirmConsent(cancelledSession.id, {
       consentToken: cancelledSession.consentToken,
@@ -311,32 +350,40 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
 
   // Adapter completion failure marks session FAILED without activating a profile
-  const failedSession = await enrollment.start(actor, secondWorkerId, {
+  const failedSession = await enrollment.start(contractorRepActor, secondWorkerId, {
     consentVersion: 'synthetic-v2',
   });
   await enrollment.confirmConsent(failedSession.id, {
     consentToken: failedSession.consentToken,
     workerConfirmed: true,
   });
-  for (let i = 0; i < 3; i++) await enrollment.submitSample(actor, failedSession.id, sample);
+  for (let i = 0; i < 3; i++)
+    await enrollment.submitSample(contractorRepActor, failedSession.id, sample);
   failNextComplete = true;
-  await assert.rejects(enrollment.complete(actor, failedSession.id), /completion failure/);
+  await assert.rejects(
+    enrollment.complete(contractorRepActor, failedSession.id),
+    /completion failure/,
+  );
   const failedSessionRow = await dataSource
     .getRepository(FaceEnrollmentSessionEntity)
     .findOneByOrFail({ id: failedSession.id });
   assert.equal(failedSessionRow.status, 'FAILED');
 
-  const renewedSession = await enrollment.start(actor, secondWorkerId, {
+  const renewedSession = await enrollment.start(contractorRepActor, secondWorkerId, {
     consentVersion: 'synthetic-v2',
   });
   await enrollment.confirmConsent(renewedSession.id, {
     consentToken: renewedSession.consentToken,
     workerConfirmed: true,
   });
-  for (let i = 0; i < 3; i++) await enrollment.submitSample(actor, renewedSession.id, sample);
-  const renewedProfile = await enrollment.complete(actor, renewedSession.id);
+  for (let i = 0; i < 3; i++)
+    await enrollment.submitSample(contractorRepActor, renewedSession.id, sample);
+  const renewedProfile = await enrollment.complete(contractorRepActor, renewedSession.id);
   assert.notEqual(renewedProfile.id, unlinkedProfile.id);
-  assert.equal((await enrollment.getProfile(actor, secondWorkerId)).id, renewedProfile.id);
+  assert.equal(
+    (await enrollment.getProfile(contractorRepActor, secondWorkerId)).id,
+    renewedProfile.id,
+  );
   assert.equal(
     (await dataSource.getRepository(FaceProfileEntity).findOneByOrFail({ id: unlinkedProfile.id }))
       .status,
@@ -348,12 +395,12 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       .countBy({ workerId: secondWorkerId, status: renewedProfile.status }),
     1,
   );
-  await enrollment.revokeProfile(actor, secondWorkerId, true);
+  await enrollment.revokeProfile(contractorRepActor, secondWorkerId, true);
 
   // Linked account validation on start when worker.userId points to an unassigned account
   await dataSource.getRepository(WorkerEntity).update(workerId, { userId: unassignedUserId });
   await assert.rejects(
-    enrollment.start(actor, workerId, { consentVersion: 'synthetic-v1' }),
+    enrollment.start(contractorRepActor, workerId, { consentVersion: 'synthetic-v1' }),
     /linked account must be active and assigned to this site/,
   );
   await dataSource.getRepository(WorkerEntity).update(workerId, { userId: null });
@@ -408,18 +455,21 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
   await enrollment.cancel(workerActor, selfSession.id);
 
-  const session = await enrollment.start(actor, workerId, { consentVersion: 'synthetic-v1' });
+  const session = await enrollment.start(contractorRepActor, workerId, {
+    consentVersion: 'synthetic-v1',
+  });
   await enrollment.confirmConsent(session.id, {
     consentToken: session.consentToken,
     workerConfirmed: true,
   });
   const frame = { mimetype: 'image/jpeg', buffer: Buffer.from('synthetic-jpeg'), size: 14 };
-  for (let index = 0; index < 3; index++) await enrollment.submitSample(actor, session.id, frame);
-  const profile = await enrollment.complete(actor, session.id);
+  for (let index = 0; index < 3; index++)
+    await enrollment.submitSample(contractorRepActor, session.id, frame);
+  const profile = await enrollment.complete(contractorRepActor, session.id);
   assert.equal(profile.userId, accountId);
 
   const response = await new FaceEnrollmentController(enrollment).getProfile(
-    { user: actor } as never,
+    { user: contractorRepActor } as never,
     workerId,
   );
   assert.equal(response.userId, accountId);
@@ -544,31 +594,16 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
 
   const gate = new FaceGateService(dataSource, adapter);
+  await assert.rejects(gate.verify(actor, siteId, 'gate1', frame), forbiddenEnrollment);
+  await assert.rejects(gate.verify(siteManagerActor, siteId, 'gate1', frame), forbiddenEnrollment);
   await assert.rejects(gate.verify(otherSecurityOfficerActor, siteId, 'gate1', frame));
 
-  const matched = await gate.verify(actor, siteId, 'gate1', frame);
+  const matched = await gate.verify(securityOfficerActor, siteId, 'gate1', frame);
   assert.equal(verification?.templates?.length, 1);
   assert.equal(matched.worker?.userId, accountId);
   assert.notEqual(matched.decision.authorization, 'ALLOWED'); // account is not permission
   assert.equal(matched.log?.workerId, workerId);
 
-  await dataSource
-    .getRepository(ContractorEntity)
-    .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });
-  await dataSource.getRepository(WorkerEntity).update(workerId, { contractorId });
-  await dataSource.getRepository(ContractorSiteParticipationEntity).save({
-    id: participationId,
-    contractorId,
-    siteId,
-    validFrom: new Date(Date.now() - 60_000),
-    validUntil: null,
-    isActive: true,
-  });
-  await dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
-    id: randomUUID(),
-    userId: contractorRepId,
-    contractorId,
-  });
   assert.equal((await enrollment.getProfile(contractorRepActor, workerId)).id, profile.id);
   await assert.rejects(
     enrollment.getProfile(
@@ -603,14 +638,14 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     createdByUserId: actorId,
   });
 
-  const deniedNoShift = await gate.verify(actor, siteId, 'gate1', frame, 'IN');
+  const deniedNoShift = await gate.verify(securityOfficerActor, siteId, 'gate1', frame, 'IN');
   assert.equal(deniedNoShift.decision.authorization, 'DENIED');
   assert.equal(deniedNoShift.decision.reasonCode, 'NO_SCHEDULE');
   assert.equal(deniedNoShift.decision.qrFallbackAllowed, false);
   assert.equal(deniedNoShift.attempt?.status, 'DENIED');
 
   await assignTestShift(dataSource, siteId, workerId);
-  const allowed = await gate.verify(actor, siteId, 'gate1', frame, 'OUT');
+  const allowed = await gate.verify(securityOfficerActor, siteId, 'gate1', frame, 'OUT');
   assert.equal(allowed.decision.authorization, 'ALLOWED');
   assert.equal(allowed.log?.direction, 'OUT');
   assert.equal(allowed.log?.userId, accountId);
@@ -629,12 +664,18 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     .getRepository(GateAccessLogEntity)
     .countBy({ siteId });
   const presenceSessionId = randomUUID();
-  const presence = await gate.observe(actor, siteId, 'gate1', presenceSessionId, frame);
+  const presence = await gate.observe(
+    securityOfficerActor,
+    siteId,
+    'gate1',
+    presenceSessionId,
+    frame,
+  );
   assert.equal(presence.state, 'NEW_FACE');
   assert.deepEqual(verification?.templates, []);
   assert.match(verification?.gatePresenceSession ?? '', /^[a-f0-9]{64}$/);
   const presenceScope = verification?.gatePresenceSession;
-  await gate.observe(actor, siteId, 'gate2', presenceSessionId, frame);
+  await gate.observe(securityOfficerActor, siteId, 'gate2', presenceSessionId, frame);
   assert.notEqual(verification?.gatePresenceSession, presenceScope);
   await assert.rejects(gate.observe(workerActor, siteId, 'gate1', presenceSessionId, frame));
   assert.equal(
@@ -644,7 +685,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
 
   for (const status of ['UNKNOWN', 'LOW_CONFIDENCE', 'QUALITY_FAILED', 'AI_UNAVAILABLE'] as const) {
     technicalStatus = status;
-    const unknown = await gate.verify(actor, siteId, 'gate1', frame);
+    const unknown = await gate.verify(securityOfficerActor, siteId, 'gate1', frame);
     assert.equal(unknown.worker, undefined);
     assert.equal(unknown.log, undefined);
     assert.equal(
@@ -653,39 +694,58 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     );
   }
   technicalStatus = 'MATCHED';
-  await assert.rejects(gate.verify({ ...actor, id: randomUUID() }, siteId, 'gate1', frame)); // cannot acknowledge ALLOWED when audit persistence fails
-  assert.equal((await gate.verify(actor, siteId, 'gate2', frame)).decision.authorization, 'DENIED');
+  await assert.rejects(
+    gate.verify({ ...securityOfficerActor, id: randomUUID() }, siteId, 'gate1', frame),
+  ); // an unknown operator cannot acknowledge ALLOWED
+  assert.equal(
+    (await gate.verify(securityOfficerActor, siteId, 'gate2', frame)).decision.authorization,
+    'DENIED',
+  );
   await assert.rejects(gate.listLogs(workerActor, siteId, 'gate1'));
   await assert.rejects(gate.listLogs(otherSecurityOfficerActor, siteId, 'gate1'));
-  await assert.rejects(gate.verify(actor, siteId, 'gate1', frame, 'INVALID' as 'IN'));
+  await assert.rejects(
+    gate.verify(securityOfficerActor, siteId, 'gate1', frame, 'INVALID' as 'IN'),
+  );
 
   const permissions = new WorkerGatePermissionsService(dataSource);
   const current = await permissions.list(actor, siteId, workerId);
-  const changed = await permissions.set(actor, siteId, workerId, {
-    gateIds: ['gate-north-01', 'gate-west-02'],
-    expectedPermissionIds: current.items.map((item) => item.id),
-  });
-  assert.equal(
-    (await gate.verify(actor, siteId, 'gate-north-01', frame)).decision.authorization,
-    'ALLOWED',
-  );
-  assert.equal(
-    (await gate.verify(actor, siteId, 'gate-west-02', frame)).decision.authorization,
-    'ALLOWED',
-  );
-  assert.equal((await gate.verify(actor, siteId, 'gate1', frame)).decision.authorization, 'DENIED');
-  assert.equal(
-    (await gate.verify(actor, siteId, 'gate-logistics-03', frame)).decision.authorization,
-    'DENIED',
-  );
   await assert.rejects(
     permissions.set(actor, siteId, workerId, {
       gateIds: [],
       expectedPermissionIds: current.items.map((item) => item.id),
     }),
+    forbiddenEnrollment,
+  );
+  const changed = await permissions.set(siteManagerActor, siteId, workerId, {
+    gateIds: ['gate-north-01', 'gate-west-02'],
+    expectedPermissionIds: current.items.map((item) => item.id),
+  });
+  assert.equal(
+    (await gate.verify(securityOfficerActor, siteId, 'gate-north-01', frame)).decision
+      .authorization,
+    'ALLOWED',
+  );
+  assert.equal(
+    (await gate.verify(securityOfficerActor, siteId, 'gate-west-02', frame)).decision.authorization,
+    'ALLOWED',
+  );
+  assert.equal(
+    (await gate.verify(securityOfficerActor, siteId, 'gate1', frame)).decision.authorization,
+    'DENIED',
+  );
+  assert.equal(
+    (await gate.verify(securityOfficerActor, siteId, 'gate-logistics-03', frame)).decision
+      .authorization,
+    'DENIED',
   );
   await assert.rejects(
-    permissions.set(actor, siteId, workerId, {
+    permissions.set(siteManagerActor, siteId, workerId, {
+      gateIds: [],
+      expectedPermissionIds: current.items.map((item) => item.id),
+    }),
+  );
+  await assert.rejects(
+    permissions.set(siteManagerActor, siteId, workerId, {
       gateIds: ['unknown-gate'],
       expectedPermissionIds: changed.items.map((item) => item.id),
     }),
@@ -707,11 +767,11 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
 
   const concurrent = await Promise.allSettled([
-    permissions.set(actor, siteId, workerId, {
+    permissions.set(siteManagerActor, siteId, workerId, {
       gateIds: ['gate-north-01'],
       expectedPermissionIds: changed.items.map((item) => item.id),
     }),
-    permissions.set(actor, siteId, workerId, {
+    permissions.set(siteManagerActor, siteId, workerId, {
       gateIds: ['gate-west-02'],
       expectedPermissionIds: changed.items.map((item) => item.id),
     }),
@@ -719,20 +779,21 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   assert.equal(concurrent.filter((result) => result.status === 'fulfilled').length, 1);
 
   const last = await permissions.list(actor, siteId, workerId);
-  await permissions.set(actor, siteId, workerId, {
+  await permissions.set(siteManagerActor, siteId, workerId, {
     gateIds: [],
     expectedPermissionIds: last.items.map((item) => item.id),
   });
   assert.equal(
-    (await gate.verify(actor, siteId, 'gate-north-01', frame)).decision.authorization,
+    (await gate.verify(securityOfficerActor, siteId, 'gate-north-01', frame)).decision
+      .authorization,
     'DENIED',
   );
   assert.equal(
-    (await gate.verify(actor, siteId, 'gate-west-02', frame)).decision.authorization,
+    (await gate.verify(securityOfficerActor, siteId, 'gate-west-02', frame)).decision.authorization,
     'DENIED',
   );
 
-  await gate.verify(actor, otherSiteId, 'gate1', frame);
+  await gate.verify(otherSecurityOfficerActor, otherSiteId, 'gate1', frame);
   assert.equal(verification?.templates?.length, 0);
 
   // Disabling UserEntity rejects account lookup, while worker identity at the gate remains independent of login account
@@ -740,14 +801,20 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   await assert.rejects(
     workforce.forAccount(siteId, { userId: accountId }, { actorUserId: actorId }),
   );
-  const disabledAccountResult = await gate.verify(actor, siteId, 'gate1', frame);
+  const disabledAccountResult = await gate.verify(securityOfficerActor, siteId, 'gate1', frame);
   assert.equal(verification?.templates?.length, 1);
   assert.equal(disabledAccountResult.worker?.id, workerId);
   assert.equal(disabledAccountResult.worker?.userId, null);
 
   // Disabling WorkerEntity excludes the inactive worker's template from gate entry matching
   await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: false });
-  const disabledWorkerResult = await gate.verify(actor, siteId, 'gate1', frame, 'IN');
+  const disabledWorkerResult = await gate.verify(
+    securityOfficerActor,
+    siteId,
+    'gate1',
+    frame,
+    'IN',
+  );
   assert.equal(verification?.templates?.length, 0);
   assert.equal(disabledWorkerResult.worker, undefined);
 
@@ -794,6 +861,6 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     /Safety Face consent provenance is immutable/,
   );
 
-  await gate.verify(actor, siteId, 'gate1', frame);
+  await gate.verify(securityOfficerActor, siteId, 'gate1', frame);
   assert.equal(verification?.templates?.length, 0);
 });

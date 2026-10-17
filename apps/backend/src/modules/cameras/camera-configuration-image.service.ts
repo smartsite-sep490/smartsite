@@ -48,7 +48,7 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
     for (const controller of this.reads.values()) controller.abort();
   }
 
-  private async authorize(token: string): Promise<void> {
+  private async authorize(token: string, siteId: string): Promise<void> {
     const { user } = await this.auth.authenticate(token);
     if (user.mustChangePassword) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -58,7 +58,13 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
     }
     if (
       !user.isActive ||
-      !user.roleAssignments.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null)
+      !user.roleAssignments.some(
+        ({ role, siteId: assignedSite }) =>
+          (role === UserRole.ADMIN && assignedSite === null) ||
+          ((role === UserRole.SITE_MANAGER || role === UserRole.SAFETY_OFFICER) &&
+            assignedSite !== null &&
+            assignedSite.toLowerCase() === siteId),
+      )
     ) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
         code: 'FORBIDDEN',
@@ -89,14 +95,14 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
   ): Promise<CameraConfigurationImageResponse> {
     const siteId = uuid(requestedSite).toLowerCase();
     const cameraId = uuid(requestedCamera).toLowerCase();
-    await this.authorize(token);
+    await this.authorize(token, siteId);
     const controller = new AbortController();
     const abort = () => controller.abort();
     let acquired = false;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
       const camera = await this.camera(siteId, cameraId);
-      await this.authorize(token);
+      await this.authorize(token, siteId);
       const origin = this.origin(camera.externalId);
       if (this.reads.has(cameraId) || this.reads.size >= 4) {
         throw new PublicHttpException(HttpStatus.TOO_MANY_REQUESTS, {
@@ -133,10 +139,10 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
       } catch {
         return unavailable();
       }
-      await this.authorize(token);
+      await this.authorize(token, siteId);
       if (controller.signal.aborted) unavailable();
       const current = await this.camera(siteId, cameraId);
-      await this.authorize(token);
+      await this.authorize(token, siteId);
       if (controller.signal.aborted) unavailable();
       if (current.externalId !== camera.externalId || this.origin(current.externalId) !== origin)
         unavailable();
@@ -161,7 +167,7 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
       };
     } catch (error) {
       // Logout/role loss takes precedence even when the upstream or revision also failed.
-      await this.authorize(token);
+      await this.authorize(token, siteId);
       if (controller.signal.aborted) return unavailable();
       if (error instanceof PublicHttpException) throw error;
       return unavailable();

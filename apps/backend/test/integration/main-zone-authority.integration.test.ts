@@ -10,9 +10,7 @@ const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 const service = new ZoneEntryAuthorizationService();
 const evaluatedAt = new Date('2026-10-11T12:00:00.000Z');
-before(async () => {
-  await database.initialize();
-});
+before(() => database.initialize());
 after(() => database.dispose());
 
 async function fixture() {

@@ -43,12 +43,16 @@ async function fixture() {
     f.site,
   ]);
   await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'CONTRACTOR_REPRESENTATIVE',$3)",
+    [randomUUID(), f.actor, f.site],
   );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
     [f.contractor],
+  );
+  await db.query(
+    'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+    [randomUUID(), f.actor, f.contractor],
   );
   await db.query(
     "INSERT INTO contractor_site_participation(id,contractor_id,site_id,valid_from,valid_until) VALUES($1,$2,$3,'2026-01-01Z','2028-01-01Z')",
@@ -64,6 +68,7 @@ async function fixture() {
   );
   return {
     ...f,
+    actors: new Map<string, string>([['CONTRACTOR_REPRESENTATIVE', f.actor]]),
     input: {
       siteId: f.site,
       zoneIds: [f.zone],
@@ -73,6 +78,24 @@ async function fixture() {
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+type ActorRole = 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SITE_MANAGER';
+async function asRole(f: Fixture, value: ActorRole) {
+  let actor = f.actors.get(value);
+  if (!actor) {
+    actor = randomUUID();
+    await db.query(
+      "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic reviewer','not-login',false)",
+      [actor],
+    );
+    await db.query(
+      'INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), actor, value, f.site],
+    );
+    f.actors.set(value, actor);
+  }
+  f.actor = actor;
+  return actor;
+}
 type Assignment = {
   id: string;
   siteContractorId: string | null;
@@ -83,22 +106,35 @@ type Assignment = {
 };
 async function seeded(f: Fixture, approve = false) {
   const service = new MainAssignmentCommandService(db);
-  const r = await service.request({
-    ...f.input,
-    workerId: f.worker,
-    actorUserId: f.actor,
-    commandId: randomUUID(),
-  });
-  if (!approve) return r.assignment;
-  return (
-    await service.decision({
+  const originalActor = f.actor;
+  try {
+    await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
+    const r = await service.request({
+      ...f.input,
+      workerId: f.worker,
       actorUserId: f.actor,
-      siteId: f.site,
       commandId: randomUUID(),
-      assignmentId: r.assignment.id,
-      approve: true,
-    })
-  ).assignment;
+    });
+    if (!approve) return r.assignment;
+    await asRole(f, 'SITE_MANAGER');
+    return (
+      await service.decision({
+        actorUserId: f.actor,
+        siteId: f.site,
+        commandId: randomUUID(),
+        assignmentId: r.assignment.id,
+        approve: true,
+      })
+    ).assignment;
+  } finally {
+    f.actor = originalActor;
+  }
+}
+type ApiRequest = (path: string, body?: unknown, method?: string) => Promise<Response>;
+interface ApiActorSession {
+  request: ApiRequest;
+  logout: () => Promise<Response>;
+  actorId: string;
 }
 async function withApi(
   f: Fixture,
@@ -106,13 +142,10 @@ async function withApi(
     request: (path: string, body?: unknown, method?: string) => Promise<Response>,
     guard: UserAuthGuard,
     logout: () => Promise<Response>,
+    loginAs: (value: ActorRole) => Promise<ApiActorSession>,
   ) => Promise<void>,
 ) {
   const password = 'SyntheticAssignment123!';
-  await db.query('UPDATE app_user SET password_hash=$2 WHERE id=$1', [
-    f.actor,
-    await hashPassword(password),
-  ]);
   const config = new ConfigService<BackendEnvironment, true>(
     validateEnvironment({
       NODE_ENV: 'test',
@@ -141,25 +174,38 @@ async function withApi(
     await configureApplication(app);
     await app.listen(0, '127.0.0.1');
     const url = await app.getUrl();
-    const login = await fetch(`${url}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: f.actor, password, clientType: 'MOBILE' }),
-    });
-    assert.equal(login.status, 200);
-    const session = (await login.json()) as { accessToken: string; refreshToken: string };
-    const request = (path: string, body?: unknown, method = 'POST') =>
-      fetch(`${url}/api/v1${path}`, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    const loginActor = async (actorId: string): Promise<ApiActorSession> => {
+      await db.query('UPDATE app_user SET password_hash=$2 WHERE id=$1', [
+        actorId,
+        await hashPassword(password),
+      ]);
+      const login = await fetch(`${url}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: actorId, password, clientType: 'MOBILE' }),
       });
+      assert.equal(login.status, 200);
+      const session = (await login.json()) as { accessToken: string; refreshToken: string };
+      const request: ApiRequest = (path, body, method = 'POST') =>
+        fetch(`${url}/api/v1${path}`, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.accessToken}`,
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+      return {
+        actorId,
+        request,
+        logout: () =>
+          request('/auth/logout', { clientType: 'MOBILE', refreshToken: session.refreshToken }),
+      };
+    };
+    const session = await loginActor(f.actor);
     const controller = module.get(WorkerAssignmentController) as unknown as { auth: UserAuthGuard };
-    await work(request, controller.auth, () =>
-      request('/auth/logout', { clientType: 'MOBILE', refreshToken: session.refreshToken }),
+    await work(session.request, controller.auth, session.logout, async (value) =>
+      loginActor(await asRole(f, value)),
     );
   } finally {
     await app.close();
@@ -191,6 +237,7 @@ test('actual public assignment request stores retained-main participation anchor
 test('actual public assignment decision retains main direct PENDING approval', async () => {
   const f = await fixture(),
     a = await seeded(f);
+  await asRole(f, 'SITE_MANAGER');
   await withApi(f, async (request) => {
     const response = await request(`/site-zone-assignment-requests/${a.id}/site-manager-decision`, {
       approve: true,
@@ -202,6 +249,7 @@ test('actual public assignment decision retains main direct PENDING approval', a
 test('actual public decision accepts retained-main expectedVersion and reviewNote', async () => {
   const f = await fixture(),
     a = await seeded(f);
+  await asRole(f, 'SITE_MANAGER');
   await withApi(f, async (request) => {
     const response = await request(`/site-zone-assignment-requests/${a.id}/site-manager-decision`, {
       approve: false,
@@ -218,6 +266,7 @@ test('actual public decision accepts retained-main expectedVersion and reviewNot
 test('actual public assignment revoke route retains main version and reason', async () => {
   const f = await fixture(),
     a = await seeded(f, true);
+  await asRole(f, 'SITE_MANAGER');
   await withApi(f, async (request) => {
     const response = await request(`/site-zone-assignment-requests/${a.id}/revoke`, {
       expectedVersion: 2,
@@ -256,7 +305,8 @@ async function policyVersion(f: Fixture) {
 
 test('all four real HTTP assignment writes reauthenticate original bearer in the claimed transaction', async () => {
   const f = await fixture();
-  await withApi(f, async (request, guard) => {
+  const requester = f.actor;
+  await withApi(f, async (request, guard, _logout, loginAs) => {
     let claims = 0;
     const original = guard.authenticateRequest.bind(guard);
     guard.authenticateRequest = async (r, manager) => {
@@ -270,15 +320,17 @@ test('all four real HTTP assignment writes reauthenticate original bearer in the
     assert.equal(created.status, 201);
     const a = (await created.json()) as Assignment;
     const root = `/site-zone-assignment-requests/${a.id}`;
-    const reviewed = await request(`${root}/safety-review`, {});
+    const safety = await loginAs('SAFETY_OFFICER');
+    const reviewed = await safety.request(`${root}/safety-review`, {});
     assert.equal(reviewed.status, 201);
     assert.equal(((await reviewed.json()) as Assignment).version, 2);
-    const decided = await request(`${root}/site-manager-decision`, {
+    const manager = await loginAs('SITE_MANAGER');
+    const decided = await manager.request(`${root}/site-manager-decision`, {
       approve: true,
       expectedVersion: 2,
     });
     assert.equal(decided.status, 201);
-    const revoked = await request(`${root}/revoke`, {
+    const revoked = await manager.request(`${root}/revoke`, {
       expectedVersion: 3,
       reviewNote: 'Site change',
     });
@@ -298,12 +350,12 @@ test('all four real HTTP assignment writes reauthenticate original bearer in the
         'ASSIGNMENT_REVOKE',
       ],
     );
-    assert.ok(
-      facts.every(
-        (r: { actor_user_id: string; bound: boolean; witnessed: boolean }) =>
-          r.actor_user_id === f.actor && r.bound && r.witnessed,
-      ),
+    assert.deepEqual(
+      facts.map((r: { actor_user_id: string }) => r.actor_user_id),
+      [requester, safety.actorId, manager.actorId, manager.actorId],
     );
+    assert.equal(new Set([requester, safety.actorId, manager.actorId]).size, 3);
+    assert.ok(facts.every((r: { bound: boolean; witnessed: boolean }) => r.bound && r.witnessed));
     assert.equal(
       (await db.query("SELECT to_regclass('zone_authority_command') IS NULL AS absent"))[0].absent,
       true,
@@ -328,6 +380,7 @@ for (const op of ['request', 'review', 'decision', 'revoke'] as const) {
   test(`real logout before public assignment ${op} transaction claim denies write and leaves no orphan command`, async () => {
     const f = await fixture(),
       a = op === 'request' ? null : await seeded(f, op === 'revoke');
+    if (op !== 'request') await asRole(f, op === 'review' ? 'SAFETY_OFFICER' : 'SITE_MANAGER');
     const before = await countCommands(),
       version = await policyVersion(f);
     await withApi(f, async (request, guard, logout) => {
@@ -386,7 +439,7 @@ for (const op of ['request', 'review', 'decision', 'revoke'] as const) {
 }
 test('public assignment role/representative matrix retains actual Site scoping and current roles', async () => {
   const f = await fixture();
-  await role(f, 'CONTRACTOR_REPRESENTATIVE');
+  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actor]);
   await assert.rejects(service().publicRequest(f.worker, f.input, ctx(f)), status(403));
   await db.query(
     'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
@@ -401,7 +454,7 @@ test('public assignment role/representative matrix retains actual Site scoping a
 test('public Safety review retains main review-only eligibility and Site Manager decision rules', async () => {
   const f = await fixture(),
     a = await seeded(f);
-  await role(f, 'SAFETY_OFFICER');
+  await asRole(f, 'SAFETY_OFFICER');
   await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
     f.participation,
   ]);
@@ -409,7 +462,7 @@ test('public Safety review retains main review-only eligibility and Site Manager
   assert.equal(r.status, 'SAFETY_REVIEWED');
   assert.equal(await policyVersion(f), 1);
   await assert.rejects(service().publicDecision(a.id, { approve: false }, ctx(f)), status(403));
-  await role(f, 'SITE_MANAGER');
+  await asRole(f, 'SITE_MANAGER');
   await assert.rejects(service().publicDecision(a.id, { approve: true }, ctx(f)), status(409));
   const rejected = await service().publicDecision(
     a.id,
@@ -429,7 +482,7 @@ test('public assignment current account, password and changed representative sco
     assert.equal(await countCommands(), n);
   }
   const f = await fixture();
-  await role(f, 'CONTRACTOR_REPRESENTATIVE');
+  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actor]);
   const other = await fixture();
   await db.query(
     'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
@@ -460,6 +513,7 @@ test('public assignment validation, cross-Site zones and version conflicts do no
   assert.equal(await countCommands(), n);
   const a = await seeded(f),
     n2 = await countCommands();
+  await asRole(f, 'SITE_MANAGER');
   await assert.rejects(
     service().publicDecision(a.id, { approve: true, expectedVersion: 2 }, ctx(f)),
     status(409),
@@ -506,6 +560,7 @@ test('public assignment concurrent decisions have one winner and exact repeat re
   const f = await fixture(),
     a = await seeded(f),
     s = service();
+  await asRole(f, 'SITE_MANAGER');
   const outcomes = await Promise.allSettled([
     s.publicDecision(a.id, { approve: true, expectedVersion: 1 }, ctx(f)),
     s.publicDecision(a.id, { approve: false, expectedVersion: 1 }, ctx(f)),
@@ -539,6 +594,7 @@ test('public journal partial install and disabled assignment/Site captures fail 
   } finally {
     await db.query('ALTER TABLE test_assignment_witness RENAME TO mf06_authority_commit_witness');
   }
+  await asRole(f, 'SITE_MANAGER');
   for (const table of ['worker_site_zone_assignment', 'site']) {
     await db.query(`ALTER TABLE ${table} DISABLE TRIGGER trg_mf06_capture_${table}`);
     try {
@@ -556,11 +612,15 @@ test('public assignment source-fact failure rolls back mutation, audit, policy i
     audits = (
       await db.query('SELECT count(*)::int AS n FROM audit_log WHERE site_id=$1', [f.site])
     )[0].n;
+  await asRole(f, 'SITE_MANAGER');
   await db.query(
     "CREATE FUNCTION test_assignment_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ASSIGNMENT' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_assignment_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_assignment_fact_failure()",
   );
   try {
-    await assert.rejects(service().publicDecision(a.id, { approve: true }, ctx(f)));
+    await assert.rejects(
+      service().publicDecision(a.id, { approve: true }, ctx(f)),
+      (error: unknown) => error instanceof Error && error.message === 'Synthetic failure',
+    );
     assert.equal(await countCommands(), n);
     assert.equal(await policyVersion(f), v);
     assert.equal(
@@ -632,12 +692,7 @@ test('actual assignment HTTP DTOs reject client actors/commands and invalid deci
 test('actual HTTP role changes use retained scoped Representative, Safety Officer and Site Manager permissions', async () => {
   const f = await fixture(),
     other = await fixture();
-  await role(f, 'CONTRACTOR_REPRESENTATIVE');
-  await db.query(
-    'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
-    [randomUUID(), f.actor, f.contractor],
-  );
-  await withApi(f, async (request) => {
+  await withApi(f, async (request, _guard, _logout, loginAs) => {
     const create = await request(`/workers/${f.worker}/site-zone-assignment-requests`, f.input);
     assert.equal(create.status, 201);
     const a = (await create.json()) as Assignment;
@@ -646,26 +701,65 @@ test('actual HTTP role changes use retained scoped Representative, Safety Office
     await role(f, 'SAFETY_OFFICER', other.site);
     assert.equal((await request(`${root}/safety-review`, {})).status, 403);
     await role(f, 'SAFETY_OFFICER');
-    assert.equal((await request(`${root}/safety-review`, {})).status, 201);
-    assert.equal((await request(`${root}/site-manager-decision`, { approve: true })).status, 403);
+    assert.equal(
+      (await request(`${root}/safety-review`, {})).status,
+      403,
+      'Requester cannot self-review',
+    );
+    const safety = await loginAs('SAFETY_OFFICER');
+    assert.equal((await safety.request(`${root}/safety-review`, {})).status, 201);
+    assert.equal(
+      (await safety.request(`${root}/site-manager-decision`, { approve: true })).status,
+      403,
+    );
+    const manager = await loginAs('SITE_MANAGER');
     await role(f, 'SITE_MANAGER', other.site);
-    assert.equal((await request(`${root}/site-manager-decision`, { approve: true })).status, 403);
+    assert.equal(
+      (await manager.request(`${root}/site-manager-decision`, { approve: true })).status,
+      403,
+    );
     await role(f, 'SITE_MANAGER');
     assert.equal(
-      (await request(`${root}/site-manager-decision`, { approve: true, expectedVersion: 2 }))
-        .status,
+      (
+        await manager.request(`${root}/site-manager-decision`, {
+          approve: true,
+          expectedVersion: 2,
+        })
+      ).status,
       201,
     );
     assert.equal(
-      (await request(`${root}/revoke`, { expectedVersion: 3, reviewNote: 'End assignment' }))
-        .status,
+      (
+        await manager.request(`${root}/revoke`, {
+          expectedVersion: 3,
+          reviewNote: 'End assignment',
+        })
+      ).status,
       201,
     );
   });
 });
+test('a requester given Safety or Manager roles still cannot review their own assignment', async () => {
+  const f = await fixture(),
+    a = await seeded(f),
+    before = await countCommands();
+  await role(f, 'SAFETY_OFFICER');
+  await assert.rejects(service().publicSafetyReview(a.id, ctx(f)), status(403));
+  await role(f, 'SITE_MANAGER');
+  await assert.rejects(service().publicDecision(a.id, { approve: true }, ctx(f)), status(403));
+  assert.equal(await countCommands(), before);
+  assert.equal(await policyVersion(f), 1);
+  assert.equal(
+    (
+      await db.query('SELECT status,version FROM worker_site_zone_assignment WHERE id=$1', [a.id])
+    )[0].status,
+    'PENDING',
+  );
+});
 test('unsupported legacy assignment state returns safe public unavailable without an undisclosed command-ID retry instruction', async () => {
   const f = await fixture(),
     a = await seeded(f);
+  await asRole(f, 'SAFETY_OFFICER');
   await db.query(
     "UPDATE worker_site_zone_assignment SET valid_until=NULL,valid_from='infinity' WHERE id=$1",
     [a.id],

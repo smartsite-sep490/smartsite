@@ -8,7 +8,7 @@ import {
   inspectSafetyFaceResponse,
   isSafetyFaceInvocation,
 } from './safety-identity-resolver.port.js';
-import { Mf06AssessmentRequestEntity } from '../../../database/entities/mf06-assessment-request.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from '../../../database/entities/zone-entry-assessment-request.entity.js';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import type {
   SafetyFaceProfileLookup,
@@ -121,7 +121,7 @@ export class Mf06CandidateMetadataService {
     );
     if (isolation[0]?.transaction_isolation !== 'serializable')
       return unavailable('TRANSACTION_REQUIRED');
-    const request = await manager.getRepository(Mf06AssessmentRequestEntity).findOne({
+    const request = await manager.getRepository(ZoneEntryAssessmentRequestEntity).findOne({
       where: { requestId: requestKey, siteId: site },
       lock: { mode: 'pessimistic_read' },
     });

@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { EntityManager } from 'typeorm';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
-import { Mf06AssessmentRequestEntity } from '../src/database/entities/mf06-assessment-request.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
 import { AiObservationEventEntity } from '../src/database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../src/database/entities/enums.js';
 import {
@@ -43,7 +43,7 @@ interface SyntheticFixture {
   consentId: string;
   invocationId: string;
   modelVersion: string;
-  request: Mf06AssessmentRequestEntity;
+  request: ZoneEntryAssessmentRequestEntity;
   event: AiObservationEventEntity;
   stored: Extract<Mf06StoredBindingInspection, { status: 'MATCHED' }>;
   crop: SafetySubjectCrop;
@@ -116,7 +116,7 @@ function createSyntheticFixture(
     requestRevision: 1,
     bindingHash: 'b'.repeat(64),
     requestedAt: new Date('2026-10-12T00:00:01.000Z'),
-  } as Mf06AssessmentRequestEntity;
+  } as ZoneEntryAssessmentRequestEntity;
 
   const storedInspection = inspectMf06StoredBinding(request, event);
   assert.equal(storedInspection.status, 'MATCHED');
@@ -181,7 +181,7 @@ function createSyntheticFixture(
 interface FakeManagerOptions {
   isTransactionActive?: boolean;
   isolationLevel?: string;
-  request?: Mf06AssessmentRequestEntity | null;
+  request?: ZoneEntryAssessmentRequestEntity | null;
   event?: AiObservationEventEntity | null;
   queryError?: Error;
   repositoryError?: Error;
@@ -219,7 +219,7 @@ function createFakeManager(options: FakeManagerOptions = {}): EntityManager {
       return {
         findOneBy: async (criteria: Record<string, unknown>) => {
           if (repositoryError) throw repositoryError;
-          if (entity === Mf06AssessmentRequestEntity) {
+          if (entity === ZoneEntryAssessmentRequestEntity) {
             if (!request) return null;
             if (criteria.requestId && criteria.requestId !== request.requestId.toLowerCase())
               return null;
@@ -235,7 +235,7 @@ function createFakeManager(options: FakeManagerOptions = {}): EntityManager {
         },
         findOne: async () => {
           if (repositoryError) throw repositoryError;
-          if (entity === Mf06AssessmentRequestEntity) return request ?? null;
+          if (entity === ZoneEntryAssessmentRequestEntity) return request ?? null;
           if (entity === AiObservationEventEntity) return event ?? null;
           return null;
         },
@@ -243,13 +243,13 @@ function createFakeManager(options: FakeManagerOptions = {}): EntityManager {
     },
     findOneBy: async (entity: unknown) => {
       if (repositoryError) throw repositoryError;
-      if (entity === Mf06AssessmentRequestEntity) return request ?? null;
+      if (entity === ZoneEntryAssessmentRequestEntity) return request ?? null;
       if (entity === AiObservationEventEntity) return event ?? null;
       return null;
     },
     findOne: async (entity: unknown) => {
       if (repositoryError) throw repositoryError;
-      if (entity === Mf06AssessmentRequestEntity) return request ?? null;
+      if (entity === ZoneEntryAssessmentRequestEntity) return request ?? null;
       if (entity === AiObservationEventEntity) return event ?? null;
       return null;
     },
@@ -433,7 +433,7 @@ test('5. missing assessment request or mismatched site and request IDs return IN
     name: string;
     siteId: string;
     requestId: string;
-    request: Mf06AssessmentRequestEntity | null;
+    request: ZoneEntryAssessmentRequestEntity | null;
   }[] = [
     { name: 'request not found in DB', siteId: f.siteId, requestId: f.requestId, request: null },
     {

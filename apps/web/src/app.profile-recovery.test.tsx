@@ -37,7 +37,7 @@ const profile = {
   displayName: 'Synthetic Officer',
   isActive: true,
   mustChangePassword: false,
-  roleAssignments: [],
+  roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'fixture-site' }],
 };
 let queryClient: QueryClient;
 let fetchFixture: ReturnType<typeof vi.fn<typeof globalThis.fetch>>;

@@ -147,3 +147,75 @@ then ran the dedicated PostgreSQL suites. Existing catalog exception now include
 eight additional EN/VI source-status entries from Main integration (2027 lines,
 370 above6035df7); no polling, transport or policy change. No size-based test
 removal, geometry/authorization relaxation or production acceptance is implied.
+
+## Main actor/session fixture repair, 17 October
+
+Root reviewed this bounded growth against the actual command services and real
+PostgreSQL runs. Agy p5/p7 supplied independent read-only fixture reviews; their
+blanket acceptance wording does not replace Root's checks. Baseline: cbe38ca.
+
+| Test under `apps/backend/test/integration/`        | Baseline | Current | Reason                                                                                                                                      |
+| -------------------------------------------------- | -------: | ------: | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main-public-assignment.integration.test.ts`       |      681 |     775 | Separate real Requester/Safety/Manager sessions, original-bearer logout barriers, operation-to-actor facts and explicit self-review denial. |
+| `main-zone-permission-command.integration.test.ts` |      610 |     665 | Separate scoped actors and exact injected audit rollback, retaining every permission interval/replay/concurrency assertion.                 |
+| `main-worker-roster.integration.test.ts`           |      480 |     523 | Distinguish public Representative profile creation from internal Admin account-pair commands without dropping either contract.              |
+| `site-access-authority-http.integration.test.ts`   |      601 |     627 | Provision and authenticate a real scoped Representative rather than grant Worker permission as Admin.                                       |
+| `runtime-command-replay.integration.test.ts`       |      412 |     433 | Real Contractor/participation/Representative setup before the original process-restart response-loss journey.                               |
+| `safety-business-http.integration.test.ts`         |      404 |     430 | Real scoped profile setup and separate bootstrap/business app phases; fixed login throttle and original restart assertions retained.        |
+
+Owner: Root. Before adding another journey to these files, extract their existing
+actor/session fixture setup into purpose-specific test support, then rerun the
+same assertions. Do not shorten tests, compress formatting or change frozen
+historical fixtures to satisfy a line count. This is a scoped exception, not a
+general increase to the 400-line test target or 700-line review threshold.
+
+The preceding denied-Zone setup handoff also grew the existing
+`RestrictedZoneView.tsx` by 27 lines and `app.tsx` by one (5ff6b20 to cbe38ca).
+Root permits the optional navigation callback and denied-card action only;
+monitoring permission/query/evidence blocks are unchanged. Extract the existing
+view orchestration before adding another feature. Owner/reviewer: Root;
+independent Agy p8 review and 29 affected DOM checks are recorded separately.
+
+## Existing operational recovery fixture, 17 October
+
+Root permits `apps/backend/test/integration/operational-recovery.integration.test.ts`
+to grow from 1011 to 1019 lines solely to use the existing scoped Manager account
+for Camera/Region creation and explicitly retain Admin403 checks. No backup,
+restore, media-integrity, private-read or history assertions are removed. The
+native-client opt-in exposed the wrong-actor403 before the dump; the corrected
+dedicated5433 run reaches restore and passes. Extract its existing actor setup
+before adding another recovery scenario. Owner/reviewer: Root; Agy p5 provides
+bounded read-only review. This exception does not raise the test-size limit.
+
+## MF06 binding reason localization, 17 October
+
+Root permits `apps/web/src/components/ppe/Mf06AssessmentDetailDialog.tsx` to
+grow from 595 to 607 physical lines only for the existing translated mismatch
+alert. The 13-reason catalog lives in a separate 71-line feature file; UUID,
+nanosecond, scope, cancellation and record-hiding checks are unchanged. Existing
+locale tests cover every reason and language switching without another request.
+Owner: Root; independent source review: Agy p8. Extract the dialog's presentation
+before adding another feature; this exception does not increase the size target.
+
+## Current Linux recovery fixture compatibility, 17 October
+
+Root permits the existing operational recovery integration fixture to grow from
+1019 to1058 lines only to use Main's actual Contractor/Representative Worker
+provisioning chain, retain production login throttling, and pin the qualified
+fresh artifact entrypoint. The registered migration count follows the canonical
+fixture; the guarded runner separately verifies the61-migration image. No
+restore, history, private-media, role, replay or integrity assertions are removed.
+The actual current-image Linux opt-in passes with all three owned SIGTERM exits0.
+Owner: Root; Agy p8 supplied bounded static review, not execution acceptance.
+Abnormal process exit retains its schema for investigation. Extract actor setup
+before adding any new scenario; this exception does not raise the size limit.
+
+## Explicit MF06 timestamp timezone, 17 October
+
+Root permits two Intl options per existing formatter: AssessmentHistory657 to659,
+ZoneAssessmentPanel832 to834 and AssessmentDetailDialog607 to609 physical lines.
+They enforce the reviewed visible-timezone requirement through explicit UTC,
+without a new Site-timezone contract, formatter abstraction or query behavior.
+Regression checks run under two host timezones; wire ISO precision remains intact.
+Owner: Root; implementation Agy p7. Extract the existing presentation before
+adding another feature; these bounded options do not raise the size target.

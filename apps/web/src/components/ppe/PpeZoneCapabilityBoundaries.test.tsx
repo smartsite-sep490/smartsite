@@ -220,7 +220,7 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
     );
   }
 
-  it('allows scoped SITE_MANAGER on own Site to open Zone dialog and create/rename Zones without mounting Camera/Region panel or calling listCameras/listRegions', async () => {
+  it('allows scoped SITE_MANAGER to manage own-Site Zones and Camera/Region setup', async () => {
     const user = userEvent.setup();
     const listCamerasSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras');
     const listRegionsSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions');
@@ -248,18 +248,18 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
     renderWithProviders(makeSession('token-sm-alpha', 'scope-sm-alpha', siteManagerAccount));
     await screen.findByRole('option', { name: /Alpha Construction Site/i });
 
-    expect(screen.queryByRole('button', { name: /Register camera/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Manage cameras/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Register camera/i })).toBeDefined();
+    expect(await screen.findByRole('button', { name: /Manage camera/i })).toBeDefined();
 
     await user.click(await screen.findByRole('button', { name: /Configure PPE by Zone/i }));
     expect(await screen.findByRole('dialog', { name: /Zone PPE configuration/i })).toBeDefined();
     expect(await screen.findByText('ZONE-A1')).toBeDefined();
 
-    // Admin-only Camera/Region panel must NOT mount or call listCameras/listRegions
-    expect(screen.queryByRole('heading', { name: /Link Zone to Camera Region/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Start Drawing Region/i })).toBeNull();
-    expect(listCamerasSpy).not.toHaveBeenCalled();
-    expect(listRegionsSpy).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole('heading', { name: /Link Zone to Camera Region/i }),
+    ).toBeDefined();
+    await waitFor(() => expect(listCamerasSpy).toHaveBeenCalled());
+    await waitFor(() => expect(listRegionsSpy).toHaveBeenCalled());
 
     // Scoped SITE_MANAGER can create a new Zone on site-alpha
     await user.type(screen.getByLabelText(/Zone Code/i), 'ZONE-A2');
@@ -289,11 +289,11 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
       'zone-1',
       'Updated Scaffold Area',
     );
-    expect(listCamerasSpy).not.toHaveBeenCalled();
-    expect(listRegionsSpy).not.toHaveBeenCalled();
+    expect(listCamerasSpy).toHaveBeenCalled();
+    expect(listRegionsSpy).toHaveBeenCalled();
   });
 
-  it('allows global ADMIN to open read-only Zone catalog and Camera/Region setup without rendering create or rename Zone controls', async () => {
+  it('allows global ADMIN to read the Zone catalog without exposing Zone or Camera/Region writers', async () => {
     const user = userEvent.setup();
     const listZonesSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listZones');
     const listCamerasSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras');
@@ -314,14 +314,10 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
     expect(screen.getByText('Hazardous Scaffold Area')).toBeDefined();
     expect(listZonesSpy).toHaveBeenCalled();
 
-    // Camera/Region setup panel IS mounted for Global ADMIN and queries cameras/regions
-    expect(
-      await screen.findByRole('heading', { name: /Link Zone to Camera Region/i }),
-    ).toBeDefined();
-    await waitFor(() => {
-      expect(listCamerasSpy).toHaveBeenCalled();
-      expect(listRegionsSpy).toHaveBeenCalled();
-    });
+    expect(screen.queryByRole('heading', { name: /Link Zone to Camera Region/i })).toBeNull();
+    expect(listCamerasSpy).not.toHaveBeenCalled();
+    expect(listRegionsSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Register camera|Manage camera/i })).toBeNull();
 
     // Zone create and rename controls must NOT be exposed to Global ADMIN
     expect(screen.queryByLabelText(/Zone Code/i)).toBeNull();

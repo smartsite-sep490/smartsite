@@ -28,6 +28,7 @@ import {
   type Mf06AssessmentAppendInput,
 } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { LEGACY_ENTITIES } from '../support/legacy24/data-source.js';
 import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
 import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/mf06-request-context.js';
 import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
@@ -35,8 +36,8 @@ import { SafetyFaceProfileMetadataReader } from '../../src/modules/workforce/saf
 import { SafetyFaceProvenance1791590400003 } from '../../src/database/migrations/1791590400003-SafetyFaceProvenance.js';
 import { createHash } from 'node:crypto';
 import type { SafetySubjectCrop } from '../../src/modules/safety/identity/safety-subject-cropper.js';
-import { Mf06AssessmentEntity } from '../../src/database/entities/mf06-assessment.entity.js';
-import { Mf06AuthorityArtifactEntity } from '../../src/database/entities/mf06-authority-artifact.entity.js';
+import { ZoneEntryAssessmentEntity } from '../../src/database/entities/zone-entry-assessment.entity.js';
+import { ZoneEntryAuthorityArtifactEntity } from '../../src/database/entities/zone-entry-authority-artifact.entity.js';
 
 // -----------------------------------------------------------------------------
 // Test Database & Harness Setup
@@ -47,6 +48,9 @@ const db = isolated.dataSource;
 const store = new Mf06AssessmentStore(db);
 
 before(async () => {
+  // This historical fixture explicitly installs B2 after the frozen request/job graph.
+  // Register its matching frozen projections only here, not in every legacy24 schema.
+  db.setOptions({ entities: [...LEGACY_ENTITIES] });
   await isolated.initialize();
   const runner = db.createQueryRunner();
   try {
@@ -1249,8 +1253,8 @@ test('optional profile-table error is recovered by B1 savepoint and allows unava
 });
 
 test('registered metadata reads actual candidate tables while default artifact query omits raw body', async () => {
-  assert.ok(db.hasMetadata(Mf06AssessmentEntity));
-  assert.ok(db.hasMetadata(Mf06AuthorityArtifactEntity));
+  assert.ok(db.hasMetadata(ZoneEntryAssessmentEntity));
+  assert.ok(db.hasMetadata(ZoneEntryAuthorityArtifactEntity));
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
@@ -1260,7 +1264,7 @@ test('registered metadata reads actual candidate tables while default artifact q
   assert.equal(result.state, 'RECORDED');
   if (result.state !== 'RECORDED') return;
   const assessment = await db
-    .getRepository(Mf06AssessmentEntity)
+    .getRepository(ZoneEntryAssessmentEntity)
     .findOneByOrFail({ assessmentId: result.assessment.assessmentId });
   assert.equal(assessment.commandId, result.assessment.commandId);
   assert.equal(assessment.requestId, req.request_id);
@@ -1268,14 +1272,14 @@ test('registered metadata reads actual candidate tables while default artifact q
   assert.ok(assessment.assessedAt instanceof Date);
   assert.ok(assessment.authorityArtifactId);
   const artifact = await db
-    .getRepository(Mf06AuthorityArtifactEntity)
+    .getRepository(ZoneEntryAuthorityArtifactEntity)
     .findOneByOrFail({ artifactId: assessment.authorityArtifactId });
   assert.equal(artifact.sha256, result.assessment.authorityArtifact?.sha256);
   assert.equal(artifact.body, undefined);
   assert.match(artifact.bodyHash, /^[0-9a-f]{64}$/);
   assert.ok(artifact.storedAt instanceof Date);
   const explicit = await db
-    .getRepository(Mf06AuthorityArtifactEntity)
+    .getRepository(ZoneEntryAuthorityArtifactEntity)
     .createQueryBuilder('artifact')
     .addSelect('artifact.body')
     .where('artifact.artifactId=:id', { id: artifact.artifactId })

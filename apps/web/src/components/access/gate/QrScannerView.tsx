@@ -64,10 +64,10 @@ export function QrScannerView({
             setError('');
             setActive((v) => !v);
           }}
-          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all shadow-xs disabled:opacity-50 ${
+          className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer active:scale-[0.99] ${
             active
               ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-              : 'bg-[#FF7A1A] text-white hover:bg-[#E56A10]'
+              : 'bg-[#F66B17] text-white hover:bg-[#E05A0A]'
           }`}
         >
           {active ? (
@@ -84,7 +84,7 @@ export function QrScannerView({
         </button>
 
         <label
-          className={`inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-xs cursor-pointer ${
+          className={`inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-xs cursor-pointer ${
             disabled ? 'opacity-50 pointer-events-none' : ''
           }`}
         >
@@ -123,20 +123,20 @@ export function QrScannerView({
 
       {/* Video Viewport with Reticle */}
       {active && (
-        <div className="relative overflow-hidden rounded-2xl border-2 border-slate-900 bg-black aspect-video max-h-72 w-full flex items-center justify-center shadow-inner">
+        <div className="relative overflow-hidden rounded-2xl border-2 border-slate-800 bg-black aspect-video max-h-72 w-full flex items-center justify-center shadow-inner">
           <video ref={video} playsInline muted className="h-full w-full object-cover" />
 
           {/* Scanner Viewfinder Reticle */}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-6">
             <div className="relative h-44 w-44 rounded-xl border border-white/20">
               {/* Corner brackets */}
-              <div className="absolute -top-1 -left-1 h-6 w-6 border-t-4 border-l-4 border-[#FF7A1A] rounded-tl-sm" />
-              <div className="absolute -top-1 -right-1 h-6 w-6 border-t-4 border-r-4 border-[#FF7A1A] rounded-tr-sm" />
-              <div className="absolute -bottom-1 -left-1 h-6 w-6 border-b-4 border-l-4 border-[#FF7A1A] rounded-bl-sm" />
-              <div className="absolute -bottom-1 -right-1 h-6 w-6 border-b-4 border-r-4 border-[#FF7A1A] rounded-br-sm" />
+              <div className="absolute -top-1 -left-1 h-6 w-6 border-t-4 border-l-4 border-[#F66B17] rounded-tl-sm" />
+              <div className="absolute -top-1 -right-1 h-6 w-6 border-t-4 border-r-4 border-[#F66B17] rounded-tr-sm" />
+              <div className="absolute -bottom-1 -left-1 h-6 w-6 border-b-4 border-l-4 border-[#F66B17] rounded-bl-sm" />
+              <div className="absolute -bottom-1 -right-1 h-6 w-6 border-b-4 border-r-4 border-[#F66B17] rounded-br-sm" />
 
               {/* Laser line */}
-              <div className="absolute inset-x-2 top-1/2 h-0.5 bg-gradient-to-r from-transparent via-[#FF7A1A] to-transparent animate-pulse shadow-[0_0_8px_#FF7A1A]" />
+              <div className="absolute inset-x-2 top-1/2 h-0.5 bg-gradient-to-r from-transparent via-[#F66B17] to-transparent animate-pulse shadow-[0_0_8px_#F66B17]" />
             </div>
             <p className="mt-3 text-[11px] font-medium tracking-wide text-white/90 drop-shadow">
               {tr('qr_scanner_view.align_qr_code_inside_the_viewfinder')}
@@ -149,7 +149,7 @@ export function QrScannerView({
       {error && (
         <div
           role="alert"
-          className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+          className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
         >
           <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
           <span>{localizeMessage(error)}</span>

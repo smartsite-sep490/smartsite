@@ -1,3 +1,4 @@
+import { workspaceTabs } from '../../features/auth/workspace-access';
 import React, { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -5,6 +6,7 @@ import { useCurrentUser, useLogout } from '../../features/auth/auth-session';
 import { NotificationBell } from '../../features/notifications/NotificationBell';
 import { translate as tr, useLocale } from '../../i18n';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
+import '../cameras/camera-setup-catalog';
 import {
   IconAlertTriangle,
   IconBuilding,
@@ -17,9 +19,7 @@ import {
   IconHome,
   IconKey,
   IconLogOut,
-  IconRadio,
   IconShield,
-  IconTrendingUp,
   IconUsers,
 } from '../icons';
 
@@ -27,6 +27,9 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export type ActiveTab =
   | 'dashboard'
+  | 'contractor-teams'
+  | 'assigned-work'
+  | 'worker-summary'
   | 'workforce'
   | 'worker-onboarding'
   | 'site-setup'
@@ -34,6 +37,7 @@ export type ActiveTab =
   | 'access'
   | 'live-monitoring'
   | 'ppe'
+  | 'camera-setup'
   | 'zones'
   | 'incidents'
   | 'iot'
@@ -81,182 +85,46 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           ? t('role.CONTRACTOR_REPRESENTATIVE')
           : roles.includes('WORKER')
             ? t('role.WORKER')
-            : currentUser
-              ? t('role.authenticatedUser')
-              : t('role.unverified');
+            : roles.includes('SECURITY_OFFICER')
+              ? tr('accounts.role.SECURITY_OFFICER')
+              : currentUser
+                ? t('role.authenticatedUser')
+                : t('role.unverified');
   const userInitials = displayName.slice(0, 2).toUpperCase();
 
-  const isAdmin = roles.includes('ADMIN');
-  const isManager = roles.includes('SITE_MANAGER');
-  const isContractorRep = !isAdmin && roles.includes('CONTRACTOR_REPRESENTATIVE');
-  const isWorker = roles.includes('WORKER');
-  const isWorkerOnly = isWorker && !isAdmin && !isManager && !isContractorRep;
-  const isManagerOnly = isManager && !isAdmin && !isContractorRep;
-  const canAccessWorkforce = (isWorker || isContractorRep) && !isAdmin;
-  const canAccessScheduleSetup = (isManager || isContractorRep) && !isAdmin;
-
-  const navGroups = isWorkerOnly
-    ? [
+  const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
+  const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
+  const navGroups = [
+    {
+      label: tr('shell.workspace'),
+      items: [
+        { id: 'dashboard', label: tr('shell.dashboard'), icon: IconDashboard },
+        { id: 'contractor-teams', label: tr('shell.contractorTeams'), icon: IconUsers },
+        { id: 'assigned-work', label: tr('shell.assignedWork'), icon: IconUsers },
+        { id: 'worker-onboarding', label: tr('shell.workerOnboarding'), icon: IconUsers },
+        { id: 'worker-summary', label: tr('shell.workerSummary'), icon: IconDashboard },
         {
-          get label() {
-            return tr('common.workspace');
-          },
-          items: [
-            {
-              id: 'dashboard',
-              get label() {
-                return tr('common.dashboard');
-              },
-              icon: IconDashboard,
-            },
-            {
-              id: 'workforce',
-              get label() {
-                return tr('app_layout.my_schedule_requests');
-              },
-              icon: IconUsers,
-            },
-            {
-              id: 'access',
-              get label() {
-                return tr('common.my_qr_pass');
-              },
-              icon: IconKey,
-            },
-          ],
+          id: 'workforce',
+          label: tr(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
+          icon: IconUsers,
         },
-      ]
-    : [
-        {
-          get label() {
-            return tr('common.workspace');
-          },
-          items: [
-            {
-              id: 'dashboard',
-              get label() {
-                return tr('common.dashboard');
-              },
-              icon: IconDashboard,
-            },
-            ...(canAccessWorkforce
-              ? [
-                  {
-                    id: 'workforce',
-                    get label() {
-                      return isContractorRep
-                        ? tr('common.contractor_review')
-                        : tr('common.workforce');
-                    },
-                    icon: IconUsers,
-                  },
-                ]
-              : []),
-            ...(canAccessScheduleSetup
-              ? [
-                  {
-                    id: 'schedule-setup',
-                    get label() {
-                      return tr('common.schedule_setup');
-                    },
-                    icon: IconCalendar,
-                  },
-                ]
-              : []),
-            ...(isContractorRep
-              ? [
-                  {
-                    id: 'worker-onboarding',
-                    get label() {
-                      return tr('common.worker_onboarding');
-                    },
-                    icon: IconUsers,
-                  },
-                ]
-              : []),
-            ...(isAdmin || isManager
-              ? [
-                  {
-                    id: 'site-setup',
-                    get label() {
-                      return isAdmin ? tr('common.site_setup') : tr('common.contractors_zones');
-                    },
-                    icon: IconBuilding,
-                  },
-                ]
-              : []),
-            ...(!isManagerOnly
-              ? [
-                  {
-                    id: 'access',
-                    get label() {
-                      return isContractorRep && !isAdmin
-                        ? tr('common.attendance_access')
-                        : tr('common.site_access');
-                    },
-                    icon: IconKey,
-                  },
-                ]
-              : []),
-          ],
-        },
-        {
-          get label() {
-            return tr('common.safety');
-          },
-          items: [
-            {
-              id: 'live-monitoring',
-              get label() {
-                return tr('common.live_monitoring');
-              },
-              icon: IconCamera,
-            },
-            {
-              id: 'ppe',
-              get label() {
-                return tr('common.ppe_monitoring');
-              },
-              icon: IconHardHat,
-            },
-            {
-              id: 'zones',
-              get label() {
-                return tr('common.restricted_zones');
-              },
-              icon: IconShield,
-            },
-            {
-              id: 'incidents',
-              get label() {
-                return tr('common.safety_operations_06c3c3');
-              },
-              icon: IconAlertTriangle,
-            },
-          ],
-        },
-        {
-          get label() {
-            return tr('common.site_data');
-          },
-          items: [
-            {
-              id: 'iot',
-              get label() {
-                return tr('common.iot_monitoring');
-              },
-              icon: IconRadio,
-            },
-            {
-              id: 'progress',
-              get label() {
-                return tr('common.progress');
-              },
-              icon: IconTrendingUp,
-            },
-          ],
-        },
-      ];
+        { id: 'accounts', label: tr('accounts.title'), icon: IconUsers },
+        { id: 'site-setup', label: tr('shell.siteSetup'), icon: IconBuilding },
+        { id: 'schedule-setup', label: tr('shell.schedule'), icon: IconCalendar },
+        { id: 'access', label: tr(workerOnly ? 'shell.myQr' : 'shell.access'), icon: IconKey },
+      ].filter((item) => allowedTabs.includes(item.id)),
+    },
+    {
+      label: tr('shell.safety'),
+      items: [
+        { id: 'live-monitoring', label: tr('shell.live'), icon: IconCamera },
+        { id: 'camera-setup', label: tr('cameraSetup.title', { ns: 'safety' }), icon: IconCamera },
+        { id: 'ppe', label: tr('shell.ppe'), icon: IconHardHat },
+        { id: 'zones', label: tr('shell.zones'), icon: IconShield },
+        { id: 'incidents', label: tr('shell.incidents'), icon: IconAlertTriangle },
+      ].filter((item) => allowedTabs.includes(item.id)),
+    },
+  ].filter((group) => group.items.length > 0);
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
@@ -435,6 +303,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           <div className="flex items-center gap-3 shrink-0">
             <LanguageSwitcher />
             <NotificationBell
+              assignedWork={
+                allowedTabs.includes('assigned-work') && !allowedTabs.includes('incidents')
+              }
               key={currentUser?.id ?? 'signed-out'}
               apiUrl={apiUrl}
               userId={currentUser?.id ?? ''}
@@ -452,7 +323,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               </div>
             </div>
 
-            <button type="button" onClick={() => navigate('/account/password')} className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2" title={tr('auth.password.title')} aria-label={tr('auth.password.title')}>
+            <button
+              type="button"
+              onClick={() => navigate('/account/password')}
+              className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
+              title={tr('auth.password.title')}
+              aria-label={tr('auth.password.title')}
+            >
               <IconKey className="w-4 h-4" />
             </button>
             {/* Logout Button */}

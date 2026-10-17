@@ -1,3 +1,4 @@
+import { refuseLegacyMainWriter } from '../../../common/configuration/legacy-workforce-writer.js';
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
@@ -254,6 +255,7 @@ export class WorkforceConfigurationService {
 
   /** Account-first enrollment used by Face/Identity flows; remains idempotent. */
   async forAccount(siteIdValue: string, input: LinkWorkerAccountCommand) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const siteId = uuid(siteIdValue);
     const value = command(LinkWorkerAccountCommand, input);
     return this.dataSource.transaction(async (manager) => {
@@ -289,6 +291,7 @@ export class WorkforceConfigurationService {
   }
 
   async linkAccount(siteIdValue: string, workerIdValue: string, input: LinkWorkerAccountCommand) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const siteId = uuid(siteIdValue);
     const workerId = uuid(workerIdValue);
     const value = command(LinkWorkerAccountCommand, input);
@@ -321,6 +324,7 @@ export class WorkforceConfigurationService {
   }
 
   async create(siteId: string, input: CreateWorkerDto): Promise<WorkerEntity> {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const scopedSiteId = uuid(siteId);
     const value = command(CreateWorkerDto, input);
     if (!!value.contractorId !== !!value.userId)
@@ -356,6 +360,7 @@ export class WorkforceConfigurationService {
   }
 
   async createContractor(siteId: string, input: CreateContractorDto): Promise<ContractorEntity> {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const scopedSiteId = uuid(siteId);
     const value = command(CreateContractorDto, input);
     const code = value.code ?? `CTR-${randomUUID().toUpperCase()}`;
@@ -373,30 +378,6 @@ export class WorkforceConfigurationService {
           name: value.name,
           isActive: true,
         });
-        const participations = await manager
-          .getRepository(ContractorSiteParticipationEntity)
-          .findBy({
-            contractorId: contractor.id,
-            siteId: scopedSiteId,
-            isActive: true,
-          });
-        const now = new Date();
-        if (
-          !participations.some(
-            ({ validFrom, validUntil }) =>
-              validFrom.getTime() <= now.getTime() &&
-              (validUntil === null || validUntil.getTime() > now.getTime()),
-          )
-        ) {
-          await manager.getRepository(ContractorSiteParticipationEntity).save({
-            id: randomUUID(),
-            contractorId: contractor.id,
-            siteId: scopedSiteId,
-            validFrom: now,
-            validUntil: null,
-            isActive: true,
-          });
-        }
         return contractor;
       });
     } catch (error) {
@@ -409,6 +390,7 @@ export class WorkforceConfigurationService {
     contractorId: string,
     input: AssignContractorRepresentativeDto,
   ): Promise<ContractorRepresentativeAssignmentEntity> {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     try {
       return await this.dataSource.transaction(async (manager) => {
         await requireLegacyAuthoritySchema(manager);
@@ -478,6 +460,18 @@ export class WorkforceConfigurationService {
         userId: value.userId,
       })
     );
+  }
+
+  async participationOptions(siteId: string) {
+    if (!(await this.dataSource.getRepository(SiteEntity).existsBy({ id: uuid(siteId) })))
+      missing();
+    return {
+      items: await this.dataSource.getRepository(ContractorEntity).find({
+        where: { isActive: true },
+        select: { id: true, code: true, name: true, isActive: true },
+        order: { name: 'ASC', id: 'ASC' },
+      }),
+    };
   }
 
   async listRepresentativeAssignments(
@@ -558,16 +552,16 @@ export class WorkforceConfigurationService {
     const query = this.dataSource
       .getRepository(ContractorEntity)
       .createQueryBuilder('contractor')
-      .innerJoin(
-        ContractorSiteParticipationEntity,
-        'participation',
-        'participation.contractor_id = contractor.id AND participation.site_id = :siteId AND participation.is_active = TRUE AND participation.valid_from <= :now AND (participation.valid_until IS NULL OR participation.valid_until > :now)',
-        { siteId: scopedSiteId, now },
-      )
       .distinct(true)
       .orderBy('contractor.name', 'ASC')
       .skip(pagination.offset)
       .take(pagination.limit);
+    query.innerJoin(
+      ContractorSiteParticipationEntity,
+      'participation',
+      'participation.contractor_id = contractor.id AND participation.site_id = :siteId AND participation.is_active = TRUE AND participation.valid_from <= :now AND (participation.valid_until IS NULL OR participation.valid_until > :now)',
+      { siteId: scopedSiteId, now },
+    );
     if (contractorIdScope)
       query.andWhere('contractor.id = :contractorIdScope', { contractorIdScope });
     const [items, total] = await query.getManyAndCount();

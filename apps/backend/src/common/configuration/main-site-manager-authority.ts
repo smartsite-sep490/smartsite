@@ -1,6 +1,16 @@
 import type { EntityManager } from 'typeorm';
 import { uuid } from './commands.js';
 import { PublicHttpException } from '../http/public-http-exception.js';
+import type { MainConfigurationCommandContext } from './main-configuration-authority.js';
+
+export function mainSiteManagerAuthorization(
+  context: MainConfigurationCommandContext | undefined,
+  siteId: string,
+): ((manager: EntityManager) => Promise<void>) | undefined {
+  return context
+    ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+    : undefined;
+}
 
 /** Rechecks MAIN's exact-site manager write policy under the command transaction. */
 export async function authorizeMainSiteManager(

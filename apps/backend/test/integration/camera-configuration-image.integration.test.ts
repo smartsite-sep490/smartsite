@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -24,7 +26,7 @@ before(() => database.initialize());
 after(() => database.dispose());
 
 test('full AppModule configuration image works before any Region and withholds pixels after real session logout', async () => {
-  assert.equal(database.dataSource.migrations.length, 59);
+  assert.equal(database.dataSource.migrations.length, 61);
   assert.equal(await database.dataSource.showMigrations(), false);
   const suffix = randomUUID().slice(0, 8);
   const password = 'SyntheticFixture123!';
@@ -96,8 +98,7 @@ test('full AppModule configuration image works before any Region and withholds p
         MF06_ENQUEUE_ENABLED: 'false',
         MF06_ASSESSMENT_READ_ENABLED: 'false',
         CORS_ORIGINS: 'http://localhost:5181',
-        STORAGE_LOCAL_ROOT:
-          'D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/configuration-image-unused-media',
+        STORAGE_LOCAL_ROOT: join(tmpdir(), 'smartsite-configuration-image-unused-media'),
       }),
     );
     const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -144,11 +145,40 @@ test('full AppModule configuration image works before any Region and withholds p
     );
     assert.equal(siteResponse.status, 201);
     const site = (await siteResponse.json()) as { id: string };
+    const cameraCommand = {
+      code: `CFG-${suffix}`,
+      name: 'Synthetic source without Region',
+      externalId,
+    };
+    const adminCameraResponse = await request(
+      'POST',
+      `/sites/${site.id}/cameras`,
+      cameraCommand,
+      session.accessToken,
+    );
+    assert.equal(adminCameraResponse.status, 403);
+    const managerUsername = `configuration-manager-${suffix}`;
+    await new UsersService(
+      database.dataSource,
+      new SiteConfigurationService(database.dataSource),
+    ).create({
+      username: managerUsername,
+      displayName: 'Synthetic configuration Manager',
+      temporaryPassword: password,
+      roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
+    });
+    const managerLogin = await request('POST', '/auth/login', {
+      username: managerUsername,
+      password,
+      clientType: 'MOBILE',
+    });
+    assert.equal(managerLogin.status, 200);
+    const managerSession = (await managerLogin.json()) as { accessToken: string };
     const cameraResponse = await request(
       'POST',
       `/sites/${site.id}/cameras`,
-      { code: `CFG-${suffix}`, name: 'Synthetic source without Region', externalId },
-      session.accessToken,
+      cameraCommand,
+      managerSession.accessToken,
     );
     assert.equal(cameraResponse.status, 201);
     const camera = (await cameraResponse.json()) as { id: string; configurationVersion: number };

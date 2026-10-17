@@ -70,7 +70,7 @@ beforeEach(() => {
     user: {
       id: 'admin',
       displayName: 'Administrator',
-      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+      roleAssignments: [SITE_A, SITE_B].map((siteId) => ({ role: 'SITE_MANAGER', siteId })),
     },
     onSignOut: vi.fn(),
   };
@@ -143,7 +143,7 @@ it('preserves the currently selected camera after registration refresh', async (
   );
 });
 
-it('limits the entry point to global Admin and settled authorized Sites', async () => {
+it('limits the entry point to scoped Site Manager and settled authorized Sites', async () => {
   session = {
     ...session,
     user: { ...session.user, roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: SITE_A }] },
@@ -350,7 +350,7 @@ it('revokes camera registration after an existing metadata request expires the s
   expect(SmartSiteManagementClient.prototype.createCamera).not.toHaveBeenCalled();
 });
 
-it('closes registration on Admin role loss and ignores the old pending success', async () => {
+it('closes registration on Site Manager role loss and ignores the old pending success', async () => {
   const pending = deferred<CameraResponse>();
   vi.mocked(SmartSiteManagementClient.prototype.createCamera).mockReturnValue(pending.promise);
   const view = mount();

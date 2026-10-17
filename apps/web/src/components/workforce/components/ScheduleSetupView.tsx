@@ -1,4 +1,4 @@
-import { localizedError } from '../../../i18n/messages';
+import { localizedError, localizeMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -129,7 +129,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [assignmentShiftFilter, setAssignmentShiftFilter] = useState('');
   const [assignmentSearchName, setAssignmentSearchName] = useState('');
   const [assignmentPage, setAssignmentPage] = useState(0);
-  const [assignmentScope, setAssignmentScope] = useState({ siteId: '', contractorId: '' });
+  const [assignmentChoice, setAssignmentScope] = useState({ siteId: '', contractorId: '' });
   const [collapsedAssignmentDates, setCollapsedAssignmentDates] = useState<Set<string>>(new Set());
 
   // Modal open states
@@ -173,7 +173,29 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   // MF07: only a Site Manager for the selected Site may create/delete shifts,
   // manage versions, and assign shifts to contractors. Admin may still view setup.
   const canManageShiftsAndVersions = isManager;
-  const canAssignWorker = isContractorRep;
+  const canAssignWorker = isManager;
+  const canViewAssignments = isAdmin || isManager || isContractorRep;
+  const readScopes = useQuery({
+    queryKey: ['schedule-read-scopes', apiUrl, currentUser?.id],
+    queryFn: () => client.contractorDashboardScopes(accessToken!),
+    enabled: !!accessToken && isContractorRep && !canAssignWorker,
+  });
+  const readOptions = useMemo(
+    () => readScopes.data?.items.filter((o) => o.siteId === activeSiteId) ?? [],
+    [readScopes.data, activeSiteId],
+  );
+  const assignmentScope = useMemo(
+    () =>
+      canAssignWorker
+        ? assignmentChoice
+        : {
+            siteId: activeSiteId ?? '',
+            contractorId: readOptions.some((o) => o.contractorId === assignmentChoice.contractorId)
+              ? assignmentChoice.contractorId
+              : (readOptions[0]?.contractorId ?? ''),
+          },
+    [canAssignWorker, assignmentChoice, activeSiteId, readOptions],
+  );
 
   useEffect(() => {
     if (!selectedSiteId && availableSites.length > 0) {
@@ -208,7 +230,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         if (items.length >= page.total || !page.items.length) return { items, total: page.total };
       }
     },
-    enabled: Boolean(accessToken && activeSiteId && canAssignWorker),
+    enabled: Boolean(accessToken && activeSiteId && canViewAssignments),
   });
   const workers = useMemo(
     () =>
@@ -321,7 +343,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     enabled: Boolean(
       accessToken &&
       activeSiteId &&
-      canAssignWorker &&
+      canViewAssignments &&
       assignmentScope.siteId === activeSiteId &&
       assignmentScope.contractorId,
     ),
@@ -376,7 +398,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     mutationFn: (input: Parameters<typeof client.createShift>[2]) =>
       client.createShift(accessToken!, activeSiteId!, input),
     onSuccess: (newShift) => {
-      setShiftSuccess(`Shift "${newShift.name}" created successfully.`);
+      setShiftSuccess(tr('schedule_setup_view.shift_created', { name: newShift.name }));
       setShiftError(null);
       setShiftName('');
       setHasShiftBreak(false);
@@ -439,7 +461,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     mutationFn: (input: { effectiveFrom: string; effectiveUntil?: string }) =>
       client.createScheduleVersion(accessToken!, activeSiteId!, input),
     onSuccess: (newVersion) => {
-      setVersionSuccess(`Schedule version created (Version ${newVersion.version}).`);
+      setVersionSuccess(tr('schedule_setup_view.version_created', { version: newVersion.version }));
       setVersionError(null);
       setShowCreateVersionModal(false);
       queryClient.invalidateQueries({ queryKey: ['schedule-versions', activeSiteId] });
@@ -623,7 +645,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" />,
       },
     ];
-    if (canAssignWorker) {
+    if (canViewAssignments) {
       items.push({
         id: 'assignment',
         get label() {
@@ -634,7 +656,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       });
     }
     return items;
-  }, [shifts.length, versions.length, schedulesTotal, canAssignWorker]);
+  }, [shifts.length, versions.length, schedulesTotal, canViewAssignments]);
 
   // ── Access Check ─────────────────────────────────────────────────────────
   if (!canAccess) {
@@ -721,7 +743,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.4)] shrink-0">
                   <IconCheck className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-xs font-semibold text-slate-100">{shiftSuccess}</span>
+                <span className="text-xs font-semibold text-slate-100">
+                  {localizeMessage(shiftSuccess)}
+                </span>
               </div>
               <button
                 type="button"
@@ -745,7 +769,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                   <IconCheck className="w-4 h-4 text-white" />
                 </div>
                 <span className="text-xs font-semibold text-slate-100">
-                  {assignContractorSuccess}
+                  {localizeMessage(assignContractorSuccess)}
                 </span>
               </div>
               <button
@@ -769,7 +793,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 <div className="w-8 h-8 rounded-lg bg-blue-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.4)] shrink-0">
                   <IconCheck className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-xs font-semibold text-slate-100">{versionSuccess}</span>
+                <span className="text-xs font-semibold text-slate-100">
+                  {localizeMessage(versionSuccess)}
+                </span>
               </div>
               <button
                 type="button"
@@ -1089,20 +1115,41 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       )}
 
       {/* ── TAB 3: WORKER ASSIGNMENT (CONTRACTOR REPRESENTATIVE ONLY) ─────── */}
-      {activeTab === 'assignment' && canAssignWorker && (
+      {activeTab === 'assignment' && canViewAssignments && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Assignment Form Card (4 cols) - Double-Bezel Architecture */}
           <div className="lg:col-span-4 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
             <div className="bg-white rounded-[22px] p-5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
-              <ScheduleAssignmentForm
-                key={activeSiteId}
-                apiUrl={apiUrl}
-                token={accessToken!}
-                siteId={activeSiteId!}
-                shifts={availableShifts}
-                versions={versions}
-                onScopeChange={setAssignmentScope}
-              />
+              {!canAssignWorker && isContractorRep && (
+                <label>
+                  {tr('common.contractor')}
+                  <select
+                    aria-label={tr('common.contractor')}
+                    value={assignmentScope.contractorId}
+                    onChange={(e) =>
+                      setAssignmentScope({ siteId: activeSiteId!, contractorId: e.target.value })
+                    }
+                  >
+                    {readOptions.map((o) => (
+                      <option key={o.contractorId} value={o.contractorId}>
+                        {o.contractorName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {canAssignWorker && (
+                <ScheduleAssignmentForm
+                  managerScope={isManager}
+                  key={activeSiteId}
+                  apiUrl={apiUrl}
+                  token={accessToken!}
+                  siteId={activeSiteId!}
+                  shifts={availableShifts}
+                  versions={versions}
+                  onScopeChange={setAssignmentScope}
+                />
+              )}
             </div>
           </div>
 
@@ -1225,7 +1272,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                       label={tr('common.worker')}
                       size="sm"
                       searchable
-                      searchPlaceholder="Filter worker..."
+                      searchPlaceholder={tr('common.filter_worker')}
                       value={assignmentWorkerFilter}
                       onChange={(val) => {
                         setAssignmentWorkerFilter(val);

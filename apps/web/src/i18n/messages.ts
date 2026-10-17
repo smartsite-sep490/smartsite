@@ -26,9 +26,7 @@ for (const catalog of [en, vi]) {
   }
 }
 
-/** For system-owned messages, including messages kept in local state across locale changes.
- * Never use this on user-authored names, comments, descriptions or audit payloads. */
-export function localizeMessage(message: string): string {
+function resolveMessage(message: string): string | undefined {
   const key = exact.get(message);
   if (key) return translate(key);
   for (const template of templates) {
@@ -45,13 +43,20 @@ export function localizeMessage(message: string): string {
       continue;
     return translate(template.key, values);
   }
-  return message;
+  return undefined;
+}
+
+/** For system-owned messages, including messages kept in local state across locale changes.
+ * Never use this on user-authored names, comments, descriptions or audit payloads. */
+export function localizeMessage(message: string): string {
+  return resolveMessage(message) ?? message;
 }
 
 export function localizedError(message: string | undefined): string {
   if (!message) return translate('errors.unexpected');
-  const translated = localizeMessage(message);
-  return uiLanguage() === 'vi' && translated === message && !/[À-ỹ]/.test(message)
-    ? translate('errors.unexpected')
-    : translated;
+  // A person's Vietnamese name does not make an English server error Vietnamese.
+  // Only catalog matches establish a translated system message.
+  return (
+    resolveMessage(message) ?? (uiLanguage() === 'vi' ? translate('errors.unexpected') : message)
+  );
 }

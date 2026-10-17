@@ -10,6 +10,7 @@ import type { MainRepresentativeCommandService } from '../src/modules/workforce/
 import type { UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
 import type { MainConfigurationCommandContext } from '../src/common/configuration/main-configuration-authority.js';
 import type { EntityManager } from 'typeorm';
+import { UserRole } from '../src/database/entities/user.entity.js';
 
 const userId = '00000000-0000-4000-8000-000000000001';
 const siteId = '00000000-0000-4000-8000-000000000002';
@@ -20,6 +21,13 @@ const request = { user: { id: userId } } as AuthenticatedRequest;
 // attributes an authenticated write to the internal SERVICE default.
 for (const operation of ['forAccount', 'linkAccount', 'create'] as const) {
   test(`Workforce HTTP ${operation} supplies the authenticated USER to audit`, async () => {
+    const operationRequest = {
+      user: {
+        id: userId,
+        mustChangePassword: false,
+        roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
+      },
+    } as AuthenticatedRequest;
     let received: unknown[] | undefined;
     const workforce = {
       [operation]: async (...args: unknown[]) => {
@@ -31,7 +39,7 @@ for (const operation of ['forAccount', 'linkAccount', 'create'] as const) {
     let reauthorized = false;
     const guard = {
       authenticateRequest: async (received: AuthenticatedRequest, transaction: EntityManager) => {
-        assert.equal(received, request);
+        assert.equal(received, operationRequest);
         assert.equal(transaction, manager);
         reauthorized = true;
       },
@@ -40,12 +48,20 @@ for (const operation of ['forAccount', 'linkAccount', 'create'] as const) {
       {} as WorkforceConfigurationService,
       workforce,
       guard,
+      {
+        createWorker: async (...args: unknown[]) => {
+          received = args;
+          return { id: workerId, siteId, externalId: 'Synthetic', displayName: 'Synthetic' };
+        },
+      } as unknown as MainWorkforceCreateService,
     );
-    if (operation === 'forAccount') await controller.forAccount(request, siteId, { userId });
+    if (operation === 'forAccount')
+      await controller.forAccount(operationRequest, siteId, { userId });
     else if (operation === 'linkAccount')
-      await controller.linkAccount(request, siteId, workerId, { userId });
+      await controller.linkAccount(operationRequest, siteId, workerId, { userId });
     else if (operation === 'create')
-      await controller.create(request, siteId, {
+      await controller.create(operationRequest, siteId, {
+        contractorId: workerId,
         externalId: 'Synthetic',
         displayName: 'Synthetic',
       });

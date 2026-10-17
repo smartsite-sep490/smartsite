@@ -19,6 +19,7 @@ import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 import { recoveryPostgresTools } from '../support/recovery-postgres-tools.js';
 import {
   loadMainRecoveryMigrations,
+  MAIN37_MISSING_MAIN61_MIGRATIONS,
   seedCompletedRecoveryAssessment,
 } from '../support/main-recovery-profile.js';
 
@@ -63,7 +64,7 @@ function recoveryScenario(main37 = false, linux = false) {
       const image = JSON.parse(docker(['image', 'inspect', linuxImage!, '--format', '{{json .}}']));
       assert.equal(image.Id, linuxImage);
       assert.equal(image.Config.User, 'node');
-      assert.deepEqual(image.Config.Cmd, ['node', 'qualified-dist/main.js']);
+      assert.deepEqual(image.Config.Cmd, ['node', 'release-dist/main.js']);
     }
     const sourceMedia = join(root, 'source-media');
     const backupMedia = join(root, 'backup-media');
@@ -118,7 +119,10 @@ function recoveryScenario(main37 = false, linux = false) {
     });
     await isolated.initialize();
     if (linux)
-      assert.equal(Number((await db.query('SELECT count(*) AS n FROM migrations'))[0].n), 59);
+      assert.equal(
+        Number((await db.query('SELECT count(*) AS n FROM migrations'))[0].n),
+        db.migrations.length,
+      );
     let missingRuntimeMigrations: string[] = [];
     if (main37) {
       assert.equal(
@@ -137,13 +141,7 @@ function recoveryScenario(main37 = false, linux = false) {
           return (migration as new () => { name: string }).prototype.constructor.name;
         })
         .filter((name) => !applied.has(name));
-      assert.equal(missingRuntimeMigrations.length, 22);
-      for (const name of [
-        'Mf06MainAuthorityJournal1791590400002',
-        'SafetyFaceProvenance1791590400003',
-        'Mf06TeamAuthorityHistory1792281600000',
-      ])
-        assert(missingRuntimeMigrations.includes(name));
+      assert.deepEqual(missingRuntimeMigrations, MAIN37_MISSING_MAIN61_MIGRATIONS);
     }
     await control.initialize();
     const schema = db.driver.schema;
@@ -316,6 +314,8 @@ function recoveryScenario(main37 = false, linux = false) {
           '128',
           '--memory',
           '384m',
+          '--cpus',
+          '1',
           '--stop-timeout',
           '45',
           '--env-file',
@@ -364,7 +364,7 @@ function recoveryScenario(main37 = false, linux = false) {
         assert.equal(child.exitCode, null, 'Main exited during startup');
         try {
           // This is an operational restore drill, not production adoption of MAIN.
-          // Incomplete historical MAIN37 is unready for the canonical MAIN59 release.
+          // Incomplete historical MAIN37 is unready for the canonical MAIN61 release.
           await request('/health/live');
           await request('/health/ready', main37 ? 503 : 200);
           return owned;
@@ -374,8 +374,8 @@ function recoveryScenario(main37 = false, linux = false) {
       }
       throw new Error('Actual main liveness/readiness-boundary deadline exceeded');
     }
-    const first = await start(sourceMedia);
-    const login = async (password: string, loginName = username) => {
+    let first = await start(sourceMedia);
+    const login = async (password: string) => {
       const result = await (
         await request('/auth/login', 200, { username: loginName, password, clientType: 'WEB' })
       ).json();
@@ -390,38 +390,44 @@ function recoveryScenario(main37 = false, linux = false) {
       token,
     );
     token = await login(changed);
-    const create = async (route: string, body: unknown) =>
-      (await request(route, 201, body, token)).json();
+    const create = async (route: string, body: unknown, actorToken = token) =>
+      (await request(route, 201, body, actorToken)).json();
     const site = await create('/sites', { code: username, name: 'Synthetic recovery Site' });
     const otherSite = await create('/sites', {
       code: `${username}-other`,
       name: 'Synthetic other Site',
     });
-    const camera = await create(`/sites/${site.id}/cameras`, {
+    const managerUsername = `${username}-manager`;
+    await create('/users', {
+      username: managerUsername,
+      displayName: 'Synthetic recovery Site Manager',
+      temporaryPassword: initial,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+    });
+    const managerLogin = await request('/auth/login', 200, {
+      username: managerUsername,
+      password: initial,
+      clientType: 'WEB',
+    });
+    const managerToken = (await managerLogin.json()).accessToken;
+    secrets.push(managerToken);
+    const cameraInput = {
       code: 'RESTORE',
       externalId: username,
       name: 'Synthetic metadata Camera',
-    });
-    const managerName = `${username}-manager`,
-      managerPassword = `Manager-${randomBytes(16).toString('hex')}!`;
-    secrets.push(managerPassword);
-    await create('/users', {
-      username: managerName,
-      displayName: 'Synthetic recovery Site Manager',
-      temporaryPassword: managerPassword,
-      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
-    });
-    const adminToken = token;
-    token = await login(managerPassword, managerName);
-    const zone = await create(`/sites/${site.id}/zones`, {
+    };
+    await request(`/sites/${site.id}/cameras`, 403, cameraInput, token);
+    const camera = await create(`/sites/${site.id}/cameras`, cameraInput, managerToken);
+    const zoneInput = {
       code: 'RESTORE',
       name: 'Synthetic recovery Zone',
       type: 'STANDARD',
       restrictionPolicy: 'NONE',
       requiredPpe: ['HARD_HAT'],
-    });
-    token = adminToken;
-    const { region } = await create(`/sites/${site.id}/cameras/${camera.id}/regions`, {
+    };
+    await request(`/sites/${site.id}/zones`, 403, zoneInput, token);
+    const zone = await create(`/sites/${site.id}/zones`, zoneInput, managerToken);
+    const regionInput = {
       zoneId: zone.id,
       expectedConfigurationVersion: 1,
       polygon: {
@@ -432,7 +438,13 @@ function recoveryScenario(main37 = false, linux = false) {
           [0, 1],
         ],
       },
-    });
+    };
+    await request(`/sites/${site.id}/cameras/${camera.id}/regions`, 403, regionInput, token);
+    const { region } = await create(
+      `/sites/${site.id}/cameras/${camera.id}/regions`,
+      regionInput,
+      managerToken,
+    );
     const references: {
       eventId: string;
       alertId: string;
@@ -528,6 +540,35 @@ function recoveryScenario(main37 = false, linux = false) {
         }
       | undefined;
     if (linux) {
+      // Separate account provisioning from the recovery journey without changing login throttling.
+      await stop(first);
+      first = await start(sourceMedia);
+      const contractor = await create(`/sites/${site.id}/contractors`, {
+        code: username,
+        name: 'Synthetic recovery Contractor',
+      });
+      await create(
+        `/contractors/${contractor.id}/participations`,
+        { siteId: site.id, validFrom: '2020-01-01T00:00:00Z', validUntil: null },
+        managerToken,
+      );
+      const representativeUsername = `${username}-representative`;
+      await create(
+        `/sites/${site.id}/contractors/${contractor.id}/representative-accounts`,
+        {
+          username: representativeUsername,
+          displayName: 'Synthetic recovery Representative',
+          temporaryPassword: initial,
+        },
+        managerToken,
+      );
+      const representativeLogin = await request('/auth/login', 200, {
+        username: representativeUsername,
+        password: initial,
+        clientType: 'WEB',
+      });
+      const representativeToken = (await representativeLogin.json()).accessToken;
+      secrets.push(representativeToken);
       const safetyUsername = `${username}-safety`;
       await create('/users', {
         username: safetyUsername,
@@ -558,10 +599,15 @@ function recoveryScenario(main37 = false, linux = false) {
       assert.ok(cookie, 'WEB session must provide its refresh cookie');
       secrets.push(cookie);
       secrets.push(safetyToken);
-      const worker = await create(`/sites/${site.id}/workers`, {
-        externalId: 'SYNTHETIC-RESTORE-WORKER',
-        displayName: 'Synthetic manual reference only',
-      });
+      const worker = await create(
+        `/sites/${site.id}/workers`,
+        {
+          contractorId: contractor.id,
+          externalId: 'SYNTHETIC-RESTORE-WORKER',
+          displayName: 'Synthetic manual reference only',
+        },
+        representativeToken,
+      );
       const event = references[0]!;
       const route = `/sites/${site.id}/safety-alerts/${event.alertId}/detections/${event.eventId}/identity-subjects/0/decisions`;
       const command = {
@@ -960,7 +1006,7 @@ function recoveryScenario(main37 = false, linux = false) {
           forcedWindowsQuiesceNotGraceful: !linux && process.platform === 'win32',
           actualLinuxContainers: linuxContainers,
           linuxImage: linux ? linuxImage : null,
-          profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_MAIN59',
+          profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_RUNTIME_GRAPH',
           completedMf06HistoryPreserved: !!completed,
           syntheticHistorySuppressed: !!completed,
           functionsTriggersMatched: true,
@@ -1002,7 +1048,7 @@ test(
   recoveryScenario(true),
 );
 test(
-  'owned Linux canonical MAIN59 DB and all evidence files restore into actual production main',
+  'owned Linux canonical runtime graph DB and all evidence files restore into actual production main',
   {
     timeout: 180_000,
     skip:

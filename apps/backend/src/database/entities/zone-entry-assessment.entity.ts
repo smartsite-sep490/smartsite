@@ -8,8 +8,8 @@ import {
   PrimaryColumn,
   Unique,
 } from 'typeorm';
-import { Mf06AssessmentRequestEntity } from './mf06-assessment-request.entity.js';
-import { Mf06AuthorityArtifactEntity } from './mf06-authority-artifact.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from './zone-entry-assessment-request.entity.js';
+import { ZoneEntryAuthorityArtifactEntity } from './zone-entry-authority-artifact.entity.js';
 export type Mf06AssessmentOutcome = 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
 export type Mf06AssessmentProvenance = 'UNAVAILABLE' | 'SYNTHETIC_TEST' | 'TRUSTED_SERVICE';
 export type Mf06AssessmentReasonCode =
@@ -30,15 +30,15 @@ export type Mf06AssessmentReasonCode =
  * assertion, or permission grant. Candidate migration deployment is separate.
  */
 @Entity({ name: 'mf06_assessment' })
-@Unique('uq_mf06_assessment_request', ['requestId'])
-@Unique('uq_mf06_assessment_command', ['commandId'])
-@Unique('uq_mf06_assessment_artifact', ['authorityArtifactId'])
-@ForeignKey(() => Mf06AssessmentRequestEntity, ['requestId'], ['requestId'], {
+@Unique('mf06_assessment_request_id_key', ['requestId'])
+@Unique('mf06_assessment_command_id_key', ['commandId'])
+@Unique('mf06_assessment_authority_artifact_id_key', ['authorityArtifactId'])
+@ForeignKey(() => ZoneEntryAssessmentRequestEntity, ['requestId'], ['requestId'], {
   name: 'mf06_assessment_request_id_fkey',
   onDelete: 'RESTRICT',
 })
 @ForeignKey(
-  () => Mf06AuthorityArtifactEntity,
+  () => ZoneEntryAuthorityArtifactEntity,
   ['authorityArtifactId', 'requestId'],
   ['artifactId', 'requestId'],
   {
@@ -73,11 +73,11 @@ export type Mf06AssessmentReasonCode =
   'mf06_assessment_check2',
   "reason_code NOT IN ('AUTHORIZED','UNAUTHORIZED') OR (worker_id IS NOT NULL AND profile_revision IS NOT NULL AND frame_sha256 IS NOT NULL AND crop_sha256 IS NOT NULL AND provenance<>'UNAVAILABLE')",
 )
-export class Mf06AssessmentEntity {
+export class ZoneEntryAssessmentEntity {
   @PrimaryColumn({
     name: 'assessment_id',
     type: 'uuid',
-    primaryKeyConstraintName: 'pk_mf06_assessment',
+    primaryKeyConstraintName: 'mf06_assessment_pkey',
     update: false,
   })
   assessmentId!: string;

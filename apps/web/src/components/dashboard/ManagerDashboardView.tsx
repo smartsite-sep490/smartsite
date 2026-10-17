@@ -61,21 +61,29 @@ export function ManagerDashboardView({
 
       {/* Site selector / content */}
       {sites.isPending ? (
-        <p role="status" className="text-sm text-slate-500">{tr('common.loading_managed_sites')}</p>
+        <p role="status" className="text-sm text-slate-500">
+          {tr('common.loading_managed_sites')}
+        </p>
       ) : sites.isError ? (
         <div role="alert" className="text-sm text-red-600">
           {tr('common.managed_sites_unavailable')}{' '}
-          <button type="button" onClick={() => void sites.refetch()} className="underline font-semibold">
+          <button
+            type="button"
+            onClick={() => void sites.refetch()}
+            className="underline font-semibold"
+          >
             {tr('common.retry')}
           </button>
         </div>
       ) : !managed.length ? (
-        <p className="text-sm text-slate-500">{tr('manager_dashboard_view.no_site_manager_assignment_available')}</p>
+        <p className="text-sm text-slate-500">
+          {tr('manager_dashboard_view.no_site_manager_assignment_available')}
+        </p>
       ) : (
         <>
           {/* Site selector bar */}
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm font-bold text-[#041D2E]">
+            <label className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-sm font-bold text-[#041D2E]">
               {tr('common.managed_site')}
               <select
                 value={siteId}
@@ -83,7 +91,7 @@ export function ManagerDashboardView({
                   setSelection({ siteId: e.target.value, offset: 0 });
                   setContractorId(null);
                 }}
-                className="ml-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#041D2E] focus:ring-2 focus:ring-[#F66B17]/30 transition-colors"
+                className="min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-[#041D2E] focus:ring-2 focus:ring-[#F66B17]/30 transition-colors"
               >
                 {managed.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -104,12 +112,18 @@ export function ManagerDashboardView({
 
           {/* Overview content */}
           {overview.isPending ? (
-            <p role="status" className="text-sm text-slate-500">{tr('common.loading_management_overview')}</p>
+            <p role="status" className="text-sm text-slate-500">
+              {tr('common.loading_management_overview')}
+            </p>
           ) : overview.isError ? (
             <div role="alert" className="text-sm text-red-600">
               {tr('common.management_overview_unavailable')}{' '}
               {localizedError(overview.error.message)}{' '}
-              <button type="button" onClick={() => void overview.refetch()} className="underline font-semibold">
+              <button
+                type="button"
+                onClick={() => void overview.refetch()}
+                className="underline font-semibold"
+              >
                 {tr('common.retry')}
               </button>
             </div>
@@ -118,17 +132,21 @@ export function ManagerDashboardView({
               <>
                 {/* KPI Cards */}
                 <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {([
-                    [tr('common.managed_contractors'), data.contractorCount, 'text-[#041D2E]'],
-                    [tr('common.configured_zones'), data.zoneCount, 'text-[#041D2E]'],
-                    [tr('common.active_teams_82c339'), data.teamCount, 'text-[#008C47]'],
-                    [tr('common.active_workers_3adad5'), data.workerCount, 'text-[#F66B17]'],
-                  ] as [string, number, string][]).map(([label, value, color]) => (
+                  {(
+                    [
+                      [tr('common.managed_contractors'), data.contractorCount, 'text-[#041D2E]'],
+                      [tr('common.configured_zones'), data.zoneCount, 'text-[#041D2E]'],
+                      [tr('common.active_teams_82c339'), data.teamCount, 'text-[#008C47]'],
+                      [tr('common.active_workers_3adad5'), data.workerCount, 'text-[#F66B17]'],
+                    ] as [string, number, string][]
+                  ).map(([label, value, color]) => (
                     <div
                       key={label}
                       className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:shadow-sm transition-shadow space-y-2"
                     >
-                      <dt className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</dt>
+                      <dt className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        {label}
+                      </dt>
                       <dd className={`text-3xl font-black tracking-tight ${color}`}>{value}</dd>
                     </div>
                   ))}
@@ -156,7 +174,10 @@ export function ManagerDashboardView({
                               tr('common.workers'),
                               tr('common.details'),
                             ].map((label) => (
-                              <th key={label} className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                              <th
+                                key={label}
+                                className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider"
+                              >
                                 {label}
                               </th>
                             ))}
@@ -174,8 +195,12 @@ export function ManagerDashboardView({
                                   {contractor.code}
                                 </p>
                               </td>
-                              <td className="p-4 font-semibold text-[#041D2E]">{contractor.teamCount}</td>
-                              <td className="p-4 font-semibold text-[#041D2E]">{contractor.workerCount}</td>
+                              <td className="p-4 font-semibold text-[#041D2E]">
+                                {contractor.teamCount}
+                              </td>
+                              <td className="p-4 font-semibold text-[#041D2E]">
+                                {contractor.workerCount}
+                              </td>
                               <td className="p-4">
                                 <button
                                   type="button"

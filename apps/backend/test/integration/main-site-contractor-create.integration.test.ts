@@ -56,8 +56,8 @@ async function fixture() {
     f.site,
   ]);
   await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-    [randomUUID(), f.actor, f.site],
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
+    [randomUUID(), f.actor],
   );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
@@ -162,7 +162,7 @@ async function factsFor(id: string) {
     [id],
   );
 }
-test('site Contractor create and automatic participation emit two actor-bound same-command facts', async () => {
+test('Admin Contractor catalog create emits its actor-bound fact without granting Site participation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     const response = await call('CONTRACTOR');
@@ -175,37 +175,20 @@ test('site Contractor create and automatic participation emit two actor-bound sa
     assert.equal(c[0].actor_user_id, f.actor);
     assert.equal(c[0].bound, true);
     assert.equal(c[0].witnessed, true);
-    const p = (
-      await db.query(
-        'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2',
-        [row.id, f.site],
-      )
-    )[0];
-    const pf = await factsFor(p.id);
-    assert.equal(pf.length, 1);
-    assert.equal(pf[0].source_kind, 'PARTICIPATION');
-    assert.equal(pf[0].actor_user_id, f.actor);
-    assert.equal(pf[0].bound, true);
-    assert.equal(pf[0].witnessed, true);
-    const same = (
-      await db.query(
-        'SELECT count(DISTINCT command_id)::int AS n FROM mf06_authority_fact WHERE source_id=ANY($1::uuid[])',
-        [[row.id, p.id]],
-      )
-    )[0];
-    assert.equal(same.n, 1);
+    const participations = await db.query(
+      'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2',
+      [row.id, f.site],
+    );
+    assert.deepEqual(participations, []);
+    assert.equal(c[0].operation, 'SITE_CONTRACTOR_CREATE');
   });
 });
-test('site Contractor reuse across Site creates only one participation source fact', async () => {
+test('Admin Contractor reuse across Sites preserves the catalog without granting participation or facts', async () => {
   const f = await fixture();
   const other = randomUUID();
   await db.query(
     "INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic other Site')",
     [other],
-  );
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-    [randomUUID(), f.actor, other],
   );
   await withApi(f, async (call) => {
     const response = await call(
@@ -216,16 +199,12 @@ test('site Contractor reuse across Site creates only one participation source fa
     assert.equal(response.status, 201);
     const row = (await response.json()) as { id: string };
     assert.equal(row.id, f.contractor);
-    const p = (
-      await db.query(
-        'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2',
-        [row.id, other],
-      )
-    )[0];
-    const facts = await factsFor(p.id);
-    assert.equal(facts.length, 1);
-    assert.equal(facts[0].actor_user_id, f.actor);
-    assert.equal(facts[0].witnessed, true);
+    const participations = await db.query(
+      'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2',
+      [row.id, other],
+    );
+    assert.deepEqual(participations, []);
+    assert.deepEqual(await factsFor(row.id), []);
   });
 });
 
@@ -278,7 +257,7 @@ for (const mode of ['OPEN', 'FINITE', 'EXPIRED', 'FUTURE', 'INACTIVE'] as const)
         'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2',
         [f.contractor, f.site],
       );
-      assert.equal(rows.length, mode === 'OPEN' || mode === 'FINITE' ? 1 : 2);
+      assert.equal(rows.length, 1, 'Catalog reuse never creates participation');
       assert.equal(
         (
           await db.query(
@@ -288,12 +267,7 @@ for (const mode of ['OPEN', 'FINITE', 'EXPIRED', 'FUTURE', 'INACTIVE'] as const)
         )[0].value,
         before,
       );
-      if (rows.length === 2) {
-        const pf = await factsFor(rows.find((r: { id: string }) => r.id !== f.participation).id);
-        assert.equal(pf.length, 1);
-        assert.equal(pf[0].actor_user_id, f.actor);
-        assert.equal(pf[0].witnessed, true);
-      }
+      assert.deepEqual(await factsFor(f.participation), []);
       assert.equal(
         (await db.query('SELECT access_policy_version FROM site WHERE id=$1', [f.site]))[0]
           .access_policy_version,
@@ -302,13 +276,13 @@ for (const mode of ['OPEN', 'FINITE', 'EXPIRED', 'FUTURE', 'INACTIVE'] as const)
       assert.equal((await db.query('SELECT count(*)::int AS n FROM audit_log'))[0].n, audits);
     });
   });
-test('site Contractor strictDTO400/unassignedSite403/name or inactive409 do not create participation', async () => {
+test('Admin Contractor strictDTO400/missingSite404/name or inactive409 do not create participation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     for (const extra of [{ actorUserId: f.actor }, { commandId: randomUUID() }])
       assert.equal((await call('CONTRACTOR', { ...f.contractorInput, ...extra })).status, 400);
-    assert.equal((await call('CONTRACTOR', undefined, 'bad-id')).status, 403);
-    assert.equal((await call('CONTRACTOR', undefined, randomUUID())).status, 403);
+    assert.equal((await call('CONTRACTOR', undefined, 'bad-id')).status, 400);
+    assert.equal((await call('CONTRACTOR', undefined, randomUUID())).status, 404);
     assert.equal(
       (await call('CONTRACTOR', { code: f.contractor, name: 'Different name' })).status,
       409,
@@ -330,13 +304,13 @@ test('site Contractor strictDTO400/unassignedSite403/name or inactive409 do not 
     );
   });
 });
-for (const role of ['ADMIN', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'] as const)
-  test('site Contractor refuses ' + role + ' without scoped Site Manager', async () => {
+for (const role of ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'] as const)
+  test('Contractor catalog refuses ' + role + ' without global Admin', async () => {
     const f = await fixture();
     await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
       f.actor,
       role,
-      role === 'ADMIN' ? null : f.site,
+      f.site,
     ]);
     await withApi(f, async (call) => {
       assert.equal((await call('CONTRACTOR')).status, 403);
@@ -376,8 +350,8 @@ for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const)
           if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
           if (change === 'ROLE')
             await db.query(
-              "UPDATE user_role_assignment SET role='ADMIN',site_id=NULL WHERE user_id=$1",
-              [f.actor],
+              "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
+              [f.actor, f.site],
             );
           if (change === 'DEACTIVATE')
             await db.query('UPDATE app_user SET is_active=false WHERE id=$1', [f.actor]);
@@ -397,26 +371,49 @@ for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const)
       });
     },
   );
-for (const table of ['contractor', 'contractor_site_participation'] as const)
-  test(
-    'site Contractor requires ' + table + ' capture even when reusing an existing Contractor',
-    async () => {
-      const f = await fixture();
-      await withApi(f, async (call) => {
-        await db.query('ALTER TABLE ' + table + ' DISABLE TRIGGER trg_mf06_capture_' + table);
-        try {
-          assert.equal((await call('CONTRACTOR')).status, 503);
-          assert.equal(
-            (await call('CONTRACTOR', { code: f.contractor, name: 'Synthetic Contractor' })).status,
-            503,
-          );
-          assert.equal(await countCreated(f), 0);
-        } finally {
-          await db.query('ALTER TABLE ' + table + ' ENABLE TRIGGER trg_mf06_capture_' + table);
-        }
-      });
-    },
-  );
+test('Contractor catalog requires its source capture even when reusing an existing Contractor', async () => {
+  const f = await fixture();
+  await withApi(f, async (call) => {
+    await db.query('ALTER TABLE contractor DISABLE TRIGGER trg_mf06_capture_contractor');
+    try {
+      assert.equal((await call('CONTRACTOR')).status, 503);
+      assert.equal(
+        (await call('CONTRACTOR', { code: f.contractor, name: 'Synthetic Contractor' })).status,
+        503,
+      );
+      assert.equal(await countCreated(f), 0);
+    } finally {
+      await db.query('ALTER TABLE contractor ENABLE TRIGGER trg_mf06_capture_contractor');
+    }
+  });
+});
+test('Contractor catalog writes do not require unrelated Site participation capture', async () => {
+  const f = await fixture();
+  await withApi(f, async (call) => {
+    await db.query(
+      'ALTER TABLE contractor_site_participation DISABLE TRIGGER trg_mf06_capture_contractor_site_participation',
+    );
+    try {
+      const response = await call('CONTRACTOR');
+      assert.equal(response.status, 201);
+      const row = (await response.json()) as { id: string };
+      assert.equal((await factsFor(row.id)).length, 1);
+      assert.equal(
+        (
+          await db.query(
+            'SELECT count(*)::int AS n FROM contractor_site_participation WHERE contractor_id=$1',
+            [row.id],
+          )
+        )[0].n,
+        0,
+      );
+    } finally {
+      await db.query(
+        'ALTER TABLE contractor_site_participation ENABLE TRIGGER trg_mf06_capture_contractor_site_participation',
+      );
+    }
+  });
+});
 test('site Contractor refuses a partial journal without creation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
@@ -429,14 +426,14 @@ test('site Contractor refuses a partial journal without creation', async () => {
     }
   });
 });
-test('site Contractor participation failure rolls back Contractor and both facts atomically', async () => {
+test('Contractor source failure rolls back catalog create and authority command atomically', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     await db.query(
       "CREATE FUNCTION test_refuse_auto_participation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic participation refusal'; END $$",
     );
     await db.query(
-      'CREATE TRIGGER test_refuse_auto_participation BEFORE INSERT ON contractor_site_participation FOR EACH ROW EXECUTE FUNCTION test_refuse_auto_participation()',
+      'CREATE TRIGGER test_refuse_auto_participation BEFORE INSERT ON contractor FOR EACH ROW EXECUTE FUNCTION test_refuse_auto_participation()',
     );
     const before = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
     try {
@@ -449,9 +446,7 @@ test('site Contractor participation failure rolls back Contractor and both facts
         before,
       );
     } finally {
-      await db.query(
-        'DROP TRIGGER test_refuse_auto_participation ON contractor_site_participation',
-      );
+      await db.query('DROP TRIGGER test_refuse_auto_participation ON contractor');
       await db.query('DROP FUNCTION test_refuse_auto_participation()');
     }
   });
@@ -480,7 +475,7 @@ test('site Contractor witness failure preserves committed sources with unconfirm
             [row.id],
           )
         )[0].n,
-        1,
+        0,
       );
     } finally {
       apiDb.query = original;

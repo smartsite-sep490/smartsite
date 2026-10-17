@@ -11,8 +11,14 @@ import {
   areUuidsEqual,
   type AssessmentTargetContext,
 } from './mf06AssessmentDetailBinding';
+import { useTranslation } from 'react-i18next';
 import { IconClock, IconCheck, IconX, IconAlertTriangle } from '../icons';
-import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
+import {
+  MF06_BINDING_REASON_KEYS,
+  registerMf06BindingCatalog,
+} from '../../i18n/mf06-binding-catalog';
+import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 
 export interface Mf06AssessmentDetailDialogProps {
   open: boolean;
@@ -85,11 +91,11 @@ const PURPOSE_KEYS: Record<Mf06AssessmentResponse['purpose'], TranslationKey> = 
   RETROSPECTIVE_REVIEW: 'mf06.detail.purpose.RETROSPECTIVE_REVIEW',
 };
 
-function formatIsoDisplay(isoString: string): string {
+function formatIsoDisplay(isoString: string, locale: Locale): string {
   try {
     const date = new Date(isoString);
     if (Number.isNaN(date.getTime())) return isoString;
-    return date.toLocaleString(undefined, {
+    return date.toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US', {
       year: 'numeric',
       month: 'short',
       day: '2-digit',
@@ -97,6 +103,8 @@ function formatIsoDisplay(isoString: string): string {
       minute: '2-digit',
       second: '2-digit',
       hour12: false,
+      timeZone: 'UTC',
+      timeZoneName: 'short',
     });
   } catch {
     return isoString;
@@ -162,7 +170,9 @@ export function Mf06AssessmentDetailDialog({
   onUnauthorized,
   onAccessError,
 }: Mf06AssessmentDetailDialogProps) {
-  const { t } = useLocale();
+  registerMf06BindingCatalog();
+  const { locale, t } = useLocale();
+  const { t: translateBindingReason } = useTranslation(SAFETY_NAMESPACE);
   const queryClient = useQueryClient();
   const managementClient = useMemo(
     () => injectedClient ?? new SmartSiteManagementClient(apiUrl),
@@ -489,7 +499,11 @@ export function Mf06AssessmentDetailDialog({
           >
             <div className="flex items-center gap-2 font-medium">
               <IconAlertTriangle className="w-4 h-4 flex-shrink-0" />
-              <span>{t('mf06.detail.validationMismatch', { reason: validationError })}</span>
+              <span>
+                {t('mf06.detail.validationMismatch', {
+                  reason: translateBindingReason(MF06_BINDING_REASON_KEYS[validationError]),
+                })}
+              </span>
             </div>
           </div>
         )}
@@ -529,7 +543,7 @@ export function Mf06AssessmentDetailDialog({
                     {record.capturedAt}
                   </time>
                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    {formatIsoDisplay(record.capturedAt)}
+                    {formatIsoDisplay(record.capturedAt, locale)}
                   </div>
                 </div>
               </div>
@@ -542,7 +556,7 @@ export function Mf06AssessmentDetailDialog({
                     {record.assessedAt}
                   </time>
                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    {formatIsoDisplay(record.assessedAt)}
+                    {formatIsoDisplay(record.assessedAt, locale)}
                   </div>
                 </div>
               </div>

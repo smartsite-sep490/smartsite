@@ -27,7 +27,13 @@ import {
 } from '../../src/database/entities/index.js';
 import type { MainConfigurationCommandContext } from '../../src/common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import {
+  ContractorOperationsService,
+  type CreateContractorWorkerCommand,
+  type CreateWorkerSiteZoneAssignmentCommand,
+} from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { ContractorWorkerAccountsService } from '../../src/modules/workforce/directory/contractor-worker-accounts.service.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
@@ -104,6 +110,16 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
   const operations = new ContractorOperationsService(dataSource);
   const creation = new MainWorkforceCreateService(dataSource);
   const assignments = new MainAssignmentCommandService(dataSource);
+  const createWorker = (
+    actor: { id: string },
+    contractorId: string,
+    input: CreateContractorWorkerCommand,
+  ) => creation.createWorker(contractorId, input, actorContext(actor));
+  const requestAssignment = (
+    actor: { id: string },
+    workerId: string,
+    input: CreateWorkerSiteZoneAssignmentCommand,
+  ) => assignments.publicRequest(workerId, input, actorContext(actor));
   const users = new UsersService(dataSource, new SiteConfigurationService(dataSource));
   const accounts = new ContractorWorkerAccountsService(dataSource, operations, users);
   const createdAccountIds: string[] = [];
@@ -193,9 +209,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         configurationLocked: false,
       });
 
-    const worker = await creation.createWorker(contractorId, workerInput, {
-      actorUserId: representative.id,
-    });
+    const worker = await createWorker(representative, contractorId, workerInput);
     assert.ok(worker);
     await t.test(
       'representative creates a Worker owned by the correct Contractor and Site',
@@ -212,7 +226,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       'duplicate Worker code is rejected by the actual PostgreSQL constraint',
       async () => {
         await assert.rejects(
-          creation.createWorker(contractorId, workerInput, { actorUserId: representative.id }),
+          createWorker(representative, contractorId, workerInput),
           publicError('CONFLICT'),
         );
         assert.equal(await dataSource.getRepository(WorkerEntity).countBy({ siteId }), 1);
@@ -220,39 +234,31 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     );
     await t.test('missing name is rejected without creating a Worker', async () => {
       await assert.rejects(
-        creation.createWorker(
-          contractorId,
-          {
-            ...workerInput,
-            externalId: randomUUID(),
-            displayName: ' ',
-          },
-          { actorUserId: representative.id },
-        ),
+        createWorker(representative, contractorId, {
+          ...workerInput,
+          externalId: randomUUID(),
+          displayName: ' ',
+        }),
         publicError('VALIDATION_FAILED'),
       );
       assert.equal(await dataSource.getRepository(WorkerEntity).countBy({ siteId }), 1);
     });
     await t.test('same-Site role does not grant access to another Contractor', async () => {
       await assert.rejects(
-        creation.createWorker(contractorId, workerInput, { actorUserId: outsider.id }),
+        createWorker(outsider, contractorId, workerInput),
         publicError('FORBIDDEN'),
       );
       await assert.rejects(
-        creation.createWorker(otherContractorId, workerInput, { actorUserId: representative.id }),
+        createWorker(representative, otherContractorId, workerInput),
         publicError('FORBIDDEN'),
       );
     });
     await t.test('a Contractor grant does not grant access to another Site', async () => {
       await assert.rejects(
-        creation.createWorker(
-          contractorId,
-          {
-            ...workerInput,
-            siteId: otherSiteId,
-          },
-          { actorUserId: representative.id },
-        ),
+        createWorker(representative, contractorId, {
+          ...workerInput,
+          siteId: otherSiteId,
+        }),
         publicError('FORBIDDEN'),
       );
     });
@@ -260,7 +266,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       await dataSource.getRepository(ContractorEntity).update(contractorId, { isActive: false });
       try {
         await assert.rejects(
-          creation.createWorker(contractorId, workerInput, { actorUserId: representative.id }),
+          createWorker(representative, contractorId, workerInput),
           publicError('FORBIDDEN'),
         );
       } finally {
@@ -271,7 +277,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         .update(participationId, { validUntil: new Date(Date.now() - 60_000) });
       try {
         await assert.rejects(
-          creation.createWorker(contractorId, workerInput, { actorUserId: representative.id }),
+          createWorker(representative, contractorId, workerInput),
           publicError('FORBIDDEN'),
         );
       } finally {
@@ -371,15 +377,11 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         'SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END::text AS number FROM worker_code_seq',
       );
       const reserved = `W${next!.number.padStart(6, '0')}`;
-      await creation.createWorker(
-        contractorId,
-        {
-          siteId,
-          externalId: reserved,
-          displayName: 'Synthetic legacy code',
-        },
-        { actorUserId: representative.id },
-      );
+      await createWorker(representative, contractorId, {
+        siteId,
+        externalId: reserved,
+        displayName: 'Synthetic legacy code',
+      });
       const inputs = Array.from({ length: 6 }, () => ({
         siteId,
         displayName: 'Synthetic concurrent auto Worker',
@@ -748,22 +750,14 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     };
     await t.test('assignment requires an expiry and an increasing interval', async () => {
       await assert.rejects(
-        assignments.publicRequest(
-          worker.id,
-          { ...request, validUntil: null },
-          { actorUserId: representative.id },
-        ),
+        requestAssignment(representative, worker.id, { ...request, validUntil: null }),
         /expiry/,
       );
       await assert.rejects(
-        assignments.publicRequest(
-          worker.id,
-          {
-            ...request,
-            validUntil: request.validFrom,
-          },
-          { actorUserId: representative.id },
-        ),
+        requestAssignment(representative, worker.id, {
+          ...request,
+          validUntil: request.validFrom,
+        }),
         publicError('VALIDATION_FAILED'),
       );
     });
@@ -771,36 +765,24 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       'assignment rejects another Site Zone, duplicate Zones and out-of-participation dates',
       async () => {
         await assert.rejects(
-          assignments.publicRequest(
-            worker.id,
-            {
-              ...request,
-              zoneIds: [otherZoneId],
-            },
-            { actorUserId: representative.id },
-          ),
+          requestAssignment(representative, worker.id, {
+            ...request,
+            zoneIds: [otherZoneId],
+          }),
           publicError('FORBIDDEN'),
         );
         await assert.rejects(
-          assignments.publicRequest(
-            worker.id,
-            {
-              ...request,
-              zoneIds: [zoneId, zoneId],
-            },
-            { actorUserId: representative.id },
-          ),
+          requestAssignment(representative, worker.id, {
+            ...request,
+            zoneIds: [zoneId, zoneId],
+          }),
           /unique/,
         );
         await assert.rejects(
-          assignments.publicRequest(
-            worker.id,
-            {
-              ...request,
-              validUntil: new Date(+parentUntil + 60_000).toISOString(),
-            },
-            { actorUserId: representative.id },
-          ),
+          requestAssignment(representative, worker.id, {
+            ...request,
+            validUntil: new Date(+parentUntil + 60_000).toISOString(),
+          }),
           /participation interval/,
         );
       },
@@ -809,13 +791,13 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       'suspended Worker and unauthorized representative cannot request assignments',
       async () => {
         await assert.rejects(
-          assignments.publicRequest(worker.id, request, { actorUserId: outsider.id }),
+          requestAssignment(outsider, worker.id, request),
           publicError('FORBIDDEN'),
         );
         await dataSource.getRepository(WorkerEntity).update(worker.id, { isActive: false });
         try {
           await assert.rejects(
-            assignments.publicRequest(worker.id, request, { actorUserId: representative.id }),
+            requestAssignment(representative, worker.id, request),
             publicError('FORBIDDEN'),
           );
         } finally {
@@ -829,9 +811,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         );
       },
     );
-    const assignment = await assignments.publicRequest(worker.id, request, {
-      actorUserId: representative.id,
-    });
+    const assignment = await requestAssignment(representative, worker.id, request);
     await t.test(
       'valid assignment stays pending and records the requester and audit history',
       async () => {
@@ -1129,15 +1109,11 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     });
 
     await t.test('Contractor Representative manages only its own worker profiles', async (mt) => {
-      const managed = await creation.createWorker(
-        contractorId,
-        {
-          siteId,
-          externalId: randomUUID(),
-          displayName: 'Synthetic managed worker',
-        },
-        { actorUserId: representative.id },
-      );
+      const managed = await createWorker(representative, contractorId, {
+        siteId,
+        externalId: randomUUID(),
+        displayName: 'Synthetic managed worker',
+      });
       const snapshot = {
         externalId: managed.externalId,
         displayName: managed.displayName,

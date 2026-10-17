@@ -45,9 +45,10 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     workerId = randomUUID(),
     userId = randomUUID(),
     repId = randomUUID(),
+    managerId = randomUUID(),
     securityId = randomUUID(),
     outsiderId = randomUUID();
-  const ids = [userId, repId, securityId, outsiderId];
+  const ids = [userId, repId, managerId, securityId, outsiderId];
   const notifications = new SchedulingNotificationService(dataSource),
     reconciliation = new AttendanceReconciliationService(dataSource, notifications),
     days = new AttendanceDaysService(dataSource, reconciliation),
@@ -61,7 +62,8 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     roleAssignments: [{ role, siteId }],
   });
   const workerActor = actor(userId, UserRole.WORKER),
-    repActor = actor(repId, UserRole.CONTRACTOR_REPRESENTATIVE);
+    repActor = actor(repId, UserRole.CONTRACTOR_REPRESENTATIVE),
+    managerActor = actor(managerId, UserRole.SITE_MANAGER);
   const date = '2026-10-01',
     at = (time: string | Date) =>
       time instanceof Date ? time : new Date(`${date}T${time}:00+07:00`);
@@ -81,6 +83,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     for (const [id, role] of [
       [userId, UserRole.WORKER],
       [repId, UserRole.CONTRACTOR_REPRESENTATIVE],
+      [managerId, UserRole.SITE_MANAGER],
       [securityId, UserRole.SECURITY_OFFICER],
       [outsiderId, UserRole.WORKER],
     ] as const)
@@ -301,6 +304,24 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         .countBy({ siteId, event: 'MISSING_CHECKOUT' }),
       2,
     );
+    const expectedMissingCheckout = `Worker ${worker.displayName} (${worker.externalId}) is missing checkout for the shift on ${date}. The shift ended more than five minutes ago. Hours remain provisional.`;
+    const missingCheckout = (await notifications.list(repActor)).items.find(
+      (n) => n.event === 'MISSING_CHECKOUT',
+    );
+    assert.equal(missingCheckout?.message, expectedMissingCheckout);
+    assert.deepEqual(missingCheckout?.target, { siteId, dayId: day.id, tab: 'attendance' });
+    // Existing inbox rows must gain context without rewriting audit content.
+    await dataSource.query(
+      `UPDATE user_notification SET content=jsonb_set(content,'{message}',to_jsonb($2::text)) WHERE id=$1`,
+      [
+        missingCheckout!.id,
+        'The shift ended more than five minutes ago and checkout is missing. Hours remain provisional.',
+      ],
+    );
+    assert.equal(
+      (await notifications.list(repActor)).items.find((n) => n.id === missingCheckout!.id)?.message,
+      expectedMissingCheckout,
+    );
     const last = await passage('OUT', '17:20', 'QR');
     day = await dataSource.getRepository(AttendanceDayEntity).findOneByOrFail({ id: day.id });
     assert.equal(day.status, 'CONFIRMED');
@@ -361,6 +382,15 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         approve: true,
         reviewNote: 'Wrong scope',
       }),
+    );
+    await assert.rejects(
+      days.review(managerActor, siteId, request.requestId, 'LEAVE', { approve: true }),
+    );
+    assert.equal((await days.list(repActor, siteId, {})).canReview, true);
+    assert.equal((await days.list(managerActor, siteId, {})).canReview, false);
+    assert.equal(
+      (await notifications.list(managerActor)).items.some((n) => n.event === 'TIME_REQUESTED'),
+      false,
     );
     await days.review(repActor, siteId, request.requestId, 'LEAVE', {
       approve: true,
@@ -625,6 +655,11 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       reason: 'Correct verified late start',
     });
     assert.equal((await days.detail(workerActor, siteId, day.id)).day.confirmedMinutes, null);
+    assert.equal((await attendance.overview(repActor, siteId)).canReviewCorrection, true);
+    assert.equal((await attendance.overview(managerActor, siteId)).canReviewCorrection, false);
+    await assert.rejects(
+      attendance.reviewCorrection(managerActor, siteId, correction.id, { approve: true }),
+    );
     const reviews = await Promise.allSettled([
       attendance.reviewCorrection(repActor, siteId, correction.id, {
         approve: true,

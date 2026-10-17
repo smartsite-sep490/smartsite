@@ -23,6 +23,7 @@ import {
   ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
@@ -31,10 +32,10 @@ import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entr
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 
-const isolated = createIsolatedTestDatabase({ canonical: true });
-const dataSource = isolated.dataSource;
+const database = createIsolatedTestDatabase({ canonical: true });
+const dataSource = database.dataSource;
+
 test('ERD: bounded permissions, gate confirmation, temporary passage and attendance corrections', async () => {
-  await isolated.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
     contractorId = randomUUID(),
@@ -58,12 +59,17 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     worker = actor(workerAccountId, UserRole.WORKER);
   const from = new Date(Date.now() - 60_000).toISOString(),
     until = new Date(Date.now() + 3600_000).toISOString();
-  const assignments = new MainAssignmentCommandService(dataSource);
-  const setup = new SiteAccessSetupService(dataSource),
+  const operations = new MainAssignmentCommandService(dataSource),
+    setup = new SiteAccessSetupService(dataSource),
     access = new QrAccessService(dataSource),
     attendance = new AttendanceService(dataSource);
   const gateId = 'gate-north-01';
   try {
+    await database.initialize();
+    const [{ owned_schema: ownedSchema }] = await dataSource.query(
+      'SELECT current_schema() AS owned_schema',
+    );
+    assert.match(ownedSchema, /^isolated_test_[0-9a-f]{32}$/);
     for (const id of [siteId, otherSiteId])
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic ERD site' });
     for (const id of users)
@@ -122,7 +128,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       configurationLocked: false,
     });
     await assert.rejects(
-      assignments.publicRequest(
+      operations.publicRequest(
         workerId,
         {
           siteId,
@@ -134,7 +140,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       ),
       /expiry/,
     );
-    const assignment = await assignments.publicRequest(
+    const assignment = await operations.publicRequest(
       workerId,
       {
         siteId,
@@ -144,22 +150,20 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       },
       { actorUserId: rep.id },
     );
-    await dataSource.query(
-      "UPDATE user_role_assignment SET site_id=$2 WHERE user_id=$1 AND role='SITE_MANAGER'",
-      [managerId, otherSiteId],
-    );
+    await dataSource.getRepository(UserRoleAssignmentEntity).save({
+      id: randomUUID(),
+      userId: outsiderId,
+      role: UserRole.SITE_MANAGER,
+      siteId: otherSiteId,
+    });
     await assert.rejects(
-      assignments.publicDecision(
+      operations.publicDecision(
         assignment.id,
         { approve: true, expectedVersion: 1 },
-        { actorUserId: actor(managerId, UserRole.SITE_MANAGER, otherSiteId).id },
+        { actorUserId: outsiderId },
       ),
     );
-    await dataSource.query(
-      "UPDATE user_role_assignment SET site_id=$2 WHERE user_id=$1 AND role='SITE_MANAGER'",
-      [managerId, siteId],
-    );
-    await assignments.publicDecision(
+    await operations.publicDecision(
       assignment.id,
       {
         approve: true,
@@ -343,7 +347,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     );
     await assert.rejects(
       attendance.reviewCorrection(
-        actor(workerAccountId, UserRole.CONTRACTOR_REPRESENTATIVE),
+        actor(workerAccountId, UserRole.SITE_MANAGER),
         siteId,
         correction.id,
         { approve: true, reviewNote: 'Self review denied' },
@@ -433,7 +437,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     const latestAssignment = await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)
       .findOneByOrFail({ id: assignment.id });
-    await assignments.publicRevoke(
+    await operations.publicRevoke(
       assignment.id,
       {
         expectedVersion: latestAssignment.version,
@@ -441,7 +445,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       },
       { actorUserId: manager.id },
     );
-    await assignments.publicRevoke(
+    await operations.publicRevoke(
       assignment.id,
       {
         expectedVersion: latestAssignment.version,
@@ -460,6 +464,6 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await passage('OUT', true);
     assert.ok((await dataSource.getRepository(AccessAuditEntity).findBy({ siteId })).length > 10);
   } finally {
-    await isolated.dispose();
+    await database.dispose();
   }
 });

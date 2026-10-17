@@ -113,12 +113,14 @@ export function AttendanceView({
   siteId,
   sessionScope,
   isWorker,
+  showRequests = true,
 }: {
   apiUrl: string;
   token: string;
   siteId: string;
   sessionScope: string;
   isWorker?: boolean;
+  showRequests?: boolean;
 }) {
   useTranslation();
 
@@ -153,7 +155,7 @@ export function AttendanceView({
   );
   const [showWorkflowSection, setShowWorkflowSection] = useState(() => Boolean(selectedDayId));
   const [correctionTab, setCorrectionTab] = useState<'pending' | 'history'>('pending');
-  const [activeSubTab, setActiveSubTab] = useState<'timesheet' | 'requests'>(() => {
+  const [selectedSubTab, setActiveSubTab] = useState<'timesheet' | 'requests'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('subtab') === 'requests') return 'requests';
@@ -161,6 +163,7 @@ export function AttendanceView({
     }
     return 'timesheet';
   });
+  const activeSubTab = showRequests ? selectedSubTab : 'timesheet';
   const [isExporting, setIsExporting] = useState(false);
 
   const handleSelectSubTab = (tab: 'timesheet' | 'requests') => {
@@ -349,22 +352,22 @@ export function AttendanceView({
 
       // Generate CSV content
       const headers = [
-        'Worker Code',
-        'Worker Name',
-        'Today Status',
-        'Total Minutes',
-        'Regular Minutes',
-        'Overtime Minutes',
-        'Provisional Minutes',
-        'Days Present',
-        'Days Required',
-        'Attendance Rate (%)',
+        tr('attendance_export.worker_code'),
+        tr('attendance_export.worker_name'),
+        tr('attendance_export.today_status'),
+        tr('attendance_export.total_minutes'),
+        tr('attendance_export.regular_minutes'),
+        tr('attendance_export.overtime_minutes'),
+        tr('attendance_export.provisional_minutes'),
+        tr('attendance_export.days_present'),
+        tr('attendance_export.days_required'),
+        tr('attendance_export.attendance_rate'),
       ];
 
       const rows = allWorkers.map((w) => [
         `"${w.workerCode.replace(/"/g, '""')}"`,
         `"${w.workerName.replace(/"/g, '""')}"`,
-        `"${w.todayStatus}"`,
+        `"${localizedLabel(w.todayStatus)}"`,
         w.totalMinutes,
         w.regularMinutes,
         w.overtimeMinutes,
@@ -375,7 +378,7 @@ export function AttendanceView({
       ]);
 
       const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
@@ -924,7 +927,7 @@ export function AttendanceView({
             </p>
           </div>
 
-          {/* Segmented Switcher for Manager */}
+          {/* Attendance sections available to this role */}
           <div className="inline-flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200/80 shadow-2xs gap-1 ml-0 sm:ml-4">
             <button
               type="button"
@@ -939,30 +942,32 @@ export function AttendanceView({
               <IconCalendar className="w-3.5 h-3.5 text-slate-500" />
               <span>{tr('attendance_report.subtab_timesheet')}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => handleSelectSubTab('requests')}
-              aria-pressed={activeSubTab === 'requests'}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                activeSubTab === 'requests'
-                  ? 'bg-white text-[#071A2B] shadow-xs ring-1 ring-slate-200/60'
-                  : 'text-slate-500 hover:text-[#071A2B] hover:bg-white/60'
-              }`}
-            >
-              <IconClock className="w-3.5 h-3.5 text-[#F66B17]" />
-              <span>{tr('attendance_report.subtab_requests')}</span>
-              {pendingCorrections.length > 0 && (
-                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-black bg-[#F66B17] text-white shadow-2xs">
-                  {pendingCorrections.length}
-                </span>
-              )}
-            </button>
+            {showRequests && (
+              <button
+                type="button"
+                onClick={() => handleSelectSubTab('requests')}
+                aria-pressed={activeSubTab === 'requests'}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  activeSubTab === 'requests'
+                    ? 'bg-white text-[#071A2B] shadow-xs ring-1 ring-slate-200/60'
+                    : 'text-slate-500 hover:text-[#071A2B] hover:bg-white/60'
+                }`}
+              >
+                <IconClock className="w-3.5 h-3.5 text-[#F66B17]" />
+                <span>{tr('attendance_report.subtab_requests')}</span>
+                {pendingCorrections.length > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-black bg-[#F66B17] text-white shadow-2xs">
+                    {pendingCorrections.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2.5">
-          {data?.canReviewCorrection && pendingCorrections.length > 0 && (
+          {showRequests && data?.canReviewCorrection && pendingCorrections.length > 0 && (
             <a
               href="#attendance-correction-form"
               onClick={() => {
@@ -1173,32 +1178,34 @@ export function AttendanceView({
       </div>
 
       {/* ── REQUESTS TAB VIEW ── */}
-      <div className={activeSubTab === 'timesheet' ? 'hidden' : 'space-y-6'}>
-        {overview.isPending && <p role="status">{tr('common.loading_attendance')}</p>}
-        {overview.error && (
-          <div role="alert">
-            {localizedError(overview.error.message)}{' '}
-            <button onClick={() => void overview.refetch()}>{tr('common.retry')}</button>
-          </div>
-        )}
+      {showRequests && (
+        <div className={activeSubTab === 'timesheet' ? 'hidden' : 'space-y-6'}>
+          {overview.isPending && <p role="status">{tr('common.loading_attendance')}</p>}
+          {overview.error && (
+            <div role="alert">
+              {localizedError(overview.error.message)}{' '}
+              <button onClick={() => void overview.refetch()}>{tr('common.retry')}</button>
+            </div>
+          )}
 
-        {/* Section 1: Overtime & Leave (Review & Queue) */}
-        {activeSubTab === 'requests' && (
-          <AttendanceDaysView
-            apiUrl={apiUrl}
-            token={token}
-            siteId={siteId}
-            sessionScope={sessionScope}
-            selectedDayId={selectedDayId}
-            onSelectDay={setSelectedDayId}
-            isWorker={isWorker}
-            activeSubTab="requests"
-          />
-        )}
+          {/* Section 1: Overtime & Leave (Review & Queue) */}
+          {activeSubTab === 'requests' && (
+            <AttendanceDaysView
+              apiUrl={apiUrl}
+              token={token}
+              siteId={siteId}
+              sessionScope={sessionScope}
+              selectedDayId={selectedDayId}
+              onSelectDay={setSelectedDayId}
+              isWorker={isWorker}
+              activeSubTab="requests"
+            />
+          )}
 
-        {/* Section 2: Attendance Corrections (Review & Queue) */}
-        {correctionSection}
-      </div>
+          {/* Section 2: Attendance Corrections (Review & Queue) */}
+          {correctionSection}
+        </div>
+      )}
     </div>
   );
 }

@@ -287,7 +287,7 @@ export function resolveCameraAndWorkArea(
 
   let workArea: string;
   if (regionId && regionId.trim()) {
-    workArea = `Region ${regionId.trim()}`;
+    workArea = tr('monitoring_utils.region', { id: regionId.trim() });
   } else if (camera === 'CAM-07') {
     workArea = tr('common.work_area_b_ba4a34');
   } else if (camera === 'CAM-04') {
@@ -343,10 +343,9 @@ export interface ZoneFilterOptions {
 /**
  * Truly filters the loaded Zone events list so that the table changes according to user selection.
  */
-export function filterZoneEvents<T extends { trackId: number; zone: string; result: string }>(
-  events: T[],
-  options: ZoneFilterOptions,
-): T[] {
+export function filterZoneEvents<
+  T extends { trackId: number; zone: string; result: string; active?: boolean },
+>(events: T[], options: ZoneFilterOptions): T[] {
   let result = events;
   if (options.workerTrackId !== null && options.workerTrackId !== undefined) {
     result = result.filter((e) => e.trackId === options.workerTrackId);
@@ -357,7 +356,8 @@ export function filterZoneEvents<T extends { trackId: number; zone: string; resu
   if (options.activeOnly) {
     result = result.filter(
       (e) =>
-        e.result.toLowerCase().includes('violation') || e.result.toLowerCase().includes('entry'),
+        e.active ??
+        (e.result.toLowerCase().includes('violation') || e.result.toLowerCase().includes('entry')),
     );
   }
   return result;

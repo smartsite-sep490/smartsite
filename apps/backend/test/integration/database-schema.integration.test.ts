@@ -197,8 +197,7 @@ test('foundation migration registers exact enum labels in PostgreSQL catalog', a
     const enumRows = await source.query(
       `SELECT t.typname, e.enumlabel
        FROM pg_type t
-       JOIN pg_enum e ON t.oid = e.enumtypid
-       JOIN pg_namespace n ON n.oid=t.typnamespace AND n.nspname=current_schema()
+       JOIN pg_enum e ON t.oid = e.enumtypid AND t.typnamespace=current_schema()::regnamespace
        WHERE t.typname IN (
          'camera_status', 'zone_type', 'zone_restriction_policy',
          'event_processing_status', 'alert_type', 'alert_status'

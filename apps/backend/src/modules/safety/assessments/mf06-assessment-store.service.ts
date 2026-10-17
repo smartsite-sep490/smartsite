@@ -6,7 +6,7 @@ import type {
   Mf06AssessmentOutcome,
   Mf06AssessmentReasonCode,
   Mf06AssessmentProvenance,
-} from '../../../database/entities/mf06-assessment.entity.js';
+} from '../../../database/entities/zone-entry-assessment.entity.js';
 import {
   MAIN_AUTHORITY_ARCHIVE_FORMATS,
   decodeStoredMainAuthorityArchive,

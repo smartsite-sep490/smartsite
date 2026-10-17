@@ -1,3 +1,4 @@
+import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
@@ -84,6 +85,7 @@ export class MainParticipationCommandService {
           createdAt: Date;
         };
       },
+      mainSiteManagerAuthorization(context, value.siteId),
     );
   }
   private publicInstant(value: string): string {

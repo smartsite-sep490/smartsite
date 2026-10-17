@@ -1,6 +1,7 @@
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
+import '../../../i18n';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
@@ -244,6 +245,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
         )}
         {activeTab === 'review' && (
           <WorkforceManagerReviewTab
+            canReview={effectiveRoles.includes('CONTRACTOR_REPRESENTATIVE')}
             key={`${selectedSiteId}-${searchParams.get('requestId') ?? ''}`}
             apiUrl={resolvedApiUrl}
             siteId={selectedSiteId}

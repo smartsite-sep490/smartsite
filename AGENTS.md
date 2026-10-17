@@ -148,6 +148,8 @@ A change is done only when all applicable statements are true:
 
 ## 11. Coding-agent rules
 
+- For the owner's current MF05/MF06 coordination, assign Agy only Frontend/UI/UX work. Backend/API/database/security review and integration fixes stay with Root or the explicitly assigned Backend owner. Do not delegate Backend/database work or read-only review to Agy without a new direct instruction. Tuấn's assigned Backend and MF08 implementation ownership remains intact.
+
 - Read this entire file before editing. If the AI tool does not automatically load `AGENTS.md`, attach or paste it into the task context.
 - Inspect code and tests; do not guess file names, APIs, package versions, or completed behavior.
 - Follow existing conventions unless the issue explicitly changes them.

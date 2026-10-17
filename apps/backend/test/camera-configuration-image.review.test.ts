@@ -21,7 +21,7 @@ test('revocation during the FIRST camera lookup outranks missing/unavailable sou
       f.onCameraRead((read) => {
         if (read !== 1) return;
         if (authFailure === 'logout') f.state.revoked = true;
-        else f.state.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId }];
+        else f.state.roleAssignments = [{ role: 'WORKER', siteId }];
         if (failure === 'scope') f.state.cameraSite = otherId;
         if (failure === 'inactive') f.state.inactive = true;
         if (failure === 'unmapped') f.state.unmappedSource = true;
@@ -40,7 +40,7 @@ test('shutdown still prioritizes authentication and role refusal over availabili
     const f = await fixture();
     f.service.onModuleDestroy();
     if (authFailure === 'logout') f.state.revoked = true;
-    else f.state.roleAssignments = [{ role: 'SITE_MANAGER', siteId }];
+    else f.state.roleAssignments = [{ role: 'WORKER', siteId }];
     await assert.rejects(
       f.service.read('token', siteId, cameraId),
       status(authFailure === 'logout' ? 401 : 403),

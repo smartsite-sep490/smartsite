@@ -61,6 +61,12 @@ function dataSourceFor(
     },
   });
   return {
+    manager: {
+      query: async (sql: string) => {
+        assert.match(sql, /pg_class.*JOIN pg_namespace/s);
+        return []; // Explicit historical profile; canonical guards use real PostgreSQL tests.
+      },
+    },
     transaction: async <T>(
       isolationOrWork: string | ((tx: EntityManager) => Promise<T>),
       maybeWork?: (tx: EntityManager) => Promise<T>,
@@ -206,7 +212,7 @@ function enrollmentServiceFor(worker: Partial<WorkerEntity>, actor: WorkforceAct
   return service.requireWorkerEnrollmentAccess(manager, actor, worker.id!);
 }
 
-test('ContractorOperationsService assertAdmin allows only global ADMIN without mustChangePassword for contractor, participation, and representative commands', async () => {
+test('ContractorOperationsService keeps global Contractor grants Admin-only and participation SiteManager-owned', async () => {
   const savedContractors: Array<Record<string, unknown>> = [];
   const savedParticipations: Array<Record<string, unknown>> = [];
   const savedGrants: Array<Record<string, unknown>> = [];
@@ -273,15 +279,20 @@ test('ContractorOperationsService assertAdmin allows only global ADMIN without m
       (error: unknown) =>
         error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
     );
-    await assert.rejects(
-      service.createParticipation(nonAdmin, IDs.contractor, {
-        siteId: IDs.site,
-        validFrom: assignmentStart,
-        validUntil: assignmentEnd,
-      }),
-      (error: unknown) =>
-        error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
-    );
+    if (
+      !nonAdmin.roleAssignments.some(
+        (r) => r.role === UserRole.SITE_MANAGER && r.siteId === IDs.site,
+      )
+    )
+      await assert.rejects(
+        service.createParticipation(nonAdmin, IDs.contractor, {
+          siteId: IDs.site,
+          validFrom: assignmentStart,
+          validUntil: assignmentEnd,
+        }),
+        (error: unknown) =>
+          error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+      );
     await assert.rejects(
       service.grantRepresentative(nonAdmin, IDs.contractor, { userId: IDs.representativeUser }),
       (error: unknown) =>
@@ -300,7 +311,7 @@ test('ContractorOperationsService assertAdmin allows only global ADMIN without m
   );
 
   await service.createContractor(globalAdmin(), { code: 'CTR-01', name: 'Alpha Contractor' });
-  await service.createParticipation(globalAdmin(), IDs.contractor, {
+  await service.createParticipation(siteManager(), IDs.contractor, {
     siteId: IDs.site,
     validFrom: assignmentStart,
     validUntil: assignmentEnd,
@@ -363,15 +374,22 @@ test('ContractorOperationsService requireWorkerCreationAccess acquires pessimist
   ]);
 });
 
-test('ContractorOperationsService allows a global admin to enroll an unassigned site worker', async () => {
+test('ContractorOperationsService denies a global admin enrolling an unassigned site worker', async () => {
   const worker = {
     id: '00000000-0000-4000-8000-000000000010',
     siteId: IDs.site,
     contractorId: null,
     isActive: true,
   } as WorkerEntity;
-  const result = await enrollmentServiceFor(worker, globalAdmin());
-  assert.equal(result, worker);
+  await assert.rejects(
+    enrollmentServiceFor(worker, {
+      id: IDs.actor,
+      mustChangePassword: false,
+      roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+    }),
+    (error: unknown) =>
+      error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+  );
 });
 
 test('ContractorOperationsService denies enrollment of an unassigned site worker to an unrelated role', async () => {
@@ -602,7 +620,7 @@ function domainReviewFixtureFor(options: {
     status: options.status,
     validFrom: new Date(assignmentStart),
     validUntil: options.validUntil === null ? null : new Date(options.validUntil ?? assignmentEnd),
-    requestedByUserId: IDs.actor,
+    requestedByUserId: IDs.representativeUser,
     safetyReviewedByUserId: null as string | null,
     siteManagerDecidedByUserId: null as string | null,
     reviewedAt: null as Date | null,
@@ -922,7 +940,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
     version: options.version ?? 1,
     validFrom: options.validFrom ?? assignmentStart,
     validUntil: options.validUntil === undefined ? assignmentEnd : options.validUntil,
-    requestedByUserId: IDs.actor,
+    requestedByUserId: IDs.representativeUser,
     safetyReviewedByUserId: null as string | null,
     siteManagerDecidedByUserId: null as string | null,
     reviewedAt: null as string | null,
@@ -980,27 +998,21 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL) OR (role=$2 AND site_id=$3)) FOR SHARE"
+        'SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND role=$2 AND site_id=$3 FOR SHARE'
       ) {
         observedTags.push('auth:user_role_assignment');
         const targetRole = params[1] as string;
         const targetSite = params[2] as string;
-        return actorRoles.filter(
-          (r) =>
-            (r.role === UserRole.ADMIN && r.site_id === null) ||
-            (r.role === targetRole && r.site_id === targetSite),
-        );
+        return actorRoles.filter((r) => r.role === targetRole && r.site_id === targetSite);
       }
       if (
         sql ===
-        "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL) OR (role='CONTRACTOR_REPRESENTATIVE' AND site_id=$2)) FOR SHARE"
+        "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND role='CONTRACTOR_REPRESENTATIVE' AND site_id=$2 FOR SHARE"
       ) {
         observedTags.push('auth:user_role_assignment');
         const targetSite = params[1] as string;
         return actorRoles.filter(
-          (r) =>
-            (r.role === UserRole.ADMIN && r.site_id === null) ||
-            (r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.site_id === targetSite),
+          (r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.site_id === targetSite,
         );
       }
       if (

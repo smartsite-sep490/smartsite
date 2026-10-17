@@ -33,7 +33,7 @@ after(async () => {
 type Context = MainConfigurationCommandContext;
 const status = (n: number) => (e: unknown) =>
   (e as { getStatus?: () => number }).getStatus?.() === n;
-async function fixture(role = 'ADMIN') {
+async function fixture(role = 'SITE_MANAGER') {
   const actorUserId = randomUUID(),
     siteId = randomUUID(),
     zoneId = randomUUID(),
@@ -210,7 +210,7 @@ test('concurrent public revokes keep one first timestamp and one actual revoke s
     2,
   );
 });
-for (const role of ['SITE_MANAGER', 'SAFETY_OFFICER', 'WORKER'])
+for (const role of ['ADMIN', 'SAFETY_OFFICER', 'WORKER'])
   test(`public DENY transactions refuse ${role}`, async () => {
     const f = await fixture(role);
     await assert.rejects(create(f), status(403));
@@ -219,7 +219,7 @@ test('public grant scope and reversed/unknown inputs fail without orphan command
   const f = await fixture(),
     other = await fixture();
   const n = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
-  await assert.rejects(f.access.createGrant(other.siteId, f.zoneId, f.input, f.ctx), status(404));
+  await assert.rejects(f.access.createGrant(other.siteId, f.zoneId, f.input, f.ctx), status(403));
   await assert.rejects(
     f.access.createGrant(f.siteId, f.zoneId, { ...f.input, workerId: other.workerId }, f.ctx),
     status(404),
@@ -428,8 +428,13 @@ test('DENY source fact failure rolls back create and revoke together with the ac
     "CREATE FUNCTION test_deny_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ZONE_GRANT' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_deny_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_deny_fact_failure()",
   );
   try {
-    await assert.rejects(create(f));
-    await assert.rejects(f.access.revokeGrant(f.siteId, f.zoneId, g.id, undefined, f.ctx));
+    const syntheticFailure = (error: unknown) =>
+      error instanceof Error && error.message.includes('Synthetic failure');
+    await assert.rejects(create(f), syntheticFailure);
+    await assert.rejects(
+      f.access.revokeGrant(f.siteId, f.zoneId, g.id, undefined, f.ctx),
+      syntheticFailure,
+    );
     const rows = await db.query('SELECT revoked_at FROM zone_access_grant WHERE worker_id=$1', [
       f.workerId,
     ]);

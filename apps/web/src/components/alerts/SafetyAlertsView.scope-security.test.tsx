@@ -21,9 +21,9 @@ const session = {
   accessToken: 'private-software-test-token',
   sessionScope: scope,
   user: {
-    id: 'admin-security-test',
-    displayName: 'Fixture Admin',
-    roleAssignments: [{ role: 'ADMIN' as const, siteId: null }],
+    id: 'officer-security-test',
+    displayName: 'Fixture Safety Officer',
+    roleAssignments: [{ role: 'SAFETY_OFFICER' as const, siteId }],
   },
 };
 const detail: SafetyAlertDetailResponse = {

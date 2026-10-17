@@ -1,3 +1,5 @@
+import { SiteManagerReviewNotifications1792108800000 } from '../../src/database/migrations/1792108800000-SiteManagerReviewNotifications.js';
+import { PreserveManagerNotificationHistory1792368000000 } from '../../src/database/migrations/1792368000000-PreserveManagerNotificationHistory.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -43,6 +45,10 @@ test('checklist migration preserves existing absence notifications through up, d
         [randomUUID()],
       );
     await insertAbsence();
+    await new SiteManagerReviewNotifications1792108800000().up(runner);
+    await runner.query(
+      "INSERT INTO user_notification(event,request_type,recipient_role) VALUES('ABSENT','ATTENDANCE','SITE_MANAGER')",
+    );
     const migration = new SafetyChecklists1792195200000();
     await migration.up(runner);
     await insertAbsence();
@@ -64,7 +70,16 @@ test('checklist migration preserves existing absence notifications through up, d
     const [row] = (await runner.query(
       "SELECT count(*)::int AS count FROM user_notification WHERE event='ABSENT'",
     )) as { count: number }[];
-    assert.equal(row!.count, 4);
+    assert.equal(row!.count, 5);
+    const history = new PreserveManagerNotificationHistory1792368000000();
+    await history.up(runner);
+    await runner.query('SAVEPOINT preserved_manager');
+    await assert.rejects(history.down(runner), /chk_notification_role/);
+    await runner.query('ROLLBACK TO SAVEPOINT preserved_manager');
+    const [preserved] = await runner.query(
+      "SELECT count(*)::int AS count FROM user_notification WHERE recipient_role='SITE_MANAGER'",
+    );
+    assert.equal(preserved.count, 1);
   } finally {
     await runner.rollbackTransaction();
     await runner.release();

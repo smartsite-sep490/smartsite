@@ -37,7 +37,7 @@ const policy = {
   restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
   requiredPpe: ['SAFETY_VEST', 'HARD_HAT'],
 };
-async function fixture(role = 'SITE_MANAGER') {
+async function fixture(role = 'ADMIN', manageSite = role === 'ADMIN') {
   const actorUserId = randomUUID(),
     siteId = randomUUID();
   await db.query(
@@ -53,6 +53,7 @@ async function fixture(role = 'SITE_MANAGER') {
     role,
     role === 'ADMIN' ? null : siteId,
   ]);
+  if (manageSite) await managerRole(actorUserId, siteId);
   const sites = new SiteConfigurationService(db),
     zones = new ZoneConfigurationService(db, sites);
   return {
@@ -64,6 +65,12 @@ async function fixture(role = 'SITE_MANAGER') {
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+async function managerRole(actorId: string, siteId: string) {
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), actorId, siteId],
+  );
+}
 async function zone(f: Fixture, ctx: Context | undefined = f.ctx) {
   return f.zones.create(f.siteId, { code: randomUUID(), name: 'Synthetic Zone', ...policy }, ctx);
 }
@@ -153,13 +160,14 @@ for (const role of ['SAFETY_OFFICER', 'WORKER'])
     );
     await assert.rejects(zone(f), status(403));
   });
-test('Site Managers cannot create Sites and global Admin cannot provision Zones', async () => {
-  const manager = await fixture(),
-    admin = await fixture('ADMIN');
+test('Main Site Manager can write its Zone but cannot create Sites; Admin alone cannot write Zones', async () => {
+  const manager = await fixture('SITE_MANAGER');
   await assert.rejects(
     manager.sites.create({ code: randomUUID(), name: 'Denied' }, manager.ctx),
     status(403),
   );
+  assert.ok((await zone(manager)).id);
+  const admin = await fixture('ADMIN', false);
   await assert.rejects(zone(admin), status(403));
 });
 test('Site and Zone reauthentication refuses a revoked session before any metadata is committed', async () => {
@@ -351,7 +359,12 @@ test('actual AppModule Zone HTTP writes bind the assigned Manager bearer actor i
         await original(r, manager);
       };
     }
-    const root = `/sites/${f.siteId}/zones`;
+    const created = await request('/sites', { code: randomUUID(), name: 'HTTP synthetic Site' });
+    assert.equal(created.status, 201);
+    const site = (await created.json()) as { id: string };
+    assert.equal((await attribution(site.id, 'SITE_CREATE')).actor_user_id, f.actorUserId);
+    await managerRole(f.actorUserId, site.id);
+    const root = `/sites/${site.id}/zones`;
     const linked = await request(root, {
       code: randomUUID(),
       name: 'HTTP synthetic Zone',
@@ -443,8 +456,8 @@ for (const target of ['SITE_CREATE', 'ZONE_CREATE', 'ZONE_POLICY_UPDATE'] as con
 test('main metadata duplicate codes and wrong Site policy writes retain existing conflict/scope behavior', async () => {
   const f = await fixture(),
     z = await zone(f);
-  const admin = await fixture('ADMIN');
-  const site = await admin.sites.create({ code: randomUUID(), name: 'Unique Site' }, admin.ctx);
+  const site = await f.sites.create({ code: randomUUID(), name: 'Unique Site' }, f.ctx);
+  await managerRole(f.actorUserId, site.id);
   const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
   await assert.rejects(
     admin.sites.create({ code: site.code, name: 'Duplicate' }, admin.ctx),
@@ -474,10 +487,8 @@ test('postcommit metadata witness failure keeps committed DTO successful while h
     "CREATE FUNCTION test_metadata_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic witness failure';END $$;CREATE TRIGGER test_metadata_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_metadata_witness_failure()",
   );
   try {
-    const site = await admin.sites.create(
-      { code: randomUUID(), name: 'Committed Site' },
-      admin.ctx,
-    );
+    const site = await f.sites.create({ code: randomUUID(), name: 'Committed Site' }, f.ctx);
+    await managerRole(f.actorUserId, site.id);
     const z = await f.zones.create(
       f.siteId,
       { code: randomUUID(), name: 'Committed Zone', ...policy },

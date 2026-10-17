@@ -178,7 +178,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             apiUrl="http://127.0.0.1:3001"
             sharedSession={{
               accessToken: 'shared-token-1',
-              user: mockAdminLoginResponse.user,
+              user: mockSafetyOfficerLoginResponse.user,
               sessionScope: 'scope-1',
             }}
           />
@@ -222,7 +222,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
           apiUrl="http://127.0.0.1:3001"
           sharedSession={{
             accessToken: 'shared-token-1',
-            user: mockAdminLoginResponse.user,
+            user: mockSafetyOfficerLoginResponse.user,
             sessionScope: 'scope-1',
           }}
         />
@@ -274,7 +274,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             apiUrl="http://127.0.0.1:3001"
             sharedSession={{
               accessToken: 'shared-token-1',
-              user: mockAdminLoginResponse.user,
+              user: mockSafetyOfficerLoginResponse.user,
               sessionScope: 'scope-1',
             }}
           />
@@ -301,7 +301,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             id: 'review-1',
             alertId: mockAlert.id,
             siteId: mockAlert.siteId,
-            actorUserId: 'user-admin-1',
+            actorUserId: 'user-so-1',
             fromStatus: 'PENDING_REVIEW',
             toStatus: status,
             reason: 'Reviewed the exact evidence.',
@@ -375,6 +375,8 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     // Admin đơn thuần: không có role SAFETY_OFFICER tại công trường này -> canReviewIdentity được tính là false
     // Do đó ObservationIdentityReviewPanel KHÔNG được mount
     expect(screen.queryByText('Xác minh người trong ảnh')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /Decision reason/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Confirm violation' })).toBeNull();
 
     // Tuyệt đối không gọi bất kỳ API danh tính nào
     expect(getIdentityContextSpy).not.toHaveBeenCalled();
@@ -1013,9 +1015,12 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             sharedSession={{
               accessToken: 'shared-token-1',
               user: {
-                id: 'admin-1',
-                displayName: 'Admin Officer',
-                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+                id: 'reviewer-1',
+                displayName: 'Safety Officer',
+                roleAssignments: [
+                  { role: 'SAFETY_OFFICER', siteId: 'site-alpha' },
+                  { role: 'SAFETY_OFFICER', siteId: 'site-beta' },
+                ],
               },
               sessionScope: 'scope-1',
             }}
@@ -1040,9 +1045,12 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             sharedSession={{
               accessToken: 'shared-token-2',
               user: {
-                id: 'admin-1',
-                displayName: 'Admin Officer',
-                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+                id: 'reviewer-1',
+                displayName: 'Safety Officer',
+                roleAssignments: [
+                  { role: 'SAFETY_OFFICER', siteId: 'site-alpha' },
+                  { role: 'SAFETY_OFFICER', siteId: 'site-beta' },
+                ],
               },
               sessionScope: 'scope-2',
             }}
@@ -1058,7 +1066,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             id: 'rev-1',
             alertId: mockAlert.id,
             siteId: mockAlert.siteId,
-            actorUserId: 'admin-1',
+            actorUserId: 'reviewer-1',
             fromStatus: 'PENDING_REVIEW',
             toStatus: 'CONFIRMED',
             reason: 'Valid decision reason from first session',
@@ -1153,9 +1161,12 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
               sharedSession={{
                 accessToken: 'shared-token-1',
                 user: {
-                  id: 'admin-1',
-                  displayName: 'Admin Officer',
-                  roleAssignments: [{ role: 'ADMIN', siteId: null }],
+                  id: 'reviewer-1',
+                  displayName: 'Safety Officer',
+                  roleAssignments: [
+                    { role: 'SAFETY_OFFICER', siteId: 'site-alpha' },
+                    { role: 'SAFETY_OFFICER', siteId: 'site-beta' },
+                  ],
                 },
                 sessionScope: 'scope-1',
               }}
@@ -1214,7 +1225,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
                 id: 'rev-1',
                 alertId: mockAlert.id,
                 siteId: mockAlert.siteId,
-                actorUserId: 'admin-1',
+                actorUserId: 'reviewer-1',
                 fromStatus: 'PENDING_REVIEW',
                 toStatus: 'CONFIRMED',
                 reason: 'First alert review reason',
@@ -1379,7 +1390,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             id: 'rev-101',
             alertId: mockAlert.id,
             siteId: mockAlert.siteId,
-            actorUserId: 'admin-1',
+            actorUserId: 'reviewer-1',
             fromStatus: 'PENDING_REVIEW',
             toStatus: 'CONFIRMED',
             reason: 'Confirmed violation observed on CAM-01',
@@ -1424,9 +1435,12 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             sharedSession={{
               accessToken: 'shared-token-1',
               user: {
-                id: 'admin-1',
-                displayName: 'Admin Officer',
-                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+                id: 'reviewer-1',
+                displayName: 'Safety Officer',
+                roleAssignments: [
+                  { role: 'SAFETY_OFFICER', siteId: 'site-alpha' },
+                  { role: 'SAFETY_OFFICER', siteId: 'site-beta' },
+                ],
               },
               sessionScope: 'scope-1',
             }}
@@ -1498,9 +1512,12 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             sharedSession={{
               accessToken: 'shared-token-1',
               user: {
-                id: 'admin-1',
-                displayName: 'Admin Officer',
-                roleAssignments: [{ role: 'ADMIN', siteId: null }],
+                id: 'reviewer-1',
+                displayName: 'Safety Officer',
+                roleAssignments: [
+                  { role: 'SAFETY_OFFICER', siteId: 'site-alpha' },
+                  { role: 'SAFETY_OFFICER', siteId: 'site-beta' },
+                ],
               },
               sessionScope: 'scope-1',
             }}
@@ -1526,7 +1543,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
             id: 'rev-1',
             alertId: mockAlert.id,
             siteId: mockAlert.siteId,
-            actorUserId: 'admin-1',
+            actorUserId: 'reviewer-1',
             fromStatus: 'PENDING_REVIEW',
             toStatus: 'CONFIRMED',
             reason: 'Reason for alert 1',

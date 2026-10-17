@@ -50,7 +50,7 @@ after(async () => {
   await database.dispose();
 });
 
-async function fixture(role = 'ADMIN') {
+async function fixture(role = 'SITE_MANAGER') {
   assert.ok(WriterClass, 'Retained-main anchored permission writer is not implemented');
   const actorUserId = randomUUID(),
     siteId = randomUUID(),
@@ -84,6 +84,11 @@ async function fixture(role = 'ADMIN') {
     'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
     [randomUUID(), actorUserId, contractorId],
   );
+  if (role === 'CONTRACTOR_REPRESENTATIVE')
+    await db.query(
+      'INSERT INTO contractor_representative_assignment(id,user_id,contractor_id,site_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), actorUserId, contractorId, siteId],
+    );
   await db.query(
     "INSERT INTO zone(id,site_id,code,name,type,restriction_policy) VALUES($1,$2,$1::uuid::text,'Synthetic Zone','RESTRICTED','AUTHORIZATION_REQUIRED')",
     [zoneId, siteId],
@@ -104,10 +109,37 @@ async function fixture(role = 'ADMIN') {
     zoneId,
     workerId,
     assignmentId,
+    actors: new Map([[role, actorUserId]]),
     service: new WriterClass(db),
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+async function asRole(f: Fixture, role: 'SITE_MANAGER' | 'CONTRACTOR_REPRESENTATIVE') {
+  let actor = f.actors.get(role);
+  if (!actor) {
+    actor = randomUUID();
+    await db.query(
+      "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic scoped actor','not-a-runtime-password',false)",
+      [actor],
+    );
+    await db.query(
+      'INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), actor, role, f.siteId],
+    );
+    if (role === 'CONTRACTOR_REPRESENTATIVE') {
+      await db.query(
+        'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+        [randomUUID(), actor, f.contractorId],
+      );
+      await db.query(
+        'INSERT INTO contractor_representative_assignment(id,user_id,contractor_id,site_id) VALUES($1,$2,$3,$4)',
+        [randomUUID(), actor, f.contractorId, f.siteId],
+      );
+    }
+    f.actors.set(role, actor);
+  }
+  f.actorUserId = actor;
+}
 function contractorInput(f: Fixture) {
   return {
     commandId: randomUUID(),
@@ -144,20 +176,13 @@ function status(n: number) {
   return (e: unknown) => (e as { getStatus?: () => number }).getStatus?.() === n;
 }
 async function grantPair(f: Fixture) {
-  // Seed through the actual Admin command, then restore the fixture's role for Worker authorization.
-  const roles = await db.query('SELECT role,site_id FROM user_role_assignment WHERE user_id=$1', [
-    f.actorUserId,
-  ]);
-  await db.query("UPDATE user_role_assignment SET role='ADMIN',site_id=NULL WHERE user_id=$1", [
-    f.actorUserId,
-  ]);
-  const cp = await f.service.grantContractor(contractorInput(f));
-  await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
-    f.actorUserId,
-    roles[0].role,
-    roles[0].site_id,
-  ]);
-  return cp;
+  const originalActor = f.actorUserId;
+  try {
+    await asRole(f, 'SITE_MANAGER');
+    return await f.service.grantContractor(contractorInput(f));
+  } finally {
+    f.actorUserId = originalActor;
+  }
 }
 async function count(table: string, column: string, value: string) {
   const allowed = new Set([
@@ -227,7 +252,7 @@ test('Worker grant follows approved assignment and Contractor permission without
     0,
   );
 });
-for (const role of ['CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER', 'WORKER']) {
+for (const role of ['ADMIN', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER', 'WORKER']) {
   test(`Contractor grant rejects ${role} without a Site Manager role`, async () => {
     const f = await fixture(role);
     await assert.rejects(f.service.grantContractor(contractorInput(f)), status(403));
@@ -242,7 +267,11 @@ test('Worker grant rejects Site Manager alone and representative of another Cont
     "UPDATE user_role_assignment SET role='CONTRACTOR_REPRESENTATIVE' WHERE user_id=$1",
     [f.actorUserId],
   );
-  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actorUserId]);
+  const other = await fixture();
+  await db.query(
+    'INSERT INTO contractor_representative_assignment(id,user_id,contractor_id,site_id) VALUES($1,$2,$3,$4)',
+    [randomUUID(), f.actorUserId, other.contractorId, f.siteId],
+  );
   await assert.rejects(f.service.grantWorker(workerInput(f, cp)), status(409));
 });
 test('same command replay preserves original response after revoke and deletion without audit or Site increment', async () => {
@@ -268,7 +297,9 @@ test('Worker replay reauthorizes representative even when original source has be
     first = await f.service.grantWorker(input);
   await db.query('DELETE FROM worker_zone_permission WHERE id=$1', [first.permission.id]);
   assert.deepEqual((await f.service.grantWorker(input)).permission, first.permission);
-  await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [f.actorUserId]);
+  await db.query('DELETE FROM contractor_representative_assignment WHERE user_id=$1', [
+    f.actorUserId,
+  ]);
   await assert.rejects(f.service.grantWorker(input), status(409));
 });
 test('changed command body or reused permission request ID with changed bounds conflicts without additional side effects', async () => {
@@ -299,7 +330,7 @@ for (const mutation of ['inactive', 'temporary-password', 'other-site-role']) {
     else if (mutation === 'temporary-password')
       await db.query('UPDATE app_user SET must_change_password=true WHERE id=$1', [f.actorUserId]);
     else {
-      const other = await fixture();
+      const other = await fixture('WORKER');
       await db.query('UPDATE user_role_assignment SET site_id=$2 WHERE user_id=$1', [
         f.actorUserId,
         other.siteId,
@@ -329,6 +360,7 @@ test('Contractor and Worker intervals are bounded using PostgreSQL microseconds'
     f.service.grantContractor({ ...contractorInput(f), validFrom: '2026-10-01T00:00:00.000000Z' }),
     status(409),
   );
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
   await assert.rejects(
     f.service.grantWorker({ ...workerInput(f, cp), validUntil: '2026-11-01T00:00:00.000007Z' }),
     status(409),
@@ -371,21 +403,23 @@ for (const mutation of [
       await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
         f.participationId,
       ]);
+    await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
     const input = workerInput(f, cp);
     await assert.rejects(f.service.grantWorker(input), status(409));
     assert.equal(await count('mf06_authority_command', 'command_id', input.commandId), 0);
   });
 }
 test('Worker grant rejects a permission from another participation', async () => {
-  const f = await fixture(),
+  const f = await fixture('CONTRACTOR_REPRESENTATIVE'),
     other = await fixture(),
     cp = await other.service.grantContractor(contractorInput(other));
   await assert.rejects(f.service.grantWorker(workerInput(f, cp)), status(409));
 });
 test('first revoke is retained; new no-op revoke records a result but no extra audit or policy increment', async () => {
   const f = await fixture(),
-    cp = await f.service.grantContractor(contractorInput(f)),
-    wp = await f.service.grantWorker(workerInput(f, cp));
+    cp = await f.service.grantContractor(contractorInput(f));
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
+  const wp = await f.service.grantWorker(workerInput(f, cp));
   const input = revokeInput(f, wp),
     first = await f.service.revokeWorker(input),
     again = await f.service.revokeWorker(revokeInput(f, wp));
@@ -404,7 +438,7 @@ test('revokes retain main roles and cross-Site boundaries, even for inactive par
     cp = await grantPair(f),
     wp = await f.service.grantWorker(workerInput(f, cp));
   await assert.rejects(f.service.revokeContractor(revokeInput(f, cp)), status(403));
-  const other = await fixture();
+  const other = await fixture('CONTRACTOR_REPRESENTATIVE');
   await assert.rejects(other.service.revokeWorker({ ...revokeInput(other, wp) }), status(404));
   await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
     f.participationId,
@@ -439,13 +473,30 @@ test('unique interval collision returns conflict and rolls back the losing comma
 test('audit failure rolls back permission, Site increment, command and facts', async () => {
   const f = await fixture(),
     input = contractorInput(f);
+  const audits = await count('audit_log', 'site_id', f.siteId);
   await db.query(
     `CREATE FUNCTION test_reject_permission_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.site_id='${f.siteId}'::uuid THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_reject_permission_audit BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION test_reject_permission_audit()`,
   );
   try {
-    await assert.rejects(f.service.grantContractor(input));
+    await assert.rejects(
+      f.service.grantContractor(input),
+      (error: unknown) => error instanceof Error && error.message === 'synthetic audit failure',
+    );
+    assert.equal(await count('audit_log', 'site_id', f.siteId), audits);
+    assert.equal(
+      (
+        await db.query('SELECT count(*)::int AS n FROM contractor_zone_permission WHERE id=$1', [
+          input.requestId,
+        ])
+      )[0].n,
+      0,
+    );
     assert.equal(await count('mf06_authority_command', 'command_id', input.commandId), 0);
     assert.equal(await count('mf06_authority_fact', 'command_id', input.commandId), 0);
+    assert.equal(
+      await count('mf06_zone_permission_command_result', 'command_id', input.commandId),
+      0,
+    );
     assert.equal(
       (await db.query('SELECT access_policy_version FROM site WHERE id=$1', [f.siteId]))[0]
         .access_policy_version,
@@ -532,6 +583,7 @@ test('retained-main request ID retries through another command do not duplicate 
   const retry = await f.service.grantContractor({ ...input, commandId: randomUUID() });
   assert.equal(retry.replayed, false);
   assert.deepEqual(retry.permission, cp.permission);
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
   const w = workerInput(f, cp),
     wp = await f.service.grantWorker(w);
   assert.deepEqual(
@@ -542,8 +594,9 @@ test('retained-main request ID retries through another command do not duplicate 
 });
 test('one microsecond Worker interval remains nonempty and accepted within all parents', async () => {
   const f = await fixture(),
-    cp = await f.service.grantContractor(contractorInput(f)),
-    input = workerInput(f, cp);
+    cp = await f.service.grantContractor(contractorInput(f));
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
+  const input = workerInput(f, cp);
   const p = await f.service.grantWorker({ ...input, validUntil: '2026-10-01T00:00:00.000004Z' });
   assert.ok(p.permission.validFrom.includes('.000003'));
   assert.ok(p.permission.validUntil.includes('.000004'));
@@ -592,6 +645,7 @@ test('a current transaction cannot forge a scoped result for another Site or ope
 test('Worker grant reflects current authorization reader and Contractor revoke denies the anchored path', async () => {
   const f = await fixture(),
     cp = await f.service.grantContractor(contractorInput(f));
+  await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
   await f.service.grantWorker(workerInput(f, cp));
   const { ZoneEntryAuthorizationService } =
     await import('../../src/modules/zones/zone-entry-authorization.service.js');
@@ -605,6 +659,7 @@ test('Worker grant reflects current authorization reader and Contractor revoke d
     verifiedWorkerId: f.workerId,
   };
   assert.equal((await reader.decide(db.manager, context)).status, 'ALLOWED');
+  await asRole(f, 'SITE_MANAGER');
   await f.service.revokeContractor(revokeInput(f, cp));
   assert.equal((await reader.decide(db.manager, context)).status, 'DENIED');
 });

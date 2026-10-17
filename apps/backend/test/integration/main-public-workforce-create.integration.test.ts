@@ -26,8 +26,52 @@ before(async () => {
 after(async () => {
   await database.dispose();
 });
-type Kind = 'CONTRACTOR' | 'WORKER';
-async function fixture() {
+type Kind = 'CONTRACTOR' | 'WORKER' | 'SITE_CONTRACTOR';
+
+for (const role of ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER']) {
+  test(`Site Contractor catalog creation refuses ${role} without global Admin`, async () => {
+    const f = await fixture();
+    await db.query('UPDATE user_role_assignment SET role=$1,site_id=$2 WHERE user_id=$3', [
+      role,
+      f.site,
+      f.actor,
+    ]);
+    await withApi(f, async (call) => {
+      assert.equal((await call('SITE_CONTRACTOR')).status, 403);
+      assert.equal(await createdCount(f, 'SITE_CONTRACTOR'), 0);
+    });
+  });
+}
+
+test('Site Contractor catalog keeps optional codes, same-code reuse and name conflicts without participation', async () => {
+  const f = await fixture();
+  await withApi(f, async (call) => {
+    const input = { name: 'Synthetic generated catalog entry' };
+    const response = await call('SITE_CONTRACTOR', input);
+    assert.equal(response.status, 201);
+    const row = (await response.json()) as { id: string; code: string; siteId: string };
+    assert.match(row.code, /^CTR-[0-9A-F-]{36}$/);
+    assert.equal(row.siteId, f.site);
+    const repeated = await call('SITE_CONTRACTOR', { ...input, code: row.code });
+    assert.equal(repeated.status, 201);
+    assert.equal(((await repeated.json()) as { id: string }).id, row.id);
+    assert.equal(
+      (await call('SITE_CONTRACTOR', { name: 'Different name', code: row.code })).status,
+      409,
+    );
+    assert.equal(
+      (
+        await db.query(
+          'SELECT count(*)::int AS n FROM contractor_site_participation WHERE contractor_id=$1',
+          [row.id],
+        )
+      )[0].n,
+      0,
+    );
+  });
+});
+
+async function fixture(kind: Kind = 'CONTRACTOR') {
   const f = {
     actor: randomUUID(),
     site: randomUUID(),
@@ -37,10 +81,6 @@ async function fixture() {
   await db.query(
     "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic actor','not-login',false)",
     [f.actor],
-  );
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
   );
   await db.query("INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Site')", [
     f.site,
@@ -53,6 +93,17 @@ async function fixture() {
     "INSERT INTO contractor_site_participation(id,contractor_id,site_id,valid_from,valid_until) VALUES($1,$2,$3,clock_timestamp()-interval '1 day',NULL)",
     [f.participation, f.contractor, f.site],
   );
+  await db.query('INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)', [
+    randomUUID(),
+    f.actor,
+    kind === 'WORKER' ? 'CONTRACTOR_REPRESENTATIVE' : 'ADMIN',
+    kind === 'WORKER' ? f.site : null,
+  ]);
+  if (kind === 'WORKER')
+    await db.query(
+      'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+      [randomUUID(), f.actor, f.contractor],
+    );
   return {
     ...f,
     contractorInput: {
@@ -122,11 +173,18 @@ async function withApi(
     };
     await work(
       (kind, body, id = f.contractor) =>
-        fetch(url + '/api/v1/contractors' + (kind === 'WORKER' ? '/' + id + '/workers' : ''), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body ?? (kind === 'WORKER' ? f.workerInput : f.contractorInput)),
-        }),
+        fetch(
+          url +
+            '/api/v1' +
+            (kind === 'SITE_CONTRACTOR'
+              ? '/sites/' + f.site + '/contractors'
+              : '/contractors' + (kind === 'WORKER' ? '/' + id + '/workers' : '')),
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body ?? (kind === 'WORKER' ? f.workerInput : f.contractorInput)),
+          },
+        ),
       controller.auth,
       () =>
         fetch(url + '/api/v1/auth/logout', {
@@ -153,11 +211,11 @@ async function createdCount(f: Fixture, kind: Kind) {
     )
   )[0].n as number;
 }
-for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
+for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
   test(
     'public ' + kind + ' create emits actor-bound same-transaction MF06 source fact and witness',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       const policy = (
         await db.query('SELECT access_policy_version FROM site WHERE id=$1', [f.site])
       )[0].access_policy_version;
@@ -173,7 +231,7 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
             [row.id],
           )
         )[0];
-        assert.equal(fact?.source_kind, kind);
+        assert.equal(fact?.source_kind, kind === 'SITE_CONTRACTOR' ? 'CONTRACTOR' : kind);
         assert.equal(fact.actor_user_id, f.actor);
         assert.equal(fact.bound, true);
         assert.equal(fact.witnessed, true);
@@ -184,6 +242,18 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
           policy,
         );
         assert.equal((await db.query('SELECT count(*)::int AS n FROM audit_log'))[0].n, audits);
+        if (kind === 'SITE_CONTRACTOR') {
+          assert.equal(
+            (
+              await db.query(
+                'SELECT count(*)::int AS n FROM contractor_site_participation WHERE contractor_id=$1',
+                [row.id],
+              )
+            )[0].n,
+            0,
+            'Catalog creation must not enroll a Contractor into a Site',
+          );
+        }
         if (kind === 'WORKER') {
           assert.equal(
             (await db.query('SELECT user_id FROM worker WHERE id=$1', [row.id]))[0].user_id,
@@ -203,13 +273,13 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
     },
   );
 }
-for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
+for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
   test(
     'public ' +
       kind +
-      ' strict attribution rejection and duplicate409 produce no extra source or journal fact',
+      ' strict attribution rejection and repeat handling produce no extra source or journal fact',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call) => {
         const input = kind === 'WORKER' ? f.workerInput : f.contractorInput;
         for (const extra of [{ actorUserId: f.actor }, { commandId: randomUUID() }])
@@ -218,7 +288,7 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
         const response = await call(kind);
         assert.equal(response.status, 201);
         const row = (await response.json()) as { id: string };
-        assert.equal((await call(kind)).status, 409);
+        assert.equal((await call(kind)).status, kind === 'SITE_CONTRACTOR' ? 201 : 409);
         assert.equal(await createdCount(f, kind), 1);
         assert.equal(
           (
@@ -234,7 +304,7 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
   );
   for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const) {
     test('held public ' + kind + ' refuses ' + change + ' before transaction claim', async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call, guard, logout) => {
         let entered!: () => void, release!: () => void;
         const claimed = new Promise<void>((r) => {
@@ -287,7 +357,7 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
   test(
     'public ' + kind + ' refuses disabled capture and partial journal without source writes',
     async () => {
-      const f = await fixture(),
+      const f = await fixture(kind),
         table = kind === 'WORKER' ? 'worker' : 'contractor';
       await withApi(f, async (call) => {
         await db.query('ALTER TABLE ' + table + ' DISABLE TRIGGER trg_mf06_capture_' + table);
@@ -312,7 +382,7 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
   test(
     'public ' + kind + ' witness failure preserves committed201 with unconfirmed history',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call, _guard, _logout, apiDb) => {
         const original = apiDb.query.bind(apiDb);
         apiDb.query = async (...args: Parameters<DataSource['query']>) => {
@@ -340,6 +410,7 @@ for (const kind of ['CONTRACTOR', 'WORKER'] as const) {
 test('Contractor creation requires global Admin while Worker creation accepts only exact scoped Representative with grant', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
+    assert.equal((await call('WORKER')).status, 403);
     await db.query(
       "UPDATE user_role_assignment SET role='CONTRACTOR_REPRESENTATIVE',site_id=$2 WHERE user_id=$1",
       [f.actor, f.site],
@@ -361,8 +432,8 @@ test('Contractor creation requires global Admin while Worker creation accepts on
     assert.equal(await createdCount(f, 'WORKER'), 1);
   });
 });
-test('even global Admin cannot create Worker for inactive Contractor or inactive expired future or missing participation', async () => {
-  const f = await fixture();
+test('scoped Representative cannot create Worker for inactive Contractor or inactive expired future or missing participation', async () => {
+  const f = await fixture('WORKER');
   await withApi(f, async (call) => {
     await db.query('UPDATE contractor SET is_active=false WHERE id=$1', [f.contractor]);
     assert.equal((await call('WORKER')).status, 403);
@@ -386,10 +457,10 @@ test('even global Admin cannot create Worker for inactive Contractor or inactive
     assert.equal(await createdCount(f, 'WORKER'), 0);
   });
 });
-test('Worker create distinguishes missing Contractor404 malformed400 and invalid body400 with no source write', async () => {
-  const f = await fixture();
+test('Worker create refuses ungranted Contractor403 malformed400 and invalid body400 with no source write', async () => {
+  const f = await fixture('WORKER');
   await withApi(f, async (call) => {
-    assert.equal((await call('WORKER', undefined, randomUUID())).status, 404);
+    assert.equal((await call('WORKER', undefined, randomUUID())).status, 403);
     assert.equal((await call('WORKER', undefined, 'bad-id')).status, 400);
     assert.equal((await call('WORKER', { ...f.workerInput, siteId: 'bad-site' })).status, 400);
     assert.equal((await call('WORKER', { ...f.workerInput, displayName: '\u0001' })).status, 400);

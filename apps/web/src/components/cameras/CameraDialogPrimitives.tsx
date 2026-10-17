@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type Ref, type RefObject } from 'react';
+import { useId, useLayoutEffect, useRef, type Ref, type RefObject } from 'react';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import type { PpeTranslationKey } from '../../i18n/ppe-catalog';
 import { useLocale } from '../../i18n/ppe-locale';
@@ -17,6 +17,7 @@ export function CameraDiscardBanner({
   onDiscardChanges,
 }: CameraDiscardBannerProps) {
   const { t } = useLocale();
+  const promptId = useId();
   const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   useLayoutEffect(() => {
@@ -27,13 +28,14 @@ export function CameraDiscardBanner({
 
   return (
     <div className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5">
-      <p className="text-sm font-medium leading-relaxed text-amber-950 break-words">
+      <p id={promptId} className="text-sm font-medium leading-relaxed text-amber-950 break-words">
         {t('cameraSetup.discardPrompt')}
       </p>
       <div className="flex flex-wrap items-center gap-2.5">
         <button
           ref={keepEditingRef}
           type="button"
+          aria-describedby={promptId}
           disabled={disabled}
           onClick={onKeepEditing}
           className={CAMERA_BUTTON_STYLES.secondary}
@@ -42,6 +44,7 @@ export function CameraDiscardBanner({
         </button>
         <button
           type="button"
+          aria-describedby={promptId}
           disabled={disabled}
           onClick={onDiscardChanges}
           className={CAMERA_BUTTON_STYLES.primary}

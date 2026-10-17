@@ -1,4 +1,6 @@
-﻿import type {
+import { VisitorRoster1792022400000 } from '../../src/database/migrations/1792022400000-VisitorRoster.js';
+import { VisitorEmailService } from '../../src/modules/workforce/access/visitor-email.service.js';
+import type {
   VerifyVisitorQrCommand,
   VerifyWorkerQrCommand,
 } from '../../src/modules/workforce/access/qr-access.commands.js';
@@ -32,6 +34,7 @@ import {
   UserNotificationEntity,
 } from '../../src/database/entities/index.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { createTestConfig } from '../support/config.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 const isolated = createIsolatedTestDatabase({ canonical: true });
 const dataSource = isolated.dataSource;
@@ -58,7 +61,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     workerId = randomUUID();
   const participationId = randomUUID(),
     assignmentId = randomUUID();
-  const service = new QrAccessService(dataSource);
+  const service = new QrAccessService(dataSource, undefined, undefined, createTestConfig());
   const gateId = 'gate-north-01';
   const registration = {
     requestId: randomUUID(),
@@ -66,10 +69,15 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     visitorName: 'Synthetic representative',
     company: 'Synthetic group',
     contact: 'synthetic@example.test',
+    email: 'synthetic@example.test',
     hostName: 'Synthetic host',
     purpose: 'Tour',
     targetArea: 'Office',
     groupSize: 20,
+    members: Array.from({ length: 20 }, (_, i) => ({
+      fullName: `Synthetic guest ${i}`,
+      identityNumber: String(i + 1).padStart(12, '0'),
+    })),
     gateId,
     validFrom: new Date(Date.now() - 60_000).toISOString(),
     validUntil: new Date(Date.now() + 3600_000).toISOString(),
@@ -99,12 +107,30 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       service.register(unstaffedSiteId, { ...registration, requestId: randomUUID() }),
       /no active Site Manager/,
     );
+    await assert.rejects(
+      service.register(siteId, { ...registration, members: [] }),
+      /VISITOR_ROSTER_SIZE/,
+    );
     const visit = await service.register(siteId, registration);
     assert.equal(visit.status, 'PENDING');
-    assert.equal('accessKeyHash' in visit, false);
+    assert.equal(visit.members?.length, 20);
+    const downgrade = dataSource.createQueryRunner();
+    await downgrade.connect();
+    await downgrade.startTransaction();
+    try {
+      await assert.rejects(
+        new VisitorRoster1792022400000().down(downgrade),
+        /Visitor identity history/,
+      );
+    } finally {
+      await downgrade.rollbackTransaction();
+      await downgrade.release();
+    }
+    assert.equal('bookingCodeHash' in visit, false);
+    assert.equal('bookingCodeCiphertext' in visit, false);
     assert.equal((await service.register(siteId, registration)).id, visit.id);
     await assert.rejects(
-      service.register(siteId, { ...registration, groupSize: 21 }),
+      service.register(siteId, { ...registration, visitorName: 'Changed' }),
       /different details/,
     );
     assert.equal(
@@ -120,217 +146,355 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
         { status: 'APPROVED' },
       ),
     );
-    await assert.rejects(service.decideVisit(security, siteId, visit.id, { status: 'APPROVED' }));
+    for (const status of ['APPROVED', 'REJECTED', 'CANCELLED'] as const)
+      await assert.rejects(service.decideVisit(security, siteId, visit.id, { status }));
     assert.equal(
-      (
-        await service.listVisits(
-          actor(otherManagerId, UserRole.SITE_MANAGER, otherSiteId),
-          otherSiteId,
-        )
-      ).items.length,
-      0,
+      (await service.listVisits(security, siteId)).items.some((item) => item.id === visit.id),
+      true,
     );
+    await assert.rejects(service.listVisits(security, otherSiteId));
+    await assert.rejects(service.listVisitorEvents(security, otherSiteId));
     await service.decideVisit(siteManager, siteId, visit.id, { status: 'APPROVED' });
-    await assert.rejects(
-      service.decideVisit(siteManager, siteId, visit.id, { status: 'REJECTED' }),
-      /already been reviewed/,
-    );
-    const first = (
+    const pass = (
       await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })
-    ).pass;
-    assert.ok(first);
+    ).pass!;
+    assert.match(pass.token, /^[A-HJ-NP-Z2-9]{8}$/);
+    assert.equal(pass.expiresAt, null);
+    assert.equal(
+      (await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })).pass
+        ?.token,
+      pass.token,
+    );
+    const preview = await service.previewVisitorQr(security, siteId, gateId, { token: pass.token });
+    assert.equal(preview.expiresAt, null);
+    assert.equal(preview.direction, 'IN');
+    await assert.rejects(
+      service.previewVisitorQr(security, otherSiteId, gateId, { token: pass.token }),
+    );
+    await assert.rejects(
+      service.previewVisitorQr(security, siteId, 'gate-west-02', { token: pass.token }),
+    );
+    const attendees = preview.visit
+      .members!.slice(0, 18)
+      .map((m) => ({ memberId: m.id, fullName: m.fullName, identityNumber: m.identityNumber }));
+    attendees[0] = {
+      ...attendees[0]!,
+      fullName: 'Synthetic replacement',
+      identityNumber: '900000000001',
+    };
     const entry: VerifyVisitorQrCommand = {
-      token: first.token,
+      token: pass.token,
       direction: 'IN',
-      count: 20,
       requestId: randomUUID(),
+      expectedVersion: preview.visit.version,
+      attendees,
     };
     await assert.rejects(service.visitorGate(security, otherSiteId, gateId, entry));
-    await assert.rejects(service.visitorGate(security, siteId, 'gate-west-02', entry));
+    await assert.rejects(service.visitorGate(security, siteId, gateId, { ...entry, count: 21 }));
     await assert.rejects(
-      service.visitorGate(security, siteId, gateId, { ...entry, count: 18 }),
-      /entire approved group/,
+      service.visitorGate(security, siteId, gateId, { ...entry, attendees: [] }),
     );
-    const concurrent = await Promise.all([
+    await assert.rejects(
+      service.visitorGate(security, siteId, gateId, {
+        ...entry,
+        attendees: [attendees[0]!, attendees[0]!],
+      }),
+    );
+    await assert.rejects(
+      service.visitorGate(security, siteId, gateId, {
+        ...entry,
+        attendees: [{ ...attendees[0]!, memberId: randomUUID() }],
+      }),
+    );
+    const results = await Promise.all([
       service.visitorGate(security, siteId, gateId, entry),
       service.visitorGate(security, siteId, gateId, entry),
     ]);
-    assert.equal(concurrent[0].id, concurrent[1].id);
-    assert.equal(concurrent[0].visit.enteredCount, 20);
-    assert.equal(concurrent[0].visit.presence, 'INSIDE');
+    assert.equal(results[0].id, results[1].id);
+    assert.equal(results[0].count, 18);
+    assert.equal(results[0].visit.enteredCount, 18);
+    assert.equal(results[0].visit.presence, 'INSIDE');
+    assert.equal(results[0].attendees?.[0]?.replacedFrom?.fullName, 'Synthetic guest 0');
+    assert.equal(results[0].visit.members?.filter((m) => m.inside).length, 18);
+    assert.equal(results[0].visit.members?.[0]?.registeredFullName, 'Synthetic guest 0');
     assert.equal(
       await dataSource.getRepository(VisitorGateEventEntity).countBy({ visitId: visit.id }),
       1,
     );
     await assert.rejects(
       service.visitorGate(security, siteId, gateId, { ...entry, requestId: randomUUID() }),
-      /already been used/,
+      /Reload/,
     );
-    const second = (
-      await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })
-    ).pass;
-    assert.ok(second);
+    await assert.rejects(
+      service.visitorGate(security, siteId, gateId, { ...entry, attendees: attendees.slice(1) }),
+      /different passage/,
+    );
+    assert.equal(
+      (await service.listVisitorEvents(security, siteId)).items[0]?.attendees?.length,
+      18,
+    );
+    assert.equal(
+      (
+        await service.listVisitorEvents(
+          actor(otherManagerId, UserRole.SITE_MANAGER, otherSiteId),
+          otherSiteId,
+        )
+      ).items.length,
+      0,
+    );
+    const checkout = await service.previewVisitorQr(security, siteId, gateId, {
+      token: pass.token,
+    });
+    assert.equal(checkout.direction, 'OUT');
     await assert.rejects(
       service.visitorGate(security, siteId, gateId, {
         ...entry,
-        token: second.token,
-        count: 3,
+        direction: 'OUT',
+        expectedVersion: checkout.visit.version,
         requestId: randomUUID(),
+        attendees: [{ ...attendees[0]!, fullName: 'Fabricated' }],
       }),
-      /direction/,
+      /EXIT_IDENTITY/,
     );
-    const rotated = (
-      await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })
-    ).pass;
-    assert.ok(rotated);
-    await assert.rejects(
-      service.visitorGate(security, siteId, gateId, {
-        ...entry,
-        token: second.token,
-        count: 1,
-        requestId: randomUUID(),
-      }),
-      /expired/,
-    );
-    await service.visitorGate(security, siteId, gateId, {
-      token: rotated.token,
+    const exited = await service.visitorGate(security, siteId, gateId, {
+      token: pass.token,
       direction: 'OUT',
-      count: 20,
+      expectedVersion: checkout.visit.version,
       requestId: randomUUID(),
+      attendees: attendees.slice(0, 5),
     });
-    const reentry = (
-      await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })
-    ).pass;
-    assert.ok(reentry);
-    assert.equal(reentry.direction, 'IN');
-    const reentered = await service.visitorGate(security, siteId, gateId, {
-      token: reentry.token,
-      direction: 'IN',
-      requestId: randomUUID(),
-    });
-    assert.equal(reentered.visit.enteredCount, 40);
+    assert.equal(exited.visit.exitedCount, 5);
     await dataSource.getRepository(VisitorVisitEntity).update(visit.id, {
       validFrom: new Date(Date.now() - 120_000),
       validUntil: new Date(Date.now() - 60_000),
     });
-    const departure = (
-      await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })
-    ).pass;
-    assert.ok(departure);
-    await assert.rejects(
-      service.visitorGate(security, siteId, gateId, {
-        token: departure.token,
-        direction: 'IN',
-        count: 1,
-        requestId: randomUUID(),
-      }),
-      /direction/,
-    );
-    await service.visitorGate(security, siteId, gateId, {
-      token: departure.token,
-      direction: 'OUT',
-      count: 20,
-      requestId: randomUUID(),
+    const departure = await service.previewVisitorQr(security, siteId, gateId, {
+      token: pass.token,
     });
-    assert.equal(
-      (await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })).pass,
-      null,
+    const out = await service.visitorGate(security, siteId, gateId, {
+      token: pass.token,
+      direction: 'OUT',
+      requestId: randomUUID(),
+      expectedVersion: departure.visit.version,
+      attendees: attendees.slice(5),
+    });
+    assert.equal(out.visit.presence, 'OUTSIDE');
+    assert.equal(out.visit.exitedCount, 18);
+    await assert.rejects(
+      service.previewVisitorQr(security, siteId, gateId, { token: pass.token }),
+      /schedule/,
     );
     assert.equal(
-      (await service.visitorPass({ visitId: visit.id, accessKey: registration.accessKey })).visit
-        .status,
-      'EXPIRED',
+      (
+        await dataSource
+          .getRepository(VisitorGateEventEntity)
+          .findOneByOrFail({ id: results[0].id })
+      ).attendees[0]?.fullName,
+      'Synthetic replacement',
     );
-    const cancellable = await service.register(siteId, {
+    // Single visitors retain a one-person passage using the same permanent code.
+    const single = await service.register(siteId, {
       ...registration,
       requestId: randomUUID(),
+      groupSize: 1,
+      members: [],
     });
-    assert.equal(cancellable.siteManagerId, managerId);
-    await service.decideVisit(siteManager, siteId, cancellable.id, {
-      status: 'APPROVED',
-      expectedVersion: 1,
+    await service.decideVisit(siteManager, siteId, single.id, { status: 'APPROVED' });
+    const singlePass = (
+      await service.visitorPass({ visitId: single.id, accessKey: registration.accessKey })
+    ).pass!;
+    const singleEntry = await service.visitorGate(security, siteId, gateId, {
+      token: singlePass.token,
+      direction: 'IN',
+      requestId: randomUUID(),
     });
-    const cancelledQr = (
-      await service.visitorPass({ visitId: cancellable.id, accessKey: registration.accessKey })
-    ).pass;
-    assert.ok(cancelledQr);
-    await assert.rejects(
-      service.decideVisit(siteManager, siteId, cancellable.id, {
-        status: 'CANCELLED',
-        expectedVersion: 1,
-        reviewNote: 'Changed plans',
-      }),
-      /changed/,
-    );
-    await service.decideVisit(siteManager, siteId, cancellable.id, {
+    assert.equal(singleEntry.count, 1);
+    await service.visitorGate(security, siteId, gateId, {
+      token: singlePass.token,
+      direction: 'OUT',
+      requestId: randomUUID(),
+    });
+    await service.decideVisit(siteManager, siteId, single.id, {
       status: 'CANCELLED',
-      expectedVersion: 2,
       reviewNote: 'Changed plans',
     });
     await assert.rejects(
-      service.visitorGate(security, siteId, gateId, {
-        token: cancelledQr.token,
-        direction: 'IN',
-        requestId: randomUUID(),
-      }),
-      /revoked/,
+      service.previewVisitorQr(security, siteId, gateId, { token: singlePass.token }),
     );
-    const rejectedVisit = await service.register(siteId, {
-      ...registration,
-      requestId: randomUUID(),
-    });
-    await service.decideVisit(siteManager, siteId, rejectedVisit.id, { status: 'REJECTED' });
-    assert.equal(
-      (await service.visitorPass({ visitId: rejectedVisit.id, accessKey: registration.accessKey }))
-        .pass,
-      null,
-    );
-    const legacyVisit = await service.register(siteId, {
-      ...registration,
-      requestId: randomUUID(),
-    });
-    await service.decideVisit(siteManager, siteId, legacyVisit.id, { status: 'APPROVED' });
-    await dataSource.getRepository(VisitorVisitEntity).update(legacyVisit.id, { enteredCount: 18 });
-    const oldEvent = await dataSource.getRepository(VisitorGateEventEntity).save({
-      id: randomUUID(),
-      visitId: legacyVisit.id,
-      operatorUserId: securityId,
-      gateId,
-      direction: 'IN',
-      count: 18,
-    });
-    const oldPass = await service.visitorPass({
-      visitId: legacyVisit.id,
-      accessKey: registration.accessKey,
-    });
-    assert.equal(oldPass.visit.presence, 'NEEDS_REVIEW');
-    assert.equal(oldPass.pass, null);
-    const manualExit = {
+    // Migration compatibility: earlier records without identities can still be reconciled.
+    const legacy = await service.register(siteId, { ...registration, requestId: randomUUID() });
+    await dataSource
+      .getRepository(VisitorVisitEntity)
+      .update(legacy.id, { members: [], enteredCount: 18 });
+    const manual = {
       requestId: randomUUID(),
       representativeConfirmed: true as const,
-      reviewNote: 'Representative verified all visitors have left',
+      reviewNote: 'Representative verified departure',
     };
-    await assert.rejects(
-      service.manualVisitCheckout(siteManager, siteId, legacyVisit.id, manualExit),
-    );
-    const reconciled = await service.manualVisitCheckout(
-      security,
-      siteId,
-      legacyVisit.id,
-      manualExit,
-    );
+    await assert.rejects(service.manualVisitCheckout(siteManager, siteId, legacy.id, manual));
+    const reconciled = await service.manualVisitCheckout(security, siteId, legacy.id, manual);
     assert.equal(reconciled.exitedCount, 18);
-    assert.equal(reconciled.presence, 'OUTSIDE');
-    await service.manualVisitCheckout(security, siteId, legacyVisit.id, manualExit);
+    await service.manualVisitCheckout(security, siteId, legacy.id, manual);
     assert.equal(
-      await dataSource.getRepository(GateEventEntity).countBy({ visitId: legacyVisit.id }),
+      await dataSource.getRepository(GateEventEntity).countBy({ visitId: legacy.id }),
       1,
     );
-    assert.equal(
-      (await dataSource.getRepository(VisitorGateEventEntity).findOneByOrFail({ id: oldEvent.id }))
-        .count,
-      18,
-    );
+    const mailConfig = createTestConfig({
+      RESEND_API_KEY: 're_synthetic_test_only',
+      RESEND_FROM_EMAIL: 'qr@example.test',
+    });
+    const email = new VisitorEmailService(dataSource, mailConfig);
+    const emailedAccess = new QrAccessService(dataSource, undefined, undefined, mailConfig, email);
+    const emailVisit = await emailedAccess.register(siteId, {
+      ...registration,
+      requestId: randomUUID(),
+      language: 'vi',
+    });
+    const originalFetch = globalThis.fetch;
+    let deliveries = 0;
+    const payloads: Array<Record<string, unknown>> = [];
+    const deliveryKeys: string[] = [];
+    let failNext = true;
+    let holdNext: (() => Promise<Response>) | undefined;
+    globalThis.fetch = async (url, init) => {
+      assert.equal(url, 'https://api.resend.com/emails');
+      deliveries++;
+      payloads.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      deliveryKeys.push(new Headers(init?.headers).get('Idempotency-Key')!);
+      if (holdNext) {
+        const held = holdNext;
+        holdNext = undefined;
+        return held();
+      }
+      if (failNext) {
+        failNext = false;
+        return new Response('{}', { status: 503 });
+      }
+      return Response.json({ id: randomUUID() });
+    };
+    try {
+      const queued = await emailedAccess.decideVisit(siteManager, siteId, emailVisit.id, {
+        status: 'APPROVED',
+      });
+      assert.equal(queued.emailStatus, 'PENDING');
+      await assert.rejects(emailedAccess.retryVisitorEmail(security, siteId, emailVisit.id));
+      await Promise.all([
+        emailedAccess.retryVisitorEmail(siteManager, siteId, emailVisit.id),
+        emailedAccess.retryVisitorEmail(siteManager, siteId, emailVisit.id),
+      ]);
+      assert.equal(deliveries, 2);
+      assert.equal(
+        (await dataSource.getRepository(VisitorVisitEntity).findOneByOrFail({ id: emailVisit.id }))
+          .emailStatus,
+        'SENT',
+      );
+      assert.match(String(payloads[1]?.subject), /phê duyệt/);
+      assert.deepEqual(payloads[0], payloads[1]);
+      assert.equal(payloads[1]?.from, 'SmartSite <qr@example.test>');
+      assert.equal(
+        (payloads[1]?.attachments as Array<{ filename: string }>)[0]?.filename,
+        'smartsite-visitor-qr.png',
+      );
+      await email.deliver(emailVisit.id);
+      assert.equal(deliveries, 2);
+      assert.equal(deliveryKeys[0], `visitor-approved/${emailVisit.id}`);
+      assert.equal(deliveryKeys[0], deliveryKeys[1]);
+
+      const cancellation = { status: 'CANCELLED' as const, reviewNote: 'Host unavailable' };
+      const cancelled = await emailedAccess.decideVisit(
+        siteManager,
+        siteId,
+        emailVisit.id,
+        cancellation,
+      );
+      assert.equal(cancelled.emailStatus, 'SENT');
+      assert.match(String(payloads[2]?.subject), /hủy/);
+      assert.match(String(payloads[2]?.text), /Host unavailable/);
+      assert.equal(payloads[2]?.attachments, undefined);
+      assert.equal(deliveryKeys[2], `visitor-cancelled/${emailVisit.id}`);
+      assert.equal(
+        (await dataSource.getRepository(VisitorVisitEntity).findOneByOrFail({ id: emailVisit.id }))
+          .emailAttempts,
+        1,
+      );
+      await emailedAccess.decideVisit(siteManager, siteId, emailVisit.id, cancellation);
+      await emailedAccess.retryVisitorEmail(siteManager, siteId, emailVisit.id);
+      assert.equal(deliveries, 3);
+
+      const rejectedVisit = await emailedAccess.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        language: 'en',
+      });
+      failNext = true;
+      const rejected = await emailedAccess.decideVisit(siteManager, siteId, rejectedVisit.id, {
+        status: 'REJECTED',
+        reviewNote: '<Area closed>',
+      });
+      assert.equal(rejected.emailStatus, 'PENDING');
+      await assert.rejects(emailedAccess.retryVisitorEmail(security, siteId, rejectedVisit.id));
+      await assert.rejects(
+        emailedAccess.retryVisitorEmail(siteManager, otherSiteId, rejectedVisit.id),
+      );
+      const retried = await emailedAccess.retryVisitorEmail(siteManager, siteId, rejectedVisit.id);
+      assert.equal(retried.emailStatus, 'SENT');
+      assert.equal(deliveries, 5);
+      assert.match(String(payloads[4]?.subject), /rejected/);
+      assert.match(String(payloads[4]?.html), /&lt;Area closed&gt;/);
+      assert.equal(payloads[4]?.attachments, undefined);
+      assert.deepEqual(payloads[3], payloads[4]);
+      assert.equal(deliveryKeys[3], `visitor-rejected/${rejectedVisit.id}`);
+      assert.equal(deliveryKeys[3], deliveryKeys[4]);
+
+      // An approval already in flight must not overwrite the cancellation email's result.
+      const racingVisit = await emailedAccess.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+      });
+      let started!: () => void;
+      let release!: (response: Response) => void;
+      const sending = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      holdNext = () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+          started();
+        });
+      const approval = emailedAccess.decideVisit(siteManager, siteId, racingVisit.id, {
+        status: 'APPROVED',
+      });
+      await sending;
+      try {
+        await emailedAccess.decideVisit(siteManager, siteId, racingVisit.id, cancellation);
+      } finally {
+        release(new Response('{}', { status: 503 }));
+        await approval;
+      }
+      const current = await dataSource
+        .getRepository(VisitorVisitEntity)
+        .findOneByOrFail({ id: racingVisit.id });
+      assert.equal(current.status, 'CANCELLED');
+      assert.equal(current.emailStatus, 'SENT');
+      assert.equal(current.emailAttempts, 1);
+      assert.equal(current.emailNextAttemptAt, null);
+
+      // Recover a stale cancellation lease after a process restart without a booking code.
+      await dataSource.getRepository(VisitorVisitEntity).update(rejectedVisit.id, {
+        status: 'CANCELLED',
+        emailStatus: 'SENDING',
+        emailAttemptedAt: new Date(Date.now() - 6 * 60_000),
+        emailNextAttemptAt: null,
+      });
+      await Promise.all([email.deliver(rejectedVisit.id), email.deliver(rejectedVisit.id)]);
+      assert.equal(deliveries, 8);
+      assert.match(String(payloads[7]?.subject), /cancelled/);
+      assert.equal(payloads[7]?.attachments, undefined);
+      await email.deliver(rejectedVisit.id);
+      assert.equal(deliveries, 8);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
     await dataSource
       .getRepository(ContractorEntity)
       .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });

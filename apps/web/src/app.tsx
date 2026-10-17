@@ -1,3 +1,4 @@
+import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
 import { translate as tr, uiLanguage } from './i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
@@ -10,7 +11,6 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
-import { IconRadio, IconTrendingUp } from './components/icons';
 import {
   useAuth,
   useRestoreSession,
@@ -70,11 +70,28 @@ const LiveMonitoringView = React.lazy(() =>
 const PpeMonitoringView = React.lazy(() =>
   import('./components/ppe/PpeMonitoringView').then((m) => ({ default: m.PpeMonitoringView })),
 );
+const CameraSetupView = React.lazy(() =>
+  import('./components/cameras/CameraSetupView').then((m) => ({ default: m.CameraSetupView })),
+);
 const RestrictedZoneView = React.lazy(() =>
   import('./components/zones/RestrictedZoneView').then((m) => ({ default: m.RestrictedZoneView })),
 );
 const SafetyAlertsView = React.lazy(() =>
   import('./components/alerts/SafetyAlertsView').then((m) => ({ default: m.SafetyAlertsView })),
+);
+
+const ContractorDashboardView = React.lazy(() =>
+  import('./components/contractor/ContractorDashboardView').then((m) => ({
+    default: m.ContractorDashboardView,
+  })),
+);
+const AssignedWorkView = React.lazy(() =>
+  import('./components/contractor/AssignedWorkView').then((m) => ({ default: m.AssignedWorkView })),
+);
+const WorkerDashboardView = React.lazy(() =>
+  import('./components/dashboard/WorkerDashboardView').then((m) => ({
+    default: m.WorkerDashboardView,
+  })),
 );
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -310,13 +327,22 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     );
   }
 
-  const roles = currentUser.roleAssignments?.map((r) => r.role) ?? [];
-  const isManagerOnly =
-    roles.includes('SITE_MANAGER') &&
-    !roles.includes('ADMIN') &&
-    !roles.includes('CONTRACTOR_REPRESENTATIVE');
-  if (isManagerOnly && ['/access', '/workforce'].includes(location.pathname.replace(/\/$/, ''))) {
-    return <Navigate to="/site-setup" replace />;
+  const allowedTabs = workspaceTabs(currentUser.roleAssignments ?? []);
+  if (allowedTabs.length === 0) {
+    return (
+      <main className="p-8" role="status">
+        {tr('auth.noAssignedRoles')}
+        <button type="button" className="ml-4 underline" onClick={handleSignOut}>
+          {tr('shell.signOut')}
+        </button>
+      </main>
+    );
+  }
+  if (
+    location.pathname !== '/account/password' &&
+    !allowedTabs.includes(location.pathname.replace(/^\//, '').replace(/\/$/, ''))
+  ) {
+    return <Navigate to={`/${defaultWorkspace(currentUser.roleAssignments ?? [])}`} replace />;
   }
 
   return (
@@ -328,7 +354,9 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             <Route
               path="/dashboard"
               element={
-                defaultAuthTab === 'workforce' ? (
+                defaultAuthTab === 'incidents' ? (
+                  <Navigate to="/incidents" replace />
+                ) : defaultAuthTab === 'workforce' ? (
                   <Navigate to="/workforce" replace />
                 ) : (
                   <DashboardView
@@ -350,6 +378,18 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 />
               }
             />
+            <Route
+              path="/contractor-teams"
+              element={<ContractorDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
+            />
+            <Route
+              path="/assigned-work"
+              element={<AssignedWorkView apiUrl={apiUrl} token={accessToken!} user={currentUser} />}
+            />
+            <Route
+              path="/worker-summary"
+              element={<WorkerDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
+            />
             <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
             <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
             <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
@@ -360,11 +400,25 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
             />
             <Route
+              path="/camera-setup"
+              element={<CameraSetupView apiUrl={apiUrl} sharedSession={sharedSession} />}
+            />
+            <Route
               path="/ppe"
               element={
                 <PpeMonitoringView
+                  key={location.search}
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
+                  initialSelection={{
+                    siteId: new URLSearchParams(location.search).get('siteId') ?? undefined,
+                    cameraId: new URLSearchParams(location.search).get('cameraId') ?? undefined,
+                  }}
+                  onOpenSetup={(context) => {
+                    const params = new URLSearchParams({ siteId: context.siteId });
+                    if (context.cameraId) params.set('cameraId', context.cameraId);
+                    navigate(`/camera-setup?${params}`);
+                  }}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />
               }
@@ -375,6 +429,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 <RestrictedZoneView
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
+                  onOpenSetup={() => navigate('/camera-setup')}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />
               }
@@ -396,42 +451,6 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                   initialStatus={alertsContext?.status}
                   initialType={alertsContext?.alertType}
                 />
-              }
-            />
-            <Route
-              path="/iot"
-              element={
-                <div className="bg-white p-8 rounded-2xl border border-slate-200/80 shadow-sm max-w-4xl mx-auto text-center space-y-3">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center">
-                    <IconRadio className="w-6 h-6" />
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    {tr('common.iot_environmental_sensors')}
-                  </h2>
-                  <p className="text-sm text-slate-500 max-w-md mx-auto">
-                    {tr(
-                      'app.environmental_air_quality_noise_thresholds_crane_wind_speed_and_perimeter_beams',
-                    )}
-                  </p>
-                </div>
-              }
-            />
-            <Route
-              path="/progress"
-              element={
-                <div className="bg-white p-8 rounded-2xl border border-slate-200/80 shadow-sm max-w-4xl mx-auto text-center space-y-3">
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 mx-auto flex items-center justify-center">
-                    <IconTrendingUp className="w-6 h-6" />
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    {tr('common.construction_progress_monitoring')}
-                  </h2>
-                  <p className="text-sm text-slate-500 max-w-md mx-auto">
-                    {tr(
-                      'app.4d_bim_overlay_photogrammetry_site_scans_and_milestone_progress_tracking',
-                    )}
-                  </p>
-                </div>
               }
             />
             <Route path="*" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
@@ -478,10 +497,7 @@ export function App() {
   const isRestoringSession = restoringSession.isLoading;
   const { data: currentUser } = useCurrentUser(apiUrl);
 
-  const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isWorkerOnly =
-    roles.includes('WORKER') && !roles.includes('ADMIN') && !roles.includes('SITE_MANAGER');
-  const defaultAuthTab = isWorkerOnly ? 'workforce' : 'dashboard';
+  const defaultAuthTab = defaultWorkspace(currentUser?.roleAssignments ?? []);
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
   // Backend live health check (locale-invariant queryKey)

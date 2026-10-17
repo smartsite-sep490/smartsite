@@ -14,6 +14,7 @@ import { validateEnvironment, type BackendEnvironment } from '../../src/config/e
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
 import { WorkforceController } from '../../src/modules/workforce/directory/workforce.controller.js';
+import { MainWorkerRosterService } from '../../src/modules/workforce/main-worker-roster.service.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { installMainAuthorityCandidate } from '../support/main-authority-candidate.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
@@ -27,7 +28,7 @@ after(async () => {
   await database.dispose();
 });
 type Kind = 'CREATE' | 'PREPARE' | 'LINK';
-async function fixture() {
+async function fixture(kind: Kind = 'PREPARE') {
   const f = {
     actor: randomUUID(),
     site: randomUUID(),
@@ -40,17 +41,24 @@ async function fixture() {
     "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic actor','not-login',false)",
     [f.actor],
   );
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
-  );
   await db.query("INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Site')", [
     f.site,
+  ]);
+  await db.query('INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)', [
+    randomUUID(),
+    f.actor,
+    kind === 'CREATE' ? 'CONTRACTOR_REPRESENTATIVE' : 'ADMIN',
+    kind === 'CREATE' ? f.site : null,
   ]);
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
     [f.contractor],
   );
+  if (kind === 'CREATE')
+    await db.query(
+      'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+      [randomUUID(), f.actor, f.contractor],
+    );
   await db.query(
     "INSERT INTO contractor_site_participation(id,contractor_id,site_id,valid_from,valid_until) VALUES($1,$2,$3,clock_timestamp()-interval '1 day',NULL)",
     [f.participation, f.contractor, f.site],
@@ -152,7 +160,11 @@ async function withApi(
             body: JSON.stringify(
               body ??
                 (kind === 'CREATE'
-                  ? { externalId: f.workerInput.externalId, displayName: f.workerInput.displayName }
+                  ? {
+                      contractorId: f.contractor,
+                      externalId: f.workerInput.externalId,
+                      displayName: f.workerInput.displayName,
+                    }
                   : { userId: f.target }),
             ),
           },
@@ -181,7 +193,7 @@ async function factsFor(id: string, actor: string) {
 
 for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const)
   test('Worker roster ' + kind + ' emits actor-bound MAIN source fact', async () => {
-    const f = await fixture();
+    const f = await fixture(kind);
     await withApi(f, async (call) => {
       const response = await call(kind);
       assert.equal(response.status, kind === 'LINK' ? 200 : 201);
@@ -220,11 +232,15 @@ for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const) {
   test(
     'Worker roster ' + kind + ' strict actor/command DTO and path inputs fail without changes',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call) => {
         const body =
           kind === 'CREATE'
-            ? { externalId: f.workerInput.externalId, displayName: 'Synthetic' }
+            ? {
+                contractorId: f.contractor,
+                externalId: f.workerInput.externalId,
+                displayName: 'Synthetic',
+              }
             : { userId: f.target };
         for (const extra of [{ actorUserId: f.actor }, { commandId: randomUUID() }])
           assert.equal((await call(kind, { ...body, ...extra })).status, 400);
@@ -239,7 +255,7 @@ for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const) {
     test(
       'Worker roster ' + kind + ' ' + change + ' before claim refuses the source mutation',
       async () => {
-        const f = await fixture();
+        const f = await fixture(kind);
         await withApi(f, async (call, guard, logout) => {
           let enter!: () => void, release!: () => void;
           const claimed = new Promise<void>((r) => (enter = r)),
@@ -290,7 +306,7 @@ for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const) {
   test(
     'Worker roster ' + kind + ' disabled or partial capture fails closed without writes',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call) => {
         await db.query('ALTER TABLE worker DISABLE TRIGGER trg_mf06_capture_worker');
         try {
@@ -314,7 +330,7 @@ for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const) {
   test(
     'Worker roster ' + kind + ' postcommit witness failure keeps committed response unconfirmed',
     async () => {
-      const f = await fixture();
+      const f = await fixture(kind);
       await withApi(f, async (call, _g, _l, apiDb) => {
         const original = apiDb.query.bind(apiDb);
         apiDb.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {
@@ -423,57 +439,84 @@ for (const kind of ['PREPARE', 'LINK'] as const)
       });
     },
   );
-test('Worker roster creation keeps contractor/account pair, WORKER role and participation eligibility', async () => {
+test('internal Admin roster command keeps contractor/account pair, WORKER role and participation eligibility', async () => {
   const f = await fixture();
-  await withApi(f, async (call) => {
-    const input = {
-      externalId: f.workerInput.externalId,
+  const roster = new MainWorkerRosterService(db);
+  const create = (input: Parameters<MainWorkerRosterService['create']>[1]) =>
+    roster.create(f.site, input, { actorUserId: f.actor });
+  const status = (value: number) => (error: unknown) =>
+    (error as { getStatus?: () => number }).getStatus?.() === value;
+  const input = {
+    externalId: f.workerInput.externalId,
+    displayName: 'Synthetic',
+    contractorId: f.contractor,
+    userId: f.target,
+  };
+  await assert.rejects(
+    create({
+      externalId: input.externalId,
       displayName: 'Synthetic',
       contractorId: f.contractor,
+    }),
+    status(400),
+  );
+  await assert.rejects(
+    create({
+      externalId: input.externalId,
+      displayName: 'Synthetic',
       userId: f.target,
+    }),
+    status(400),
+  );
+  await db.query("UPDATE user_role_assignment SET role='SITE_MANAGER' WHERE user_id=$1", [
+    f.target,
+  ]);
+  await assert.rejects(create(input), status(404));
+  await db.query("UPDATE user_role_assignment SET role='WORKER' WHERE user_id=$1", [f.target]);
+  await db.query('UPDATE contractor SET is_active=false WHERE id=$1', [f.contractor]);
+  await assert.rejects(create(input), status(404));
+  await db.query('UPDATE contractor SET is_active=true WHERE id=$1', [f.contractor]);
+  await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
+    f.participation,
+  ]);
+  await assert.rejects(create(input), status(404));
+  await db.query('UPDATE contractor_site_participation SET is_active=true WHERE id=$1', [
+    f.participation,
+  ]);
+  const row = await create(input);
+  assert.equal(row.contractorId, f.contractor);
+  assert.equal(row.userId, f.target);
+  await assert.rejects(create({ ...input, externalId: randomUUID() }), status(409));
+  await assert.rejects(create(input), status(409));
+});
+test('public Worker profile creation belongs to scoped Representative and never implicitly links an account', async () => {
+  const admin = await fixture();
+  await withApi(admin, async (call) => {
+    assert.equal((await call('CREATE')).status, 403);
+    assert.equal(await boundCount(admin, 'CREATE'), 0);
+  });
+  const rep = await fixture('CREATE');
+  await withApi(rep, async (call) => {
+    const input = {
+      contractorId: rep.contractor,
+      externalId: rep.workerInput.externalId,
+      displayName: 'Synthetic profile',
     };
-    assert.equal(
-      (
-        await call('CREATE', {
-          externalId: input.externalId,
-          displayName: 'Synthetic',
-          contractorId: f.contractor,
-        })
-      ).status,
-      400,
-    );
-    assert.equal(
-      (
-        await call('CREATE', {
-          externalId: input.externalId,
-          displayName: 'Synthetic',
-          userId: f.target,
-        })
-      ).status,
-      400,
-    );
-    await db.query("UPDATE user_role_assignment SET role='SITE_MANAGER' WHERE user_id=$1", [
-      f.target,
-    ]);
-    assert.equal((await call('CREATE', input)).status, 404);
-    await db.query("UPDATE user_role_assignment SET role='WORKER' WHERE user_id=$1", [f.target]);
-    await db.query('UPDATE contractor SET is_active=false WHERE id=$1', [f.contractor]);
-    assert.equal((await call('CREATE', input)).status, 404);
-    await db.query('UPDATE contractor SET is_active=true WHERE id=$1', [f.contractor]);
-    await db.query('UPDATE contractor_site_participation SET is_active=false WHERE id=$1', [
-      f.participation,
-    ]);
-    assert.equal((await call('CREATE', input)).status, 404);
-    await db.query('UPDATE contractor_site_participation SET is_active=true WHERE id=$1', [
-      f.participation,
-    ]);
-    const r = await call('CREATE', input);
-    assert.equal(r.status, 201);
-    const row = (await r.json()) as { contractorId: string; userId: string };
-    assert.equal(row.contractorId, f.contractor);
-    assert.equal(row.userId, f.target);
-    assert.equal((await call('CREATE', { ...input, externalId: randomUUID() })).status, 409);
-    assert.equal((await call('CREATE', input)).status, 409);
+    assert.equal((await call('CREATE', { ...input, userId: rep.target })).status, 400);
+    const response = await call('CREATE', input);
+    assert.equal(response.status, 201);
+    const worker = (await response.json()) as {
+      id: string;
+      contractorId: string;
+      userId: string | null;
+    };
+    assert.equal(worker.contractorId, rep.contractor);
+    assert.equal(worker.userId, null);
+    const facts = await factsFor(worker.id, rep.actor);
+    assert.equal(facts[0].operation, 'CONTRACTOR_WORKER_CREATE');
+    await db.query('DELETE FROM contractor_representative_grant WHERE user_id=$1', [rep.actor]);
+    assert.equal((await call('CREATE', { ...input, externalId: randomUUID() })).status, 403);
+    assert.equal(await boundCount(rep, 'CREATE'), 1);
   });
 });
 test('Account-first natural-key collision returns409 and leaves no linked Worker/fact', async () => {

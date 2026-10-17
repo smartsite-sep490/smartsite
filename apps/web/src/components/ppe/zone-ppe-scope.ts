@@ -41,9 +41,7 @@ export function deriveZonePpeCapabilities(
   const canManageZones = user.roleAssignments.some(
     (r) => r.role === 'SITE_MANAGER' && r.siteId === siteId,
   );
-  const canManageRegions = user.roleAssignments.some(
-    (r) => r.role === 'ADMIN' && r.siteId === null,
-  );
+  const canManageRegions = canManageZones;
   return { canManageZones, canManageRegions };
 }
 
@@ -58,6 +56,7 @@ export function getZonePpeScopeKey(
     token: string;
     canManageZones?: boolean;
     canManageRegions?: boolean;
+    canReadZones?: boolean;
   },
 ): string {
   return JSON.stringify([
@@ -68,5 +67,6 @@ export function getZonePpeScopeKey(
     getOpaqueTokenNonce(client, props.token),
     Boolean(props.canManageZones),
     Boolean(props.canManageRegions),
+    Boolean(props.canReadZones),
   ]);
 }

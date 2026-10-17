@@ -679,7 +679,7 @@ test('Repeated password reset increments fact revision, captures metadata-only u
   await withApi(f, async ({ call, login }) => {
     const initialRev = await accountHeadRevision(f.target);
 
-    // Reset 1: must_change_password remains false; reset still records credential revision
+    // Main reset passwords are usable immediately; change remains optional.
     const tempPass1 = 'SyntheticReset1Pass123!';
     const res1 = await call('POST', `/api/v1/users/${f.target}/reset-password`, {
       temporaryPassword: tempPass1,
@@ -700,7 +700,7 @@ test('Repeated password reset increments fact revision, captures metadata-only u
     const session1 = await login(f.target, tempPass1);
     assert.ok(session1.accessToken);
 
-    // Reset 2 (Repeated): must_change_password was already false, but password hash changes
+    // Reset 2 changes the password hash while retaining optional password change.
     const tempPass2 = 'SyntheticReset2Pass456!';
     const res2 = await call('POST', `/api/v1/users/${f.target}/reset-password`, {
       temporaryPassword: tempPass2,
@@ -717,7 +717,7 @@ test('Repeated password reset increments fact revision, captures metadata-only u
     assert.ok(fact2);
     assert.equal(fact2.command_operation, 'USER_PASSWORD_RESET');
     assert.equal(fact2.operation, 'UPDATE');
-    // Both before and after payloads have must_change_password = false (metadata-only update)
+    // The second reset still records its command and witness without forcing change.
     assert.equal(fact2.before_payload?.must_change_password, false);
     assert.equal(fact2.after_payload?.must_change_password, false);
     assert.equal(fact2.revision, fact1.revision + 1);

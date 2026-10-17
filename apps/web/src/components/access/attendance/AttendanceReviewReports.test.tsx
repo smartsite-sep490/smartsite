@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AttendanceView } from './AttendanceView';
+import i18n, { translate as tr } from '../../../i18n';
 
 const api = vi.hoisted(() => ({
   attendanceSummary: vi.fn(),
@@ -76,12 +77,14 @@ beforeEach(() => {
   });
   api.reviewAttendanceCorrection.mockResolvedValue({ id: pending.id });
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   vi.resetAllMocks();
   window.history.replaceState({}, '', '/');
+  vi.restoreAllMocks();
+  await i18n.changeLanguage('en');
 });
-function mount() {
+function mount(showRequests = true) {
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -91,10 +94,77 @@ function mount() {
         token="token"
         siteId="site"
         sessionScope="session"
+        showRequests={showRequests}
       />
     </QueryClientProvider>,
   );
 }
+
+it.each([
+  '/access?tab=attendance&subtab=requests',
+  '/access?tab=attendance#attendance-correction-form',
+])(
+  'keeps the Site Manager on timesheets without request or approval content for %s',
+  async (url) => {
+    window.history.replaceState({}, '', url);
+    mount(false);
+    await screen.findByRole('button', { name: 'View worker' });
+    expect(screen.getByRole('button', { name: 'Timesheet' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: /Requests & Approvals/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Correction requests/ })).toBeNull();
+    expect(screen.queryByText('Forgot checkout')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Approve correction' })).toBeNull();
+  },
+);
+
+it('exports CSV headers and statuses in the selected language while preserving worker data', async () => {
+  const blobs: Blob[] = [];
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+    blobs.push(blob as Blob);
+    return 'blob:synthetic-csv';
+  });
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  api.attendanceWorkers.mockResolvedValue({
+    items: [
+      {
+        workerId: 'worker',
+        workerCode: 'W000001',
+        workerName: 'Safety overview',
+        todayStatus: 'PRESENT',
+        totalMinutes: 480,
+        regularMinutes: 480,
+        overtimeMinutes: 0,
+        provisionalMinutes: 0,
+        presentDays: 1,
+        requiredDays: 1,
+        attendanceRate: 100,
+      },
+    ],
+    total: 1,
+  });
+  mount();
+  await screen.findByRole('button', { name: 'View worker' });
+  for (const language of ['vi', 'en'] as const) {
+    await act(async () => {
+      await i18n.changeLanguage(language);
+    });
+    fireEvent.click(screen.getByRole('button', { name: tr('attendance_report.export') }));
+    await waitFor(() => expect(blobs).toHaveLength(language === 'vi' ? 1 : 2));
+    const content = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(blobs.at(-1)!);
+    });
+    expect(content).toContain(
+      language === 'vi' ? 'Mã công nhân,Tên công nhân' : 'Worker Code,Worker Name',
+    );
+    expect(content).toContain(language === 'vi' ? 'Có mặt' : 'Present');
+    expect(content).toContain('"W000001","Safety overview"');
+  }
+});
 it('shows recorded and proposed hours and approval without expanding the report workflow', async () => {
   mount();
   fireEvent.click(await screen.findByRole('link', { name: 'Correction requests (1)' }));

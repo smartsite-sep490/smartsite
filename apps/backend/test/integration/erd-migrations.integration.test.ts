@@ -24,7 +24,7 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
         Number((b.name ?? b.constructor.name).slice(-13)),
     );
     const boundary = migrations.findIndex((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
-    assert.ok(boundary > 0);
+    assert.ok(boundary > 0, 'Explicit pre-ERD release boundary required');
     const baseline = migrations.slice(0, boundary);
     const access = migrations.filter((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
     for (const migration of baseline) await migration.up(runner);

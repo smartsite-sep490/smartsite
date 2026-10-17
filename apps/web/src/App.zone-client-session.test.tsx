@@ -140,12 +140,14 @@ async function mountReadyZoneDialogHarness() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  const setup = await screen.findByRole('button', { name: /camera setup/i }, { timeout: 8000 });
+  expect(await screen.findByRole('option', { name: /CAM-01 · Camera 01/i })).not.toBeNull();
+  fireEvent.click(setup);
   const openBtn = await screen.findByRole(
     'button',
     { name: /configure ppe by zone/i },
     { timeout: 8000 },
   );
-  expect(await screen.findByRole('option', { name: /CAM-01 · Camera 01/i })).not.toBeNull();
   fireEvent.click(openBtn);
   expect(await screen.findByRole('dialog', { name: /zone ppe configuration/i })).not.toBeNull();
   expect(await screen.findByRole('button', { name: /rename Z-NORTH/i })).not.toBeNull();

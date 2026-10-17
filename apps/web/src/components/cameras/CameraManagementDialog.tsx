@@ -35,7 +35,7 @@ export interface CameraManagementDialogProps {
   siteId: string | null;
   siteName: string;
   camera: CameraResponse;
-  isAdmin: boolean;
+  canManageCamera: boolean;
   client?: SmartSiteManagementClient;
   onUpdated?: (camera: CameraResponse) => void;
   onUnauthorized?: () => void;
@@ -193,7 +193,7 @@ export function CameraManagementDialog(props: CameraManagementDialogProps) {
   });
   if (
     !props.open ||
-    !props.isAdmin ||
+    !props.canManageCamera ||
     !props.token ||
     !props.sessionScope ||
     !props.siteId ||
@@ -389,7 +389,7 @@ function ScopedCameraManagementForm(
       isSaving ||
       isConflictBlocked ||
       blocked ||
-      !props.isAdmin ||
+      !props.canManageCamera ||
       !props.token ||
       !props.siteId
     ) {
@@ -447,7 +447,7 @@ function ScopedCameraManagementForm(
       isSaving ||
       isConflictBlocked ||
       blocked ||
-      !props.isAdmin ||
+      !props.canManageCamera ||
       !props.token ||
       !props.siteId
     ) {

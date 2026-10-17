@@ -12,6 +12,7 @@ import type {
 } from '@smartsite/api-client';
 import i18n from '../../i18n';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
+import '../../i18n';
 
 // Polyfill URL.createObjectURL and ResizeObserver for jsdom
 if (typeof URL.createObjectURL !== 'function') {

@@ -242,7 +242,7 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
     );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
     queryClient.clear();
     vi.restoreAllMocks();

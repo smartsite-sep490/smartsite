@@ -10,7 +10,7 @@ import { Mf06AssessmentHistory } from './Mf06AssessmentHistory';
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
 import { IconClock, IconShield, IconCheck, IconAlertTriangle } from '../icons';
-import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
+import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
 
 export interface Mf06ZoneAssessmentPanelProps {
   token: string | null;
@@ -74,11 +74,11 @@ const PURPOSE_KEYS: Record<Mf06RequestStatusResponse['purpose'], TranslationKey>
   RETROSPECTIVE_REVIEW: 'mf06.detail.purpose.RETROSPECTIVE_REVIEW',
 };
 
-function formatTimestamp(isoString: string): string {
+function formatTimestamp(isoString: string, locale: Locale): string {
   try {
     const date = new Date(isoString);
     if (Number.isNaN(date.getTime())) return isoString;
-    return date.toLocaleString(undefined, {
+    return date.toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US', {
       year: 'numeric',
       month: 'short',
       day: '2-digit',
@@ -86,6 +86,8 @@ function formatTimestamp(isoString: string): string {
       minute: '2-digit',
       second: '2-digit',
       hour12: false,
+      timeZone: 'UTC',
+      timeZoneName: 'short',
     });
   } catch {
     return isoString;
@@ -286,7 +288,7 @@ function Mf06RequestStatusList({
     'http://localhost:3000',
   client: injectedClient,
 }: Mf06ZoneAssessmentPanelProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const queryClient = useQueryClient();
   const managementClient = useMemo(
     () => injectedClient ?? new SmartSiteManagementClient(apiUrl),
@@ -696,7 +698,7 @@ function Mf06RequestStatusList({
                         {t('mf06.detail.field.captured')}
                       </span>{' '}
                       <time dateTime={request.capturedAt} className="font-mono tabular-nums">
-                        {formatTimestamp(request.capturedAt)}
+                        {formatTimestamp(request.capturedAt, locale)}
                       </time>
                     </div>
                     <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
@@ -704,7 +706,7 @@ function Mf06RequestStatusList({
                         {t('mf06.requests.fieldRequested')}
                       </span>{' '}
                       <time dateTime={request.requestedAt} className="font-mono tabular-nums">
-                        {formatTimestamp(request.requestedAt)}
+                        {formatTimestamp(request.requestedAt, locale)}
                       </time>
                     </div>
                     <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
@@ -713,7 +715,7 @@ function Mf06RequestStatusList({
                       </span>{' '}
                       {request.deadlineAt ? (
                         <time dateTime={request.deadlineAt} className="font-mono tabular-nums">
-                          {formatTimestamp(request.deadlineAt)}
+                          {formatTimestamp(request.deadlineAt, locale)}
                         </time>
                       ) : (
                         <span className="text-zinc-400">{t('mf06.requests.deadlineNone')}</span>

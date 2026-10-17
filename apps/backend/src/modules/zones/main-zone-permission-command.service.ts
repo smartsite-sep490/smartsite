@@ -162,13 +162,13 @@ export class MainZonePermissionCommandService {
       operation,
       value,
       async (manager) => {
-        const admin = await this.authorize(manager, value, kind, true);
+        await this.authorize(manager, value, kind);
         const sourceId =
           'permissionId' in value
-            ? await this.revoke(manager, value, kind, admin)
+            ? await this.revoke(manager, value, kind)
             : 'siteContractorId' in value
               ? await this.createContractor(manager, value)
-              : await this.createWorker(manager, value, admin);
+              : await this.createWorker(manager, value);
         if (action === 'REVOKE') return { id: sourceId };
         // Match main's entity response and Date precision, independent of journal functions.
         const common =
@@ -187,7 +187,7 @@ export class MainZonePermissionCommandService {
         return rows[0] as { id: string; [key: string]: unknown };
       },
       async (manager) => {
-        await this.authorize(manager, value, kind, true);
+        await this.authorize(manager, value, kind);
       },
     ).catch((error: unknown) => {
       if (
@@ -220,38 +220,29 @@ export class MainZonePermissionCommandService {
     return this.execute('worker', 'REVOKE', parsed.data);
   }
 
-  private async authorize(
-    manager: EntityManager,
-    value: WorkCommand,
-    kind: Kind,
-    publicRoute = false,
-  ): Promise<boolean> {
+  private async authorize(manager: EntityManager, value: WorkCommand, kind: Kind): Promise<void> {
     const users = await manager.query(
       'SELECT id FROM app_user WHERE id=$1 AND is_active AND NOT must_change_password FOR SHARE',
       [value.actorUserId],
     );
     const roles: { role: string; site_id: string | null }[] = await manager.query(
-      "SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND ((role='ADMIN' AND site_id IS NULL AND $4) OR (role=$2 AND site_id=$3)) FOR SHARE",
+      'SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 AND role=$2 AND site_id=$3 FOR SHARE',
       [
         value.actorUserId,
         kind === 'contractor' ? 'SITE_MANAGER' : 'CONTRACTOR_REPRESENTATIVE',
         value.siteId,
-        !publicRoute || kind !== 'contractor',
       ],
     );
     if (!users.length || !roles.length) forbidden();
-    return roles.some((r) => r.role === 'ADMIN' && r.site_id === null);
   }
   private async representative(
     manager: EntityManager,
     value: WorkCommand,
     contractorId: string,
-    admin: boolean,
   ): Promise<void> {
-    if (admin) return;
     const grants = await manager.query(
-      'SELECT id FROM contractor_representative_grant WHERE user_id=$1 AND contractor_id=$2 FOR SHARE',
-      [value.actorUserId, contractorId],
+      'SELECT id FROM contractor_representative_assignment WHERE user_id=$1 AND contractor_id=$2 AND site_id=$3 FOR SHARE',
+      [value.actorUserId, contractorId, value.siteId],
     );
     if (!grants.length) conflict('Representative does not manage this contractor');
   }
@@ -280,7 +271,7 @@ export class MainZonePermissionCommandService {
     const { commandId, ...request } = value;
     const hash = computeCanonicalPayloadHash({ operation, ...request });
     const result = await withZoneAuthorityTransaction(this.source, async (manager) => {
-      const admin = await this.authorize(manager, value, kind);
+      await this.authorize(manager, value, kind);
       const context = await manager.query(
         "SELECT current_setting('smartsite.mf06_command_id',true) AS value",
       );
@@ -302,17 +293,16 @@ export class MainZonePermissionCommandService {
           conflict('Command ID was already used for another request');
         const permission = await this.result(manager, commandId, kind);
         if (permission.siteId !== value.siteId) unavailable();
-        if (kind === 'worker')
-          await this.representative(manager, value, permission.contractorId, admin);
+        if (kind === 'worker') await this.representative(manager, value, permission.contractorId);
         return { commandId, replayed: true, permission };
       }
       await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [commandId]);
       const sourceId =
         'permissionId' in value
-          ? await this.revoke(manager, value, kind, admin)
+          ? await this.revoke(manager, value, kind)
           : 'siteContractorId' in value
             ? await this.createContractor(manager, value)
-            : await this.createWorker(manager, value, admin);
+            : await this.createWorker(manager, value);
       await manager.query(
         "INSERT INTO mf06_zone_permission_command_result(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,$3::text,mf06_zone_permission_response($2,$3::text),'')",
         [commandId, sourceId, kind],
@@ -393,11 +383,7 @@ export class MainZonePermissionCommandService {
     );
     return value.requestId;
   }
-  private async createWorker(
-    manager: EntityManager,
-    value: WorkerWork,
-    admin: boolean,
-  ): Promise<string> {
+  private async createWorker(manager: EntityManager, value: WorkerWork): Promise<string> {
     const assignments: Assignment[] = await manager.query(
       'SELECT id,worker_id,site_contractor_id,status,valid_from::text,valid_until::text FROM worker_site_zone_assignment WHERE id=$1 AND site_id=$2 FOR UPDATE',
       [value.workerAssignmentId, value.siteId],
@@ -431,7 +417,7 @@ export class MainZonePermissionCommandService {
       workers[0]!.contractor_id !== participation.contractor_id
     )
       conflict('Worker and Contractor Zone scopes do not match');
-    await this.representative(manager, value, participation.contractor_id, admin);
+    await this.representative(manager, value, participation.contractor_id);
     for (const parent of [assignment, permission, participation])
       await this.contained(manager, value.validFrom, value.validUntil, parent);
     const existing = await manager.query(
@@ -475,12 +461,7 @@ export class MainZonePermissionCommandService {
     );
     return value.requestId;
   }
-  private async revoke(
-    manager: EntityManager,
-    value: RevokeWork,
-    kind: Kind,
-    admin: boolean,
-  ): Promise<string> {
+  private async revoke(manager: EntityManager, value: RevokeWork, kind: Kind): Promise<string> {
     const table = kind === 'contractor' ? 'contractor_zone_permission' : 'worker_zone_permission';
     const rows: { revoked_at: Date | null }[] = await manager.query(
       `SELECT revoked_at FROM ${table} WHERE id=$1 FOR UPDATE`,
@@ -499,8 +480,7 @@ export class MainZonePermissionCommandService {
           );
     if (!scoped.length || scoped[0]!.site_id !== value.siteId) missing();
     // Revocation remains possible after assignment/participation expiry or deactivation.
-    if (kind === 'worker')
-      await this.representative(manager, value, scoped[0]!.contractor_id, admin);
+    if (kind === 'worker') await this.representative(manager, value, scoped[0]!.contractor_id);
     if (!rows[0]!.revoked_at) {
       await manager.query(`UPDATE ${table} SET revoked_at=clock_timestamp() WHERE id=$1`, [
         value.permissionId,

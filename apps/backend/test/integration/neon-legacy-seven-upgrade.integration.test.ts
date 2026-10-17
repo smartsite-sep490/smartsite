@@ -26,10 +26,18 @@ async function withLegacySeven(
   const options = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
   if (options.type !== 'postgres' || !Array.isArray(options.migrations))
     throw new Error('Dedicated PostgreSQL migration graph required');
-  const prefix = options.migrations.slice(0, 7);
+  const canonicalPrefix = options.migrations.slice(0, 7);
   assert.deepEqual(
-    prefix.map((migration) => (typeof migration === 'function' ? migration.name : migration)),
-    observedPrefix,
+    canonicalPrefix
+      .map((migration) => (typeof migration === 'function' ? migration.name : migration))
+      .sort(),
+    [...observedPrefix].sort(),
+  );
+  // Preserve the observed historical order even when current same-timestamp declarations reorder.
+  const prefix = observedPrefix.map((name) =>
+    canonicalPrefix.find(
+      (migration) => typeof migration === 'function' && migration.name === name,
+    )!,
   );
   const scoped = {
     ...options,
@@ -133,7 +141,7 @@ async function selectedRows(db: DataSource) {
   return result;
 }
 
-test('observed seven-migration prefix upgrades populated synthetic data to MAIN59 without inventing identity or grants', async () => {
+test('observed seven-migration prefix upgrades populated synthetic data to MAIN61 without inventing identity or grants', async () => {
   await withLegacySeven(async (legacy, upgrade) => {
     const fixture = await seed(legacy, 2147483647),
       before = await selectedRows(legacy);
@@ -145,7 +153,7 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN5
     assert.equal(
       await new DatabaseService(upgrade).isReady(),
       false,
-      'Reachable legacy7 is not release59 readiness',
+      'Reachable legacy7 is not release61 readiness',
     );
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
@@ -154,10 +162,10 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN5
     );
     await legacy.destroy();
     const applied = await upgrade.runMigrations({ transaction: 'all' });
-    assert.equal(applied.length, 52);
+    assert.equal(applied.length, 54);
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
-      59,
+      61,
     );
     assert.equal(await new DatabaseService(upgrade).isReady(), true);
     const after = await selectedRows(upgrade);

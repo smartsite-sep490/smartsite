@@ -47,7 +47,7 @@ function mount(overrides: Partial<CameraManagementDialogProps> = {}) {
     siteId: SITE,
     siteName: 'Site Alpha',
     camera: { ...baseCamera },
-    isAdmin: true,
+    canManageCamera: true,
     onUpdated: vi.fn(),
     onUnauthorized: vi.fn(),
     ...overrides,

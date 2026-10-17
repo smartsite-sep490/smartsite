@@ -11,8 +11,8 @@ import {
   CameraObservationRegionEntity,
   CameraStatus,
   EventProcessingStatus,
-  Mf06AssessmentJobEntity,
-  Mf06AssessmentRequestEntity,
+  ZoneEntryAssessmentJobEntity,
+  ZoneEntryAssessmentRequestEntity,
   SiteEntity,
   ZoneEntity,
   ZoneRestrictionPolicy,
@@ -52,7 +52,7 @@ it('committed raw event without requests cannot be backfilled from a reassigned 
   const ids = await db.transaction((manager) => service.enqueueFresh(manager, event));
   assert.deepEqual(ids, []);
   assert.equal(
-    await db.getRepository(Mf06AssessmentRequestEntity).countBy({ eventId: event.eventId }),
+    await db.getRepository(ZoneEntryAssessmentRequestEntity).countBy({ eventId: event.eventId }),
     0,
   );
 });
@@ -72,7 +72,7 @@ it('historical replay retains original request and job head after current Camera
     assert.equal(original.length, 1);
   });
   const jobBefore = await db
-    .getRepository(Mf06AssessmentJobEntity)
+    .getRepository(ZoneEntryAssessmentJobEntity)
     .findOneByOrFail({ requestId: original[0] });
   await db
     .getRepository(CameraEntity)
@@ -82,7 +82,9 @@ it('historical replay retains original request and job head after current Camera
     original,
   );
   assert.deepEqual(
-    await db.getRepository(Mf06AssessmentJobEntity).findOneByOrFail({ requestId: original[0] }),
+    await db
+      .getRepository(ZoneEntryAssessmentJobEntity)
+      .findOneByOrFail({ requestId: original[0] }),
     jobBefore,
   );
 });
@@ -100,7 +102,9 @@ it('a caller event hash mismatch cannot redirect a stored fresh source', async (
       [],
     );
     assert.equal(
-      await manager.getRepository(Mf06AssessmentRequestEntity).countBy({ eventId: event.eventId }),
+      await manager
+        .getRepository(ZoneEntryAssessmentRequestEntity)
+        .countBy({ eventId: event.eventId }),
       0,
     );
   });
@@ -343,9 +347,9 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
     const [requestId] = createdRequestIds;
     assert.ok(requestId, 'requestId must be defined');
 
-    const requestRepo = db.getRepository(Mf06AssessmentRequestEntity);
+    const requestRepo = db.getRepository(ZoneEntryAssessmentRequestEntity);
     const request = await requestRepo.findOneBy({ requestId });
-    assert.ok(request, 'Mf06AssessmentRequestEntity must be persisted in database');
+    assert.ok(request, 'ZoneEntryAssessmentRequestEntity must be persisted in database');
 
     assert.equal(request.eventId, savedEventId);
     assert.equal(request.personObservationIndex, 0);
@@ -362,9 +366,9 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
     assert.equal(request.requestRevision, 1);
     assert.match(request.bindingHash, /^[0-9a-f]{64}$/);
 
-    const jobRepo = db.getRepository(Mf06AssessmentJobEntity);
+    const jobRepo = db.getRepository(ZoneEntryAssessmentJobEntity);
     const job = await jobRepo.findOneBy({ requestId });
-    assert.ok(job, 'Mf06AssessmentJobEntity must be persisted in database');
+    assert.ok(job, 'ZoneEntryAssessmentJobEntity must be persisted in database');
 
     assert.equal(job.status, 'PENDING');
     assert.equal(job.attemptCount, 0);
@@ -410,7 +414,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
       'Two requests must be generated for two distinct zone entries',
     );
 
-    const requestRepo = db.getRepository(Mf06AssessmentRequestEntity);
+    const requestRepo = db.getRepository(ZoneEntryAssessmentRequestEntity);
     const requests = await requestRepo.find({
       where: [{ requestId: requestIds[0] }, { requestId: requestIds[1] }],
     });
@@ -434,7 +438,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
     assert.equal(req2.zoneId, infraRef.zone2Id);
     assert.equal(req2.subjectBindingStatus, 'BOUND');
 
-    const jobRepo = db.getRepository(Mf06AssessmentJobEntity);
+    const jobRepo = db.getRepository(ZoneEntryAssessmentJobEntity);
     const jobs = await jobRepo.find({
       where: [{ requestId: requestIds[0] }, { requestId: requestIds[1] }],
     });
@@ -463,7 +467,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
       assert.equal(idsNotFound.length, 1);
 
       const reqNotFound = await manager
-        .getRepository(Mf06AssessmentRequestEntity)
+        .getRepository(ZoneEntryAssessmentRequestEntity)
         .findOneBy({ requestId: idsNotFound[0] });
       assert.ok(reqNotFound);
       assert.equal(reqNotFound.subjectBindingStatus, 'PERSON_NOT_FOUND');
@@ -471,7 +475,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
       assert.equal(reqNotFound.trackId, 303);
 
       const jobNotFound = await manager
-        .getRepository(Mf06AssessmentJobEntity)
+        .getRepository(ZoneEntryAssessmentJobEntity)
         .findOneBy({ requestId: idsNotFound[0] });
       assert.ok(jobNotFound);
       assert.equal(jobNotFound.status, 'PENDING');
@@ -489,7 +493,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
       assert.equal(idsAmbiguous.length, 1);
 
       const reqAmbiguous = await manager
-        .getRepository(Mf06AssessmentRequestEntity)
+        .getRepository(ZoneEntryAssessmentRequestEntity)
         .findOneBy({ requestId: idsAmbiguous[0] });
       assert.ok(reqAmbiguous);
       assert.equal(reqAmbiguous.subjectBindingStatus, 'AMBIGUOUS_PERSON_TRACK');
@@ -514,7 +518,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
       );
 
       const jobsForDuplicate = await manager
-        .getRepository(Mf06AssessmentJobEntity)
+        .getRepository(ZoneEntryAssessmentJobEntity)
         .find({ where: { requestId: idsDuplicate[0] } });
       assert.equal(jobsForDuplicate.length, 1, 'Exactly one job must exist for deduped request');
     });
@@ -592,7 +596,7 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
       );
 
       // Verify that no requests or jobs were written for any of these invalid events
-      const allRequests = await manager.getRepository(Mf06AssessmentRequestEntity).find({
+      const allRequests = await manager.getRepository(ZoneEntryAssessmentRequestEntity).find({
         where: [
           { eventId: skewEvent.eventId },
           { eventId: unknownCamEvent.eventId },
@@ -642,12 +646,12 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
     assert.equal(eventInDb, null, 'Rolled-back event must not exist in database');
 
     const requestInDb = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findOneBy({ requestId: capturedRequestId });
     assert.equal(requestInDb, null, 'Rolled-back assessment request must not exist in database');
 
     const jobInDb = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findOneBy({ requestId: capturedRequestId });
     assert.equal(jobInDb, null, 'Rolled-back assessment job must not exist in database');
   });
@@ -698,12 +702,12 @@ describe('MF06 Enqueue Service Integration Tests (B3 Software-Only)', () => {
 
     // Database verification: must still have exactly 1 request and 1 job
     const requests = await db
-      .getRepository(Mf06AssessmentRequestEntity)
+      .getRepository(ZoneEntryAssessmentRequestEntity)
       .findBy({ eventId: event.eventId });
     assert.equal(requests.length, 1, 'Exactly one request must exist in database after replay');
 
     const jobs = await db
-      .getRepository(Mf06AssessmentJobEntity)
+      .getRepository(ZoneEntryAssessmentJobEntity)
       .findBy({ requestId: initialRequestId });
     assert.equal(jobs.length, 1, 'Exactly one job must exist in database after replay');
     assert.equal(jobs[0]?.status, 'PENDING');

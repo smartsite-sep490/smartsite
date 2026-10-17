@@ -59,13 +59,14 @@ export class SiteAccessSetupQueryService {
         );
         if (!roles.length) forbidden();
         if (!(await manager.query('SELECT id FROM site WHERE id=$1', [site])).length) missing();
-        const admin = roles.some((r) => r.role === 'ADMIN' && r.site_id === null);
-        const siteManager = admin || roles.some((r) => r.role === 'SITE_MANAGER');
-        const grants: { contractor_id: string }[] = siteManager
+        const siteManager = roles.some((r) => r.role === 'SITE_MANAGER');
+        const canReadAll =
+          siteManager || roles.some((r) => r.role === 'ADMIN' && r.site_id === null);
+        const grants: { contractor_id: string }[] = canReadAll
           ? []
           : await manager.query(
-              'SELECT contractor_id FROM contractor_representative_grant WHERE user_id=$1 FOR SHARE',
-              [actor],
+              'SELECT contractor_id FROM contractor_representative_assignment WHERE user_id=$1 AND site_id=$2 FOR SHARE',
+              [actor, site],
             );
         const participations: Dated<AccessSetupResponse['participations'][number]>[] =
           await manager.query(
@@ -73,14 +74,14 @@ export class SiteAccessSetupQueryService {
           p.valid_from AS "validFrom",p.valid_until AS "validUntil"
          FROM contractor_site_participation p JOIN contractor c ON c.id=p.contractor_id
          WHERE p.site_id=$1 AND p.is_active AND ($2 OR p.contractor_id=ANY($3::uuid[])) ORDER BY p.id`,
-            [site, siteManager, grants.map((g) => g.contractor_id)],
+            [site, canReadAll, grants.map((g) => g.contractor_id)],
           );
         // Main options intentionally include inactive/expired rows and non-approved assignments.
         // These are configuration records, not an authorization decision at an event time.
         const workers: AccessSetupResponse['workers'] = await manager.query(
           `SELECT id,display_name AS name,contractor_id AS "contractorId" FROM worker
          WHERE site_id=$1 AND ($2 OR contractor_id=ANY($3::uuid[])) ORDER BY id`,
-          [site, siteManager, participations.map((p) => p.contractorId)],
+          [site, canReadAll, participations.map((p) => p.contractorId)],
         );
         const assignments: Dated<AccessSetupResponse['assignments'][number]>[] =
           await manager.query(
@@ -114,10 +115,8 @@ export class SiteAccessSetupQueryService {
         // pg Dates serialize with the same millisecond precision as retained-main entity responses.
         return {
           canReviewAssignments: siteManager,
-          canGrantContractorZones: roles.some(
-            (r) => r.role === 'SITE_MANAGER' && r.site_id === site,
-          ),
-          canGrantWorkerZones: admin || roles.some((r) => r.role === 'CONTRACTOR_REPRESENTATIVE'),
+          canGrantContractorZones: roles.some((r) => r.role === 'SITE_MANAGER'),
+          canGrantWorkerZones: roles.some((r) => r.role === 'CONTRACTOR_REPRESENTATIVE'),
           participations: participations.map(dates),
           workers,
           zones,

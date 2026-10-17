@@ -5,8 +5,10 @@ import { WorkforceIdentityModule } from '../identity/identity.module.js';
 import { WorkforceAttendanceModule } from '../attendance/attendance.module.js';
 import { WorkforceNotificationsModule } from '../notifications/notifications.module.js';
 import { QrAccessService } from './qr-access.service.js';
+import { VisitorEmailService } from './visitor-email.service.js';
 import { SiteAccessSetupService } from './site-access-setup.service.js';
 import { SiteAccessSetupController } from './site-access-setup.controller.js';
+import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.js';
 import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
 import { FaceGateController } from './face-gate.controller.js';
 import { FaceGateService } from './face-gate.service.js';
@@ -31,8 +33,10 @@ import { MainZonePermissionCommandService } from '../../zones/main-zone-permissi
     WorkerGatePermissionsController,
   ],
   providers: [
+    VisitorEmailService,
     QrAccessService,
     SiteAccessSetupService,
+    SiteAccessSetupQueryService,
     FaceGateService,
     WorkerGatePermissionsService,
     SiteAccessSetupQueryService,

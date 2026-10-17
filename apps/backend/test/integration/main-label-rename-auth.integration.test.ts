@@ -400,7 +400,7 @@ for (const route of ROUTES) {
         const admin = await createActor(
           f,
           `${route.kind}_${rev.type}`,
-          route.kind === 'zone' ? 'SITE_MANAGER' : 'ADMIN',
+          route.kind === 'site' ? 'ADMIN' : 'SITE_MANAGER',
         );
         const session = await ctx.login(admin.username);
         const barrier = createBarrier(5000);
@@ -478,6 +478,13 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
     // 1. Site Rename with Unicode & surrounding whitespace
     const unicodeSiteName = '   Công Trường Phía Đông - Khu Vực \u{1F3D7}   ';
     const expectedTrimmedSiteName = 'Công Trường Phía Đông - Khu Vực \u{1F3D7}';
+    const managerSiteAttempt = await call(
+      'PATCH',
+      `/api/v1/sites/${f.site.id}`,
+      { name: unicodeSiteName },
+      zoneSession.accessToken,
+    );
+    assert.equal(managerSiteAttempt.status, 403, 'Site Manager does not bypass Site rename');
     const siteRes = await call(
       'PATCH',
       `/api/v1/sites/${f.site.id}`,
@@ -543,11 +550,18 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
     // 3. Camera Rename with Unicode & surrounding whitespace
     const unicodeCameraName = '   Camera Quan Sát Cổng Chính \u{1F4F9}   ';
     const expectedTrimmedCameraName = 'Camera Quan Sát Cổng Chính \u{1F4F9}';
-    const cameraRes = await call(
+    const adminCameraAttempt = await call(
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
       { name: unicodeCameraName },
       session.accessToken,
+    );
+    assert.equal(adminCameraAttempt.status, 403, 'Admin does not bypass camera writes');
+    const cameraRes = await call(
+      'PATCH',
+      `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
+      { name: unicodeCameraName },
+      zoneSession.accessToken,
     );
     assert.equal(cameraRes.status, 200);
     const cameraJson = (await cameraRes.json()) as { id: string; name: string };
@@ -611,7 +625,7 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
       { name: expectedTrimmedCameraName },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(cameraNoop.status, 200);
 
@@ -708,7 +722,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
       { name: 'Invalid\u0007Bell' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(cameraCtrl.status, 400, 'Control character bell must be rejected with 400');
 
@@ -734,7 +748,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
       { name: tooLongName },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(
       cameraLong.status,
@@ -763,7 +777,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
       { name: '' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(cameraEmpty.status, 400, 'Empty camera name must be rejected with 400');
 
@@ -788,7 +802,7 @@ test('Label renames strictly enforce DTO validation against control characters, 
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${f.camera.id}`,
       { name: 'Valid Camera Name', userId: randomUUID() },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(cameraActor.status, 400, 'Forbidden userId field must be rejected with 400');
   });
@@ -853,7 +867,7 @@ test('Label renames enforce site scoping and missing resource 404 responses', as
       'PATCH',
       `/api/v1/sites/${f.site.id}/cameras/${nonExistentId}`,
       { name: 'Any Name' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
     assert.equal(missingCamera.status, 404, 'Missing camera must return 404');
 
@@ -862,8 +876,19 @@ test('Label renames enforce site scoping and missing resource 404 responses', as
       'PATCH',
       `/api/v1/sites/${f.otherSite.id}/cameras/${f.camera.id}`,
       { name: 'Any Name' },
-      session.accessToken,
+      zoneSession.accessToken,
     );
-    assert.equal(wrongSiteCamera.status, 404, 'Camera requested under wrong site must return 404');
+    assert.equal(wrongSiteCamera.status, 403, 'A Site Manager cannot inspect another Site');
+    const scopedWrongCamera = await call(
+      'PATCH',
+      `/api/v1/sites/${f.otherSite.id}/cameras/${f.camera.id}`,
+      { name: 'Any Name' },
+      otherSession.accessToken,
+    );
+    assert.equal(
+      scopedWrongCamera.status,
+      404,
+      'A target-Site manager cannot rename a foreign camera',
+    );
   });
 });

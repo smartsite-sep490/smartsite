@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
-import { Mf06AssessmentRequestEntity } from '../src/database/entities/mf06-assessment-request.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
 import { AiObservationEventEntity } from '../src/database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../src/database/entities/enums.js';
 import {
@@ -64,7 +64,7 @@ function fixture() {
     requestRevision: 1,
     bindingHash: 'b'.repeat(64),
     requestedAt: new Date('2026-10-01T00:01:00Z'),
-  } as Mf06AssessmentRequestEntity;
+  } as ZoneEntryAssessmentRequestEntity;
   const rehash = () => {
     event.payloadHash = computeCanonicalPayloadHash(event.rawPayload);
     request.payloadHash = event.payloadHash;
@@ -196,7 +196,7 @@ test('MF06 reader filters exact Site/request and reads source in one repeatable 
     getRepository: (entity: unknown) => ({
       findOneBy: async (where: Record<string, unknown>) => {
         calls.push({ entity, where });
-        if (entity === Mf06AssessmentRequestEntity)
+        if (entity === ZoneEntryAssessmentRequestEntity)
           return where.siteId === f.request.siteId ? f.request : null;
         if (entity === AiObservationEventEntity) return f.event;
         throw new Error('Mutable registry/identity/media must not be consulted');
@@ -213,7 +213,7 @@ test('MF06 reader filters exact Site/request and reads source in one repeatable 
   assert.equal((await reader.load(f.request.siteId, f.request.requestId)).status, 'MATCHED');
   assert.deepEqual(calls, [
     {
-      entity: Mf06AssessmentRequestEntity,
+      entity: ZoneEntryAssessmentRequestEntity,
       where: { requestId: f.request.requestId, siteId: f.request.siteId },
     },
     { entity: AiObservationEventEntity, where: { eventId: f.request.eventId } },
@@ -254,7 +254,7 @@ test('MF06 scoped reader refuses a wrong request scope from a storage adapter an
   const manager = {
     getRepository: (entity: unknown) => ({
       findOneBy: async () => {
-        if (entity === Mf06AssessmentRequestEntity) return f.request;
+        if (entity === ZoneEntryAssessmentRequestEntity) return f.request;
         eventReads++;
         return f.event;
       },
@@ -283,7 +283,7 @@ test('MF06 internal reader differentiates missing source and preserves infrastru
     transaction: async (_isolation: string, operation: (m: EntityManager) => unknown) =>
       operation({
         getRepository: (entity: unknown) => ({
-          findOneBy: async () => (entity === Mf06AssessmentRequestEntity ? f.request : null),
+          findOneBy: async () => (entity === ZoneEntryAssessmentRequestEntity ? f.request : null),
         }),
       } as unknown as EntityManager),
   } as unknown as DataSource;

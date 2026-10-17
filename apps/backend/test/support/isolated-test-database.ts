@@ -17,7 +17,12 @@ export function createIsolatedTestDatabase(
     ? {
         ...productionOptions,
         migrations: [...LEGACY_TEST_MIGRATIONS],
-        entities: [...LEGACY_ENTITIES],
+        // The frozen source catalog also contains later B2 projections. The
+        // legacy migration graph stops at request/job and never creates B2.
+        entities: LEGACY_ENTITIES.filter(
+          (entity) =>
+            !['Mf06AssessmentEntity', 'Mf06AuthorityArtifactEntity'].includes(entity.name),
+        ),
       }
     : productionOptions;
   if (options.type !== 'postgres') throw new Error('Dedicated PostgreSQL required');

@@ -10,7 +10,8 @@ import { createIsolatedTestDatabase } from './support/isolated-test-database.js'
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
-const currentMain = '3ce035888d18b61f8b70bd7c1eada4ae8d799d74';
+const previousMain = '3ce035888d18b61f8b70bd7c1eada4ae8d799d74';
+const currentMain = '0dd7d277ac858c79c25eab88b29c9b00d3ece541';
 test(
   'owned test database defaults to release graph; historical24 requires an explicit test-only selection',
   {
@@ -86,6 +87,19 @@ test(
       const path = `apps/backend/src/database/migrations/${match[1]}.ts`;
       assert.equal(digest(readFileSync(join(repository, path))), digest(original(path)), path);
     }
+    const priorOptions = original(
+      'apps/backend/src/database/typeorm.options.ts',
+      previousMain,
+    ).toString();
+    const upstreamEdits = [...priorOptions.matchAll(/from '\.\/migrations\/([\w-]+)\.js'/g)]
+      .map((match) => `apps/backend/src/database/migrations/${match[1]}.ts`)
+      .filter(
+        (path) => digest(original(path, previousMain)) !== digest(original(path, currentMain)),
+      );
+    // Main changed an existing checklist constraint; byte provenance is not upgrade proof.
+    assert.deepEqual(upstreamEdits, [
+      'apps/backend/src/database/migrations/1792195200000-SafetyChecklists.ts',
+    ]);
     assert(!actual.includes('ZoneAuthorityHistory1791417600000'));
   },
 );

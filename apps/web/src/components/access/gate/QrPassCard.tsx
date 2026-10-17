@@ -17,7 +17,10 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
     return () => clearInterval(timer);
   }, []);
 
-  const remaining = Math.max(0, Math.ceil((Date.parse(pass.expiresAt) - now) / 1000));
+  const remaining =
+    pass.expiresAt === null
+      ? Infinity
+      : Math.max(0, Math.ceil((Date.parse(pass.expiresAt) - now) / 1000));
   const isExpiringSoon = remaining > 0 && remaining <= 30;
 
   const handleCopyToken = () => {
@@ -108,10 +111,12 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
         >
           <IconClock className="h-4 w-4 text-slate-500" />
           <span>
-            {tr('common.expires_in_value_value', {
-              value1: Math.floor(remaining / 60),
-              value2: String(remaining % 60).padStart(2, '0'),
-            })}
+            {pass.expiresAt === null
+              ? tr('visitor.stableQr')
+              : tr('common.expires_in_value_value', {
+                  value1: Math.floor(remaining / 60),
+                  value2: String(remaining % 60).padStart(2, '0'),
+                })}
           </span>
         </div>
       </div>
@@ -124,7 +129,7 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-xs"
         >
           <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
-          <span>{tr('common.generate_new_qr')}</span>
+          <span>{tr(pass.expiresAt === null ? 'common.refresh' : 'common.generate_new_qr')}</span>
         </button>
 
         {remaining > 0 && (
@@ -152,7 +157,11 @@ export function QrPassCard({ pass, onRefresh }: { pass: QrPassResponse; onRefres
       </div>
 
       <p className="mt-4 text-[11px] text-slate-500 leading-relaxed">
-        {tr('qr_pass_card.after_security_confirmation_refresh_for_subsequent_gate_scans')}
+        {tr(
+          pass.expiresAt === null
+            ? 'visitor.stableQrConditions'
+            : 'qr_pass_card.after_security_confirmation_refresh_for_subsequent_gate_scans',
+        )}
       </p>
 
       {/* Token Inspector Details */}

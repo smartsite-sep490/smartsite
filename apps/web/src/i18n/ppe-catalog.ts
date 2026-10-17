@@ -686,11 +686,11 @@ export const PPE_EN_CATALOG = {
     'All AI model inference and live camera analysis are currently paused by operator configuration. Stored zone/region configurations and persisted safety alert records remain accessible through the workspaces below.',
   'liveOverview.ppe.title': 'PPE Monitoring',
   'liveOverview.ppe.description':
-    'Open the per-camera PPE workspace to manage zone PPE requirements, link camera observation regions, and inspect camera snapshot evidence when an authorized source is available.',
+    'View per-camera PPE observations and available snapshots. Configure cameras, regions and PPE in Camera setup.',
   'liveOverview.ppe.action': 'Open PPE Monitoring',
   'liveOverview.zones.title': 'Restricted Zones',
   'liveOverview.zones.description':
-    'Open the restricted zone workspace to configure polygon region geometry per camera and review technical zone entry observations and recorded assessment history.',
+    'Review zone-entry observations and saved assessments. Configure observation regions in Camera setup.',
   'liveOverview.zones.action': 'Open Restricted Zones',
   'liveOverview.incidents.title': 'Safety Alerts',
   'liveOverview.incidents.description':
@@ -704,7 +704,7 @@ export const PPE_EN_CATALOG = {
   'cameraSetup.register.dialogDescription':
     'Register camera metadata for this site. Video availability is checked separately in monitoring.',
   'cameraSetup.register.authRequired':
-    'An authorized Admin session and selected Site are required to register a camera.',
+    'A Site Manager session assigned to the selected Site is required to register a camera.',
   'cameraSetup.register.introPrefix': 'Register camera metadata for',
   'cameraSetup.register.introSuffix': 'This does not start video capture or AI processing.',
   'cameraSetup.register.sourceHelp':
@@ -956,7 +956,7 @@ export const PPE_EN_CATALOG = {
     'Authoritative polygon geometry target for editing and backend sync. Live AI detection stream reflects observed camera zones.',
   'restrictedZone.scope.zoneScopeLabel': 'Zone Scope',
   'restrictedZone.scope.readOnlyTitle':
-    'Live AI detections reflect observed camera zones; geometry editing is restricted to Admin',
+    'Live AI detections reflect observed camera zones; geometry editing requires the assigned Site Manager',
   'restrictedZone.scope.readOnlyValue': 'Restricted Zone (Read-Only)',
   'restrictedZone.scope.safetyOfficerBadge': 'Safety Officer (Read-Only)',
   'restrictedZone.viewport.connectingTitle': 'Connecting to Camera Snapshot...',
@@ -1698,11 +1698,11 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
     'Toàn bộ suy luận mô hình AI và phân tích luồng camera hiện đang tạm dừng theo cấu hình vận hành. Các cấu hình khu vực/vùng quan sát đã lưu và bản ghi cảnh báo an toàn vẫn có thể truy cập qua các mục bên dưới.',
   'liveOverview.ppe.title': 'Giám sát Trang bị Bảo hộ',
   'liveOverview.ppe.description':
-    'Mở không gian làm việc PPE theo từng camera để cấu hình yêu cầu bảo hộ theo khu vực, liên kết vùng quan sát và kiểm tra bằng chứng ảnh chụp khi nguồn camera được cấp quyền khả dụng.',
+    'Xem quan sát PPE theo từng camera và ảnh chụp hiện có. Cấu hình camera, vùng quan sát và PPE tại Thiết lập camera.',
   'liveOverview.ppe.action': 'Vào Giám sát Trang bị Bảo hộ',
   'liveOverview.zones.title': 'Giám sát Khu vực Hạn chế',
   'liveOverview.zones.description':
-    'Mở không gian khu vực hạn chế để cấu hình đa giác vùng quan sát theo từng camera, xem các quan sát kỹ thuật khi có người đi vào vùng hạn chế và tra cứu lịch sử đánh giá đã lưu.',
+    'Xem xét quan sát ra vào khu vực và các đánh giá đã lưu. Cấu hình vùng quan sát tại Thiết lập camera.',
   'liveOverview.zones.action': 'Vào Giám sát Khu vực Hạn chế',
   'liveOverview.incidents.title': 'Cảnh báo An toàn',
   'liveOverview.incidents.description':
@@ -1716,7 +1716,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'cameraSetup.register.dialogDescription':
     'Đăng ký siêu dữ liệu camera cho công trường này. Tình trạng kết nối video được kiểm tra riêng khi giám sát.',
   'cameraSetup.register.authRequired':
-    'Cần phiên Quản trị viên (Admin) hợp lệ và công trường đã chọn để đăng ký camera.',
+    'Cần phiên Quản lý công trường được phân công tại công trường đã chọn để đăng ký camera.',
   'cameraSetup.register.introPrefix': 'Đăng ký siêu dữ liệu camera cho',
   'cameraSetup.register.introSuffix': 'Thao tác này không khởi chạy thu hình video hay xử lý AI.',
   'cameraSetup.register.sourceHelp':
@@ -1975,7 +1975,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
     'Đa giác vùng quan sát chuẩn để chỉnh sửa và đồng bộ máy chủ. Luồng nhận diện AI trực tiếp phản ánh các khu vực camera ghi nhận.',
   'restrictedZone.scope.zoneScopeLabel': 'Phạm vi khu vực',
   'restrictedZone.scope.readOnlyTitle':
-    'Nhận diện AI trực tiếp phản ánh các khu vực camera ghi nhận; chỉnh sửa hình học chỉ dành cho Quản trị viên (Admin)',
+    'Nhận diện AI trực tiếp phản ánh các khu vực camera ghi nhận; chỉnh sửa hình học dành cho Quản lý công trường được phân công',
   'restrictedZone.scope.readOnlyValue': 'Khu vực hạn chế (Chỉ đọc)',
   'restrictedZone.scope.safetyOfficerBadge': 'Cán bộ an toàn (Chỉ đọc)',
   'restrictedZone.viewport.connectingTitle': 'Đang kết nối ảnh chụp camera...',

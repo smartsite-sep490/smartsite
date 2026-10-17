@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -9,6 +11,7 @@ import { validateEnvironment, type BackendEnvironment } from '../../src/config/e
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
   ContractorEntity,
+  ContractorRepresentativeAssignmentEntity,
   ContractorRepresentativeGrantEntity,
   ContractorSiteParticipationEntity,
   UserRole,
@@ -79,8 +82,7 @@ function createRealAccessServices() {
     MF06_ENQUEUE_ENABLED: 'false',
     MF06_ASSESSMENT_READ_ENABLED: 'false',
     CORS_ORIGINS: 'http://localhost:5181',
-    STORAGE_LOCAL_ROOT:
-      'D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/software-http-unused-media',
+    STORAGE_LOCAL_ROOT: join(tmpdir(), 'smartsite-representative-race-unused-media'),
   });
   assert.equal(environment.MF06_ENQUEUE_ENABLED, false);
   assert.equal(environment.MF06_ASSESSMENT_READ_ENABLED, false);
@@ -255,7 +257,7 @@ interface LockObservationRow {
   state: string | null;
   blocked_by_t1: boolean;
   has_ungranted_lock: boolean;
-  t1_holds_representative_grant_row_lock: boolean;
+  t1_holds_representative_assignment_row_lock: boolean;
 }
 
 async function observeBackendWaitingOnRepresentativeRowLock(
@@ -283,9 +285,9 @@ async function observeBackendWaitingOnRepresentativeRowLock(
            FROM pg_locks h
            WHERE h.pid = $2::int
              AND h.granted
-             AND h.relation = to_regclass('contractor_representative_grant')
+             AND h.relation = to_regclass('contractor_representative_assignment')
              AND h.mode <> 'AccessShareLock'
-         ) AS t1_holds_representative_grant_row_lock
+         ) AS t1_holds_representative_assignment_row_lock
        FROM pg_stat_activity sa
        WHERE sa.pid = $1::int`,
       [waitingPid, holdingPid],
@@ -307,18 +309,10 @@ async function observeBackendWaitingOnRepresentativeRowLock(
   );
 }
 
-test('grantWorker rejects authenticated CONTRACTOR_REPRESENTATIVE lacking contractor_representative_grant for the contractor with 0 permission or fact writes', async () => {
+test('grantWorker rejects a global Contractor grant without the exact Site representative assignment with 0 permission or fact writes', async () => {
   const suffix = randomUUID().slice(0, 8);
   const services = createRealAccessServices();
   const seeded = await seedSiteContractorAndApprovedWorkerAssignment(suffix, services);
-
-  const otherContractorId = randomUUID();
-  await database.dataSource.getRepository(ContractorEntity).save({
-    id: otherContractorId,
-    code: `OTHER-CTR-${suffix.toUpperCase()}`,
-    name: 'Unrelated Contractor',
-    isActive: true,
-  });
 
   const ungrantedRep = await services.usersService.create(
     {
@@ -332,7 +326,7 @@ test('grantWorker rejects authenticated CONTRACTOR_REPRESENTATIVE lacking contra
   await database.dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
     id: randomUUID(),
     userId: ungrantedRep.id,
-    contractorId: otherContractorId,
+    contractorId: seeded.contractorId,
   });
 
   const repLogin = await services.authService.login(
@@ -376,7 +370,7 @@ test('grantWorker rejects authenticated CONTRACTOR_REPRESENTATIVE lacking contra
   assert.deepEqual(permissionGaps, []);
 });
 
-test('grantWorker holds a row lock on contractor_representative_grant so a concurrent DELETE after requireRepresentative waits until worker_zone_permission INSERT commits', async () => {
+test('grantWorker locks the exact Site representative assignment until worker_zone_permission INSERT commits before a concurrent DELETE', async () => {
   const suffix = randomUUID().slice(0, 8);
   const services = createRealAccessServices();
   const seeded = await seedSiteContractorAndApprovedWorkerAssignment(suffix, services);
@@ -390,11 +384,12 @@ test('grantWorker holds a row lock on contractor_representative_grant so a concu
     },
     seeded.adminAuth.context,
   );
-  const representativeGrantId = randomUUID();
-  await database.dataSource.getRepository(ContractorRepresentativeGrantEntity).save({
-    id: representativeGrantId,
+  const representativeAssignmentId = randomUUID();
+  await database.dataSource.getRepository(ContractorRepresentativeAssignmentEntity).save({
+    id: representativeAssignmentId,
     userId: repUser.id,
     contractorId: seeded.contractorId,
+    siteId: seeded.site.id,
   });
 
   const repLogin = await services.authService.login(
@@ -509,12 +504,12 @@ test('grantWorker holds a row lock on contractor_representative_grant so a concu
       t2DeleteStarted.resolve();
       const deletedRows = (await activeRunner2.query(
         `WITH deleted AS (
-           DELETE FROM contractor_representative_grant
-           WHERE id = $1 AND user_id = $2 AND contractor_id = $3
+           DELETE FROM contractor_representative_assignment
+           WHERE id = $1 AND user_id = $2 AND contractor_id = $3 AND site_id = $4
            RETURNING id
          )
          SELECT id FROM deleted`,
-        [representativeGrantId, repUser.id, seeded.contractorId],
+        [representativeAssignmentId, repUser.id, seeded.contractorId, seeded.site.id],
       )) as Array<{ id: string }>;
       await activeRunner2.commitTransaction();
       return {
@@ -531,9 +526,9 @@ test('grantWorker holds a row lock on contractor_representative_grant so a concu
     ]);
     stopPolling.stopped = true;
 
-    const grantCountWhileT1Held = await database.dataSource
-      .getRepository(ContractorRepresentativeGrantEntity)
-      .countBy({ id: representativeGrantId });
+    const assignmentCountWhileT1Held = await database.dataSource
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .countBy({ id: representativeAssignmentId });
     const workerPermissionCountWhileT1Held = await database.dataSource
       .getRepository(WorkerZonePermissionEntity)
       .countBy({ id: workerRequestId });
@@ -546,19 +541,19 @@ test('grantWorker holds a row lock on contractor_representative_grant so a concu
     assert.equal(
       scheduleOutcome.status,
       'waiting_on_t1_lock',
-      `Expected T2 DELETE (pid=${t2Pid}) on contractor_representative_grant (${representativeGrantId}) to block on T1 (pid=${t1Pid}) row lock until worker_zone_permission (${workerRequestId}) committed, but T2 completed its DELETE and committed while T1 was still paused before worker_zone_permission INSERT (grantCountWhileT1Held=${grantCountWhileT1Held}, workerPermissionCountWhileT1Held=${workerPermissionCountWhileT1Held})`,
+      `Expected T2 DELETE (pid=${t2Pid}) on contractor_representative_assignment (${representativeAssignmentId}) to block on T1 (pid=${t1Pid}) row lock until worker_zone_permission (${workerRequestId}) committed, but T2 completed its DELETE and committed while T1 was still paused before worker_zone_permission INSERT (assignmentCountWhileT1Held=${assignmentCountWhileT1Held}, workerPermissionCountWhileT1Held=${workerPermissionCountWhileT1Held})`,
     );
     assert.equal(scheduleOutcome.observation.wait_event_type, 'Lock');
     assert.equal(scheduleOutcome.observation.has_ungranted_lock, true);
     assert.equal(scheduleOutcome.observation.blocked_by_t1, true);
-    assert.equal(scheduleOutcome.observation.t1_holds_representative_grant_row_lock, true);
-    assert.equal(grantCountWhileT1Held, 1);
+    assert.equal(scheduleOutcome.observation.t1_holds_representative_assignment_row_lock, true);
+    assert.equal(assignmentCountWhileT1Held, 1);
     assert.equal(workerPermissionCountWhileT1Held, 0);
 
     assert.equal(
       await database.dataSource
-        .getRepository(ContractorRepresentativeGrantEntity)
-        .countBy({ id: representativeGrantId }),
+        .getRepository(ContractorRepresentativeAssignmentEntity)
+        .countBy({ id: representativeAssignmentId }),
       0,
     );
     assert.equal(

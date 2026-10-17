@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -41,8 +43,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
     MF06_ENQUEUE_ENABLED: 'false',
     MF06_ASSESSMENT_READ_ENABLED: 'false',
     CORS_ORIGINS: 'http://localhost:5181',
-    STORAGE_LOCAL_ROOT:
-      'D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/software-http-unused-media',
+    STORAGE_LOCAL_ROOT: join(tmpdir(), 'smartsite-software-http-unused-media'),
   });
   assert.equal(environment.MF06_ENQUEUE_ENABLED, false);
   assert.equal(environment.MF06_ASSESSMENT_READ_ENABLED, false);
@@ -179,19 +180,19 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       externalId: `SYNTHETIC-NO-CAPTURE-${suffix}`,
       name: 'Camera cấu hình',
     };
-    const managerCamera = await request(
-      'POST',
-      `/sites/${site.id}/cameras`,
-      cameraInput,
-      manager.accessToken,
-    );
-    assert.equal(managerCamera.status, 403);
-    await managerCamera.json();
-    const cameraResponse = await request(
+    const adminCamera = await request(
       'POST',
       `/sites/${site.id}/cameras`,
       cameraInput,
       admin.accessToken,
+    );
+    assert.equal(adminCamera.status, 403);
+    await adminCamera.json();
+    const cameraResponse = await request(
+      'POST',
+      `/sites/${site.id}/cameras`,
+      cameraInput,
+      manager.accessToken,
     );
     assert.equal(cameraResponse.status, 201);
     const camera = (await cameraResponse.json()) as {
@@ -215,7 +216,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       'POST',
       regionPath,
       { zoneId: zone.id, expectedConfigurationVersion: camera.configurationVersion, polygon },
-      admin.accessToken,
+      manager.accessToken,
     );
     assert.equal(regionResponse.status, 201);
     const mutation = (await regionResponse.json()) as {
@@ -230,7 +231,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       'POST',
       regionPath,
       { zoneId: zone.id, expectedConfigurationVersion: camera.configurationVersion, polygon },
-      admin.accessToken,
+      manager.accessToken,
     );
     assert.equal(staleRegion.status, 409);
     await staleRegion.json();
@@ -238,7 +239,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       'PATCH',
       `/sites/${site.id}/cameras/${camera.id}`,
       { name: 'No policy mutation', status: 'INACTIVE' },
-      admin.accessToken,
+      manager.accessToken,
     );
     assert.equal(invalidCamera.status, 400);
     await invalidCamera.json();

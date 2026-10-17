@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
@@ -14,6 +15,7 @@ import {
   ConfirmPassageCommand,
   ManualWorkerVerificationCommand,
   ManualVisitCheckoutCommand,
+  PreviewVisitorQrCommand,
 } from './qr-access.commands.js';
 @ApiTags('visitor-registration')
 @Controller('visitor-registration')
@@ -41,6 +43,22 @@ export class VisitorRegistrationController {
 @Controller('sites/:siteId')
 export class QrAccessController {
   constructor(private readonly access: QrAccessService) {}
+  @Get('visitor-gate-events') events(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    return this.access.listVisitorEvents(req.user!, siteId);
+  }
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('gates/:gateId/visitor-qr-preview')
+  previewVisitor(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('gateId') gateId: string,
+    @Body() input: PreviewVisitorQrCommand,
+  ) {
+    return this.access.previewVisitorQr(req.user!, siteId, gateId, input);
+  }
   @Post('visits/:visitId/manual-checkout') manualVisitCheckout(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
@@ -67,6 +85,15 @@ export class QrAccessController {
   }
   @Get('visits') visits(@Req() req: AuthenticatedRequest, @Param('siteId') siteId: string) {
     return this.access.listVisits(req.user!, siteId);
+  }
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('visits/:visitId/email')
+  retryEmail(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('visitId') visitId: string,
+  ) {
+    return this.access.retryVisitorEmail(req.user!, siteId, visitId);
   }
   @Post('visits/:visitId/decision') decide(
     @Req() req: AuthenticatedRequest,
@@ -99,7 +126,9 @@ export class QrAccessController {
   ) {
     return this.access.workerGate(req.user!, siteId, gateId, input);
   }
-  @Post('gates/:gateId/visitor-gate-events') visitorGate(
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('gates/:gateId/visitor-gate-events')
+  visitorGate(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('gateId') gateId: string,

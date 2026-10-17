@@ -24,6 +24,9 @@ vi.mock('gsap', () => ({
   },
 }));
 vi.mock('./components/landing/LandingPage', () => ({ LandingPage: () => <div>Landing</div> }));
+vi.mock('./components/dashboard/DashboardView', () => ({
+  DashboardView: () => <h1>Main dashboard</h1>,
+}));
 vi.mock('./components/layout/AppLayout', () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
 }));
@@ -41,7 +44,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
     displayName: 'Representative',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE' as const, siteId: 'site' }],
+    roleAssignments: [{ role: 'SITE_MANAGER' as const, siteId: 'site' }],
   };
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -87,6 +90,9 @@ it('App clears the authenticated Safety workspace even when server logout fails'
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  const incidentsTab = await screen.findByRole('button', { name: 'Incidents' });
+  await waitFor(() => expect((incidentsTab as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(incidentsTab);
   expect(await screen.findByText('No incidents found.', {}, { timeout: 8000 })).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Sign out Representative' }));
   await waitFor(() => expect(logout).toHaveBeenCalledOnce());
@@ -124,7 +130,7 @@ it('an account refresh after sign-in cannot navigate back to Dashboard after ope
     displayName: 'Representative',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE' as const, siteId: 'site' }],
+    roleAssignments: [{ role: 'SITE_MANAGER' as const, siteId: 'site' }],
   };
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -202,7 +208,7 @@ it('an account refresh after sign-in cannot navigate back to Dashboard after ope
   });
   fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'test-password' } });
   fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-  await screen.findByRole('heading', { name: /Site A/i }, { timeout: 8000 });
+  await screen.findByRole('heading', { name: 'Main dashboard' }, { timeout: 8000 });
   fireEvent.click(screen.getByRole('button', { name: 'Open Safety' }));
   await screen.findByRole('button', { name: 'Sign out Representative' });
   const callsBeforeRefresh = me.mock.calls.length;

@@ -8,7 +8,7 @@ import { getZonePpeScopeKey } from './zone-ppe-scope';
 /** Owns closing the Zone form; authorization/scope changes still unmount it. */
 export function ZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
   const queryClient = useQueryClient();
-  if (!props.canManageZones && !props.canManageRegions) {
+  if (!props.canReadZones && !props.canManageZones && !props.canManageRegions) {
     return null;
   }
   return <ScopedZonePpeSetupDialog key={getZonePpeScopeKey(queryClient, props)} {...props} />;

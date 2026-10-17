@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
@@ -61,8 +63,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
     MF06_ENQUEUE_ENABLED: 'false',
     MF06_ASSESSMENT_READ_ENABLED: 'false',
     CORS_ORIGINS: 'http://localhost:5181',
-    STORAGE_LOCAL_ROOT:
-      'D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/software-http-unused-media',
+    STORAGE_LOCAL_ROOT: join(tmpdir(), 'smartsite-software-http-unused-media'),
   });
   assert.equal(environment.MF06_ENQUEUE_ENABLED, false);
   assert.equal(environment.MF06_ASSESSMENT_READ_ENABLED, false);
@@ -441,11 +442,37 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
       manager.accessToken,
     );
     assert.equal(managerWorker.status, 403);
-    const workerGrant = await request(
+    const adminWorker = await request(
       'POST',
       `/sites/${site.id}/access-setup/worker-zone-permissions`,
       workerInput,
       admin.accessToken,
+    );
+    assert.equal(adminWorker.status, 403);
+    const representativeResponse = await request(
+      'POST',
+      `/sites/${site.id}/contractors/${contractorId}/representative-accounts`,
+      {
+        username: `access-rep-${suffix}`,
+        displayName: 'Synthetic Site Representative',
+        temporaryPassword: fixturePassword,
+      },
+      manager.accessToken,
+    );
+    assert.equal(representativeResponse.status, 201);
+    const representativeUser = (await representativeResponse.json()) as { id: string };
+    const representativeLogin = await request('POST', '/auth/login', {
+      username: `access-rep-${suffix}`,
+      password: fixturePassword,
+      clientType: 'MOBILE',
+    });
+    assert.equal(representativeLogin.status, 200);
+    const representative = (await representativeLogin.json()) as { accessToken: string };
+    const workerGrant = await request(
+      'POST',
+      `/sites/${site.id}/access-setup/worker-zone-permissions`,
+      workerInput,
+      representative.accessToken,
     );
     assert.equal(workerGrant.status, 201);
     assert.equal(((await workerGrant.json()) as { id: string }).id, workerInput.requestId);
@@ -453,7 +480,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
       'POST',
       `/sites/${site.id}/access-setup/worker-zone-permissions/${workerInput.requestId}/revoke`,
       undefined,
-      admin.accessToken,
+      representative.accessToken,
     );
     assert.equal(workerRevoke.status, 201);
     const adminContractorRevoke = await request(
@@ -490,7 +517,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
       attributed.every(
         (row: { source_kind: string; actor_user_id: string }) =>
           row.actor_user_id ===
-          (row.source_kind === 'CONTRACTOR_PERMISSION' ? managerUser.id : admin.user.id),
+          (row.source_kind === 'CONTRACTOR_PERMISSION' ? managerUser.id : representativeUser.id),
       ),
     );
     assert.equal(

@@ -1,6 +1,6 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage } from '../../../i18n/messages';
-import { localizedLabel } from '../../../i18n/labels';
+import { localizedLabel, localizedGateName } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -255,7 +255,12 @@ export function SecurityGateDeskView({
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrCodeInput, setQrCodeInput] = useState('');
   const [fallback, setFallback] = useState<QrFallbackResponse | null>(null);
-  const [qrResultMessage, setQrResultMessage] = useState('');
+  const [qrResult, setQrResult] = useState<Awaited<
+    ReturnType<typeof client.verifyWorkerQr>
+  > | null>(null);
+  const qrResultMessage = qrResult
+    ? `${localizedLabel(qrResult.authorization)}: ${qrResult.worker.displayName} · ${getSafeReasonMessage(qrResult.reasonCode)}`
+    : '';
   const qrCommand = useRef<VerifyQrCommand | null>(null);
   const fallbackMutation = useMutation({
     mutationFn: () =>
@@ -271,9 +276,7 @@ export function SecurityGateDeskView({
     onSuccess: (r) => {
       setRepeatNotice('');
       setSeparatePassage(false);
-      setQrResultMessage(
-        `${localizedLabel(r.authorization)}: ${r.worker.displayName} · ${getSafeReasonMessage(r.reasonCode)}`,
-      );
+      setQrResult(r);
       setCandidateWorker(r.worker);
       setCurrentAttempt(r.attempt ?? null);
       setQrCodeInput('');
@@ -303,7 +306,7 @@ export function SecurityGateDeskView({
     method: log.method ?? 'FACE',
     outcome: log.decision.authorization,
     reasonCode: log.decision.reasonCode,
-    gateName: gates.find((gate) => gate.id === log.gateId)?.name ?? log.gateId,
+    gateName: localizedGateName(log.gateId),
   }));
 
   // Safe preview URL update helper
@@ -565,7 +568,7 @@ export function SecurityGateDeskView({
             requestId: crypto.randomUUID(),
           };
     qrCommand.current = input;
-    setQrResultMessage('');
+    setQrResult(null);
     qrVerification.mutate(input);
   };
 
@@ -579,12 +582,12 @@ export function SecurityGateDeskView({
     <div className="space-y-6">
       {/* Top Bar: Gate Selector & Direction Command Strip */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2.5">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-4">
+          <div className="flex w-full min-w-0 max-w-full items-center gap-2.5 sm:w-auto">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100/80 text-[#F66B17]">
               <IconBuilding2 className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0 max-w-full">
               <label
                 htmlFor="gate-site-select"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
@@ -598,7 +601,7 @@ export function SecurityGateDeskView({
                   handleResetScan();
                   onSelectSite(e.target.value);
                 }}
-                className="mt-0.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none"
+                className="mt-0.5 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none"
               >
                 {sites.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -611,11 +614,11 @@ export function SecurityGateDeskView({
 
           <div className="h-8 w-px bg-slate-200 hidden sm:block" />
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex w-full min-w-0 max-w-full items-center gap-2.5 sm:w-auto">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
               <IconKey className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0 max-w-full">
               <label
                 htmlFor="gate-selector"
                 className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
@@ -630,11 +633,11 @@ export function SecurityGateDeskView({
                   handleResetScan();
                   setSelectedGateId(e.target.value);
                 }}
-                className="mt-0.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none disabled:bg-slate-100"
+                className="mt-0.5 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none disabled:bg-slate-100"
               >
                 {gates.map((gate) => (
                   <option key={gate.id} value={gate.id}>
-                    {gate.name} ({gate.id})
+                    {localizedGateName(gate.id)} ({gate.id})
                   </option>
                 ))}
               </select>
@@ -765,7 +768,7 @@ export function SecurityGateDeskView({
                         onClick={() => {
                           stopCamera();
                           qrVerification.reset();
-                          setQrResultMessage('');
+                          setQrResult(null);
                           fallbackMutation.mutate();
                         }}
                       >
@@ -851,7 +854,7 @@ export function SecurityGateDeskView({
             <div className="flex items-center gap-2.5 pl-1">
               <span className="h-2.5 w-2.5 rounded-full bg-[#F66B17] animate-pulse shrink-0" />
               <span role="status" aria-live="polite" className="text-xs font-bold text-orange-950">
-                {scanMessage}
+                {localizeMessage(scanMessage)}
               </span>
             </div>
 
@@ -940,7 +943,7 @@ export function SecurityGateDeskView({
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
                   <span className="text-slate-500 font-medium">{tr('common.site_assignment')}</span>
                   <span className="font-bold text-emerald-700">
-                    {candidateWorker.assignmentStatus}
+                    {localizedLabel(candidateWorker.assignmentStatus)}
                   </span>
                 </div>
               </div>
@@ -972,7 +975,7 @@ export function SecurityGateDeskView({
                   onClick={() => {
                     stopCamera();
                     qrVerification.reset();
-                    setQrResultMessage('');
+                    setQrResult(null);
                     setQrModalOpen(true);
                   }}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-100/90 py-3 text-xs font-bold text-amber-950 hover:bg-amber-200 transition-all"

@@ -2,12 +2,13 @@ import { Controller, Get, Header, Param, Req, Res, UseGuards } from '@nestjs/com
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { invalid } from '../../common/configuration/commands.js';
-import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
 import { CameraConfigurationImageService } from './camera-configuration-image.service.js';
 
 @ApiTags('camera-configuration')
 @ApiBearerAuth('user-token')
-@UseGuards(UserAuthGuard, AdminGuard)
+@UseGuards(UserAuthGuard, SiteConfigurationGuard)
 @Controller('sites/:siteId/cameras/:cameraId')
 export class CameraConfigurationImageController {
   constructor(private readonly images: CameraConfigurationImageService) {}

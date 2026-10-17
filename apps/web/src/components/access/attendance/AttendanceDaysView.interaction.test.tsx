@@ -224,7 +224,7 @@ describe('MF03 interactive UI', () => {
       const card = within(await screen.findByRole('region', { name: 'Submitted request' }));
       await card.findByText('Pending approval');
       expect(screen.queryByRole('button', { name: 'Submit request' })).toBeNull();
-      expect(card.getByText(/Waiting for your contractor representative/)).toBeTruthy();
+      expect(card.getByText(/Waiting for your Contractor Representative/)).toBeTruthy();
       expect(api.requestAttendanceTime).toHaveBeenCalledTimes(1);
       status = result;
       await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));

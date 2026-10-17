@@ -1,10 +1,10 @@
-import { translate as tr, uiLanguage } from '../../i18n';
+import i18n, { translate as tr, uiLocale } from '../../i18n';
 import { localizeMessage } from '../../i18n/messages';
 import { localizedLabel } from '../../i18n/labels';
 import type { UserNotificationResponse } from '@smartsite/api-client';
 
-export function notificationHref(notification: UserNotificationResponse) {
-  return `${'incidentId' in notification.target || 'checklistId' in notification.target ? '/incidents' : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
+export function notificationHref(notification: UserNotificationResponse, assignedWork = false) {
+  return `${'incidentId' in notification.target || 'checklistId' in notification.target ? (assignedWork ? '/assigned-work' : '/incidents') : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
 }
 
 export function formatNotificationDisplayMessage(
@@ -28,7 +28,7 @@ export function formatNotificationDisplayMessage(
     item.event === 'ENTRY_DENIED_NO_SCHEDULE' &&
     item.message?.startsWith('Bạn chưa được phân công ca làm')
   ) {
-    const workDate = item.workDate || 'today';
+    const workDate = item.workDate || tr('common.today');
     return tr(
       'notification-utils.you_are_not_scheduled_for_a_shift_on_value_at_this_site_and_entry_is_not_permitted',
       { value1: workDate },
@@ -45,6 +45,31 @@ export function formatNotificationDisplayMessage(
     ].includes(item.event)
   )
     return item.message;
+  // Translate the generated envelope while keeping names and authored reasons intact.
+  const request = /^([\s\S]+) requested (overtime|leave): ([\s\S]*)$/.exec(item.message);
+  if (item.event === 'TIME_REQUESTED' && request) {
+    return tr('notifications.time_request', {
+      name: request[1],
+      kind: localizedLabel(request[2]).toLocaleLowerCase(uiLocale()),
+      reason: request[3],
+    });
+  }
+  const review =
+    /^(Attendance correction|overtime|leave) (approved|rejected)(?:: ([\s\S]*))?$/.exec(
+      item.message,
+    );
+  if (['TIME_APPROVED', 'TIME_REJECTED'].includes(item.event) && review) {
+    return (
+      tr('notifications.time_review', {
+        kind: localizedLabel(review[1] === 'Attendance correction' ? 'CORRECTION' : review[1]),
+        status: localizedLabel(review[2]),
+      }) + (review[3] ? tr('notifications.reason', { reason: review[3] }) : '')
+    );
+  }
+  if (item.event === 'TIME_APPROVED' && item.message.startsWith('Duplicate IN ignored: '))
+    return tr('notifications.duplicate_ignored', {
+      reason: item.message.slice('Duplicate IN ignored: '.length),
+    });
   const reasonAt = item.message.indexOf(' Reason: ');
   if (reasonAt !== -1 && ['SWAP_DECLINED', 'REQUEST_REJECTED'].includes(item.event)) {
     return (
@@ -56,9 +81,13 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
-  if (['EARLY_EXIT', 'EXIT_DURATION_EXCEEDED', 'MAX_EXITS_EXCEEDED'].includes(item.event)) {
+  if (
+    i18n.exists(`notifications.${item.event}`) &&
+    (item.title === item.event ||
+      item.title === item.event.replaceAll('_', ' ') ||
+      ['EARLY_EXIT', 'EXIT_DURATION_EXCEEDED', 'MAX_EXITS_EXCEEDED'].includes(item.event))
+  ) {
     return tr(`notifications.${item.event}`);
   }
-  if (uiLanguage() === 'en') return item.title;
   return localizeMessage(localizedLabel(item.title));
 }

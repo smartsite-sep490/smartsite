@@ -132,7 +132,7 @@ export class Mf06AssessmentsController {
       paging = pagination(query.offset as string | undefined, query.limit as string | undefined);
     const result = await this.query.list(scope, paging.offset, paging.limit);
     await this.auth.authenticateRequest(request);
-    assertSafetySiteAccess(request.user, scope);
+    assertSafetySiteAccess(request.user, scope, 'GET');
     return result;
   }
   @Get(':assessmentId')
@@ -152,7 +152,7 @@ export class Mf06AssessmentsController {
     const scope = uuid(siteId).toLowerCase(),
       result = await this.query.get(scope, uuid(assessmentId).toLowerCase());
     await this.auth.authenticateRequest(request);
-    assertSafetySiteAccess(request.user, scope);
+    assertSafetySiteAccess(request.user, scope, 'GET');
     return result;
   }
 }

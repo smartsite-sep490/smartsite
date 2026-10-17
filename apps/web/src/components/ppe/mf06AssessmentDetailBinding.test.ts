@@ -99,13 +99,13 @@ describe('mf06AssessmentDetailBinding', () => {
 
     it('rejects on UUID mismatch (e.g. requestId)', () => {
       const mismatch = { ...validLoaded, requestId: '99999999-9999-4999-8999-999999999999' };
-      expect(validateAssessmentBinding(mismatch, validExpected)).toBe('Request ID mismatch');
+      expect(validateAssessmentBinding(mismatch, validExpected)).toBe('REQUEST_ID_MISMATCH');
     });
 
     it('rejects on capturedAt microsecond precision discrepancy (.123456 vs .123457)', () => {
       const mismatch = { ...validLoaded, capturedAt: '2026-10-12T10:00:00.123457Z' };
       expect(validateAssessmentBinding(mismatch, validExpected)).toBe(
-        'CapturedAt precision mismatch',
+        'CAPTURED_AT_PRECISION_MISMATCH',
       );
     });
 
@@ -120,7 +120,7 @@ describe('mf06AssessmentDetailBinding', () => {
       };
 
       // loaded has outcome: UNAVAILABLE instead of DENIED
-      expect(validateAssessmentBinding(validLoaded, historyExpected)).toBe('Outcome mismatch');
+      expect(validateAssessmentBinding(validLoaded, historyExpected)).toBe('OUTCOME_MISMATCH');
 
       const matchingHistoryLoaded: Mf06AssessmentResponse = {
         ...validLoaded,
