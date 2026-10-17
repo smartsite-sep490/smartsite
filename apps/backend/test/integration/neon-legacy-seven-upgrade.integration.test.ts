@@ -26,10 +26,18 @@ async function withLegacySeven(
   const options = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
   if (options.type !== 'postgres' || !Array.isArray(options.migrations))
     throw new Error('Dedicated PostgreSQL migration graph required');
-  const prefix = options.migrations.slice(0, 7);
+  const canonicalPrefix = options.migrations.slice(0, 7);
   assert.deepEqual(
-    prefix.map((migration) => (typeof migration === 'function' ? migration.name : migration)),
-    observedPrefix,
+    canonicalPrefix
+      .map((migration) => (typeof migration === 'function' ? migration.name : migration))
+      .sort(),
+    [...observedPrefix].sort(),
+  );
+  // Preserve the observed historical order even when current same-timestamp declarations reorder.
+  const prefix = observedPrefix.map((name) =>
+    canonicalPrefix.find(
+      (migration) => typeof migration === 'function' && migration.name === name,
+    )!,
   );
   const scoped = {
     ...options,

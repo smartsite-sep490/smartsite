@@ -178,7 +178,7 @@ test('evaluates event-time Zone entry authorization from two-tier and Team permi
           validFrom: '2026-09-28T07:00:00.000Z',
           validUntil: '2026-09-28T09:00:00.000Z',
         },
-        adminActor.context,
+        siteManagerActor.context,
       ),
       /Contractor and Worker Zone permissions/,
     );
@@ -303,7 +303,7 @@ test('evaluates event-time Zone entry authorization from two-tier and Team permi
         validFrom: '2026-09-28T07:30:00.000Z',
         validUntil: null,
       },
-      adminActor.context,
+      siteManagerActor.context,
     );
     const denied = await source.transaction((manager) =>
       service.decide(manager, {
@@ -367,7 +367,7 @@ test('evaluates event-time Zone entry authorization from two-tier and Team permi
     const denyGrant = (await access.listGrants(siteId, zoneId, 0, 20)).items.find(
       (grant) => grant.effect === ZoneAccessEffect.DENY,
     )!;
-    await access.revokeGrant(siteId, zoneId, denyGrant.id, capturedAt, adminActor.context);
+    await access.revokeGrant(siteId, zoneId, denyGrant.id, capturedAt, siteManagerActor.context);
 
     const ingestionEventId = randomUUID();
     let ingestionClock = capturedAt;
@@ -864,7 +864,7 @@ test('enforces real command actor/scope/version bounds, Team fallback, and fail-
         validFrom: fromDate.toISOString(),
         validUntil: untilDate.toISOString(),
       },
-      manager.context,
+      admin.context,
     ),
     status(403),
   );
