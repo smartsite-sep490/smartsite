@@ -451,6 +451,13 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     expect(screen.getByTestId('focused-badge-cam-1')).not.toBeNull();
     expect(screen.queryByTestId('focused-badge-cam-2')).toBeNull();
 
+    // Open secondary diagnostics drawer; cam-1 has no modelObjects so raw section is absent even when expanded
+    const diagnosticsToggle = screen.getByTestId('toggle-diagnostics-drawer');
+    expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(diagnosticsToggle);
+    expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByTestId('experimental-objects-section')).toBeNull();
+
     // Click tile 2 to focus cam-2
     const tile2 = screen.getByTestId('wall-tile-cam-2');
     fireEvent.click(tile2);
@@ -533,6 +540,11 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
         <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
       </QueryClientProvider>,
     );
+
+    const diagnosticsToggle = await screen.findByTestId('toggle-diagnostics-drawer');
+    expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(diagnosticsToggle);
+    expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('true');
 
     const section = await screen.findByTestId('experimental-objects-section');
     const scoped = within(section);
@@ -1009,6 +1021,11 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     fireEvent.click(wallBtn);
 
     await screen.findByTestId('wall-tile-cam-tapo');
+
+    const diagnosticsToggle = screen.getByTestId('toggle-diagnostics-drawer');
+    expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(diagnosticsToggle);
+    expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('true');
 
     // 1. Initial selected camera is cam-tapo -> Default preset is GROUND
     const section = await screen.findByTestId('experimental-objects-section');

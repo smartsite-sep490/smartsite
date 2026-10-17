@@ -1208,6 +1208,9 @@ describe('PpeMonitoringView MF05 Demo Control Panel Integration', () => {
     );
 
     await screen.findByRole('option', { name: /Công trường Alpha/i });
+    const toggle = screen.getByTestId('toggle-diagnostics-drawer');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(demoPanelState.rendered).toBe(false);
     expect(screen.queryByTestId('mf05-demo-control-panel')).toBeNull();
   });
@@ -1222,6 +1225,7 @@ describe('PpeMonitoringView MF05 Demo Control Panel Integration', () => {
     );
 
     await screen.findByRole('option', { name: /Công trường Alpha/i });
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
 
     await waitFor(() => expect(demoPanelState.rendered).toBe(true));
     expect(demoPanelState.props).not.toBeNull();
@@ -1246,6 +1250,7 @@ describe('PpeMonitoringView MF05 Demo Control Panel Integration', () => {
     );
 
     await screen.findByRole('option', { name: /Công trường Alpha/i });
+    fireEvent.click(screen.getByTestId('toggle-diagnostics-drawer'));
     await waitFor(() => expect(demoPanelState.rendered).toBe(true));
     expect(demoPanelState.props?.canApply).toBe(false);
 
@@ -1265,6 +1270,7 @@ describe('PpeMonitoringView MF05 Demo Control Panel Integration', () => {
 
     await screen.findByRole('option', { name: /Công trường Alpha/i });
     expect(screen.queryByText(/Applying Demo Region\.\.\./i)).toBeNull();
+    await user.click(screen.getByTestId('toggle-diagnostics-drawer'));
 
     // Trigger Apply action
     const applyButton = await screen.findByRole('button', { name: /Apply Saved Region/i });
@@ -1300,6 +1306,7 @@ describe('PpeMonitoringView MF05 Demo Control Panel Integration', () => {
     );
 
     await screen.findByRole('option', { name: /Công trường Alpha/i });
+    await user.click(screen.getByTestId('toggle-diagnostics-drawer'));
 
     // Trigger apply on cam-1
     const applyButton = await screen.findByRole('button', { name: /Apply Saved Region/i });

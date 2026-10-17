@@ -1451,10 +1451,13 @@ export function PpeMonitoringView({
       {/* Monitoring Scope (Primary Selectors) & Secondary Configuration Actions */}
       <div
         className={`grid grid-cols-1 gap-4 items-stretch min-w-0 w-full max-w-full ${
-          !onOpenSetup &&
-          (canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback)
-            ? 'xl:grid-cols-[minmax(0,1fr)_360px]'
-            : ''
+          onOpenSetup
+            ? isGlobalAdmin || canOpenZonePpe || canRegisterCamera || canManageCamera
+              ? 'lg:grid-cols-[minmax(0,1fr)_auto]'
+              : ''
+            : canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
+              ? 'xl:grid-cols-[minmax(0,1fr)_360px]'
+              : ''
         }`}
       >
         <section
@@ -1763,18 +1766,29 @@ export function PpeMonitoringView({
 
         {onOpenSetup ? (
           (isGlobalAdmin || canOpenZonePpe || canRegisterCamera || canManageCamera) && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                disabled={!selectedSiteId}
-                onClick={() =>
-                  onOpenSetup({ siteId: selectedSiteId, cameraId: selectedCamera?.id })
-                }
-              >
-                {tr('cameraSetup.title', { ns: 'safety' })}
-              </button>
-            </div>
+            <section
+              aria-label={t('ppe.layout.configuration')}
+              className="rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full"
+            >
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  {t('ppe.layout.configuration')}
+                </h2>
+              </div>
+
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  disabled={!selectedSiteId}
+                  onClick={() =>
+                    onOpenSetup({ siteId: selectedSiteId, cameraId: selectedCamera?.id })
+                  }
+                >
+                  {tr('cameraSetup.title', { ns: 'safety' })}
+                </button>
+              </div>
+            </section>
           )
         ) : (
           <section
@@ -1953,21 +1967,15 @@ export function PpeMonitoringView({
           )}
         </div>
 
-        {!isAiWorkPaused && (
+        {!isAiWorkPaused && viewMode === 'wall' && (
           <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2.5 py-1 flex-shrink-0 min-w-0">
             <span className="text-[11px] font-mono text-slate-600 tabular-nums truncate">
-              {viewMode === 'wall' ? t('ppe.cadence.wall') : t('ppe.cadence.single')}
+              {t('ppe.cadence.wall')}
             </span>
-            {(scopedPreview.isPolling ||
-              (viewMode === 'wall' &&
-                previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE'))) && (
+            {previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE') && (
               <span
                 className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
-                title={
-                  viewMode === 'wall'
-                    ? t('ppe.cadence.pollingWallTitle')
-                    : t('ppe.cadence.pollingSingleTitle')
-                }
+                title={t('ppe.cadence.pollingWallTitle')}
               />
             )}
           </div>
@@ -2430,19 +2438,6 @@ export function PpeMonitoringView({
                         ? t('ppe.toolbar.captionRecordedRaw')
                         : t('ppe.toolbar.captionAiPolling')}
                 </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('wall')}
-                  className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  title={t('ppe.toolbar.switchToWallAria')}
-                  aria-label={t('ppe.toolbar.switchToWallAria')}
-                  data-testid="switch-to-wall-toolbar-btn"
-                >
-                  <IconGrid className="w-4 h-4" />
-                </button>
               </div>
             </div>
           </div>

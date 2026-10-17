@@ -269,7 +269,9 @@ describe('PpeMonitoringView - Zone PPE Configuration (Phase 2 Suite)', () => {
     );
     await screen.findByRole('option', { name: /Công trường Alpha/i });
     const trigger = screen.getByRole('button', { name: /Configure PPE by Zone/i });
-    await user.click(screen.getByTestId('toggle-diagnostics-drawer'));
+    expect(screen.getByTestId('toggle-diagnostics-drawer').getAttribute('aria-expanded')).toBe(
+      'false',
+    );
     await user.click(trigger);
     expect(screen.getByRole('dialog', { name: 'Zone PPE configuration' })).toBeDefined();
     expect(
