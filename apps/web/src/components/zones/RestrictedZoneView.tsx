@@ -78,6 +78,7 @@ export interface RestrictedZoneViewProps {
   authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
   onSignOut?: () => void;
   apiUrl?: string;
+  onOpenSetup?: () => void;
   onNavigate?: (
     tab: 'incidents',
     context?: {
@@ -94,6 +95,7 @@ const allocateMetadataCredential = () => ++nextMetadataCredential;
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  onOpenSetup,
   onNavigate,
   sharedSession: providedSharedSession,
   authenticatedSession,
@@ -855,6 +857,20 @@ export function RestrictedZoneView({
   }
 
   if (isShared && !canViewZone) {
+    const canHandoffToCameraSetup =
+      Boolean(onOpenSetup) &&
+      rejectedCredential !== metadataCredential &&
+      Boolean(effectiveUser) &&
+      !effectiveUser?.mustChangePassword &&
+      Boolean(
+        effectiveUser?.roleAssignments.some(
+          (assignment) =>
+            assignment.role === 'SITE_MANAGER' &&
+            typeof assignment.siteId === 'string' &&
+            assignment.siteId.trim().length > 0,
+        ),
+      );
+
     return (
       <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
         <div className="mx-auto max-w-lg rounded-lg border border-[#EAEAEA] bg-white p-7">
@@ -867,6 +883,17 @@ export function RestrictedZoneView({
           <p className="mt-2 text-sm leading-6 text-[#6B6B6B]">
             {t('restrictedZone.accessRestricted.description')}
           </p>
+          {canHandoffToCameraSetup && onOpenSetup && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={onOpenSetup}
+                className="rounded-lg border border-[#EAEAEA] bg-white px-4 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F5F5F5] transition-colors shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+              >
+                {tr('cameraSetup.title', { ns: 'safety' })}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

@@ -429,6 +429,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                 <RestrictedZoneView
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
+                  onOpenSetup={() => navigate('/camera-setup')}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />
               }
