@@ -7,6 +7,7 @@ import {
   type Mf06AssessmentPage,
 } from '@smartsite/api-client';
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
+import { Mf06AssessmentReferences } from './Mf06AssessmentReferences';
 import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
 import { IconClock, IconShield, IconCheck, IconX, IconAlertTriangle } from '../icons';
 import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
@@ -577,32 +578,10 @@ export function Mf06AssessmentHistory({
                   </div>
 
                   {/* Scoped Technical References with accessible full wrapping */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-0.5 text-[11px] text-zinc-600 dark:text-zinc-300 font-mono tabular-nums">
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.detail.field.assessmentId')}
-                      </span>{' '}
-                      <span>{assessment.assessmentId}</span>
-                    </div>
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.history.fieldCamera')}
-                      </span>{' '}
-                      <span>{assessment.cameraId}</span>
-                    </div>
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.history.fieldZone')}
-                      </span>{' '}
-                      <span>{assessment.zoneId}</span>
-                    </div>
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.detail.field.provenance')}
-                      </span>{' '}
-                      <span>{assessment.provenance}</span>
-                    </div>
-                  </div>
+                  <Mf06AssessmentReferences
+                    key={`${apiUrl}:${clientNonce}:${siteId}:${credentialId}:${tokenNonce}`}
+                    assessment={assessment}
+                  />
                 </li>
               );
             })}

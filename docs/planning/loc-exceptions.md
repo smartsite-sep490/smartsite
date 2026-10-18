@@ -271,3 +271,14 @@ rules remain unchanged. New real-HTTP regression112 lines is separate from the
 legacy test file. Extract HTTP transport and actor orchestration before future
 feature growth; this scoped exception does not raise the normal file-size target
 or qualify actual load, resource caps, soak, browser or production acceptance.
+
+## MF06 reference disclosure label, 18 October
+
+Root permits `apps/web/src/i18n/ppe-catalog.ts` 2037→2039 physical lines for
+one paired EN/VI presentation label used by the native technical-reference
+disclosure. Keep canonical key typing/registration and catalog audit intact;
+no translation payload, permission or machine-enum changes. The history view
+shrinks by extracting its references into a separate small component. Before
+unrelated catalog growth, move the cohesive MF06 catalog through the existing
+feature registration pattern with parity/load-order coverage. This scoped
+exception does not raise general LOC limits or prove browser/AT acceptance.
