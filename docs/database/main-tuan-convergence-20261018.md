@@ -43,8 +43,11 @@ on the Root branch or the running website.
 | PostgreSQL captured-state/history boundaries                    |     10 |      0 |       0 |
 | PostgreSQL assessment append/finalize/replay/concurrency        |     20 |      0 |       0 |
 | PostgreSQL notification preservation/atomic failure rollback    |      4 |      0 |       0 |
+| PostgreSQL scoped assessment-read HTTP journeys                 |      2 |      0 |       0 |
+| PostgreSQL lease/concurrency boundaries                         |     25 |      0 |       0 |
+| PostgreSQL scoped request-status journeys                       |     17 |      0 |       0 |
 
-The45 PostgreSQL cases are across five commands, not a single full45 run. The
+The89 PostgreSQL cases are across eight commands, not a single full89 run. The
 unit and registry runs are separate. Narrow owning-suite source/type compilation
 passed; this is not a new full Backend/Web/native frozenCI execution.
 
@@ -62,8 +65,8 @@ they do not establish mixed-binary compatibility or zero-downtime storage rename
 ## Isolation and limitations
 
 Exact PG32276 birth/command/data/sole loopback5433 listener and website39792
-birth/5181 ownership were verified before/after. Six cleanup receipts include
-the initial failed notification run. All21 recorded fixture schema names are
+birth/5181 ownership were verified before/after. Nine cleanup receipts include
+the initial failed notification run. All26 recorded fixture schema names are
 absent and initial namespace names remain; foreign table bytes were not audited.
 Synthetic fixtures only;5434, cloud, real profiles/consent, cameras and models
 were not used. The separate forward-only down test belongs to the qualified65
@@ -71,8 +74,8 @@ candidate; it is not reported as a new66 down/recovery run.
 
 Evidence directory under the existing Main0dd integration run:
 `main-tuan-convergence-20261018-v1`.
-Read `proof-v1.json`, `resolution-v1.json`, `source-proof-v2.json`, `result-v1.json`,
-the named log/exit/ownership receipts and `compiled-pins-v1.json`.
+Read `proof-v1.json`, `resolution-v1.json`, `source-proof-v2.json`, `result-v2.json`,
+the named log/exit/ownership receipts and `compiled-pins-v2.json`.
 
 State: **COMBINED66_SCOPED_QUALIFIED_NOT_MERGED**. Independent Backend review,
 remaining affected HTTP/QR/runtime/recovery checks, nativeCI and an explicitly
