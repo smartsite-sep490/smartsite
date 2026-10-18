@@ -231,7 +231,9 @@ export function WorkerDocumentsPanel(p: Props) {
               onClick={toggleAll}
               className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-slate-600 transition-all shadow-2xs cursor-pointer select-none"
             >
-              {expandedSections.length === allSections.length ? 'Thu gọn tất cả' : 'Mở rộng tất cả'}
+              {expandedSections.length === allSections.length
+                ? tr('documents.collapseAll')
+                : tr('documents.expandAll')}
             </button>
           </div>
         </div>
@@ -294,7 +296,7 @@ export function WorkerDocumentsPanel(p: Props) {
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <IconUser className="w-4 h-4 text-[#F66B17] shrink-0" />
             <span className="font-extrabold text-sm text-slate-800 truncate">
-              Căn cước công dân (Mặt trước & Mặt sau)
+              {tr('documents.identityBothSides')}
             </span>
           </div>
 
@@ -303,7 +305,7 @@ export function WorkerDocumentsPanel(p: Props) {
             {identityMismatch && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs whitespace-nowrap">
                 <IconAlertTriangle className="w-3 h-3 text-amber-700 shrink-0" />
-                <span>Lệch CCCD</span>
+                <span>{tr('documents.identityMismatchShort')}</span>
               </span>
             )}
 
@@ -322,8 +324,8 @@ export function WorkerDocumentsPanel(p: Props) {
               />
               <span>
                 {identityUploadedCount === 2
-                  ? 'Đủ 2 mặt'
-                  : `Chưa đủ ảnh (${identityUploadedCount}/2)`}
+                  ? tr('documents.identityComplete')
+                  : tr('documents.identityIncomplete', { count: identityUploadedCount })}
               </span>
             </span>
 
@@ -699,7 +701,7 @@ export function WorkerDocumentsPanel(p: Props) {
                   {hasMismatch && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs whitespace-nowrap">
                       <IconAlertTriangle className="w-3 h-3 text-amber-700 shrink-0" />
-                      <span>Lệch CCCD</span>
+                      <span>{tr('documents.identityMismatchShort')}</span>
                     </span>
                   )}
 
@@ -707,7 +709,7 @@ export function WorkerDocumentsPanel(p: Props) {
                   {isExpiring && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap">
                       <IconClock className="w-3 h-3 text-amber-600 shrink-0" />
-                      <span>Sắp hết hạn</span>
+                      <span>{tr('common.expiring_soon')}</span>
                     </span>
                   )}
 
@@ -964,7 +966,7 @@ function ReviewDocument({
     >
       <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-orange-950 border-b border-orange-200/60 pb-2.5">
         <IconShield className="w-4 h-4 text-[#F66B17]" />
-        <span>Quyết định duyệt của Cán bộ an toàn</span>
+        <span>{tr('documents.reviewDecision')}</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1003,7 +1005,7 @@ function ReviewDocument({
           rows={3}
           value={note}
           maxLength={1000}
-          placeholder="Nhập nhận xét hoặc lý do yêu cầu nộp lại..."
+          placeholder={tr('documents.reviewNotePlaceholder')}
           onChange={(e) => setNote(e.target.value)}
         />
       </label>

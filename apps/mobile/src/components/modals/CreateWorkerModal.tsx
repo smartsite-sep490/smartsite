@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -167,7 +168,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               <Text style={styles.label}>{t('workforce.fullName')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Ví dụ: Nguyễn Văn An"
+                placeholder={tr('workforce.nameExample')}
                 placeholderTextColor={colors.textMuted}
                 value={displayName}
                 editable={!pendingAccount && !command.isPending}
@@ -184,7 +185,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               <Text style={styles.label}>{t('workforce.username')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Ví dụ: nguyenvanan"
+                placeholder={tr('workforce.usernameExample')}
                 placeholderTextColor={colors.textMuted}
                 value={username}
                 editable={!pendingAccount && !command.isPending}

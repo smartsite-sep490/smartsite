@@ -1,3 +1,5 @@
+import { localizedLabel } from '../../i18n/messages';
+import { translate as tr, uiLocale } from '../../i18n';
 import React, { useState } from 'react';
 import {
   View,
@@ -116,7 +118,7 @@ export function AttendanceScreen({
 
   if (!workers.isSuccess)
     return (
-      <Page title="Phạm vi công nhân" onBack={onBack}>
+      <Page title={tr('attendance.workerScope')} onBack={onBack}>
         <QueryState query={workers}>{() => null}</QueryState>
       </Page>
     );
@@ -213,7 +215,10 @@ export function AttendanceScreen({
                   <View style={attStyles.dateBadge}>
                     <Text style={attStyles.dateBadgeDay}>{day.workDate.slice(8)}</Text>
                     <Text style={attStyles.dateBadgeMonth}>
-                      Th{Number(day.workDate.slice(5, 7))}
+                      {new Intl.DateTimeFormat(uiLocale(), {
+                        month: 'short',
+                        timeZone: 'UTC',
+                      }).format(new Date(`${day.workDate}T00:00:00Z`))}
                     </Text>
                   </View>
                   <View style={attStyles.dayInfoCol}>
@@ -281,7 +286,7 @@ export function AttendanceScreen({
               {data.requests.map((r) => (
                 <Body key={r.id}>
                   {r.kind === 'LEAVE' ? t('attendance.leave') : t('attendance.overtime')} ·{' '}
-                  {displayTime(r.startsAt)}–{displayTime(r.endsAt)} · {r.status}
+                  {displayTime(r.startsAt)}–{displayTime(r.endsAt)} · {localizedLabel(r.status)}
                   {r.reviewNote ? ` · ${r.reviewNote}` : ''}
                 </Body>
               ))}
@@ -305,7 +310,8 @@ export function AttendanceScreen({
             {!data.items.length && <Hint>{t('attendance.noConfirmedHours')}</Hint>}
             {data.items.map((w) => (
               <Body key={w.workerId}>
-                {w.workerName} · {w.confirmedDays} ngày · {minutes(w.totalMinutes)}
+                {w.workerName} · {w.confirmedDays} {tr('attendance.daysSeparator')}{' '}
+                {minutes(w.totalMinutes)}
               </Body>
             ))}
           </Card>
@@ -338,15 +344,15 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
 
   if (!workers.isSuccess)
     return (
-      <Page title="Phạm vi công nhân" onBack={onBack}>
+      <Page title={tr('attendance.workerScope')} onBack={onBack}>
         <QueryState query={workers}>{() => null}</QueryState>
       </Page>
     );
 
   if (query.data && !workers.data.some((w) => w.id === query.data.day.workerId))
     return (
-      <Page title="Ngoài phạm vi đang chọn" onBack={onBack}>
-        <Hint>Chọn đúng công trường, nhà thầu hoặc vai trò để xem ngày công này.</Hint>
+      <Page title={tr('attendance.outOfScope')} onBack={onBack}>
+        <Hint>{tr('attendance.scopeHint')}</Hint>
       </Page>
     );
 
@@ -365,7 +371,7 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
                   </Text>
                 </View>
                 <View style={attStyles.detailStatusBadge}>
-                  <Text style={attStyles.detailStatusText}>{data.day.status}</Text>
+                  <Text style={attStyles.detailStatusText}>{localizedLabel(data.day.status)}</Text>
                 </View>
               </View>
 
@@ -394,7 +400,7 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
             {/* Vertical Timeline of In/Out Sessions (Matching Lovable) */}
             <View style={attStyles.timelineSection}>
               <Text style={attStyles.sectionTitle}>{t('attendance.timeline')}</Text>
-              {!data.sessions.length && <Hint>Chưa có phiên làm việc ghi nhận.</Hint>}
+              {!data.sessions.length && <Hint>{tr('attendance.noSessions')}</Hint>}
               {data.sessions.map((s, index) => {
                 const isLast = index === data.sessions.length - 1;
                 return (
@@ -407,7 +413,8 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
                     <View style={attStyles.sessionCard}>
                       <View style={attStyles.sessionCardHeader}>
                         <Text style={attStyles.sessionCardTitle}>
-                          {t('attendance.sessionCount', { index: index + 1 })} · {s.status}
+                          {t('attendance.sessionCount', { index: index + 1 })} ·{' '}
+                          {localizedLabel(s.status)}
                         </Text>
                         <View style={attStyles.workedBadge}>
                           <Text style={attStyles.workedBadgeText}>{minutes(s.workedMinutes)}</Text>
@@ -468,7 +475,7 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
             {!data.corrections.length && <Hint>{t('attendance.noRequests')}</Hint>}
             {data.corrections.map((c) => (
               <Body key={c.id}>
-                {c.reason} · {c.status} · {displayTime(c.proposedInAt)} →{' '}
+                {c.reason} · {localizedLabel(c.status)} · {displayTime(c.proposedInAt)} →{' '}
                 {displayTime(c.proposedOutAt)}
                 {c.reviewNote ? ` · ${c.reviewNote}` : ''}
               </Body>
@@ -516,30 +523,34 @@ function CorrectionModal({
         <View style={attStyles.modalSheet}>
           <View style={attStyles.modalDragHandle} />
           <Text style={attStyles.modalTitle}>{t('attendance.requestSessionCorrection')}</Text>
-          <Text style={attStyles.modalSubtitle}>
-            Sự kiện quét gốc được giữ nguyên. Site Manager xét duyệt yêu cầu.
-          </Text>
+          <Text style={attStyles.modalSubtitle}>{tr('attendance.correctionHint')}</Text>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <DateTimeField label="Giờ vào đề nghị" value={from} onChange={setFrom} />
-            <DateTimeField label="Giờ ra đề nghị" value={to} onChange={setTo} />
-            <Field label="Lý do sửa công" multiline value={reason} onChangeText={setReason} />
+            <DateTimeField label={tr('attendance.proposedIn')} value={from} onChange={setFrom} />
+            <DateTimeField label={tr('attendance.proposedOut')} value={to} onChange={setTo} />
+            <Field
+              label={tr('attendance.correctionReason')}
+              multiline
+              value={reason}
+              onChangeText={setReason}
+            />
             <ErrorNotice error={command.error} />
 
             <View style={{ marginTop: 16 }}>
               <Button
-                label="Gửi Site Manager"
+                label={tr('attendance.submitToManager')}
                 disabled={command.isPending || !from || !to || !reason.trim()}
                 onPress={() =>
                   command.mutate(async () => {
                     const proposedInAt = instant(from),
                       proposedOutAt = instant(to);
-                    if (proposedOutAt <= proposedInAt) throw new Error('Giờ ra phải sau giờ vào.');
+                    if (proposedOutAt <= proposedInAt)
+                      throw new Error(tr('validation.exitAfterEntry'));
                     const input = {
                       expectedSessionVersion: session.version,
                       proposedInAt,
                       proposedOutAt,
-                      reason: required(reason, 'lý do'),
+                      reason: required(reason, tr('validation.reasonLabel')),
                     };
                     await client.requestAttendanceCorrection(token, scope.siteId, session.id, {
                       ...input,
@@ -609,15 +620,15 @@ function TimeRequestModal({ visible, onClose }: { visible: boolean; onClose: () 
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <Choice
-              label="Loại yêu cầu"
+              label={tr('schedule.requestType')}
               value={kind}
               onChange={(v) => {
                 setKind(v as typeof kind);
                 command.reset();
               }}
               options={[
-                { value: 'LEAVE', label: 'Nghỉ trong ca' },
-                { value: 'OVERTIME', label: 'Tăng ca ngoài giờ' },
+                { value: 'LEAVE', label: tr('attendance.partialLeave') },
+                { value: 'OVERTIME', label: tr('attendance.overtimeOutsideShift') },
               ]}
             />
             <QueryState query={shifts}>
@@ -625,12 +636,12 @@ function TimeRequestModal({ visible, onClose }: { visible: boolean; onClose: () 
                 <QueryState query={schedules}>
                   {(data) => (
                     <Choice
-                      label="Ca được phân công"
+                      label={tr('attendance.assignedShift')}
                       value={scheduleId}
                       onChange={setSchedule}
                       options={data.map((s) => ({
                         value: s.id,
-                        label: `${s.workDate} · ${shifts.data?.find((v) => v.id === s.shiftId)?.name ?? 'Ca làm'}`,
+                        label: `${s.workDate} · ${shifts.data?.find((v) => v.id === s.shiftId)?.name ?? tr('schedule.shift')}`,
                       }))}
                     />
                   )}
@@ -638,33 +649,38 @@ function TimeRequestModal({ visible, onClose }: { visible: boolean; onClose: () 
               )}
             </QueryState>
 
-            <DateTimeField label="Bắt đầu" value={from} onChange={setFrom} />
-            <DateTimeField label="Kết thúc" value={to} onChange={setTo} />
+            <DateTimeField label={tr('common.start')} value={from} onChange={setFrom} />
+            <DateTimeField label={tr('common.end')} value={to} onChange={setTo} />
             <Hint>
               {kind === 'LEAVE'
-                ? 'Thời gian nghỉ phải nằm trong ca được phân công.'
-                : 'Gửi trước khi tăng ca bắt đầu, ngoài giờ ca chính.'}
+                ? tr('attendance.leaveBoundsHint')
+                : tr('attendance.overtimeBoundsHint')}
             </Hint>
-            <Field label="Lý do" value={reason} onChangeText={setReason} multiline />
+            <Field
+              label={tr('requests.reason')}
+              value={reason}
+              onChangeText={setReason}
+              multiline
+            />
             <ErrorNotice error={command.error} />
 
             <View style={{ marginTop: 12 }}>
               <Button
-                label="Gửi Site Manager"
+                label={tr('attendance.submitToManager')}
                 disabled={command.isPending || !scheduleId || !from || !to || !reason.trim()}
                 onPress={() =>
                   command.mutate(async () => {
                     const startsAt = instant(from),
                       endsAt = instant(to);
-                    if (endsAt <= startsAt) throw new Error('Thời gian kết thúc phải sau bắt đầu.');
+                    if (endsAt <= startsAt) throw new Error(tr('validation.timeEndAfterStart'));
                     if (kind === 'OVERTIME' && Date.parse(startsAt) <= Date.now())
-                      throw new Error('Tăng ca phải được yêu cầu trước giờ bắt đầu.');
+                      throw new Error(tr('validation.overtimeBeforeStart'));
                     const input = {
                       workerScheduleId: scheduleId,
                       kind,
                       startsAt,
                       endsAt,
-                      reason: required(reason, 'lý do'),
+                      reason: required(reason, tr('validation.reasonLabel')),
                     };
                     await client.requestAttendanceTime(token, scope.siteId, {
                       ...input,
@@ -680,11 +696,12 @@ function TimeRequestModal({ visible, onClose }: { visible: boolean; onClose: () 
             <QueryState query={history}>
               {(data) => (
                 <View style={{ marginTop: 16 }}>
-                  <Text style={attStyles.sectionTitle}>Lịch sử yêu cầu</Text>
-                  {!data.length && <Hint>Chưa có yêu cầu.</Hint>}
+                  <Text style={attStyles.sectionTitle}>{tr('attendance.requestHistory')}</Text>
+                  {!data.length && <Hint>{tr('attendance.noRequests')}</Hint>}
                   {data.map((r) => (
                     <Text key={r.id} style={attStyles.historyRowText}>
-                      {displayTime(r.startsAt)}–{displayTime(r.endsAt)} · {r.status} · {r.reason}
+                      {displayTime(r.startsAt)}–{displayTime(r.endsAt)} · {localizedLabel(r.status)}{' '}
+                      · {r.reason}
                     </Text>
                   ))}
                 </View>

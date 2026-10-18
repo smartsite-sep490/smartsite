@@ -1,3 +1,5 @@
+import { useTranslation } from '../../i18n';
+import { translate as tr } from '../../i18n';
 import {
   createContext,
   useContext,
@@ -37,6 +39,7 @@ export function WorkspaceProvider({
   children,
   onScopeChange,
 }: PropsWithChildren<{ scope: MobileScope; user: AccountResponse; onScopeChange: () => void }>) {
+  useTranslation();
   const { session, epoch, token } = useAuth();
   const [controller] = useState(() => new AbortController());
   useEffect(() => {
@@ -89,9 +92,9 @@ export function WorkspaceProvider({
   );
   if (scope.role === 'worker' && !self.isSuccess)
     return (
-      <Page title="Hồ sơ công nhân">
+      <Page title={tr('workforce.workerProfile')}>
         <QueryState query={self}>{() => null}</QueryState>
-        <Button secondary label="Chọn lại công trường / vai trò" onPress={onScopeChange} />
+        <Button secondary label={tr('scope.chooseAgain')} onPress={onScopeChange} />
       </Page>
     );
   if (scope.role === 'worker')
@@ -101,8 +104,8 @@ export function WorkspaceProvider({
           data.workerId ? (
             content
           ) : (
-            <Page title="Chưa có hồ sơ công nhân">
-              <Hint>Liên hệ đại diện nhà thầu để liên kết tài khoản tại công trường.</Hint>
+            <Page title={tr('scope.noWorkerProfile')}>
+              <Hint>{tr('scope.linkWorkerHint')}</Hint>
             </Page>
           )
         }

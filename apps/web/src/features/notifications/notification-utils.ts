@@ -83,6 +83,7 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
+  if (item.event.startsWith('DOCUMENT_')) return tr(`notifications.${item.event}`);
   if (
     i18n.exists(`notifications.${item.event}`) &&
     (item.title === item.event ||

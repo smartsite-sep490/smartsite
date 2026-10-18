@@ -245,7 +245,7 @@ export function WorkerDocumentReviewView(p: {
                         {!(p.canReview ?? true) && w.expiringKinds.length > 0 && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 shadow-2xs whitespace-nowrap">
                             <IconClock className="w-2.5 h-2.5 text-amber-600" />
-                            <span>Sắp hết hạn</span>
+                            <span>{tr('common.expiring_soon')}</span>
                           </span>
                         )}
                       </div>
@@ -260,7 +260,7 @@ export function WorkerDocumentReviewView(p: {
           {workers.data && workers.data.total > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
               <span className="font-medium text-slate-500">
-                {currentPage}/{totalPages} ({total} thợ)
+                {tr('documents.queuePage', { page: currentPage, pages: totalPages, count: total })}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -299,10 +299,11 @@ export function WorkerDocumentReviewView(p: {
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center text-slate-500 space-y-3">
               <IconUsers className="w-10 h-10 text-slate-400 mx-auto" />
               <div className="space-y-1">
-                <p className="font-bold text-sm text-slate-700">Chưa chọn hồ sơ công nhân</p>
+                <p className="font-bold text-sm text-slate-700">
+                  {tr('documents.noWorkerSelected')}
+                </p>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                  Chọn một công nhân từ danh sách hàng đợi bên trái để kiểm tra và duyệt hồ sơ giấy
-                  tờ.
+                  {tr('documents.selectWorkerHint')}
                 </p>
               </div>
             </div>

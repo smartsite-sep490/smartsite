@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SmartSiteManagementClient, type WorkerComplianceResponse } from '@smartsite/api-client';
 import type { useWorkspace } from '../workspace/workspace-context';
 import { WorkerDocuments } from './worker-documents';
-import { translate as t } from '../../i18n';
+import { translate as t, setLanguage } from '../../i18n';
 import { Field, Button } from '../shared/ui';
 
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
@@ -16,6 +16,7 @@ afterEach(async () => {
   if (root) await act(async () => root.unmount());
   cache?.clear();
   vi.restoreAllMocks();
+  await setLanguage('vi');
 });
 
 it('keeps Worker originals read-only and allows Representative expiry suggestions on pending documents', async () => {
@@ -131,6 +132,14 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
     .findAllByType(Field)
     .find((node) => node.props.label === `${t('documents.submittedExpiresOn')} (YYYY-MM-DD)`)!;
   await act(async () => field.props.onChangeText('2027-10-18'));
+  await act(async () => {
+    await setLanguage('en');
+  });
+  const translatedField = root.root
+    .findAllByType(Field)
+    .find((node) => node.props.label === `${t('documents.submittedExpiresOn')} (YYYY-MM-DD)`)!;
+  expect(translatedField.props.value).toBe('2027-10-18');
+  expect(JSON.stringify(root.toJSON())).toContain('Synthetic Worker');
   const button = root.root
     .findAllByType(Button)
     .find((node) => node.props.label === t('documents.saveSubmittedExpiry'))!;

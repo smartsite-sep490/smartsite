@@ -12,6 +12,35 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it.each(['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const)(
+    'translates %s notification text without changing authored values',
+    async (kind) => {
+      const values = {
+        name: 'Nguyễn Văn Test',
+        code: 'W001',
+        note: 'Giữ nguyên Approved & 012345678901',
+        date: '2026-10-18',
+      };
+      for (const event of [
+        'DOCUMENT_SUBMITTED',
+        'DOCUMENT_APPROVED',
+        'DOCUMENT_REJECTED',
+        'DOCUMENT_EXPIRING',
+        'DOCUMENT_EXPIRED',
+      ] as const) {
+        await i18n.changeLanguage('vi');
+        const key = `documentNotifications.${kind}_${event}`;
+        const message = translate(key, values),
+          title = translate(`notifications.${event}`);
+        await i18n.changeLanguage('en');
+        expect(formatNotificationTitle({ event, title })).toBe(translate(`notifications.${event}`));
+        expect(formatNotificationDisplayMessage({ event, message })).toBe(translate(key, values));
+        expect(formatNotificationDisplayMessage({ event, message })).toContain(values.name);
+        if (event === 'DOCUMENT_REJECTED')
+          expect(formatNotificationDisplayMessage({ event, message })).toContain(values.note);
+      }
+    },
+  );
   it('identifies the worker missing checkout in both languages without translating their name', async () => {
     const item = {
       event: 'MISSING_CHECKOUT' as const,

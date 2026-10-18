@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../../i18n';
+import { localizedError } from '../../../i18n/messages';
 
 /** Web selects existing files; mobile owns camera capture. */
 export function DocumentMediaPicker({
@@ -129,7 +130,7 @@ export function DocumentMediaPicker({
             role="alert"
             className="text-xs font-bold text-red-700 bg-red-100/70 px-2.5 py-1.5 rounded-lg border border-red-200"
           >
-            {error}
+            {localizedError(error)}
           </p>
         )}
       </div>

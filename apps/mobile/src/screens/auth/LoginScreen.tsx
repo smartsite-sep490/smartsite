@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
 import {
   View,
@@ -99,7 +100,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
               placeholder={t('auth.username')}
               placeholderTextColor="#94A3B8"
               value={username}
-              accessibilityLabel="Tên đăng nhập"
+              accessibilityLabel={tr('workforce.username')}
               onChangeText={setUsername}
               autoCapitalize="none"
               autoCorrect={false}
@@ -114,7 +115,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
               placeholder={t('auth.password')}
               placeholderTextColor="#94A3B8"
               value={password}
-              accessibilityLabel="Mật khẩu"
+              accessibilityLabel={tr('auth.password')}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
@@ -127,18 +128,9 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
           {/* Forgot Password Link */}
           <Pressable
             style={styles.forgotBtn}
-            onPress={() =>
-              Alert.alert(
-                t('profile.changePassword'),
-                currentLang === 'vi'
-                  ? 'Vui lòng liên hệ ban quản lý công trường để được cấp lại mật khẩu tài khoản.'
-                  : 'Please contact site management to reset your account password.',
-              )
-            }
+            onPress={() => Alert.alert(t('profile.changePassword'), tr('auth.passwordResetHint'))}
           >
-            <Text style={styles.forgotText}>
-              {currentLang === 'vi' ? 'Quên mật khẩu?' : 'Forgot password?'}
-            </Text>
+            <Text style={styles.forgotText}>{tr('auth.forgotPassword')}</Text>
           </Pressable>
 
           {/* Submit Button */}
@@ -147,7 +139,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
             onPress={handleLogin}
             disabled={pending || !username.trim() || !password}
             accessibilityRole="button"
-            accessibilityLabel="Đăng nhập"
+            accessibilityLabel={tr('auth.signIn')}
           >
             <Text style={styles.loginBtnText}>
               {pending ? t('auth.signingIn') : t('auth.signIn')}
@@ -155,11 +147,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
           </Pressable>
 
           {/* Footer Note */}
-          <Text style={styles.footerNote}>
-            {currentLang === 'vi'
-              ? 'Tài khoản do quản lý công trường cấp'
-              : 'Accounts are issued by site management'}
-          </Text>
+          <Text style={styles.footerNote}>{tr('auth.accountsIssuedByManagement')}</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

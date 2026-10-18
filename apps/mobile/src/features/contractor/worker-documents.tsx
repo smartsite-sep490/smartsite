@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -202,7 +203,7 @@ export function WorkerDocuments({
 
               {/* Identity Images (Front & Back) */}
               <View style={docStyles.sectionHeader}>
-                <Text style={docStyles.sectionTitle}>Căn cước công dân (CCCD)</Text>
+                <Text style={docStyles.sectionTitle}>{tr('documents.identityHeading')}</Text>
               </View>
 
               {(['FRONT', 'BACK'] as const).map((side) => {
@@ -298,7 +299,7 @@ export function WorkerDocuments({
 
               {/* 3 Safety & Health Certificates */}
               <View style={docStyles.sectionHeader}>
-                <Text style={docStyles.sectionTitle}>Chứng chỉ & Giấy tờ an toàn</Text>
+                <Text style={docStyles.sectionTitle}>{tr('documents.certificatesHeading')}</Text>
               </View>
 
               {documentKinds.map((kind) => {

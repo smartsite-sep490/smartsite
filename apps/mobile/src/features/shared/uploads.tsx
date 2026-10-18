@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Image, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,8 +26,7 @@ export async function capturePhoto(
   document = false,
 ): Promise<NativeUploadFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted)
-    throw new Error('Cần quyền camera để chụp ảnh. Bạn có thể cấp quyền trong cài đặt thiết bị.');
+  if (!permission.granted) throw new Error(tr('uploads.cameraPermission'));
   const result = await ImagePicker.launchCameraAsync({
     mediaTypes: ['images'],
     quality: document ? 1 : 0.7,
@@ -46,11 +46,7 @@ export async function capturePhoto(
     const transformed = new File(saved.uri);
     if (transformed.size > (document ? 5 : 1) * 1024 * 1024) {
       transformed.delete();
-      throw new Error(
-        document
-          ? 'Ảnh vượt 5 MB. Vui lòng chụp lại.'
-          : 'Ảnh vượt 1 MB. Vui lòng chụp lại với khung hình gọn hơn.',
-      );
+      throw new Error(document ? tr('uploads.photoTooLarge') : tr('uploads.evidencePhotoTooLarge'));
     }
     return { uri: saved.uri, name: 'photo.jpg', type: 'image/jpeg' };
   } finally {
@@ -109,7 +105,7 @@ export function Attachments({
         if (file) await accept(file);
       } else if (source === 'gallery') {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) throw new Error('Cần quyền thư viện ảnh để chọn ảnh giấy tờ.');
+        if (!permission.granted) throw new Error(tr('uploads.libraryPermission'));
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 1,
@@ -124,7 +120,7 @@ export function Attachments({
           const file = { uri: saved.uri, name: 'document-gallery.jpg', type: 'image/jpeg' };
           if (new File(saved.uri).size > 5 * 1024 * 1024) {
             removeCached(file);
-            throw new Error('Mỗi ảnh tối đa 5 MB.');
+            throw new Error(tr('uploads.imageSizeLimit'));
           }
           await accept(file);
         }
@@ -139,7 +135,7 @@ export function Attachments({
         if (asset) {
           const size = asset.size ?? new File(asset.uri).size;
           if (size > (jpegOnly ? 1024 * 1024 : 5 * 1024 * 1024))
-            throw new Error(jpegOnly ? 'Ảnh JPEG tối đa 1 MB.' : 'Mỗi tệp tối đa 5 MB.');
+            throw new Error(jpegOnly ? tr('uploads.jpegSizeLimit') : tr('uploads.fileSizeLimit'));
           const mime =
             asset.mimeType ??
             (asset.name.toLowerCase().endsWith('.pdf')
@@ -159,11 +155,7 @@ export function Attachments({
   };
   return (
     <View style={{ gap: 10 }}>
-      <Hint>
-        {jpegOnly
-          ? 'Ảnh JPEG tối đa 1 MB.'
-          : 'JPEG, PNG hoặc PDF. Mỗi tệp tối đa 5 MB; tổng tối đa 20 MB.'}
-      </Hint>
+      <Hint>{jpegOnly ? tr('uploads.jpegSizeLimit') : tr('uploads.attachmentsHint')}</Hint>
       {files.map((file, index) => (
         <Card key={`${file.uri}:${index}`}>
           <Body>{file.name}</Body>
@@ -176,7 +168,7 @@ export function Attachments({
           )}
           <Button
             secondary
-            label={`Gỡ ${file.name}`}
+            label={tr('uploads.removeFile', { name: file.name })}
             onPress={() => onChange(files.filter((_, i) => i !== index))}
           />
         </Card>
@@ -184,7 +176,7 @@ export function Attachments({
       <ErrorNotice error={error} />
       <Button
         secondary
-        label={validateFile ? t('documents.camera') : 'Chụp ảnh'}
+        label={validateFile ? t('documents.camera') : tr('uploads.takePhoto')}
         disabled={pending || files.length >= maxFiles}
         onPress={() => void add('camera')}
       />
@@ -198,7 +190,7 @@ export function Attachments({
       )}
       <Button
         secondary
-        label="Chọn tệp đính kèm"
+        label={tr('uploads.chooseAttachment')}
         disabled={pending || files.length >= maxFiles}
         onPress={() => void add('file')}
       />
@@ -208,12 +200,13 @@ export function Attachments({
 export function EvidenceButton({
   load,
   mediaType,
-  label = 'Xem bằng chứng',
+  label = tr('uploads.viewEvidence'),
 }: {
   load: () => Promise<Blob>;
   mediaType: string;
   label?: string;
 }) {
+  useTranslation();
   const [uri, setUri] = useState(''),
     [error, setError] = useState<unknown>(null),
     [pending, setPending] = useState(false);
@@ -232,8 +225,7 @@ export function EvidenceButton({
           }),
         );
       } else {
-        if (!(await Sharing.isAvailableAsync()))
-          throw new Error('Thiết bị chưa hỗ trợ mở tệp PDF.');
+        if (!(await Sharing.isAvailableAsync())) throw new Error(tr('uploads.pdfUnavailable'));
         const file = new File(Paths.cache, `smartsite-evidence-${Date.now()}.pdf`);
         try {
           file.create();
@@ -262,7 +254,7 @@ export function EvidenceButton({
       {uri && (
         <>
           <Image source={{ uri }} style={{ height: 260 }} resizeMode="contain" />
-          <Button secondary label="Đóng ảnh" onPress={() => setUri('')} />
+          <Button secondary label={tr('uploads.closeImage')} onPress={() => setUri('')} />
         </>
       )}
     </View>

@@ -23,6 +23,7 @@ import { AccessScreen } from './features/access/access-screen';
 import { AssignedWorkScreen } from './features/assigned-work/assigned-work-screen';
 import { QrScreen, NotificationsScreen } from './features/workspace/qr-notifications';
 import { useTranslation, initSavedLanguage } from './i18n';
+import { localizeMessage } from './i18n/messages';
 
 export type UserRole = 'worker' | 'contractor';
 export type MobileRoute =
@@ -337,7 +338,7 @@ function AuthenticatedApp() {
         </Card>
       )}
       {expired && <Hint>{t('auth.sessionExpired')}</Hint>}
-      {notice && <Hint>{notice}</Hint>}
+      {notice && <Hint>{localizeMessage(notice)}</Hint>}
       <LoginScreen
         pending={login.isPending}
         error={login.error}
