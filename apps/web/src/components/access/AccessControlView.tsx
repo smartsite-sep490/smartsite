@@ -1,9 +1,8 @@
 import { localizedLabel } from '../../i18n/labels';
 import { localizedError } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import {
   IconAlertTriangle,
   IconBuilding2,
@@ -22,7 +21,12 @@ import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
 import { ZoneDecisionHistory } from './permissions/ZoneDecisionHistory';
 import { WorkerMobileQrView } from './gate/WorkerMobileQrView';
 import { AttendanceView } from './attendance/AttendanceView';
-import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
+import {
+  useManagementClient,
+  useAuth,
+  useCurrentUser,
+  useLogout,
+} from '../../features/auth/auth-session';
 import { isSecurityWorkspaceOnly } from '../../features/auth/workspace-access';
 import { useTranslation } from 'react-i18next';
 
@@ -134,7 +138,7 @@ function errorMessage(error: unknown): string {
 
 export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const { t } = useTranslation();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const { accessToken } = useAuth();
   const currentUserQuery = useCurrentUser(apiUrl);
