@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError } from '@smartsite/api-client';
+import type { CameraResponse, SiteResponse } from '@smartsite/contracts/management';
 import type { SharedSession } from '../../types/shared-session';
 import { changeUiLanguage } from '../../i18n/runtime';
 import { CameraSetupView } from './CameraSetupView';
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   listPreviewCameras: vi.fn(),
   client: {} as Record<string, unknown>,
   section: undefined as string | undefined,
+  initialCameraId: undefined as string | undefined,
   canManageZones: false,
   canManageRegions: false,
   canReadZones: false,
@@ -22,12 +24,14 @@ vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => 
 vi.mock('../ppe/ZonePpeSetupDialog', () => ({
   ZonePpeSetupDialog: (props: {
     section?: string;
+    initialCameraId?: string;
     canReadZones?: boolean;
     canManageZones: boolean;
     canManageRegions: boolean;
     onClose: () => void;
   }) => {
     mocks.section = props.section;
+    mocks.initialCameraId = props.initialCameraId;
     mocks.canManageZones = props.canManageZones;
     mocks.canManageRegions = props.canManageRegions;
     mocks.canReadZones = Boolean(props.canReadZones);
@@ -41,7 +45,32 @@ vi.mock('../ppe/ZonePpeSetupDialog', () => ({
 vi.mock('./CameraRegistrationDialog', () => ({
   CameraRegistrationDialog: () => <div role="dialog">Register camera form</div>,
 }));
-const site = { id: 'site-1', code: 'S1', name: 'North Site', createdAt: '2026-10-17T00:00:00Z' };
+const site: SiteResponse = {
+  id: 'site-1',
+  code: 'S1',
+  name: 'North Site',
+  createdAt: '2026-10-17T00:00:00Z',
+};
+const activeCamera: CameraResponse = {
+  id: 'cam-1',
+  siteId: site.id,
+  code: 'C1',
+  name: 'Gate camera',
+  externalId: 'source-gate',
+  status: 'ACTIVE',
+  configurationVersion: 1,
+  createdAt: site.createdAt,
+};
+const inactiveCamera: CameraResponse = {
+  id: 'cam-2',
+  siteId: site.id,
+  code: 'C2',
+  name: 'Storage camera',
+  externalId: 'source-storage',
+  status: 'INACTIVE',
+  configurationVersion: 1,
+  createdAt: site.createdAt,
+};
 const manager: SharedSession = {
   accessToken: 'synthetic-token',
   sessionScope: 'workflow-session',
@@ -68,7 +97,10 @@ function mount(session = manager) {
 beforeEach(() => {
   changeUiLanguage('en');
   mocks.listSites.mockReset().mockResolvedValue({ items: [site], total: 1 });
-  mocks.listCameras.mockReset().mockResolvedValue({ items: [], total: 0 });
+  mocks.listCameras.mockReset().mockResolvedValue({
+    items: [activeCamera, inactiveCamera],
+    total: 2,
+  });
   mocks.listPreviewCameras.mockReset();
   mocks.client = {
     listSites: mocks.listSites,
@@ -76,6 +108,7 @@ beforeEach(() => {
     listPreviewCameras: mocks.listPreviewCameras,
   };
   mocks.section = undefined;
+  mocks.initialCameraId = undefined;
   mocks.canManageZones = false;
   mocks.canManageRegions = false;
   mocks.canReadZones = false;
@@ -87,22 +120,45 @@ afterEach(() => {
 
 it('makes the ordered setup workflow visible with one action per task and separate policy/region entry', async () => {
   mount();
-  const guide = await screen.findByRole('list', { name: 'Setup steps' });
-  expect(guide.tagName).toBe('OL');
-  expect(guide.closest('details:not([open])')).toBeNull();
-  expect(within(guide).getAllByRole('listitem')).toHaveLength(3);
-  for (const name of ['Configure PPE by Zone', 'Register camera', 'Link observation regions']) {
-    expect(screen.getAllByRole('button', { name })).toHaveLength(1);
-    expect(within(guide).getByRole('button', { name })).toBeTruthy();
+  const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
+  await within(camerasSection).findByRole('heading', { name: activeCamera.name });
+
+  const helpSummary = within(camerasSection)
+    .getByText('How to set up this site')
+    .closest('summary');
+  const helpDetails = helpSummary?.parentElement;
+  if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
+    throw new Error('Expected native details/summary for setup help.');
   }
-  fireEvent.click(within(guide).getByRole('button', { name: 'Configure PPE by Zone' }));
+  expect(helpDetails.open).toBe(false);
+  fireEvent.click(helpSummary);
+  expect(helpDetails.open).toBe(true);
+
+  const guide = within(helpDetails).getByRole('list', { name: 'Setup steps' });
+  expect(guide.tagName).toBe('OL');
+  expect(within(guide).getAllByRole('listitem')).toHaveLength(3);
+  expect(within(guide).queryByRole('button')).toBeNull();
+
+  for (const name of ['Configure PPE by Zone', 'Register camera', 'Link observation regions']) {
+    expect(within(camerasSection).getAllByRole('button', { name })).toHaveLength(1);
+  }
+  fireEvent.click(within(camerasSection).getByRole('button', { name: 'Configure PPE by Zone' }));
   expect(mocks.section).toBe('zones');
+  expect(mocks.initialCameraId).toBeUndefined();
   expect(mocks.canManageZones).toBe(true);
   expect(mocks.canManageRegions).toBe(true);
   expect(mocks.canReadZones).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Close setup task' }));
-  fireEvent.click(within(guide).getByRole('button', { name: 'Link observation regions' }));
+
+  const activeRow = within(camerasSection)
+    .getByRole('heading', { name: activeCamera.name })
+    .closest('li');
+  if (!activeRow) {
+    throw new Error('Expected active camera row.');
+  }
+  fireEvent.click(within(activeRow).getByRole('button', { name: 'Link observation regions' }));
   expect(mocks.section).toBe('regions');
+  expect(mocks.initialCameraId).toBe(activeCamera.id);
   expect(mocks.canManageZones).toBe(true);
   expect(mocks.canManageRegions).toBe(true);
   expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
@@ -110,8 +166,8 @@ it('makes the ordered setup workflow visible with one action per task and separa
 
 it('keeps registration on its existing form through the workflow entry', async () => {
   mount();
-  const guide = await screen.findByRole('list', { name: 'Setup steps' });
-  fireEvent.click(within(guide).getByRole('button', { name: 'Register camera' }));
+  const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
+  fireEvent.click(within(camerasSection).getByRole('button', { name: 'Register camera' }));
   expect(screen.getByRole('dialog').textContent).toBe('Register camera form');
   expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 });
@@ -121,8 +177,9 @@ it('offers Admin policy reading but no camera or Region writer in the visible gu
     ...manager,
     user: { ...manager.user, roleAssignments: [{ role: 'ADMIN', siteId: null }] },
   });
-  const guide = await screen.findByRole('list', { name: 'Setup steps' });
-  fireEvent.click(within(guide).getByRole('button', { name: 'View area policies' }));
+  const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
+  await within(camerasSection).findByRole('heading', { name: activeCamera.name });
+  fireEvent.click(within(camerasSection).getByRole('button', { name: 'View area policies' }));
   expect(mocks.section).toBe('zones');
   expect(mocks.canReadZones).toBe(true);
   expect(mocks.canManageZones).toBe(false);
@@ -145,19 +202,23 @@ it('does not grant task actions to a Site Manager assigned to another Site', asy
 
 it('preserves a policy task on locale changes and removes it on role withdrawal', async () => {
   const { rerender } = mount();
-  const guide = await screen.findByRole('list', { name: 'Setup steps' });
-  fireEvent.click(within(guide).getByRole('button', { name: 'Configure PPE by Zone' }));
+  const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
+  await within(camerasSection).findByRole('heading', { name: activeCamera.name });
+  fireEvent.click(within(camerasSection).getByRole('button', { name: 'Configure PPE by Zone' }));
   const dialog = screen.getByRole('dialog');
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('dialog')).toBe(dialog);
-  const translated = screen.getByRole('list', { name: 'Thứ tự thiết lập' });
-  expect(within(translated).getByRole('button', { name: 'Gắn vùng quan sát' })).toBeTruthy();
+  const translatedCameras = screen.getByRole('region', { name: 'Camera' });
+  expect(within(translatedCameras).getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+  expect(within(translatedCameras).getByRole('button', { name: 'Gắn vùng quan sát' })).toBeTruthy();
   rerender({
     ...manager,
     user: { ...manager.user, roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: site.id }] },
   });
   expect(screen.queryByRole('dialog')).toBeNull();
-  expect(screen.queryByRole('list', { name: 'Thứ tự thiết lập' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Cấu hình PPE theo khu vực' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Đăng ký camera' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Gắn vùng quan sát' })).toBeNull();
 });
 
 it('keeps policy management independent of a denied camera catalog without exposing Region actions', async () => {

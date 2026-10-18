@@ -126,19 +126,34 @@ describe('Zone task copy and workflow landmark alignment', () => {
     expect(viStatus.textContent).not.toMatch(/áp dụng giám sát AI/i);
   });
 
-  it('aligns the CameraSetupWorkflow section landmark label with its visible workflowTitle heading', async () => {
+  it('aligns the CameraSetupWorkflow compact toolbar and default-closed help details with its workflowTitle list label', async () => {
     render(
       <CameraSetupWorkflow canWriteZones canReadZones={false} canManageCameras open={vi.fn()} />,
     );
 
-    const region = screen.getByRole('region', { name: 'Setup steps' });
-    expect(within(region).getByRole('heading', { name: 'Setup steps' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Register camera' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Configure PPE by Zone' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Link observation regions' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Areas & PPE' })).toBeNull();
+
+    const helpSummary = screen.getByText('How to set up this site').closest('summary');
+    const helpDetails = helpSummary?.parentElement;
+    if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
+      throw new Error('Expected native details/summary for setup help.');
+    }
+    expect(helpDetails.open).toBe(false);
+    fireEvent.click(helpSummary);
+    expect(helpDetails.open).toBe(true);
+
+    const stepList = within(helpDetails).getByRole('list', { name: 'Setup steps' });
+    expect(within(stepList).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(helpDetails).queryByRole('button')).toBeNull();
 
     await act(async () => {
       await i18n.changeLanguage('vi');
     });
-    const viRegion = screen.getByRole('region', { name: 'Thứ tự thiết lập' });
-    expect(within(viRegion).getByRole('heading', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+    expect(helpDetails.open).toBe(true);
+    expect(screen.getByText('Cách thiết lập công trường').closest('summary')).toBe(helpSummary);
+    expect(within(helpDetails).getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   });
 });

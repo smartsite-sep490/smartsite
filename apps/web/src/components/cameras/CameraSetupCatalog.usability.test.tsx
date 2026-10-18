@@ -123,6 +123,7 @@ it('grants register, zone PPE, and camera-specific manage actions only to the sc
   await screen.findByText(activeCamera.name);
   expect(screen.getByRole('button', { name: 'Register camera' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Configure PPE by Zone' })).toBeTruthy();
+  expect(screen.getAllByRole('button', { name: 'Link observation regions' })).toHaveLength(1);
   const manageButton = screen.getByRole('button', { name: `Manage ${activeCamera.name}` });
   expect(manageButton.textContent).toBe('Manage');
   expect(
@@ -136,10 +137,12 @@ it('grants register, zone PPE, and camera-specific manage actions only to the sc
   expect(screen.queryByRole('button', { name: 'Register camera' })).toBeNull();
   expect(screen.queryByRole('button', { name: `Manage ${activeCamera.name}` })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Link observation regions' })).toBeNull();
   expect(
     screen.getByText('The assigned Site Manager configures cameras and observation regions.'),
   ).toBeTruthy();
-  expect(screen.getByText('The Site Manager defines PPE requirements for each area.')).toBeTruthy();
+  expect(screen.queryByText('The Site Manager defines PPE requirements for each area.')).toBeNull();
+  expect(screen.getByRole('list', { name: 'Setup steps' })).toBeTruthy();
   adminView.unmount();
 
   const foreignView = mountCatalog({ user: foreignManagerUser });
@@ -149,6 +152,7 @@ it('grants register, zone PPE, and camera-specific manage actions only to the sc
   expect(screen.queryByRole('button', { name: 'Register camera' })).toBeNull();
   expect(screen.queryByRole('button', { name: `Manage ${activeCamera.name}` })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Link observation regions' })).toBeNull();
 });
 
 it('renders ACTIVE and INACTIVE as configuration status without claiming live stream or AI connectivity', async () => {
@@ -257,7 +261,14 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
   mountCatalog();
   await screen.findByText(activeCamera.name);
   expect(screen.getByRole('region', { name: 'Cameras' })).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Setup steps' })).toBeTruthy();
+  const helpSummary = screen.getByText('How to set up this site').closest('summary');
+  const helpDetails = helpSummary?.parentElement;
+  if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
+    throw new Error('Expected native details/summary for setup help.');
+  }
+  expect(helpDetails.open).toBe(false);
+  expect(screen.getByRole('list', { name: 'Setup steps' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Link observation regions' })).toBeTruthy();
   expect(screen.getAllByText('Camera code').length).toBeGreaterThan(0);
   expect(screen.getAllByText('Configuration status').length).toBeGreaterThan(0);
   expect(screen.getByText('2 shown · 2 returned by the catalog')).toBeTruthy();
@@ -267,9 +278,11 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
 
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('region', { name: 'Camera' })).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+  expect(screen.getByText('Cách thiết lập công trường').closest('summary')).toBe(helpSummary);
+  expect(screen.getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Đăng ký camera' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cấu hình PPE theo khu vực' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Gắn vùng quan sát' })).toBeTruthy();
   const viManageButton = screen.getByRole('button', { name: `Quản lý ${activeCamera.name}` });
   expect(viManageButton.textContent).toBe('Quản lý');
   expect(screen.getAllByText('Mã camera').length).toBeGreaterThan(0);
@@ -277,7 +290,6 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
   expect(screen.getByText('Đã bật trong cấu hình')).toBeTruthy();
   expect(screen.getByText('Đã tắt trong cấu hình')).toBeTruthy();
   expect(screen.getByText('Đang hiện 2 · danh mục trả về 2')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   expect(screen.getByText(activeCamera.name)).toBeTruthy();
   expect(screen.getByText(activeCamera.code)).toBeTruthy();
 });

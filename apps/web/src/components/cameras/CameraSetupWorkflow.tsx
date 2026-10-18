@@ -16,83 +16,41 @@ export function CameraSetupWorkflow({
   open: (kind: CameraSetupOpenKind, cameraId?: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
-  const primaryButton = CAMERA_BUTTON_STYLES.primary;
-  const secondaryButton = CAMERA_BUTTON_STYLES.secondary;
-  const hasZoneAction = canWriteZones || canReadZones;
-  const cardSurface =
-    'flex min-w-0 flex-col justify-between gap-4 rounded-xl border border-slate-200/90 bg-slate-50/70 p-4';
-  const badgeClass =
-    'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-700';
-
   return (
-    <section
-      className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs"
-      aria-label={t('cameraSetup.workflowTitle')}
-    >
-      <div className="min-w-0">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-          {t('cameraSetup.workflowTitle')}
-        </h2>
-        <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-600">
-          {t('cameraSetup.areasHint')}
-        </p>
-        {!hasZoneAction && (
-          <p className="mt-2 text-sm text-slate-500">{t('cameraSetup.managerHint')}</p>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {canManageCameras && (
+          <button
+            type="button"
+            className={CAMERA_BUTTON_STYLES.primary}
+            onClick={() => open('register')}
+          >
+            {t('cameraSetup.register')}
+          </button>
+        )}
+        {(canWriteZones || canReadZones) && (
+          <button
+            type="button"
+            className={CAMERA_BUTTON_STYLES.secondary}
+            onClick={() => open('zones')}
+          >
+            {t(canWriteZones ? 'cameraSetup.zones' : 'cameraSetup.viewZones')}
+          </button>
         )}
       </div>
-      <ol aria-label={t('cameraSetup.workflowTitle')} className="mt-5 grid gap-4 lg:grid-cols-3">
-        <li className={cardSurface}>
-          <div className="flex items-start gap-3">
-            <span aria-hidden="true" className={badgeClass}>
-              1
-            </span>
-            <p className="min-w-0 text-sm leading-6 text-slate-700">{t('cameraSetup.step1')}</p>
-          </div>
-          {hasZoneAction && (
-            <button
-              type="button"
-              className={`${secondaryButton} self-start`}
-              onClick={() => open('zones')}
-            >
-              {t(canWriteZones ? 'cameraSetup.zones' : 'cameraSetup.viewZones')}
-            </button>
-          )}
-        </li>
-        <li className={cardSurface}>
-          <div className="flex items-start gap-3">
-            <span aria-hidden="true" className={badgeClass}>
-              2
-            </span>
-            <p className="min-w-0 text-sm leading-6 text-slate-700">{t('cameraSetup.step2')}</p>
-          </div>
-          {canManageCameras && (
-            <button
-              type="button"
-              className={`${primaryButton} self-start`}
-              onClick={() => open('register')}
-            >
-              {t('cameraSetup.register')}
-            </button>
-          )}
-        </li>
-        <li className={cardSurface}>
-          <div className="flex items-start gap-3">
-            <span aria-hidden="true" className={badgeClass}>
-              3
-            </span>
-            <p className="min-w-0 text-sm leading-6 text-slate-700">{t('cameraSetup.step3')}</p>
-          </div>
-          {canManageCameras && (
-            <button
-              type="button"
-              className={`${secondaryButton} self-start`}
-              onClick={() => open('regions')}
-            >
-              {t('cameraSetup.regionsAction')}
-            </button>
-          )}
-        </li>
-      </ol>
-    </section>
+      <details className="text-sm text-slate-600">
+        <summary className="w-fit cursor-pointer rounded-md py-1 font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-700">
+          {t('cameraSetup.help')}
+        </summary>
+        <ol
+          aria-label={t('cameraSetup.workflowTitle')}
+          className="mt-2 max-w-2xl list-decimal space-y-1 pl-5 leading-6"
+        >
+          <li>{t('cameraSetup.step1')}</li>
+          <li>{t('cameraSetup.step2')}</li>
+          <li>{t('cameraSetup.step3')}</li>
+        </ol>
+      </details>
+    </div>
   );
 }

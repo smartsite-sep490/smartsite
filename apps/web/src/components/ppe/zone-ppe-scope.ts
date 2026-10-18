@@ -58,6 +58,7 @@ export function getZonePpeScopeKey(
     canManageRegions?: boolean;
     canReadZones?: boolean;
     section?: 'all' | 'zones' | 'regions';
+    initialCameraId?: string;
   },
 ): string {
   return JSON.stringify([
@@ -70,5 +71,6 @@ export function getZonePpeScopeKey(
     Boolean(props.canManageRegions),
     Boolean(props.canReadZones),
     props.section ?? 'all',
+    props.initialCameraId ?? '',
   ]);
 }

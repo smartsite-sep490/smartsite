@@ -28,6 +28,7 @@ export interface ZonePpeCameraRegionPanelProps {
   sessionScope: string;
   credentialId: number;
   siteId: string;
+  initialCameraId?: string;
   zones: ZoneResponse[];
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
   onClose?: () => void;
@@ -116,6 +117,7 @@ export function ZonePpeCameraRegionPanel(props: ZonePpeCameraRegionPanelProps) {
         props.siteId,
         props.credentialId,
         internalNonce,
+        props.initialCameraId ?? '',
       ])}
       {...props}
       internalNonce={internalNonce}
@@ -132,6 +134,7 @@ function ZonePpeCameraRegionPanelContent({
   sessionScope,
   credentialId,
   siteId,
+  initialCameraId,
   zones,
   onDraftStateChange,
   onClose,
@@ -232,10 +235,12 @@ function ZonePpeCameraRegionPanelContent({
     [isCameraBaseError, activeCameras],
   );
 
-  const [requestedCameraId, setSelectedCameraId] = useState<string>('');
+  const [requestedCameraId, setSelectedCameraId] = useState<string>(() => initialCameraId ?? '');
   const selectedCameraId = visibleActiveCameras.some((c) => c.id === requestedCameraId)
     ? requestedCameraId
-    : (visibleActiveCameras[0]?.id ?? '');
+    : initialCameraId
+      ? ''
+      : (visibleActiveCameras[0]?.id ?? '');
 
   const selectedCamera = useMemo(
     () => visibleActiveCameras.find((c) => c.id === selectedCameraId) ?? null,
@@ -434,7 +439,7 @@ function ZonePpeCameraRegionPanelContent({
   if (requestedZoneId !== selectedZoneId) {
     setSelectedZoneId(selectedZoneId);
   }
-  if (requestedCameraId !== selectedCameraId) {
+  if (requestedCameraId !== selectedCameraId && requestedCameraId !== initialCameraId) {
     setSelectedCameraId(selectedCameraId);
   }
   if (isDrawingScopeRevoked) {
@@ -716,6 +721,7 @@ function ZonePpeCameraRegionPanelContent({
             disabled={visibleActiveCameras.length === 0}
             className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-50 truncate"
           >
+            {!selectedCameraId && <option value="">{t('regionSetup.field.selectCamera')}</option>}
             {visibleActiveCameras.map((camera) => (
               <option key={camera.id} value={camera.id}>
                 {camera.code} · {camera.name}

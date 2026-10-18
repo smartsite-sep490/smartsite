@@ -16,7 +16,7 @@ import { CameraSetupCatalog } from './CameraSetupCatalog';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 
 const button = CAMERA_BUTTON_STYLES.secondary;
-const surface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-5';
+const surface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3';
 type Props = { apiUrl: string; sharedSession: SharedSession | null };
 
 export function CameraSetupView({ apiUrl, sharedSession }: Props) {
@@ -173,7 +173,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   if (revoked || sites.status === 401 || cameras.status === 401)
     return <p role="alert">{t('cameraSetup.session')}</p>;
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-10">
+    <div className="mx-auto max-w-7xl space-y-4 pb-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -203,7 +203,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
             id="camera-setup-site"
             value={site?.id ?? ''}
             disabled={sites.baseError || sites.isPending}
-            className="min-w-0 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+            className="w-full min-w-0 max-w-xl rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
             onChange={(event) => {
               close();
               setParams({ siteId: event.target.value });
@@ -288,9 +288,10 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           ? canManageCameras
           : canReadZones || capabilities.canManageZones) && (
           <ZonePpeSetupDialog
-            key={activeDialog.kind}
+            key={`${activeDialog.kind}:${activeDialog.cameraId ?? ''}`}
             {...common}
             section={activeDialog.kind === 'regions' ? 'regions' : 'zones'}
+            initialCameraId={activeDialog.kind === 'regions' ? activeDialog.cameraId : undefined}
             canReadZones={canReadZones}
             canManageZones={capabilities.canManageZones}
             canManageRegions={canManageCameras}

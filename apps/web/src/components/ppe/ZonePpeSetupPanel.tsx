@@ -18,6 +18,7 @@ export interface ZonePpeSetupPanelProps {
   canManageRegions: boolean;
   canReadZones?: boolean;
   section?: 'all' | 'zones' | 'regions';
+  initialCameraId?: string;
   onClose: () => void;
   embedded?: boolean;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
@@ -76,6 +77,7 @@ function ZonePpeSetupPanelInternal({
   canManageRegions,
   canReadZones = false,
   section = 'all',
+  initialCameraId,
   onClose,
   embedded = false,
   onDraftStateChange,
@@ -1209,6 +1211,7 @@ function ZonePpeSetupPanelInternal({
               sessionScope={sessionScope}
               credentialId={credentialId}
               siteId={siteId}
+              initialCameraId={initialCameraId}
               zones={scopedZones}
             />
           ) : isZonesSettledEmpty ? (
