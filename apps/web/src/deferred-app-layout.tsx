@@ -1,9 +1,10 @@
+import { lazyWithCommonCatalogs } from './i18n/lazy-common-page';
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import type { ActiveTab } from './components/layout/AppLayout';
 import { PageLoadingFallback, RouteErrorBoundary } from './route-load-boundary';
 
-const LazyAppLayout = React.lazy(() =>
+const LazyAppLayout = lazyWithCommonCatalogs(() =>
   import('./components/layout/AppLayout').then((m) => ({ default: m.AppLayout })),
 );
 

@@ -1,3 +1,4 @@
+import { lazyWithCommonCatalogs } from './i18n/lazy-common-page';
 import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
 import { translate as tr } from './i18n';
 import { useTranslation } from 'react-i18next';
@@ -25,74 +26,74 @@ import { PageLoadingFallback, RouteErrorBoundary } from './route-load-boundary';
 
 // Code-split page components with React.lazy to avoid eagerly loading all views into the entry bundle.
 // Keep auth/session guards static; defer page, login, and layout implementations.
-const LandingPage = React.lazy(() =>
+const LandingPage = lazyWithCommonCatalogs(() =>
   import('./components/landing/LandingPage').then((m) => ({ default: m.LandingPage })),
 );
-const LoginScreen = React.lazy(() =>
+const LoginScreen = lazyWithCommonCatalogs(() =>
   import('./features/auth/LoginScreen').then((m) => ({ default: m.LoginScreen })),
 );
-const RegisterScreen = React.lazy(() =>
+const RegisterScreen = lazyWithCommonCatalogs(() =>
   import('./features/auth/RegisterScreen').then((m) => ({ default: m.RegisterScreen })),
 );
-const ChangePasswordScreen = React.lazy(() =>
+const ChangePasswordScreen = lazyWithCommonCatalogs(() =>
   import('./features/auth/ChangePasswordScreen').then((m) => ({ default: m.ChangePasswordScreen })),
 );
-const DashboardView = React.lazy(() =>
+const DashboardView = lazyWithCommonCatalogs(() =>
   import('./components/dashboard/DashboardView').then((m) => ({ default: m.DashboardView })),
 );
-const WorkforceView = React.lazy(() =>
+const WorkforceView = lazyWithCommonCatalogs(() =>
   import('./components/workforce/components/WorkforceView').then((m) => ({
     default: m.WorkforceView,
   })),
 );
-const SiteSetupView = React.lazy(() =>
+const SiteSetupView = lazyWithCommonCatalogs(() =>
   import('./components/workforce/components/SiteSetupView').then((m) => ({
     default: m.SiteSetupView,
   })),
 );
-const ScheduleSetupView = React.lazy(() =>
+const ScheduleSetupView = lazyWithCommonCatalogs(() =>
   import('./components/workforce/components/ScheduleSetupView').then((m) => ({
     default: m.ScheduleSetupView,
   })),
 );
-const WorkerOnboardingView = React.lazy(() =>
+const WorkerOnboardingView = lazyWithCommonCatalogs(() =>
   import('./components/workforce/components/WorkerOnboardingView').then((m) => ({
     default: m.WorkerOnboardingView,
   })),
 );
-const AccessControlView = React.lazy(() =>
+const AccessControlView = lazyWithCommonCatalogs(() =>
   import('./components/access/AccessControlView').then((m) => ({ default: m.AccessControlView })),
 );
-const VisitorRegistrationView = React.lazy(() =>
+const VisitorRegistrationView = lazyWithCommonCatalogs(() =>
   import('./components/access/visitor/VisitorRegistrationView').then((m) => ({
     default: m.VisitorRegistrationView,
   })),
 );
-const LiveMonitoringView = React.lazy(() =>
+const LiveMonitoringView = lazyWithCommonCatalogs(() =>
   import('./components/live/LiveMonitoringView').then((m) => ({ default: m.LiveMonitoringView })),
 );
-const PpeMonitoringView = React.lazy(() =>
+const PpeMonitoringView = lazyWithCommonCatalogs(() =>
   import('./components/ppe/PpeMonitoringView').then((m) => ({ default: m.PpeMonitoringView })),
 );
-const CameraSetupView = React.lazy(() =>
+const CameraSetupView = lazyWithCommonCatalogs(() =>
   import('./components/cameras/CameraSetupView').then((m) => ({ default: m.CameraSetupView })),
 );
-const RestrictedZoneView = React.lazy(() =>
+const RestrictedZoneView = lazyWithCommonCatalogs(() =>
   import('./components/zones/RestrictedZoneView').then((m) => ({ default: m.RestrictedZoneView })),
 );
-const SafetyAlertsView = React.lazy(() =>
+const SafetyAlertsView = lazyWithCommonCatalogs(() =>
   import('./components/alerts/SafetyAlertsView').then((m) => ({ default: m.SafetyAlertsView })),
 );
 
-const ContractorDashboardView = React.lazy(() =>
+const ContractorDashboardView = lazyWithCommonCatalogs(() =>
   import('./components/contractor/ContractorDashboardView').then((m) => ({
     default: m.ContractorDashboardView,
   })),
 );
-const AssignedWorkView = React.lazy(() =>
+const AssignedWorkView = lazyWithCommonCatalogs(() =>
   import('./components/contractor/AssignedWorkView').then((m) => ({ default: m.AssignedWorkView })),
 );
-const WorkerDashboardView = React.lazy(() =>
+const WorkerDashboardView = lazyWithCommonCatalogs(() =>
   import('./components/dashboard/WorkerDashboardView').then((m) => ({
     default: m.WorkerDashboardView,
   })),

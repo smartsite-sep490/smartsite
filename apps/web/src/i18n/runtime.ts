@@ -1,8 +1,8 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
-import en from './locales/en.json';
-import vi from './locales/vi.json';
+import boot from './boot-catalogs.json';
+import { createCommonCatalogLoader } from './common-catalog-loader';
 import {
   convertCatalogToI18next,
   isSupportedUiLanguage,
@@ -37,8 +37,8 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { common: en, [SAFETY_NAMESPACE]: {} },
-      vi: { common: vi, [SAFETY_NAMESPACE]: {} },
+      en: { common: { ...boot.en }, [SAFETY_NAMESPACE]: {} },
+      vi: { common: { ...boot.vi }, [SAFETY_NAMESPACE]: {} },
     },
     supportedLngs: ['en', 'vi'],
     fallbackLng: 'en',
@@ -55,6 +55,17 @@ void i18n
     interpolation: { escapeValue: false },
     react: { useSuspense: false },
   });
+
+export const ensureCommonCatalogs = createCommonCatalogLoader(
+  async () => {
+    const [en, vi] = await Promise.all([import('./locales/en.json'), import('./locales/vi.json')]);
+    return { en: en.default, vi: vi.default };
+  },
+  (catalogs) => {
+    i18n.addResourceBundle('en', 'common', catalogs.en, true, false);
+    i18n.addResourceBundle('vi', 'common', catalogs.vi, true, false);
+  },
+);
 
 export function uiLanguage(): UiLanguage {
   return (i18n.resolvedLanguage ?? i18n.language)?.startsWith('vi') ? 'vi' : 'en';
