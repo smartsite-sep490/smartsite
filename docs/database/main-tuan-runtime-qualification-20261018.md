@@ -62,3 +62,6 @@ review the actual combined diff and receive authorization. The carrier is local,
 not pushed, merged, deployed or served. Independent Backend review is still open:
 the existing Herdr Codex pane asks to sign in again. Linux runtime recovery/SIGTERM,
 native frozen CI, browser/UAT and whole phase2–7/model acceptance remain open.
+
+Later legacy-upgrade, timezone-fixture and complete native unit evidence is recorded in
+[upgrade qualification](main-tuan-upgrade-qualification-20261018.md).

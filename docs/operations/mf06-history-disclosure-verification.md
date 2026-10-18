@@ -27,8 +27,11 @@ REA was not used. Research was not browser or accessibility acceptance.
 - Final changed test: 3 PASS after strict fixture repairs and live locale-switch
   coverage. These three overlap the 139; they are not 142 distinct cases.
 - Strict TypeScript for the changed component/test dependency graph: exit 0.
-  The earlier whole-Web source/test check exhausted its 512 MiB heap, exit 134;
-  no new whole-Web typecheck pass is claimed.
+  The initial whole-Web source/test check exhausted its 512 MiB heap, exit 134.
+  A later bounded check of all Root Web src TS/TSX and tests passed at heap768 MiB
+  in14.12 seconds, peak RSS881.5 MiB, BelowNormal priority; the40-second/1024-MiB
+  guard did not fire. Vite configuration types passed in a separate command.
+  Existing approved dependency mapping remains; native frozen CI is not claimed.
 - Changed production files and final test lint: exit 0; formatting/diff checked.
 - Production Vite bundle v26: exit 0 with AI work paused.
 - Initial JavaScript closure: 473196 bytes, within the 500000-byte limit.
