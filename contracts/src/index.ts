@@ -41,6 +41,8 @@ export type {
   VisitorPassResponse,
   QrFallbackResponse,
   VerifyQrCommand,
+  IssueWorkerQrCommand,
+  WorkerQrVerificationCommand,
   VisitorGateCommand,
   WorkerQrVerificationResponse,
   VisitorGateEventResponse,
@@ -193,3 +195,5 @@ export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
 export * from './camera-observation-zones.js';
 export * from './camera-configuration-image.js';
+export type * from './worker-documents-api.js';
+export { healthCertificateExpiry } from './worker-document-dates.js';

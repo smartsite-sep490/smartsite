@@ -16,6 +16,10 @@ import type {
   CreateShiftSwapRequestDto,
 } from '../src/modules/workforce/scheduling/dto/scheduling-request.dto.js';
 import { SchedulingWorkflowService } from '../src/modules/workforce/scheduling/scheduling-workflow.service.js';
+import {
+  WorkerComplianceProfileEntity,
+  WorkerDocumentEntity,
+} from '../src/database/entities/worker-document.entity.js';
 
 function actor(
   id: string,
@@ -53,6 +57,7 @@ test('shift-change creation rejects an ended shift but reaches pending-request v
     workDate: '2030-01-01',
   };
   const worker = { id: workerId, siteId, userId: actorId, contractorId, isActive: true };
+  let documentsValid = true;
   const builder = {
     setLock: () => builder,
     where: () => builder,
@@ -61,6 +66,19 @@ test('shift-change creation rejects an ended shift but reaches pending-request v
   };
   const manager = {
     getRepository(entity: unknown) {
+      if (entity === WorkerComplianceProfileEntity) return { findOneBy: async () => null };
+      if (entity === WorkerDocumentEntity)
+        return {
+          findBy: async () =>
+            documentsValid
+              ? ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'].map((kind) => ({
+                  kind,
+                  status: 'APPROVED',
+                  issuedOn: '2020-01-01',
+                  expiresOn: '2099-01-01',
+                }))
+              : [],
+        };
       if (entity === WorkerScheduleEntity) return { createQueryBuilder: () => builder };
       if (entity === WorkerEntity) return { findOneBy: async () => worker };
       if (entity === ContractorEntity) return { findOneBy: async () => ({ id: contractorId }) };
@@ -92,6 +110,9 @@ test('shift-change creation rejects an ended shift but reaches pending-request v
       toShiftId: randomUUID(),
       reason: 'Need a different shift',
     });
+  documentsValid = false;
+  await assert.rejects(request(), publicCode('FORBIDDEN'));
+  documentsValid = true;
   await assert.rejects(request(), publicCode('CONFLICT'));
   t.mock.timers.tick(1);
   await assert.rejects(request(), publicCode('SHIFT_WORK_DATE_PASSED'));

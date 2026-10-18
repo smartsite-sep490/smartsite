@@ -27,6 +27,7 @@ import {
   CreateWorkerDto,
 } from './dto/workforce.dto.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
+import { workerDocumentStatuses } from '../documents/worker-compliance.js';
 
 /** Safe read projection; account, face, and contractor data stay in their owning workflows. */
 export type WorkerReviewReference = Pick<
@@ -646,7 +647,14 @@ export class WorkforceConfigurationService {
       skip: pagination.offset,
       take: pagination.limit,
     });
-    return { items, total };
+    const states = await workerDocumentStatuses(
+      this.dataSource.manager,
+      items.map((w) => w.id),
+    );
+    return {
+      items: items.map((w) => Object.assign(w, { documentStatus: states.get(w.id)! })),
+      total,
+    };
   }
 
   async listCoworkers(

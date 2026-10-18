@@ -46,6 +46,7 @@ import { evaluateWorkerAccess } from '../../src/modules/workforce/access/worker-
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 
 const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
 const dataSource = isolatedDatabase.dataSource;
@@ -286,6 +287,10 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     });
 
     const accountInput = {
+      nationalId: '000000000001',
+      phoneNumber: '0900000001',
+      gender: 'MALE' as const,
+      address: 'Synthetic address',
       siteId,
       externalId: `ACC-${randomUUID()}`,
       displayName: 'Synthetic MF01 account Worker',
@@ -298,6 +303,10 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         const input = {
           siteId,
           displayName: 'Synthetic automatic Worker',
+          nationalId: '000000000002',
+          phoneNumber: '0900000002',
+          gender: 'MALE' as const,
+          address: 'Synthetic address',
           username: `auto-${randomUUID().slice(0, 8)}`,
         };
         const result = await accounts.create(
@@ -383,6 +392,10 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       const inputs = Array.from({ length: 6 }, () => ({
         siteId,
         displayName: 'Synthetic concurrent auto Worker',
+        nationalId: '000000000003',
+        phoneNumber: '0900000003',
+        gender: 'MALE' as const,
+        address: 'Synthetic address',
         username: `auto-${randomUUID().slice(0, 12)}`,
         temporaryPassword: accountInput.temporaryPassword,
       }));
@@ -956,23 +969,56 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       },
     );
     await t.test(
-      'the linked Worker can start their own enrollment and expired consent cannot be used',
+      'the linked Worker cannot enroll themselves or manage their face profile',
       async () => {
         await dataSource.getRepository(WorkerEntity).update(worker.id, { userId: workerAccountId });
-        const ownSession = await enrollment.start(workerActor, worker.id, {
+        const workerActor = {
+          id: workerAccountId,
+          mustChangePassword: false,
+          roleAssignments: [{ role: UserRole.WORKER, siteId }],
+        };
+        await assert.rejects(
+          enrollment.start(workerActor, worker.id, {
+            consentVersion: 'synthetic-v3',
+          }),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.getProfile(workerActor, worker.id),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.revokeProfile(workerActor, worker.id),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.revokeProfile(workerActor, worker.id, true),
+          publicError('FORBIDDEN'),
+        );
+        await assert.rejects(
+          enrollment.assessSampleQuality(workerActor, worker.id, sample, 'front'),
+          publicError('FORBIDDEN'),
+        );
+        assert.equal((await enrollment.getProfile(representative, worker.id)).id, profile.id);
+      },
+    );
+    await t.test(
+      'expired consent cannot be used in a representative enrollment session',
+      async () => {
+        const supervisedSession = await enrollment.start(representative, worker.id, {
           consentVersion: 'synthetic-v3',
         });
         await dataSource
           .getRepository(FaceEnrollmentSessionEntity)
-          .update(ownSession.id, { expiresAt: new Date(Date.now() - 60_000) });
+          .update(supervisedSession.id, { expiresAt: new Date(Date.now() - 60_000) });
         await assert.rejects(
-          enrollment.confirmConsent(ownSession.id, {
-            consentToken: ownSession.consentToken,
+          enrollment.confirmConsent(supervisedSession.id, {
+            consentToken: supervisedSession.consentToken,
             workerConfirmed: true,
           }),
           /unavailable/,
         );
-        await enrollment.cancel(workerActor, ownSession.id);
+        await enrollment.cancel(representative, supervisedSession.id);
       },
     );
 
@@ -1002,6 +1048,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       validUntil: until,
       createdByUserId: representativeId,
     });
+    await approvedWorkerDocuments(dataSource, [worker.id], representativeId);
     await t.test(
       'approved assignment and gate grant still require a current Worker schedule',
       async () => {

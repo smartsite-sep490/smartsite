@@ -15,6 +15,7 @@ import { WorkerEntity } from '../../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../../database/entities/worker-schedule.entity.js';
 import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
+import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
 import { isShiftEnded } from '@smartsite/contracts';
 import { AttendanceReconciliationService } from '../attendance/attendance-reconciliation.service.js';
@@ -248,8 +249,9 @@ export class SchedulingWorkflowService {
     worker: WorkerEntity,
   ): Promise<'WORKER' | 'CONTRACTOR_REPRESENTATIVE'> {
     this.assertPasswordChanged(actor);
-    if (this.hasSiteRole(actor, UserRole.WORKER, worker.siteId) && worker.userId === actor.id)
+    if (this.hasSiteRole(actor, UserRole.WORKER, worker.siteId) && worker.userId === actor.id) {
       return 'WORKER';
+    }
     if (!this.hasSiteRole(actor, UserRole.CONTRACTOR_REPRESENTATIVE, worker.siteId))
       this.forbidden();
     if (!worker.contractorId) this.forbidden();
@@ -388,6 +390,7 @@ export class SchedulingWorkflowService {
       await this.assertRequestAuthority(manager, actor, worker);
       await this.assertWorkerParticipation(manager, worker);
       await this.assertWorkDateAvailable(manager, schedule);
+      await requireWorkerDocuments(manager, worker);
       await this.assertNoPendingRequests(manager, scopedSiteId, [schedule.id]);
       await this.assertTargetShift(manager, scopedSiteId, value.toShiftId, true);
       await this.assertContractorShiftAssignment(
@@ -580,6 +583,8 @@ export class SchedulingWorkflowService {
         conflict('Workers must belong to the same contractor to swap shifts');
       await this.assertWorkerParticipation(manager, requester);
       await this.assertWorkerParticipation(manager, coworker);
+      await requireWorkerDocuments(manager, requester);
+      await requireWorkerDocuments(manager, coworker);
       await this.assertWorkDateAvailable(manager, requesterSchedule);
       await this.assertWorkDateAvailable(manager, coworkerSchedule);
       const teamBinding = await teamSwapEligibility(
@@ -672,6 +677,7 @@ export class SchedulingWorkflowService {
       )
         this.forbidden();
       await this.assertWorkerParticipation(manager, coworker);
+      await requireWorkerDocuments(manager, coworker);
       const requester = await manager
         .getRepository(WorkerEntity)
         .findOneBy({ id: request.requesterWorkerId, siteId: scopedSiteId, isActive: true });
@@ -755,6 +761,7 @@ export class SchedulingWorkflowService {
         this.forbidden();
       request.status = ShiftRequestStatus.REJECTED;
       await this.assertWorkerParticipation(manager, coworker!);
+      await requireWorkerDocuments(manager, coworker!);
       request.reviewedByUserId = actor.id;
       request.reviewedAt = new Date();
       request.reviewReason = value.reason;
@@ -985,6 +992,7 @@ export class SchedulingWorkflowService {
         `mf03:${scopedSiteId}:${worker.id}`,
       ]);
       const authority = await this.assertRequestAuthority(manager, actor, worker);
+      if (authority === 'WORKER') await requireWorkerDocuments(manager, worker);
       let replacementWorkerId: string | null = null;
       if (value.replacementWorkerId) {
         if (authority !== 'CONTRACTOR_REPRESENTATIVE') this.forbidden();

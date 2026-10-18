@@ -15,7 +15,8 @@
     "./camera-observation-zones": "./dist/camera-observation-zones.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
     "./gate-permissions": "./dist/gate-permissions-api.js",
-    "./mf06-assessments": "./dist/mf06-assessment-api.js"
+    "./mf06-assessments": "./dist/mf06-assessment-api.js",
+    "./worker-document-dates": "./dist/worker-document-dates.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

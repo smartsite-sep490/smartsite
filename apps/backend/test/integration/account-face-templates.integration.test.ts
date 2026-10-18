@@ -31,6 +31,7 @@ import type { FaceVerificationTechnicalOutcome } from '@smartsite/contracts';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 
 const database = createIsolatedTestDatabase({ canonical: true });
 const { dataSource } = database;
@@ -424,16 +425,11 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     workforce.linkAccount(siteId, secondWorkerId, { userId: accountId }, { actorUserId: actorId }),
   );
 
-  // Main allows an active account-linked Worker to enroll themselves at their assigned Site.
-  // It does not allow that Worker to operate another Worker's enrollment or bypass initial password change.
-  const selfSession = await enrollment.start(workerActor, workerId, {
-    consentVersion: 'synthetic-self-v1',
-  });
-  assert.equal(selfSession.workerId, workerId);
-  assert.equal(selfSession.actorUserId, workerActor.id);
-  assert.equal(selfSession.status, FaceEnrollmentSessionStatus.PENDING);
-  assert.equal(selfSession.consentedAt, null);
-  assert.equal(selfSession.consentMethod, null);
+  // Main585 keeps enrollment and profile management Representative-led, including linked Workers.
+  await assert.rejects(
+    enrollment.start(workerActor, workerId, { consentVersion: 'synthetic-self-v1' }),
+    forbiddenEnrollment,
+  );
   await assert.rejects(
     enrollment.start(workerActor, secondWorkerId, { consentVersion: 'synthetic-v1' }),
     forbiddenEnrollment,
@@ -452,10 +448,18 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     }),
     forbiddenEnrollment,
   );
-  await enrollment.cancel(workerActor, selfSession.id);
-
   const session = await enrollment.start(contractorRepActor, workerId, {
     consentVersion: 'synthetic-v1',
+  });
+  assert.equal(session.workerId, workerId);
+  assert.equal(session.actorUserId, contractorRepActor.id);
+  assert.equal(session.status, FaceEnrollmentSessionStatus.PENDING);
+  assert.equal(session.consentedAt, null);
+  assert.equal(session.consentMethod, null);
+  await assert.rejects(enrollment.cancel(workerActor, session.id), (error: unknown) => {
+    assert(error instanceof HttpException);
+    assert.equal(error.getStatus(), 404);
+    return true;
   });
   await enrollment.confirmConsent(session.id, {
     consentToken: session.consentToken,
@@ -473,7 +477,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   );
   assert.equal(response.userId, accountId);
   assert.equal('encryptedTemplate' in response, false);
-  assert.equal((await enrollment.getProfile(workerActor, workerId)).id, profile.id);
+  await assert.rejects(enrollment.getProfile(workerActor, workerId), forbiddenEnrollment);
   await assert.rejects(enrollment.revokeProfile(workerActor, secondWorkerId), forbiddenEnrollment);
   assert.equal(profile.profileReferenceHash, createHash('sha256').update(reference).digest('hex'));
   const stored = await dataSource
@@ -637,6 +641,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     createdByUserId: actorId,
   });
 
+  await approvedWorkerDocuments(dataSource, [workerId], actorId);
   const deniedNoShift = await gate.verify(securityOfficerActor, siteId, 'gate1', frame, 'IN');
   assert.equal(deniedNoShift.decision.authorization, 'DENIED');
   assert.equal(deniedNoShift.decision.reasonCode, 'NO_SCHEDULE');
@@ -820,8 +825,8 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: true });
   await dataSource.getRepository(UserEntity).update(accountId, { isActive: true });
 
-  // Withdrawing their own consent remains available to the linked Worker in Main.
-  await enrollment.revokeProfile(workerActor, workerId);
+  await assert.rejects(enrollment.revokeProfile(workerActor, workerId), forbiddenEnrollment);
+  await enrollment.revokeProfile(contractorRepActor, workerId);
   const revoked = await dataSource
     .getRepository(FaceProfileEntity)
     .createQueryBuilder('profile')
@@ -830,7 +835,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     .getOneOrFail();
   assert.equal(revoked.status, 'REVOKED');
   assert.equal(revoked.encryptedTemplate, null);
-  assert.equal(revoked.revokedByUserId, workerActor.id);
+  assert.equal(revoked.revokedByUserId, contractorRepActor.id);
 
   const [{ safety_revision: revokedSafetyRevision }] = (await dataSource.query(
     'SELECT safety_revision FROM face_profile WHERE id = $1',

@@ -31,10 +31,12 @@ import {
 } from '../../../database/entities/index.js';
 import type { WorkforceActor } from '../directory/contractor-operations.service.js';
 import { requireSiteRole } from '../access/qr-access.service.js';
+import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { auditAccess } from '../shared/access-audit.js';
 import { AttendanceReconciliationService } from './attendance-reconciliation.service.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import { attendanceAccess } from './attendance-access.js';
+import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { AttendanceOverviewQueryDto } from './dto/attendance.dto.js';
 
 export class RecordAttendanceCommand {
@@ -115,6 +117,7 @@ export class AttendanceService {
         .existsBy({ id: workerId, siteId, userId: actor.id }))
     )
       conflict('Worker can request corrections only for their own attendance');
+    return worker;
   }
   async record(
     actor: WorkforceActor,
@@ -148,6 +151,7 @@ export class AttendanceService {
         )
       )
         await this.requireSelf(manager, actor, siteId, worker.id);
+      if (value.kind === 'CHECK_IN') await requireWorkerDocuments(manager, worker);
       const oldEvent = await manager
         .getRepository(AttendanceEventEntity)
         .findOneBy({ gateEventId: passage.id });
@@ -261,12 +265,21 @@ export class AttendanceService {
       UserRole.SITE_MANAGER,
     ]);
     const workers: WorkerEntity[] = [];
+    let canReviewCorrection = false;
     for (const worker of await this.source
       .getRepository(WorkerEntity)
       .findBy({ siteId, isActive: true })) {
       try {
         await attendanceAccess(this.source.manager, actor, worker);
         workers.push(worker);
+        if (worker.userId !== actor.id) {
+          try {
+            await attendanceAccess(this.source.manager, actor, worker, true);
+            canReviewCorrection = true;
+          } catch (error) {
+            if (!(error instanceof PublicHttpException && error.getStatus() === 403)) throw error;
+          }
+        }
       } catch (error) {
         if (!(error instanceof Error && 'getStatus' in error)) throw error;
       }
@@ -312,9 +325,7 @@ export class AttendanceService {
       canRequestCorrection: actor.roleAssignments.some(
         (r) => r.role === UserRole.WORKER && r.siteId === siteId,
       ),
-      canReviewCorrection: actor.roleAssignments.some(
-        (r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId,
-      ),
+      canReviewCorrection,
       sessions: sessions.map((s) =>
         response(
           s,
@@ -359,7 +370,8 @@ export class AttendanceService {
         .getRepository(AttendanceSessionEntity)
         .findOne({ where: { id: sessionId, siteId }, lock: { mode: 'pessimistic_write' } });
       if (!session) missing();
-      await this.requireSelf(manager, actor, siteId, session.workerId);
+      const worker = await this.requireSelf(manager, actor, siteId, session.workerId);
+      await requireWorkerDocuments(manager, worker);
       if (session.status === 'IGNORED')
         conflict('An ignored duplicate cannot be changed into a work interval');
       const proposedInAt = new Date(value.proposedInAt),
@@ -450,7 +462,7 @@ export class AttendanceService {
     correctionId: string,
     input: ReviewAttendanceCorrectionCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
     uuid(correctionId);
     const value = command(ReviewAttendanceCorrectionCommand, input);
     const reviewNote = value.reviewNote ?? null;

@@ -250,12 +250,6 @@ export class ContractorOperationsService {
     const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: uuid(workerIdValue) });
     if (!worker) missing();
     if (!worker.isActive) this.forbidden();
-    if (
-      !actor.mustChangePassword &&
-      worker.userId === actor.id &&
-      actor.roleAssignments.some((r) => r.role === UserRole.WORKER && r.siteId === worker.siteId)
-    )
-      return worker;
     if (!worker.contractorId) {
       this.forbidden();
     }

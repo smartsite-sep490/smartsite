@@ -103,7 +103,9 @@ export class QrAccessController {
   ) {
     return this.access.decideVisit(req.user!, siteId, visitId, input);
   }
-  @Post('worker-qr') workerPass(
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('worker-qr')
+  workerPass(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Body() input: IssueWorkerQrCommand,
@@ -118,7 +120,9 @@ export class QrAccessController {
   ) {
     return this.access.cameraFallback(req.user!, siteId, gateId, input);
   }
-  @Post('gates/:gateId/qr-verifications') workerGate(
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('gates/:gateId/qr-verifications')
+  workerGate(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('gateId') gateId: string,

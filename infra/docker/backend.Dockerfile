@@ -22,6 +22,12 @@ RUN pnpm --filter @smartsite/contracts --filter @smartsite/backend install --pro
 
 FROM node:24.19.0-bookworm-slim AS runtime
 ENV NODE_ENV=production
+ENV WORKER_DOCUMENT_PYTHON=/opt/document-ocr/bin/python
+ENV WORKER_DOCUMENT_TESSERACT=/usr/bin/tesseract
+ENV WORKER_DOCUMENT_PDFTOPPM=/usr/bin/pdftoppm
+RUN apt-get update && apt-get install -y --no-install-recommends python3-venv tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng poppler-utils && rm -rf /var/lib/apt/lists/*
+COPY apps/backend/ocr/requirements.txt /tmp/document-ocr-requirements.txt
+RUN python3 -m venv /opt/document-ocr && /opt/document-ocr/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/document-ocr-requirements.txt && rm /tmp/document-ocr-requirements.txt
 WORKDIR /workspace/apps/backend
 COPY --from=dependencies --chown=node:node /workspace/node_modules /workspace/node_modules
 COPY --from=dependencies --chown=node:node /workspace/contracts /workspace/contracts
@@ -30,6 +36,7 @@ COPY --from=build --chown=node:node /workspace/contracts/dist /workspace/contrac
 COPY --from=build --chown=node:node /workspace/contracts/schemas /workspace/contracts/schemas
 COPY --from=build --chown=node:node /workspace/apps/backend/dist ./dist
 COPY --from=build --chown=node:node /workspace/apps/backend/package.json ./package.json
+COPY --chown=node:node apps/backend/ocr/worker_document_ocr.py ./ocr/worker_document_ocr.py
 RUN mkdir -p /var/lib/smartsite && chown node:node /var/lib/smartsite && chmod 700 /var/lib/smartsite
 USER node
 EXPOSE 3000

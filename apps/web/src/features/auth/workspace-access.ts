@@ -22,6 +22,7 @@ export function workspaceTabs(assignments: readonly RoleAssignmentResponse[]): s
     tabs.push('access');
   if (admin || has('SITE_MANAGER', 'SAFETY_OFFICER')) tabs.push('live-monitoring', 'ppe', 'zones');
   if (admin || has('SITE_MANAGER', 'SAFETY_OFFICER')) tabs.push('incidents');
+  if (has('WORKER', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER')) tabs.push('worker-documents');
   return tabs;
 }
 

@@ -1,3 +1,7 @@
+import { WorkerQrShortCodes1792454400000 } from './migrations/1792454400000-WorkerQrShortCodes.js';
+import { WorkerDocumentIdentityChecks1792627200000 } from './migrations/1792627200000-WorkerDocumentIdentityChecks.js';
+import { WorkerDocumentSubmittedExpiry1792713600000 } from './migrations/1792713600000-WorkerDocumentSubmittedExpiry.js';
+import { WorkerHealthIssueDate1792800000000 } from './migrations/1792800000000-WorkerHealthIssueDate.js';
 import { PreserveManagerNotificationHistory1792368000000 } from './migrations/1792368000000-PreserveManagerNotificationHistory.js';
 import { SiteManagerReviewNotifications1792108800000 } from './migrations/1792108800000-SiteManagerReviewNotifications.js';
 import { VisitorRoster1792022400000 } from './migrations/1792022400000-VisitorRoster.js';
@@ -157,6 +161,11 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ShiftExitGracePeriod1792281600000,
       AttendanceExitNotifications1792281600001,
       PreserveManagerNotificationHistory1792368000000,
+      WorkerQrShortCodes1792454400000,
+      WorkerDocuments1792540800000,
+      WorkerDocumentIdentityChecks1792627200000,
+      WorkerDocumentSubmittedExpiry1792713600000,
+      WorkerHealthIssueDate1792800000000,
     ],
     logging: false,
     extra: {
@@ -176,3 +185,4 @@ export function createTypeOrmOptions(databaseUrl: string, timeoutMs = 2000): Dat
     DATABASE_TIMEOUT_MS: timeoutMs,
   });
 }
+import { WorkerDocuments1792540800000 } from './migrations/1792540800000-WorkerDocuments.js';

@@ -16,6 +16,14 @@ pnpm dev:api
 
 API: `http://localhost:3000/api/v1`; Swagger chỉ trong development tại `http://localhost:3000/api/docs`. `pnpm dev` chạy cả Web và Backend. Dùng `pnpm --filter @smartsite/backend build` rồi `pnpm --filter @smartsite/backend start` để chạy bản đã build.
 
+## Worker document OCR
+
+Document OCR is packaged with the Backend under `ocr/`, using a private Python subprocess
+and Tesseract/Poppler. Install the engines and run `pnpm ocr:setup` once. Normal runtime uses
+only `pnpm dev:api` or `pnpm dev`; no separate AI/OCR server is needed. The Backend image
+includes the engines and Vietnamese/English language data. See
+[Worker documents](../../contracts/worker-documents.md) for executable settings and tests.
+
 ## Ranh giới module
 
 Workforce được chia thành các module nghiệp vụ `directory`, `teams`, `scheduling`, `attendance`, `identity`, `access` và `notifications`; `workforce.module.ts` chỉ ghép các module và giữ các export đang được Safety sử dụng. Controller/service/DTO được đặt cạnh nhau theo luồng. Xem [bản đồ Workforce](src/modules/workforce/README.md) để tìm điểm bắt đầu của MF03/MF07, Face/QR và quan hệ giữa các module.

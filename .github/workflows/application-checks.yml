@@ -31,6 +31,10 @@ jobs:
       - run: npm install --global pnpm@12.4.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm peers check
+      - name: Install document OCR tools
+        run: sudo apt-get update && sudo apt-get install -y python3-venv tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng poppler-utils
+      - run: pnpm ocr:setup
+      - run: pnpm test:ocr
       - run: pnpm check
       - run: pnpm --filter @smartsite/mobile check:dependencies
         env:

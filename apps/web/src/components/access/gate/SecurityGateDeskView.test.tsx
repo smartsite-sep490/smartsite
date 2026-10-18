@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { SecurityGateDeskView } from './SecurityGateDeskView';
 
-const cameraMock = vi.hoisted(() => ({ active: false }));
+const cameraMock = vi.hoisted(() => ({ active: false, failed: false }));
+vi.mock('./QrScannerView', () => ({ QrScannerView: () => null }));
 vi.mock('../enrollment/gateCameraReadiness', () => ({ inspectGateCamera: () => null }));
 vi.mock('../enrollment/faceGateUtils', async () => ({
   ...(await vi.importActual<typeof import('../enrollment/faceGateUtils')>(
@@ -18,8 +19,14 @@ vi.mock('../enrollment/faceGateUtils', async () => ({
 
 vi.mock('../enrollment/gateCameraSession', () => ({
   GateCameraSession: class {
-    constructor(private options: { ready: (devices: MediaDeviceInfo[], id: string) => void }) {}
+    constructor(
+      private options: {
+        ready: (devices: MediaDeviceInfo[], id: string) => void;
+        failed: (message: string) => void;
+      },
+    ) {}
     async start() {
+      if (cameraMock.failed) this.options.failed('Synthetic camera unavailable');
       if (cameraMock.active) this.options.ready([], 'synthetic-camera');
     }
     stop() {}
@@ -31,6 +38,63 @@ afterEach(() => {
   queries?.clear();
   vi.restoreAllMocks();
   cameraMock.active = false;
+  cameraMock.failed = false;
+});
+
+it('accepts the Worker short manual code without asking Worker to enter an officer session', async () => {
+  cameraMock.failed = true;
+  const workers = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'listWorkers')
+    .mockResolvedValue({ items: [], total: 0 });
+  const manual = vi.spyOn(SmartSiteManagementClient.prototype, 'manuallyVerifyWorker');
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
+    items: [],
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback').mockResolvedValue({
+    id: 'internal-session-id',
+    siteId: 'site-1',
+    gateId: 'gate-north-01',
+    direction: 'IN',
+    expiresAt: '2030-01-01T00:05:00Z',
+  });
+  const verify = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'verifyWorkerQr')
+    .mockRejectedValue(new Error('Synthetic verification stop'));
+  queries = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queries}>
+      <SecurityGateDeskView
+        apiUrl="https://synthetic.test"
+        token="synthetic-token"
+        sessionScope="test"
+        selectedSiteId="site-1"
+        sites={[{ id: 'site-1', name: 'Synthetic site' }]}
+        onSelectSite={() => {}}
+        isSecurityOfficer
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Camera Error · Use Fallback QR' }));
+  const input = await screen.findByLabelText('Worker QR Code or Token');
+  expect(screen.queryByText('Security Manual Verification')).toBeNull();
+  expect(screen.queryByLabelText('Worker profile')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Verify Worker manually' })).toBeNull();
+  expect(workers).not.toHaveBeenCalled();
+  expect(manual).not.toHaveBeenCalled();
+  expect(screen.queryByText('internal-session-id')).toBeNull();
+  expect(screen.queryByText(/Provide this session code/)).toBeNull();
+  fireEvent.change(input, { target: { value: 'ABCD2345' } });
+  fireEvent.click(screen.getByRole('button', { name: /Confirm.*QR/ }));
+  await waitFor(() =>
+    expect(verify).toHaveBeenCalledWith('synthetic-token', 'site-1', 'gate-north-01', {
+      token: 'ABCD2345',
+      direction: 'IN',
+      fallbackSessionId: 'internal-session-id',
+      requestId: expect.any(String),
+    }),
+  );
 });
 
 it.each(['recorded', 'response-lost', 'repeated-scan', 'schedule-removed', 'no-schedule'] as const)(
@@ -176,29 +240,35 @@ it.each(['recorded', 'response-lost', 'repeated-scan', 'schedule-removed', 'no-s
 );
 
 it('treats a repeated scan as already recorded and requires a separate-passage confirmation', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers').mockResolvedValue({
-    items: [
-      {
-        id: 'worker-1',
-        siteId: 'site-1',
-        contractorId: null,
-        userId: null,
-        externalId: 'W1',
-        displayName: 'Synthetic worker',
-        isActive: true,
-        createdAt: '2030-01-01T00:00:00Z',
-      },
-    ],
-    total: 1,
-  });
+  cameraMock.active = true;
   vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
     items: [],
   });
-  vi.spyOn(SmartSiteManagementClient.prototype, 'manuallyVerifyWorker').mockResolvedValue({
-    id: 'attempt-1',
-    status: 'READY',
-    scheduleStatus: 'SCHEDULED',
-    expiresAt: '2030-01-01T00:05:00Z',
+  vi.spyOn(SmartSiteManagementClient.prototype, 'observeGateFace')
+    .mockResolvedValueOnce({ state: 'NEW_FACE', reasonCode: 'FACE_PRESENCE_NEW' })
+    .mockResolvedValue({ state: 'SAME_FACE', reasonCode: 'FACE_PRESENCE_SAME' });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate').mockResolvedValue({
+    attempt: {
+      id: 'attempt-1',
+      status: 'READY',
+      scheduleStatus: 'SCHEDULED',
+      expiresAt: '2030-01-01T00:05:00Z',
+    },
+    worker: {
+      id: 'worker-1',
+      userId: 'user-1',
+      username: 'synthetic',
+      externalId: 'W1',
+      displayName: 'Synthetic worker',
+      contractorName: 'Synthetic contractor',
+      assignmentStatus: 'APPROVED',
+    },
+    decision: {
+      technicalOutcome: 'MATCHED',
+      authorization: 'ALLOWED',
+      reasonCode: 'VALID_ASSIGNMENT',
+      qrFallbackAllowed: false,
+    },
   });
   const confirm = vi.spyOn(SmartSiteManagementClient.prototype, 'confirmGatePassage');
   confirm.mockRejectedValueOnce(
@@ -234,18 +304,11 @@ it('treats a repeated scan as already recorded and requires a separate-passage c
         selectedSiteId="site-1"
         sites={[{ id: 'site-1', name: 'Synthetic site' }]}
         onSelectSite={() => {}}
-        canManualVerify
+        isSecurityOfficer
       />
     </QueryClientProvider>,
   );
-  await screen.findByRole('option', { name: /Synthetic worker/ });
-  fireEvent.change(screen.getByLabelText('Worker profile'), { target: { value: 'worker-1' } });
-  fireEvent.change(screen.getByLabelText('Verification reason'), {
-    target: { value: 'Identity verified' },
-  });
-  fireEvent.click(screen.getByRole('checkbox', { name: /physically verified/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Verify Worker manually' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Confirm actual passage' }));
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1), { timeout: 3000 });
   const separate = await screen.findByRole('checkbox', { name: /separate physical passage/ });
   expect(
     (screen.getByRole('button', { name: 'Confirm actual passage' }) as HTMLButtonElement).disabled,

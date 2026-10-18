@@ -8,7 +8,13 @@ import type { SharedSession } from '../../types/shared-session';
 import i18n from '../../i18n';
 import { SafetyAlertsView, type SafetyAlertsViewProps } from './SafetyAlertsView';
 
-const mounted = vi.hoisted(() => ({ incident: vi.fn(), tasks: vi.fn() }));
+const mounted = vi.hoisted(() => ({ incident: vi.fn(), tasks: vi.fn(), documents: vi.fn() }));
+vi.mock('../safety/WorkerDocumentReviewView', () => ({
+  WorkerDocumentReviewView: (props: unknown) => {
+    mounted.documents(props);
+    return <div data-testid="owned-documents">Document fixture</div>;
+  },
+}));
 vi.mock('../safety/IncidentView', () => ({
   IncidentView: (props: unknown) => {
     mounted.incident(props);
@@ -75,6 +81,7 @@ beforeEach(async () => {
   await i18n.changeLanguage('en');
   mounted.incident.mockClear();
   mounted.tasks.mockClear();
+  mounted.documents.mockClear();
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
     items: [
       { id: siteId, code: 'SITE-A', name: 'Site fixture', createdAt: '2026-10-01T00:00:00Z' },
@@ -99,6 +106,56 @@ afterEach(() => {
 });
 
 describe('Owner-approved real-account boundary without modifying MF08', () => {
+  it('passes the aligned current session to Main document review and removes it on logout', async () => {
+    const view = mount({ ...base, initialDocumentWorkerId: 'worker-fixture' });
+    await waitFor(() => expect(screen.getByTestId('owned-documents')).toBeTruthy());
+    expect(mounted.documents.mock.lastCall?.[0]).toMatchObject({
+      token: 'fixture-current',
+      siteId,
+      initialWorkerId: 'worker-fixture',
+      scope: 'https://backend.invalid:fixture-scope',
+    });
+    view.update({ ...base, initialDocumentWorkerId: 'worker-fixture', sharedSession: null });
+    expect(screen.queryByTestId('owned-documents')).toBeNull();
+  });
+  it('withholds Main document review when a shared session lacks an aligned full Account', async () => {
+    const view = mount({
+      ...base,
+      initialDocumentWorkerId: 'worker-fixture',
+      authenticatedSession: undefined,
+    });
+    await waitFor(() => expect(SmartSiteManagementClient.prototype.listSites).toHaveBeenCalled());
+    expect(mounted.documents).not.toHaveBeenCalled();
+    view.update({
+      ...base,
+      initialDocumentWorkerId: 'worker-fixture',
+      sharedSession: shared(account, 'next-token', 'next-scope'),
+    });
+    expect(mounted.documents).not.toHaveBeenCalled();
+  });
+  it('opens Main document review for a new worker link after another workspace tab was selected', async () => {
+    const view = mount(base);
+    await openIncident();
+    view.update({ ...base, initialDocumentWorkerId: 'worker-next' });
+    await waitFor(() =>
+      expect(mounted.documents.mock.lastCall?.[0].initialWorkerId).toBe('worker-next'),
+    );
+  });
+  it('evicts the current Main document queue and profile on controlled logout', async () => {
+    const view = mount({ ...base, initialDocumentWorkerId: 'worker-fixture' });
+    await waitFor(() => expect(screen.getByTestId('owned-documents')).toBeTruthy());
+    const scope = mounted.documents.mock.lastCall?.[0].scope;
+    const cache = caches[caches.length - 1]!;
+    const queue = ['worker-document-queue', scope, siteId];
+    const profile = ['worker-documents', scope, siteId, 'worker-fixture'];
+    cache.setQueryDefaults(queue, { gcTime: Infinity });
+    cache.setQueryDefaults(profile, { gcTime: Infinity });
+    cache.setQueryData(queue, { private: true });
+    cache.setQueryData(profile, { private: true });
+    view.update({ ...base, initialDocumentWorkerId: 'worker-fixture', sharedSession: null });
+    await waitFor(() => expect(cache.getQueryData(queue)).toBeUndefined());
+    expect(cache.getQueryData(profile)).toBeUndefined();
+  });
   it.each(['inactive', 'password-change'] as const)(
     'blocks protected requests for an explicitly %s full Account in both controlled modes',
     async (state) => {

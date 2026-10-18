@@ -3,6 +3,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsDefined,
   IsNotEmpty,
   IsString,
@@ -41,6 +42,7 @@ import {
   PASSWORD_POLICY_PATTERN,
 } from '../../../common/configuration/password-policy.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
+import { WorkerComplianceProfileEntity } from '../../../database/entities/worker-document.entity.js';
 import { ContractorEntity } from '../../../database/entities/contractor.entity.js';
 import { ContractorRepresentativeGrantEntity } from '../../../database/entities/contractor-representative-grant.entity.js';
 import { ContractorSiteParticipationEntity } from '../../../database/entities/contractor-site-participation.entity.js';
@@ -54,6 +56,21 @@ import { auditAccess } from '../shared/access-audit.js';
 import { requireSiteRole } from '../access/qr-access.service.js';
 
 export class CreateContractorWorkerAccountCommand implements WorkerAccountCommand {
+  @IsIn(['MALE', 'FEMALE', 'OTHER']) gender!: 'MALE' | 'FEMALE' | 'OTHER';
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  @Matches(/^[^\p{Cc}\p{Cs}]+$/u)
+  address!: string;
+  @IsString()
+  @Matches(/^[0-9]{12}$/)
+  nationalId!: string;
+
+  @IsString()
+  @Matches(/^\+?[0-9]{9,15}$/)
+  phoneNumber!: string;
+
   @IsUUID()
   siteId!: string;
 
@@ -290,6 +307,10 @@ export class ContractorWorkerAccountsService {
           contractorId,
           siteId,
           externalId: value.externalId ?? null,
+          nationalId: value.nationalId,
+          phoneNumber: value.phoneNumber,
+          gender: value.gender,
+          address: value.address,
           username: prepared.username,
           displayName: prepared.displayName,
         },
@@ -315,6 +336,14 @@ export class ContractorWorkerAccountsService {
             externalId,
             displayName: value.displayName,
             isActive: true,
+          });
+          await manager.getRepository(WorkerComplianceProfileEntity).save({
+            workerId: worker.id,
+            nationalId: value.nationalId,
+            phoneNumber: value.phoneNumber,
+            gender: value.gender,
+            address: value.address,
+            identityRequired: true,
           });
           await auditAccess(
             manager,

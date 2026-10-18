@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module.js';
 import { MainZonePermissionCommandService } from '../zones/main-zone-permission-command.service.js';
+import { WorkerDocumentsModule } from './documents/worker-documents.module.js';
 import { WorkforceDirectoryModule } from './directory/directory.module.js';
 import { WorkerAccountsModule } from './directory/worker-accounts.module.js';
 import { WorkforceTeamsModule } from './teams/teams.module.js';
@@ -15,6 +16,7 @@ import { SiteAccessSetupQueryService } from './site-access-setup-query.service.j
 @Module({
   imports: [
     DatabaseModule,
+    WorkerDocumentsModule,
     WorkforceDirectoryModule,
     WorkerAccountsModule,
     WorkforceTeamsModule,

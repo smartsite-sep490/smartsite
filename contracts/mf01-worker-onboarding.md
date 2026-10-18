@@ -2,11 +2,23 @@
 
 Contractor Representatives can create a new Worker profile and its linked login account through
 **Worker Onboarding** (`/worker-onboarding`). They choose one of their assigned Sites and an active
-Contractor they represent, then enter name and username. The Backend sets the initial password to
+Contractor they represent, then enter name, username, 12-digit citizen ID, gender, address and phone number.
+They attach clear front/back ID images and the safety card, health certificate and personal insurance
+for Safety Officer review. See [Worker documents](worker-documents.md) for OCR, protected files,
+review and expiry behavior. Web selects existing files; Mobile also supports camera and photo library.
+The Backend sets the initial password to
 `12345678`; the UI displays it and does not require password entry. The Worker can sign in immediately and may change it later.
 The Backend generates
 the Worker code (for example `W000001`) when saving and returns it for display in the success message
 and roster. After creation, the supervised face-enrollment workflow is available on the same page.
+Face enrollment and face-profile management are provided on Web only; the mobile Contractor
+Representative workspace does not expose these functions.
+
+Only a Contractor Representative with the active Site/Contractor scope may manage face enrollment.
+A Worker cannot start self-enrollment, check/upload enrollment samples, complete enrollment, or manage
+their face profile. The Worker confirms consent within the representative-led session. Gate face
+verification remains a Security Officer operation. This restriction applies to both Web and Mobile
+and is enforced by the Backend.
 
 The page also lists the selected Contractor's workers at that Site, across all roster pages,
 with search by code/name, Worker status and account-link status. Ownership belongs to the
@@ -31,16 +43,21 @@ and currently valid Site participation. A role at another Site grants no access.
 {
   "siteId": "<Site UUID>",
   "displayName": "Synthetic Worker",
-  "username": "worker001"
+  "username": "worker001",
+  "nationalId": "000000000001",
+  "gender": "MALE",
+  "address": "Synthetic address",
+  "phoneNumber": "0900000001"
 }
 ```
 
 The Backend checks Site role, Contractor grant and current participation before hashing the
-password, and rechecks them in the write transaction. An authorized global Admin can also use
-the creation endpoint. Caller-supplied roles are rejected: the account receives only `WORKER`
+password, and rechecks them in the write transaction. Caller-supplied roles are rejected: the account receives only `WORKER`
 at the selected Site, with `mustChangePassword: false`. General account administration remains
 Admin-only. Account, role, linked Worker and actor audit are committed together, or rolled back
-together. The response contains `{ account, worker }` with no password or hash. The temporary
+together, including the private compliance profile. New account requests require the identity/contact
+fields above; clients must update their creation forms with this Backend change. The response
+contains `{ account, worker }` with no password or hash. The temporary
 password defaults to `12345678` when omitted and allows immediate sign-in; changing it is optional. Legacy callers may
 still supply `temporaryPassword`: the exact default or a password meeting the existing account policy.
 Null, empty, malformed and other weak passwords are rejected. Only new Worker account provisioning
@@ -84,6 +101,6 @@ changes. Repeating the already-applied state is a no-op with no duplicate audit.
 also advances the Site's access-policy version. Existing clients can still update codes through this
 API; the current management UI displays the code as read-only.
 
-This is an additive API change; existing profile-only creation and Admin account APIs remain
+Existing profile-only creation and Admin account APIs remain
 available. Provisioning does not create or approve a Site/Zone assignment, certificate, face
 profile or gate permission. These retain their current workflows and current-state checks.

@@ -61,6 +61,14 @@ const WorkerOnboardingView = lazyWithCommonCatalogs(() =>
     default: m.WorkerOnboardingView,
   })),
 );
+const WorkerDocumentsView = lazyWithCommonCatalogs(() =>
+  import('./components/workforce/components/WorkerDocumentsView').then((m) => ({
+    default: m.WorkerDocumentsView,
+  })),
+);
+const AccountsView = lazyWithCommonCatalogs(() =>
+  import('./features/accounts/AccountsView').then((m) => ({ default: m.AccountsView })),
+);
 const AccessControlView = lazyWithCommonCatalogs(() =>
   import('./components/access/AccessControlView').then((m) => ({ default: m.AccessControlView })),
 );
@@ -305,6 +313,8 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             />
             <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
             <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
+            <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
+            <Route path="/accounts" element={<AccountsView apiUrl={apiUrl} />} />
             <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
             <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
             <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
@@ -361,6 +371,11 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                   initialIncidentId={incidentLink.get('incidentId') ?? undefined}
                   initialChecklistId={incidentLink.get('checklistId') ?? undefined}
                   initialActionId={incidentLink.get('actionId') ?? undefined}
+                  initialDocumentWorkerId={
+                    incidentLink.get('tab') === 'documents'
+                      ? (incidentLink.get('workerId') ?? undefined)
+                      : undefined
+                  }
                   initialAlertId={alertsContext?.alertId}
                   initialStatus={alertsContext?.status}
                   initialType={alertsContext?.alertType}

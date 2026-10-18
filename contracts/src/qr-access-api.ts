@@ -68,6 +68,7 @@ export interface VisitResponse {
   decidedByUserId: string | null;
 }
 export interface QrPassResponse {
+  /** Worker: 8-character single-use code; Visitor: booking code. Encode this exact value in QR. */
   token: string;
   /** Visitor codes have no token expiry; approval and visit schedule still apply. */
   expiresAt: string | null;
@@ -88,6 +89,16 @@ export interface VerifyQrCommand {
   token: string;
   direction: 'IN' | 'OUT';
   requestId: string;
+}
+export interface IssueWorkerQrCommand {
+  /** Worker chooses the intended passage; no Security session code is required. */
+  direction?: 'IN' | 'OUT';
+  /** Compatibility with older clients that already obtained an officer session UUID. */
+  fallbackSessionId?: string;
+}
+export interface WorkerQrVerificationCommand extends VerifyQrCommand {
+  /** Required for new Worker codes; this is Security's internal fallback session. */
+  fallbackSessionId?: string;
 }
 export interface VisitorGateCommand extends VerifyQrCommand {
   /** Legacy visits without a roster retain whole-group confirmation. */

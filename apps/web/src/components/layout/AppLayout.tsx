@@ -30,6 +30,7 @@ export type ActiveTab =
   | 'contractor-teams'
   | 'assigned-work'
   | 'worker-summary'
+  | 'worker-documents'
   | 'workforce'
   | 'worker-onboarding'
   | 'site-setup'
@@ -40,6 +41,7 @@ export type ActiveTab =
   | 'camera-setup'
   | 'zones'
   | 'incidents'
+  | 'accounts'
   | 'iot'
   | 'progress'
   | 'landing';
@@ -102,6 +104,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'contractor-teams', label: tr('shell.contractorTeams'), icon: IconUsers },
         { id: 'assigned-work', label: tr('shell.assignedWork'), icon: IconUsers },
         { id: 'worker-onboarding', label: tr('shell.workerOnboarding'), icon: IconUsers },
+        { id: 'worker-documents', label: tr('documents.title'), icon: IconUsers },
         { id: 'worker-summary', label: tr('shell.workerSummary'), icon: IconDashboard },
         {
           id: 'workforce',

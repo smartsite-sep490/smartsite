@@ -11,7 +11,7 @@ import { createIsolatedTestDatabase } from './support/isolated-test-database.js'
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
 const previousMain = '3ce035888d18b61f8b70bd7c1eada4ae8d799d74';
-const currentMain = '0dd7d277ac858c79c25eab88b29c9b00d3ece541';
+const currentMain = '585cc2631caf244e40af393d1abb2ceead5f9500';
 test(
   'owned test database defaults to release graph; historical24 requires an explicit test-only selection',
   {

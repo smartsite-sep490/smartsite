@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -200,6 +201,11 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     temporaryPassword: pass,
   });
 
+  await approvedWorkerDocuments(
+    dataSource,
+    [workerAEntityId, workerBEntityId, workerCEntityId],
+    repA.id,
+  );
   const shiftId = randomUUID();
   const teamId = randomUUID();
   await dataSource.getRepository(ContractorTeamEntity).save({

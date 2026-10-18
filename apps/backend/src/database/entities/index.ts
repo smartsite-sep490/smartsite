@@ -145,6 +145,9 @@ export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
 export const ENTITIES = [
+  WorkerComplianceProfileEntity,
+  WorkerIdentityImageEntity,
+  WorkerDocumentEntity,
   SafetyChecklistAssignmentEntity,
   SafetyChecklistItemEntity,
   SafetyChecklistSubmissionEntity,
@@ -223,3 +226,9 @@ export const ENTITIES = [
   UserNotificationEntity,
   TeamZonePermissionEntity,
 ] as const;
+import {
+  WorkerComplianceProfileEntity,
+  WorkerDocumentEntity,
+  WorkerIdentityImageEntity,
+} from './worker-document.entity.js';
+export * from './worker-document.entity.js';

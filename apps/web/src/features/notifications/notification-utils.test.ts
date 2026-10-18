@@ -12,6 +12,49 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it.each(['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const)(
+    'translates %s notification text without changing authored values',
+    async (kind) => {
+      const values = {
+        name: 'Nguyễn Văn Test',
+        code: 'W001',
+        note: 'Giữ nguyên Approved & 012345678901',
+        date: '2026-10-18',
+      };
+      for (const event of [
+        'DOCUMENT_SUBMITTED',
+        'DOCUMENT_APPROVED',
+        'DOCUMENT_REJECTED',
+        'DOCUMENT_EXPIRING',
+        'DOCUMENT_EXPIRED',
+      ] as const) {
+        await i18n.changeLanguage('vi');
+        const key = `documentNotifications.${kind}_${event}`;
+        const message = translate(key, values),
+          title = translate(`notifications.${event}`);
+        await i18n.changeLanguage('en');
+        expect(formatNotificationTitle({ event, title })).toBe(translate(`notifications.${event}`));
+        expect(formatNotificationDisplayMessage({ event, message })).toBe(translate(key, values));
+        expect(formatNotificationDisplayMessage({ event, message })).toContain(values.name);
+        if (event === 'DOCUMENT_REJECTED')
+          expect(formatNotificationDisplayMessage({ event, message })).toContain(values.note);
+      }
+    },
+  );
+  it('identifies the worker missing checkout in both languages without translating their name', async () => {
+    const item = {
+      event: 'MISSING_CHECKOUT' as const,
+      message:
+        'Worker Nguyễn An (W000001) is missing checkout for the shift on 2026-10-16. The shift ended more than five minutes ago. Hours remain provisional.',
+    };
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      'Công nhân Nguyễn An (W000001) thiếu lượt check-out cho ca ngày 2026-10-16. Ca đã kết thúc hơn năm phút. Giờ làm hiện là tạm tính.',
+    );
+    await i18n.changeLanguage('en');
+    expect(formatNotificationDisplayMessage(item)).toBe(item.message);
+  });
+
   it('translates the exit-policy reminder from the server and preserves configured limits', async () => {
     const item = {
       event: 'EARLY_EXIT' as const,
@@ -155,6 +198,22 @@ it('opens a checklist notification in the shared Safety workspace with its Site'
       target: { siteId: 'site/a', checklistId: 'checklist/a', tab: 'checklists' },
     }),
   ).toBe('/incidents?siteId=site%2Fa&checklistId=checklist%2Fa&tab=checklists');
+});
+
+it('opens a document notification in the worker documents view with its Site and Worker ID', () => {
+  expect(
+    notificationHref({
+      id: 'notice',
+      event: 'DOCUMENT_EXPIRING',
+      siteId: 'site-a',
+      siteName: 'Synthetic site',
+      title: 'Giấy tờ sắp hết hạn',
+      message: 'Worker A - Thẻ an toàn lao động nhóm 3 sắp hết hạn',
+      createdAt: '2026-10-17T00:00:00Z',
+      readAt: null,
+      target: { siteId: 'site-a', workerId: 'worker-1', tab: 'documents' },
+    }),
+  ).toBe('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
 });
 
 it('preserves authored Safety bodies even when they exactly match known system copy', async () => {

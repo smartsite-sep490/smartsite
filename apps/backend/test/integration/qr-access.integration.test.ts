@@ -8,6 +8,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { WorkerQrShortCodes1792454400000 } from '../../src/database/migrations/1792454400000-WorkerQrShortCodes.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import {
@@ -27,6 +28,7 @@ import {
   VisitorVisitEntity,
   VisitorGateEventEntity,
   QrFallbackSessionEntity,
+  QrCredentialEntity,
   GateAccessLogEntity,
   AttendanceEventEntity,
   AttendanceSessionEntity,
@@ -37,6 +39,7 @@ import dataSource from '../support/test-data-source.js';
 import { createTestConfig } from '../support/config.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 test('real PostgreSQL visitor approval, group counts, expiring QR, replay and worker fallback authorization', async () => {
   await dataSource.initialize();
   const sites: [string, string, string] = [randomUUID(), randomUUID(), randomUUID()];
@@ -553,6 +556,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
     });
+    await approvedWorkerDocuments(dataSource, [workerId], managerId);
     const noShiftPass = await service.workerPass(workerActor, siteId, {
       fallbackSessionId: noShiftFallback.id,
     });
@@ -624,23 +628,80 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await dataSource
       .getRepository(WorkerScheduleEntity)
       .update(assigned.id, { workDate: assigned.workDate });
+    // A Worker already has its own credential before an officer opens fallback.
+    const independentPass = await service.workerPass(workerActor, siteId, { direction: 'IN' });
+    assert.match(independentPass.token, /^[A-HJ-NP-Z2-9]{8}$/);
+    await assert.rejects(
+      dataSource.transaction(async (manager) => {
+        await new WorkerQrShortCodes1792454400000().down(manager.queryRunner!);
+      }),
+      /Worker QR history requires/,
+    );
     const fallback = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
     });
-    await assert.rejects(service.workerPass(security, siteId, { fallbackSessionId: fallback.id }));
+    await assert.rejects(service.workerPass(security, siteId, { direction: 'IN' }));
+    await assert.rejects(service.workerPass(workerActor, otherSiteId, { direction: 'IN' }));
     await assert.rejects(
-      service.workerPass(workerActor, otherSiteId, { fallbackSessionId: fallback.id }),
+      service.workerPass({ ...workerActor, roleAssignments: [] }, siteId, { direction: 'IN' }),
     );
-    const workerPass = await service.workerPass(workerActor, siteId, {
+    await assert.rejects(service.workerPass(workerActor, siteId, {}), /Choose a passage direction/);
+    await assert.rejects(
+      service.workerPass(workerActor, siteId, { direction: 'IN', fallbackSessionId: fallback.id }),
+      /Choose a passage direction/,
+    );
+    // UUID-based clients remain compatible; the current mobile does not request an officer code.
+    const previousPass = await service.workerPass(workerActor, siteId, {
       fallbackSessionId: fallback.id,
     });
+    const workerPass = await service.workerPass(workerActor, siteId, { direction: 'IN' });
+    assert.match(workerPass.token, /^[A-HJ-NP-Z2-9]{8}$/);
+    assert.notEqual(workerPass.token, previousPass.token);
+    const storedPass = await dataSource
+      .getRepository(QrCredentialEntity)
+      .findOneByOrFail({ tokenHash: createHash('sha256').update(workerPass.token).digest('hex') });
+    assert.equal(storedPass.fallbackSessionId, null);
+    assert.equal(storedPass.siteId, siteId);
+    assert.equal(storedPass.direction, 'IN');
+    assert.ok(Date.parse(workerPass.expiresAt!) > Date.now());
+    assert.ok(Date.parse(workerPass.expiresAt!) <= Date.now() + 300_000);
+    const previousCredential = await dataSource.getRepository(QrCredentialEntity).findOneByOrFail({
+      tokenHash: createHash('sha256').update(previousPass.token).digest('hex'),
+    });
+    assert.ok(previousCredential.revokedAt);
+    await assert.rejects(
+      service.workerGate(security, siteId, gateId, {
+        token: previousPass.token,
+        direction: 'IN',
+        requestId: randomUUID(),
+      }),
+      /expired or been revoked/,
+    );
+    await assert.rejects(
+      service.workerGate(security, siteId, gateId, {
+        token: workerPass.token,
+        direction: 'IN',
+        requestId: randomUUID(),
+      }),
+      /Security must open/,
+    );
     const scan: VerifyWorkerQrCommand = {
-      token: workerPass.token,
+      token: workerPass.token.toLowerCase(),
+      fallbackSessionId: fallback.id,
       direction: 'IN',
       requestId: randomUUID(),
     };
     await assert.rejects(service.workerGate(siteManager, siteId, gateId, scan)); // belongs to the opening operator
+    await assert.rejects(
+      service.workerGate(actor(managerId, UserRole.SECURITY_OFFICER), siteId, gateId, scan),
+      /does not belong/,
+    );
+    await assert.rejects(
+      service.workerGate(security, siteId, 'gate-west-02', scan),
+      /does not belong/,
+    );
+    await assert.rejects(service.workerGate(security, otherSiteId, gateId, scan));
     await assert.rejects(
       service.workerGate(security, siteId, gateId, { ...scan, direction: 'OUT' }),
     );
@@ -837,10 +898,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.query(
-      'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1)) OR fallback_session_id IN (SELECT id FROM qr_fallback_session WHERE site_id = ANY($1))',
-      [sites],
-    );
+    await dataSource.query('DELETE FROM qr_credential WHERE site_id = ANY($1)', [sites]);
     await dataSource.query(
       'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1))',
       [sites],

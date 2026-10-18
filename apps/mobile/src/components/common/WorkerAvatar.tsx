@@ -1,3 +1,4 @@
+import { translate as tr, useTranslation } from '../../i18n';
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
@@ -7,22 +8,30 @@ interface WorkerAvatarProps {
 }
 
 export function WorkerAvatar({ size = 52, role = 'worker' }: WorkerAvatarProps) {
-  const helmetColor = role === 'worker' ? '#F59E0B' : '#FFFFFF'; // Workers wear yellow hardhat, Contractor/Supervisors wear white
-  const vestColor = role === 'worker' ? '#F05A28' : '#0284C7'; // Workers orange vest, Contractor blue vest
+  useTranslation();
+  const helmetColor = role === 'worker' ? '#F59E0B' : '#FFFFFF';
+  const vestColor = role === 'worker' ? '#F66B17' : '#0284C7';
 
   return (
-    <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}>
+    <View
+      accessibilityLabel={
+        role === 'worker' ? tr('header.workerAvatar') : tr('header.contractorAvatar')
+      }
+      style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}
+    >
       {/* Helmet crown */}
       <View
         style={[
           styles.helmet,
           {
-            width: size * 0.46,
+            width: size * 0.48,
             height: size * 0.3,
             backgroundColor: helmetColor,
             borderTopLeftRadius: size * 0.25,
             borderTopRightRadius: size * 0.25,
             top: size * 0.12,
+            borderWidth: role === 'contractor' ? 1 : 0,
+            borderColor: '#CBD5E1',
           },
         ]}
       />
@@ -31,19 +40,21 @@ export function WorkerAvatar({ size = 52, role = 'worker' }: WorkerAvatarProps) 
         style={[
           styles.helmetBrim,
           {
-            width: size * 0.54,
+            width: size * 0.58,
             height: size * 0.08,
             backgroundColor: helmetColor,
             top: size * 0.35,
+            borderWidth: role === 'contractor' ? 1 : 0,
+            borderColor: '#CBD5E1',
           },
         ]}
       />
-      {/* Head */}
+      {/* Face */}
       <View
         style={[
           styles.face,
           {
-            width: size * 0.34,
+            width: size * 0.36,
             height: size * 0.32,
             top: size * 0.36,
           },
@@ -54,7 +65,7 @@ export function WorkerAvatar({ size = 52, role = 'worker' }: WorkerAvatarProps) 
         style={[
           styles.vest,
           {
-            width: size * 0.72,
+            width: size * 0.74,
             height: size * 0.36,
             backgroundColor: vestColor,
             top: size * 0.62,
@@ -63,8 +74,8 @@ export function WorkerAvatar({ size = 52, role = 'worker' }: WorkerAvatarProps) 
       >
         {/* Reflective Stripes */}
         <View style={styles.reflectiveStripes}>
-          <View style={[styles.stripe, { backgroundColor: '#E2E8F0' }]} />
-          <View style={[styles.stripe, { backgroundColor: '#E2E8F0' }]} />
+          <View style={[styles.stripe, { backgroundColor: '#F8FAFC' }]} />
+          <View style={[styles.stripe, { backgroundColor: '#F8FAFC' }]} />
         </View>
       </View>
     </View>
@@ -80,7 +91,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -95,7 +106,7 @@ const styles = StyleSheet.create({
   },
   face: {
     position: 'absolute',
-    backgroundColor: '#FBCFE8', // warm skin tone
+    backgroundColor: '#FBCFE8',
     borderRadius: 8,
     zIndex: 2,
   },

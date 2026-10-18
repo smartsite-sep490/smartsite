@@ -164,6 +164,28 @@ const previewSourcesSchema = z
 
 export const backendEnvironmentSchema = z
   .object({
+    WORKER_DOCUMENT_PYTHON: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4096)
+      .regex(/^[^\p{Cc}]+$/u)
+      .optional(),
+    WORKER_DOCUMENT_TESSERACT: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4096)
+      .regex(/^[^\p{Cc}]+$/u)
+      .optional(),
+    WORKER_DOCUMENT_PDFTOPPM: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4096)
+      .regex(/^[^\p{Cc}]+$/u)
+      .optional(),
+    WORKER_DOCUMENT_NOTICE_DAYS: integer(30, 1, 365),
     ...databaseFields,
     PORT: integer(3000, 1, 65535),
     RESEND_API_KEY: z

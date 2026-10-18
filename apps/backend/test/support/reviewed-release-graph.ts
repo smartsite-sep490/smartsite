@@ -79,8 +79,18 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
     return name;
   });
   const workerQr = 'WorkerQrShortCodes1792454400000';
-  // Main eb56d14 adds exactly this migration after the unchanged Root61 graph.
-  const expected = names.includes(workerQr) ? [...release61, workerQr] : release61;
+  // Main eb56d14 adds QR; Main585cc263 adds exactly the four document migrations.
+  const documents = [
+    'WorkerDocuments1792540800000',
+    'WorkerDocumentIdentityChecks1792627200000',
+    'WorkerDocumentSubmittedExpiry1792713600000',
+    'WorkerHealthIssueDate1792800000000',
+  ];
+  const expected = names.includes(documents[0]!)
+    ? [...release61, workerQr, ...documents]
+    : names.includes(workerQr)
+      ? [...release61, workerQr]
+      : release61;
   assert.deepEqual(names, expected, 'Exact reviewed release migration names and order');
   return names;
 }

@@ -485,13 +485,14 @@ it('keeps Safety navigation scoped and opens the password action from main', asy
     </MemoryRouter>,
   );
   const navigation = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-  expect(navigation.getAllByRole('button')).toHaveLength(5);
+  expect(navigation.getAllByRole('button')).toHaveLength(6);
   for (const name of [
     'Dashboard',
     'Live Monitoring',
     'PPE Monitoring',
     'Restricted Zones',
     'Safety Operations',
+    'Worker documents',
   ]) {
     expect(navigation.getByRole('button', { name })).toBeTruthy();
   }

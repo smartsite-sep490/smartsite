@@ -1,6 +1,7 @@
 import { useManagementClient } from '../../features/auth/auth-session';
 import { SafetyOverviewView } from '../safety/SafetyOverviewView';
 import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
+import { WorkerDocumentReviewView } from '../safety/WorkerDocumentReviewView';
 import { AlertWorkContext } from '../safety/AlertWorkContext';
 import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
@@ -36,6 +37,7 @@ export interface SafetyAlertsViewProps {
   initialIncidentId?: string;
   initialChecklistId?: string;
   initialActionId?: string;
+  initialDocumentWorkerId?: string;
   initialStatus?: 'ALL' | SafetyAlertStatus;
   initialType?: 'ALL' | SafetyAlertType;
   sharedSession?: SharedSession | null;
@@ -170,7 +172,8 @@ function AlertRow({
   );
 }
 
-type WorkspaceTab = 'Overview' | 'Alerts' | 'Incidents' | 'Checklists' | 'Safety Tasks';
+type WorkspaceTab =
+  'Overview' | 'Alerts' | 'Incidents' | 'Checklists' | 'Safety Tasks' | 'Documents';
 function initialWorkspaceTab(
   session: {
     user: Pick<AccountResponse, 'roleAssignments'>;
@@ -196,6 +199,7 @@ export function SafetyAlertsView({
   initialIncidentId,
   initialChecklistId,
   initialActionId,
+  initialDocumentWorkerId,
   initialStatus,
   initialType,
   sharedSession,
@@ -206,19 +210,21 @@ export function SafetyAlertsView({
   const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(
-    initialIncidentId
-      ? 'Incidents'
-      : initialChecklistId
-        ? 'Checklists'
-        : initialAlertId || initialType || initialStatus
-          ? 'Alerts'
-          : sharedSession !== undefined
-            ? sharedSession
-              ? initialWorkspaceTab({ user: sharedSession.user })
-              : 'Alerts'
-            : authenticatedSession
-              ? initialWorkspaceTab(authenticatedSession, true)
-              : 'Alerts',
+    initialDocumentWorkerId
+      ? 'Documents'
+      : initialIncidentId
+        ? 'Incidents'
+        : initialChecklistId
+          ? 'Checklists'
+          : initialAlertId || initialType || initialStatus
+            ? 'Alerts'
+            : sharedSession !== undefined
+              ? sharedSession
+                ? initialWorkspaceTab({ user: sharedSession.user })
+                : 'Alerts'
+              : authenticatedSession
+                ? initialWorkspaceTab(authenticatedSession, true)
+                : 'Alerts',
   );
   const [relatedAlertFilter, setRelatedAlertFilter] = useState<RelatedAlertFilter>();
   const [relatedChecklistFilter, setRelatedChecklistFilter] =
@@ -228,6 +234,11 @@ export function SafetyAlertsView({
   const [checklistDraft, setChecklistDraft] = useState<{ teamId: string; day: string }>();
   const [incidentReturn, setIncidentReturn] = useState<'Overview' | 'Checklists'>();
   const [previousChecklistLink, setPreviousChecklistLink] = useState(initialChecklistId);
+  const [previousDocumentLink, setPreviousDocumentLink] = useState(initialDocumentWorkerId);
+  if (previousDocumentLink !== initialDocumentWorkerId) {
+    setPreviousDocumentLink(initialDocumentWorkerId);
+    if (initialDocumentWorkerId) setWorkspaceTab('Documents');
+  }
   if (previousChecklistLink !== initialChecklistId) {
     setPreviousChecklistLink(initialChecklistId);
     if (initialChecklistId) {
@@ -391,6 +402,10 @@ export function SafetyAlertsView({
         void queryClient.cancelQueries({ queryKey: [prefix, apiUrl, scope] });
         queryClient.removeQueries({ queryKey: [prefix, apiUrl, scope] });
       }
+      for (const prefix of ['worker-document-queue', 'worker-documents']) {
+        void queryClient.cancelQueries({ queryKey: [prefix, `${apiUrl}:${scope}`] });
+        queryClient.removeQueries({ queryKey: [prefix, `${apiUrl}:${scope}`] });
+      }
       for (const mutation of queryClient.getMutationCache().getAll()) {
         if (mutation.options.meta?.safetySession === scope)
           queryClient.getMutationCache().remove(mutation);
@@ -468,13 +483,15 @@ export function SafetyAlertsView({
     setIncidentSourceAlert('');
     if (incomingUser)
       setWorkspaceTab(
-        initialIncidentId
-          ? 'Incidents'
-          : initialChecklistId
-            ? 'Checklists'
-            : initialAlertId || initialType || initialStatus
-              ? 'Alerts'
-              : initialWorkspaceTab({ user: incomingUser }, !hasSharedSession),
+        initialDocumentWorkerId
+          ? 'Documents'
+          : initialIncidentId
+            ? 'Incidents'
+            : initialChecklistId
+              ? 'Checklists'
+              : initialAlertId || initialType || initialStatus
+                ? 'Alerts'
+                : initialWorkspaceTab({ user: incomingUser }, !hasSharedSession),
       );
   }
 
@@ -603,7 +620,10 @@ export function SafetyAlertsView({
       ),
     [effectiveUser],
   );
-  const selectedTabSiteIds = workspaceTab === 'Alerts' ? safetyOfficerSiteIds : workflowSiteIds;
+  const selectedTabSiteIds =
+    workspaceTab === 'Alerts' || workspaceTab === 'Documents'
+      ? safetyOfficerSiteIds
+      : workflowSiteIds;
   const visibleSites = useMemo(
     () =>
       sites.error
@@ -631,6 +651,7 @@ export function SafetyAlertsView({
     );
   const canIncidents =
     Boolean(workflowUser) && (isGlobalAdmin || workflowSiteIds.has(selectedSiteId));
+  const canReviewDocuments = Boolean(workflowUser) && safetyOfficerSiteIds.has(selectedSiteId);
   const alerts = useQuery({
     queryKey: [
       'safety-alerts',
@@ -1125,7 +1146,16 @@ export function SafetyAlertsView({
         className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-2"
         aria-label={tr('common.safety_workspace')}
       >
-        {(['Overview', 'Alerts', 'Incidents', 'Checklists', 'Safety Tasks'] as const).map((tab) => (
+        {(
+          [
+            'Overview',
+            'Alerts',
+            'Incidents',
+            'Checklists',
+            'Safety Tasks',
+            ...(canReviewDocuments ? ['Documents' as const] : []),
+          ] as const
+        ).map((tab) => (
           <button
             type="button"
             key={'workspace-' + tab}
@@ -1144,15 +1174,17 @@ export function SafetyAlertsView({
                 : 'text-[var(--text-secondary)] hover:bg-[var(--surface-bone)]')
             }
           >
-            {tab === 'Overview' || tab === 'Checklists'
-              ? localizedLabel(tab)
-              : tr(
-                  tab === 'Alerts'
-                    ? 'common.alerts'
-                    : tab === 'Incidents'
-                      ? 'common.incidents'
-                      : 'common.safety_tasks',
-                )}
+            {tab === 'Documents'
+              ? tr('documents.reviewQueue')
+              : tab === 'Overview' || tab === 'Checklists'
+                ? localizedLabel(tab)
+                : tr(
+                    tab === 'Alerts'
+                      ? 'common.alerts'
+                      : tab === 'Incidents'
+                        ? 'common.incidents'
+                        : 'common.safety_tasks',
+                  )}
           </button>
         ))}
       </nav>
@@ -1243,6 +1275,16 @@ export function SafetyAlertsView({
         <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
           {tr('app.safety_full_account_required')}
         </p>
+      )}
+      {selectedSiteId && canReviewDocuments && workspaceTab === 'Documents' && (
+        <WorkerDocumentReviewView
+          key={`${selectedSiteId}:${activeEffectiveScope}:${initialDocumentWorkerId ?? ''}`}
+          client={client}
+          token={effectiveToken}
+          siteId={selectedSiteId}
+          scope={`${apiUrl}:${activeEffectiveScope}`}
+          initialWorkerId={initialDocumentWorkerId}
+        />
       )}
       {selectedSiteId && canTasks && workflowUser && (
         <section hidden={workspaceTab !== 'Overview'}>

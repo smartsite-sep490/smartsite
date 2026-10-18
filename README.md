@@ -107,11 +107,13 @@ Copy the Backend example without replacing an existing configuration, start Post
 
 ```sh
 node -e "const fs=require('node:fs'); if (!fs.existsSync('apps/backend/.env')) fs.copyFileSync('apps/backend/.env.example','apps/backend/.env')"
-docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60
+pnpm dev:db
 pnpm --filter @smartsite/backend db:migrate:run
 ```
 
 Start the development applications:
+
+`pnpm dev:db` starts only the local PostgreSQL service and requires Docker Desktop to be running. It reuses the existing development volume and does not build application images.
 
 ```sh
 pnpm dev
@@ -149,6 +151,42 @@ For the face-enrollment transport demo, Compose wires the Backend's
 service token. It accepts three authenticated JPEG uploads. Completion remains
 honestly `AI_UNAVAILABLE` until a reviewed face model and private template store
 exist; it never creates a simulated biometric profile or grants access.
+
+### Worker documents and Safety approval
+
+Worker onboarding on Web/Mobile includes citizen ID, gender, address, phone number, two clear ID
+images, the Group 3 safety card, health certificate and personal insurance. Web selects existing
+files; Mobile also captures photos or selects them from the library. Quality checks reject blurry
+images, while OCR suggests dates for the Site Safety Officer to inspect and approve on Web.
+Every renewal requires another approval before its new expiry applies. Representatives can
+enter an optional expiry date for safety/insurance, or examination/issue date for health,
+if OCR fails; Worker and Safety can view this suggestion, which
+requires Safety confirmation before taking effect. All Workers, including existing accounts,
+need three current approved documents for entry and Worker write operations.
+Pending/expired accounts retain sign-in, document/status reads and trusted exit operations. OCR also
+compares labeled 12-digit citizen IDs on identity images and certificates with the saved profile.
+Mismatches are advisory warnings visible to the Worker, Representative and Safety Officer; they
+never prevent submission or Safety approval. The default expiry notice is 30 days.
+See [Worker documents](contracts/worker-documents.md) for setup, privacy and review rules.
+
+Document OCR runs directly under the Backend. Install Python, Tesseract with Vietnamese/English
+language data and Poppler once, configure their paths as described in the contract, then run:
+
+```sh
+pnpm ocr:setup
+pnpm dev:api
+```
+
+`pnpm dev` also includes OCR through the Backend. There is no separate OCR service, port or AI
+repository dependency. Setup does not build an APK; runtime never installs packages or downloads
+models. The Backend container includes the OCR tools. Apply migration
+`WorkerDocuments1792540800000`, then `WorkerDocumentIdentityChecks1792627200000`, with the Backend
+migration command before using the new forms.
+Also apply `WorkerDocumentSubmittedExpiry1792713600000` for manual expiry suggestions,
+then `WorkerHealthIssueDate1792800000000` for health examination/issue dates. Health expiry
+is computed one calendar year after the date Safety confirms (29 February clamps to 28 February).
+Safety must approve a replacement before renewal takes effect; existing approved expiry dates
+are preserved by the migration.
 
 ### Account-linked face enrollment
 
@@ -269,7 +307,7 @@ use the same encryption key and compatible model. Losing/changing the key requir
 
 See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instructions.
 
-CI currently verifies Android and iOS JavaScript exports. Emulator, simulator, and physical-device validation remain separate steps.
+Mobile now connects Worker and Contractor Representative authentication, scoped schedules/attendance/requests, Worker onboarding/teams/Zone permissions, face enrollment, notifications and assigned safety work to the shared Backend APIs. See the Mobile guide for the exact supported operations and permission boundaries. Automated checks include mobile session/workflow tests and Android/iOS JavaScript exports. Emulator, simulator, and physical-device validation remain separate steps.
 
 ## Environment Configuration
 

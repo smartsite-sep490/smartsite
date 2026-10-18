@@ -9,12 +9,12 @@ import { ZoneRestrictionPolicy } from '../../src/database/entities/enums.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { LEGACY_TEST_MIGRATIONS } from '../support/legacy-test-migrations.js';
 import { loadMainRecoveryMigrations } from '../support/main-recovery-profile.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
-const workerQrMigration = 'WorkerQrShortCodes1792454400000';
 // Keep the historical release54 prefix: exclude the checklist, three attendance
-// additions, later visitor/manager notifications and the new Worker QR migration.
+// additions, later visitor/manager notifications and Main QR/document additions.
 const afterRelease54 = new Set([
   'SafetyChecklists1792195200000',
   'AttendanceAbsence1792022400000',
@@ -23,7 +23,11 @@ const afterRelease54 = new Set([
   'VisitorRoster1792022400000',
   'SiteManagerReviewNotifications1792108800000',
   'PreserveManagerNotificationHistory1792368000000',
-  workerQrMigration,
+  'WorkerQrShortCodes1792454400000',
+  'WorkerDocuments1792540800000',
+  'WorkerDocumentIdentityChecks1792627200000',
+  'WorkerDocumentSubmittedExpiry1792713600000',
+  'WorkerHealthIssueDate1792800000000',
 ]);
 for (const profile of [
   'fresh',
@@ -47,12 +51,7 @@ for (const profile of [
       const db = isolated.dataSource;
       const production = db.options.migrations;
       assert(Array.isArray(production));
-      const workerQrDelta = production.some(
-        (migration) => typeof migration === 'function' && migration.name === workerQrMigration,
-      )
-        ? 1
-        : 0;
-      const expectedReleaseCount = 61 + workerQrDelta;
+      const expectedReleaseCount = reviewedReleaseMigrationNames(production).length;
       if (profile === 'populated-release54')
         db.setOptions({
           migrations: production.filter(
@@ -150,8 +149,9 @@ for (const profile of [
         const applied = await db.runMigrations();
         assert.equal(
           applied.length,
-          (profile === 'populated-release54' ? 7 : profile === 'populated-main35' ? 26 : 38) +
-            workerQrDelta,
+          expectedReleaseCount -
+            (profile === 'populated-release54' ? 54 : profile === 'populated-main35' ? 35 : 24) +
+            (profile === 'populated-legacy24' ? 1 : 0),
         );
         for (const { table, fields, rows } of inventory)
           assert.deepEqual(
