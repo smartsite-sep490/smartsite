@@ -184,9 +184,14 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           </p>
         </div>
         {canOpenMonitoring && (
-          <Link className={button} to={site ? `/ppe?${returnParams}` : '/ppe'}>
-            {t('cameraSetup.monitor')}
-          </Link>
+          <nav className="flex flex-wrap items-center gap-2" aria-label={t('cameraSetup.monitor')}>
+            <Link className={button} to={site ? `/ppe?${returnParams}` : '/ppe'}>
+              {t('cameraSetup.monitorPpe')}
+            </Link>
+            <Link className={button} to={site ? `/zones?${returnParams}` : '/zones'}>
+              {t('cameraSetup.monitorZones')}
+            </Link>
+          </nav>
         )}
       </header>
       <section className={surface} aria-label={t('cameraSetup.site')}>

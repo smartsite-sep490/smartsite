@@ -94,7 +94,8 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
         'Register cameras and link observation areas. Open monitoring to view images.',
       ),
     ).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Open monitoring' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'PPE monitoring' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Restricted-zone monitoring' })).toBeNull();
 
     expect(
       within(guide).getByText('The Site Manager creates areas and their PPE requirements.'),
@@ -115,10 +116,11 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(
       screen.queryByText('Đăng ký camera và liên kết vùng quan sát. Mở giám sát để xem hình ảnh.'),
     ).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Mở giám sát' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Giám sát PPE' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Giám sát vùng hạn chế' })).toBeNull();
   });
 
-  it('shows exact site-scoped intro in EN/VI for read-only Global Admin without imperative register/link copy while preserving View area policies and Open monitoring', async () => {
+  it('shows exact site-scoped intro in EN/VI for read-only Global Admin without imperative register/link copy while preserving View area policies and PPE monitoring', async () => {
     mountSetup(globalAdminSession);
 
     const guide = await screen.findByRole('list', { name: 'Setup steps' });
@@ -133,7 +135,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(within(guide).queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
     expect(within(guide).queryByRole('button', { name: 'Register camera' })).toBeNull();
     expect(within(guide).queryByRole('button', { name: 'Link observation regions' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Open monitoring' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'PPE monitoring' })).toBeTruthy();
     expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 
     await act(async () => changeUiLanguage('vi'));
@@ -141,7 +143,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(
       screen.queryByText('Đăng ký camera và liên kết vùng quan sát. Mở giám sát để xem hình ảnh.'),
     ).toBeNull();
-    expect(screen.getByRole('link', { name: 'Mở giám sát' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Giám sát PPE' })).toBeTruthy();
   });
 
   it('shows exact site-scoped intro in EN/VI and preserves managerHint and step overview without task buttons or camera queries for foreign-site Site Manager', async () => {
@@ -160,7 +162,8 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     ]) {
       expect(within(guide).queryByRole('button', { name })).toBeNull();
     }
-    expect(screen.queryByRole('link', { name: 'Open monitoring' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'PPE monitoring' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Restricted-zone monitoring' })).toBeNull();
     expect(mocks.listCameras).not.toHaveBeenCalled();
     expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 

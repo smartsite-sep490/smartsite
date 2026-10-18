@@ -109,7 +109,7 @@ it('translates setup in place without replacing authorized camera metadata', asy
 it('returns to monitoring with only a validated Site/camera context', async () => {
   mount(admin, '/camera-setup?siteId=site-1&cameraId=cam-1');
   await screen.findByText(camera.name);
-  expect(screen.getByRole('link', { name: 'Open monitoring' }).getAttribute('href')).toBe(
+  expect(screen.getByRole('link', { name: 'PPE monitoring' }).getAttribute('href')).toBe(
     '/ppe?siteId=site-1&cameraId=cam-1',
   );
 });
@@ -150,7 +150,8 @@ it('lets the scoped Site Manager configure camera regions and policy without pre
   expect(screen.getByRole('dialog').textContent).toBe('Section zones Zones true Regions true');
   expect(mocks.listCameras).toHaveBeenCalledOnce();
   expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
-  expect(screen.queryByRole('link', { name: 'Open monitoring' })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'PPE monitoring' })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Restricted-zone monitoring' })).toBeNull();
 });
 it('does not expose writes for a Site Manager assigned to another Site', async () => {
   mount(manager('site-2'));
