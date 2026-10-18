@@ -1,3 +1,4 @@
+import { translate as tr, useTranslation } from '../../i18n';
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
@@ -7,13 +8,14 @@ interface WorkerAvatarProps {
 }
 
 export function WorkerAvatar({ size = 52, role = 'worker' }: WorkerAvatarProps) {
+  useTranslation();
   const helmetColor = role === 'worker' ? '#F59E0B' : '#FFFFFF';
   const vestColor = role === 'worker' ? '#F66B17' : '#0284C7';
 
   return (
     <View
       accessibilityLabel={
-        role === 'worker' ? 'Ảnh đại diện Công nhân' : 'Ảnh đại diện Đại diện nhà thầu'
+        role === 'worker' ? tr('header.workerAvatar') : tr('header.contractorAvatar')
       }
       style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}
     >

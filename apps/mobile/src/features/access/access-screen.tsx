@@ -1,3 +1,5 @@
+import { localizedLabel } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWorkspace } from '../workspace/workspace-context';
@@ -80,7 +82,7 @@ export function AccessScreen({ onBack }: { onBack: () => void }) {
                           ]}
                         >
                           {isRevoked
-                            ? 'Đã thu hồi'
+                            ? tr('access.revoked')
                             : isActive
                               ? t('access.effective')
                               : t('access.notEffective')}
@@ -92,9 +94,7 @@ export function AccessScreen({ onBack }: { onBack: () => void }) {
               })}
 
               <View style={accessStyles.noticeBox}>
-                <Text style={accessStyles.noticeBoxText}>
-                  ℹ️ Quyền vào cổng/khu vực được máy chủ kiểm tra theo lịch và phạm vi hiện hành.
-                </Text>
+                <Text style={accessStyles.noticeBoxText}>{tr('access.authorizationHint')}</Text>
               </View>
             </>
           )}
@@ -104,6 +104,7 @@ export function AccessScreen({ onBack }: { onBack: () => void }) {
   return <ContractorAccess onBack={onBack} />;
 }
 function ContractorAccess({ onBack }: { onBack: () => void }) {
+  useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [workerId, setWorker] = useState(''),
     [zoneIds, setZones] = useState<string[]>([]),
@@ -120,11 +121,11 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
   const interval = () => {
     const validFrom = instant(from),
       validUntil = instant(to);
-    if (validUntil <= validFrom) throw new Error('Thời điểm kết thúc phải sau bắt đầu.');
+    if (validUntil <= validFrom) throw new Error(tr('validation.endAfterStart'));
     return { validFrom, validUntil };
   };
   return (
-    <Page title="Phân công & quyền khu vực" onBack={onBack}>
+    <Page title={tr('access.title')} onBack={onBack}>
       <ErrorNotice error={command.error} />
       <QueryState query={query}>
         {(data) => {
@@ -142,15 +143,15 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
           return (
             <>
               <Card>
-                <Body>Gửi đề nghị phân công</Body>
-                <Hint>Đề nghị cần được xét theo quy trình. Đại diện không tự duyệt quyền vào.</Hint>
+                <Body>{tr('access.requestAssignment')}</Body>
+                <Hint>{tr('access.assignmentHint')}</Hint>
                 <Choice
-                  label="Công nhân"
+                  label={tr('schedule.worker')}
                   value={workerId}
                   options={workers.map((w) => ({ value: w.id, label: w.name }))}
                   onChange={setWorker}
                 />
-                <Body>Khu vực đề nghị</Body>
+                <Body>{tr('access.requestedZones')}</Body>
                 {data.zones.map((z) => (
                   <Button
                     key={z.id}
@@ -165,10 +166,10 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                     }
                   />
                 ))}
-                <DateTimeField label="Bắt đầu hiệu lực" value={from} onChange={setFrom} />
-                <DateTimeField label="Kết thúc hiệu lực" value={to} onChange={setTo} />
+                <DateTimeField label={tr('access.validFrom')} value={from} onChange={setFrom} />
+                <DateTimeField label={tr('access.validUntil')} value={to} onChange={setTo} />
                 <Button
-                  label="Gửi phân công"
+                  label={tr('access.submitAssignment')}
                   disabled={command.isPending || !workerId || !zoneIds.length || !from || !to}
                   onPress={() =>
                     command.mutate(async () => {
@@ -186,12 +187,12 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                 />
               </Card>
               <Card>
-                <Body>Trạng thái phân công</Body>
-                {!assignments.length && <Hint>Chưa có phân công.</Hint>}
+                <Body>{tr('access.assignmentStatus')}</Body>
+                {!assignments.length && <Hint>{tr('access.noAssignments')}</Hint>}
                 {assignments.map((a) => (
                   <Card key={a.id}>
                     <Body>
-                      {a.workerName} · {a.status}
+                      {a.workerName} · {localizedLabel(a.status)}
                     </Body>
                     <Hint>
                       {displayTime(a.validFrom)} → {displayTime(a.validUntil)}
@@ -202,9 +203,9 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
               </Card>
               {data.canGrantWorkerZones && (
                 <Card>
-                  <Body>Cấp quyền trong phạm vi nhà thầu được giao</Body>
+                  <Body>{tr('access.grantWithinScope')}</Body>
                   <Choice
-                    label="Phân công đã duyệt"
+                    label={tr('access.approvedAssignment')}
                     value={assignmentId}
                     onChange={setAssignment}
                     options={assignments
@@ -212,17 +213,17 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                       .map((a) => ({ value: a.id, label: a.workerName }))}
                   />
                   <Choice
-                    label="Quyền khu vực nhà thầu"
+                    label={tr('access.contractorZoneGrant')}
                     value={permissionId}
                     onChange={setPermission}
                     options={permissions.map((p) => ({
                       value: p.id,
-                      label: `${data.zones.find((z) => z.id === p.zoneId)?.name ?? 'Khu vực'} · ${displayTime(p.validUntil)}`,
+                      label: `${data.zones.find((z) => z.id === p.zoneId)?.name ?? tr('common.zone')} · ${displayTime(p.validUntil)}`,
                     }))}
                   />
-                  <Hint>Dùng khoảng hiệu lực đã chọn ở trên.</Hint>
+                  <Hint>{tr('access.selectedValidity')}</Hint>
                   <Button
-                    label="Cấp quyền Worker"
+                    label={tr('access.grantWorker')}
                     disabled={command.isPending || !assignmentId || !permissionId || !from || !to}
                     onPress={() =>
                       command.mutate(() => {
@@ -244,7 +245,7 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                       <Card key={p.id}>
                         <Body>
                           {assignments.find((a) => a.id === p.workerAssignmentId)?.workerName} ·{' '}
-                          {p.revokedAt ? 'Đã thu hồi' : 'Đã cấp quyền'}
+                          {p.revokedAt ? tr('access.revoked') : tr('access.granted')}
                         </Body>
                         <Hint>
                           {displayTime(p.validFrom)} → {displayTime(p.validUntil)}
@@ -252,7 +253,7 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                         {!p.revokedAt && (
                           <Button
                             secondary
-                            label="Thu hồi quyền Worker"
+                            label={tr('access.revokeWorker')}
                             disabled={command.isPending}
                             onPress={() =>
                               command.mutate(() =>

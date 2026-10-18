@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import { Fragment, useState, type PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
@@ -12,6 +13,7 @@ import {
 import { ApiError } from '@smartsite/api-client';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation, translate } from '../../i18n';
+import { localizeMessage } from '../../i18n/messages';
 
 export const palette = {
   navy: '#0F1E36',
@@ -28,7 +30,9 @@ export function errorMessage(error: unknown) {
     if (error.status === 409) return translate('auth.conflictError');
     if (error.code === 'network' || error.code === 'timeout') return translate('auth.networkError');
   }
-  return error instanceof Error ? error.message : translate('common.unexpectedError');
+  return error instanceof Error
+    ? localizeMessage(error.message)
+    : translate('common.unexpectedError');
 }
 
 export function Button({
@@ -101,7 +105,7 @@ export function Choice({
       <Text style={styles.label}>{label}</Text>
       <Button
         secondary
-        label={selectedLabel ? `${selectedLabel} ▾` : 'Chọn… ▾'}
+        label={selectedLabel ? `${selectedLabel} ▾` : tr('common.selectDropdown')}
         disabled={disabled}
         onPress={() => setOpen(!open)}
       />
@@ -156,6 +160,7 @@ export function Body({ children }: PropsWithChildren) {
 }
 
 export function ErrorNotice({ error }: { error: unknown }) {
+  useTranslation();
   return error ? (
     <Text accessibilityRole="alert" style={styles.error}>
       {errorMessage(error)}

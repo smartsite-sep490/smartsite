@@ -14,6 +14,27 @@ Assigned safety work includes starting checklists, answering every criterion, at
 
 Mobile has no Worker face enrollment or face-profile management screen for either role. Contractor Representatives use the existing Web enrollment workflow with the Worker's explicit consent. Web enrollment and Backend APIs remain available.
 
+Worker account creation now collects citizen ID, gender, address, phone number, front/back ID images
+and the three required safety/health/insurance documents. Every attachment supports camera, photo
+library and existing file selection. Images must pass Backend quality checks before selection and
+again before storage. A PDF may contain up to four pages, at most 5 MiB per file; citizen ID sides
+require JPEG/PNG. Upload interruptions keep the newly created account so retry continues its files
+instead of creating a second account. The Worker and Representative can open protected originals
+from the document profile; Representatives can submit replacements. Safety Officers review on Web.
+Newly uploaded documents never extend validity without a new Safety approval. All Workers,
+including existing accounts, can view the Representative's optional manual date suggestion.
+Health certificates use the examination/issue date, with expiry computed one calendar year
+later (29 February becomes 28 February). Safety cards and insurance use an expiry date.
+Representatives can correct the appropriate date while pending,
+without uploading the original again. Manual dates still require Safety confirmation. All Workers,
+including existing accounts, need three current approved documents for entry and Worker write
+operations. Pending/expired profiles retain sign-in, reads and trusted exit operations. OCR compares
+citizen IDs on images/certificates with the saved profile; mismatches are visible to the Worker,
+Representative and Safety Officer but never block submission or approval.
+Safety must approve the dates before renewal takes effect; existing approved health dates are
+preserved until a new approval. See [Worker documents](../../contracts/worker-documents.md)
+and apply its Backend migrations, including `WorkerHealthIssueDate1792800000000`.
+
 Only refresh credentials are stored with [Expo SecureStore](https://docs.expo.dev/versions/v57.0.0/sdk/securestore/), separately for each API origin; access tokens remain in memory. Refresh rotation is serialized, authenticated 401s share one refresh, and logout clears local credentials even when the server is unavailable. Password changes revoke sessions and return to login. Private query data is cleared when the session changes. Camera/document/share functionality requires a rebuilt development client after installing the added native modules.
 
 ## Local setup

@@ -23,6 +23,7 @@ import { AccessScreen } from './features/access/access-screen';
 import { AssignedWorkScreen } from './features/assigned-work/assigned-work-screen';
 import { QrScreen, NotificationsScreen } from './features/workspace/qr-notifications';
 import { useTranslation, initSavedLanguage } from './i18n';
+import { localizeMessage } from './i18n/messages';
 
 export type UserRole = 'worker' | 'contractor';
 export type MobileRoute =
@@ -121,7 +122,12 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
 
       <View style={{ flex: 1 }} key={`${route}:${navigation.id ?? ''}`}>
         {route === 'home' && <HomeScreen navigate={navigate} />}
-        {route === 'profile' && <ProfileScreen onScopeChange={onScopeChange} />}
+        {route === 'profile' && (
+          <ProfileScreen
+            onScopeChange={onScopeChange}
+            initialDocuments={navigation.kind === 'documents'}
+          />
+        )}
         {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
         {route === 'attendance' && (
           <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
@@ -133,7 +139,7 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
             onBack={main ? undefined : back}
           />
         )}
-        {route === 'workforce' && contractor && <WorkforceScreen />}
+        {route === 'workforce' && contractor && <WorkforceScreen initialWorkerId={navigation.id} />}
         {route === 'teams' && contractor && <TeamsScreen onBack={back} />}
         {route === 'access' && <AccessScreen onBack={back} />}
         {route === 'assigned' && contractor && (
@@ -332,7 +338,7 @@ function AuthenticatedApp() {
         </Card>
       )}
       {expired && <Hint>{t('auth.sessionExpired')}</Hint>}
-      {notice && <Hint>{notice}</Hint>}
+      {notice && <Hint>{localizeMessage(notice)}</Hint>}
       <LoginScreen
         pending={login.isPending}
         error={login.error}

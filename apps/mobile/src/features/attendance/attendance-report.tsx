@@ -1,3 +1,6 @@
+import { useTranslation } from '../../i18n';
+import { localizedLabel } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
@@ -15,6 +18,7 @@ export function AttendanceReport({
   toDate: string;
   onDay: (id: string) => void;
 }) {
+  useTranslation();
   const { scope, client, token, workerId, queryKey } = useWorkspace();
   const [offset, setOffset] = useState(0),
     [expanded, setExpanded] = useState('');
@@ -37,16 +41,16 @@ export function AttendanceReport({
   });
   return (
     <Card>
-      <Body>Báo cáo công theo công nhân</Body>
+      <Body>{tr('attendance.workerReport')}</Body>
       <ErrorNotice error={command.error} />
       <Button
         secondary
-        label="Xuất / chia sẻ CSV"
+        label={tr('attendance.shareCsv')}
         disabled={command.isPending}
         onPress={() =>
           command.mutate(async () => {
             if (!(await Sharing.isAvailableAsync()))
-              throw new Error('Thiết bị chưa hỗ trợ chia sẻ tệp.');
+              throw new Error(tr('validation.sharingUnavailable'));
             const rows = await allPages((p) =>
               client.attendanceWorkers(token, scope.siteId, { ...filter, ...p }),
             );
@@ -76,27 +80,37 @@ export function AttendanceReport({
                   {w.workerName} · {w.workerCode}
                 </Body>
                 <Hint>
-                  Hôm nay: {w.todayStatus} · {displayTime(w.todayFirstCheckInAt)} →{' '}
-                  {displayTime(w.todayLastCheckOutAt)}
+                  {tr('attendance.todayLabel')} {w.todayStatus} ·{' '}
+                  {displayTime(w.todayFirstCheckInAt)} → {displayTime(w.todayLastCheckOutAt)}
                 </Hint>
-                <Body>Công xác nhận: {minutes(w.totalMinutes)}</Body>
+                <Body>
+                  {tr('attendance.confirmedLabel')} {minutes(w.totalMinutes)}
+                </Body>
                 <Hint>
-                  Tạm tính: {minutes(w.provisionalMinutes)} · {w.presentDays}/{w.requiredDays} ngày
-                  · {w.attendanceRate === null ? 'Chưa có tỷ lệ' : `${w.attendanceRate}%`}
+                  {tr('attendance.provisionalLabel')} {minutes(w.provisionalMinutes)} ·{' '}
+                  {w.presentDays}/{w.requiredDays} {tr('attendance.daysSeparator')}{' '}
+                  {w.attendanceRate === null ? tr('attendance.noRate') : `${w.attendanceRate}%`}
                 </Hint>
                 <Button
                   secondary
-                  label={expanded === w.workerId ? 'Đóng lịch công' : 'Lịch công từng ngày'}
+                  label={
+                    expanded === w.workerId
+                      ? tr('attendance.closeCalendar')
+                      : tr('attendance.dailyCalendar')
+                  }
                   onPress={() => setExpanded(expanded === w.workerId ? '' : w.workerId)}
                 />
                 {expanded === w.workerId &&
                   w.daily?.map((d) => (
                     <Card key={d.workDate}>
                       <Body>
-                        {d.workDate} · {d.status}
+                        {d.workDate} · {localizedLabel(d.status)}
                       </Body>
                       <Hint>
-                        {d.hoursStatus === 'CONFIRMED' ? 'Đã xác nhận' : 'Tạm tính'} ·{' '}
+                        {d.hoursStatus === 'CONFIRMED'
+                          ? tr('attendance.confirmed')
+                          : tr('attendance.provisionalHours')}{' '}
+                        ·{' '}
                         {minutes(
                           d.hoursStatus === 'CONFIRMED' ? d.totalMinutes : d.provisionalMinutes,
                         )}
@@ -104,7 +118,7 @@ export function AttendanceReport({
                       {d.attendanceDayId && (
                         <Button
                           secondary
-                          label="Mở ngày công"
+                          label={tr('attendance.openDay')}
                           onPress={() => onDay(d.attendanceDayId!)}
                         />
                       )}

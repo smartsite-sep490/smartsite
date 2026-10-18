@@ -1,3 +1,4 @@
+import { translate as tr, useTranslation } from '../../i18n';
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -19,6 +20,7 @@ interface SplashScreenProps {
 }
 
 export function SplashScreen({ onFinish }: SplashScreenProps) {
+  useTranslation();
   // Animation drivers using useState to satisfy React 19 render-ref rules
   const [logoScale] = useState(() => new Animated.Value(0.5));
   const [logoOpacity] = useState(() => new Animated.Value(0));
@@ -76,7 +78,7 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
           duration: 1200,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
 
     // 3. Text slide up and fade in after delay
@@ -156,11 +158,7 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
             ]}
           >
             <View style={styles.logoCard}>
-              <Image
-                source={smartsiteAppIcon}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+              <Image source={smartsiteAppIcon} style={styles.logoImage} resizeMode="contain" />
             </View>
           </Animated.View>
 
@@ -177,23 +175,17 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
             <Text style={styles.brandName}>
               Smart<Text style={styles.brandOrange}>Site</Text>
             </Text>
-            <Text style={styles.tagline}>
-              NỀN TẢNG QUẢN LÝ CÔNG TRƯỜNG THÔNG MINH
-            </Text>
-            <Text style={styles.subtext}>
-              Kết nối con người, xây dựng tương lai
-            </Text>
+            <Text style={styles.tagline}>{tr('splash.platformTitle')}</Text>
+            <Text style={styles.subtext}>{tr('header.tagline')}</Text>
           </Animated.View>
         </View>
 
         {/* Bottom Loading Progress Bar */}
         <View style={styles.bottomSection}>
           <View style={styles.progressBarTrack}>
-            <Animated.View
-              style={[styles.progressBarFill, { width: progressWidth }]}
-            />
+            <Animated.View style={[styles.progressBarFill, { width: progressWidth }]} />
           </View>
-          <Text style={styles.loadingText}>Đang chuẩn bị phiên làm việc...</Text>
+          <Text style={styles.loadingText}>{tr('splash.preparing')}</Text>
           <Text style={styles.versionText}>SmartSite v0.1.0 · 2026</Text>
         </View>
       </Animated.View>

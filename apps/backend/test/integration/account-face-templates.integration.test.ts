@@ -27,6 +27,7 @@ import type { FaceVerificationTechnicalOutcome } from '@smartsite/contracts';
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 
 after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
@@ -274,6 +275,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       validUntil: null,
       createdByUserId: actorId,
     });
+    await approvedWorkerDocuments(dataSource, [workerId], actorId);
     const deniedNoShift = await gate.verify(actor, siteId, 'gate1', frame, 'IN');
     assert.equal(deniedNoShift.decision.authorization, 'DENIED');
     assert.equal(deniedNoShift.decision.reasonCode, 'NO_SCHEDULE');

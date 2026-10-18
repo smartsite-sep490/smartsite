@@ -14,7 +14,7 @@ Instruction priority is: explicit task requirements, this file, repository docum
 
 ## 2. Current system boundaries
 
-This repository owns the React Web app, React Native/Expo app, NestJS Backend, shared client/contracts, TypeORM persistence, and local infrastructure. Computer vision belongs in the separate `smartsite-ai` repository.
+This repository owns the React Web app, React Native/Expo app, NestJS Backend, shared client/contracts, TypeORM persistence, and local infrastructure. Camera/face computer vision belongs in the separate `smartsite-ai` repository. Worker document OCR is a Backend-owned, bounded CPU helper shipped in `apps/backend/ocr`; it does not run camera loops or a separate HTTP service.
 
 - Backend is the source of truth for accounts, roles, Site/Contractor/Zone scope, access authorization, alert state, incidents, attendance, and other business decisions.
 - AI observations are technical evidence. They are not final authorization or violation decisions.

@@ -42,7 +42,9 @@ import {
   WorkforceConfigurationService,
 } from './workforce-configuration.service.js';
 
-function workerResponse(worker: WorkerEntity) {
+function workerResponse(
+  worker: WorkerEntity & { documentStatus?: import('@smartsite/contracts').WorkerComplianceStatus },
+) {
   return {
     id: worker.id,
     siteId: worker.siteId,
@@ -51,6 +53,7 @@ function workerResponse(worker: WorkerEntity) {
     externalId: worker.externalId,
     displayName: worker.displayName,
     isActive: worker.isActive,
+    documentStatus: worker.documentStatus,
     createdAt: worker.createdAt,
   };
 }

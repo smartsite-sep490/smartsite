@@ -1869,6 +1869,147 @@ export class SmartSiteManagementClient {
     );
   }
 
+  workerCompliance(token: string, siteId: string, workerId: string, options?: RequestOptions) {
+    return this.request<WorkerComplianceResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/compliance`,
+      token,
+      undefined,
+      undefined,
+      options,
+    );
+  }
+  checkDocumentImageQuality(token: string, siteId: string, contractorId: string, file: UploadFile) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    return this.requestFormData<import('@smartsite/contracts').DocumentImageQuality>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/document-image-quality`,
+      token,
+      form,
+      { timeoutMs: 60_000 },
+    );
+  }
+  uploadWorkerIdentityImage(
+    token: string,
+    siteId: string,
+    workerId: string,
+    side: 'FRONT' | 'BACK',
+    file: UploadFile,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    return this.requestFormData<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${side}`,
+      token,
+      form,
+      { timeoutMs: 60_000 },
+    );
+  }
+  workerIdentityImageFile(token: string, siteId: string, workerId: string, id: string) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${pathId(id)}/file`,
+      token,
+      undefined,
+      ['image/jpeg', 'image/png'],
+    );
+  }
+  listWorkerCompliance(
+    token: string,
+    siteId: string,
+    options?: import('@smartsite/contracts').WorkerComplianceListQuery,
+  ) {
+    return this.request<Page<WorkerComplianceResponse>>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/worker-compliance`, {
+        ...options,
+        pendingOnly: options?.pendingOnly === undefined ? undefined : String(options.pendingOnly),
+        needsSupplement:
+          options?.needsSupplement === undefined ? undefined : String(options.needsSupplement),
+      }),
+      token,
+    );
+  }
+  retryWorkerIdentityOcr(token: string, siteId: string, workerId: string, id: string) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${pathId(id)}/ocr`,
+      token,
+      {},
+      undefined,
+      { timeoutMs: 60_000 },
+    );
+  }
+  uploadWorkerDocument(
+    token: string,
+    siteId: string,
+    workerId: string,
+    kind: WorkerDocumentKind,
+    file: UploadFile,
+    input: import('@smartsite/contracts').UploadWorkerDocumentCommand = {},
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    if (input.submittedExpiresOn !== undefined)
+      form.append('submittedExpiresOn', input.submittedExpiresOn);
+    if (input.submittedIssuedOn !== undefined)
+      form.append('submittedIssuedOn', input.submittedIssuedOn);
+    return this.requestFormData<WorkerDocumentResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}`,
+      token,
+      form,
+      { timeoutMs: 60_000 },
+    );
+  }
+  updateWorkerDocumentExpiry(
+    token: string,
+    siteId: string,
+    workerId: string,
+    id: string,
+    input: import('@smartsite/contracts').UpdateWorkerDocumentExpiryCommand,
+  ) {
+    return this.request<WorkerDocumentResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/submitted-expiry`,
+      token,
+      input,
+    );
+  }
+  workerDocumentFile(token: string, siteId: string, workerId: string, id: string) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/file`,
+      token,
+      undefined,
+      ['image/jpeg', 'image/png', 'application/pdf'],
+    );
+  }
+  retryWorkerDocumentOcr(token: string, siteId: string, workerId: string, id: string) {
+    return this.request<WorkerDocumentResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/ocr`,
+      token,
+      {},
+      undefined,
+      { timeoutMs: 60_000 },
+    );
+  }
+  reviewWorkerDocument(
+    token: string,
+    siteId: string,
+    workerId: string,
+    id: string,
+    input: ReviewWorkerDocumentCommand,
+  ) {
+    return this.request<WorkerDocumentResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/reviews`,
+      token,
+      input,
+    );
+  }
+
   contractorWorkerAccountOptions(token: string, siteId: string) {
     return this.request<ContractorWorkerAccountOptionsResponse>(
       'GET',
@@ -2781,3 +2922,9 @@ export class SmartSiteManagementClient {
     });
   }
 }
+import type {
+  WorkerDocumentKind,
+  WorkerDocumentResponse,
+  WorkerComplianceResponse,
+  ReviewWorkerDocumentCommand,
+} from '@smartsite/contracts';

@@ -35,11 +35,28 @@ describe('mobile i18n configuration', () => {
         (en as Record<string, Record<string, string>>)[section]!,
       ).sort();
       expect(enSubKeys).toEqual(viSubKeys);
+      for (const key of viSubKeys) {
+        const viValue = (vi as Record<string, Record<string, string>>)[section]![key]!;
+        const enValue = (en as Record<string, Record<string, string>>)[section]![key]!;
+        const variables = (value: string) =>
+          [...value.matchAll(/{{(\w+)}}/g)].map((m) => m[1]).sort();
+        expect(viValue.trim(), `${section}.${key}`).not.toBe('');
+        expect(enValue.trim(), `${section}.${key}`).not.toBe('');
+        expect(variables(viValue), `${section}.${key}`).toEqual(variables(enValue));
+      }
     }
   });
 
   it('interpolates parameters correctly', () => {
     expect(translate('scope.welcome', { name: 'Nguyen Van An' })).toBe('Xin chào, Nguyen Van An');
     expect(translate('attendance.totalHours', { hours: 8 })).toBe('Tổng giờ: 8h');
+  });
+  it('keeps Vietnamese prose out of the English catalog except the native language name', () => {
+    for (const [section, entries] of Object.entries(en)) {
+      for (const [key, value] of Object.entries(entries)) {
+        if (`${section}.${key}` === 'header.vietnamese') continue;
+        expect(value, `${section}.${key}`).not.toMatch(/[ĂăĐđƠơƯưẠ-ỹ]/);
+      }
+    }
   });
 });

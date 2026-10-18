@@ -19,6 +19,22 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
   assert.equal(config.EVIDENCE_LOCAL_ROOT, undefined);
 });
 
+test('document OCR executables are explicit local commands, not inherited service credentials', () => {
+  assert.equal(validateEnvironment({}).WORKER_DOCUMENT_PYTHON, undefined);
+  for (const field of [
+    'WORKER_DOCUMENT_PYTHON',
+    'WORKER_DOCUMENT_TESSERACT',
+    'WORKER_DOCUMENT_PDFTOPPM',
+  ] as const) {
+    assert.equal(
+      validateEnvironment({ [field]: ' C:/Tools With Spaces/engine.exe ' })[field],
+      'C:/Tools With Spaces/engine.exe',
+    );
+    for (const value of ['', '  ', 'bad\ncommand', 'bad\0command'])
+      assert.throws(() => validateEnvironment({ [field]: value }));
+  }
+});
+
 test('local evidence root is optional but must be a trimmed absolute path', () => {
   const absoluteRoot = path.resolve('local-evidence');
   assert.equal(

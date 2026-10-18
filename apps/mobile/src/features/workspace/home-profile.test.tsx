@@ -7,6 +7,7 @@ import { ProfileScreen } from './home-profile';
 
 vi.mock('../auth/auth-context', () => ({ useAuth: () => ({ session: {} }) }));
 vi.mock('./workspace-context', () => ({ useWorkspace: () => workspace }));
+vi.mock('../shared/uploads', () => ({ Attachments: () => null, EvidenceButton: () => null }));
 let workspace: ReturnType<typeof useWorkspace>;
 let root: ReactTestRenderer;
 let cache: QueryClient;

@@ -1,3 +1,5 @@
+import { localizedLabel } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -208,11 +210,7 @@ export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
           </QueryState>
         )}
       </QueryState>
-      {scope.role === 'contractor' && (
-        <Hint>
-          Lịch được Site Manager gán. Đại diện xem lịch và duyệt đổi ca/hoán đổi trong mục Yêu cầu.
-        </Hint>
-      )}
+      {scope.role === 'contractor' && <Hint>{tr('schedule.managerAssignmentHint')}</Hint>}
     </Page>
   );
 }
@@ -294,10 +292,10 @@ function ScheduleRequest({
         <Field label={t('schedule.reason')} multiline value={reason} onChangeText={setReason} />
         <Hint>
           {kind === 'SWAP'
-            ? 'Người nhận cần đồng ý trước khi Đại diện nhà thầu xét duyệt.'
+            ? tr('requests.swapNotice')
             : kind === 'CHANGE'
-              ? 'Đại diện nhà thầu xét duyệt đổi ca.'
-              : 'Site Manager xét duyệt nghỉ nguyên ca.'}
+              ? tr('requests.changeReviewHint')
+              : tr('requests.absenceReviewHint')}
         </Hint>
         <ErrorNotice error={command.error} />
         <Button
@@ -397,8 +395,7 @@ export function ShiftRequestsScreen({
   });
   const detail = selected ?? incoming.data;
   const renderDetail = (r: ShiftRequestResponse) => {
-    if (!requestInScope(r, workerIds, scope.role))
-      return <Hint>Yêu cầu không thuộc phạm vi đang chọn.</Hint>;
+    if (!requestInScope(r, workerIds, scope.role)) return <Hint>{tr('requests.outOfScope')}</Hint>;
     const canReview =
       rep &&
       r.status === 'PENDING_MANAGER' &&
@@ -422,7 +419,7 @@ export function ShiftRequestsScreen({
         } else if (canReview) {
           if (approve) await client.approveShiftSwapRequest(token, scope.siteId, r.id);
           else await client.rejectShiftSwapRequest(token, scope.siteId, r.id, { reason });
-        } else throw new Error('Yêu cầu không còn ở trạng thái cho phép xử lý.');
+        } else throw new Error(tr('validation.requestStateChanged'));
         setSelected(null);
         setReason('');
       });
@@ -470,7 +467,7 @@ export function ShiftRequestsScreen({
                 },
               ]}
             >
-              {r.status}
+              {localizedLabel(r.status)}
             </Text>
           </View>
         </View>
@@ -485,10 +482,13 @@ export function ShiftRequestsScreen({
               : (r.workDate ?? '—')}
           </Text>
           <Text style={schedStyles.detailInfoSub}>
-            Gửi: {displayTime(r.createdAt)} · Xét: {displayTime(r.reviewedAt)}
+            {tr('requests.submittedAt')} {displayTime(r.createdAt)} {tr('requests.reviewedAt')}{' '}
+            {displayTime(r.reviewedAt)}
           </Text>
           {r.reviewReason && (
-            <Text style={schedStyles.detailReviewReason}>Lý do xét: {r.reviewReason}</Text>
+            <Text style={schedStyles.detailReviewReason}>
+              {tr('requests.reviewReason')} {r.reviewReason}
+            </Text>
           )}
         </View>
 
@@ -513,14 +513,14 @@ export function ShiftRequestsScreen({
   };
   if (!workers.isSuccess)
     return (
-      <Page title="Phạm vi công nhân" onBack={onBack}>
+      <Page title={tr('attendance.workerScope')} onBack={onBack}>
         <QueryState query={workers}>{() => null}</QueryState>
       </Page>
     );
   return (
     <Page title={rep ? t('contractorHome.approveRequests') : t('requests.title')} onBack={onBack}>
       <Choice
-        label="Danh sách"
+        label={tr('requests.list')}
         value={view}
         onChange={(v) => {
           setView(v as ShiftRequestListOptions['view']);
@@ -531,17 +531,17 @@ export function ShiftRequestsScreen({
         options={
           rep
             ? [
-                { value: 'REVIEW', label: 'Chờ tôi xét duyệt' },
-                { value: 'HISTORY', label: 'Lịch sử' },
+                { value: 'REVIEW', label: tr('requests.awaitingMyReview') },
+                { value: 'HISTORY', label: tr('requests.history') },
               ]
             : [
-                { value: 'WORKER', label: 'Tôi đã gửi' },
-                { value: 'INCOMING', label: 'Chờ tôi đồng ý' },
+                { value: 'WORKER', label: tr('requests.submittedByMe') },
+                { value: 'INCOMING', label: tr('requests.awaitingMyConsent') },
               ]
         }
       />
       <Choice
-        label="Loại"
+        label={tr('requests.kind')}
         value={type}
         onChange={(v) => {
           setType(v as typeof type);
@@ -560,7 +560,8 @@ export function ShiftRequestsScreen({
         {(data) => (
           <>
             <Hint>
-              {data.pendingCount} yêu cầu chờ duyệt · {data.incomingCount} yêu cầu chờ đồng ý
+              {data.pendingCount} {tr('requests.pendingReviewUnit')} {data.incomingCount}{' '}
+              {tr('requests.pendingConsentUnit')}
             </Hint>
             {!data.items.length && <Hint>{t('requests.noRequests')}</Hint>}
             {data.items.map((r) => (
@@ -622,7 +623,7 @@ export function ShiftRequestsScreen({
                         },
                       ]}
                     >
-                      {r.status}
+                      {localizedLabel(r.status)}
                     </Text>
                   </View>
                 </View>
@@ -652,7 +653,7 @@ export function ShiftRequestsScreen({
               {!data.length && <Hint>{t('requests.noRequests')}</Hint>}
               {data.map((r) => (
                 <Body key={r.id}>
-                  {r.reason} · {r.status}
+                  {r.reason} · {localizedLabel(r.status)}
                 </Body>
               ))}
             </Card>

@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -208,7 +209,7 @@ export function WorkerRequestModal({
                   style={selectedSchedule ? styles.selectTextActive : styles.selectTextPlaceholder}
                 >
                   {selectedSchedule
-                    ? `${selectedSchedule.workDate} · ${selectedShift?.name ?? 'Ca làm'}`
+                    ? `${selectedSchedule.workDate} · ${selectedShift?.name ?? tr('schedule.shift')}`
                     : t('requests.selectShiftPlaceholder')}
                 </Text>
                 <IconChevronDown size={18} color={colors.textMuted} />
@@ -236,7 +237,7 @@ export function WorkerRequestModal({
                             item.id === selectedScheduleId && styles.dropdownItemTextActive,
                           ]}
                         >
-                          {item.workDate} · {sh?.name ?? 'Ca làm'}
+                          {item.workDate} · {sh?.name ?? tr('schedule.shift')}
                         </Text>
                       </Pressable>
                     );

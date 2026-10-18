@@ -32,6 +32,7 @@ import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entr
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 
 test('ERD: bounded permissions, gate confirmation, temporary passage and attendance corrections', async () => {
   await dataSource.initialize();
@@ -281,6 +282,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
           : undefined,
       });
     };
+    await approvedWorkerDocuments(dataSource, [workerId], managerId);
     await assignTestShift(dataSource, siteId, workerId);
     const entry = await passage('IN');
     assert.equal(await dataSource.getRepository(AttendanceEventEntity).countBy({ siteId }), 1);

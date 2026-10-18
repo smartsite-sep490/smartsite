@@ -39,6 +39,7 @@ import dataSource from '../support/test-data-source.js';
 import { createTestConfig } from '../support/config.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 test('real PostgreSQL visitor approval, group counts, expiring QR, replay and worker fallback authorization', async () => {
   await dataSource.initialize();
   const sites: [string, string, string] = [randomUUID(), randomUUID(), randomUUID()];
@@ -555,6 +556,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
     });
+    await approvedWorkerDocuments(dataSource, [workerId], managerId);
     const noShiftPass = await service.workerPass(workerActor, siteId, {
       fallbackSessionId: noShiftFallback.id,
     });
