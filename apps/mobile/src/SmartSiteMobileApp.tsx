@@ -121,7 +121,12 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
 
       <View style={{ flex: 1 }} key={`${route}:${navigation.id ?? ''}`}>
         {route === 'home' && <HomeScreen navigate={navigate} />}
-        {route === 'profile' && <ProfileScreen onScopeChange={onScopeChange} />}
+        {route === 'profile' && (
+          <ProfileScreen
+            onScopeChange={onScopeChange}
+            initialDocuments={navigation.kind === 'documents'}
+          />
+        )}
         {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
         {route === 'attendance' && (
           <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
@@ -133,7 +138,7 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
             onBack={main ? undefined : back}
           />
         )}
-        {route === 'workforce' && contractor && <WorkforceScreen />}
+        {route === 'workforce' && contractor && <WorkforceScreen initialWorkerId={navigation.id} />}
         {route === 'teams' && contractor && <TeamsScreen onBack={back} />}
         {route === 'access' && <AccessScreen onBack={back} />}
         {route === 'assigned' && contractor && (

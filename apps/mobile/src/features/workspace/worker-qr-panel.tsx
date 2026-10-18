@@ -28,6 +28,7 @@ function QrGraphic({ code }: { code: string }) {
 
 export function WorkerQrPanel() {
   const { t } = useTranslation();
+  const { workerDocumentStatus } = useWorkspace();
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
   return (
     <View style={{ gap: 12, width: '100%' }}>
@@ -41,7 +42,11 @@ export function WorkerQrPanel() {
         ]}
         onChange={(value) => setDirection(value as 'IN' | 'OUT')}
       />
-      <WorkerQrPass key={direction} direction={direction} />
+      {direction === 'IN' && workerDocumentStatus && workerDocumentStatus !== 'ACTIVE' ? (
+        <Hint>{t('documents.readOnly')}</Hint>
+      ) : (
+        <WorkerQrPass key={direction} direction={direction} />
+      )}
     </View>
   );
 }

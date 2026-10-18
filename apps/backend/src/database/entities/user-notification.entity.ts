@@ -19,6 +19,7 @@ import { ContractorEntity } from './contractor.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 
 export interface NotificationContent {
+  documentWorkerId?: string;
   checklistId?: string;
   dayId?: string;
   incidentId?: string;
@@ -37,7 +38,7 @@ export interface NotificationContent {
 @Index('idx_notification_unread', ['recipientUserId', 'createdAt'], { where: 'read_at IS NULL' })
 @Check(
   'chk_notification_request_type',
-  "request_type IN ('CHANGE', 'SWAP', 'SAFETY', 'ATTENDANCE', 'SCHEDULE', 'CHECKLIST')",
+  "request_type IN ('CHANGE', 'SWAP', 'SAFETY', 'ATTENDANCE', 'SCHEDULE', 'CHECKLIST', 'DOCUMENT')",
 )
 @Check('chk_notification_deleted_read', 'deleted_at IS NULL OR read_at IS NOT NULL')
 @Check(
@@ -46,7 +47,7 @@ export interface NotificationContent {
 )
 @Check(
   'chk_notification_event',
-  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','ABSENT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED','CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED','EXIT_DURATION_EXCEEDED','MAX_EXITS_EXCEEDED')",
+  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','ABSENT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED','CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED','EXIT_DURATION_EXCEEDED','MAX_EXITS_EXCEEDED','DOCUMENT_SUBMITTED','DOCUMENT_APPROVED','DOCUMENT_REJECTED','DOCUMENT_EXPIRING','DOCUMENT_EXPIRED')",
 )
 @Check(
   'chk_notification_schedule_target',
@@ -64,6 +65,11 @@ export interface NotificationContent {
 @Check(
   'chk_notification_checklist_target',
   `(request_type<>'CHECKLIST' AND event NOT IN ('CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED')) OR (request_type='CHECKLIST' AND recipient_role IN ('SAFETY_OFFICER','CONTRACTOR_REPRESENTATIVE') AND event IN ('CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED') AND COALESCE(content->>'checklistId','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')`,
+)
+@Check(
+  'chk_notification_document_target',
+  `(request_type<>'DOCUMENT' AND event NOT IN ('DOCUMENT_SUBMITTED','DOCUMENT_APPROVED','DOCUMENT_REJECTED','DOCUMENT_EXPIRING','DOCUMENT_EXPIRED')) OR
+  (request_type='DOCUMENT' AND event IN ('DOCUMENT_SUBMITTED','DOCUMENT_APPROVED','DOCUMENT_REJECTED','DOCUMENT_EXPIRING','DOCUMENT_EXPIRED') AND COALESCE(content->>'documentWorkerId','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')`,
 )
 export class UserNotificationEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_user_notification' })
@@ -89,13 +95,14 @@ export class UserNotificationEntity {
   recipientRole!: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' | 'SITE_MANAGER';
 
   @Column({ name: 'request_type', type: 'varchar', length: 16 })
-  requestType!: 'CHANGE' | 'SWAP' | 'SAFETY' | 'ATTENDANCE' | 'SCHEDULE' | 'CHECKLIST';
+  requestType!: 'CHANGE' | 'SWAP' | 'SAFETY' | 'ATTENDANCE' | 'SCHEDULE' | 'CHECKLIST' | 'DOCUMENT';
 
   @Column({ name: 'request_id', type: 'uuid' })
   requestId!: string;
 
   @Column({ type: 'varchar', length: 24 })
   event!:
+    | import('@smartsite/contracts').WorkerDocumentNotificationEvent
     | SchedulingNotificationEvent
     | ScheduleAssignmentNotificationEvent
     | import('@smartsite/contracts').ChecklistNotificationEvent

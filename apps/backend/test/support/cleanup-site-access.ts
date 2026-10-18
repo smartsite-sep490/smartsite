@@ -3,6 +3,18 @@ import type { DataSource } from 'typeorm';
 /** Remove only the synthetic sites owned by the calling integration test. */
 export async function cleanupSiteAccess(source: DataSource, siteIds: string[]) {
   await source.query(
+    'DELETE FROM worker_identity_image WHERE worker_id IN (SELECT id FROM worker WHERE site_id=ANY($1))',
+    [siteIds],
+  );
+  await source.query(
+    'DELETE FROM worker_document WHERE worker_id IN (SELECT id FROM worker WHERE site_id=ANY($1))',
+    [siteIds],
+  );
+  await source.query(
+    'DELETE FROM worker_compliance_profile WHERE worker_id IN (SELECT id FROM worker WHERE site_id=ANY($1))',
+    [siteIds],
+  );
+  await source.query(
     'DELETE FROM team_zone_permission WHERE team_id IN (SELECT id FROM contractor_team WHERE site_id=ANY($1))',
     [siteIds],
   );

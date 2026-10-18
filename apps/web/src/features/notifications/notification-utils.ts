@@ -4,6 +4,8 @@ import { localizedLabel } from '../../i18n/labels';
 import type { UserNotificationResponse } from '@smartsite/api-client';
 
 export function notificationHref(notification: UserNotificationResponse, assignedWork = false) {
+  if (notification.target.tab === 'documents')
+    return `/worker-documents?${new URLSearchParams({ ...notification.target })}`;
   return `${'incidentId' in notification.target || 'checklistId' in notification.target ? (assignedWork ? '/assigned-work' : '/incidents') : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
 }
 

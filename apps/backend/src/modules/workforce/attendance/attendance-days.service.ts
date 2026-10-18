@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { randomUUID } from 'node:crypto';
+import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { DataSource, In } from 'typeorm';
 import type {
   AttendanceDaysResponse,
@@ -525,6 +526,7 @@ export class AttendanceDaysService {
       if (!worker) missing();
       if ((await attendanceAccess(manager, actor, worker)) !== 'SELF')
         conflict('Workers submit their own time requests');
+      await requireWorkerDocuments(manager, worker);
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `mf03:${siteId}:${worker.id}`,
       ]);

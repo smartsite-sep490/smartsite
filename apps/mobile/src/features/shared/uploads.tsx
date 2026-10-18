@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -6,14 +6,30 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { NativeUploadFile } from '@smartsite/api-client';
 import { Body, Button, Card, ErrorNotice, Hint } from './ui';
+import { useTranslation } from '../../i18n';
 
-export async function capturePhoto(front = false): Promise<NativeUploadFile | null> {
+function removeCached(file: NativeUploadFile) {
+  try {
+    const prefix = Paths?.cache?.uri?.replace(/\/+$/, '') + '/';
+    if (Paths?.cache?.uri && file.uri.startsWith(prefix)) {
+      const cached = new File(file.uri);
+      if (cached.exists) cached.delete();
+    }
+  } catch {
+    /* Cache cleanup must not change a completed upload. */
+  }
+}
+
+export async function capturePhoto(
+  front = false,
+  document = false,
+): Promise<NativeUploadFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted)
     throw new Error('Cần quyền camera để chụp ảnh. Bạn có thể cấp quyền trong cài đặt thiết bị.');
   const result = await ImagePicker.launchCameraAsync({
     mediaTypes: ['images'],
-    quality: 0.7,
+    quality: document ? 1 : 0.7,
     cameraType: front ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
   });
   if (result.canceled || !result.assets[0]) return null;
@@ -21,16 +37,20 @@ export async function capturePhoto(front = false): Promise<NativeUploadFile | nu
   try {
     const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
     const context = ImageManipulator.manipulate(original.uri);
-    context.resize({ width: 1280 });
+    context.resize({ width: Math.min(document ? 1920 : 1280, result.assets[0].width) });
     const image = await context.renderAsync();
     const saved = await image.saveAsync({
       format: SaveFormat.JPEG,
-      compress: 0.75,
+      compress: document ? 0.85 : 0.75,
     });
     const transformed = new File(saved.uri);
-    if (transformed.size > 1024 * 1024) {
+    if (transformed.size > (document ? 5 : 1) * 1024 * 1024) {
       transformed.delete();
-      throw new Error('Ảnh vượt 1 MB. Vui lòng chụp lại với khung hình gọn hơn.');
+      throw new Error(
+        document
+          ? 'Ảnh vượt 5 MB. Vui lòng chụp lại.'
+          : 'Ảnh vượt 1 MB. Vui lòng chụp lại với khung hình gọn hơn.',
+      );
     }
     return { uri: saved.uri, name: 'photo.jpg', type: 'image/jpeg' };
   } finally {
@@ -42,24 +62,77 @@ export function Attachments({
   onChange,
   jpegOnly = false,
   maxFiles = 3,
+  validateFile,
+  allowPdf = true,
 }: {
   files: NativeUploadFile[];
   onChange: (files: NativeUploadFile[]) => void;
   jpegOnly?: boolean;
   maxFiles?: number;
+  validateFile?: (file: NativeUploadFile) => Promise<void>;
+  allowPdf?: boolean;
 }) {
+  const { t } = useTranslation();
   const [error, setError] = useState<unknown>(null),
     [pending, setPending] = useState(false);
-  const add = async (source: 'camera' | 'file') => {
+  const managed = !!validateFile;
+  const owned = useRef(new Map<string, NativeUploadFile>());
+  const previous = useRef(files);
+  useEffect(() => {
+    if (managed)
+      for (const file of previous.current)
+        if (!files.some((next) => next.uri === file.uri)) removeCached(file);
+    previous.current = files;
+  }, [files, managed]);
+  useEffect(() => {
+    const tracked = owned.current;
+    return () => {
+      if (managed) for (const file of tracked.values()) removeCached(file);
+    };
+  }, [managed]);
+  const accept = async (file: NativeUploadFile) => {
+    if (managed) owned.current.set(file.uri, file);
+    try {
+      await validateFile?.(file);
+      onChange([...files, file]);
+    } catch (e) {
+      if (managed) removeCached(file);
+      throw e;
+    }
+  };
+  const add = async (source: 'camera' | 'gallery' | 'file') => {
     setPending(true);
     setError(null);
     try {
       if (source === 'camera') {
-        const file = await capturePhoto();
-        if (file) onChange([...files, file]);
+        const file = await capturePhoto(false, !!validateFile);
+        if (file) await accept(file);
+      } else if (source === 'gallery') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) throw new Error('Cần quyền thư viện ảnh để chọn ảnh giấy tờ.');
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 1,
+        });
+        const asset = !result.canceled ? result.assets[0] : undefined;
+        if (asset) {
+          const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
+          const context = ImageManipulator.manipulate(asset.uri);
+          context.resize({ width: Math.min(1920, asset.width) });
+          const image = await context.renderAsync();
+          const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+          const file = { uri: saved.uri, name: 'document-gallery.jpg', type: 'image/jpeg' };
+          if (new File(saved.uri).size > 5 * 1024 * 1024) {
+            removeCached(file);
+            throw new Error('Mỗi ảnh tối đa 5 MB.');
+          }
+          await accept(file);
+        }
       } else {
         const result = await DocumentPicker.getDocumentAsync({
-          type: jpegOnly ? 'image/jpeg' : ['image/jpeg', 'image/png', 'application/pdf'],
+          type: jpegOnly
+            ? 'image/jpeg'
+            : ['image/jpeg', 'image/png', ...(allowPdf ? ['application/pdf'] : [])],
           copyToCacheDirectory: true,
         });
         const asset = !result.canceled ? result.assets[0] : undefined;
@@ -75,7 +148,7 @@ export function Attachments({
                 ? 'image/png'
                 : 'image/jpeg');
           const file = { uri: asset.uri, name: asset.name, type: mime };
-          onChange([...files, file]);
+          await accept(file);
         }
       }
     } catch (e) {
@@ -111,10 +184,18 @@ export function Attachments({
       <ErrorNotice error={error} />
       <Button
         secondary
-        label="Chụp ảnh"
+        label={validateFile ? t('documents.camera') : 'Chụp ảnh'}
         disabled={pending || files.length >= maxFiles}
         onPress={() => void add('camera')}
       />
+      {validateFile && (
+        <Button
+          secondary
+          label={t('documents.gallery')}
+          disabled={pending || files.length >= maxFiles}
+          onPress={() => void add('gallery')}
+        />
+      )}
       <Button
         secondary
         label="Chọn tệp đính kèm"

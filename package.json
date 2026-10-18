@@ -10,6 +10,8 @@
     "dev": "turbo run dev --filter=@smartsite/web --filter=@smartsite/backend",
     "dev:web": "pnpm --filter @smartsite/web dev",
     "dev:api": "pnpm --filter @smartsite/backend dev",
+    "ocr:setup": "node scripts/setup-document-ocr.mjs",
+    "test:ocr": "node scripts/test-document-ocr.mjs",
     "dev:db": "docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60",
     "dev:mobile": "pnpm --filter @smartsite/mobile exec node --dns-result-order=ipv4first ./node_modules/expo/bin/cli start --dev-client --localhost --port 8081 --max-workers 2",
     "dev:mobile:lan": "pnpm --filter @smartsite/mobile dev",

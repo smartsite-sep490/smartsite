@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -162,6 +163,7 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
       isActive: true,
     });
     const firstInput = { requestId: randomUUID(), name: 'Đội sơn', description: 'Paint team' };
+    await approvedWorkerDocuments(dataSource, [aId, bId, cId], repId);
     const paint = await service.create(rep, siteId, contractorId, firstInput),
       floor = await service.create(rep, siteId, contractorId, {
         requestId: randomUUID(),

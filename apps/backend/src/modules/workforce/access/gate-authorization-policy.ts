@@ -26,6 +26,7 @@ export interface GateAuthorizationDecision {
   authorization: GateAuthorizationOutcome;
   reasonCode:
     | 'WORKER_INACTIVE'
+    | 'WORKER_DOCUMENTS_INVALID'
     | 'CONTRACTOR_INACTIVE'
     | 'CONTRACTOR_SITE_PARTICIPATION_INVALID'
     | 'FACE_PROFILE_REVOKED'

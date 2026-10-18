@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -114,6 +115,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       displayName: 'Synthetic Worker',
       isActive: true,
     });
+    await approvedWorkerDocuments(dataSource, [worker.id], repId);
     const shift = await dataSource.getRepository(ShiftEntity).save({
       id: randomUUID(),
       siteId,

@@ -147,3 +147,14 @@ export async function getBackendHealth(
   }
 }
 export type * from '@smartsite/contracts';
+export { healthCertificateExpiry } from '@smartsite/contracts/worker-document-dates';
+export type {
+  WorkerDocumentKind,
+  WorkerDocumentStatus,
+  DocumentOcrResult,
+  WorkerDocumentResponse,
+  WorkerComplianceStatus,
+  WorkerComplianceResponse,
+  ReviewWorkerDocumentCommand,
+} from '@smartsite/contracts';
+export type { DocumentImageQuality, WorkerIdentityImageResponse } from '@smartsite/contracts';

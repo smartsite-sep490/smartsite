@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -128,6 +129,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       isActive: true,
     },
   ]);
+  await approvedWorkerDocuments(dataSource, [aId, bId], repA.id);
   const morning = randomUUID(),
     evening = randomUUID(),
     version = randomUUID();

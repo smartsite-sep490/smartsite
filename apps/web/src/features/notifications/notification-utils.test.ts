@@ -171,6 +171,22 @@ it('opens a checklist notification in the shared Safety workspace with its Site'
   ).toBe('/incidents?siteId=site%2Fa&checklistId=checklist%2Fa&tab=checklists');
 });
 
+it('opens a document notification in the worker documents view with its Site and Worker ID', () => {
+  expect(
+    notificationHref({
+      id: 'notice',
+      event: 'DOCUMENT_EXPIRING',
+      siteId: 'site-a',
+      siteName: 'Synthetic site',
+      title: 'Giấy tờ sắp hết hạn',
+      message: 'Worker A - Thẻ an toàn lao động nhóm 3 sắp hết hạn',
+      createdAt: '2026-10-17T00:00:00Z',
+      readAt: null,
+      target: { siteId: 'site-a', workerId: 'worker-1', tab: 'documents' },
+    }),
+  ).toBe('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
+});
+
 it('preserves authored Safety bodies even when they exactly match known system copy', async () => {
   const message = 'Checklist report recorded';
   await i18n.changeLanguage('vi');

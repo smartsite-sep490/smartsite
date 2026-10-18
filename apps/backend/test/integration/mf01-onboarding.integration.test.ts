@@ -39,6 +39,7 @@ import { evaluateWorkerAccess } from '../../src/modules/workforce/access/worker-
 import dataSource from '../support/test-data-source.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 
 after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
@@ -238,6 +239,10 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     });
 
     const accountInput = {
+      nationalId: '000000000001',
+      phoneNumber: '0900000001',
+      gender: 'MALE' as const,
+      address: 'Synthetic address',
       siteId,
       externalId: `ACC-${randomUUID()}`,
       displayName: 'Synthetic MF01 account Worker',
@@ -250,6 +255,10 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         const input = {
           siteId,
           displayName: 'Synthetic automatic Worker',
+          nationalId: '000000000002',
+          phoneNumber: '0900000002',
+          gender: 'MALE' as const,
+          address: 'Synthetic address',
           username: `auto-${randomUUID().slice(0, 8)}`,
         };
         const result = await accounts.create(representative, contractorId, input);
@@ -325,6 +334,10 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       const inputs = Array.from({ length: 6 }, () => ({
         siteId,
         displayName: 'Synthetic concurrent auto Worker',
+        nationalId: '000000000003',
+        phoneNumber: '0900000003',
+        gender: 'MALE' as const,
+        address: 'Synthetic address',
         username: `auto-${randomUUID().slice(0, 12)}`,
         temporaryPassword: accountInput.temporaryPassword,
       }));
@@ -936,6 +949,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       validUntil: until,
       createdByUserId: representativeId,
     });
+    await approvedWorkerDocuments(dataSource, [worker.id], representativeId);
     await t.test(
       'approved assignment and gate grant still require a current Worker schedule',
       async () => {

@@ -1,4 +1,7 @@
 import { WorkerQrShortCodes1792454400000 } from './migrations/1792454400000-WorkerQrShortCodes.js';
+import { WorkerDocumentIdentityChecks1792627200000 } from './migrations/1792627200000-WorkerDocumentIdentityChecks.js';
+import { WorkerDocumentSubmittedExpiry1792713600000 } from './migrations/1792713600000-WorkerDocumentSubmittedExpiry.js';
+import { WorkerHealthIssueDate1792800000000 } from './migrations/1792800000000-WorkerHealthIssueDate.js';
 import { PreserveManagerNotificationHistory1792368000000 } from './migrations/1792368000000-PreserveManagerNotificationHistory.js';
 import { ShiftExitGracePeriod1792281600000 } from './migrations/1792281600000-ShiftExitGracePeriod.js';
 import { AttendanceExitNotifications1792281600001 } from './migrations/1792281600001-AttendanceExitNotifications.js';
@@ -74,6 +77,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      WorkerHealthIssueDate1792800000000,
+      WorkerDocumentSubmittedExpiry1792713600000,
+      WorkerDocumentIdentityChecks1792627200000,
+      WorkerDocuments1792540800000,
       WorkerQrShortCodes1792454400000,
       PreserveManagerNotificationHistory1792368000000,
       ShiftExitGracePeriod1792281600000,
@@ -151,3 +158,4 @@ export function createTypeOrmOptions(databaseUrl: string, timeoutMs = 2000): Dat
     DATABASE_TIMEOUT_MS: timeoutMs,
   });
 }
+import { WorkerDocuments1792540800000 } from './migrations/1792540800000-WorkerDocuments.js';

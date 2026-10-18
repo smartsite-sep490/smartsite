@@ -5,9 +5,13 @@ node_modules
 **/.expo
 **/.turbo
 **/.test-build
+**/.venv
+**/__pycache__
 **/coverage
 apps/web/test-results
 apps/web/playwright-report
+apps/mobile/android
+apps/mobile/ios
 **/.env
 **/.env.*
 !**/.env.example

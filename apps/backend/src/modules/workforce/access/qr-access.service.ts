@@ -47,6 +47,7 @@ import {
   OvertimeRequestEntity,
 } from '../../../database/entities/index.js';
 import { evaluateWorkerAccess } from './worker-access-evaluation.js';
+import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { auditAccess } from '../shared/access-audit.js';
 import { AttendanceReconciliationService } from '../attendance/attendance-reconciliation.service.js';
 import { isRepeatedGatePassage } from './gate-repeat-policy.js';
@@ -1021,6 +1022,7 @@ export class QrAccessService {
       });
       if (!worker) forbidden('No active worker linked to this account at this site');
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`worker-qr:${worker.id}`]);
+      if (direction === 'IN') await requireWorkerDocuments(manager, worker);
       return this.issue(
         manager,
         { workerId: worker.id, ...(session ? { fallbackSessionId: session.id } : {}) },

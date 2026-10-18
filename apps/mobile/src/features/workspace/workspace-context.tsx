@@ -6,7 +6,11 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
+import {
+  SmartSiteManagementClient,
+  type AccountResponse,
+  type WorkerComplianceStatus,
+} from '@smartsite/api-client';
 import { API_URL, useAuth } from '../auth/auth-context';
 import { useQuery } from '@tanstack/react-query';
 import { QueryState, Page, Hint, Button } from '../shared/ui';
@@ -24,6 +28,7 @@ type Workspace = {
   token: string;
   queryKey: readonly unknown[];
   workerId: string;
+  workerDocumentStatus?: WorkerComplianceStatus;
 };
 const WorkspaceContext = createContext<Workspace | null>(null);
 export function WorkspaceProvider({
@@ -61,9 +66,23 @@ export function WorkspaceProvider({
     queryFn: () => client.myContractorTeam(token, scope.siteId),
     enabled: scope.role === 'worker',
   });
+  const compliance = useQuery({
+    queryKey: [...queryKey, 'worker-documents', self.data?.workerId],
+    queryFn: () => client.workerCompliance(token, scope.siteId, self.data!.workerId),
+    enabled: scope.role === 'worker' && !!self.data?.workerId,
+    refetchInterval: 60_000,
+  });
   const content = (
     <WorkspaceContext.Provider
-      value={{ scope, user, client, token, queryKey, workerId: self.data?.workerId ?? '' }}
+      value={{
+        scope,
+        user,
+        client,
+        token,
+        queryKey,
+        workerId: self.data?.workerId ?? '',
+        workerDocumentStatus: compliance.data?.status,
+      }}
     >
       {children}
     </WorkspaceContext.Provider>

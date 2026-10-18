@@ -17,11 +17,13 @@ import {
   QueryState,
 } from '../shared/ui';
 import { CreateWorkerModal } from '../../components/modals/CreateWorkerModal';
+import { WorkerDocuments } from './worker-documents';
 import { useTranslation } from '../../i18n';
 
-export function WorkforceScreen() {
+export function WorkforceScreen({ initialWorkerId }: { initialWorkerId?: string } = {}) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
+  const [requestedWorker, setRequestedWorker] = useState(initialWorkerId ?? '');
   const [search, setSearch] = useState(''),
     [offset, setOffset] = useState(0),
     [selected, setSelected] = useState<WorkerResponse | null>(null),
@@ -32,8 +34,21 @@ export function WorkforceScreen() {
     queryFn: ({ signal }) => allPages((p) => client.listWorkers(token, scope.siteId, p), signal),
   });
 
-  if (selected)
-    return <WorkerDetail key={selected.id} worker={selected} onBack={() => setSelected(null)} />;
+  const opened =
+    selected ??
+    workers.data?.find((w) => w.id === requestedWorker && w.contractorId === scope.contractorId);
+  if (opened)
+    return (
+      <WorkerDetail
+        key={opened.id}
+        worker={opened}
+        initialDocuments={!!requestedWorker}
+        onBack={() => {
+          setSelected(null);
+          setRequestedWorker('');
+        }}
+      />
+    );
 
   const avatarColors = [
     { bg: '#FFF4EE', text: '#F66B17' },
@@ -67,6 +82,7 @@ export function WorkforceScreen() {
             <>
               {!filtered.length && <Hint>{t('workforce.noWorkers')}</Hint>}
               {filtered.slice(offset, offset + 20).map((w, index) => {
+                const operational = w.isActive && w.documentStatus === 'ACTIVE';
                 const colorScheme = avatarColors[index % avatarColors.length] ?? {
                   bg: '#FFF4EE',
                   text: '#F66B17',
@@ -100,22 +116,26 @@ export function WorkforceScreen() {
                       <View
                         style={[
                           wfStyles.statusPill,
-                          { backgroundColor: w.isActive ? '#EDFAF2' : '#F1F5F9' },
+                          { backgroundColor: operational ? '#EDFAF2' : '#F1F5F9' },
                         ]}
                       >
                         <View
                           style={[
                             wfStyles.statusDot,
-                            { backgroundColor: w.isActive ? '#10B981' : '#64748B' },
+                            { backgroundColor: operational ? '#10B981' : '#64748B' },
                           ]}
                         />
                         <Text
                           style={[
                             wfStyles.statusText,
-                            { color: w.isActive ? '#065F46' : '#64748B' },
+                            { color: operational ? '#065F46' : '#64748B' },
                           ]}
                         >
-                          {w.isActive ? t('workforce.statusActive') : t('workforce.statusInactive')}
+                          {!w.isActive
+                            ? t('workforce.statusInactive')
+                            : w.documentStatus === 'ACTIVE'
+                              ? t('workforce.statusActive')
+                              : t(`documents.${w.documentStatus ?? 'PENDING'}`)}
                         </Text>
                       </View>
                     </View>
@@ -148,12 +168,28 @@ export function CreateWorker({ onBack }: { onBack: () => void }) {
   return <CreateWorkerModal visible onClose={onBack} onSuccess={onBack} />;
 }
 
-export function WorkerDetail({ worker, onBack }: { worker: WorkerResponse; onBack: () => void }) {
+export function WorkerDetail({
+  worker,
+  onBack,
+  initialDocuments = false,
+}: {
+  worker: WorkerResponse;
+  onBack: () => void;
+  initialDocuments?: boolean;
+}) {
   const { t } = useTranslation();
   const { scope, client, token } = useWorkspace();
   const [name, setName] = useState(worker.displayName),
     [active, setActive] = useState(worker.isActive);
   const command = useCommand();
+  const [documents, setDocuments] = useState(initialDocuments);
+  if (documents)
+    return (
+      <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
+        <WorkerDocuments workerId={worker.id} canUpload />
+      </Page>
+    );
+
   return (
     <Page title={t('workforce.workerProfile')} onBack={onBack}>
       <Card>
@@ -175,6 +211,7 @@ export function WorkerDetail({ worker, onBack }: { worker: WorkerResponse; onBac
           ]}
         />
         <ErrorNotice error={command.error} />
+        <Button secondary label={t('documents.title')} onPress={() => setDocuments(true)} />
         <Button
           label={t('common.save')}
           disabled={command.isPending || !name.trim()}
