@@ -5,7 +5,7 @@ This is a UI implementation brief. The Backend remains authoritative for every a
 ## Screens
 
 1. **Security gate desk (Web):** Site and gate selector, webcam preview, one explicit “Scan face” button, technical/access result panel, QR fallback launcher, and manual-review actions. Do not continuously identify people from the camera.
-2. **Worker enrollment (Web/Mobile):** consent acknowledgement/version, three guided JPEG captures, capture-quality feedback, submit/retry state, FaceProfile status, and revoke/re-enroll action.
+2. **Representative-led Worker enrollment (Web):** consent acknowledgement/version, three guided JPEG captures, capture-quality feedback, submit/retry state, FaceProfile status, and revoke/re-enroll action. Mobile has no enrollment or face-management screen for either role. Worker accounts have no self-enrollment or face-management controls; the Worker only confirms consent within the supervised session on Web.
 3. **Worker mobile QR:** short-lived QR shown only after the gate desk has indicated QR fallback; warn that it does not itself grant access.
 4. **Visitor flow:** QR-only registration, approval, and check-in/out. Do not render webcam or face-capture components for visitors.
 

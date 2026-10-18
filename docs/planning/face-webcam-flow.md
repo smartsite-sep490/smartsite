@@ -2,11 +2,11 @@
 
 ## 1. Phạm vi và quyết định kỹ thuật
 
-| Main flow | Phạm vi Identity & Access |
-| --- | --- |
-| **MF01** | Contractor Representative tiếp nhận Worker, thu consent, đăng ký khuôn mặt, khai báo năng lực/chứng chỉ và gửi đề nghị phân công Site/Zone. |
-| **MF02** | Điểm danh cổng ưu tiên **nhận diện khuôn mặt qua webcam**; chỉ dùng QR động khi face scan không xác minh được hoặc dịch vụ không sẵn sàng. Backend quyết định vào/ra từ dữ liệu nghiệp vụ. |
-| **MF04** | Đăng ký, duyệt và quản lý lượt khách; chỉ QR, không nhận diện khuôn mặt Visitor. |
+| Main flow | Phạm vi Identity & Access                                                                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **MF01**  | Contractor Representative tiếp nhận Worker, thu consent, đăng ký khuôn mặt, khai báo năng lực/chứng chỉ và gửi đề nghị phân công Site/Zone.                                                |
+| **MF02**  | Điểm danh cổng ưu tiên **nhận diện khuôn mặt qua webcam**; chỉ dùng QR động khi face scan không xác minh được hoặc dịch vụ không sẵn sàng. Backend quyết định vào/ra từ dữ liệu nghiệp vụ. |
+| **MF04**  | Đăng ký, duyệt và quản lý lượt khách; chỉ QR, không nhận diện khuôn mặt Visitor.                                                                                                           |
 
 ### AI khuôn mặt: miễn phí API nhưng không miễn điều kiện
 
@@ -45,30 +45,30 @@ Face match chỉ đưa ra ứng viên danh tính và tín hiệu kỹ thuật. A
 
 ## 3. Actor và data scope
 
-| Role | MF01 | MF02 | MF04 |
-| --- | --- | --- | --- |
-| `ADMINISTRATOR` | Quản lý Organization, Site, role và Site Manager | Không mặc định vận hành cổng | Không tự duyệt Visit của mình |
-| `SITE_MANAGER` | Duyệt assignment Site/Zone | Xem vận hành Site theo scope | Duyệt Visit tại Site được giao |
-| `CONTRACTOR_REPRESENTATIVE` | Chỉ quản lý Worker, consent, face enrollment, chứng chỉ và đề nghị assignment của Organization mình | Không quyết định quyền qua cổng | Là host theo Site scope |
-| `SECURITY_OFFICER` | Chỉ xem dữ liệu tối thiểu cần cho cổng | Vận hành face scan/QR fallback, manual review, check-in/out tại Site được giao | Quét QR và check-in/out Visitor |
-| `SAFETY_OFFICER` | Review chứng chỉ theo MF01 | Không vận hành cổng mặc định | Không duyệt Visit mặc định |
-| `WORKER` | Xem hồ sơ/phân công của chính mình, consent/re-enroll | Điểm danh face-first; xuất QR động khi fallback | Không quản lý Visitor |
+| Role                        | MF01                                                                                                                             | MF02                                                                           | MF04                            |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| `ADMINISTRATOR`             | Quản lý Organization, Site, role và Site Manager                                                                                 | Không mặc định vận hành cổng                                                   | Không tự duyệt Visit của mình   |
+| `SITE_MANAGER`              | Duyệt assignment Site/Zone                                                                                                       | Xem vận hành Site theo scope                                                   | Duyệt Visit tại Site được giao  |
+| `CONTRACTOR_REPRESENTATIVE` | Chỉ quản lý Worker, consent, face enrollment, chứng chỉ và đề nghị assignment của Organization mình                              | Không quyết định quyền qua cổng                                                | Là host theo Site scope         |
+| `SECURITY_OFFICER`          | Chỉ xem dữ liệu tối thiểu cần cho cổng                                                                                           | Vận hành face scan/QR fallback, manual review, check-in/out tại Site được giao | Quét QR và check-in/out Visitor |
+| `SAFETY_OFFICER`            | Review chứng chỉ theo MF01                                                                                                       | Không vận hành cổng mặc định                                                   | Không duyệt Visit mặc định      |
+| `WORKER`                    | Xem hồ sơ/phân công của chính mình, xác nhận consent trong phiên do đại diện nhà thầu hỗ trợ; không tự đăng ký/quản lý khuôn mặt | Security quét khuôn mặt tại cổng; xuất QR động khi fallback                    | Không quản lý Visitor           |
 
 Không có role `Operator`. Mọi quyền phải kiểm tra role **và** Organization/Site/Zone scope ở Backend; không suy ra quyền từ ID do client gửi.
 
 ## 4. Dữ liệu, riêng tư và trạng thái
 
-| Thực thể | Dữ liệu/chức năng tối thiểu |
-| --- | --- |
-| `Organization` / `ContractorParticipation` | Nhà thầu, Site và thời hạn tham gia |
-| `Worker` | workerCode, fullName, contractorId, status, nghề/năng lực |
-| `FaceProfile` | workerId, `ACTIVE|REVOKED|NEEDS_REENROLL`, model/version, encrypted template reference, consent time/version, created/revoked by |
-| `FaceEnrollmentSession` | workerId, actor, 3 sample metadata, status, started/completed time |
-| `WorkerSiteZoneAssignment` | workerId, siteId, zoneIds, validFrom/to, approval status, requester/reviewer |
-| `FaceVerification` | gate/session, technical outcome (`MATCHED|UNKNOWN|LOW_CONFIDENCE|QUALITY_FAILED|AI_UNAVAILABLE`), candidateWorkerId?, safe score band, capturedAt |
-| `GateEvent` / `AttendanceEvent` | site, gate, worker?, direction, method (`FACE|QR|MANUAL`), authorization result, reasonCode, idempotency key, actor/time |
-| `Visitor` / `Visit` | host, Site/Zone, schedule, approval, QR credential, check-in/out |
-| `AuditLog` | actor, action, resource, safe context, timestamp |
+| Thực thể                                   | Dữ liệu/chức năng tối thiểu                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
+| `Organization` / `ContractorParticipation` | Nhà thầu, Site và thời hạn tham gia                                          |
+| `Worker`                                   | workerCode, fullName, contractorId, status, nghề/năng lực                    |
+| `FaceProfile`                              | workerId, `ACTIVE                                                            | REVOKED | NEEDS_REENROLL`, model/version, encrypted template reference, consent time/version, created/revoked by |
+| `FaceEnrollmentSession`                    | workerId, actor, 3 sample metadata, status, started/completed time           |
+| `WorkerSiteZoneAssignment`                 | workerId, siteId, zoneIds, validFrom/to, approval status, requester/reviewer |
+| `FaceVerification`                         | gate/session, technical outcome (`MATCHED                                    | UNKNOWN | LOW_CONFIDENCE                                                                                         | QUALITY_FAILED | AI_UNAVAILABLE`), candidateWorkerId?, safe score band, capturedAt |
+| `GateEvent` / `AttendanceEvent`            | site, gate, worker?, direction, method (`FACE                                | QR      | MANUAL`), authorization result, reasonCode, idempotency key, actor/time                                |
+| `Visitor` / `Visit`                        | host, Site/Zone, schedule, approval, QR credential, check-in/out             |
+| `AuditLog`                                 | actor, action, resource, safe context, timestamp                             |
 
 - Face samples, frames, embeddings và raw scores là dữ liệu sinh trắc học. Không lưu base64/raw image/embedding trong browser storage, app log hoặc public DB field; AI service lưu template được mã hóa/private storage theo chính sách retention.
 - Backend chỉ lưu profile status, model version, consent và dữ liệu cần audit; không trả embedding/raw score cho Web/Mobile.
@@ -119,16 +119,16 @@ MF04 không gọi Face Service, không tạo FaceProfile và không lưu ảnh k
 
 ## 6. Backlog triển khai
 
-| Task | Kết quả mong đợi |
-| --- | --- |
-| IAA-01 — Chốt UC, state và threshold policy | Chốt actor × scope, consent/retention, enrollment/verification states, QR fallback, error/reason codes và nguyên tắc không dùng AI cho Visitor. |
-| IAA-02 — Roles, Organization và scope | Migration từ roles hiện tại sang sáu role, Contractor/Site grants và guards; test allowed/denied/cross-organization/cross-site. |
-| IAA-03 — MF01 onboarding/assignment | Roster, chứng chỉ/năng lực, review Safety Officer, Site Manager approve có thời hạn và lịch sử. |
-| IAA-04 — MF01 face enrollment | Webcam 3 mẫu, AI adapter interface, InsightFace local adapter, encrypted template/profile status, revoke/re-enroll và audit. Không log ảnh/embedding. |
-| IAA-05 — MF02 face gate | Webcam one-frame, technical result, Backend authorization, Gate/Attendance event idempotent, QR fallback và manual review. |
-| IAA-06 — MF04 Visitor QR | Host registration, non-self Site Manager approval, expiring/replay-safe QR, Security check-in/out. |
-| IAA-07 — Web + Worker mobile | Enrollment, Worker QR, Security gate desk, Visitor visit management; loading/denied/unavailable/retry states. |
-| IAA-08 — Evaluation và hardening | Bộ ảnh/điều kiện được phép dùng, FAR/FRR/unknown/latency measurements, liveness limitation, retention/deletion, PostgreSQL integration tests và demo cases. |
+| Task                                        | Kết quả mong đợi                                                                                                                                            |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IAA-01 — Chốt UC, state và threshold policy | Chốt actor × scope, consent/retention, enrollment/verification states, QR fallback, error/reason codes và nguyên tắc không dùng AI cho Visitor.             |
+| IAA-02 — Roles, Organization và scope       | Migration từ roles hiện tại sang sáu role, Contractor/Site grants và guards; test allowed/denied/cross-organization/cross-site.                             |
+| IAA-03 — MF01 onboarding/assignment         | Roster, chứng chỉ/năng lực, review Safety Officer, Site Manager approve có thời hạn và lịch sử.                                                             |
+| IAA-04 — MF01 face enrollment               | Webcam 3 mẫu, AI adapter interface, InsightFace local adapter, encrypted template/profile status, revoke/re-enroll và audit. Không log ảnh/embedding.       |
+| IAA-05 — MF02 face gate                     | Webcam one-frame, technical result, Backend authorization, Gate/Attendance event idempotent, QR fallback và manual review.                                  |
+| IAA-06 — MF04 Visitor QR                    | Host registration, non-self Site Manager approval, expiring/replay-safe QR, Security check-in/out.                                                          |
+| IAA-07 — Web + Worker mobile                | Enrollment, Worker QR, Security gate desk, Visitor visit management; loading/denied/unavailable/retry states.                                               |
+| IAA-08 — Evaluation và hardening            | Bộ ảnh/điều kiện được phép dùng, FAR/FRR/unknown/latency measurements, liveness limitation, retention/deletion, PostgreSQL integration tests và demo cases. |
 
 Thứ tự: `IAA-01 → IAA-02 → IAA-03 → IAA-04 → IAA-05`; `IAA-06` có thể chạy song song sau IAA-02; rồi `IAA-07 → IAA-08`.
 

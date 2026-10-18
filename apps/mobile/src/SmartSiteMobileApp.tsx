@@ -1,315 +1,351 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, SafeAreaView, StatusBar, Platform } from 'react-native';
-import { SplashScreen } from './screens/splash/SplashScreen';
+import React, { useEffect, useState } from 'react';
+import { View, BackHandler } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { AuthProvider, API_URL, useAuth, useCurrentUser } from './features/auth/auth-context';
 import { LoginScreen } from './screens/auth/LoginScreen';
-import { WorkerHomeScreen } from './screens/worker/WorkerHomeScreen';
-import { WorkerScheduleScreen } from './screens/worker/WorkerScheduleScreen';
-import { WorkerAttendanceDetailScreen } from './screens/worker/WorkerAttendanceDetailScreen';
-import { WorkerRequestScreen } from './screens/worker/WorkerRequestScreen';
-import { WorkerQrScreen } from './screens/worker/WorkerQrScreen';
-import { WorkerNotificationsScreen } from './screens/worker/WorkerNotificationsScreen';
-import { ContractorHomeScreen } from './screens/contractor/ContractorHomeScreen';
-import { ContractorRequestsScreen } from './screens/contractor/ContractorRequestsScreen';
-import { ContractorRequestDetailScreen } from './screens/contractor/ContractorRequestDetailScreen';
-import { ContractorWorkforceScreen, ContractorWorkerRecord } from './screens/contractor/ContractorWorkforceScreen';
-import { ContractorWorkerDetailScreen } from './screens/contractor/ContractorWorkerDetailScreen';
-import { ContractorScheduleAssignScreen } from './screens/contractor/ContractorScheduleAssignScreen';
-import { ContractorSafetyChecklistScreen } from './screens/contractor/ContractorSafetyChecklistScreen';
-import { ProfileScreen } from './screens/profile/ProfileScreen';
-import { BottomTabBar, WorkerTab, ContractorTab } from './components/common/BottomTabBar';
+import { SplashScreen } from './screens/splash/SplashScreen';
+import { ScreenHeader } from './components/common/ScreenHeader';
+import { BottomTabBar, type WorkerTab, type ContractorTab } from './components/common/BottomTabBar';
+import { Body, Button, Card, Choice, ErrorNotice, Hint, Page, palette } from './features/shared/ui';
+import { allPages } from './features/shared/data';
+import {
+  WorkspaceProvider,
+  useWorkspace,
+  type MobileScope,
+} from './features/workspace/workspace-context';
+import { HomeScreen, ProfileScreen } from './features/workspace/home-profile';
+import { ScheduleScreen, ShiftRequestsScreen } from './features/scheduling/scheduling-screens';
+import { AttendanceScreen } from './features/attendance/attendance-screens';
+import { WorkforceScreen } from './features/contractor/workforce-screen';
+import { TeamsScreen } from './features/contractor/teams-screen';
+import { AccessScreen } from './features/access/access-screen';
+import { AssignedWorkScreen } from './features/assigned-work/assigned-work-screen';
+import { QrScreen, NotificationsScreen } from './features/workspace/qr-notifications';
+import { useTranslation, initSavedLanguage } from './i18n';
 
 export type UserRole = 'worker' | 'contractor';
-type ActiveSubScreen =
-  | 'none'
+export type MobileRoute =
+  | 'home'
+  | 'schedule'
+  | 'attendance'
   | 'profile'
-  | 'request'
-  | 'attendanceDetail'
+  | 'requests'
+  | 'workforce'
+  | 'teams'
+  | 'access'
+  | 'assigned'
   | 'qr'
-  | 'notifications'
-  | 'contractorWorkerDetail'
-  | 'contractorScheduleAssign'
-  | 'contractorRequestDetail'
-  | 'contractorSafetyChecklist';
+  | 'notifications';
 
-export function SmartSiteMobileApp() {
-  const [showSplash, setShowSplash] = useState<boolean>(true);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [role, setRole] = useState<UserRole>('worker');
-  const [workerTab, setWorkerTab] = useState<WorkerTab>('home');
-  const [contractorTab, setContractorTab] = useState<ContractorTab>('home');
-  const [subScreen, setSubScreen] = useState<ActiveSubScreen>('none');
-  const [requestTabType, setRequestTabType] = useState<'leave' | 'overtime' | 'adjustment'>('leave');
-  const [selectedWorker, setSelectedWorker] = useState<ContractorWorkerRecord | null>(null);
+export type NavigationTarget = {
+  route: MobileRoute;
+  id?: string;
+  kind?: string;
+  workDate?: string;
+};
 
-  // 1. Animated Splash Screen
-  if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  }
+function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
+  const { t } = useTranslation();
+  const { scope, client, token, queryKey } = useWorkspace();
+  const [navigation, navigate] = useState<NavigationTarget>({ route: 'home' });
+  const back = () => navigate({ route: 'home' });
 
-  // 2. Authentication Screen
-  if (!isLoggedIn) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#0F1E36" />
-        <LoginScreen
-          onLogin={(chosenRole) => {
-            setRole(chosenRole);
-            setIsLoggedIn(true);
-            setWorkerTab('home');
-            setContractorTab('home');
-            setSubScreen('none');
-          }}
-        />
-      </SafeAreaView>
-    );
-  }
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (navigation.route === 'home') return false;
+      navigate({ route: 'home' });
+      return true;
+    });
+    return () => sub.remove();
+  }, [navigation.route]);
 
-  // Sub-screen 1: QR Dự phòng (Batch 2 - Image 1)
-  if (subScreen === 'qr') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <WorkerQrScreen
-          onBack={() => setSubScreen('none')}
-          workerName="Nguyễn Văn An"
-          workerCode="W000123"
-          siteName="Công trường Riverside · Cổng chính"
-        />
-      </SafeAreaView>
-    );
-  }
+  const notices = useQuery({
+    queryKey: [...queryKey, 'badge'],
+    queryFn: () => client.listNotifications(token, { limit: 1, readStatus: 'UNREAD' }),
+    refetchInterval: 30000,
+  });
 
-  // Sub-screen 2: Thông báo (Batch 2 - Image 2)
-  if (subScreen === 'notifications') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <WorkerNotificationsScreen
-          onBack={() => setSubScreen('none')}
-          onSelectNotification={() => {
-            setSubScreen('attendanceDetail');
-          }}
-        />
-      </SafeAreaView>
-    );
-  }
+  const { route } = navigation;
+  const contractor = scope.role === 'contractor';
 
-  // Sub-screen 3: Gửi yêu cầu (Batch 1 - Image 5)
-  if (subScreen === 'request') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <WorkerRequestScreen
-          initialTab={requestTabType}
-          onBack={() => setSubScreen('none')}
-        />
-      </SafeAreaView>
-    );
-  }
+  const pendingRequests = useQuery({
+    queryKey: [...queryKey, 'contractor-pending-badge'],
+    queryFn: () =>
+      client.listShiftRequests(token, scope.siteId, {
+        view: 'REVIEW',
+        limit: 1,
+      }),
+    enabled: contractor,
+    refetchInterval: 30000,
+  });
 
-  // Sub-screen 4: Chi tiết chấm công (Batch 1 - Image 4)
-  if (subScreen === 'attendanceDetail') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <WorkerAttendanceDetailScreen
-          onBack={() => setSubScreen('none')}
-          onRequestAdjustment={() => {
-            setRequestTabType('adjustment');
-            setSubScreen('request');
-          }}
-        />
-      </SafeAreaView>
-    );
-  }
+  const main =
+    route === 'home' ||
+    route === 'schedule' ||
+    route === 'profile' ||
+    route === (contractor ? 'workforce' : 'attendance') ||
+    (contractor && route === 'requests');
 
-  // Sub-screen 5: Hồ sơ công nhân cho Nhà thầu (Batch 2 - Image 5)
-  if (subScreen === 'contractorWorkerDetail') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <ContractorWorkerDetailScreen
-          onBack={() => setSubScreen('none')}
-          workerName={selectedWorker?.name || 'Nguyễn Văn An'}
-          workerCode={selectedWorker?.code || 'W000123'}
-          team={selectedWorker?.team ? `Đội ${selectedWorker.team}` : 'Đội Thi công 01'}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Sub-screen 6: Phân lịch làm việc cho Nhà thầu (Batch 3 - Image 1)
-  if (subScreen === 'contractorScheduleAssign') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <ContractorScheduleAssignScreen
-          onBack={() => setSubScreen('none')}
-          onSuccess={() => setSubScreen('none')}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Sub-screen 7: Chi tiết phê duyệt yêu cầu (Batch 3 - Image 3)
-  if (subScreen === 'contractorRequestDetail') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <ContractorRequestDetailScreen
-          onBack={() => setSubScreen('none')}
-          onApproveSuccess={() => setSubScreen('none')}
-          onRejectSuccess={() => setSubScreen('none')}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Sub-screen 8: Checklist an toàn (Batch 3 - Image 4)
-  // Sub-screen 8: Checklist an toàn (Batch 3 - Image 4)
-  if (subScreen === 'contractorSafetyChecklist') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <ContractorSafetyChecklistScreen
-          onBack={() => setSubScreen('none')}
-          onSubmitSuccess={() => setSubScreen('none')}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Sub-screen 9: Hồ sơ & Thiết lập tài khoản
-  if (subScreen === 'profile') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <ProfileScreen
-          role={role}
-          onSwitchRole={(newRole) => setRole(newRole)}
-          onLogout={() => {
-            setIsLoggedIn(false);
-            setSubScreen('none');
-          }}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // Main Tab Navigation Body
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.container}>
-        {/* Content Area */}
-        <View style={styles.contentArea}>
-          {role === 'worker' ? (
-            <>
-              {workerTab === 'home' && (
-                <WorkerHomeScreen
-                  onNavigateToSchedule={() => setWorkerTab('schedule')}
-                  onNavigateToAttendance={() => setSubScreen('attendanceDetail')}
-                  onNavigateToRequest={() => {
-                    setRequestTabType('leave');
-                    setSubScreen('request');
-                  }}
-                  onNotificationPress={() => setSubScreen('notifications')}
-                />
-              )}
-              {workerTab === 'schedule' && (
-                <WorkerScheduleScreen
-                  onNavigateToRequest={(type) => {
-                    setRequestTabType(type === 'swap' ? 'leave' : 'overtime');
-                    setSubScreen('request');
-                  }}
-                  onSelectShift={() => setSubScreen('attendanceDetail')}
-                />
-              )}
-              {workerTab === 'attendance' && (
-                <WorkerAttendanceDetailScreen
-                  onBack={() => setWorkerTab('home')}
-                  onRequestAdjustment={() => {
-                    setRequestTabType('adjustment');
-                    setSubScreen('request');
-                  }}
-                />
-              )}
-              {workerTab === 'profile' && (
-                <ProfileScreen
-                  role="worker"
-                  onSwitchRole={(newRole) => setRole(newRole)}
-                  onLogout={() => setIsLoggedIn(false)}
-                />
-              )}
-            </>
-          ) : (
-            <>
-              {contractorTab === 'home' && (
-                <ContractorHomeScreen
-                  onNavigateToRequests={() => setContractorTab('requests')}
-                  onNavigateToWorkforce={() => setContractorTab('workforce')}
-                  onNavigateToSchedule={() => setSubScreen('contractorScheduleAssign')}
-                  onNavigateToChecklist={() => setSubScreen('contractorSafetyChecklist')}
-                  onNotificationPress={() => setSubScreen('notifications')}
-                  onAvatarPress={() => setSubScreen('profile')}
-                />
-              )}
-              {contractorTab === 'workforce' && (
-                <ContractorWorkforceScreen
-                  onSelectWorker={(w) => {
-                    setSelectedWorker(w);
-                    setSubScreen('contractorWorkerDetail');
-                  }}
-                  onAddWorker={() => {
-                    setSelectedWorker(null);
-                    setSubScreen('contractorWorkerDetail');
-                  }}
-                />
-              )}
-              {contractorTab === 'schedule' && (
-                <ContractorScheduleAssignScreen
-                  onBack={() => setContractorTab('home')}
-                  onSuccess={() => setContractorTab('workforce')}
-                />
-              )}
-              {contractorTab === 'requests' && (
-                <ContractorRequestsScreen
-                  onSelectRequest={() => setSubScreen('contractorRequestDetail')}
-                />
-              )}
-            </>
-          )}
-        </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
+      {/* Top Header */}
+      <ScreenHeader
+        mode={main ? 'root' : 'detail'}
+        title={
+          !main
+            ? route === 'teams'
+              ? t('teams.title')
+              : route === 'access'
+                ? t('access.title')
+                : route === 'assigned'
+                  ? t('assignedWork.title')
+                  : route === 'qr'
+                    ? t('qr.title')
+                    : route === 'notifications'
+                      ? t('notifications.title')
+                      : undefined
+            : undefined
+        }
+        siteName={scope.siteName}
+        scopeLabel={contractor ? scope.contractorName : t('scope.workerRole')}
+        avatarRole={scope.role}
+        showAvatar={false}
+        showSiteInfo={false}
+        unreadCount={notices.data?.unreadCount ?? 0}
+        onBack={!main ? back : undefined}
+        onScopeChange={onScopeChange}
+        onNotificationPress={() => navigate({ route: 'notifications' })}
+        onAvatarPress={() => navigate({ route: 'profile' })}
+      />
 
-        {/* Persistent Bottom Tab Bar */}
-        <BottomTabBar
-          role={role}
-          activeTab={role === 'worker' ? workerTab : contractorTab}
-          onSelectTab={(tab) => {
-            if (role === 'worker') {
-              setWorkerTab(tab as WorkerTab);
-            } else {
-              setContractorTab(tab as ContractorTab);
-            }
-          }}
-          pendingRequestsCount={5}
-        />
+      <View style={{ flex: 1 }} key={`${route}:${navigation.id ?? ''}`}>
+        {route === 'home' && <HomeScreen navigate={navigate} />}
+        {route === 'profile' && <ProfileScreen onScopeChange={onScopeChange} />}
+        {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
+        {route === 'attendance' && (
+          <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
+        )}
+        {route === 'requests' && (
+          <ShiftRequestsScreen
+            initialId={navigation.id}
+            initialKind={navigation.kind}
+            onBack={main ? undefined : back}
+          />
+        )}
+        {route === 'workforce' && contractor && <WorkforceScreen />}
+        {route === 'teams' && contractor && <TeamsScreen onBack={back} />}
+        {route === 'access' && <AccessScreen onBack={back} />}
+        {route === 'assigned' && contractor && (
+          <AssignedWorkScreen
+            initialId={navigation.id}
+            initialKind={navigation.kind}
+            onBack={back}
+          />
+        )}
+        {route === 'qr' && !contractor && <QrScreen onBack={back} />}
+        {route === 'notifications' && <NotificationsScreen navigate={navigate} onBack={back} />}
       </View>
+
+      {main && (
+        <BottomTabBar
+          role={scope.role}
+          activeTab={route}
+          pendingRequestsCount={contractor ? (pendingRequests.data?.total ?? 0) : 0}
+          onSelectTab={(tab: WorkerTab | ContractorTab) => navigate({ route: tab })}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'android' ? 24 : 0,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  contentArea: {
-    flex: 1,
-  },
-});
+function ScopePicker() {
+  const { t } = useTranslation();
+  const auth = useAuth(),
+    profile = useCurrentUser();
+  const [choice, setChoice] = useState('');
+  const [choosing, setChoosing] = useState(false);
+
+  const sites = useQuery({
+    queryKey: ['mobile', 'sites', auth.epoch],
+    queryFn: ({ signal }) =>
+      allPages((page) => auth.client.listSites(auth.token, page, { signal }), signal),
+    enabled: !!profile.data,
+  });
+
+  const isRep = profile.data?.roleAssignments.some((r) => r.role === 'CONTRACTOR_REPRESENTATIVE');
+
+  const scopes = useQuery({
+    queryKey: ['mobile', 'contractor-scopes', auth.epoch],
+    queryFn: () => auth.client.contractorDashboardScopes(auth.token),
+    enabled: !!isRep,
+  });
+
+  const logout = useMutation({ mutationFn: () => auth.session.logout() });
+
+  if (profile.isError || sites.isError || (isRep && scopes.isError))
+    return (
+      <Page title={t('scope.failedToLoad')}>
+        <ErrorNotice error={profile.error ?? sites.error ?? scopes.error} />
+        <Button
+          label={t('common.retry')}
+          onPress={() => {
+            void profile.refetch();
+            void sites.refetch();
+            if (isRep) void scopes.refetch();
+          }}
+        />
+        <Button secondary label={t('common.logout')} onPress={() => logout.mutate()} />
+      </Page>
+    );
+
+  if (profile.isPending || sites.isPending || (isRep && scopes.isPending))
+    return <Page title={t('scope.loadingScopes')} />;
+
+  const user = profile.data;
+  if (!user) return null;
+
+  const options: MobileScope[] = [
+    ...user.roleAssignments
+      .filter((r) => r.role === 'WORKER' && r.siteId)
+      .flatMap((r) => {
+        const site = sites.data?.find((s) => s.id === r.siteId);
+        return site
+          ? [
+              {
+                role: 'worker' as const,
+                siteId: site.id,
+                siteName: site.name,
+                contractorId: '',
+                contractorName: '',
+              },
+            ]
+          : [];
+      }),
+    ...(scopes.data?.items ?? [])
+      .filter((s) =>
+        user.roleAssignments.some(
+          (r) => r.role === 'CONTRACTOR_REPRESENTATIVE' && r.siteId === s.siteId,
+        ),
+      )
+      .map((s) => ({
+        role: 'contractor' as const,
+        siteId: s.siteId,
+        siteName: s.siteName,
+        contractorId: s.contractorId,
+        contractorName: s.contractorName,
+      })),
+  ];
+
+  const key = (s: MobileScope) => `${s.role}:${s.siteId}:${s.contractorId}`;
+  const selected =
+    options.find((s) => key(s) === choice) ?? (options.length === 1 ? options[0] : undefined);
+
+  if (selected && !choosing)
+    return (
+      <WorkspaceProvider
+        key={`${auth.epoch}:${key(selected)}`}
+        scope={selected}
+        user={user}
+        onScopeChange={() => setChoosing(true)}
+      >
+        <WorkspaceApp onScopeChange={() => setChoosing(true)} />
+      </WorkspaceProvider>
+    );
+
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <Page title={t('scope.welcome', { name: user.displayName })}>
+        <Card>
+          <Body>{t('scope.chooseSiteAndRole')}</Body>
+          {!options.length ? (
+            <Hint>{t('scope.noActiveScope')}</Hint>
+          ) : (
+            <Choice
+              label={t('scope.workScope')}
+              value={choice}
+              options={options.map((s) => ({
+                value: key(s),
+                label: `${s.siteName} · ${s.role === 'worker' ? t('scope.workerRole') : s.contractorName}`,
+              }))}
+              onChange={setChoice}
+            />
+          )}
+          <Button
+            label={t('common.continue')}
+            disabled={!selected}
+            onPress={() => setChoosing(false)}
+          />
+        </Card>
+        <ErrorNotice error={logout.error} />
+        <Button secondary label={t('common.logout')} onPress={() => logout.mutate()} />
+      </Page>
+    </SafeAreaView>
+  );
+}
+
+function AuthenticatedApp() {
+  const { t } = useTranslation();
+  const { session, response, expired, notice } = useAuth();
+  const [splash, setSplash] = useState(true);
+
+  useEffect(() => {
+    void initSavedLanguage();
+  }, []);
+
+  const restore = useQuery({
+    queryKey: ['mobile-restore'],
+    queryFn: () => session.restore(),
+    enabled: !!API_URL,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const login = useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      session.login(username, password),
+  });
+
+  if (splash) return <SplashScreen onFinish={() => setSplash(false)} />;
+  if (!API_URL)
+    return (
+      <Page title={t('auth.notConfigured')}>
+        <Hint>{t('auth.configHint')}</Hint>
+      </Page>
+    );
+
+  if (response) return <ScopePicker />;
+  if (restore.isPending) return <Page title={t('auth.restoringSession')} />;
+
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      {restore.isError && (
+        <Card>
+          <ErrorNotice error={restore.error} />
+          <Button
+            secondary
+            label={t('auth.restoreSession')}
+            onPress={() => void restore.refetch()}
+          />
+        </Card>
+      )}
+      {expired && <Hint>{t('auth.sessionExpired')}</Hint>}
+      {notice && <Hint>{notice}</Hint>}
+      <LoginScreen
+        pending={login.isPending}
+        error={login.error}
+        onLogin={(username, password) => login.mutate({ username, password })}
+      />
+    </SafeAreaView>
+  );
+}
+
+export function SmartSiteMobileApp() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
+  );
+}

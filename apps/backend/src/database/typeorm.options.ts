@@ -1,3 +1,4 @@
+import { WorkerQrShortCodes1792454400000 } from './migrations/1792454400000-WorkerQrShortCodes.js';
 import { PreserveManagerNotificationHistory1792368000000 } from './migrations/1792368000000-PreserveManagerNotificationHistory.js';
 import { ShiftExitGracePeriod1792281600000 } from './migrations/1792281600000-ShiftExitGracePeriod.js';
 import { AttendanceExitNotifications1792281600001 } from './migrations/1792281600001-AttendanceExitNotifications.js';
@@ -73,6 +74,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      WorkerQrShortCodes1792454400000,
       PreserveManagerNotificationHistory1792368000000,
       ShiftExitGracePeriod1792281600000,
       AttendanceExitNotifications1792281600001,

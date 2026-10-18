@@ -20,7 +20,12 @@ import {
   IsBoolean,
   ValidateIf,
 } from 'class-validator';
-import type { CreateVisitCommand, VerifyQrCommand, VisitorGateCommand } from '@smartsite/contracts';
+import type {
+  CreateVisitCommand,
+  IssueWorkerQrCommand as IssueWorkerQrInput,
+  WorkerQrVerificationCommand,
+  VisitorGateCommand,
+} from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts';
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const visitorToken = ({ value }: { value: unknown }) =>
@@ -96,13 +101,15 @@ export class CameraFallbackCommand {
   @IsIn(['IN', 'OUT']) direction!: 'IN' | 'OUT';
   @IsIn(['CAMERA_UNAVAILABLE']) reason!: 'CAMERA_UNAVAILABLE';
 }
-export class IssueWorkerQrCommand {
-  @IsUUID() fallbackSessionId!: string;
+export class IssueWorkerQrCommand implements IssueWorkerQrInput {
+  @IsOptional() @IsUUID() fallbackSessionId?: string;
+  @IsOptional() @IsIn(['IN', 'OUT']) direction?: 'IN' | 'OUT';
 }
-export class VerifyWorkerQrCommand implements VerifyQrCommand {
-  @Matches(/^SSQ-[a-f0-9]{64}$/) token!: string;
+export class VerifyWorkerQrCommand implements WorkerQrVerificationCommand {
+  @Transform(visitorToken) @Matches(/^(SSQ-[a-f0-9]{64}|[A-HJ-NP-Z2-9]{8})$/) token!: string;
   @IsIn(['IN', 'OUT']) direction!: 'IN' | 'OUT';
   @IsUUID() requestId!: string;
+  @IsOptional() @IsUUID() fallbackSessionId?: string;
 }
 export class VerifyVisitorQrCommand implements VisitorGateCommand {
   @Transform(visitorToken) @Matches(/^(SSQ-[a-f0-9]{64}|[A-HJ-NP-Z2-9]{8})$/) token!: string;

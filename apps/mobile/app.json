@@ -7,6 +7,7 @@
     "platforms": ["ios", "android"],
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/smartsite-app-icon-white.png",
     "ios": {
       "bundleIdentifier": "com.smartsite.app",
       "supportsTablet": true,
@@ -17,6 +18,19 @@
     "android": {
       "package": "com.smartsite.app"
     },
-    "plugins": ["expo-router", "expo-dev-client"]
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      "expo-secure-store",
+      "./plugins/with-windows-native-build.mjs",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Cho phép SmartSite chụp ảnh bằng chứng cho công việc bạn chọn.",
+          "photosPermission": "Cho phép SmartSite chọn ảnh bằng chứng cho công việc bạn chọn.",
+          "microphonePermission": false
+        }
+      ]
+    ]
   }
 }

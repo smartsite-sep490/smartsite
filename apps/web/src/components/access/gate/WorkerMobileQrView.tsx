@@ -21,14 +21,14 @@ export function WorkerMobileQrView({
   useTranslation();
 
   const client = useManagementClient(apiUrl);
-  const [fallbackId, setFallbackId] = useState('');
+  const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
   const pass = useMutation({
-    mutationFn: (id: string) => client.issueWorkerQr(token, siteId, id),
+    mutationFn: (value: 'IN' | 'OUT') => client.issueWorkerQr(token, siteId, { direction: value }),
   });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    pass.mutate(fallbackId.trim());
+    pass.mutate(direction);
   };
 
   const workerInitials = workerName.slice(0, 2).toUpperCase() || 'WK';
@@ -98,29 +98,28 @@ export function WorkerMobileQrView({
           <form onSubmit={submit} className="space-y-4">
             <div>
               <label
-                htmlFor="fallback-session-id"
+                htmlFor="worker-qr-direction"
                 className="block text-xs font-bold uppercase tracking-wider text-slate-700"
               >
-                {tr('common.officer_session_code')}
+                {tr('worker_mobile_qr_view.passage_direction')}
               </label>
-              <div className="relative mt-1.5">
-                <input
-                  id="fallback-session-id"
-                  required
-                  value={fallbackId}
-                  onChange={(e) => {
-                    setFallbackId(e.target.value);
-                    pass.reset();
-                  }}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-3 font-mono text-sm tracking-wide text-slate-900 placeholder:font-sans placeholder:text-slate-400 focus:border-[#FF7A1A] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF7A1A]/15"
-                  placeholder={tr('worker_mobile_qr_view.session_uuid_e_g_b81a5d44')}
-                />
-              </div>
+              <select
+                id="worker-qr-direction"
+                value={direction}
+                onChange={(event) => {
+                  setDirection(event.target.value as 'IN' | 'OUT');
+                  pass.reset();
+                }}
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm"
+              >
+                <option value="IN">{tr('common.entry_in')}</option>
+                <option value="OUT">{tr('common.exit_out')}</option>
+              </select>
             </div>
 
             <button
               type="submit"
-              disabled={pass.isPending || !fallbackId.trim()}
+              disabled={pass.isPending}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF7A1A] px-4 py-3 text-sm font-bold text-white shadow-xs hover:bg-[#E56A10] transition-all disabled:opacity-50"
             >
               {pass.isPending ? (
@@ -151,7 +150,7 @@ export function WorkerMobileQrView({
           {/* Active QR Pass Card */}
           {pass.data && !pass.isPending && !pass.error && (
             <div className="mt-6 pt-6 border-t border-slate-100">
-              <QrPassCard pass={pass.data} onRefresh={() => pass.mutate(fallbackId.trim())} />
+              <QrPassCard pass={pass.data} onRefresh={() => pass.mutate(direction)} />
             </div>
           )}
         </div>

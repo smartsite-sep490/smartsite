@@ -7,6 +7,14 @@ Contractor they represent, then enter name and username. The Backend sets the in
 The Backend generates
 the Worker code (for example `W000001`) when saving and returns it for display in the success message
 and roster. After creation, the supervised face-enrollment workflow is available on the same page.
+Face enrollment and face-profile management are provided on Web only; the mobile Contractor
+Representative workspace does not expose these functions.
+
+Only a Contractor Representative with the active Site/Contractor scope may manage face enrollment.
+A Worker cannot start self-enrollment, check/upload enrollment samples, complete enrollment, or manage
+their face profile. The Worker confirms consent within the representative-led session. Gate face
+verification remains a Security Officer operation. This restriction applies to both Web and Mobile
+and is enforced by the Backend.
 
 The page also lists the selected Contractor's workers at that Site, across all roster pages,
 with search by code/name, Worker status and account-link status. Ownership belongs to the

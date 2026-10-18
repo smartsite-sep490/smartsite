@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import { colors } from '../../theme/colors';
+import smartSiteSymbol from '../../../assets/smartsite-symbol-transparent.png';
+import smartSiteLogoHorizontalDark from '../../../assets/smartsite-logo-horizontal-dark.png';
 
 interface IconProps {
   size?: number;
@@ -8,57 +10,49 @@ interface IconProps {
 }
 
 /**
- * SmartSite Hexagonal Logo with skyscraper/tower silhouettes
+ * SmartSite official brand icon / symbol
  */
 export function SmartSiteLogo({ size = 38 }: { size?: number }) {
-  const innerScale = size / 38;
   return (
-    <View style={[styles.logoContainer, { width: size, height: size }]}>
-      <View style={[styles.hexagonShape, { width: size, height: size, borderRadius: size * 0.22 }]}>
-        <View style={styles.logoBarsContainer}>
-          {/* Left building */}
-          <View
-            style={[
-              styles.logoBuilding,
-              {
-                width: 4 * innerScale,
-                height: 14 * innerScale,
-                backgroundColor: '#FFFFFF',
-              },
-            ]}
-          />
-          {/* Middle tallest building */}
-          <View
-            style={[
-              styles.logoBuilding,
-              {
-                width: 4 * innerScale,
-                height: 22 * innerScale,
-                backgroundColor: '#FFFFFF',
-              },
-            ]}
-          />
-          {/* Right building */}
-          <View
-            style={[
-              styles.logoBuilding,
-              {
-                width: 4 * innerScale,
-                height: 16 * innerScale,
-                backgroundColor: '#FFFFFF',
-              },
-            ]}
-          />
-        </View>
-      </View>
-    </View>
+    <Image
+      source={smartSiteSymbol}
+      style={{ width: size, height: size }}
+      resizeMode="contain"
+      accessibilityRole="image"
+      accessibilityLabel="SmartSite Logo"
+    />
+  );
+}
+
+/**
+ * SmartSite official horizontal wordmark logo
+ */
+export function SmartSiteHorizontalLogo({
+  width = 130,
+  height = 32,
+}: {
+  width?: number;
+  height?: number;
+}) {
+  return (
+    <Image
+      source={smartSiteLogoHorizontalDark}
+      style={{ width, height }}
+      resizeMode="contain"
+      accessibilityRole="image"
+      accessibilityLabel="SmartSite"
+    />
   );
 }
 
 /**
  * Notification Bell with optional unread indicator
  */
-export function IconBell({ size = 24, hasUnread = true, color = colors.textPrimary }: IconProps & { hasUnread?: boolean }) {
+export function IconBell({
+  size = 24,
+  hasUnread = true,
+  color = colors.textPrimary,
+}: IconProps & { hasUnread?: boolean }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       {/* Bell body */}
@@ -170,7 +164,15 @@ export function IconCalendar({ size = 24, color = colors.textTertiary }: IconPro
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       {/* Rings */}
-      <View style={{ flexDirection: 'row', width: size * 0.55, justifyContent: 'space-between', marginBottom: -2, zIndex: 1 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          width: size * 0.55,
+          justifyContent: 'space-between',
+          marginBottom: -2,
+          zIndex: 1,
+        }}
+      >
         <View style={{ width: 2, height: 4, backgroundColor: color, borderRadius: 1 }} />
         <View style={{ width: 2, height: 4, backgroundColor: color, borderRadius: 1 }} />
       </View>
@@ -322,8 +324,24 @@ export function IconUserPlus({ size = 20, color = '#FFFFFF' }: IconProps) {
           justifyContent: 'center',
         }}
       >
-        <View style={{ position: 'absolute', width: 7, height: 2, backgroundColor: color, borderRadius: 1 }} />
-        <View style={{ position: 'absolute', width: 2, height: 7, backgroundColor: color, borderRadius: 1 }} />
+        <View
+          style={{
+            position: 'absolute',
+            width: 7,
+            height: 2,
+            backgroundColor: color,
+            borderRadius: 1,
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            width: 2,
+            height: 7,
+            backgroundColor: color,
+            borderRadius: 1,
+          }}
+        />
       </View>
     </View>
   );
@@ -415,8 +433,24 @@ export function IconPlus({ size = 20, color = colors.textPrimary }: IconProps) {
         justifyContent: 'center',
       }}
     >
-      <View style={{ position: 'absolute', width: 2, height: size * 0.5, backgroundColor: color, borderRadius: 1 }} />
-      <View style={{ position: 'absolute', height: 2, width: size * 0.5, backgroundColor: color, borderRadius: 1 }} />
+      <View
+        style={{
+          position: 'absolute',
+          width: 2,
+          height: size * 0.5,
+          backgroundColor: color,
+          borderRadius: 1,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          height: 2,
+          width: size * 0.5,
+          backgroundColor: color,
+          borderRadius: 1,
+        }}
+      />
     </View>
   );
 }
@@ -488,7 +522,9 @@ export function IconBriefcase({ size = 22, color = colors.primary }: IconProps) 
         }}
       >
         <View style={{ width: '100%', height: 1.5, backgroundColor: color }} />
-        <View style={{ width: 4, height: 4, backgroundColor: color, borderRadius: 1, marginTop: -2 }} />
+        <View
+          style={{ width: 4, height: 4, backgroundColor: color, borderRadius: 1, marginTop: -2 }}
+        />
       </View>
     </View>
   );
@@ -722,29 +758,3 @@ export function IconFaceScan({ size = 28, color = colors.primary }: IconProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  logoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hexagonShape: {
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  logoBarsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-  },
-  logoBuilding: {
-    borderTopLeftRadius: 1.5,
-    borderTopRightRadius: 1.5,
-  },
-});
