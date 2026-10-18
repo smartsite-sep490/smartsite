@@ -1051,8 +1051,8 @@ export function RestrictedZoneView({
             </button>
           </div>
 
-          {/* Selectors Grid: Site, Camera, Region, Version */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+          {/* Selectors Grid: Site and Camera with Setup/Read-Only Action Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
             <div>
               <label
                 htmlFor="zone-site-select"
@@ -1122,7 +1122,7 @@ export function RestrictedZoneView({
               <ZoneMetadataPaging query={cameras} kind="cameras" />
             </div>
 
-            <div className="flex items-center gap-2 pt-1 sm:pt-0">
+            <div className="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
               {canOpenSetup && selectedSiteId && (
                 <a
                   href={`/camera-setup?${setupParams.toString()}`}
