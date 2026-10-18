@@ -335,7 +335,7 @@ describe('App Navigation and Context Lifecycle', () => {
         </MemoryRouter>,
       );
       expect(screen.queryByRole('heading', { name: 'Change your temporary password' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'Sidebar Incidents' })).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Sidebar Incidents' })).not.toBeNull();
       expect(await screen.findByTestId('route-view')).not.toBeNull();
     },
   );

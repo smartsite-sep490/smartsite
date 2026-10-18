@@ -1,5 +1,5 @@
 import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
-import { translate as tr, uiLanguage } from './i18n';
+import { translate as tr } from './i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -10,7 +10,8 @@ import {
   type SafetyAlertStatus,
   type SafetyAlertType,
 } from '@smartsite/api-client';
-import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
+import type { ActiveTab } from './components/layout/AppLayout';
+import { DeferredAppLayout as AppLayout } from './deferred-app-layout';
 import {
   useAuth,
   useRestoreSession,
@@ -19,13 +20,16 @@ import {
   SessionExpiredModal,
 } from './features/auth/auth-session';
 import type { SharedSession } from './types/shared-session';
-import { LoginScreen } from './features/auth/LoginScreen';
 import { AuthErrorNotice } from './features/auth/AuthErrorNotice';
+import { PageLoadingFallback, RouteErrorBoundary } from './route-load-boundary';
 
 // Code-split page components with React.lazy to avoid eagerly loading all views into the entry bundle.
-// Static shell: LoginScreen, AppLayout, auth session hooks, and SessionExpiredModal remain static.
+// Keep auth/session guards static; defer page, login, and layout implementations.
 const LandingPage = React.lazy(() =>
   import('./components/landing/LandingPage').then((m) => ({ default: m.LandingPage })),
+);
+const LoginScreen = React.lazy(() =>
+  import('./features/auth/LoginScreen').then((m) => ({ default: m.LoginScreen })),
 );
 const RegisterScreen = React.lazy(() =>
   import('./features/auth/RegisterScreen').then((m) => ({ default: m.RegisterScreen })),
@@ -109,104 +113,6 @@ interface ProtectedRoutesProps {
   onNavigate: (tab: ActiveTab, context?: AlertsNavigationContext) => void;
 }
 
-/**
- * Accessible status loading indicator for Suspense boundaries.
- */
-function PageLoadingFallback({ label }: { label?: string }) {
-  const resolvedLabel = label ?? tr('common.loading');
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex h-96 w-full items-center justify-center p-6 text-center"
-    >
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 rounded-full border-2 border-[#0F172A] border-t-transparent animate-spin" />
-        <span className="text-xs font-medium text-slate-500">{resolvedLabel}</span>
-      </div>
-    </div>
-  );
-}
-
-function routeErrorCopy(fallbackTitle?: string) {
-  if (uiLanguage() === 'vi') {
-    return {
-      title: fallbackTitle || tr('common.request_failed'),
-      description: tr('errors.unexpected'),
-      reloadLabel: tr('common.refresh'),
-    };
-  }
-  return {
-    title: fallbackTitle || 'Unable to load page',
-    description:
-      'This screen could not be loaded. Reload this page, or use navigation to choose another view.',
-    reloadLabel: 'Reload Page',
-  };
-}
-
-/**
- * Safe Error Boundary for dynamic chunk and route load failures.
- * Provides a page reload action without dumping raw errors or authentication tokens.
- */
-interface RouteErrorBoundaryProps {
-  children: React.ReactNode;
-  fallbackTitle?: string;
-}
-
-interface RouteErrorBoundaryState {
-  hasError: boolean;
-}
-
-class RouteErrorBoundary extends React.Component<RouteErrorBoundaryProps, RouteErrorBoundaryState> {
-  constructor(props: RouteErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(): RouteErrorBoundaryState {
-    return { hasError: true };
-  }
-
-  componentDidCatch() {
-    // Chunk load error caught safely without leaking tokens or sensitive state
-  }
-
-  handleReload = () => {
-    window.location.reload();
-  };
-
-  render() {
-    if (this.state.hasError) {
-      const copy = routeErrorCopy(this.props.fallbackTitle);
-      return (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="mx-auto max-w-lg my-8 rounded-2xl border border-slate-200/80 bg-white p-7 text-center shadow-sm"
-        >
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center mb-3">
-            <span className="text-base font-bold">!</span>
-          </div>
-          <h2 className="text-lg font-bold text-slate-900">{copy.title}</h2>
-          <p className="mt-2 text-xs text-slate-500 leading-relaxed max-w-md mx-auto">
-            {copy.description}
-          </p>
-          <div className="mt-6 flex justify-center gap-3">
-            <button
-              type="button"
-              onClick={this.handleReload}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-            >
-              {copy.reloadLabel}
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 function profileRecoveryMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) {
@@ -273,7 +179,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     const profileDenied =
       userError instanceof ApiError && (userError.status === 401 || userError.status === 403);
     return (
-      <AppLayout onSelectTab={onNavigate}>
+      <AppLayout onSelectTab={onNavigate} onLoadSignOut={handleSignOut}>
         <div
           role="alert"
           className="mx-auto max-w-lg rounded-2xl border border-slate-200/80 bg-white p-7 text-center shadow-sm"
@@ -311,7 +217,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
 
   if (isUserPending || !currentUser) {
     return (
-      <AppLayout onSelectTab={onNavigate}>
+      <AppLayout onSelectTab={onNavigate} onLoadSignOut={handleSignOut}>
         <div
           role="status"
           aria-label={tr('common.loading_your_account_8fa5b7')}
@@ -352,7 +258,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
   };
 
   return (
-    <AppLayout onSelectTab={onNavigate}>
+    <AppLayout onSelectTab={onNavigate} onLoadSignOut={handleSignOut}>
       <RouteErrorBoundary key={location.pathname}>
         <React.Suspense fallback={<PageLoadingFallback />}>
           <Routes>
@@ -578,17 +484,21 @@ export function App() {
           path="/login"
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
-              <LoginScreen
-                notice={
-                  logoutUnconfirmed
-                    ? tr('auth.session.logoutWarning')
-                    : passwordChanged || location.state?.passwordChanged
-                      ? tr('auth.password.success')
-                      : undefined
-                }
-                onBack={() => navigate('/')}
-                onNavigateToRegister={() => navigate('/register')}
-              />
+              <RouteErrorBoundary key={location.pathname}>
+                <React.Suspense fallback={<PageLoadingFallback />}>
+                  <LoginScreen
+                    notice={
+                      logoutUnconfirmed
+                        ? tr('auth.session.logoutWarning')
+                        : passwordChanged || location.state?.passwordChanged
+                          ? tr('auth.password.success')
+                          : undefined
+                    }
+                    onBack={() => navigate('/')}
+                    onNavigateToRegister={() => navigate('/register')}
+                  />
+                </React.Suspense>
+              </RouteErrorBoundary>
             </PublicOnlyRoute>
           }
         />
@@ -608,7 +518,7 @@ export function App() {
           path="/register"
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
-              <RouteErrorBoundary>
+              <RouteErrorBoundary key={location.pathname}>
                 <React.Suspense fallback={<PageLoadingFallback />}>
                   <RegisterScreen
                     onBackToLogin={() => navigate('/login')}
