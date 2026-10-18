@@ -131,7 +131,19 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     }
   };
   const open = (kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => {
-    if (site) setDialog({ kind, siteId: site.id, cameraId });
+    if (!site) return;
+    if (
+      kind === 'regions' &&
+      canManageCameras &&
+      cameraId &&
+      rows.some((row) => row.id === cameraId && row.status === 'ACTIVE')
+    ) {
+      const nextParams = new URLSearchParams(params);
+      nextParams.set('siteId', site.id);
+      nextParams.set('cameraId', cameraId);
+      setParams(nextParams, { replace: true });
+    }
+    setDialog({ kind, siteId: site.id, cameraId });
   };
   const close = () => setDialog(null);
   const common = {

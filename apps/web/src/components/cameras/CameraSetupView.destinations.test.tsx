@@ -25,7 +25,20 @@ vi.mock('./CameraManagementDialog', () => ({
   CameraManagementDialog: () => <div role="dialog">Manage camera</div>,
 }));
 vi.mock('../ppe/ZonePpeSetupDialog', () => ({
-  ZonePpeSetupDialog: () => <div role="dialog">Zone PPE setup</div>,
+  ZonePpeSetupDialog: (props: {
+    section?: string;
+    initialCameraId?: string;
+    onClose: () => void;
+  }) => (
+    <div role="dialog">
+      <span>
+        Zone PPE setup {props.section ?? 'all'} {props.initialCameraId ?? 'none'}
+      </span>
+      <button type="button" onClick={props.onClose}>
+        Close setup dialog
+      </button>
+    </div>
+  ),
 }));
 
 const site: SiteResponse = {
@@ -42,6 +55,28 @@ const camera: CameraResponse = {
   name: 'Gate camera',
   externalId: 'private-alias',
   status: 'ACTIVE',
+  configurationVersion: 1,
+  createdAt: site.createdAt,
+};
+
+const towerCamera: CameraResponse = {
+  id: 'cam-2',
+  siteId: site.id,
+  code: 'C2',
+  name: 'Tower camera',
+  externalId: 'private-tower-alias',
+  status: 'ACTIVE',
+  configurationVersion: 2,
+  createdAt: site.createdAt,
+};
+
+const inactiveCamera: CameraResponse = {
+  id: 'cam-3',
+  siteId: site.id,
+  code: 'C3',
+  name: 'Storage camera',
+  externalId: 'private-storage-alias',
+  status: 'INACTIVE',
   configurationVersion: 1,
   createdAt: site.createdAt,
 };
@@ -205,4 +240,76 @@ it('updates both monitoring destination labels in place on locale change without
   expect(screen.getByRole('dialog')).toBeTruthy();
   expect(mocks.listSites).toHaveBeenCalledTimes(1);
   expect(mocks.listCameras).toHaveBeenCalledTimes(1);
+});
+
+it('updates both monitoring destination links to the active camera when Regions is opened for another row without silent substitution on pending pages or non-region actions', async () => {
+  const scopedManagerOfficer = createSession(
+    [
+      { role: 'SITE_MANAGER', siteId: site.id },
+      { role: 'SAFETY_OFFICER', siteId: site.id },
+    ],
+    'manager-officer-handoff',
+  );
+  mocks.listCameras.mockResolvedValueOnce({
+    items: [camera, towerCamera, inactiveCamera],
+    total: 3,
+  });
+
+  mount(scopedManagerOfficer, '/camera-setup?siteId=site-1&cameraId=cam-1');
+  await screen.findByText(towerCamera.name);
+
+  const nav = screen.getByRole('navigation', { name: 'Open monitoring' });
+  const ppeLink = within(nav).getByRole('link', { name: 'PPE monitoring' });
+  const zonesLink = within(nav).getByRole('link', { name: 'Restricted-zone monitoring' });
+
+  expect(ppeLink.getAttribute('href')).toBe('/ppe?siteId=site-1&cameraId=cam-1');
+  expect(zonesLink.getAttribute('href')).toBe('/zones?siteId=site-1&cameraId=cam-1');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Configure PPE by Zone' }));
+  expect(screen.getByRole('dialog').textContent).toContain('Zone PPE setup zones none');
+  expect(ppeLink.getAttribute('href')).toBe('/ppe?siteId=site-1&cameraId=cam-1');
+  expect(zonesLink.getAttribute('href')).toBe('/zones?siteId=site-1&cameraId=cam-1');
+  fireEvent.click(screen.getByRole('button', { name: 'Close setup dialog' }));
+
+  const towerRow = screen.getByRole('heading', { name: towerCamera.name }).closest('li');
+  if (!towerRow) {
+    throw new Error('Expected Tower camera row.');
+  }
+  fireEvent.click(within(towerRow).getByRole('button', { name: 'Link observation regions' }));
+  expect(screen.getByRole('dialog').textContent).toContain('Zone PPE setup regions cam-2');
+  expect(ppeLink.getAttribute('href')).toBe('/ppe?siteId=site-1&cameraId=cam-2');
+  expect(zonesLink.getAttribute('href')).toBe('/zones?siteId=site-1&cameraId=cam-2');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Close setup dialog' }));
+  expect(ppeLink.getAttribute('href')).toBe('/ppe?siteId=site-1&cameraId=cam-2');
+  expect(zonesLink.getAttribute('href')).toBe('/zones?siteId=site-1&cameraId=cam-2');
+
+  cleanup();
+  mocks.listCameras.mockResolvedValueOnce({ items: [camera], total: 2 });
+  mount(scopedManagerOfficer, '/camera-setup?siteId=site-1&cameraId=cam-2');
+  await screen.findByText(camera.name);
+
+  expect(
+    screen.getByText(
+      'The linked camera is not on the loaded pages. Load more cameras to look for it.',
+    ),
+  ).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'PPE monitoring' }).getAttribute('href')).toBe(
+    '/ppe?siteId=site-1',
+  );
+  expect(
+    screen.getByRole('link', { name: 'Restricted-zone monitoring' }).getAttribute('href'),
+  ).toBe('/zones?siteId=site-1');
+
+  const gateRow = screen.getByRole('heading', { name: camera.name }).closest('li');
+  if (!gateRow) {
+    throw new Error('Expected Gate camera row.');
+  }
+  fireEvent.click(within(gateRow).getByRole('button', { name: 'Link observation regions' }));
+  expect(screen.getByRole('link', { name: 'PPE monitoring' }).getAttribute('href')).toBe(
+    '/ppe?siteId=site-1&cameraId=cam-1',
+  );
+  expect(
+    screen.getByRole('link', { name: 'Restricted-zone monitoring' }).getAttribute('href'),
+  ).toBe('/zones?siteId=site-1&cameraId=cam-1');
 });
