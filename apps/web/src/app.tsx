@@ -465,7 +465,7 @@ export function App() {
         <Route
           path="/"
           element={
-            <RouteErrorBoundary>
+            <RouteErrorBoundary key={location.pathname}>
               <React.Suspense fallback={<PageLoadingFallback />}>
                 <LandingPage
                   onEnterApp={(tab) => {
@@ -507,7 +507,7 @@ export function App() {
         <Route
           path="/visits/register"
           element={
-            <RouteErrorBoundary>
+            <RouteErrorBoundary key={location.pathname}>
               <React.Suspense fallback={<PageLoadingFallback />}>
                 <VisitorRegistrationView apiUrl={apiUrl} onBack={() => navigate('/login')} />
               </React.Suspense>

@@ -10,6 +10,8 @@ import { ApiError, getBackendHealth } from '@smartsite/api-client';
 const shellModuleState = vi.hoisted(() => ({
   loginScreenFactoryCalls: 0,
   registerScreenFactoryCalls: 0,
+  landingFactoryCalls: 0,
+  visitorFactoryCalls: 0,
   appLayoutFactoryCalls: 0,
 }));
 
@@ -94,6 +96,22 @@ vi.mock('./features/auth/RegisterScreen', () => {
   };
 });
 
+vi.mock('./components/landing/LandingPage', () => {
+  shellModuleState.landingFactoryCalls += 1;
+  return Promise.reject(new Error('ChunkLoadError: secret-login-chunk-token-999'));
+});
+
+vi.mock('./components/access/visitor/VisitorRegistrationView', () => {
+  shellModuleState.visitorFactoryCalls += 1;
+  return {
+    VisitorRegistrationView: () => (
+      <div data-testid="register-screen">
+        <h1>Create SmartSite Account</h1>
+      </div>
+    ),
+  };
+});
+
 vi.mock('./components/layout/AppLayout', () => {
   shellModuleState.appLayoutFactoryCalls += 1;
   return {
@@ -105,10 +123,10 @@ vi.mock('./components/layout/AppLayout', () => {
 
 import { App } from './app';
 
-function ExternalRouteControl() {
+function ExternalRouteControl({ destination }: { destination: string }) {
   const navigate = useNavigate();
   return (
-    <button type="button" data-testid="navigate-to-register" onClick={() => navigate('/register')}>
+    <button type="button" data-testid="navigate-to-register" onClick={() => navigate(destination)}>
       Go to Register
     </button>
   );
@@ -146,38 +164,44 @@ describe('App public route chunk error boundary recovery', () => {
     vi.clearAllMocks();
   });
 
-  it('shows safe error alert when /login chunk rejects and recovers when navigating to /register without mounting protected layout', async () => {
-    expect(ApiError).toBeTypeOf('function');
-    const user = userEvent.setup();
+  it.each([
+    ['/login', '/register', 'loginScreenFactoryCalls', 'registerScreenFactoryCalls'],
+    ['/', '/visits/register', 'landingFactoryCalls', 'visitorFactoryCalls'],
+  ] as const)(
+    'recovers after failed %s when navigating to %s without mounting protected layout',
+    async (initial, destination, failedFactory, healthyFactory) => {
+      expect(ApiError).toBeTypeOf('function');
+      const user = userEvent.setup();
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/login']}>
-          <ExternalRouteControl />
-          <App />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={[initial]}>
+            <ExternalRouteControl destination={destination} />
+            <App />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
 
-    const alert = await screen.findByRole('alert');
-    expect(alert).toBeTruthy();
-    expect(screen.getByRole('heading', { name: /unable to load page/i })).toBeTruthy();
-    expect(screen.queryByText(/secret-login-chunk-token-999/i)).toBeNull();
-    expect(getBackendHealth).toHaveBeenCalled();
-    expect(shellModuleState.loginScreenFactoryCalls).toBe(1);
-    expect(shellModuleState.appLayoutFactoryCalls).toBe(0);
-    expect(screen.queryByTestId('protected-app-layout')).toBeNull();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /unable to load page/i })).toBeTruthy();
+      expect(screen.queryByText(/secret-login-chunk-token-999/i)).toBeNull();
+      expect(getBackendHealth).toHaveBeenCalled();
+      expect(shellModuleState[failedFactory]).toBe(1);
+      expect(shellModuleState.appLayoutFactoryCalls).toBe(0);
+      expect(screen.queryByTestId('protected-app-layout')).toBeNull();
 
-    await user.click(screen.getByTestId('navigate-to-register'));
+      await user.click(screen.getByTestId('navigate-to-register'));
 
-    const registerHeading = await screen.findByRole('heading', {
-      name: /create smartsite account/i,
-    });
-    expect(registerHeading).toBeTruthy();
-    expect(screen.getByTestId('register-screen')).toBeTruthy();
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(shellModuleState.registerScreenFactoryCalls).toBe(1);
-    expect(shellModuleState.appLayoutFactoryCalls).toBe(0);
-    expect(screen.queryByTestId('protected-app-layout')).toBeNull();
-  });
+      const registerHeading = await screen.findByRole('heading', {
+        name: /create smartsite account/i,
+      });
+      expect(registerHeading).toBeTruthy();
+      expect(screen.getByTestId('register-screen')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(shellModuleState[healthyFactory]).toBe(1);
+      expect(shellModuleState.appLayoutFactoryCalls).toBe(0);
+      expect(screen.queryByTestId('protected-app-layout')).toBeNull();
+    },
+  );
 });
