@@ -81,3 +81,7 @@ State: **COMBINED66_SCOPED_QUALIFIED_NOT_MERGED**. Independent Backend review,
 remaining affected HTTP/QR/runtime/recovery checks, nativeCI and an explicitly
 authorized integration remain open. Browser/UAT, resource/load, trusted identity,
 model and whole phase2–7 acceptance are not established by this result.
+
+Later HTTP/QR/native runtime and restore qualification, including the corrected
+Main enrollment test contract, is recorded in
+[runtime qualification](main-tuan-runtime-qualification-20261018.md).
