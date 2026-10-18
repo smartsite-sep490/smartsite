@@ -1,0 +1,2106 @@
+
+// 70 bảng (69 bảng có entity + attendance_schedule_conflict chỉ có migration).
+// Bỏ bảng migrations nội bộ TypeORM. 735 cột, 234 FK, 152 CHECK, 6 native enum, 11 trigger.
+// Import toàn bộ file vào dbdiagram.io để chỉnh sửa.
+// Đây là ERD, không phải migration hoặc bản SQL restore.
+// Partial indexes: ghi chính xác SQL/predicate trong note; không đánh dấu unique toàn bảng.
+// Trigger/function: giữ nguyên SQL trong phần chú thích cuối file; DBML không thực thi chúng.
+// FK chỉ vẽ khi database có constraint thật; JSON/mảng/tham chiếu đa hình không tự thêm Ref.
+
+Project smartsite_current {
+  database_type: 'PostgreSQL'
+  Note: 'Schema vật lý main 767c6f8 + Safety overview/checklists chưa commit, migrate trên PostgreSQL test riêng ngày 2026-10-13. Các trạng thái varchar + CHECK được giữ đúng kiểu vật lý, không biến thành PostgreSQL enum. Partial index và trigger được ghi chú đầy đủ. Backend vẫn kiểm tra role/data scope; ERD không thay thế authorization và không chứng minh mọi workflow đã hoàn thành.'
+}
+
+Enum alert_status {
+  PENDING_REVIEW
+  NEEDS_MORE_EVIDENCE
+  CONFIRMED
+  DISMISSED
+  CLOSED
+}
+
+Enum alert_type {
+  PPE_VIOLATION
+  RESTRICTED_ZONE_INTRUSION
+}
+
+Enum camera_status {
+  ACTIVE
+  INACTIVE
+}
+
+Enum event_processing_status {
+  PROCESSED
+  SKIPPED_CLOCK_SKEW
+  SKIPPED_NO_CANDIDATE
+  SKIPPED_UNKNOWN_CAMERA
+}
+
+Enum zone_restriction_policy {
+  NONE
+  PROHIBITED_FOR_ALL
+  AUTHORIZATION_REQUIRED
+}
+
+Enum zone_type {
+  STANDARD
+  RESTRICTED
+  HAZARDOUS
+}
+
+Table absence_request {
+  Note: 'Entity: AbsenceRequestEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_absence_request_id']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  worker_schedule_id uuid [not null]
+  shift_id uuid [not null]
+  replacement_worker_id uuid [null]
+  requested_by_user_id uuid [not null]
+  is_understaffed boolean [not null, default: `false`]
+  reviewed_by_user_id uuid [null]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  expected_schedule_version_id uuid [not null]
+  starts_at timestamptz [null]
+  ends_at timestamptz [null]
+  reason varchar(1000) [not null]
+  status varchar(24) [not null]
+  review_note text [null]
+
+  indexes {
+    (site_id, status, created_at) [name: 'idx_absence_request_site_status']
+  }
+
+  checks {
+    `((char_length((reason)::text) >= 5) AND (char_length((reason)::text) <= 1000))` [name: 'chk_absence_request_reason_length']
+    `((replacement_worker_id IS NULL) OR (replacement_worker_id <> worker_id))` [name: 'chk_absence_request_replacement_distinct']
+    `((status)::text = ANY ((ARRAY['PENDING_MANAGER'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying, 'CONFLICTED'::character varying])::text[]))` [name: 'chk_absence_request_status']
+    `(((starts_at IS NULL) AND (ends_at IS NULL)) OR ((starts_at IS NOT NULL) AND (ends_at > starts_at)))` [name: 'ck_absence_interval']
+  }
+}
+
+Table access_attempt {
+  Note: 'Entity: AccessAttemptEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_access_attempt_id']
+  site_id uuid [not null]
+  operator_id uuid [not null]
+  credential_id uuid [null]
+  worker_id uuid [null]
+  worker_assignment_id uuid [null]
+  visit_id uuid [null]
+  assignment_version integer [null]
+  site_policy_version integer [not null, default: `1`]
+  reviewed_by uuid [null]
+  reviewed_at timestamptz [null]
+  expires_at timestamptz [not null]
+  used_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  gate_id varchar(64) [not null]
+  direction varchar(3) [not null]
+  method varchar(10) [not null]
+  identity_status varchar(32) [not null]
+  authorization_status varchar(32) [not null]
+  schedule_status varchar(32) [not null]
+  reason_code varchar(100) [not null]
+  status varchar(16) [not null]
+  review_note text [null]
+
+  indexes {
+    (site_id, created_at) [name: 'idx_attempt_site_created']
+  }
+
+  checks {
+    `(((identity_status)::text <> 'MATCHED'::text) OR ((worker_id IS NOT NULL) <> (visit_id IS NOT NULL)))` [name: 'ck_attempt_identity']
+    `(expires_at > created_at)` [name: 'ck_attempt_interval']
+    `(((status)::text <> ALL ((ARRAY['READY'::character varying, 'USED'::character varying])::text[])) OR ((method)::text <> 'MANUAL'::text) OR ((reviewed_by IS NOT NULL) AND (reviewed_at IS NOT NULL)))` [name: 'ck_attempt_manual_review']
+    `(((status)::text <> ALL ((ARRAY['READY'::character varying, 'USED'::character varying])::text[])) OR (((identity_status)::text = 'MATCHED'::text) AND ((authorization_status)::text = 'ALLOWED'::text)))` [name: 'ck_attempt_ready']
+    `(((status)::text <> ALL ((ARRAY['READY'::character varying, 'USED'::character varying])::text[])) OR ((direction)::text = 'OUT'::text) OR ((schedule_status)::text <> 'NO_SCHEDULE'::text) OR ((reviewed_by IS NOT NULL) AND (reviewed_at IS NOT NULL)))` [name: 'ck_attempt_schedule_review']
+    `(NOT ((worker_id IS NOT NULL) AND (visit_id IS NOT NULL)))` [name: 'ck_attempt_subject']
+    `(((identity_status)::text = 'MATCHED'::text) OR ((worker_id IS NULL) AND (worker_assignment_id IS NULL) AND (visit_id IS NULL)))` [name: 'ck_attempt_unidentified']
+    `(((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[])) AND ((method)::text = ANY ((ARRAY['FACE'::character varying, 'QR'::character varying, 'MANUAL'::character varying])::text[])) AND ((identity_status)::text = ANY ((ARRAY['MATCHED'::character varying, 'UNKNOWN'::character varying, 'LOW_CONFIDENCE'::character varying, 'QUALITY_FAILED'::character varying, 'UNAVAILABLE'::character varying])::text[])) AND ((authorization_status)::text = ANY ((ARRAY['ALLOWED'::character varying, 'DENIED'::character varying, 'REVIEW_REQUIRED'::character varying, 'UNAVAILABLE'::character varying])::text[])) AND ((schedule_status)::text = ANY ((ARRAY['SCHEDULED'::character varying, 'OUTSIDE_SHIFT'::character varying, 'NO_SCHEDULE'::character varying, 'NOT_APPLICABLE'::character varying])::text[])) AND ((status)::text = ANY ((ARRAY['PENDING'::character varying, 'READY'::character varying, 'DENIED'::character varying, 'USED'::character varying, 'EXPIRED'::character varying])::text[])))` [name: 'ck_attempt_values']
+  }
+}
+
+Table ai_observation_event {
+  Note: 'Sự kiện AI giữ raw_payload; không có các bảng person_observation/identity_candidate/ppe_observation của ERD logic cũ. Entity: AiObservationEventEntity.'
+  event_id uuid [pk, not null, note: 'PK constraint: pk_ai_observation_event_event_id']
+  resolved_camera_id uuid [null]
+  stream_session_id uuid [not null]
+  captured_at timestamptz [not null]
+  received_at timestamptz [not null, default: `now()`]
+  raw_payload jsonb [not null]
+  processing_status event_processing_status [not null]
+  created_at timestamptz [not null, default: `now()`]
+  payload_hash character(64) [not null]
+  camera_external_id varchar(128) [not null]
+  processing_note text [null]
+
+  indexes {
+    (camera_external_id, stream_session_id, captured_at) [name: 'idx_event_camera_session_captured']
+  }
+}
+
+Table alert_detection_mapping {
+  Note: 'Entity: AlertDetectionMappingEntity.'
+  alert_id uuid [not null, note: 'PK constraint: pk_alert_detection_mapping']
+  event_id uuid [not null, note: 'PK constraint: pk_alert_detection_mapping']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (alert_id, event_id) [name: 'pk_alert_detection_mapping', pk]
+  }
+}
+
+Table app_user {
+  Note: 'Tài khoản đăng nhập; username là định danh đăng nhập. Hồ sơ công nhân nằm ở worker. Entity: UserEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_app_user_id']
+  is_active boolean [not null, default: `true`]
+  must_change_password boolean [not null, default: `false`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  username varchar(64) [not null]
+  display_name varchar(255) [not null]
+  password_hash varchar(255) [not null]
+
+  indexes {
+    username [name: 'uq_app_user_username', unique]
+  }
+}
+
+Table attendance_anomaly {
+  Note: 'Entity: AttendanceAnomalyEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_attendance_anomaly_id']
+  site_id uuid [not null]
+  attendance_pair_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+  code varchar(32) [not null]
+  detail varchar(500) [null]
+
+  indexes {
+    (attendance_pair_id, created_at) [name: 'idx_attendance_anomaly_pair']
+  }
+
+  checks {
+    `((code)::text = ANY ((ARRAY['MISSING_IN'::character varying, 'MISSING_OUT'::character varying, 'OUT_WITHOUT_IN'::character varying, 'DUPLICATE_IN'::character varying, 'DUPLICATE_OUT'::character varying, 'LATE_CHECKIN'::character varying, 'EARLY_CHECKOUT'::character varying, 'CROSS_MIDNIGHT'::character varying])::text[]))` [name: 'chk_attendance_anomaly_code']
+  }
+}
+
+Table attendance_correction {
+  Note: 'Entity: AttendanceCorrectionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_attendance_correction_id']
+  attendance_session_id uuid [not null]
+  requested_by uuid [not null]
+  expected_session_version integer [not null]
+  proposed_in_at timestamptz [not null]
+  proposed_out_at timestamptz [not null]
+  reviewed_by uuid [null]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  reason text [not null]
+  status varchar(16) [not null]
+  review_note text [null]
+
+  checks {
+    `(proposed_out_at >= proposed_in_at)` [name: 'ck_attendance_correction_interval']
+    `((reviewed_by IS NULL) OR (reviewed_by <> requested_by))` [name: 'ck_attendance_correction_self_review']
+    `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying])::text[]))` [name: 'ck_attendance_correction_status']
+  }
+}
+
+Table attendance_correction_request {
+  Note: 'Entity: AttendanceCorrectionRequestEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_attendance_correction_request_id']
+  site_id uuid [not null]
+  attendance_pair_id uuid [not null]
+  requested_minutes integer [null]
+  requested_check_in_at timestamptz [null]
+  requested_check_out_at timestamptz [null]
+  requested_by_user_id uuid [not null]
+  reviewed_by_user_id uuid [null]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  reason varchar(1000) [not null]
+  status varchar(16) [not null]
+  review_reason varchar(1000) [null]
+
+  indexes {
+    (attendance_pair_id, status) [name: 'idx_attendance_correction_pair_status']
+  }
+
+  checks {
+    `((requested_minutes IS NULL) OR (requested_minutes >= 0))` [name: 'chk_attendance_correction_minutes']
+    `((char_length((reason)::text) >= 5) AND (char_length((reason)::text) <= 1000))` [name: 'chk_attendance_correction_reason_length']
+    `((status)::text = ANY ((ARRAY['PENDING_REVIEW'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying])::text[]))` [name: 'chk_attendance_correction_status']
+  }
+}
+
+Table attendance_day {
+  Note: 'Ngày công theo Site/công nhân/ngày, snapshot ca, timezone, phút công và trạng thái đối soát. Entity: AttendanceDayEntity.'
+  id uuid [pk, not null, note: 'PK constraint: attendance_day_pkey']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  work_date date [not null]
+  schedule_id uuid [null]
+  starts_at timestamptz [null]
+  ends_at timestamptz [null]
+  regular_minutes integer [not null, default: `0`]
+  overtime_minutes integer [not null, default: `0`]
+  provisional_minutes integer [not null, default: `0`]
+  confirmed_minutes integer [null]
+  anomalies jsonb [not null, default: `'[]'::jsonb`]
+  version integer [not null, default: `1`]
+  reviewed_by uuid [null]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  break_starts_at timestamptz [null]
+  break_ends_at timestamptz [null]
+  review_note text [null]
+  shift_name varchar(160) [null]
+  status varchar(16) [not null]
+  timezone varchar(64) [not null]
+
+  indexes {
+    (status, ends_at) [name: 'idx_attendance_day_due']
+    (site_id, worker_id, work_date) [name: 'uq_attendance_day_worker_date', unique]
+  }
+
+  checks {
+    `(((break_starts_at IS NULL) AND (break_ends_at IS NULL)) OR ((break_starts_at IS NOT NULL) AND (break_ends_at IS NOT NULL) AND (starts_at IS NOT NULL) AND (ends_at IS NOT NULL) AND (break_starts_at >= starts_at) AND (break_ends_at <= ends_at) AND (break_ends_at > break_starts_at)))` [name: 'attendance_day_break_check']
+    `(((starts_at IS NULL) AND (ends_at IS NULL)) OR (ends_at > starts_at))` [name: 'attendance_day_check']
+    `(confirmed_minutes >= 0)` [name: 'attendance_day_confirmed_minutes_check']
+    `(overtime_minutes >= 0)` [name: 'attendance_day_overtime_minutes_check']
+    `(provisional_minutes >= 0)` [name: 'attendance_day_provisional_minutes_check']
+    `(regular_minutes >= 0)` [name: 'attendance_day_regular_minutes_check']
+    `((status)::text = ANY ((ARRAY['IN_PROGRESS'::character varying, 'NEEDS_REVIEW'::character varying, 'CONFIRMED'::character varying])::text[]))` [name: 'attendance_day_status_check']
+    `(version > 0)` [name: 'attendance_day_version_check']
+  }
+}
+
+Table attendance_event {
+  Note: 'Entity: AttendanceEventEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_attendance_event_id']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  worker_assignment_id uuid [null]
+  shift_assignment_id uuid [null]
+  gate_event_id uuid [null]
+  occurred_at timestamptz [not null]
+  recorded_by uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  kind varchar(16) [not null]
+  method varchar(10) [not null]
+  reason_code varchar(100) [not null]
+
+  indexes {
+    gate_event_id [name: 'uq_attendance_event_gate', unique]
+  }
+
+  checks {
+    `(((kind)::text = ANY ((ARRAY['CHECK_IN'::character varying, 'CHECK_OUT'::character varying])::text[])) AND ((method)::text = ANY ((ARRAY['FACE'::character varying, 'QR'::character varying, 'MANUAL'::character varying])::text[])))` [name: 'ck_attendance_event_kind']
+  }
+}
+
+Table attendance_pair {
+  Note: 'Bảng vật lý tồn tại song song với attendance_event/session/day. Sự tồn tại của bảng không chứng minh mọi luồng cũ đang được API sử dụng. Entity: AttendancePairEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_attendance_pair_id']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  shift_id uuid [null]
+  work_date date [not null]
+  check_in_at timestamptz [null]
+  check_out_at timestamptz [null]
+  raw_event_refs jsonb [not null, default: `'[]'::jsonb`]
+  worked_minutes integer [null]
+  confirmed_minutes integer [null]
+  confirmed_by_user_id uuid [null]
+  confirmed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  status varchar(16) [not null]
+
+  indexes {
+    (site_id, work_date, worker_id) [name: 'idx_attendance_pair_site_work_date']
+  }
+
+  checks {
+    `((confirmed_minutes IS NULL) OR (confirmed_minutes >= 0))` [name: 'chk_attendance_pair_confirmed_minutes']
+    `((check_out_at IS NULL) OR (check_in_at IS NULL) OR (check_out_at > check_in_at))` [name: 'chk_attendance_pair_interval']
+    `((status)::text = ANY ((ARRAY['MATCHED'::character varying, 'NEEDS_REVIEW'::character varying, 'CALCULATED'::character varying, 'CORRECTED'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[]))` [name: 'chk_attendance_pair_status']
+    `((worked_minutes IS NULL) OR (worked_minutes >= 0))` [name: 'chk_attendance_pair_worked_minutes']
+  }
+}
+
+Table attendance_schedule_conflict {
+  Note: 'Bảng do migration MF03 tạo, không có entity TypeORM. Ghi schedule_id xung đột tại thời điểm migration; không phải bảng quản lý xung đột mới của UI. Chỉ khai báo trong migration.'
+  schedule_id uuid [pk, not null, note: 'PK constraint: attendance_schedule_conflict_pkey']
+}
+
+Table attendance_session {
+  Note: 'Entity: AttendanceSessionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_attendance_session_id']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  shift_assignment_id uuid [null]
+  check_in_event_id uuid [null]
+  check_out_event_id uuid [null]
+  effective_in_at timestamptz [null]
+  effective_out_at timestamptz [null]
+  applied_correction_id uuid [null]
+  version integer [not null, default: `1`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  day_id uuid [null]
+  ignored_by uuid [null]
+  ignored_at timestamptz [null]
+  status varchar(16) [not null]
+  ignore_reason text [null]
+
+  indexes {
+    day_id [name: 'idx_attendance_session_day']
+    applied_correction_id [name: 'uq_attendance_session_correction', unique]
+    check_in_event_id [name: 'uq_attendance_session_in', unique]
+    (site_id, worker_id) [name: 'uq_attendance_session_legacy_open', note: 'PARTIAL UNIQUE; WHERE ((check_out_event_id IS NULL) AND (effective_out_at IS NULL) AND (day_id IS NULL)). Exact SQL: CREATE UNIQUE INDEX uq_attendance_session_legacy_open ON public.attendance_session USING btree (site_id, worker_id) WHERE ((check_out_event_id IS NULL) AND (effective_out_at IS NULL) AND (day_id IS NULL))']
+    (site_id, worker_id, day_id) [name: 'uq_attendance_session_open', note: 'PARTIAL UNIQUE; WHERE ((check_out_event_id IS NULL) AND (effective_out_at IS NULL) AND (day_id IS NOT NULL)). Exact SQL: CREATE UNIQUE INDEX uq_attendance_session_open ON public.attendance_session USING btree (site_id, worker_id, day_id) WHERE ((check_out_event_id IS NULL) AND (effective_out_at IS NULL) AND (day_id IS NOT NULL))']
+    check_out_event_id [name: 'uq_attendance_session_out', unique]
+  }
+
+  checks {
+    `((check_in_event_id IS NULL) OR (check_out_event_id IS NULL) OR (check_in_event_id <> check_out_event_id))` [name: 'ck_attendance_session_distinct']
+    `((check_in_event_id IS NOT NULL) OR (check_out_event_id IS NOT NULL))` [name: 'ck_attendance_session_events']
+    `((((status)::text = 'IGNORED'::text) AND (ignored_by IS NOT NULL) AND (ignored_at IS NOT NULL) AND (ignore_reason IS NOT NULL) AND (length(TRIM(BOTH FROM ignore_reason)) >= 5) AND (effective_in_at IS NULL) AND (check_out_event_id IS NULL) AND (check_in_event_id IS NOT NULL)) OR (((status)::text <> 'IGNORED'::text) AND (ignored_by IS NULL) AND (ignored_at IS NULL) AND (ignore_reason IS NULL)))` [name: 'ck_attendance_session_ignore']
+    `((effective_in_at IS NULL) OR (effective_out_at IS NULL) OR (effective_out_at >= effective_in_at))` [name: 'ck_attendance_session_interval']
+    `((status)::text = ANY ((ARRAY['MATCHED'::character varying, 'MISSING_IN'::character varying, 'MISSING_OUT'::character varying, 'NEEDS_REVIEW'::character varying, 'CORRECTED'::character varying, 'IGNORED'::character varying])::text[]))` [name: 'ck_attendance_session_status']
+  }
+}
+
+Table audit_log {
+  Note: 'Entity: AccessAuditEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_audit_log_id']
+  actor_account_id uuid [null]
+  site_id uuid [null]
+  entity_id uuid [not null]
+  changes jsonb [null]
+  occurred_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+  action varchar(100) [not null]
+  entity_type varchar(100) [not null]
+  reason text [null]
+}
+
+Table auth_session {
+  Note: 'Entity: AuthSessionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_auth_session_id']
+  user_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+  last_refreshed_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz [null]
+  client_type varchar(8) [not null]
+  refresh_token_hash varchar(64) [not null]
+
+  indexes {
+    expires_at [name: 'idx_auth_session_expires']
+    user_id [name: 'idx_auth_session_user']
+  }
+
+  checks {
+    `((client_type)::text = ANY ((ARRAY['WEB'::character varying, 'MOBILE'::character varying])::text[]))` [name: 'chk_auth_session_client_type']
+  }
+}
+
+Table camera {
+  Note: 'Entity: CameraEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_camera_id']
+  site_id uuid [not null]
+  status camera_status [not null, default: `'ACTIVE'::camera_status`]
+  created_at timestamptz [not null, default: `now()`]
+  configuration_version bigint [not null, default: `1`]
+  external_id varchar(128) [not null]
+  code varchar(64) [not null]
+  name varchar(255) [not null]
+
+  indexes {
+    external_id [name: 'uq_camera_external_id', unique]
+    (site_id, code) [name: 'uq_camera_site_code', unique]
+  }
+
+  checks {
+    `((configuration_version >= 1) AND (configuration_version <= '9007199254740991'::bigint))` [name: 'chk_camera_configuration_version']
+  }
+}
+
+Table camera_observation_region {
+  Note: 'Vùng quan sát camera với geometry, coordinate_space và version; khác mô hình observation_region cũ. Entity: CameraObservationRegionEntity.'
+  camera_id uuid [not null]
+  zone_id uuid [not null]
+  polygon jsonb [not null]
+  id uuid [pk, not null, note: 'PK constraint: pk_camera_observation_region_id']
+  version integer [not null, default: `1`]
+  is_active boolean [not null, default: `true`]
+  created_at timestamptz [not null, default: `now()`]
+  coordinate_space varchar(32) [not null, default: `'NORMALIZED_0_1'::character varying`]
+
+  indexes {
+    (camera_id, is_active) [name: 'idx_region_camera_active']
+  }
+
+  checks {
+    `((coordinate_space)::text = 'NORMALIZED_0_1'::text)` [name: 'chk_region_coordinate_space']
+    `(version >= 1)` [name: 'chk_region_version']
+  }
+}
+
+Table contractor {
+  Note: 'Entity: ContractorEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_contractor_id']
+  is_active boolean [not null, default: `true`]
+  created_at timestamptz [not null, default: `now()`]
+  code varchar(64) [not null]
+  name varchar(255) [not null]
+
+  indexes {
+    code [name: 'uq_contractor_code', unique]
+  }
+}
+
+Table contractor_representative_assignment {
+  Note: 'Phân công tài khoản đại diện Contractor tại Site; còn phải kiểm tra vai trò và participation hiện hành ở Backend. Entity: ContractorRepresentativeAssignmentEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_contractor_representative_assignment_id']
+  site_id uuid [not null]
+  contractor_id uuid [not null]
+  user_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, site_id) [name: 'idx_contractor_representative_user_site']
+    (site_id, contractor_id, user_id) [name: 'uq_contractor_representative_assignment', unique]
+  }
+}
+
+Table contractor_representative_grant {
+  Note: 'Quyền đại diện nhà thầu; khác với phân công đại diện tại một Site cụ thể. Entity: ContractorRepresentativeGrantEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_contractor_representative_grant_id']
+  user_id uuid [not null]
+  contractor_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    user_id [name: 'idx_contractor_representative_grant_user']
+    (user_id, contractor_id) [name: 'uq_contractor_representative_grant', unique]
+  }
+}
+
+Table contractor_shift_assignment {
+  Note: 'Entity: ContractorShiftAssignmentEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_contractor_shift_assignment_id']
+  site_id uuid [not null]
+  shift_id uuid [not null]
+  contractor_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (site_id, contractor_id, shift_id) [name: 'idx_contractor_shift_assignment_contractor']
+    (site_id, shift_id, contractor_id) [name: 'idx_contractor_shift_assignment_shift']
+    (site_id, shift_id, contractor_id) [name: 'uq_contractor_shift_assignment', unique]
+  }
+}
+
+Table contractor_site_participation {
+  Note: 'Quan hệ nhà thầu tham gia Site theo khoảng hiệu lực; không phải một dòng cố định cho mỗi cặp Contractor/Site. Entity: ContractorSiteParticipationEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_contractor_site_participation_id']
+  contractor_id uuid [not null]
+  site_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [null]
+  is_active boolean [not null, default: `true`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (contractor_id, site_id, valid_from) [name: 'idx_contractor_site_participation_lookup']
+  }
+
+  checks {
+    `((valid_until IS NULL) OR (valid_until > valid_from))` [name: 'chk_contractor_site_participation_interval']
+  }
+}
+
+Table contractor_team {
+  Note: 'Đội thuộc một Contractor tại một Site; tên đội đang hoạt động duy nhất trong phạm vi đó. Entity: ContractorTeamEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_team_id']
+  site_id uuid [not null]
+  contractor_id uuid [not null]
+  is_active boolean [not null, default: `true`]
+  version integer [not null, default: `1`]
+  created_by uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  name varchar(160) [not null]
+  normalized_name varchar(160) [not null]
+  description varchar(1000) [not null, default: `''::character varying`]
+
+  indexes {
+    (site_id, contractor_id, normalized_name) [name: 'uq_team_active_name', note: 'PARTIAL UNIQUE; WHERE (is_active = true). Exact SQL: CREATE UNIQUE INDEX uq_team_active_name ON public.contractor_team USING btree (site_id, contractor_id, normalized_name) WHERE (is_active = true)']
+    (id, site_id, contractor_id) [name: 'uq_team_scope', unique]
+  }
+
+  checks {
+    `((char_length(TRIM(BOTH FROM name)) >= 1) AND (char_length(TRIM(BOTH FROM name)) <= 160))` [name: 'ck_team_name']
+    `(version > 0)` [name: 'ck_team_version']
+  }
+}
+
+Table contractor_team_membership {
+  Note: 'Thành viên đội có joined_at/left_at. Partial unique và trigger kiểm tra phạm vi thành viên đang hoạt động. Entity: ContractorTeamMembershipEntity. Trigger: team_membership_scope; xem SQL cuối file.'
+  id uuid [pk, not null, note: 'PK constraint: pk_team_membership_id']
+  site_id uuid [not null]
+  contractor_id uuid [not null]
+  team_id uuid [not null]
+  worker_id uuid [not null]
+  joined_at timestamptz [not null]
+  left_at timestamptz [null]
+  assigned_by uuid [not null]
+  ended_by uuid [null]
+  reason varchar(1000) [not null]
+  end_reason varchar(1000) [null]
+
+  indexes {
+    (team_id, left_at) [name: 'idx_team_members']
+    (site_id, worker_id) [name: 'uq_team_worker_active', note: 'PARTIAL UNIQUE; WHERE (left_at IS NULL). Exact SQL: CREATE UNIQUE INDEX uq_team_worker_active ON public.contractor_team_membership USING btree (site_id, worker_id) WHERE (left_at IS NULL)']
+  }
+
+  checks {
+    `((left_at IS NULL) OR (left_at >= joined_at))` [name: 'ck_team_membership_interval']
+  }
+}
+
+Table contractor_zone_permission {
+  Note: 'Cấp Zone cho participation của nhà thầu trong khoảng thời gian. site_contractor_id trỏ tới contractor_site_participation. Entity: ContractorZonePermissionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_contractor_zone_permission_id']
+  site_contractor_id uuid [not null]
+  zone_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  granted_by uuid [not null]
+  revoked_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (site_contractor_id, zone_id, valid_from) [name: 'uq_contractor_zone_interval', note: 'PARTIAL UNIQUE; WHERE (revoked_at IS NULL). Exact SQL: CREATE UNIQUE INDEX uq_contractor_zone_interval ON public.contractor_zone_permission USING btree (site_contractor_id, zone_id, valid_from) WHERE (revoked_at IS NULL)']
+  }
+
+  checks {
+    `(valid_until > valid_from)` [name: 'ck_contractor_zone_interval']
+  }
+}
+
+Table corrective_action {
+  Note: 'Entity: CorrectiveActionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: corrective_action_pkey']
+  incident_id uuid [not null]
+  assigned_to uuid [not null]
+  assigned_by uuid [not null]
+  due_at timestamptz [null]
+  version integer [not null, default: `1`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  superseded_at timestamptz [null]
+  superseded_by uuid [null]
+  description text [not null]
+  status varchar(16) [not null]
+  superseded_reason text [null]
+
+  indexes {
+    (assigned_to, incident_id) [name: 'idx_action_assignee']
+    (incident_id, id) [name: 'idx_action_incident']
+  }
+
+  checks {
+    `(((superseded_at IS NULL) AND (superseded_by IS NULL) AND (superseded_reason IS NULL)) OR ((superseded_at IS NOT NULL) AND (superseded_by IS NOT NULL) AND (superseded_reason IS NOT NULL) AND (length(TRIM(BOTH FROM superseded_reason)) > 0)))` [name: 'action_supersession_check']
+    `(length(TRIM(BOTH FROM description)) > 0)` [name: 'corrective_action_description_check']
+    `((status)::text = ANY ((ARRAY['ASSIGNED'::character varying, 'IN_PROGRESS'::character varying, 'SUBMITTED'::character varying, 'VERIFIED'::character varying, 'CLOSED'::character varying])::text[]))` [name: 'corrective_action_status_check']
+    `(version >= 1)` [name: 'corrective_action_version_check']
+  }
+}
+
+Table corrective_action_submission {
+  Note: 'Kết quả nộp xử lý; trigger chỉ cho phép quyết định đối với bản nộp đang PENDING. Entity: CorrectiveActionSubmissionEntity. Trigger: immutable_submission; xem SQL cuối file.'
+  id uuid [pk, not null, note: 'PK constraint: corrective_action_submission_pkey']
+  corrective_action_id uuid [not null]
+  submitted_by uuid [not null]
+  evidence_id uuid [null]
+  submitted_at timestamptz [not null]
+  reviewed_by uuid [null]
+  reviewed_at timestamptz [null]
+  result_description text [not null]
+  status varchar(16) [not null]
+  review_note text [null]
+
+  indexes {
+    corrective_action_id [name: 'uq_action_pending_submission', note: 'PARTIAL UNIQUE; WHERE ((status)::text = \'PENDING\'::text). Exact SQL: CREATE UNIQUE INDEX uq_action_pending_submission ON public.corrective_action_submission USING btree (corrective_action_id) WHERE ((status)::text = \'PENDING\'::text)']
+  }
+
+  checks {
+    `((((status)::text = 'PENDING'::text) AND (reviewed_by IS NULL) AND (reviewed_at IS NULL) AND (review_note IS NULL)) OR (((status)::text <> 'PENDING'::text) AND (reviewed_by IS NOT NULL) AND (reviewed_by <> submitted_by) AND (reviewed_at IS NOT NULL) AND (review_note IS NOT NULL) AND (length(TRIM(BOTH FROM review_note)) > 0)))` [name: 'chk_submission_review']
+    `(length(TRIM(BOTH FROM result_description)) > 0)` [name: 'corrective_action_submission_result_description_check']
+    `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[]))` [name: 'corrective_action_submission_status_check']
+  }
+}
+
+Table face_enrollment_session {
+  Note: 'Entity: FaceEnrollmentSessionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_face_enrollment_session_id']
+  worker_id uuid [not null]
+  actor_user_id uuid [not null]
+  consented_at timestamptz [null]
+  accepted_sample_count smallint [not null, default: `0`]
+  started_at timestamptz [not null]
+  completed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz [null]
+  consent_version varchar(64) [not null]
+  status varchar(32) [not null]
+  consent_method varchar(50) [null]
+  consent_token_hash character(64) [null]
+
+  indexes {
+    (worker_id, started_at) [name: 'idx_face_enrollment_session_worker_started']
+  }
+
+  checks {
+    `((accepted_sample_count >= 0) AND (accepted_sample_count <= 3))` [name: 'chk_face_enrollment_session_sample_count']
+    `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'COLLECTING'::character varying, 'COMPLETED'::character varying, 'FAILED'::character varying, 'CANCELLED'::character varying])::text[]))` [name: 'chk_face_enrollment_session_status']
+  }
+}
+
+Table face_profile {
+  Note: 'Hồ sơ nhận diện có template mã hóa và trạng thái. Không chứa dữ liệu sinh trắc thực tế trong ERD. Entity: FaceProfileEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_face_profile_id']
+  worker_id uuid [not null]
+  consented_at timestamptz [not null]
+  created_by_user_id uuid [not null]
+  revoked_at timestamptz [null]
+  revoked_by_user_id uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  user_id uuid [null]
+  deleted_at timestamptz [null]
+  profile_reference_hash character(64) [not null]
+  model_version varchar(128) [not null]
+  status varchar(32) [not null]
+  consent_version varchar(64) [not null]
+  encrypted_template text [null]
+  consent_method varchar(50) [not null, default: `'LEGACY_UNVERIFIED'::character varying`]
+
+  indexes {
+    profile_reference_hash [name: 'uq_face_profile_reference_hash', unique]
+    worker_id [name: 'uq_face_profile_worker_active', note: 'PARTIAL UNIQUE; WHERE ((status)::text = \'ACTIVE\'::text). Exact SQL: CREATE UNIQUE INDEX uq_face_profile_worker_active ON public.face_profile USING btree (worker_id) WHERE ((status)::text = \'ACTIVE\'::text)']
+  }
+
+  checks {
+    `(((status)::text <> 'ACTIVE'::text) OR ((encrypted_template IS NOT NULL) AND ((length(encrypted_template) >= 100) AND (length(encrypted_template) <= 32768))))` [name: 'chk_face_profile_database_template']
+    `((status)::text = ANY ((ARRAY['ACTIVE'::character varying, 'REVOKED'::character varying, 'DELETED'::character varying])::text[]))` [name: 'chk_face_profile_status']
+    `(((status)::text <> 'DELETED'::text) OR (encrypted_template IS NULL))` [name: 'ck_face_profile_deleted']
+  }
+}
+
+Table gate_access_log {
+  Note: 'Entity: GateAccessLogEntity.'
+  id uuid [pk, not null, note: 'PK constraint: gate_access_log_pkey']
+  site_id uuid [not null]
+  operator_user_id uuid [not null]
+  worker_id uuid [null]
+  user_id uuid [null]
+  decision jsonb [not null]
+  created_at timestamptz [not null, default: `now()`]
+  worker_name varchar(255) [null]
+  worker_external_id varchar(128) [null]
+  contractor_name varchar(255) [null]
+  username varchar(64) [null]
+  method varchar(8) [not null, default: `'FACE'::character varying`]
+  gate_id varchar(64) [not null]
+  direction varchar(3) [not null]
+
+  indexes {
+    (site_id, gate_id, created_at, id) [name: 'idx_gate_access_log_site_gate_time']
+  }
+
+  checks {
+    `((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[]))` [name: 'chk_gate_access_log_direction']
+    `((method)::text = ANY ((ARRAY['FACE'::character varying, 'QR'::character varying])::text[]))` [name: 'chk_gate_access_log_method']
+  }
+}
+
+Table gate_event {
+  Note: 'Entity: GateEventEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_gate_event_id']
+  access_attempt_id uuid [not null]
+  site_id uuid [not null]
+  worker_id uuid [null]
+  visit_id uuid [null]
+  occurred_at timestamptz [not null]
+  recorded_by uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  direction varchar(3) [not null]
+  gate_name varchar(100) [not null]
+  idempotency_key varchar(150) [not null]
+
+  indexes {
+    access_attempt_id [name: 'uq_gate_event_attempt', unique]
+    idempotency_key [name: 'uq_gate_event_idempotency', unique]
+  }
+
+  checks {
+    `((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[]))` [name: 'ck_gate_event_direction']
+    `((worker_id IS NOT NULL) <> (visit_id IS NOT NULL))` [name: 'ck_gate_event_subject']
+  }
+}
+
+Table incident {
+  source_checklist_result_id uuid [null, note: 'Nguồn FAIL đã ACCEPTED; partial unique, không tự xác nhận contractor.']
+  Note: 'Entity: IncidentEntity.'
+  id uuid [pk, not null, note: 'PK constraint: incident_pkey']
+  site_id uuid [not null]
+  zone_id uuid [null]
+  occurred_at timestamptz [not null]
+  reported_by uuid [not null]
+  closed_by uuid [null]
+  closed_at timestamptz [null]
+  version integer [not null, default: `1`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  contractor_id uuid [null]
+  responsibility_confirmed_by uuid [null]
+  responsibility_confirmed_at timestamptz [null]
+  title varchar(200) [not null]
+  description text [not null]
+  severity varchar(16) [not null]
+  status varchar(16) [not null]
+  responsibility_reason text [null]
+
+  indexes {
+    (site_id, created_at, id) [name: 'idx_incident_site_order']
+  }
+
+  checks {
+    `((((status)::text = 'CLOSED'::text) AND (closed_by IS NOT NULL) AND (closed_at IS NOT NULL)) OR (((status)::text <> 'CLOSED'::text) AND (closed_by IS NULL) AND (closed_at IS NULL)))` [name: 'chk_incident_closure']
+    `(length(TRIM(BOTH FROM description)) > 0)` [name: 'incident_description_check']
+    `(((contractor_id IS NULL) AND (responsibility_reason IS NULL) AND (responsibility_confirmed_by IS NULL) AND (responsibility_confirmed_at IS NULL)) OR ((contractor_id IS NOT NULL) AND (responsibility_reason IS NOT NULL) AND (length(TRIM(BOTH FROM responsibility_reason)) > 0) AND (responsibility_confirmed_by IS NOT NULL) AND (responsibility_confirmed_at IS NOT NULL)))` [name: 'incident_responsibility_check']
+    `((severity)::text = ANY ((ARRAY['LOW'::character varying, 'MEDIUM'::character varying, 'HIGH'::character varying, 'CRITICAL'::character varying])::text[]))` [name: 'incident_severity_check']
+    `((status)::text = ANY ((ARRAY['OPEN'::character varying, 'ASSIGNED'::character varying, 'IN_PROGRESS'::character varying, 'VERIFIED'::character varying, 'CLOSED'::character varying, 'REOPENED'::character varying])::text[]))` [name: 'incident_status_check']
+    `(length(TRIM(BOTH FROM title)) > 0)` [name: 'incident_title_check']
+    `(version >= 1)` [name: 'incident_version_check']
+  }
+}
+
+Table incident_worker {
+  Note: 'Entity: IncidentWorkerEntity.'
+  incident_id uuid [not null, note: 'PK constraint: incident_worker_pkey']
+  worker_id uuid [not null, note: 'PK constraint: incident_worker_pkey']
+
+  indexes {
+    (incident_id, worker_id) [name: 'incident_worker_pkey', pk]
+  }
+}
+
+Table observation_identity_decision {
+  Note: 'Lịch sử quyết định danh tính; trigger cấm sửa/xóa. Entity: ObservationIdentityDecisionEntity. Trigger: trg_identity_decision_append_only; xem SQL cuối file.'
+  id uuid [pk, not null, note: 'PK constraint: pk_identity_decision_id']
+  resolution_id uuid [not null]
+  site_id uuid [not null]
+  actor_user_id uuid [not null]
+  revision integer [not null]
+  expected_revision integer [not null]
+  worker_id uuid [null]
+  evidence_index smallint [null]
+  recorded_at timestamptz [not null, default: `now()`]
+  command_hash character(64) [not null]
+  action varchar(8) [not null]
+  evidence_sha256 character(64) [null]
+  reason varchar(1000) [not null]
+  scope varchar(32) [not null, default: `'EXACT_OBSERVATION'::character varying`]
+  verification_method varchar(16) [not null, default: `'MANUAL'::character varying`]
+
+  indexes {
+    (resolution_id, id, revision) [name: 'uq_identity_decision_head_pointer', unique]
+    (resolution_id, revision) [name: 'uq_identity_decision_revision', unique]
+  }
+
+  checks {
+    `((((action)::text = 'RESOLVE'::text) AND (worker_id IS NOT NULL) AND (evidence_index IS NOT NULL) AND ((evidence_index >= 0) AND (evidence_index <= 255)) AND (evidence_sha256 IS NOT NULL) AND (evidence_sha256 ~ '^[0-9a-f]{64}$'::text)) OR (((action)::text = 'CLEAR'::text) AND (worker_id IS NULL) AND (evidence_index IS NULL) AND (evidence_sha256 IS NULL)))` [name: 'chk_identity_decision_action']
+    `(command_hash ~ '^[0-9a-f]{64}$'::text)` [name: 'chk_identity_decision_hash']
+    `(((char_length((reason)::text) >= 5) AND (char_length((reason)::text) <= 1000)) AND ((reason)::text = btrim((reason)::text)))` [name: 'chk_identity_decision_reason']
+    `(((expected_revision >= 0) AND (expected_revision <= 2147483646)) AND (revision = (expected_revision + 1)))` [name: 'chk_identity_decision_revision']
+    `(((scope)::text = 'EXACT_OBSERVATION'::text) AND ((verification_method)::text = 'MANUAL'::text))` [name: 'chk_identity_decision_scope']
+  }
+}
+
+Table observation_identity_resolution {
+  Note: 'Kết quả giải quyết danh tính quan sát do Backend quản lý. Entity: ObservationIdentityResolutionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_identity_resolution_id']
+  event_id uuid [not null]
+  person_observation_index smallint [not null]
+  site_id uuid [not null]
+  subject_ref jsonb [not null]
+  revision integer [not null, default: `0`]
+  current_decision_id uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  payload_hash character(64) [not null]
+
+  indexes {
+    (event_id, person_observation_index) [name: 'uq_identity_resolution_event_subject', unique]
+    (id, site_id) [name: 'uq_identity_resolution_id_site', unique]
+  }
+
+  checks {
+    `(payload_hash ~ '^[0-9a-f]{64}$'::text)` [name: 'chk_identity_resolution_hash']
+    `(((revision = 0) AND (current_decision_id IS NULL)) OR (((revision >= 1) AND (revision <= 2147483647)) AND (current_decision_id IS NOT NULL)))` [name: 'chk_identity_resolution_head']
+    `((person_observation_index >= 0) AND (person_observation_index <= 255))` [name: 'chk_identity_resolution_index']
+    `(jsonb_typeof(subject_ref) = 'object'::text)` [name: 'chk_identity_resolution_ref']
+  }
+}
+
+Table overtime_request {
+  Note: 'Entity: OvertimeRequestEntity.'
+  id uuid [pk, not null, note: 'PK constraint: overtime_request_pkey']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  schedule_id uuid [not null]
+  expected_shift_id uuid [not null]
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  requested_by uuid [not null]
+  reviewed_by uuid [null]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  reason text [not null]
+  status varchar(16) [not null]
+  review_note text [null]
+
+  indexes {
+    (schedule_id, status) [name: 'idx_overtime_schedule']
+  }
+
+  checks {
+    `(ends_at > starts_at)` [name: 'overtime_request_check']
+    `((reviewed_by IS NULL) OR (reviewed_by <> requested_by))` [name: 'overtime_request_check1']
+    `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[]))` [name: 'overtime_request_status_check']
+  }
+}
+
+Table qr_credential {
+  Note: 'Entity: QrCredentialEntity.'
+  id uuid [pk, not null, note: 'PK constraint: qr_credential_pkey']
+  visit_id uuid [null]
+  worker_id uuid [null]
+  fallback_session_id uuid [null]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz [null]
+  result jsonb [null]
+  created_at timestamptz [not null, default: `now()`]
+  site_id uuid [not null]
+  revoked_at timestamptz [null]
+  request_hash varchar(64) [null]
+  direction varchar(3) [not null]
+  token_hash varchar(64) [not null]
+
+  indexes {
+    token_hash [name: 'uq_qr_credential_token_hash', unique]
+  }
+
+  checks {
+    `((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[]))` [name: 'chk_qr_direction']
+    `(((visit_id IS NOT NULL) AND (worker_id IS NULL) AND (fallback_session_id IS NULL)) OR ((visit_id IS NULL) AND (worker_id IS NOT NULL) AND (fallback_session_id IS NOT NULL)))` [name: 'chk_qr_subject']
+    `(expires_at > created_at)` [name: 'ck_qr_expiry']
+  }
+}
+
+Table qr_fallback_session {
+  Note: 'Entity: QrFallbackSessionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: qr_fallback_session_pkey']
+  site_id uuid [not null]
+  operator_user_id uuid [not null]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  gate_id varchar(64) [not null]
+  direction varchar(3) [not null]
+  reason varchar(32) [not null]
+
+  checks {
+    `((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[]))` [name: 'chk_fallback_direction']
+    `((reason)::text = ANY ((ARRAY['CAMERA_UNAVAILABLE'::character varying, 'UNKNOWN'::character varying, 'LOW_CONFIDENCE'::character varying, 'QUALITY_FAILED'::character varying, 'AI_UNAVAILABLE'::character varying])::text[]))` [name: 'chk_fallback_reason']
+  }
+}
+
+Table safety_alert {
+  Note: 'Entity: SafetyAlertEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_safety_alert_id']
+  site_id uuid [not null]
+  zone_id uuid [null]
+  identity_similarity_score numeric(5,4) [null]
+  identity_quality_score numeric(5,4) [null]
+  alert_type alert_type [not null]
+  status alert_status [not null, default: `'PENDING_REVIEW'::alert_status`]
+  first_detected_at timestamptz [not null]
+  last_detected_at timestamptz [not null]
+  detection_count integer [not null, default: `1`]
+  created_at timestamptz [not null, default: `now()`]
+  revision integer [not null, default: `0`]
+  updated_at timestamptz [not null, default: `now()`]
+  incident_id uuid [null]
+  candidate_subtype varchar(64) [not null]
+  grouping_key varchar(255) [not null]
+  candidate_worker_id varchar(128) [null]
+
+  indexes {
+    (grouping_key, status) [name: 'idx_alert_grouping']
+    incident_id [name: 'idx_alert_incident', note: 'PARTIAL INDEX; WHERE (incident_id IS NOT NULL). Exact SQL: CREATE INDEX idx_alert_incident ON public.safety_alert USING btree (incident_id) WHERE (incident_id IS NOT NULL)']
+    (site_id, last_detected_at, id) [name: 'idx_alert_site_last_detected']
+  }
+
+  checks {
+    `(revision >= 0)` [name: 'chk_safety_alert_revision']
+  }
+}
+
+Table safety_alert_review {
+  Note: 'Entity: SafetyAlertReviewEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_safety_alert_review_id']
+  alert_id uuid [not null]
+  site_id uuid [not null]
+  actor_user_id uuid [not null]
+  from_status alert_status [not null]
+  to_status alert_status [not null]
+  alert_revision integer [not null]
+  created_at timestamptz [not null, default: `now()`]
+  reason varchar(1000) [not null]
+
+  indexes {
+    (alert_id, created_at) [name: 'idx_safety_alert_review_alert_created']
+  }
+
+  checks {
+    `((char_length((reason)::text) >= 5) AND (char_length((reason)::text) <= 1000))` [name: 'chk_safety_alert_review_reason_length']
+    `(alert_revision >= 1)` [name: 'chk_safety_alert_review_revision']
+  }
+}
+
+Table safety_evidence {
+  Note: 'Bằng chứng phục vụ quy trình an toàn; thay mô hình evidence_reference cũ ở phần workflow, không phải đổi tên tương đương toàn bộ. Entity: SafetyEvidenceEntity.'
+  id uuid [pk, not null, note: 'PK constraint: safety_evidence_pkey']
+  site_id uuid [not null]
+  size integer [not null]
+  uploaded_by uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+  storage_key varchar(512) [not null]
+  media_type varchar(32) [not null]
+  sha256 varchar(64) [not null]
+  storage_provider varchar(8) [not null, default: `'LOCAL'::character varying`]
+
+  indexes {
+    (storage_provider, storage_key) [name: 'safety_evidence_provider_key_unique', unique]
+  }
+
+  checks {
+    `((media_type)::text = ANY ((ARRAY['image/jpeg'::character varying, 'image/png'::character varying, 'application/pdf'::character varying])::text[]))` [name: 'safety_evidence_media_type_check']
+    `((storage_provider)::text = ANY ((ARRAY['LOCAL'::character varying, 'R2'::character varying])::text[]))` [name: 'safety_evidence_provider_check']
+    `((sha256)::text ~ '^[0-9a-f]{64}$'::text)` [name: 'safety_evidence_sha256_check']
+    `((size >= 1) AND (size <= 5242880))` [name: 'safety_evidence_size_check']
+  }
+}
+
+Table safety_task {
+  Note: 'Entity: SafetyTaskEntity.'
+  id uuid [pk, not null, note: 'PK constraint: safety_task_pkey']
+  site_id uuid [not null]
+  zone_id uuid [null]
+  source_alert_id uuid [null]
+  source_incident_id uuid [null]
+  assigned_to uuid [not null]
+  assigned_by uuid [not null]
+  due_at timestamptz [null]
+  result_evidence_id uuid [null]
+  completed_at timestamptz [null]
+  verified_by uuid [null]
+  verified_at timestamptz [null]
+  version integer [not null, default: `1`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  description text [not null]
+  status varchar(16) [not null]
+  result_summary text [null]
+  kind varchar(32) [not null]
+
+  indexes {
+    (site_id, assigned_to, status) [name: 'idx_task_assignee']
+    (site_id, created_at, id) [name: 'idx_task_site_order']
+  }
+
+  checks {
+    `(((status)::text <> ALL ((ARRAY['COMPLETED'::character varying, 'VERIFIED'::character varying])::text[])) OR ((completed_at IS NOT NULL) AND (result_summary IS NOT NULL) AND (length(TRIM(BOTH FROM result_summary)) > 0)))` [name: 'chk_task_completed']
+    `((((status)::text = 'VERIFIED'::text) AND (verified_by IS NOT NULL) AND (verified_by <> assigned_to) AND (verified_at IS NOT NULL)) OR (((status)::text <> 'VERIFIED'::text) AND (verified_by IS NULL) AND (verified_at IS NULL)))` [name: 'chk_task_verification']
+    `(length(TRIM(BOTH FROM description)) > 0)` [name: 'safety_task_description_check']
+    `((kind)::text = ANY ((ARRAY['ZONE_INSPECTION'::character varying, 'ALERT_VERIFICATION'::character varying, 'SAFETY_FOLLOW_UP'::character varying, 'SAFETY_PATROL'::character varying])::text[]))` [name: 'safety_task_kind_check']
+    `((status)::text = ANY ((ARRAY['ASSIGNED'::character varying, 'IN_PROGRESS'::character varying, 'COMPLETED'::character varying, 'VERIFIED'::character varying, 'CANCELLED'::character varying])::text[]))` [name: 'safety_task_status_check']
+    `(version >= 1)` [name: 'safety_task_version_check']
+  }
+}
+
+Table safety_workflow_audit {
+  Note: 'Lịch sử workflow an toàn bất biến, command_id dùng cho idempotency. Entity: SafetyWorkflowAuditEntity. Trigger: immutable_workflow_audit; xem SQL cuối file.'
+  id uuid [pk, not null, note: 'PK constraint: safety_workflow_audit_pkey']
+  command_id uuid [not null]
+  actor_id uuid [not null]
+  site_id uuid [not null]
+  resource_id uuid [not null]
+  changes jsonb [not null]
+  result jsonb [not null]
+  occurred_at timestamptz [not null, default: `now()`]
+  resource_type varchar(16) [not null]
+  action varchar(32) [not null]
+  reason text [null]
+  input_hash varchar(64) [not null]
+
+  indexes {
+    (site_id, resource_type, resource_id, occurred_at, id) [name: 'idx_workflow_audit_resource']
+    command_id [name: 'safety_workflow_audit_command_id_key', unique]
+  }
+
+  checks {
+    `((resource_type)::text = ANY ((ARRAY['INCIDENT'::character varying, 'SAFETY_TASK'::character varying, 'CHECKLIST'::character varying])::text[]))` [name: 'safety_workflow_audit_resource_type_check']
+  }
+}
+
+Table schedule_assignment_batch {
+  Note: 'Entity: ScheduleAssignmentBatchEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_schedule_assignment_batch']
+  site_id uuid [not null]
+  contractor_id uuid [not null]
+  created_by uuid [not null]
+  version integer [not null, default: `1`]
+  input jsonb [not null]
+  preview jsonb [not null]
+  schedule_ids jsonb [not null]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table schedule_version {
+  Note: 'Entity: ScheduleVersionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_schedule_version_id']
+  site_id uuid [not null]
+  version integer [not null]
+  effective_from timestamptz [not null]
+  effective_until timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (site_id, effective_from, version) [name: 'idx_schedule_version_site_effective']
+    (site_id, version) [name: 'uq_schedule_version_site_version', unique]
+  }
+
+  checks {
+    `((effective_until IS NULL) OR (effective_until > effective_from))` [name: 'chk_schedule_version_effective_interval']
+    `(version >= 1)` [name: 'chk_schedule_version_positive']
+  }
+}
+
+Table shift {
+  Note: 'Entity: ShiftEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_shift_id']
+  site_id uuid [not null]
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz [null]
+  break_starts_at timestamptz [null]
+  break_ends_at timestamptz [null]
+  timezone varchar(64) [not null]
+  name varchar(160) [not null]
+
+  indexes {
+    (site_id, starts_at, id) [name: 'idx_shift_site_start']
+  }
+
+  checks {
+    `(((break_starts_at IS NULL) AND (break_ends_at IS NULL)) OR ((break_starts_at IS NOT NULL) AND (break_ends_at IS NOT NULL) AND (starts_at IS NOT NULL) AND (ends_at IS NOT NULL) AND (break_starts_at >= starts_at) AND (break_ends_at <= ends_at) AND (break_ends_at > break_starts_at)))` [name: 'chk_shift_break']
+    `(ends_at > starts_at)` [name: 'chk_shift_interval']
+    `((char_length((name)::text) >= 1) AND (char_length((name)::text) <= 160))` [name: 'chk_shift_name_length']
+  }
+}
+
+Table shift_change_request {
+  Note: 'Entity: ShiftChangeRequestEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_shift_change_request_id']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  worker_schedule_id uuid [not null]
+  from_shift_id uuid [not null]
+  to_shift_id uuid [not null]
+  expected_schedule_version_id uuid [not null]
+  requested_by_user_id uuid [not null]
+  reviewed_by_user_id uuid [null]
+  reviewed_at timestamptz [null]
+  applied_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  status varchar(24) [not null]
+  reason varchar(1000) [not null]
+  review_reason varchar(1000) [null]
+
+  indexes {
+    (site_id, status, created_at) [name: 'idx_shift_change_site_status']
+  }
+
+  checks {
+    `((char_length((reason)::text) >= 5) AND (char_length((reason)::text) <= 1000))` [name: 'chk_shift_change_reason_length']
+    `((status)::text = ANY ((ARRAY['DRAFT'::character varying, 'PENDING_COWORKER'::character varying, 'PENDING_MANAGER'::character varying, 'APPROVED'::character varying, 'APPLIED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying, 'EXPIRED'::character varying, 'CONFLICTED'::character varying])::text[]))` [name: 'chk_shift_change_status']
+  }
+}
+
+Table shift_swap_request {
+  Note: 'Entity: ShiftSwapRequestEntity.'
+  expected_team_id uuid [null]
+  expected_requester_membership_id uuid [null]
+  expected_coworker_membership_id uuid [null]
+  id uuid [pk, not null, note: 'PK constraint: pk_shift_swap_request_id']
+  site_id uuid [not null]
+  requester_worker_id uuid [not null]
+  requester_worker_schedule_id uuid [not null]
+  coworker_worker_id uuid [not null]
+  coworker_worker_schedule_id uuid [not null]
+  requester_shift_id uuid [not null]
+  coworker_shift_id uuid [not null]
+  expected_schedule_version_id uuid [not null]
+  requested_by_user_id uuid [not null]
+  coworker_confirmed_at timestamptz [null]
+  reviewed_by_user_id uuid [null]
+  reviewed_at timestamptz [null]
+  applied_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  status varchar(24) [not null]
+  reason varchar(1000) [not null]
+  review_reason varchar(1000) [null]
+
+  indexes {
+    (site_id, status, created_at) [name: 'idx_shift_swap_site_status']
+  }
+
+  checks {
+    `(requester_worker_id <> coworker_worker_id)` [name: 'chk_shift_swap_distinct_workers']
+    `((char_length((reason)::text) >= 5) AND (char_length((reason)::text) <= 1000))` [name: 'chk_shift_swap_reason_length']
+    `((status)::text = ANY ((ARRAY['DRAFT'::character varying, 'PENDING_COWORKER'::character varying, 'PENDING_MANAGER'::character varying, 'APPROVED'::character varying, 'APPLIED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying, 'EXPIRED'::character varying, 'CONFLICTED'::character varying])::text[]))` [name: 'chk_shift_swap_status']
+  }
+}
+
+Table site {
+  Note: 'Entity: SiteEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_site_id']
+  created_at timestamptz [not null, default: `now()`]
+  access_policy_version integer [not null, default: `1`]
+  code varchar(64) [not null]
+  name varchar(255) [not null]
+
+  indexes {
+    code [name: 'uq_site_code', unique]
+  }
+}
+
+Table team_zone_permission {
+  Note: 'Cấp Zone cho đội thông qua quyền Zone của nhà thầu. Trigger kiểm tra Site/Contractor và khoảng hiệu lực. Entity: TeamZonePermissionEntity. Trigger: trg_team_zone_scope; xem SQL cuối file.'
+  created_at timestamptz [not null, default: `now()`]
+  id uuid [pk, not null, note: 'PK constraint: pk_team_zone_permission']
+  team_id uuid [not null]
+  contractor_zone_permission_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  granted_by uuid [not null]
+  revoked_at timestamptz [null]
+
+  indexes {
+    (team_id, contractor_zone_permission_id) [name: 'idx_team_zone_lookup']
+    team_id [name: 'uq_team_single_zone', note: 'PARTIAL UNIQUE; WHERE (revoked_at IS NULL). Exact SQL: CREATE UNIQUE INDEX uq_team_single_zone ON public.team_zone_permission USING btree (team_id) WHERE (revoked_at IS NULL)']
+  }
+
+  checks {
+    `(valid_until > valid_from)` [name: 'ck_team_zone_interval']
+  }
+}
+
+Table timesheet {
+  Note: 'Bảng vật lý có attendance_day_id và trạng thái; không suy ra tính năng payroll từ việc có bảng. Entity: TimesheetEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_timesheet_id']
+  site_id uuid [not null]
+  worker_id uuid [not null]
+  period_start date [not null]
+  period_end date [not null]
+  total_minutes integer [not null, default: `0`]
+  approved_by_user_id uuid [null]
+  approved_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  attendance_day_id uuid [null]
+  status varchar(24) [not null]
+
+  indexes {
+    (site_id, period_start, period_end, worker_id) [name: 'idx_timesheet_site_period']
+    attendance_day_id [name: 'timesheet_attendance_day_id_key', unique]
+  }
+
+  checks {
+    `(total_minutes >= 0)` [name: 'chk_timesheet_minutes']
+    `(period_end >= period_start)` [name: 'chk_timesheet_period']
+    `((status)::text = ANY ((ARRAY['DRAFT'::character varying, 'PENDING_APPROVAL'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying])::text[]))` [name: 'chk_timesheet_status']
+  }
+}
+
+Table user_notification {
+  Note: 'Thông báo nhiều nghiệp vụ; request_id là tham chiếu đa hình, không có FK chung tới một bảng yêu cầu. Entity: UserNotificationEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_user_notification']
+  recipient_user_id uuid [not null]
+  site_id uuid [not null]
+  contractor_id uuid [not null]
+  worker_id uuid [null]
+  request_id uuid [not null]
+  content jsonb [not null]
+  created_at timestamptz [not null, default: `now()`]
+  read_at timestamptz [null]
+  deleted_at timestamptz [null]
+  recipient_role varchar(32) [not null]
+  request_type varchar(16) [not null]
+  event varchar(24) [not null]
+
+  indexes {
+    (recipient_user_id, created_at, id) [name: 'idx_notification_recipient_created']
+    (recipient_user_id, created_at) [name: 'idx_notification_unread', note: 'PARTIAL INDEX; WHERE (read_at IS NULL). Exact SQL: CREATE INDEX idx_notification_unread ON public.user_notification USING btree (recipient_user_id, created_at) WHERE (read_at IS NULL)']
+    (recipient_user_id, request_type, request_id, event) [name: 'uq_notification_event_recipient', unique]
+  }
+
+  checks {
+    `((((request_type)::text <> 'CHECKLIST'::text) AND ((event)::text <> ALL ((ARRAY['CHECKLIST_ASSIGNED'::character varying, 'CHECKLIST_SUBMITTED'::character varying, 'CHECKLIST_RETURNED'::character varying, 'CHECKLIST_RECORDED'::character varying])::text[]))) OR (((request_type)::text = 'CHECKLIST'::text) AND ((recipient_role)::text = ANY ((ARRAY['SAFETY_OFFICER'::character varying, 'CONTRACTOR_REPRESENTATIVE'::character varying])::text[])) AND ((event)::text = ANY ((ARRAY['CHECKLIST_ASSIGNED'::character varying, 'CHECKLIST_SUBMITTED'::character varying, 'CHECKLIST_RETURNED'::character varying, 'CHECKLIST_RECORDED'::character varying])::text[])) AND (COALESCE((content ->> 'checklistId'::text), ''::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text)))` [name: 'chk_notification_checklist_target']
+    `((deleted_at IS NULL) OR (read_at IS NOT NULL))` [name: 'chk_notification_deleted_read']
+    `((event)::text = ANY ((ARRAY['CHANGE_REQUESTED'::character varying, 'SWAP_REQUESTED'::character varying, 'SWAP_CONFIRMED'::character varying, 'SWAP_DECLINED'::character varying, 'REQUEST_APPLIED'::character varying, 'REQUEST_REJECTED'::character varying, 'REQUEST_CONFLICTED'::character varying, 'SAFETY_HANDOVER'::character varying, 'EARLY_EXIT'::character varying, 'MISSING_CHECKOUT'::character varying, 'UNSCHEDULED_ENTRY'::character varying, 'ENTRY_DENIED_NO_SCHEDULE'::character varying, 'TIME_REQUESTED'::character varying, 'TIME_APPROVED'::character varying, 'TIME_REJECTED'::character varying, 'SCHEDULE_CHANGED'::character varying, 'SCHEDULE_CANCELLED'::character varying, 'CHECKLIST_ASSIGNED'::character varying, 'CHECKLIST_SUBMITTED'::character varying, 'CHECKLIST_RETURNED'::character varying, 'CHECKLIST_RECORDED'::character varying])::text[]))` [name: 'chk_notification_event']
+    `((request_type)::text = ANY ((ARRAY['CHANGE'::character varying, 'SWAP'::character varying, 'SAFETY'::character varying, 'ATTENDANCE'::character varying, 'SCHEDULE'::character varying, 'CHECKLIST'::character varying])::text[]))` [name: 'chk_notification_request_type']
+    `((((recipient_role)::text = 'WORKER'::text) AND (worker_id IS NOT NULL)) OR (((recipient_role)::text = ANY ((ARRAY['CONTRACTOR_REPRESENTATIVE'::character varying, 'SAFETY_OFFICER'::character varying])::text[])) AND (worker_id IS NULL)))` [name: 'chk_notification_role']
+    `((((request_type)::text <> 'SAFETY'::text) AND ((event)::text <> 'SAFETY_HANDOVER'::text)) OR (((request_type)::text = 'SAFETY'::text) AND ((event)::text = 'SAFETY_HANDOVER'::text) AND ((recipient_role)::text = 'CONTRACTOR_REPRESENTATIVE'::text) AND (jsonb_typeof((content -> 'incidentId'::text)) = 'string'::text) AND (jsonb_typeof((content -> 'actionId'::text)) = 'string'::text) AND (COALESCE((content ->> 'incidentId'::text), ''::text) <> ''::text) AND (COALESCE((content ->> 'actionId'::text), ''::text) <> ''::text) AND ((content ->> 'incidentId'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text) AND ((content ->> 'actionId'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text)))` [name: 'chk_notification_safety_target']
+    `((((request_type)::text <> 'SCHEDULE'::text) AND ((event)::text <> ALL ((ARRAY['SCHEDULE_CHANGED'::character varying, 'SCHEDULE_CANCELLED'::character varying])::text[]))) OR (((request_type)::text = 'SCHEDULE'::text) AND ((event)::text = ANY ((ARRAY['SCHEDULE_CHANGED'::character varying, 'SCHEDULE_CANCELLED'::character varying])::text[])) AND ((recipient_role)::text = 'WORKER'::text) AND (COALESCE((content ->> 'workDate'::text), ''::text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text)))` [name: 'chk_notification_schedule_target']
+  }
+}
+
+Table user_role_assignment {
+  Note: 'Vai trò toàn cục hoặc theo Site. Một Site có tối đa một SITE_MANAGER theo partial unique index. Entity: UserRoleAssignmentEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_user_role_assignment_id']
+  user_id uuid [not null]
+  site_id uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  role varchar(32) [not null]
+
+  indexes {
+    site_id [name: 'idx_user_role_assignment_site', note: 'PARTIAL INDEX; WHERE (site_id IS NOT NULL). Exact SQL: CREATE INDEX idx_user_role_assignment_site ON public.user_role_assignment USING btree (site_id) WHERE (site_id IS NOT NULL)']
+    user_id [name: 'idx_user_role_assignment_user']
+    site_id [name: 'uq_site_single_manager', note: 'PARTIAL UNIQUE; WHERE ((role)::text = \'SITE_MANAGER\'::text). Exact SQL: CREATE UNIQUE INDEX uq_site_single_manager ON public.user_role_assignment USING btree (site_id) WHERE ((role)::text = \'SITE_MANAGER\'::text)']
+    (user_id, role) [name: 'uq_user_role_assignment_global', note: 'PARTIAL UNIQUE; WHERE (site_id IS NULL). Exact SQL: CREATE UNIQUE INDEX uq_user_role_assignment_global ON public.user_role_assignment USING btree (user_id, role) WHERE (site_id IS NULL)']
+    (user_id, role, site_id) [name: 'uq_user_role_assignment_scoped', note: 'PARTIAL UNIQUE; WHERE (site_id IS NOT NULL). Exact SQL: CREATE UNIQUE INDEX uq_user_role_assignment_scoped ON public.user_role_assignment USING btree (user_id, role, site_id) WHERE (site_id IS NOT NULL)']
+  }
+
+  checks {
+    `((role)::text = ANY ((ARRAY['ADMIN'::character varying, 'SITE_MANAGER'::character varying, 'CONTRACTOR_REPRESENTATIVE'::character varying, 'SAFETY_OFFICER'::character varying, 'SECURITY_OFFICER'::character varying, 'WORKER'::character varying])::text[]))` [name: 'chk_user_role_assignment_role']
+    `((((role)::text = 'ADMIN'::text) AND (site_id IS NULL)) OR (((role)::text <> 'ADMIN'::text) AND (site_id IS NOT NULL)))` [name: 'chk_user_role_assignment_scope']
+  }
+}
+
+Table visit_zone {
+  Note: 'Entity: VisitZoneEntity.'
+  id uuid [pk, not null, note: 'PK constraint: visit_zone_pkey']
+  visit_id uuid [not null]
+  zone_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  revoked_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (visit_id, zone_id, valid_from) [name: 'uq_visit_zone_interval', unique]
+  }
+
+  checks {
+    `(valid_until > valid_from)` [name: 'chk_visit_zone_interval']
+  }
+}
+
+Table visitor {
+  Note: 'Entity: VisitorEntity.'
+  id uuid [pk, not null, note: 'PK constraint: visitor_pkey']
+  created_at timestamptz [not null, default: `now()`]
+  full_name varchar(255) [not null]
+  contact varchar(255) [not null]
+  organization varchar(255) [not null]
+  identity_reference varchar(200) [null]
+}
+
+Table visitor_gate_event {
+  Note: 'Entity: VisitorGateEventEntity.'
+  id uuid [pk, not null, note: 'PK constraint: visitor_gate_event_pkey']
+  visit_id uuid [not null]
+  operator_user_id uuid [not null]
+  count integer [not null]
+  created_at timestamptz [not null, default: `now()`]
+  gate_id varchar(64) [not null]
+  direction varchar(3) [not null]
+
+  indexes {
+    (visit_id, created_at) [name: 'idx_visitor_gate_event_visit']
+  }
+
+  checks {
+    `(count > 0)` [name: 'chk_visitor_event_count']
+    `((direction)::text = ANY ((ARRAY['IN'::character varying, 'OUT'::character varying])::text[]))` [name: 'chk_visitor_event_direction']
+  }
+}
+
+Table visitor_visit {
+  Note: 'Entity: VisitorVisitEntity.'
+  id uuid [pk, not null, note: 'PK constraint: visitor_visit_pkey']
+  site_id uuid [not null]
+  group_size integer [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  entered_count integer [not null, default: `0`]
+  exited_count integer [not null, default: `0`]
+  decided_by_user_id uuid [null]
+  decided_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  representative_visitor_id uuid [not null]
+  site_manager_id uuid [not null]
+  version integer [not null, default: `1`]
+  updated_at timestamptz [not null, default: `now()`]
+  access_key_hash varchar(64) [not null]
+  visitor_name varchar(255) [not null]
+  company varchar(255) [not null]
+  contact varchar(255) [not null]
+  host_name varchar(255) [not null]
+  purpose varchar(1000) [not null]
+  target_area varchar(255) [not null]
+  gate_id varchar(64) [not null]
+  status varchar(16) [not null, default: `'PENDING'::character varying`]
+  review_note text [null]
+
+  indexes {
+    (site_id, status, created_at) [name: 'idx_visitor_visit_site_status']
+  }
+
+  checks {
+    `((entered_count >= 0) AND (exited_count >= 0) AND (exited_count <= entered_count) AND ((entered_count - exited_count) <= group_size))` [name: 'chk_visit_counts']
+    `((group_size >= 1) AND (group_size <= 1000))` [name: 'chk_visit_group_size']
+    `(valid_until > valid_from)` [name: 'chk_visit_interval']
+    `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying, 'EXPIRED'::character varying])::text[]))` [name: 'chk_visit_status']
+    `(version >= 1)` [name: 'chk_visit_version']
+  }
+}
+
+Table worker {
+  Note: 'Hồ sơ công nhân thuộc Site. user_id có thể null; không đồng nhất worker.id và app_user.id. Entity: WorkerEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_worker_id']
+  site_id uuid [not null]
+  is_active boolean [not null, default: `true`]
+  created_at timestamptz [not null, default: `now()`]
+  contractor_id uuid [null]
+  user_id uuid [null]
+  external_id varchar(128) [not null]
+  display_name varchar(255) [not null]
+
+  indexes {
+    contractor_id [name: 'idx_worker_contractor', note: 'PARTIAL INDEX; WHERE (contractor_id IS NOT NULL). Exact SQL: CREATE INDEX idx_worker_contractor ON public.worker USING btree (contractor_id) WHERE (contractor_id IS NOT NULL)']
+    (id, site_id) [name: 'uq_worker_id_site', unique]
+    (site_id, external_id) [name: 'uq_worker_site_external_id', unique]
+    (site_id, user_id) [name: 'uq_worker_site_user', note: 'PARTIAL UNIQUE; WHERE (user_id IS NOT NULL). Exact SQL: CREATE UNIQUE INDEX uq_worker_site_user ON public.worker USING btree (site_id, user_id) WHERE (user_id IS NOT NULL)']
+  }
+}
+
+Table worker_gate_permission {
+  Note: 'Entity: WorkerGatePermissionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_worker_gate_permission_id']
+  worker_id uuid [not null]
+  site_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [null]
+  created_by_user_id uuid [not null]
+  revoked_at timestamptz [null]
+  revoked_by_user_id uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  worker_assignment_id uuid [null]
+  gate_id varchar(64) [not null]
+
+  indexes {
+    (worker_id, site_id, gate_id, revoked_at) [name: 'idx_worker_gate_permission_lookup']
+  }
+
+  checks {
+    `((gate_id)::text ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'::text)` [name: 'chk_worker_gate_permission_gate']
+    `((valid_until IS NULL) OR (valid_until > valid_from))` [name: 'chk_worker_gate_permission_interval']
+  }
+}
+
+Table worker_schedule {
+  Note: 'Lịch công nhân theo ngày/ca/phiên bản. Trigger kiểm soát lịch đang hoạt động cùng ngày; giữ nguyên ngoại lệ lịch sử trong function. Entity: WorkerScheduleEntity. Trigger: mf03_one_shift_per_day; xem SQL cuối file.'
+  id uuid [pk, not null, note: 'PK constraint: pk_worker_schedule_id']
+  site_id uuid [not null]
+  schedule_version_id uuid [not null]
+  worker_id uuid [not null]
+  shift_id uuid [not null]
+  work_date date [not null]
+  is_active boolean [not null, default: `true`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (site_id, worker_id, work_date) [name: 'idx_worker_schedule_site_worker_date']
+    (site_id, worker_id, shift_id, work_date) [name: 'uq_worker_schedule_active_worker_shift_date', note: 'PARTIAL UNIQUE; WHERE (is_active = true). Exact SQL: CREATE UNIQUE INDEX uq_worker_schedule_active_worker_shift_date ON public.worker_schedule USING btree (site_id, worker_id, shift_id, work_date) WHERE (is_active = true)']
+    (schedule_version_id, worker_id, shift_id, work_date) [name: 'uq_worker_schedule_version_worker_shift_date', unique]
+  }
+}
+
+Table worker_site_zone_assignment {
+  Note: 'Phân công công nhân tại Site/Zone theo thời gian. zone_ids là mảng UUID, không có FK phần tử mảng. Entity: WorkerSiteZoneAssignmentEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_worker_site_zone_assignment_id']
+  worker_id uuid [not null]
+  site_id uuid [not null]
+  zone_ids "uuid[]" [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [null]
+  requested_by_user_id uuid [not null]
+  safety_reviewed_by_user_id uuid [null]
+  site_manager_decided_by_user_id uuid [null]
+  created_at timestamptz [not null, default: `now()`]
+  site_contractor_id uuid [null]
+  version integer [not null, default: `1`]
+  reviewed_at timestamptz [null]
+  status varchar(32) [not null]
+  gate_id varchar(64) [null]
+  review_note text [null]
+
+  indexes {
+    (worker_id, site_id, status, valid_from) [name: 'idx_worker_site_zone_assignment_gate_lookup']
+  }
+
+  checks {
+    `((gate_id IS NULL) OR ((gate_id)::text ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'::text))` [name: 'chk_assignment_gate_id']
+    `((valid_until IS NULL) OR (valid_until > valid_from))` [name: 'chk_worker_site_zone_assignment_interval']
+    `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'SAFETY_REVIEWED'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying, 'REVOKED'::character varying, 'EXPIRED'::character varying])::text[]))` [name: 'chk_worker_site_zone_assignment_status']
+    `(cardinality(zone_ids) > 0)` [name: 'chk_worker_site_zone_assignment_zone_ids']
+  }
+}
+
+Table worker_zone_permission {
+  Note: 'Quyền Zone công nhân dựa trên worker_site_zone_assignment và contractor_zone_permission. Entity: WorkerZonePermissionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_worker_zone_permission_id']
+  worker_assignment_id uuid [not null]
+  contractor_zone_permission_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  granted_by uuid [not null]
+  revoked_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (worker_assignment_id, contractor_zone_permission_id, valid_from) [name: 'uq_worker_zone_interval', unique]
+  }
+
+  checks {
+    `(valid_until > valid_from)` [name: 'ck_worker_zone_interval']
+  }
+}
+
+Table zone {
+  Note: 'Zone thuộc Site; required_ppe là text[], không có bảng zone_ppe_requirement riêng. Entity: ZoneEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_zone_id']
+  site_id uuid [not null]
+  type zone_type [not null]
+  restriction_policy zone_restriction_policy [not null]
+  created_at timestamptz [not null, default: `now()`]
+  configuration_locked boolean [not null, default: `false`]
+  code varchar(64) [not null]
+  name varchar(255) [not null]
+  required_ppe "text[]" [not null, default: `'{}'::text[]`]
+
+  indexes {
+    (site_id, code) [name: 'uq_zone_site_code', unique]
+  }
+}
+
+Table zone_access_grant {
+  Note: 'Entity: ZoneAccessGrantEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_zone_access_grant_id']
+  site_id uuid [not null]
+  zone_id uuid [not null]
+  worker_id uuid [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz [null]
+  revoked_at timestamptz [null]
+  created_at timestamptz [not null, default: `now()`]
+  effect varchar(8) [not null]
+
+  indexes {
+    (zone_id, worker_id, valid_from) [name: 'idx_zone_access_grant_lookup']
+  }
+
+  checks {
+    `((effect)::text = ANY ((ARRAY['ALLOW'::character varying, 'DENY'::character varying])::text[]))` [name: 'chk_zone_access_grant_effect']
+    `((valid_until IS NULL) OR (valid_until > valid_from))` [name: 'chk_zone_access_grant_interval']
+  }
+}
+
+Table zone_entry_decision {
+  Note: 'Entity: ZoneEntryDecisionEntity.'
+  id uuid [pk, not null, note: 'PK constraint: pk_zone_entry_decision_id']
+  event_id uuid [not null]
+  site_id uuid [not null]
+  zone_id uuid [not null]
+  worker_id uuid [null]
+  track_id bigint [not null]
+  evaluated_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+  candidate_worker_id varchar(128) [null]
+  status varchar(16) [not null]
+  reason_code varchar(64) [not null]
+
+  indexes {
+    (site_id, evaluated_at, id) [name: 'idx_zone_entry_decision_site_time']
+    (event_id, track_id, zone_id) [name: 'uq_zone_entry_decision_event_track_zone', unique]
+  }
+
+  checks {
+    `((status)::text = ANY ((ARRAY['ALLOWED'::character varying, 'DENIED'::character varying, 'UNAVAILABLE'::character varying])::text[]))` [name: 'chk_zone_entry_decision_status']
+    `((track_id >= 0) AND (track_id <= '9007199254740991'::bigint))` [name: 'chk_zone_entry_decision_track_id']
+  }
+}
+
+// Foreign keys vật lý, bao gồm quy tắc ON DELETE/ON UPDATE.
+Ref fk_absence_request_expected_version: absence_request.expected_schedule_version_id > schedule_version.id [delete: restrict, update: no action]
+Ref fk_absence_request_replacement_worker: absence_request.replacement_worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_absence_request_requested_by: absence_request.requested_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_absence_request_reviewed_by: absence_request.reviewed_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_absence_request_shift: absence_request.shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_absence_request_site: absence_request.site_id > site.id [delete: restrict, update: no action]
+Ref fk_absence_request_worker: absence_request.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_absence_request_worker_schedule: absence_request.worker_schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref fk_attempt_assignment: access_attempt.worker_assignment_id > worker_site_zone_assignment.id [delete: restrict, update: no action]
+Ref fk_attempt_credential: access_attempt.credential_id > qr_credential.id [delete: restrict, update: no action]
+Ref fk_attempt_operator: access_attempt.operator_id > app_user.id [delete: restrict, update: no action]
+Ref fk_attempt_reviewer: access_attempt.reviewed_by > app_user.id [delete: restrict, update: no action]
+Ref fk_attempt_site: access_attempt.site_id > site.id [delete: restrict, update: no action]
+Ref fk_attempt_visit: access_attempt.visit_id > visitor_visit.id [delete: restrict, update: no action]
+Ref fk_attempt_worker: access_attempt.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_event_resolved_camera: ai_observation_event.resolved_camera_id > camera.id [delete: set null, update: no action]
+Ref fk_mapping_alert: alert_detection_mapping.alert_id > safety_alert.id [delete: cascade, update: no action]
+Ref fk_mapping_event: alert_detection_mapping.event_id > ai_observation_event.event_id [delete: cascade, update: no action]
+Ref fk_attendance_anomaly_pair: attendance_anomaly.attendance_pair_id > attendance_pair.id [delete: cascade, update: no action]
+Ref fk_attendance_anomaly_site: attendance_anomaly.site_id > site.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_requester: attendance_correction.requested_by > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_reviewer: attendance_correction.reviewed_by > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_session: attendance_correction.attendance_session_id > attendance_session.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_pair: attendance_correction_request.attendance_pair_id > attendance_pair.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_requested_by: attendance_correction_request.requested_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_reviewed_by: attendance_correction_request.reviewed_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_correction_site: attendance_correction_request.site_id > site.id [delete: restrict, update: no action]
+Ref attendance_day_reviewed_by_fkey: attendance_day.reviewed_by > app_user.id [delete: restrict, update: no action]
+Ref attendance_day_schedule_id_fkey: attendance_day.schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref attendance_day_site_id_fkey: attendance_day.site_id > site.id [delete: restrict, update: no action]
+Ref attendance_day_worker_id_fkey: attendance_day.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_attendance_event_assignment: attendance_event.worker_assignment_id > worker_site_zone_assignment.id [delete: restrict, update: no action]
+Ref fk_attendance_event_gate: attendance_event.gate_event_id > gate_event.id [delete: restrict, update: no action]
+Ref fk_attendance_event_recorder: attendance_event.recorded_by > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_event_schedule: attendance_event.shift_assignment_id > worker_schedule.id [delete: restrict, update: no action]
+Ref fk_attendance_event_site: attendance_event.site_id > site.id [delete: restrict, update: no action]
+Ref fk_attendance_event_worker: attendance_event.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_attendance_pair_confirmed_by: attendance_pair.confirmed_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_pair_shift: attendance_pair.shift_id > shift.id [delete: set null, update: no action]
+Ref fk_attendance_pair_site: attendance_pair.site_id > site.id [delete: restrict, update: no action]
+Ref fk_attendance_pair_worker: attendance_pair.worker_id > worker.id [delete: restrict, update: no action]
+Ref attendance_schedule_conflict_schedule_id_fkey: attendance_schedule_conflict.schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref attendance_session_day_id_fkey: attendance_session.day_id > attendance_day.id [delete: restrict, update: no action]
+Ref fk_attendance_session_correction: attendance_session.applied_correction_id > attendance_correction.id [delete: restrict, update: no action]
+Ref fk_attendance_session_ignored_by: attendance_session.ignored_by > app_user.id [delete: restrict, update: no action]
+Ref fk_attendance_session_in: attendance_session.check_in_event_id > attendance_event.id [delete: restrict, update: no action]
+Ref fk_attendance_session_out: attendance_session.check_out_event_id > attendance_event.id [delete: restrict, update: no action]
+Ref fk_attendance_session_schedule: attendance_session.shift_assignment_id > worker_schedule.id [delete: restrict, update: no action]
+Ref fk_attendance_session_site: attendance_session.site_id > site.id [delete: restrict, update: no action]
+Ref fk_attendance_session_worker: attendance_session.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_audit_actor: audit_log.actor_account_id > app_user.id [delete: restrict, update: no action]
+Ref fk_audit_site: audit_log.site_id > site.id [delete: restrict, update: no action]
+Ref fk_auth_session_user: auth_session.user_id > app_user.id [delete: cascade, update: no action]
+Ref fk_camera_site: camera.site_id > site.id [delete: restrict, update: no action]
+Ref fk_region_camera: camera_observation_region.camera_id > camera.id [delete: restrict, update: no action]
+Ref fk_region_zone: camera_observation_region.zone_id > zone.id [delete: restrict, update: no action]
+Ref fk_contractor_representative_assignment_contractor: contractor_representative_assignment.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_contractor_representative_assignment_site: contractor_representative_assignment.site_id > site.id [delete: restrict, update: no action]
+Ref fk_contractor_representative_assignment_user: contractor_representative_assignment.user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_contractor_representative_grant_contractor: contractor_representative_grant.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_contractor_representative_grant_user: contractor_representative_grant.user_id > app_user.id [delete: cascade, update: no action]
+Ref fk_contractor_shift_assignment_contractor: contractor_shift_assignment.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_contractor_shift_assignment_shift: contractor_shift_assignment.shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_contractor_shift_assignment_site: contractor_shift_assignment.site_id > site.id [delete: restrict, update: no action]
+Ref fk_contractor_site_participation_contractor: contractor_site_participation.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_contractor_site_participation_site: contractor_site_participation.site_id > site.id [delete: restrict, update: no action]
+Ref fk_team_contractor: contractor_team.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_team_creator: contractor_team.created_by > app_user.id [delete: restrict, update: no action]
+Ref fk_team_site: contractor_team.site_id > site.id [delete: restrict, update: no action]
+Ref fk_membership_assigner: contractor_team_membership.assigned_by > app_user.id [delete: restrict, update: no action]
+Ref fk_membership_ender: contractor_team_membership.ended_by > app_user.id [delete: restrict, update: no action]
+Ref fk_membership_team_scope: contractor_team_membership.(team_id, site_id, contractor_id) > contractor_team.(id, site_id, contractor_id) [delete: restrict, update: no action]
+Ref fk_membership_worker_site: contractor_team_membership.(worker_id, site_id) > worker.(id, site_id) [delete: restrict, update: no action]
+Ref fk_contractor_zone_granter: contractor_zone_permission.granted_by > app_user.id [delete: restrict, update: no action]
+Ref fk_contractor_zone_participation: contractor_zone_permission.site_contractor_id > contractor_site_participation.id [delete: restrict, update: no action]
+Ref fk_contractor_zone_zone: contractor_zone_permission.zone_id > zone.id [delete: restrict, update: no action]
+Ref action_superseded_by_fkey: corrective_action.superseded_by > app_user.id [delete: no action, update: no action]
+Ref corrective_action_assigned_by_fkey: corrective_action.assigned_by > app_user.id [delete: no action, update: no action]
+Ref corrective_action_assigned_to_fkey: corrective_action.assigned_to > app_user.id [delete: no action, update: no action]
+Ref corrective_action_incident_id_fkey: corrective_action.incident_id > incident.id [delete: no action, update: no action]
+Ref corrective_action_submission_corrective_action_id_fkey: corrective_action_submission.corrective_action_id > corrective_action.id [delete: no action, update: no action]
+Ref corrective_action_submission_evidence_id_fkey: corrective_action_submission.evidence_id > safety_evidence.id [delete: no action, update: no action]
+Ref corrective_action_submission_reviewed_by_fkey: corrective_action_submission.reviewed_by > app_user.id [delete: no action, update: no action]
+Ref corrective_action_submission_submitted_by_fkey: corrective_action_submission.submitted_by > app_user.id [delete: no action, update: no action]
+Ref fk_face_enrollment_session_actor: face_enrollment_session.actor_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_face_enrollment_session_worker: face_enrollment_session.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_face_profile_creator: face_profile.created_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_face_profile_revoker: face_profile.revoked_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_face_profile_user: face_profile.user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_face_profile_worker: face_profile.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_gate_access_log_operator: gate_access_log.operator_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_gate_access_log_site: gate_access_log.site_id > site.id [delete: restrict, update: no action]
+Ref fk_gate_access_log_user: gate_access_log.user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_gate_access_log_worker: gate_access_log.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_gate_event_attempt: gate_event.access_attempt_id > access_attempt.id [delete: restrict, update: no action]
+Ref fk_gate_event_recorder: gate_event.recorded_by > app_user.id [delete: restrict, update: no action]
+Ref fk_gate_event_site: gate_event.site_id > site.id [delete: restrict, update: no action]
+Ref fk_gate_event_visit: gate_event.visit_id > visitor_visit.id [delete: restrict, update: no action]
+Ref fk_gate_event_worker: gate_event.worker_id > worker.id [delete: restrict, update: no action]
+Ref incident_closed_by_fkey: incident.closed_by > app_user.id [delete: no action, update: no action]
+Ref incident_contractor_id_fkey: incident.contractor_id > contractor.id [delete: no action, update: no action]
+Ref incident_reported_by_fkey: incident.reported_by > app_user.id [delete: no action, update: no action]
+Ref incident_responsibility_confirmed_by_fkey: incident.responsibility_confirmed_by > app_user.id [delete: no action, update: no action]
+Ref incident_site_id_fkey: incident.site_id > site.id [delete: no action, update: no action]
+Ref incident_zone_id_fkey: incident.zone_id > zone.id [delete: no action, update: no action]
+Ref incident_worker_incident_id_fkey: incident_worker.incident_id > incident.id [delete: no action, update: no action]
+Ref incident_worker_worker_id_fkey: incident_worker.worker_id > worker.id [delete: no action, update: no action]
+Ref fk_identity_decision_actor: observation_identity_decision.actor_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_identity_decision_resolution: observation_identity_decision.(resolution_id, site_id) > observation_identity_resolution.(id, site_id) [delete: restrict, update: no action]
+Ref fk_identity_decision_worker: observation_identity_decision.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_identity_resolution_current: observation_identity_resolution.(id, current_decision_id, revision) > observation_identity_decision.(resolution_id, id, revision) [delete: restrict, update: no action]
+Ref fk_identity_resolution_event: observation_identity_resolution.event_id > ai_observation_event.event_id [delete: restrict, update: no action]
+Ref fk_identity_resolution_site: observation_identity_resolution.site_id > site.id [delete: restrict, update: no action]
+Ref overtime_request_expected_shift_id_fkey: overtime_request.expected_shift_id > shift.id [delete: restrict, update: no action]
+Ref overtime_request_requested_by_fkey: overtime_request.requested_by > app_user.id [delete: restrict, update: no action]
+Ref overtime_request_reviewed_by_fkey: overtime_request.reviewed_by > app_user.id [delete: restrict, update: no action]
+Ref overtime_request_schedule_id_fkey: overtime_request.schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref overtime_request_site_id_fkey: overtime_request.site_id > site.id [delete: restrict, update: no action]
+Ref overtime_request_worker_id_fkey: overtime_request.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_qr_fallback: qr_credential.fallback_session_id > qr_fallback_session.id [delete: restrict, update: no action]
+Ref fk_qr_site: qr_credential.site_id > site.id [delete: restrict, update: no action]
+Ref fk_qr_visit: qr_credential.visit_id > visitor_visit.id [delete: restrict, update: no action]
+Ref fk_qr_worker: qr_credential.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_fallback_operator: qr_fallback_session.operator_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_fallback_site: qr_fallback_session.site_id > site.id [delete: restrict, update: no action]
+Ref fk_alert_site: safety_alert.site_id > site.id [delete: restrict, update: no action]
+Ref fk_alert_zone: safety_alert.zone_id > zone.id [delete: set null, update: no action]
+Ref safety_alert_incident_id_fkey: safety_alert.incident_id > incident.id [delete: no action, update: no action]
+Ref fk_safety_alert_review_actor: safety_alert_review.actor_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_safety_alert_review_alert: safety_alert_review.alert_id > safety_alert.id [delete: restrict, update: no action]
+Ref fk_safety_alert_review_site: safety_alert_review.site_id > site.id [delete: restrict, update: no action]
+Ref safety_evidence_site_id_fkey: safety_evidence.site_id > site.id [delete: no action, update: no action]
+Ref safety_evidence_uploaded_by_fkey: safety_evidence.uploaded_by > app_user.id [delete: no action, update: no action]
+Ref safety_task_assigned_by_fkey: safety_task.assigned_by > app_user.id [delete: no action, update: no action]
+Ref safety_task_assigned_to_fkey: safety_task.assigned_to > app_user.id [delete: no action, update: no action]
+Ref safety_task_result_evidence_id_fkey: safety_task.result_evidence_id > safety_evidence.id [delete: no action, update: no action]
+Ref safety_task_site_id_fkey: safety_task.site_id > site.id [delete: no action, update: no action]
+Ref safety_task_source_alert_id_fkey: safety_task.source_alert_id > safety_alert.id [delete: no action, update: no action]
+Ref safety_task_source_incident_id_fkey: safety_task.source_incident_id > incident.id [delete: no action, update: no action]
+Ref safety_task_verified_by_fkey: safety_task.verified_by > app_user.id [delete: no action, update: no action]
+Ref safety_task_zone_id_fkey: safety_task.zone_id > zone.id [delete: no action, update: no action]
+Ref safety_workflow_audit_actor_id_fkey: safety_workflow_audit.actor_id > app_user.id [delete: no action, update: no action]
+Ref safety_workflow_audit_site_id_fkey: safety_workflow_audit.site_id > site.id [delete: no action, update: no action]
+Ref fk_schedule_batch_contractor: schedule_assignment_batch.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_schedule_batch_creator: schedule_assignment_batch.created_by > app_user.id [delete: restrict, update: no action]
+Ref fk_schedule_batch_site: schedule_assignment_batch.site_id > site.id [delete: restrict, update: no action]
+Ref fk_schedule_version_site: schedule_version.site_id > site.id [delete: restrict, update: no action]
+Ref fk_shift_site: shift.site_id > site.id [delete: restrict, update: no action]
+Ref fk_shift_change_expected_version: shift_change_request.expected_schedule_version_id > schedule_version.id [delete: restrict, update: no action]
+Ref fk_shift_change_from_shift: shift_change_request.from_shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_shift_change_requested_by: shift_change_request.requested_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_shift_change_reviewed_by: shift_change_request.reviewed_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_shift_change_site: shift_change_request.site_id > site.id [delete: restrict, update: no action]
+Ref fk_shift_change_to_shift: shift_change_request.to_shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_shift_change_worker: shift_change_request.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_shift_change_worker_schedule: shift_change_request.worker_schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref fk_shift_swap_coworker_schedule: shift_swap_request.coworker_worker_schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref fk_shift_swap_coworker_shift: shift_swap_request.coworker_shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_shift_swap_coworker_worker: shift_swap_request.coworker_worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_shift_swap_expected_version: shift_swap_request.expected_schedule_version_id > schedule_version.id [delete: restrict, update: no action]
+Ref fk_shift_swap_requested_by: shift_swap_request.requested_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_shift_swap_requester_schedule: shift_swap_request.requester_worker_schedule_id > worker_schedule.id [delete: restrict, update: no action]
+Ref fk_shift_swap_requester_shift: shift_swap_request.requester_shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_shift_swap_requester_worker: shift_swap_request.requester_worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_shift_swap_reviewed_by: shift_swap_request.reviewed_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_shift_swap_site: shift_swap_request.site_id > site.id [delete: restrict, update: no action]
+Ref fk_swap_coworker_membership: shift_swap_request.expected_coworker_membership_id > contractor_team_membership.id [delete: restrict, update: no action]
+Ref fk_swap_requester_membership: shift_swap_request.expected_requester_membership_id > contractor_team_membership.id [delete: restrict, update: no action]
+Ref fk_swap_team: shift_swap_request.expected_team_id > contractor_team.id [delete: restrict, update: no action]
+Ref fk_team_zone_granter: team_zone_permission.granted_by > app_user.id [delete: restrict, update: no action]
+Ref fk_team_zone_parent: team_zone_permission.contractor_zone_permission_id > contractor_zone_permission.id [delete: restrict, update: no action]
+Ref fk_team_zone_team: team_zone_permission.team_id > contractor_team.id [delete: restrict, update: no action]
+Ref fk_timesheet_approved_by: timesheet.approved_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_timesheet_site: timesheet.site_id > site.id [delete: restrict, update: no action]
+Ref fk_timesheet_worker: timesheet.worker_id > worker.id [delete: restrict, update: no action]
+Ref timesheet_attendance_day_id_fkey: timesheet.attendance_day_id > attendance_day.id [delete: restrict, update: no action]
+Ref fk_notification_contractor: user_notification.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_notification_site: user_notification.site_id > site.id [delete: restrict, update: no action]
+Ref fk_notification_user: user_notification.recipient_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_notification_worker: user_notification.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_user_role_assignment_site: user_role_assignment.site_id > site.id [delete: restrict, update: no action]
+Ref fk_user_role_assignment_user: user_role_assignment.user_id > app_user.id [delete: cascade, update: no action]
+Ref fk_visit_zone_visit: visit_zone.visit_id > visitor_visit.id [delete: cascade, update: no action]
+Ref fk_visit_zone_zone: visit_zone.zone_id > zone.id [delete: restrict, update: no action]
+Ref fk_visitor_event_operator: visitor_gate_event.operator_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_visitor_event_visit: visitor_gate_event.visit_id > visitor_visit.id [delete: restrict, update: no action]
+Ref fk_visit_decider: visitor_visit.decided_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_visit_representative: visitor_visit.representative_visitor_id > visitor.id [delete: restrict, update: no action]
+Ref fk_visit_site: visitor_visit.site_id > site.id [delete: restrict, update: no action]
+Ref fk_visit_site_manager: visitor_visit.site_manager_id > app_user.id [delete: restrict, update: no action]
+Ref fk_worker_contractor: worker.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_worker_site: worker.site_id > site.id [delete: restrict, update: no action]
+Ref fk_worker_user: worker.user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_gate_permission_assignment: worker_gate_permission.worker_assignment_id > worker_site_zone_assignment.id [delete: restrict, update: no action]
+Ref fk_worker_gate_permission_creator: worker_gate_permission.created_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_worker_gate_permission_revoker: worker_gate_permission.revoked_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_worker_gate_permission_site: worker_gate_permission.site_id > site.id [delete: restrict, update: no action]
+Ref fk_worker_gate_permission_worker: worker_gate_permission.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_worker_schedule_shift: worker_schedule.shift_id > shift.id [delete: restrict, update: no action]
+Ref fk_worker_schedule_site: worker_schedule.site_id > site.id [delete: restrict, update: no action]
+Ref fk_worker_schedule_version: worker_schedule.schedule_version_id > schedule_version.id [delete: restrict, update: no action]
+Ref fk_worker_schedule_worker: worker_schedule.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_assignment_participation: worker_site_zone_assignment.site_contractor_id > contractor_site_participation.id [delete: restrict, update: no action]
+Ref fk_worker_site_zone_assignment_requester: worker_site_zone_assignment.requested_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_worker_site_zone_assignment_safety_reviewer: worker_site_zone_assignment.safety_reviewed_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_worker_site_zone_assignment_site: worker_site_zone_assignment.site_id > site.id [delete: restrict, update: no action]
+Ref fk_worker_site_zone_assignment_site_manager: worker_site_zone_assignment.site_manager_decided_by_user_id > app_user.id [delete: restrict, update: no action]
+Ref fk_worker_site_zone_assignment_worker: worker_site_zone_assignment.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_worker_zone_assignment: worker_zone_permission.worker_assignment_id > worker_site_zone_assignment.id [delete: restrict, update: no action]
+Ref fk_worker_zone_contractor_permission: worker_zone_permission.contractor_zone_permission_id > contractor_zone_permission.id [delete: restrict, update: no action]
+Ref fk_worker_zone_granter: worker_zone_permission.granted_by > app_user.id [delete: restrict, update: no action]
+Ref fk_zone_site: zone.site_id > site.id [delete: restrict, update: no action]
+Ref fk_zone_access_grant_site: zone_access_grant.site_id > site.id [delete: restrict, update: no action]
+Ref fk_zone_access_grant_worker: zone_access_grant.worker_id > worker.id [delete: restrict, update: no action]
+Ref fk_zone_access_grant_zone: zone_access_grant.zone_id > zone.id [delete: restrict, update: no action]
+Ref fk_zone_entry_decision_event: zone_entry_decision.event_id > ai_observation_event.event_id [delete: cascade, update: no action]
+Ref fk_zone_entry_decision_site: zone_entry_decision.site_id > site.id [delete: restrict, update: no action]
+Ref fk_zone_entry_decision_worker: zone_entry_decision.worker_id > worker.id [delete: set null, update: no action]
+Ref fk_zone_entry_decision_zone: zone_entry_decision.zone_id > zone.id [delete: restrict, update: no action]
+
+TableGroup Identity_Site_Contractor {
+  app_user
+  auth_session
+  site
+  user_role_assignment
+  contractor
+  contractor_site_participation
+  contractor_representative_grant
+  contractor_representative_assignment
+  worker
+  contractor_team
+  contractor_team_membership
+}
+
+TableGroup Zones_Permissions {
+  zone
+  contractor_zone_permission
+  team_zone_permission
+  worker_zone_permission
+  worker_site_zone_assignment
+  zone_access_grant
+  worker_gate_permission
+}
+
+TableGroup Scheduling_Notifications {
+  shift
+  contractor_shift_assignment
+  schedule_version
+  schedule_assignment_batch
+  worker_schedule
+  shift_change_request
+  shift_swap_request
+  absence_request
+  user_notification
+}
+
+TableGroup Attendance {
+  attendance_event
+  attendance_session
+  attendance_correction
+  attendance_day
+  attendance_pair
+  attendance_anomaly
+  attendance_correction_request
+  attendance_schedule_conflict
+  overtime_request
+  timesheet
+}
+
+TableGroup Gate_Visitor_Face {
+  visitor
+  visitor_visit
+  visit_zone
+  qr_credential
+  qr_fallback_session
+  visitor_gate_event
+  access_attempt
+  gate_event
+  gate_access_log
+  audit_log
+  face_profile
+  face_enrollment_session
+}
+
+TableGroup Cameras_AI_Review {
+  camera
+  camera_observation_region
+  ai_observation_event
+  observation_identity_resolution
+  observation_identity_decision
+  zone_entry_decision
+  safety_alert
+  alert_detection_mapping
+  safety_alert_review
+}
+
+TableGroup Safety_Workflow {
+  safety_checklist_assignment
+  safety_checklist_item
+  safety_checklist_submission
+  safety_checklist_item_result
+  safety_checklist_result_evidence
+  incident
+  incident_worker
+  safety_task
+  corrective_action
+  corrective_action_submission
+  safety_evidence
+  safety_workflow_audit
+}
+
+// PostgreSQL triggers/functions — nguyên văn schema đã migrate.
+// contractor_team_membership: team_membership_scope
+// CREATE TRIGGER team_membership_scope BEFORE INSERT OR UPDATE ON public.contractor_team_membership FOR EACH ROW EXECUTE FUNCTION validate_team_membership_scope();
+// CREATE OR REPLACE FUNCTION public.validate_team_membership_scope()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$ BEGIN
+//         IF NEW.left_at IS NULL AND NOT EXISTS (
+//           SELECT 1 FROM worker w JOIN contractor_team t ON t.id=NEW.team_id AND t.site_id=w.site_id AND t.contractor_id=w.contractor_id
+//           WHERE w.id=NEW.worker_id AND w.site_id=NEW.site_id AND w.contractor_id=NEW.contractor_id AND w.is_active AND t.is_active
+//         ) THEN RAISE EXCEPTION 'Invalid active team membership scope' USING ERRCODE='23514'; END IF;
+//         RETURN NEW; END $function$
+
+// corrective_action_submission: immutable_submission
+// CREATE TRIGGER immutable_submission BEFORE DELETE OR UPDATE ON public.corrective_action_submission FOR EACH ROW EXECUTE FUNCTION mf08_immutable_history();
+// CREATE OR REPLACE FUNCTION public.mf08_immutable_history()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$
+//       BEGIN
+//         IF TG_TABLE_NAME = 'safety_workflow_audit' OR TG_OP = 'DELETE' OR OLD.status <> 'PENDING' THEN
+//           RAISE EXCEPTION 'MF08 history is immutable';
+//         END IF;
+//         IF NEW.id IS DISTINCT FROM OLD.id OR NEW.corrective_action_id IS DISTINCT FROM OLD.corrective_action_id
+//           OR NEW.submitted_by IS DISTINCT FROM OLD.submitted_by OR NEW.result_description IS DISTINCT FROM OLD.result_description
+//           OR NEW.evidence_id IS DISTINCT FROM OLD.evidence_id OR NEW.submitted_at IS DISTINCT FROM OLD.submitted_at
+//           OR NEW.status = 'PENDING' THEN RAISE EXCEPTION 'Only a pending submission decision may be written'; END IF;
+//         RETURN NEW;
+//       END $function$
+
+// observation_identity_decision: trg_identity_decision_append_only
+// CREATE TRIGGER trg_identity_decision_append_only BEFORE DELETE OR UPDATE ON public.observation_identity_decision FOR EACH ROW EXECUTE FUNCTION reject_observation_identity_audit_mutation();
+// CREATE OR REPLACE FUNCTION public.reject_observation_identity_audit_mutation()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$
+//       BEGIN
+//         RAISE EXCEPTION 'Observation identity decisions are append-only' USING ERRCODE = '23514';
+//       END $function$
+
+// safety_workflow_audit: immutable_workflow_audit
+// CREATE TRIGGER immutable_workflow_audit BEFORE DELETE OR UPDATE ON public.safety_workflow_audit FOR EACH ROW EXECUTE FUNCTION mf08_immutable_history();
+// Function đã ghi ở trigger trước.
+
+// team_zone_permission: trg_team_zone_scope
+// CREATE TRIGGER trg_team_zone_scope BEFORE INSERT OR UPDATE OF team_id, contractor_zone_permission_id, valid_from, valid_until ON public.team_zone_permission FOR EACH ROW EXECUTE FUNCTION validate_team_zone_scope();
+// CREATE OR REPLACE FUNCTION public.validate_team_zone_scope()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$ BEGIN
+//       IF NOT EXISTS (SELECT 1 FROM contractor_team t JOIN contractor_site_participation p ON p.site_id=t.site_id AND p.contractor_id=t.contractor_id JOIN contractor_zone_permission cp ON cp.site_contractor_id=p.id JOIN zone z ON z.id=cp.zone_id AND z.site_id=t.site_id WHERE t.id=NEW.team_id AND cp.id=NEW.contractor_zone_permission_id AND NEW.valid_from>=cp.valid_from AND NEW.valid_until<=cp.valid_until AND NEW.valid_from>=p.valid_from AND (p.valid_until IS NULL OR NEW.valid_until<=p.valid_until)) THEN
+//         RAISE EXCEPTION 'Invalid team Zone scope or interval' USING ERRCODE='23514'; END IF;
+//       RETURN NEW; END $function$
+
+// worker_schedule: mf03_one_shift_per_day
+// CREATE TRIGGER mf03_one_shift_per_day BEFORE INSERT OR UPDATE ON public.worker_schedule FOR EACH ROW EXECUTE FUNCTION mf03_one_shift_per_day();
+// CREATE OR REPLACE FUNCTION public.mf03_one_shift_per_day()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$
+//       BEGIN
+//         IF NEW.is_active THEN
+//           PERFORM pg_advisory_xact_lock(hashtext(NEW.site_id::text||NEW.worker_id::text||NEW.work_date::text));
+//           IF EXISTS(SELECT 1 FROM worker_schedule WHERE site_id=NEW.site_id AND worker_id=NEW.worker_id AND work_date=NEW.work_date AND is_active AND id<>NEW.id) THEN
+//             IF TG_OP='UPDATE' AND OLD.is_active AND OLD.site_id=NEW.site_id AND OLD.worker_id=NEW.worker_id AND OLD.work_date=NEW.work_date AND OLD.shift_id=NEW.shift_id THEN RETURN NEW; END IF;
+//             RAISE EXCEPTION 'Worker already has an active shift on this date' USING ERRCODE='23505',CONSTRAINT='uq_worker_schedule_one_day';
+//           END IF;
+//         END IF;
+//         RETURN NEW;
+//       END $function$
+
+
+// Incident source index
+// CREATE UNIQUE INDEX uq_incident_checklist_result ON public.incident USING btree (source_checklist_result_id) WHERE (source_checklist_result_id IS NOT NULL);
+
+Table safety_checklist_assignment {
+ Note: 'Checklist trước công việc; khóa nhóm, Zone, công việc, thời gian, người nhận và tiêu chí khi giao. ACCEPTED là ghi nhận báo cáo, không cấp phép làm việc hay chặn lịch/chấm công.'
+ id uuid [pk, not null]
+ site_id uuid [not null]
+ contractor_id uuid [not null]
+ team_id uuid [not null]
+ zone_id uuid [not null]
+ description varchar(2000) [not null]
+ starts_at timestamptz [not null]
+ ends_at timestamptz [not null]
+ assigned_to uuid [not null]
+ assigned_by uuid [not null]
+ status varchar(16) [not null, default: `'ASSIGNED'::character varying`]
+ version integer [not null, default: `1`]
+ created_at timestamptz [not null, default: `now()`]
+ updated_at timestamptz [not null, default: `now()`]
+ checks {
+  `((char_length(TRIM(BOTH FROM description)) >= 1) AND (char_length(TRIM(BOTH FROM description)) <= 2000))` [name: 'ck_checklist_description']
+  `(ends_at > starts_at)` [name: 'ck_checklist_interval']
+  `((status)::text = ANY ((ARRAY['ASSIGNED'::character varying, 'IN_PROGRESS'::character varying, 'SUBMITTED'::character varying, 'ACCEPTED'::character varying, 'CANCELLED'::character varying])::text[]))` [name: 'ck_checklist_status']
+  `(version > 0)` [name: 'ck_checklist_version']
+ }
+}
+// CREATE INDEX idx_checklist_assignee ON public.safety_checklist_assignment USING btree (assigned_to, status);
+// CREATE INDEX idx_checklist_site_created ON public.safety_checklist_assignment USING btree (site_id, created_at, id);
+// CREATE UNIQUE INDEX safety_checklist_assignment_pkey ON public.safety_checklist_assignment USING btree (id);
+
+Table safety_checklist_item {
+ Note: 'Tiêu chí snapshot theo lần giao; bất biến sau khi giao.'
+ id uuid [pk, not null]
+ assignment_id uuid [not null]
+ position integer [not null]
+ text varchar(1000) [not null]
+ evidence_required boolean [not null]
+ indexes {
+  (assignment_id, position) [unique, name: 'uq_checklist_item_position']
+  (id, assignment_id) [unique, name: 'uq_checklist_item_scope']
+ }
+ checks {
+  `(("position" >= 0) AND ("position" <= 29))` [name: 'ck_checklist_item_position']
+  `((char_length(TRIM(BOTH FROM text)) >= 1) AND (char_length(TRIM(BOTH FROM text)) <= 1000))` [name: 'ck_checklist_item_text']
+ }
+}
+// CREATE UNIQUE INDEX safety_checklist_item_pkey ON public.safety_checklist_item USING btree (id);
+// CREATE UNIQUE INDEX uq_checklist_item_position ON public.safety_checklist_item USING btree (assignment_id, "position");
+// CREATE UNIQUE INDEX uq_checklist_item_scope ON public.safety_checklist_item USING btree (id, assignment_id);
+
+Table safety_checklist_submission {
+ Note: 'Append-only attempts, một PENDING; Safety khác người nộp ghi nhận hoặc trả lại một lần.'
+ id uuid [pk, not null]
+ assignment_id uuid [not null]
+ submitted_by uuid [not null]
+ submitted_at timestamptz [not null, default: `now()`]
+ status varchar(16) [not null, default: `'PENDING'::character varying`]
+ reviewed_by uuid [null]
+ reviewed_at timestamptz [null]
+ review_note varchar(2000) [null]
+ indexes {
+  (id, assignment_id) [unique, name: 'uq_checklist_submission_scope']
+ }
+ checks {
+  `((((status)::text = 'PENDING'::text) AND (reviewed_by IS NULL) AND (reviewed_at IS NULL) AND (review_note IS NULL)) OR (((status)::text = ANY ((ARRAY['ACCEPTED'::character varying, 'RETURNED'::character varying])::text[])) AND (reviewed_by IS NOT NULL) AND (reviewed_at IS NOT NULL) AND ((char_length(TRIM(BOTH FROM review_note)) >= 1) AND (char_length(TRIM(BOTH FROM review_note)) <= 2000)) AND (reviewed_by <> submitted_by)))` [name: 'ck_checklist_review']
+  `((status)::text = ANY ((ARRAY['PENDING'::character varying, 'ACCEPTED'::character varying, 'RETURNED'::character varying])::text[]))` [name: 'ck_checklist_submission_status']
+ }
+}
+// CREATE UNIQUE INDEX safety_checklist_submission_pkey ON public.safety_checklist_submission USING btree (id);
+// CREATE UNIQUE INDEX uq_checklist_pending ON public.safety_checklist_submission USING btree (assignment_id) WHERE ((status)::text = 'PENDING'::text);
+// CREATE UNIQUE INDEX uq_checklist_submission_scope ON public.safety_checklist_submission USING btree (id, assignment_id);
+
+Table safety_checklist_item_result {
+ Note: 'FAIL trong báo cáo ACCEPTED có thể mở tối đa một Incident; trách nhiệm vẫn cần Safety xác minh.'
+ id uuid [pk, not null]
+ assignment_id uuid [not null]
+ submission_id uuid [not null]
+ item_id uuid [not null]
+ answer varchar(16) [not null]
+ note varchar(2000) [not null, default: `''::character varying`]
+ indexes {
+  (submission_id, item_id) [unique, name: 'uq_checklist_result_item']
+ }
+ checks {
+  `((answer)::text = ANY ((ARRAY['PASS'::character varying, 'FAIL'::character varying, 'NOT_APPLICABLE'::character varying])::text[]))` [name: 'ck_checklist_answer']
+  `((char_length((note)::text) <= 2000) AND (((answer)::text = 'PASS'::text) OR (char_length(TRIM(BOTH FROM note)) > 0)))` [name: 'ck_checklist_result_note']
+ }
+}
+// CREATE UNIQUE INDEX safety_checklist_item_result_pkey ON public.safety_checklist_item_result USING btree (id);
+// CREATE UNIQUE INDEX uq_checklist_result_item ON public.safety_checklist_item_result USING btree (submission_id, item_id);
+
+Table safety_checklist_result_evidence {
+ Note: 'Liên kết nhiều JPEG/PNG/PDF vào evidence chung; không sao chép object R2.'
+ result_id uuid [not null]
+ evidence_id uuid [not null]
+ indexes {
+  (result_id, evidence_id) [pk, name: 'safety_checklist_result_evidence_pkey']
+ }
+}
+// CREATE UNIQUE INDEX safety_checklist_result_evidence_pkey ON public.safety_checklist_result_evidence USING btree (result_id, evidence_id);
+Ref fk_incident_checklist_result: incident.source_checklist_result_id > safety_checklist_item_result.id [delete: restrict, update: no action]
+Ref fk_checklist_assignee: safety_checklist_assignment.assigned_to > app_user.id [delete: restrict, update: no action]
+Ref fk_checklist_contractor: safety_checklist_assignment.contractor_id > contractor.id [delete: restrict, update: no action]
+Ref fk_checklist_creator: safety_checklist_assignment.assigned_by > app_user.id [delete: restrict, update: no action]
+Ref fk_checklist_site: safety_checklist_assignment.site_id > site.id [delete: restrict, update: no action]
+Ref fk_checklist_team_scope: safety_checklist_assignment.(team_id, site_id, contractor_id) > contractor_team.(id, site_id, contractor_id) [delete: restrict, update: no action]
+Ref fk_checklist_zone: safety_checklist_assignment.zone_id > zone.id [delete: restrict, update: no action]
+Ref fk_checklist_item_assignment: safety_checklist_item.assignment_id > safety_checklist_assignment.id [delete: restrict, update: no action]
+Ref fk_checklist_result_item: safety_checklist_item_result.(item_id, assignment_id) > safety_checklist_item.(id, assignment_id) [delete: restrict, update: no action]
+Ref fk_checklist_result_submission: safety_checklist_item_result.(submission_id, assignment_id) > safety_checklist_submission.(id, assignment_id) [delete: restrict, update: no action]
+Ref fk_checklist_evidence_file: safety_checklist_result_evidence.evidence_id > safety_evidence.id [delete: restrict, update: no action]
+Ref fk_checklist_evidence_result: safety_checklist_result_evidence.result_id > safety_checklist_item_result.id [delete: restrict, update: no action]
+Ref fk_checklist_reviewer: safety_checklist_submission.reviewed_by > app_user.id [delete: restrict, update: no action]
+Ref fk_checklist_submission_assignment: safety_checklist_submission.assignment_id > safety_checklist_assignment.id [delete: restrict, update: no action]
+Ref fk_checklist_submitter: safety_checklist_submission.submitted_by > app_user.id [delete: restrict, update: no action]
+// CREATE TRIGGER checklist_scope BEFORE INSERT OR UPDATE ON public.safety_checklist_assignment FOR EACH ROW EXECUTE FUNCTION validate_checklist_scope();
+// CREATE OR REPLACE FUNCTION public.validate_checklist_scope()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$ BEGIN
+//    IF NOT EXISTS(SELECT 1 FROM zone WHERE id=NEW.zone_id AND site_id=NEW.site_id) THEN RAISE EXCEPTION 'Invalid checklist Zone scope' USING ERRCODE='23514'; END IF;
+//    IF TG_OP='UPDATE' AND (NEW.site_id,NEW.contractor_id,NEW.team_id,NEW.zone_id,NEW.description,NEW.starts_at,NEW.ends_at,NEW.assigned_to,NEW.assigned_by) IS DISTINCT FROM (OLD.site_id,OLD.contractor_id,OLD.team_id,OLD.zone_id,OLD.description,OLD.starts_at,OLD.ends_at,OLD.assigned_to,OLD.assigned_by) THEN RAISE EXCEPTION 'Assigned checklist content is immutable' USING ERRCODE='23514'; END IF;
+//    RETURN NEW;
+//   END $function$
+//
+// CREATE TRIGGER immutable_checklist_item BEFORE DELETE OR UPDATE ON public.safety_checklist_item FOR EACH ROW EXECUTE FUNCTION preserve_checklist_history();
+// CREATE OR REPLACE FUNCTION public.preserve_checklist_history()
+//  RETURNS trigger
+//  LANGUAGE plpgsql
+// AS $function$ BEGIN
+//    IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Checklist history is immutable' USING ERRCODE='23514'; END IF;
+//    IF TG_TABLE_NAME='safety_checklist_submission' THEN
+//     IF OLD.status<>'PENDING' OR NEW.status NOT IN ('ACCEPTED','RETURNED') OR (NEW.id,NEW.assignment_id,NEW.submitted_by,NEW.submitted_at) IS DISTINCT FROM (OLD.id,OLD.assignment_id,OLD.submitted_by,OLD.submitted_at) THEN RAISE EXCEPTION 'Checklist review is immutable' USING ERRCODE='23514'; END IF;
+//    ELSE RAISE EXCEPTION 'Checklist items and results are immutable' USING ERRCODE='23514'; END IF;
+//    RETURN NEW;
+//   END $function$
+//
+// CREATE TRIGGER immutable_checklist_result BEFORE DELETE OR UPDATE ON public.safety_checklist_item_result FOR EACH ROW EXECUTE FUNCTION preserve_checklist_history();
+// CREATE TRIGGER immutable_checklist_evidence BEFORE DELETE OR UPDATE ON public.safety_checklist_result_evidence FOR EACH ROW EXECUTE FUNCTION preserve_checklist_history();
+// CREATE TRIGGER immutable_checklist_submission BEFORE DELETE OR UPDATE ON public.safety_checklist_submission FOR EACH ROW EXECUTE FUNCTION preserve_checklist_history();
+
+// Phase 1 2026-10-14: MF08 assignee/read/evidence/notification require contractor_representative_assignment(user_id,site_id,contractor_id), active role/account/participation. Legacy global grants do not imply Site scope.
+// Overview alert/checklist summaries are derived queries, not persisted tables; no new schema/migration in this phase. Alert team context uses dated Zone grants, never verified identity or a work permit.
+
+// Phase 2 Safety Overview: read-only day/week aggregation; source work_date and shift-start membership preserved.
+// Checklist first-submission timing and authorized Incident follow-up are derived, not stored as additional columns.
+// Recorded is receipt/review, not work permission. Closed Incident retains original FAIL; reopened follow-up needs attention.
+// Camera ACTIVE is configuration status. Alert evidence is timestamped, not a live stream. Schema remains 70 tables.
