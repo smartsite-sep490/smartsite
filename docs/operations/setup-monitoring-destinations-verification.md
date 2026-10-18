@@ -43,6 +43,13 @@ package install, browser launch or AI process. The live Agy session's native MCP
 reload/tool-use remains unverified; registration is not proof of live adoption.
 Private configuration backup stays outside Git and is never a shareable artifact.
 
+Follow-up actual Agy invocation succeeded through the configured stdio server:
+1public Tabler script1475bytes,1parsed file,0parse failures, exit0 and no forced
+server stop. Evidence/receipt: agy-stdio-static-smoke-v2.json and its receipt.
+This proves Agy can use the prepared bounded stdio workflow; the agent-native
+tool-list reload is still separate. Initial CLI bootstrap at128MiB exited134
+before emitting Evidence; that failure is retained, not counted as a parse run.
+
 ## Evidence and release boundary
 
 Run directory: `D:/Ky9-FPT/SmartSiteData/runs/rea-product-references-20261018-v1`.
