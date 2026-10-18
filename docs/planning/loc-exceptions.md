@@ -261,3 +261,13 @@ bounded. Owner: Root; implementation/test support: Agy p5/p7/p8, independent
 review: existing Herdr Codex. Extract policy form/list and Region presentation
 before unrelated growth. This exception does not raise the normal size targets
 or establish browser, assistive-technology or production acceptance.
+
+## Load-profile failure cancellation, 18 October
+
+Root permits `infra/software-load-profile.mjs` 654→667 physical lines for one
+internal cancellation controller, fatal-worker abort and all-actor drain before
+rethrowing the original error. The existing owned-target/request/refresh/summary
+rules remain unchanged. New real-HTTP regression112 lines is separate from the
+legacy test file. Extract HTTP transport and actor orchestration before future
+feature growth; this scoped exception does not raise the normal file-size target
+or qualify actual load, resource caps, soak, browser or production acceptance.

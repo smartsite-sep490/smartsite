@@ -385,9 +385,13 @@ function validJson(text, route) {
 }
 
 /** Closed-loop profile: one request per actor, no mutation retries or rate-limit relaxation. */
-export async function runLoadProfile(input, { signal, onProgress } = {}) {
+export async function runLoadProfile(input, { signal: callerSignal, onProgress } = {}) {
   const p = validateProfile(input),
     actors = p.actors.map((a) => ({ ...a }));
+  const controller = new AbortController();
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, controller.signal])
+    : controller.signal;
   let authRefreshes = 0,
     refreshFailure = false;
   let refreshTail = Promise.resolve();
@@ -482,55 +486,64 @@ export async function runLoadProfile(input, { signal, onProgress } = {}) {
       reportPending = false;
     }
   };
-  await Promise.all(
-    actors.map(async (a, index) => {
-      let iteration = 0;
-      while (performance.now() < endAt && !signal?.aborted && !refreshFailure) {
-        try {
-          await refresh(a);
-        } catch {
-          refreshFailure = true;
-          break;
+  const outcomes = await Promise.allSettled(
+    actors
+      .map(async (a, index) => {
+        let iteration = 0;
+        while (performance.now() < endAt && !signal?.aborted && !refreshFailure) {
+          try {
+            await refresh(a);
+          } catch {
+            refreshFailure = true;
+            break;
+          }
+          const r = p.routes[(index + iteration) % p.routes.length];
+          const pausedUntil = routeCooldown.get(r.name) ?? 0;
+          if (pausedUntil > performance.now()) {
+            await wait(
+              Math.min(pausedUntil - performance.now(), Math.max(1, endAt - performance.now())),
+              undefined,
+              { signal },
+            ).catch(() => {});
+            continue;
+          }
+          const start = performance.now();
+          if (start >= endAt) break;
+          const result = await call(p, a, r.path, r.method, r.body, false, signal);
+          const outcome =
+            result.outcome ??
+            (result.status === 429
+              ? 'throttled'
+              : result.status === 200
+                ? validJson(result.text, r)
+                  ? 'success'
+                  : 'body'
+                : 'unexpected');
+          if (outcome === 'throttled')
+            routeCooldown.set(r.name, performance.now() + cooldown(result.headers));
+          add(start < measureAt ? warmup : measured, {
+            name: r.name,
+            kind: r.kind,
+            durationMs: performance.now() - start,
+            status: result.status,
+            outcome,
+          });
+          iteration++;
+          await progress();
+          await wait(Math.min(p.thinkMs, Math.max(1, endAt - performance.now())), undefined, {
+            signal,
+          }).catch(() => {});
         }
-        const r = p.routes[(index + iteration) % p.routes.length];
-        const pausedUntil = routeCooldown.get(r.name) ?? 0;
-        if (pausedUntil > performance.now()) {
-          await wait(
-            Math.min(pausedUntil - performance.now(), Math.max(1, endAt - performance.now())),
-            undefined,
-            { signal },
-          ).catch(() => {});
-          continue;
-        }
-        const start = performance.now();
-        if (start >= endAt) break;
-        const result = await call(p, a, r.path, r.method, r.body, false, signal);
-        const outcome =
-          result.outcome ??
-          (result.status === 429
-            ? 'throttled'
-            : result.status === 200
-              ? validJson(result.text, r)
-                ? 'success'
-                : 'body'
-              : 'unexpected');
-        if (outcome === 'throttled')
-          routeCooldown.set(r.name, performance.now() + cooldown(result.headers));
-        add(start < measureAt ? warmup : measured, {
-          name: r.name,
-          kind: r.kind,
-          durationMs: performance.now() - start,
-          status: result.status,
-          outcome,
-        });
-        iteration++;
-        await progress();
-        await wait(Math.min(p.thinkMs, Math.max(1, endAt - performance.now())), undefined, {
-          signal,
-        }).catch(() => {});
-      }
-    }),
+      })
+      .map((worker) =>
+        worker.catch((error) => {
+          controller.abort();
+          throw error;
+        }),
+      ),
   );
+  const failed = outcomes.find((outcome) => outcome.status === 'rejected');
+  if (failed) throw failed.reason;
   const completed = !signal?.aborted && !refreshFailure && performance.now() >= endAt;
   const measurement = summary(measured);
   // A route never sampled is not an implicitly successful route.

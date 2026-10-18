@@ -12,6 +12,10 @@ The CLI rejects remote URLs, credentials/query strings in the base URL, protecte
 
 The caller owns fixture preparation and shutdown. This tool does not stop an existing runtime or delete schemas, media, logs or containers. If a run fails, retain its output and verify the exact owner before cleanup. The exported `runLoadProfile` is also used by real HTTP tests and separately guarded native harnesses; calling it directly does not provide the CLI's Docker ownership proof. Report native Windows and Linux qualification separately.
 
+A fatal actor or progress-observer error cancels the profile's other requests and waits, drains all actor loops, then rejects with the original error. This includes ownership observation and progress-file write failures. The caller's cancellation controller is not modified. The tool does not kill the target API or container; caller-owned teardown and retained failure evidence are still required. This cancellation safeguard does not establish an RSS cap, load capacity or an accepted soak run.
+
+Run the isolated tool checks with `node --test --test-concurrency=1 scripts/software-load-profile.test.mjs`. The root `scripts/*.test.mjs` test command also discovers this entrypoint; its HTTP fixtures use ephemeral loopback servers and no database, camera, Docker or production target.
+
 ## Private input fields
 
 - `baseUrl`: `http://127.0.0.1:<owned-port>/api/v1`; `origin`: existing WEB origin `http://127.0.0.1:5173`.
