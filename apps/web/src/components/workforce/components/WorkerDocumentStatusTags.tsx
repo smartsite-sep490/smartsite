@@ -8,7 +8,6 @@ export function WorkerDocumentStatusTags({
 }) {
   const isPending = profile.submissionStatus === 'PENDING_REVIEW';
   const isReviewed = profile.submissionStatus === 'REVIEWED';
-  const isNotSubmitted = profile.submissionStatus === 'NOT_SUBMITTED' || !profile.submissionStatus;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 justify-end">
