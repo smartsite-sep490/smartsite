@@ -1,65 +1,55 @@
-# Schema extension inventory
+# Schema extensions and physical names
 
-The owner's70-table ERD remains the baseline. This inventory describes current
-implementation differences; it does not replace or approve a new ERD.
+The owner70-table ERD remains unchanged. Tuấn approved naming and preserving
+the extension structure in chat17/10; this is not recorded as leader/Root approval.
+Implementation is local only. See [audit](tuan-db-erd-audit.md) and [mapping](tuan-db-erd-mapping.csv).
 
-## Assessment classes corrected in source
+## Assessment entities
 
-| Previous class | Current business class | Existing physical storage |
-|---|---|---|
-| Mf06AssessmentRequestEntity | ZoneEntryAssessmentRequestEntity | mf06_assessment_request |
-| Mf06AssessmentJobEntity | ZoneEntryAssessmentJobEntity | mf06_assessment_job |
-| Mf06AssessmentEntity | ZoneEntryAssessmentEntity | mf06_assessment |
-| Mf06AuthorityArtifactEntity | ZoneEntryAuthorityArtifactEntity | mf06_authority_artifact |
+| Business class                   | Current physical table        |
+| -------------------------------- | ----------------------------- |
+| ZoneEntryAssessmentRequestEntity | zone_entry_assessment_request |
+| ZoneEntryAssessmentJobEntity     | zone_entry_assessment_job     |
+| ZoneEntryAssessmentEntity        | zone_entry_assessment         |
+| ZoneEntryAuthorityArtifactEntity | zone_entry_authority_artifact |
 
-The table mapping stays explicit. Public API enums, event identifiers, assessment
-payloads and historical migration identities have not been renamed. Frozen
-legacy test bytes remain unchanged; their adapter maps exact known constructors.
+## Forward storage mapping
 
-## Additional storage and purpose
+| Historical physical table           | Current physical table                   |
+| ----------------------------------- | ---------------------------------------- |
+| mf06_assessment_request             | zone_entry_assessment_request            |
+| mf06_assessment_job                 | zone_entry_assessment_job                |
+| mf06_assessment                     | zone_entry_assessment                    |
+| mf06_authority_artifact             | zone_entry_authority_artifact            |
+| mf06_authority_source               | authorization_history_source             |
+| mf06_authority_command              | authorization_history_command            |
+| mf06_authority_fact                 | authorization_history_revision           |
+| mf06_authority_commit_witness       | authorization_history_commit_receipt     |
+| mf06_authority_gap                  | authorization_history_gap                |
+| mf06_authority_head                 | authorization_history_head               |
+| mf06_authority_epoch                | authorization_history_epoch              |
+| mf06_authority_control              | authorization_history_control            |
+| mf06_authority_baseline             | authorization_history_baseline           |
+| mf06_assignment_command_result      | worker_assignment_command_receipt        |
+| mf06_participation_command_result   | contractor_participation_command_receipt |
+| mf06_zone_permission_command_result | zone_permission_command_receipt          |
+| mf06_zone_deny_command_result       | zone_access_denial_command_receipt       |
 
-| Existing relation | Purpose |
-|---|---|
-| mf06_assessment_request | Immutable original observation/region/subject binding |
-| mf06_assessment_job | Bounded claim, lease, retry and completion state |
-| mf06_assessment | Immutable assessment result with provenance and claim binding |
-| mf06_authority_artifact | Bounded immutable authority archive used by an assessment |
-| mf06_authority_source | Source-field registry for captured authorization facts |
-| mf06_authority_command | Actor-bound command and transaction attribution |
-| mf06_authority_fact | Append-only source revisions |
-| mf06_authority_commit_witness | Post-commit witness; absence is not confirmation |
-| mf06_authority_gap | Explicit gaps that prevent trusted history |
-| mf06_authority_head | Captured revision head |
-| mf06_authority_epoch | Capture/cutover epoch; no automatic READY adoption |
-| mf06_authority_control | Active capture control |
-| mf06_authority_baseline | Explicit source baseline/cutover record |
-| mf06_assignment_command_result | Assignment command replay receipt |
-| mf06_participation_command_result | Contractor participation command replay receipt |
-| mf06_zone_permission_command_result | Zone permission command replay receipt |
-| mf06_zone_deny_command_result | Explicit Zone deny command replay receipt |
-| safety_face_consent | Safety-specific consent provenance; not inferred from a profile |
-| safety_face_consent_revocation | Append-only Safety consent revocation |
+The separate `safety_face_consent` and `safety_face_consent_revocation` tables remain.
+The mapping CSV explains why each request/job/result/archive/history/receipt needs
+separate persistence. No consolidation, row deletion or new business permission was approved.
 
-Seven observed additional columns on baseline tables are `face_profile.safety_revision`,
-`shift.allowed_exit_minutes`, `shift.max_exit_count`, and `attendance_day.allowed_exit_minutes`,
-`attendance_day.max_exit_count`, `attendance_day.exit_count`, `attendance_day.deducted_minutes`.
-The attendance columns arrived through Main; do not remove them to match an older
-snapshot without reconciling Main's attendance contract.
+Seven earlier additional columns and12 inherited VisitorRoster columns are retained;
+three CHECK extensions and three index-sort differences inherited Main are explicit in the audit.
 
-## Open integration work
+Physical rename is migration1792454400000, after notification compatibility bridges
+1792010000000/1792368000001. Applied migration classes and frozen fixtures keep their
+historical identifiers/bytes. Existing PK/FK/index/trigger names remain for compatibility.
 
-The saved migrated58 catalog at pushed checkpoint `675d29e` was compared against
-the byte-pinned owner file:735 column type/nullability pairs and234 named foreign
-keys (columns, targets, delete/update actions) matched with zero differences.
-This reuses a saved catalog; it is not a fresh production-database inspection.
-Defaults, CHECK expressions, indexes and triggers are outside that comparison.
-The current repair leaves historical migration bytes unchanged.
+Only exact17 table identifiers and16 reviewed function bodies change. Separate legacy
+`zone_authority_*` data remains intact. Old-name journal detection remains deny-only:
+runtime must not silently use legacy storage or write without journal attribution.
 
-- Compare baseline types, nullability, defaults, constraints and FK semantics;
-  identifier coverage alone is insufficient.
-- Coordinate physical naming changes with Tuấn before concurrent DDL edits.
-  Use a forward migration and test populated upgrade, triggers/functions, replay
-  receipts, archives and rollback. Never alter already-applied migration bytes.
-- Do not blindly replace `mf06_authority_*` with `zone_authority_*`: a retired
-  branch schema already uses several of those names.
-- This repair does not migrate production or establish Face/identity/model trust.
+Public API/DTO/enums, event IDs/hashes and archived V1/V2 machine vocabulary remain stable.
+An `mf06` service/route identifies a flow; it no longer defines these physical table names.
+No AI worker, READY epoch, real consent or identity is enabled by naming changes.

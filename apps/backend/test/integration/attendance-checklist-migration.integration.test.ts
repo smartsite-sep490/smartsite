@@ -1,5 +1,7 @@
 import { SiteManagerReviewNotifications1792108800000 } from '../../src/database/migrations/1792108800000-SiteManagerReviewNotifications.js';
 import { PreserveManagerNotificationHistory1792368000000 } from '../../src/database/migrations/1792368000000-PreserveManagerNotificationHistory.js';
+import { PrepareNotificationCompatibility1792010000000 } from '../../src/database/migrations/1792010000000-PrepareNotificationCompatibility.js';
+import { CompleteNotificationCompatibility1792368000001 } from '../../src/database/migrations/1792368000001-CompleteNotificationCompatibility.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -33,8 +35,9 @@ test('checklist migration preserves existing absence notifications through up, d
       CREATE TABLE attendance_day(status text CONSTRAINT attendance_day_status_check
         CHECK(status IN ('IN_PROGRESS','NEEDS_REVIEW','CONFIRMED')));
       CREATE TABLE user_notification(
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         event text CONSTRAINT chk_notification_event CHECK(event='MISSING_CHECKOUT'),
-        request_type text CONSTRAINT chk_notification_request_type CHECK(request_type IN ('ATTENDANCE','SCHEDULE')),
+        request_type text CONSTRAINT chk_notification_request_type CHECK(request_type IN ('CHANGE','SAFETY','ATTENDANCE','SCHEDULE')),
         recipient_role text, worker_id uuid, content jsonb NOT NULL DEFAULT '{}',
         CONSTRAINT chk_notification_role CHECK(recipient_role='WORKER' AND worker_id IS NOT NULL));
     `);
@@ -50,6 +53,7 @@ test('checklist migration preserves existing absence notifications through up, d
       "INSERT INTO user_notification(event,request_type,recipient_role) VALUES('ABSENT','ATTENDANCE','SITE_MANAGER')",
     );
     const migration = new SafetyChecklists1792195200000();
+    await new PrepareNotificationCompatibility1792010000000().up(runner);
     await migration.up(runner);
     await insertAbsence();
     for (const event of [
@@ -67,12 +71,13 @@ test('checklist migration preserves existing absence notifications through up, d
     await insertAbsence();
     await migration.up(runner);
     await insertAbsence();
+    const history = new PreserveManagerNotificationHistory1792368000000();
+    await history.up(runner);
+    await new CompleteNotificationCompatibility1792368000001().up(runner);
     const [row] = (await runner.query(
       "SELECT count(*)::int AS count FROM user_notification WHERE event='ABSENT'",
     )) as { count: number }[];
     assert.equal(row!.count, 5);
-    const history = new PreserveManagerNotificationHistory1792368000000();
-    await history.up(runner);
     await runner.query('SAVEPOINT preserved_manager');
     await assert.rejects(history.down(runner), /chk_notification_role/);
     await runner.query('ROLLBACK TO SAVEPOINT preserved_manager');

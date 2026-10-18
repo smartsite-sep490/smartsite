@@ -3,10 +3,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import type { DataSource } from 'typeorm';
-import { QrAccess1791417600000 } from '../../src/database/migrations/1791417600000-QrAccess.js';
-import { ErdVisitorAccess1791504000000 } from '../../src/database/migrations/1791504000000-ErdVisitorAccess.js';
-import { ErdZonePermissions1791504000003 } from '../../src/database/migrations/1791504000003-ErdZonePermissions.js';
-import { Mf06MainAuthorityJournal1791590400002 } from '../../src/database/migrations/1791590400002-Mf06MainAuthorityJournal.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 interface Result {
@@ -29,25 +25,10 @@ interface Writer {
   revoke(input: unknown): Promise<Result>;
 }
 let WriterClass: (new (source: DataSource) => Writer) | undefined;
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   await database.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    await new QrAccess1791417600000().up(runner);
-    await new ErdVisitorAccess1791504000000().up(runner);
-    await new ErdZonePermissions1791504000003().up(runner);
-    await runner.query(
-      'ALTER TABLE site ADD COLUMN access_policy_version integer NOT NULL DEFAULT 1',
-    );
-    await new Mf06MainAuthorityJournal1791590400002().up(runner);
-    await runner.commitTransaction();
-  } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    await runner.release();
-  }
   const moduleUrl = new URL(
     '../../src/modules/zones/main-zone-deny-command.service.js',
     import.meta.url,
@@ -118,7 +99,7 @@ test('main DENY create commits original projection, command, fact and committed 
   assert.deepEqual(
     (
       await db.query(
-        'SELECT c.command_id,f.transaction_id=c.transaction_id AS same_tx,r.command_id=c.command_id AS result_bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_command c JOIN mf06_authority_fact f USING(command_id) JOIN mf06_zone_deny_command_result r USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id) WHERE c.command_id=$1',
+        'SELECT c.command_id,f.transaction_id=c.transaction_id AS same_tx,r.command_id=c.command_id AS result_bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_command c JOIN authorization_history_revision f USING(command_id) JOIN zone_access_denial_command_receipt r USING(command_id) JOIN authorization_history_commit_receipt w USING(command_id) WHERE c.command_id=$1',
         [f.commandId],
       )
     )[0],
@@ -126,15 +107,19 @@ test('main DENY create commits original projection, command, fact and committed 
   );
   assert.deepEqual(
     (
-      await db.query('SELECT result_json FROM mf06_zone_deny_command_result WHERE command_id=$1', [
-        f.commandId,
-      ])
+      await db.query(
+        'SELECT result_json FROM zone_access_denial_command_receipt WHERE command_id=$1',
+        [f.commandId],
+      )
     )[0].result_json,
     result.grant,
   );
   assert.equal(
-    (await db.query("SELECT count(*)::int AS n FROM mf06_authority_epoch WHERE state='READY'"))[0]
-      .n,
+    (
+      await db.query(
+        "SELECT count(*)::int AS n FROM authorization_history_epoch WHERE state='READY'",
+      )
+    )[0].n,
     0,
   );
 });
@@ -162,9 +147,10 @@ test('command ID reuse with changed body is a conflict and cannot mutate another
   await assert.rejects(f.service.create({ ...createInput(f), validUntil: null }), status(409));
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE command_id=$1', [
-        f.commandId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE command_id=$1',
+        [f.commandId],
+      )
     )[0].n,
     1,
   );
@@ -175,9 +161,10 @@ test('main public ALLOW remains forbidden through this DENY command path', async
   await assert.rejects(f.service.create({ ...createInput(f), effect: 'ALLOW' }), status(409));
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1', [
-        f.commandId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
+        [f.commandId],
+      )
     )[0].n,
     0,
   );
@@ -215,9 +202,10 @@ test('wrong Site Zone or Worker and inactive Worker are refused without journal 
   await assert.rejects(f.service.create(createInput(f)), status(404));
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1', [
-        f.commandId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
+        [f.commandId],
+      )
     )[0].n,
     0,
   );
@@ -259,7 +247,7 @@ test('different revoke commands serialize and preserve the first exact revocatio
   assert.equal(
     (
       await db.query(
-        "SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1 AND operation='UPDATE'",
+        "SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1 AND operation='UPDATE'",
         [created.grant.id],
       )
     )[0].n,
@@ -285,13 +273,13 @@ test('revoke replay returns the recorded body even after the source is deleted',
 test('response persistence failure rolls back the grant, command and source fact', async () => {
   const f = await fixture();
   await db.query(
-    "CREATE FUNCTION reject_deny_result() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic persistence failure' USING ERRCODE='23514'; END $$; CREATE TRIGGER test_reject_result BEFORE INSERT ON mf06_zone_deny_command_result FOR EACH ROW EXECUTE FUNCTION reject_deny_result()",
+    "CREATE FUNCTION reject_deny_result() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic persistence failure' USING ERRCODE='23514'; END $$; CREATE TRIGGER test_reject_result BEFORE INSERT ON zone_access_denial_command_receipt FOR EACH ROW EXECUTE FUNCTION reject_deny_result()",
   );
   try {
     await assert.rejects(f.service.create(createInput(f)));
   } finally {
     await db.query(
-      'DROP TRIGGER test_reject_result ON mf06_zone_deny_command_result; DROP FUNCTION reject_deny_result()',
+      'DROP TRIGGER test_reject_result ON zone_access_denial_command_receipt; DROP FUNCTION reject_deny_result()',
     );
   }
   assert.equal(
@@ -304,9 +292,10 @@ test('response persistence failure rolls back the grant, command and source fact
   );
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1', [
-        f.commandId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
+        [f.commandId],
+      )
     )[0].n,
     0,
   );
@@ -348,7 +337,7 @@ test('a postcommit witness failure is safely retried without another committed g
     get(target, property) {
       if (property === 'query')
         return async (sql: string, ...args: unknown[]) => {
-          if (sql.startsWith('INSERT INTO mf06_authority_commit_witness'))
+          if (sql.startsWith('INSERT INTO authorization_history_commit_receipt'))
             throw new Error('Synthetic witness I/O failure');
           return Reflect.apply(target.query, target, [sql, ...args]);
         };
@@ -358,9 +347,10 @@ test('a postcommit witness failure is safely retried without another committed g
   });
   await assert.rejects(new WriterClass(wrapped).create(createInput(f)), status(503));
   const saved = (
-    await db.query('SELECT result_json FROM mf06_zone_deny_command_result WHERE command_id=$1', [
-      f.commandId,
-    ])
+    await db.query(
+      'SELECT result_json FROM zone_access_denial_command_receipt WHERE command_id=$1',
+      [f.commandId],
+    )
   )[0].result_json;
   assert.equal(
     (
@@ -373,7 +363,7 @@ test('a postcommit witness failure is safely retried without another committed g
   assert.equal(
     (
       await db.query(
-        'SELECT count(*)::int AS n FROM mf06_authority_commit_witness WHERE command_id=$1',
+        'SELECT count(*)::int AS n FROM authorization_history_commit_receipt WHERE command_id=$1',
         [f.commandId],
       )
     )[0].n,
@@ -384,9 +374,10 @@ test('a postcommit witness failure is safely retried without another committed g
   assert.deepEqual(retry.grant, saved);
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE command_id=$1', [
-        f.commandId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE command_id=$1',
+        [f.commandId],
+      )
     )[0].n,
     1,
   );
@@ -447,9 +438,10 @@ test('an already-revoked grant records a replayable no-op response without anoth
   assert.deepEqual(second.grant, first.grant);
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE command_id=$1', [
-        secondId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE command_id=$1',
+        [secondId],
+      )
     )[0].n,
     0,
   );
@@ -462,19 +454,19 @@ test('original responses cannot be deleted, truncated, rewritten or inserted aft
     created = await f.service.create(createInput(f));
   const constraint = (e: unknown) => (e as { code?: string }).code === '23514';
   await assert.rejects(
-    db.query('DELETE FROM mf06_zone_deny_command_result WHERE command_id=$1', [f.commandId]),
+    db.query('DELETE FROM zone_access_denial_command_receipt WHERE command_id=$1', [f.commandId]),
     constraint,
   );
-  await assert.rejects(db.query('TRUNCATE mf06_zone_deny_command_result'), constraint);
+  await assert.rejects(db.query('TRUNCATE zone_access_denial_command_receipt'), constraint);
   await assert.rejects(
-    db.query("UPDATE mf06_zone_deny_command_result SET result_json='{}' WHERE command_id=$1", [
+    db.query("UPDATE zone_access_denial_command_receipt SET result_json='{}' WHERE command_id=$1", [
       f.commandId,
     ]),
     constraint,
   );
   await assert.rejects(
     db.query(
-      "INSERT INTO mf06_zone_deny_command_result(command_id,source_id,result_json,result_hash) VALUES($1,$2,$3,'')",
+      "INSERT INTO zone_access_denial_command_receipt(command_id,source_id,result_json,result_hash) VALUES($1,$2,$3,'')",
       [f.commandId, created.grant.id, created.grant],
     ),
     constraint,
@@ -530,12 +522,12 @@ test('an origin response cannot fabricate a result different from its source row
   await assert.rejects(
     db.transaction(async (manager) => {
       await manager.query(
-        "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_ZONE_DENY_REVOKE',$3)",
+        "INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_ZONE_DENY_REVOKE',$3)",
         [commandId, f.actorUserId, 'a'.repeat(64)],
       );
       await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [commandId]);
       await manager.query(
-        "INSERT INTO mf06_zone_deny_command_result(command_id,source_id,result_json,result_hash) VALUES($1,$2,$3,'')",
+        "INSERT INTO zone_access_denial_command_receipt(command_id,source_id,result_json,result_hash) VALUES($1,$2,$3,'')",
         [commandId, created.grant.id, { ...created.grant, effect: 'ALLOW' }],
       );
     }),
@@ -543,9 +535,10 @@ test('an origin response cannot fabricate a result different from its source row
   );
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1', [
-        commandId,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
+        [commandId],
+      )
     )[0].n,
     0,
   );
@@ -556,7 +549,7 @@ test('replay reuses an existing immutable witness instead of recertifying an old
   const created = await f.service.create(createInput(f));
   // A new insert must not be required once the original immutable witness exists.
   await db.query(
-    "CREATE FUNCTION reject_witness_recertification() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic old transaction status unavailable' USING ERRCODE='23514'; END $$; CREATE TRIGGER test_reject_witness BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION reject_witness_recertification()",
+    "CREATE FUNCTION reject_witness_recertification() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic old transaction status unavailable' USING ERRCODE='23514'; END $$; CREATE TRIGGER test_reject_witness BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION reject_witness_recertification()",
   );
   try {
     const retry = await f.service.create(createInput(f));
@@ -564,7 +557,7 @@ test('replay reuses an existing immutable witness instead of recertifying an old
     assert.deepEqual(retry.grant, created.grant);
   } finally {
     await db.query(
-      'DROP TRIGGER test_reject_witness ON mf06_authority_commit_witness; DROP FUNCTION reject_witness_recertification()',
+      'DROP TRIGGER test_reject_witness ON authorization_history_commit_receipt; DROP FUNCTION reject_witness_recertification()',
     );
   }
 });

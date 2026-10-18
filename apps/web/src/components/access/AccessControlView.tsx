@@ -582,6 +582,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               token={token}
               siteId={siteId}
               sessionScope={sessionScope}
+              showRequests={
+                !siteRoles.includes('SITE_MANAGER') ||
+                siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
+              }
               isWorker={
                 siteRoles.includes('WORKER') &&
                 !isGlobalAdmin &&

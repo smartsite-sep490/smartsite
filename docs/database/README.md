@@ -1,31 +1,30 @@
-# Owner ERD baseline
+# Database design and local implementation
 
-`ERD-Logical.dbml` preserves the owner's supplied ERD semantics. The original
-Downloads file is untouched. This repository copy normalizes CRLF to LF under
-`.gitattributes` and removes trailing spaces from two empty `//` comment lines
-so the repository whitespace check passes; no schema statement changes.
+[ERD-Logical.dbml](ERD-Logical.dbml) là baseline70 bảng/735 cột do owner cung cấp;
+không được sinh lại từ code hoặc đổi theo catalog quan sát.
 
-Original file SHA256:
-`0971e449f309bd6fad35b0dbf7a66876ef0e2677f2a9fbcbff15a332b734f370`.
-Repository file SHA256:
-`4ccc85f7eb348492eaa8b5d402d03e83ad109c4b8f55929fb0e269f66eeb125f`.
+- File gốc `D:/SEP490/ERD-Logical.dbml` và bản trong gói Downloads không bị sửa.
+- SHA256 gốc: `0971e449f309bd6fad35b0dbf7a66876ef0e2677f2a9fbcbff15a332b734f370`.
+- SHA256 bản repository: `4ccc85f7eb348492eaa8b5d402d03e83ad109c4b8f55929fb0e269f66eeb125f`.
+- Repo chỉ chuẩn hóa CRLF→LF và trailing spaces trên2 dòng comment rỗng;
+  không gọi hai file byte-identical.
 
-Implementation follows this baseline. It is not regenerated from whatever code
-currently does. Required new tables can extend it with documented business names
-and purpose; do not rename existing business tables to match local implementations.
+Tài liệu bàn giao:
 
-The file declares70 tables/735 columns. An observed canonical58 test-schema export
-contains89 tables/887 columns. Preserving the original identifiers alone does not
-prove type, nullability, constraints, relations or business semantics conform.
+- [Baseline/source/ownership](tuan-db-erd-baseline.md).
+- [Audit và khác biệt ERD](tuan-db-erd-audit.md).
+- [Mapping38 dòng](tuan-db-erd-mapping.csv), [consumers](tuan-db-erd-consumers.csv),
+  [catalog comparison1.234 dòng](tuan-db-erd-comparison.csv).
+- [Extension inventory](schema-extensions.md).
+- [Kết quả kiểm thử và hướng dẫn gửi leader](tuan-db-erd-handoff.md).
+- [File và số dòng](tuan-db-erd-files.csv): tách source tích hợp khỏi phần sửa local;
+  số dòng gồm test/fixture/docs, không phải toàn bộ là code runtime mới.
 
-The observed extension includes17 physical `mf06_` tables and two Safety consent
-tables. The four current assessment classes now use `ZoneEntry...Entity` business
-names; see [extension inventory](schema-extensions.md). Existing SQL identifiers
-are explicitly mapped for compatibility. They have not been silently renamed in
-an applied migration. Physical naming normalization and full semantic comparison
-remain open; class renaming alone is not complete ERD conformance.
+[Observed DBML](tuan-db-erd-observed.dbml) là **generated diagnostic**, từ catalog
+PostgreSQL18 schema test owned, graph65: Rootf3aa818 + Main0ef7b69 + TeamV2 và3
+migration forward mới. Export gồm89 bảng ứng dụng, cột/PK/FK; CHECK/index/function
+chi tiết nằm trong comparison CSV/catalog receipt. Không coi export là bản thiết kế
+leader đã duyệt hoặc thay baseline gốc. File generated được miễn giới hạn handwritten LOC.
 
-Generated observed-schema DBML is a diagnostic artifact. It must not replace this
-owner baseline or be presented as an accepted ERD. No production schema was changed.
-The last published database CI failed at checkpoint `675d29e`; the current repair
-requires a new full CI run. Entity naming review alone does not resolve failures.
+Implementation chỉ ở local theo yêu cầu Tuấn. Không có migration production,
+trust/consent/Face identity thật hoặc thao tác deploy/PR từ lượt này.

@@ -58,7 +58,7 @@ export class Mf06RequestStatusQueryService {
   }
 
   private from() {
-    return 'FROM mf06_assessment_request r LEFT JOIN mf06_assessment_job j ON j.request_id=r.request_id LEFT JOIN mf06_assessment a ON a.request_id=r.request_id';
+    return 'FROM zone_entry_assessment_request r LEFT JOIN zone_entry_assessment_job j ON j.request_id=r.request_id LEFT JOIN zone_entry_assessment a ON a.request_id=r.request_id';
   }
   private visible() {
     return "(a.assessment_id IS NULL OR a.provenance<>'SYNTHETIC_TEST')";
@@ -113,10 +113,10 @@ export class Mf06RequestStatusQueryService {
       scope,
       [
         'site',
-        'mf06_assessment_request',
-        'mf06_assessment_job',
-        'mf06_assessment',
-        'mf06_authority_artifact',
+        'zone_entry_assessment_request',
+        'zone_entry_assessment_job',
+        'zone_entry_assessment',
+        'zone_entry_authority_artifact',
       ],
       operation,
       () => this.unavailable(),

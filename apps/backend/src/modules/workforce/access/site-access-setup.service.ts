@@ -255,26 +255,27 @@ export class SiteAccessSetupService {
           .getRepository(ZoneEntity)
           .findOneBy({ id: value.zoneId, siteId });
         if (!participation || !zone) missing();
-        let from: Date, until: Date;
-        if ('startDate' in value) {
-          const [interval] = (await manager.query(
-            `SELECT ($1::date::timestamp AT TIME ZONE $3) AS "from", (($2::date + 1)::timestamp AT TIME ZONE $3) AS "until"`,
-            [value.startDate, value.endDate, value.timezone],
-          )) as { from: Date; until: Date }[];
-          // Calendar-day grants never extend the parent participation, including a Site joined mid-day.
-          from = new Date(Math.max(+interval!.from, +participation.validFrom));
-          until = new Date(
-            Math.min(
-              +interval!.until,
-              participation.validUntil ? +participation.validUntil : Infinity,
-            ),
-          );
-        } else {
-          from = new Date(value.validFrom);
-          until = new Date(value.validUntil);
-        }
-        if (!containedInterval(from, until, participation.validFrom, participation.validUntil))
+        const calendar = 'startDate' in value;
+        const requested = calendar
+          ? 'SELECT $1::date::timestamp AT TIME ZONE $3 AS f, ($2::date + 1)::timestamp AT TIME ZONE $3 AS u'
+          : 'SELECT $1::timestamptz AS f, $2::timestamptz AS u';
+        const [interval] = await manager.query<{ from: string; until: string; valid: boolean }[]>(
+          `WITH requested AS (${requested}), bounds AS (
+            SELECT ${calendar ? 'greatest(r.f,p.valid_from)' : 'r.f'} AS f,
+              ${calendar ? 'least(r.u,coalesce(p.valid_until,r.u))' : 'r.u'} AS u,p.valid_from,p.valid_until
+            FROM requested r JOIN contractor_site_participation p ON p.id=${calendar ? '$4' : '$3'})
+          SELECT to_char(f AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "from",
+            to_char(u AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "until",
+            isfinite(f) AND isfinite(u) AND isfinite(valid_from) AND (valid_until IS NULL OR isfinite(valid_until))
+            AND u>f AND f>=valid_from AND (valid_until IS NULL OR u<=valid_until) AS valid FROM bounds`,
+          calendar
+            ? [value.startDate, value.endDate, value.timezone, participation.id]
+            : [value.validFrom, value.validUntil, participation.id],
+        );
+        if (!interval?.valid)
           conflict('Zone permission must fit the contractor participation interval');
+        const from = interval.from,
+          until = interval.until;
         const existing = await manager
           .getRepository(ContractorZonePermissionEntity)
           .findOneBy({ id: value.requestId });
@@ -282,22 +283,35 @@ export class SiteAccessSetupService {
           if (
             existing.siteContractorId !== participation.id ||
             existing.zoneId !== zone.id ||
-            +existing.validFrom !== +from ||
-            +existing.validUntil !== +until ||
+            !(
+              await manager.query(
+                'SELECT valid_from=$2::timestamptz AND valid_until=$3::timestamptz AS same FROM contractor_zone_permission WHERE id=$1',
+                [existing.id, from, until],
+              )
+            )[0]?.same ||
             existing.grantedBy !== currentActor.id
           )
             conflict('Request was used for another permission');
           return existing;
         }
-        const permission = await manager.getRepository(ContractorZonePermissionEntity).save({
-          id: value.requestId,
-          siteContractorId: participation.id,
-          zoneId: zone.id,
-          validFrom: from,
-          validUntil: until,
-          grantedBy: currentActor.id,
-          revokedAt: null,
-        });
+        await manager
+          .getRepository(ContractorZonePermissionEntity)
+          .createQueryBuilder()
+          .insert()
+          .values({
+            id: value.requestId,
+            siteContractorId: participation.id,
+            zoneId: zone.id,
+            validFrom: () => ':exactFrom',
+            validUntil: () => ':exactUntil',
+            grantedBy: currentActor.id,
+            revokedAt: null,
+          })
+          .setParameters({ exactFrom: from, exactUntil: until })
+          .execute();
+        const permission = await manager
+          .getRepository(ContractorZonePermissionEntity)
+          .findOneByOrFail({ id: value.requestId });
         await auditAccess(
           manager,
           currentActor.id,
@@ -309,8 +323,8 @@ export class SiteAccessSetupService {
           {
             siteContractorId: participation.id,
             zoneId: zone.id,
-            validFrom: from.toISOString(),
-            validUntil: until.toISOString(),
+            validFrom: from,
+            validUntil: until,
             ...('startDate' in value
               ? { startDate: value.startDate, endDate: value.endDate, timezone: value.timezone }
               : {}),

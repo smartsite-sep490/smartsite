@@ -231,10 +231,10 @@ async function factsForSource(sourceKind: string, sourceId: string): Promise<Fac
             f.transaction_id = c.transaction_id AS bound,
             w.transaction_id = c.transaction_id AS witnessed,
             e.state AS epoch_state
-     FROM mf06_authority_fact f
-     JOIN mf06_authority_command c USING(command_id)
-     LEFT JOIN mf06_authority_commit_witness w USING(command_id)
-     LEFT JOIN mf06_authority_epoch e ON e.epoch_id = f.epoch_id
+     FROM authorization_history_revision f
+     JOIN authorization_history_command c USING(command_id)
+     LEFT JOIN authorization_history_commit_receipt w USING(command_id)
+     LEFT JOIN authorization_history_epoch e ON e.epoch_id = f.epoch_id
      WHERE f.source_kind = $1 AND f.source_id = $2
      ORDER BY f.observed_at ASC, f.revision ASC`,
     [sourceKind, sourceId],
@@ -245,7 +245,7 @@ async function accountHeadRevision(sourceId: string): Promise<number> {
   // Fixture inserts are intentionally unattributed and excluded by the command INNER JOIN.
   // Revisions still include those real source writes; never pretend their actor is known.
   const rows: { revision: number }[] = await db.query(
-    "SELECT revision::int AS revision FROM mf06_authority_head WHERE source_kind='USER_ACCOUNT' AND source_id=$1",
+    "SELECT revision::int AS revision FROM authorization_history_head WHERE source_kind='USER_ACCOUNT' AND source_id=$1",
     [sourceId],
   );
   const row = rows[0];
@@ -261,10 +261,10 @@ async function factsForCommand(commandOperation: string, actorUserId: string): P
             f.transaction_id = c.transaction_id AS bound,
             w.transaction_id = c.transaction_id AS witnessed,
             e.state AS epoch_state
-     FROM mf06_authority_fact f
-     JOIN mf06_authority_command c USING(command_id)
-     LEFT JOIN mf06_authority_commit_witness w USING(command_id)
-     LEFT JOIN mf06_authority_epoch e ON e.epoch_id = f.epoch_id
+     FROM authorization_history_revision f
+     JOIN authorization_history_command c USING(command_id)
+     LEFT JOIN authorization_history_commit_receipt w USING(command_id)
+     LEFT JOIN authorization_history_epoch e ON e.epoch_id = f.epoch_id
      WHERE c.operation = $1 AND c.actor_user_id = $2
      ORDER BY f.observed_at ASC, f.revision ASC`,
     [commandOperation, actorUserId],
@@ -1226,7 +1226,9 @@ test('Disabled user_role_assignment capture trigger refuses role replace before 
 test('Authority control interruption fails closed with 503 and zero writes', async () => {
   const f = await fixture();
   await withApi(f, async ({ call }) => {
-    await db.query('ALTER TABLE mf06_authority_control RENAME TO mf06_authority_control_held');
+    await db.query(
+      'ALTER TABLE authorization_history_control RENAME TO mf06_authority_control_held',
+    );
     try {
       const response = await call('PATCH', `/api/v1/users/${f.target}/status`, { isActive: false });
       assert.equal(response.status, 503);
@@ -1234,7 +1236,9 @@ test('Authority control interruption fails closed with 503 and zero writes', asy
       const target = (await db.query('SELECT is_active FROM app_user WHERE id=$1', [f.target]))[0];
       assert.equal(target.is_active, true);
     } finally {
-      await db.query('ALTER TABLE mf06_authority_control_held RENAME TO mf06_authority_control');
+      await db.query(
+        'ALTER TABLE mf06_authority_control_held RENAME TO authorization_history_control',
+      );
     }
   });
 });
@@ -1244,7 +1248,7 @@ test('Witness failure keeps committed response unconfirmed with null witness', a
   await withApi(f, async ({ call, apiDb }) => {
     const original = apiDb.query.bind(apiDb);
     apiDb.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {
-      if (sql.startsWith('INSERT INTO mf06_authority_commit_witness')) {
+      if (sql.startsWith('INSERT INTO authorization_history_commit_receipt')) {
         throw new Error('Synthetic witness refusal');
       }
       return original(sql, params, runner);

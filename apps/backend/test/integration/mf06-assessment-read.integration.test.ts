@@ -35,18 +35,11 @@ import { Mf06IngestionEnqueueService } from '../../src/modules/safety/assessment
 import { Mf06JobLeaseService } from '../../src/modules/safety/assessments/mf06-job-lease.service.js';
 import { Mf06AssessmentStore } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { Mf06AssessmentQueryService } from '../../src/modules/safety/assessments/mf06-assessment-query.service.js';
-import { Mf06ImmutableAssessments1791590400004 } from '../../src/database/migrations/1791590400004-Mf06ImmutableAssessments.js';
 
 test('actual AppModule assessment reads enforce scope/auth/default OFF/query boundaries and safe empty pages', async (t) => {
-  const isolated = createIsolatedTestDatabase({ legacy: true }),
+  const isolated = createIsolatedTestDatabase({ canonical: true }),
     db = isolated.dataSource;
   await isolated.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await new Mf06ImmutableAssessments1791590400004().up(runner);
-  } finally {
-    await runner.release();
-  }
   const site = randomUUID(),
     otherSite = randomUUID(),
     user = randomUUID();
@@ -165,16 +158,10 @@ test('actual AppModule assessment reads enforce scope/auth/default OFF/query bou
 });
 
 test('populated reads retain original scope, exclude synthetic records and return exactly the public whitelist', async (t) => {
-  const isolated = createIsolatedTestDatabase({ legacy: true }),
+  const isolated = createIsolatedTestDatabase({ canonical: true }),
     db = isolated.dataSource;
   await isolated.initialize();
   t.after(() => isolated.dispose());
-  const runner = db.createQueryRunner();
-  try {
-    await new Mf06ImmutableAssessments1791590400004().up(runner);
-  } finally {
-    await runner.release();
-  }
   const first = await seedAssessment(db, 'UNAVAILABLE');
   const synthetic = await seedAssessment(db, 'SYNTHETIC_TEST', first.siteId);
   const other = await seedAssessment(db, 'UNAVAILABLE');
@@ -226,7 +213,7 @@ test('populated reads retain original scope, exclude synthetic records and retur
   const offset = await query.list(first.siteId, 1, 1);
   assert.deepEqual(offset, { items: [], total: 1, offset: 1, limit: 1 });
   const off = new Mf06AssessmentQueryService(db, createTestConfig());
-  await db.query('ALTER TABLE mf06_assessment RENAME TO fixture_hidden_assessment');
+  await db.query('ALTER TABLE zone_entry_assessment RENAME TO fixture_hidden_assessment');
   try {
     await assert.rejects(
       () => off.list(first.siteId),
@@ -245,7 +232,7 @@ test('populated reads retain original scope, exclude synthetic records and retur
         (error as { getStatus(): number }).getStatus() === 503,
     );
   } finally {
-    await db.query('ALTER TABLE fixture_hidden_assessment RENAME TO mf06_assessment');
+    await db.query('ALTER TABLE fixture_hidden_assessment RENAME TO zone_entry_assessment');
   }
 });
 
@@ -328,7 +315,7 @@ async function seedAssessment(
   }).claim();
   assert.ok(claim);
   const [request] = await db.query(
-    'SELECT binding_hash FROM mf06_assessment_request WHERE request_id=$1',
+    'SELECT binding_hash FROM zone_entry_assessment_request WHERE request_id=$1',
     [claim.requestId],
   );
   const result = await new Mf06AssessmentStore(db).finalize({

@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 // Set before any application ESM imports, including ConfigModule.forRoot().
 process.env.NODE_ENV = 'test';
@@ -30,62 +31,86 @@ const strictWorkforce = process.argv.includes('--strict-workforce');
 if (strictWorkforce && !integration) {
   throw new Error('--strict-workforce requires the isolated integration database.');
 }
-if (integration) {
-  const { resolveTestDatabaseUrl } =
-    await import('../.test-build/test/support/test-environment.js');
-  process.env.TEST_DATABASE_URL = resolveTestDatabaseUrl();
-  const { default: source } = await import('../.test-build/test/support/test-data-source.js');
-  try {
-    await source.initialize();
-    await source.runMigrations();
-  } catch {
-    console.error(
-      'Test database initialization or migration failed; verify the dedicated local TEST_DATABASE_URL and PostgreSQL service.',
-    );
-    process.exitCode = 1;
-  } finally {
-    if (source.isInitialized) await source.destroy();
+let source;
+let ownedSchema;
+let schemaCreated = false;
+try {
+  if (integration) {
+    const { resolveTestDatabaseUrl } =
+      await import('../.test-build/test/support/test-environment.js');
+    process.env.TEST_DATABASE_URL = resolveTestDatabaseUrl();
+    ownedSchema = `isolated_test_${randomUUID().replaceAll('-', '')}`;
+    process.env.SMARTSITE_TEST_SCHEMA = ownedSchema;
+    ({ default: source } = await import('../.test-build/test/support/test-data-source.js'));
+    try {
+      await source.initialize();
+      await source.query(`CREATE SCHEMA "${ownedSchema}"`);
+      schemaCreated = true;
+      await source.runMigrations();
+    } catch {
+      console.error(
+        'Test database initialization or migration failed; verify the dedicated local TEST_DATABASE_URL and PostgreSQL service.',
+      );
+      process.exitCode = 1;
+    } finally {
+      if (source.isInitialized) await source.destroy();
+    }
+  } else {
+    delete process.env.TEST_DATABASE_URL;
+    delete process.env.SMARTSITE_TEST_SCHEMA;
   }
-} else {
-  delete process.env.TEST_DATABASE_URL;
-}
 
-if (!process.exitCode) {
-  const directory = integration ? '.test-build/test/integration' : '.test-build/test';
-  const allFiles = readdirSync(new URL(`../${directory}/`, import.meta.url))
-    .filter((file) => file.endsWith('.test.js'))
-    .sort();
-  // Application transaction gate; the full suite still checks TypeORM schema
-  // introspection separately and does not suppress its dependency warnings.
-  const workforceFiles = [
-    'mf07-scheduling-queries.integration.test.js',
-    'mf07-shared-contractor.integration.test.js',
-    'workforce-authority-writers.integration.test.js',
-    'workforce-review-reader.integration.test.js',
-    'workforce-zone-authority-history.integration.test.js',
-    'safety-business-http.integration.test.js',
-  ];
-  if (strictWorkforce && workforceFiles.some((file) => !allFiles.includes(file))) {
-    throw new Error(
-      'Strict Workforce integration files are missing; compile the complete test suite.',
+  if (!process.exitCode) {
+    const directory = integration ? '.test-build/test/integration' : '.test-build/test';
+    const allFiles = readdirSync(new URL(`../${directory}/`, import.meta.url))
+      .filter((file) => file.endsWith('.test.js'))
+      .sort();
+    // Application transaction gate; the full suite still checks TypeORM schema
+    // introspection separately and does not suppress its dependency warnings.
+    const workforceFiles = [
+      'mf07-scheduling-queries.integration.test.js',
+      'mf07-shared-contractor.integration.test.js',
+      'workforce-authority-writers.integration.test.js',
+      'workforce-review-reader.integration.test.js',
+      'workforce-zone-authority-history.integration.test.js',
+      'safety-business-http.integration.test.js',
+    ];
+    if (strictWorkforce && workforceFiles.some((file) => !allFiles.includes(file))) {
+      throw new Error(
+        'Strict Workforce integration files are missing; compile the complete test suite.',
+      );
+    }
+    const files = (strictWorkforce ? workforceFiles : allFiles).map(
+      (file) => `${directory}/${file}`,
     );
+    const result = spawnSync(
+      process.execPath,
+      // Keep Nest child-process fixtures bounded on a shared desktop.
+      [
+        ...(strictWorkforce ? ['--throw-deprecation'] : []),
+        '--test',
+        '--test-concurrency=1',
+        ...files,
+      ],
+      {
+        cwd: backendDirectory,
+        env: process.env,
+        stdio: 'inherit',
+      },
+    );
+    if (result.error) console.error('Unable to start the backend test process.');
+    process.exitCode = result.status ?? 1;
   }
-  const files = (strictWorkforce ? workforceFiles : allFiles).map((file) => `${directory}/${file}`);
-  const result = spawnSync(
-    process.execPath,
-    // Keep Nest child-process fixtures bounded on a shared desktop.
-    [
-      ...(strictWorkforce ? ['--throw-deprecation'] : []),
-      '--test',
-      '--test-concurrency=1',
-      ...files,
-    ],
-    {
-      cwd: backendDirectory,
-      env: process.env,
-      stdio: 'inherit',
-    },
-  );
-  if (result.error) console.error('Unable to start the backend test process.');
-  process.exitCode = result.status ?? 1;
+} finally {
+  if (source && schemaCreated) {
+    try {
+      if (!source.isInitialized) await source.initialize();
+      await source.query(`DROP SCHEMA IF EXISTS "${ownedSchema}" CASCADE`);
+    } catch {
+      console.error('Owned integration test schema cleanup failed.');
+      process.exitCode = 1;
+    } finally {
+      if (source.isInitialized) await source.destroy();
+    }
+  }
 }

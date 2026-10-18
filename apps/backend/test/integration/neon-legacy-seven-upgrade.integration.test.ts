@@ -162,10 +162,10 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN6
     );
     await legacy.destroy();
     const applied = await upgrade.runMigrations({ transaction: 'all' });
-    assert.equal(applied.length, 54);
+    assert.equal(applied.length, upgrade.migrations.length - 7);
     assert.equal(
       (await upgrade.query('SELECT count(*)::int AS total FROM migrations'))[0].total,
-      61,
+      upgrade.migrations.length,
     );
     assert.equal(await new DatabaseService(upgrade).isReady(), true);
     const after = await selectedRows(upgrade);
@@ -200,10 +200,10 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN6
       'contractor_zone_permission',
       'worker_zone_permission',
       'safety_face_consent',
-      'mf06_assessment_request',
-      'mf06_assessment_job',
-      'mf06_assessment',
-      'mf06_authority_epoch',
+      'zone_entry_assessment_request',
+      'zone_entry_assessment_job',
+      'zone_entry_assessment',
+      'authorization_history_epoch',
     ])
       assert.equal(
         (await upgrade.query(`SELECT count(*)::int AS total FROM ${table}`))[0].total,
@@ -211,8 +211,9 @@ test('observed seven-migration prefix upgrades populated synthetic data to MAIN6
         `Unexpected generated ${table}`,
       );
     assert.equal(
-      (await upgrade.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
-        .epoch_id,
+      (
+        await upgrade.query('SELECT epoch_id FROM authorization_history_control WHERE singleton=1')
+      )[0].epoch_id,
       null,
     );
     assert.equal((await upgrade.runMigrations({ transaction: 'all' })).length, 0);
@@ -253,7 +254,7 @@ test('invalid legacy Track rolls the entire pending migration batch back, retain
     assert.equal(
       (
         await upgrade.query(
-          "SELECT to_regclass(format('%I.%I',current_schema(),'mf06_assessment_request')) AS relation",
+          "SELECT to_regclass(format('%I.%I',current_schema(),'zone_entry_assessment_request')) AS relation",
         )
       )[0].relation,
       null,

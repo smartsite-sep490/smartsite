@@ -4,13 +4,82 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { MAIN_AUTHORITY_SOURCES } from '../src/common/configuration/main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../src/common/configuration/main-team-authority-sources.js';
 import {
   MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
   sealMainAuthorityArchive,
   decodeStoredMainAuthorityArchive,
   type MainAuthorityArchiveContext,
   type MainAuthorityArchivePayload,
 } from '../src/modules/zones/main-authority-archive-codec.js';
+
+test('V1/V2 retain legacy rings and API polygon objects without changing archive bytes or trust', () => {
+  for (const version of [MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_AUTHORITY_ARCHIVE_FORMAT_V2]) {
+    const f = createArchiveFixture({ cameraId: randomUUID(), regionId: randomUUID() });
+    const inventory =
+      version === MAIN_AUTHORITY_ARCHIVE_FORMAT
+        ? MAIN_AUTHORITY_SOURCES
+        : MAIN_AUTHORITY_V2_SOURCES;
+    const ring = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ];
+    for (const polygon of [ring, { coordinates: ring }]) {
+      const payload = {
+        ...f.payload,
+        version,
+        sources: inventory.map(([sourceKind, tableName, fields]) => ({
+          sourceKind,
+          tableName,
+          fields,
+          rows: (
+            f.payload.sources.find((source) => source.sourceKind === sourceKind)?.rows ?? []
+          ).map((row) => (sourceKind === 'REGION' ? { ...row, polygon } : row)),
+        })),
+      };
+      const sha256 = computeCanonicalPayloadHash(payload);
+      const envelope = { format: version, sha256, payload };
+      for (const result of [
+        sealMainAuthorityArchive(payload, f.context),
+        decodeStoredMainAuthorityArchive(envelope, { ...f.context, sha256 }),
+      ]) {
+        assert.equal(result.status, 'VALID');
+        if (result.status !== 'VALID') throw new Error('Expected valid polygon archive');
+        assert.equal(result.archive.sha256, sha256);
+        assert.equal(computeCanonicalPayloadHash(result.archive.payload), sha256);
+        assert.deepEqual(JSON.parse(JSON.stringify(result.archive)), envelope);
+        assert.equal(result.authorityCoverageEstablished, false);
+        assert.equal(result.identityEstablished, false);
+      }
+      for (const invalid of [
+        { coordinates: ring, allowed: true },
+        {
+          coordinates: [
+            [-1, 0],
+            [1, 0],
+            [1, 1],
+          ],
+        },
+        { coordinates: [] },
+      ]) {
+        const malformed = {
+          ...payload,
+          sources: payload.sources.map((source) =>
+            source.sourceKind === 'REGION'
+              ? { ...source, rows: source.rows.map((row) => ({ ...row, polygon: invalid })) }
+              : source,
+          ),
+        };
+        assert.deepEqual(sealMainAuthorityArchive(malformed, f.context), {
+          status: 'UNAVAILABLE',
+          reason: 'MALFORMED_ARCHIVE',
+        });
+      }
+    }
+  }
+});
 
 test('retained MAIN revoked and expired assignment metadata remain readable without granting authority', () => {
   for (const status of ['REVOKED', 'EXPIRED']) {
@@ -245,10 +314,10 @@ test('4. format and version validation rejects unknown versions with UNSUPPORTED
         ),
     },
     {
-      name: 'payload newer version V2',
+      name: 'payload unknown version V3',
       run: () =>
         sealMainAuthorityArchive(
-          { ...f.payload, version: 'MF06_MAIN_AUTHORITY_ARCHIVE_V2' },
+          { ...f.payload, version: 'MF06_MAIN_AUTHORITY_ARCHIVE_V3' },
           f.context,
         ),
     },

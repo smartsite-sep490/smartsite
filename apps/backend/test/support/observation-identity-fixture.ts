@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
-import type { EntityManager } from 'typeorm';
+import type { DataSource, EntityManager } from 'typeorm';
 import {
   AiObservationEventEntity,
   AlertDetectionMappingEntity,
@@ -19,9 +19,9 @@ import {
 import { ObservationIdentityResolutionService } from '../../src/modules/safety/identity/observation-identity-resolution.service.js';
 import { SafetyAlertEvidenceService } from '../../src/modules/safety/alerts/safety-alert-evidence.service.js';
 import { createTestConfig } from './config.js';
-import dataSource from './test-data-source.js';
+import legacyDataSource from './test-data-source.js';
 
-export async function observationIdentityFixture() {
+export async function observationIdentityFixture(dataSource: DataSource = legacyDataSource) {
   if (!dataSource.isInitialized) await dataSource.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),

@@ -12,9 +12,33 @@ import {
 } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { MainRepresentativeCommandService } from '../../src/modules/workforce/main-representative-command.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
+import { Legacy24TestDataSource } from '../support/legacy24/data-source.js';
 
 const canonical = createIsolatedTestDatabase();
 const legacy = createIsolatedTestDatabase({ legacy: true });
+test('legacy linked Worker creation uses only its transaction connection in a one-slot pool', async () => {
+  const f = await fixture(legacy.dataSource);
+  await legacy.dataSource.query("UPDATE user_role_assignment SET role='WORKER' WHERE user_id=$1", [
+    f.target,
+  ]);
+  const single = new Legacy24TestDataSource({
+    ...legacy.dataSource.options,
+    extra: { ...legacy.dataSource.options.extra, max: 1, connectionTimeoutMillis: 250 },
+  });
+  try {
+    await single.initialize();
+    const worker = await new WorkforceConfigurationService(single).create(f.site, {
+      externalId: randomUUID(),
+      displayName: 'Synthetic linked Worker',
+      contractorId: f.contractor,
+      userId: f.target,
+    });
+    assert.equal(worker.userId, f.target);
+    assert.equal(worker.contractorId, f.contractor);
+  } finally {
+    if (single.isInitialized) await single.destroy();
+  }
+});
 before(async () => {
   await canonical.initialize();
   await legacy.initialize();
@@ -24,7 +48,7 @@ after(async () => {
   await legacy.dispose();
 });
 
-async function fixture(db: DataSource) {
+async function fixture(db: DataSource, role = 'ADMIN') {
   const f = {
     actor: randomUUID(),
     target: randomUUID(),
@@ -51,8 +75,8 @@ async function fixture(db: DataSource) {
     [f.participation, f.contractor, f.site],
   );
   await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL),($3,$4,'CONTRACTOR_REPRESENTATIVE',$5)",
-    [randomUUID(), f.actor, randomUUID(), f.target, f.site],
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$6,$7),($3,$4,'CONTRACTOR_REPRESENTATIVE',$5)",
+    [randomUUID(), f.actor, randomUUID(), f.target, f.site, role, role === 'ADMIN' ? null : f.site],
   );
   const actor: WorkforceActor = {
     id: f.actor,
@@ -145,6 +169,14 @@ const calls = [
       new ContractorOperationsService(db).safetyReview(f.actorContext, f.worker),
   ],
   [
+    'assignment revoke',
+    (db: DataSource, f: Fixture) =>
+      new ContractorOperationsService(db).revokeAssignment(f.actorContext, f.worker, {
+        expectedVersion: 1,
+        reviewNote: 'Synthetic revoke',
+      }),
+  ],
+  [
     'assignment decision',
     (db: DataSource, f: Fixture) =>
       new ContractorOperationsService(db).siteManagerDecision(f.actorContext, f.worker, {
@@ -163,8 +195,8 @@ async function counts(db: DataSource) {
   (SELECT count(*)::int FROM worker) AS workers,(SELECT count(*)::int FROM contractor) AS contractors,
   (SELECT count(*)::int FROM contractor_site_participation) AS participations,
   (SELECT count(*)::int FROM worker_site_zone_assignment) AS allocations,
-  (SELECT count(*)::int FROM mf06_authority_command) AS commands,(SELECT count(*)::int FROM mf06_authority_fact) AS facts,
-  (SELECT count(*)::int FROM mf06_authority_gap) AS gaps,(SELECT count(*)::int FROM mf06_authority_commit_witness) AS witnesses`)
+  (SELECT count(*)::int FROM authorization_history_command) AS commands,(SELECT count(*)::int FROM authorization_history_revision) AS facts,
+  (SELECT count(*)::int FROM authorization_history_gap) AS gaps,(SELECT count(*)::int FROM authorization_history_commit_receipt) AS witnesses`)
   )[0];
 }
 for (const [name, call] of calls)
@@ -177,19 +209,19 @@ for (const [name, call] of calls)
   });
 
 const relations = [
-  'mf06_authority_source',
-  'mf06_authority_command',
-  'mf06_authority_epoch',
-  'mf06_authority_control',
-  'mf06_authority_head',
-  'mf06_authority_fact',
-  'mf06_authority_gap',
-  'mf06_authority_commit_witness',
-  'mf06_authority_baseline',
-  'mf06_assignment_command_result',
-  'mf06_participation_command_result',
-  'mf06_zone_permission_command_result',
-  'mf06_zone_deny_command_result',
+  'authorization_history_source',
+  'authorization_history_command',
+  'authorization_history_epoch',
+  'authorization_history_control',
+  'authorization_history_head',
+  'authorization_history_revision',
+  'authorization_history_gap',
+  'authorization_history_commit_receipt',
+  'authorization_history_baseline',
+  'worker_assignment_command_receipt',
+  'contractor_participation_command_receipt',
+  'zone_permission_command_receipt',
+  'zone_access_denial_command_receipt',
 ] as const;
 for (const relation of relations)
   test(`partial MAIN ${relation} refuses both raw legacy representative writers and legacy journal writer`, async () => {
@@ -264,14 +296,9 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
 for (const kind of ['GRANT', 'ASSIGN'] as const)
   test(`canonical authenticated replacement ${kind} retains exact actor/fact/witness attribution`, async () => {
     const db = canonical.dataSource,
-      f = await fixture(db),
+      f = await fixture(db, kind === 'GRANT' ? 'ADMIN' : 'SITE_MANAGER'),
       service = new MainRepresentativeCommandService(db);
     const context = { actorUserId: f.actor, reauthorize: async () => {} };
-    if (kind === 'ASSIGN')
-      await db.query(
-        "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
-        [randomUUID(), f.actor, f.site],
-      );
     const result =
       kind === 'GRANT'
         ? await service.grant(f.contractor, { userId: f.target }, context)
@@ -280,7 +307,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
     assert.equal(result!.userId, f.target);
     const rows = await db.query(
       `SELECT c.actor_user_id,c.operation,f.source_kind,f.source_id,w.transaction_id=c.transaction_id AS witnessed
-  FROM mf06_authority_command c JOIN mf06_authority_fact f USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id)
+  FROM authorization_history_command c JOIN authorization_history_revision f USING(command_id) JOIN authorization_history_commit_receipt w USING(command_id)
   WHERE f.source_id=$1`,
       [result!.id],
     );

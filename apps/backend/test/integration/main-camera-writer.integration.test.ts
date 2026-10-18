@@ -74,7 +74,7 @@ async function create(f: Fixture, context: Context | undefined = f.context) {
 }
 async function attribution(id: string, operation: string) {
   const rows = await db.query(
-    'SELECT c.command_id,c.actor_user_id,c.operation,f.source_kind,f.transaction_id=c.transaction_id AS same_tx,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f LEFT JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY f.revision DESC LIMIT 1',
+    'SELECT c.command_id,c.actor_user_id,c.operation,f.source_kind,f.transaction_id=c.transaction_id AS same_tx,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f LEFT JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY f.revision DESC LIMIT 1',
     [id],
   );
   assert.ok(rows[0]?.command_id, `${operation} must retain a same-transaction main command`);
@@ -114,7 +114,7 @@ test('Region create binds camera revision, polygon and permanent Zone lock to on
   assert.deepEqual(
     (
       await db.query(
-        'SELECT source_kind FROM mf06_authority_fact WHERE command_id=$1 ORDER BY source_kind',
+        'SELECT source_kind FROM authorization_history_revision WHERE command_id=$1 ORDER BY source_kind',
         [row.command_id],
       )
     ).map((r: { source_kind: string }) => r.source_kind),
@@ -190,7 +190,7 @@ test('Camera status mutation records camera and every active Region version unde
   assert.deepEqual(
     (
       await db.query(
-        'SELECT source_kind FROM mf06_authority_fact WHERE command_id=$1 ORDER BY source_kind',
+        'SELECT source_kind FROM authorization_history_revision WHERE command_id=$1 ORDER BY source_kind',
         [row.command_id],
       )
     ).map((r: { source_kind: string }) => r.source_kind),
@@ -201,7 +201,7 @@ test('stale revision and foreign Site mutations fail without orphan commands or 
   const f = await fixture(),
     camera = await create(f),
     other = await fixture();
-  const n = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+  const n = (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n;
   await assert.rejects(
     f.service.setStatus(
       f.siteId,
@@ -229,7 +229,10 @@ test('stale revision and foreign Site mutations fail without orphan commands or 
     ),
     status(404),
   );
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n, n);
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
+    n,
+  );
 });
 for (const role of ['ADMIN', 'SAFETY_OFFICER', 'WORKER'])
   test(`late camera mutation rejects current ${role}`, async () => {
@@ -277,7 +280,7 @@ test('journal fact failure rolls back actual Camera/Region/Zone mutations', asyn
   const f = await fixture(),
     camera = await create(f);
   await db.query(
-    `CREATE FUNCTION test_camera_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='REGION' THEN RAISE EXCEPTION 'synthetic fact failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_camera_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_camera_fact_failure()`,
+    `CREATE FUNCTION test_camera_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='REGION' THEN RAISE EXCEPTION 'synthetic fact failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_camera_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_camera_fact_failure()`,
   );
   try {
     await assert.rejects(
@@ -309,14 +312,14 @@ test('journal fact failure rolls back actual Camera/Region/Zone mutations', asyn
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_camera_fact_failure ON mf06_authority_fact;DROP FUNCTION test_camera_fact_failure()',
+      'DROP TRIGGER test_camera_fact_failure ON authorization_history_revision;DROP FUNCTION test_camera_fact_failure()',
     );
   }
 });
 test('postcommit witness failure preserves successful existing API semantics without advising an unsafe create retry', async () => {
   const f = await fixture();
   await db.query(
-    "CREATE FUNCTION test_camera_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic witness failure';END $$;CREATE TRIGGER test_camera_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_camera_witness_failure()",
+    "CREATE FUNCTION test_camera_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic witness failure';END $$;CREATE TRIGGER test_camera_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_camera_witness_failure()",
   );
   try {
     const camera = await create(f);
@@ -326,13 +329,15 @@ test('postcommit witness failure preserves successful existing API semantics wit
       1,
     );
     const row = (
-      await db.query('SELECT command_id FROM mf06_authority_fact WHERE source_id=$1', [camera.id])
+      await db.query('SELECT command_id FROM authorization_history_revision WHERE source_id=$1', [
+        camera.id,
+      ])
     )[0];
     assert.ok(row.command_id);
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_commit_witness WHERE command_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_commit_receipt WHERE command_id=$1',
           [row.command_id],
         )
       )[0].n,
@@ -340,13 +345,15 @@ test('postcommit witness failure preserves successful existing API semantics wit
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_camera_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_camera_witness_failure()',
+      'DROP TRIGGER test_camera_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_camera_witness_failure()',
     );
   }
 });
 test('partial installed journal fails closed before Camera create', async () => {
   const f = await fixture();
-  await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO test_hidden_camera_witness');
+  await db.query(
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO test_hidden_camera_witness',
+  );
   try {
     await assert.rejects(create(f), status(503));
     assert.equal(
@@ -355,7 +362,7 @@ test('partial installed journal fails closed before Camera create', async () => 
     );
   } finally {
     await db.query(
-      'ALTER TABLE test_hidden_camera_witness RENAME TO mf06_authority_commit_witness',
+      'ALTER TABLE test_hidden_camera_witness RENAME TO authorization_history_commit_receipt',
     );
   }
 });
@@ -369,7 +376,9 @@ test('legacy internal caller without actor never receives fabricated main attrib
   });
   assert.equal(
     (
-      await db.query('SELECT command_id FROM mf06_authority_fact WHERE source_id=$1', [camera.id])
+      await db.query('SELECT command_id FROM authorization_history_revision WHERE source_id=$1', [
+        camera.id,
+      ])
     )[0].command_id,
     null,
   );
@@ -546,7 +555,9 @@ test('actual HTTP logout between initial guard and transaction claim denies Came
       }
       await original(r, manager);
     };
-    const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+    const count = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+    )[0].n;
     const code = randomUUID();
     const pending = request(`/sites/${f.siteId}/cameras`, {
       code,
@@ -574,7 +585,7 @@ test('actual HTTP logout between initial guard and transaction claim denies Came
       0,
     );
     assert.equal(
-      (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+      (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
       count,
     );
   });

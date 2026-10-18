@@ -19,6 +19,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { DataSource, In, type EntityManager } from 'typeorm';
+import { requireLegacyAuthoritySchema } from '../../zones/legacy-authority-schema.js';
 import {
   command,
   conflict,
@@ -269,11 +270,14 @@ export class ContractorOperationsService {
     this.assertAdmin(actor);
     const value = command(CreateContractorCommand, input);
     try {
-      return await this.dataSource.getRepository(ContractorEntity).save({
-        id: randomUUID(),
-        code: value.code,
-        name: value.name,
-        isActive: true,
+      return await this.dataSource.transaction(async (manager) => {
+        await requireLegacyAuthoritySchema(manager);
+        return manager.getRepository(ContractorEntity).save({
+          id: randomUUID(),
+          code: value.code,
+          name: value.name,
+          isActive: true,
+        });
       });
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
@@ -291,6 +295,7 @@ export class ContractorOperationsService {
     await this.requireSiteRole(actor, uuid(value.siteId), UserRole.SITE_MANAGER);
     const range = timeRange(value.validFrom, value.validUntil);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const contractor = await manager
         .getRepository(ContractorEntity)
         .findOneBy({ id: contractorId });
@@ -319,6 +324,7 @@ export class ContractorOperationsService {
     const contractorId = uuid(contractorIdValue);
     const value = command(GrantContractorRepresentativeCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const [contractor, user] = await Promise.all([
         manager.getRepository(ContractorEntity).findOneBy({ id: contractorId }),
         manager.getRepository(UserEntity).findOneBy({ id: uuid(value.userId) }),
@@ -355,6 +361,7 @@ export class ContractorOperationsService {
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       await this.requireWorkerCreationAccess(manager, actor, contractorId, siteId);
       try {
         return await manager.getRepository(WorkerEntity).save({
@@ -396,6 +403,7 @@ export class ContractorOperationsService {
     const range = timeRange(value.validFrom, value.validUntil);
     if (!range.until) conflict('Worker assignment requires an expiry');
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
       if (!worker?.contractorId || !worker.isActive) this.forbidden();
       await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
@@ -439,6 +447,7 @@ export class ContractorOperationsService {
     await refuseLegacyMainWriter(this.dataSource.manager);
     const requestId = uuid(requestIdValue);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const request = await manager
         .getRepository(WorkerSiteZoneAssignmentEntity)
         .createQueryBuilder('assignment')
@@ -476,6 +485,7 @@ export class ContractorOperationsService {
     const requestId = uuid(requestIdValue);
     const value = command(SiteManagerDecisionCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const request = await manager
         .getRepository(WorkerSiteZoneAssignmentEntity)
         .createQueryBuilder('assignment')
@@ -543,6 +553,7 @@ export class ContractorOperationsService {
     await refuseLegacyMainWriter(this.dataSource.manager);
     const value = command(RevokeWorkerAssignmentCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const assignment = await manager
         .getRepository(WorkerSiteZoneAssignmentEntity)
         .findOne({ where: { id: uuid(requestIdValue) }, lock: { mode: 'pessimistic_write' } });

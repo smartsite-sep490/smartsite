@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { DataSource } from 'typeorm';
 import {
@@ -11,6 +12,7 @@ import {
   ZoneAuthorityCommandEntity,
 } from '../src/database/entities/index.js';
 import { createIsolatedTestDatabase } from './support/isolated-test-database.js';
+import { backendDirectory } from '../src/config/runtime-environment.js';
 
 async function metadataOnly(legacy: boolean) {
   const previous = process.env.TEST_DATABASE_URL;
@@ -83,7 +85,7 @@ test('legacy constructor aliases do not accept an unknown class with a trusted e
 });
 
 test('historical fixture bytes stay pinned and explicitly exclude production usage', async () => {
-  const root = new URL('./support/legacy24/', import.meta.url);
+  const root = new URL('test/support/legacy24/', pathToFileURL(backendDirectory));
   const provenance = JSON.parse(await readFile(new URL('provenance.json', root), 'utf8')) as {
     sourceCommit: string;
     productionUsageAllowed: boolean;

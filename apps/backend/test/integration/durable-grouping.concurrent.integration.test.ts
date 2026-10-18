@@ -6,22 +6,20 @@ import { DataSource, type QueryRunner } from 'typeorm';
 import { AlertStatus, AlertType } from '../../src/database/entities/enums.js';
 import { SafetyAlertEntity } from '../../src/database/entities/safety-alert.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import type { AlertCandidate } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
   if (!dataSource.isInitialized) {
-    await dataSource.initialize();
+    await isolated.initialize();
   }
   return await fn(dataSource);
 }
 
-after(async () => {
-  if (dataSource.isInitialized) {
-    await dataSource.destroy();
-  }
-});
+after(() => isolated.dispose());
 
 test('DurableGroupingService: 10 concurrent transactions with identical site/groupingKey result in exactly 1 open alert with detectionCount=10', async () => {
   await withDataSource(async (source) => {

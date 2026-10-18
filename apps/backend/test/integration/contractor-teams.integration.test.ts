@@ -8,7 +8,7 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
@@ -20,7 +20,6 @@ import { SchedulingWorkflowService } from '../../src/modules/workforce/schedulin
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance/attendance-reconciliation.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import {
   SiteEntity,
   ContractorEntity,
@@ -47,8 +46,10 @@ import {
   ContractorZonePermissionEntity,
 } from '../../src/database/entities/index.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 test('contractor teams: scoped dashboard, HTTP contracts, membership history, concurrency and swap lifecycle', async (t) => {
-  await dataSource.initialize();
+  await isolated.initialize();
   let app: NestExpressApplication | undefined;
   const siteId = randomUUID(),
     otherSite = randomUUID(),
@@ -734,43 +735,6 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
     );
   } finally {
     if (app) await app.close();
-    if (!dataSource.isInitialized) await dataSource.initialize();
-    await cleanupSiteAccess(dataSource, [siteId, otherSite]);
-    await dataSource.getRepository(ZoneEntity).delete({ siteId });
-    await dataSource.query('DELETE FROM shift_swap_request WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM contractor_team_membership WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM contractor_team WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM contractor_shift_assignment WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM shift WHERE site_id=ANY($1)', [[siteId, otherSite]]);
-    await dataSource.query('DELETE FROM schedule_version WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM worker WHERE site_id=ANY($1)', [[siteId, otherSite]]);
-    await dataSource.query(
-      'DELETE FROM contractor_representative_assignment WHERE site_id=ANY($1)',
-      [[siteId, otherSite]],
-    );
-    await dataSource.query('DELETE FROM contractor_site_participation WHERE site_id=ANY($1)', [
-      [siteId, otherSite],
-    ]);
-    await dataSource.query('DELETE FROM contractor WHERE id=ANY($1)', [
-      [contractorId, foreignContractor],
-    ]);
-    await dataSource.query('DELETE FROM auth_session WHERE user_id=ANY($1)', [ids]);
-    await dataSource.query('DELETE FROM user_role_assignment WHERE user_id=ANY($1)', [ids]);
-    await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [ids]);
-    await dataSource.query('DELETE FROM site WHERE id=ANY($1)', [[siteId, otherSite]]);
-    await dataSource.destroy();
+    await isolated.dispose();
   }
 });

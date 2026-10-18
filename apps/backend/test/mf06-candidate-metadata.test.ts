@@ -206,7 +206,7 @@ function createFakeManager(options: FakeManagerOptions = {}): EntityManager {
       if (/transaction_isolation/i.test(sql)) {
         return [{ transaction_isolation: isolationLevel }];
       }
-      if (/mf06_assessment_request/i.test(sql)) {
+      if (/zone_entry_assessment_request/i.test(sql)) {
         return request ? [request] : [];
       }
       if (/ai_observation_event/i.test(sql)) {

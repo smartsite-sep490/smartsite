@@ -88,7 +88,7 @@ async function create(f: Fixture, ctx: Context | undefined = f.ctx) {
 async function attribution(id: string, op: string, witnessed: true | null = true) {
   const row = (
     await db.query(
-      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
       [id],
     )
   )[0];
@@ -178,8 +178,11 @@ test('actor-free public service callers remain unattributed instead of inventing
   const f = await fixture(),
     g = await f.access.createGrant(f.siteId, f.zoneId, f.input);
   assert.equal(
-    (await db.query('SELECT command_id FROM mf06_authority_fact WHERE source_id=$1', [g.id]))[0]
-      .command_id,
+    (
+      await db.query('SELECT command_id FROM authorization_history_revision WHERE source_id=$1', [
+        g.id,
+      ])
+    )[0].command_id,
     null,
   );
   assert.equal(
@@ -203,9 +206,10 @@ test('concurrent public revokes keep one first timestamp and one actual revoke s
   assert.equal((await attribution(g.id, 'ZONE_DENY_REVOKE')).actor_user_id, f.actorUserId);
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1', [
-        g.id,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
+        [g.id],
+      )
     )[0].n,
     2,
   );
@@ -218,7 +222,7 @@ for (const role of ['ADMIN', 'SAFETY_OFFICER', 'WORKER'])
 test('public grant scope and reversed/unknown inputs fail without orphan commands', async () => {
   const f = await fixture(),
     other = await fixture();
-  const n = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+  const n = (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n;
   await assert.rejects(f.access.createGrant(other.siteId, f.zoneId, f.input, f.ctx), status(403));
   await assert.rejects(
     f.access.createGrant(f.siteId, f.zoneId, { ...f.input, workerId: other.workerId }, f.ctx),
@@ -242,15 +246,22 @@ test('public grant scope and reversed/unknown inputs fail without orphan command
     ),
     status(400),
   );
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n, n);
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
+    n,
+  );
 });
 test('partial journal and disabled DENY capture refuse authenticated creates', async () => {
   const f = await fixture();
-  await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO test_public_deny_witness');
+  await db.query(
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO test_public_deny_witness',
+  );
   try {
     await assert.rejects(create(f), status(503));
   } finally {
-    await db.query('ALTER TABLE test_public_deny_witness RENAME TO mf06_authority_commit_witness');
+    await db.query(
+      'ALTER TABLE test_public_deny_witness RENAME TO authorization_history_commit_receipt',
+    );
   }
   await db.query(
     'ALTER TABLE zone_access_grant DISABLE TRIGGER trg_mf06_capture_zone_access_grant',
@@ -390,7 +401,9 @@ for (const operation of ['create', 'revoke'] as const)
         }
         await original(r, manager);
       };
-      const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+      const count = (
+        await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
+      )[0].n;
       const root = `/sites/${f.siteId}/zones/${f.zoneId}/access-grants`;
       const pending =
         operation === 'create'
@@ -409,7 +422,7 @@ for (const operation of ['create', 'revoke'] as const)
       }
       assert.equal((await pending).status, 401);
       assert.equal(
-        (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+        (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
         count,
       );
       const rows = await db.query('SELECT revoked_at FROM zone_access_grant WHERE worker_id=$1', [
@@ -423,9 +436,10 @@ for (const operation of ['create', 'revoke'] as const)
 test('DENY source fact failure rolls back create and revoke together with the actor command', async () => {
   const f = await fixture(),
     g = await create(f);
-  const count = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n;
+  const count = (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0]
+    .n;
   await db.query(
-    "CREATE FUNCTION test_deny_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ZONE_GRANT' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_deny_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_deny_fact_failure()",
+    "CREATE FUNCTION test_deny_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='ZONE_GRANT' THEN RAISE EXCEPTION 'Synthetic failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_deny_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_deny_fact_failure()",
   );
   try {
     const syntheticFailure = (error: unknown) =>
@@ -441,12 +455,12 @@ test('DENY source fact failure rolls back create and revoke together with the ac
     assert.equal(rows.length, 1);
     assert.equal(rows[0].revoked_at, null);
     assert.equal(
-      (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+      (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
       count,
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_deny_fact_failure ON mf06_authority_fact;DROP FUNCTION test_deny_fact_failure()',
+      'DROP TRIGGER test_deny_fact_failure ON authorization_history_revision;DROP FUNCTION test_deny_fact_failure()',
     );
   }
 });
@@ -454,7 +468,7 @@ test('DENY source fact failure rolls back create and revoke together with the ac
 test('postcommit DENY witness failure keeps the already committed success without claiming confirmed history', async () => {
   const f = await fixture();
   await db.query(
-    "CREATE FUNCTION test_deny_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_deny_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_deny_witness_failure()",
+    "CREATE FUNCTION test_deny_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_deny_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_deny_witness_failure()",
   );
   try {
     const g = await create(f);
@@ -462,7 +476,7 @@ test('postcommit DENY witness failure keeps the already committed success withou
     assert.equal((await f.access.listGrants(f.siteId, f.zoneId)).total, 1);
   } finally {
     await db.query(
-      'DROP TRIGGER test_deny_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_deny_witness_failure()',
+      'DROP TRIGGER test_deny_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_deny_witness_failure()',
     );
   }
 });

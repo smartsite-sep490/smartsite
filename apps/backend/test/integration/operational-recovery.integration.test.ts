@@ -5,7 +5,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test, type TestContext } from 'node:test';
@@ -16,6 +16,8 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 import { syntheticJpeg } from '../support/synthetic-jpeg.js';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
+import { recoveryPostgresTools } from '../support/recovery-postgres-tools.js';
+import { Mf06AssessmentStore } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import {
   loadMainRecoveryMigrations,
   MAIN37_MISSING_MAIN61_MIGRATIONS,
@@ -23,6 +25,7 @@ import {
 } from '../support/main-recovery-profile.js';
 
 const pgBin = process.env.SMARTSITE_TEST_PG_BIN;
+const pgContainer = process.env.SMARTSITE_TEST_PG_CONTAINER;
 const mainSnapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
 const sourceRepository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const linuxImage = process.env.SMARTSITE_TEST_LINUX_RECOVERY_IMAGE;
@@ -30,18 +33,23 @@ const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).dige
 
 function recoveryScenario(main37 = false, linux = false) {
   return async (t: TestContext) => {
-    assert.ok(pgBin && isAbsolute(pgBin));
+    const pgTool = recoveryPostgresTools(pgBin, pgContainer);
+    const storage = main37
+      ? {
+          assessment: 'mf06_assessment',
+          artifact: 'mf06_authority_artifact',
+          job: 'mf06_assessment_job',
+        }
+      : {
+          assessment: 'zone_entry_assessment',
+          artifact: 'zone_entry_authority_artifact',
+          job: 'zone_entry_assessment_job',
+        };
     const url = new URL(resolveTestDatabaseUrl());
     assert.equal(url.hostname, '127.0.0.1');
     assert.equal(url.port, '5433');
     assert.equal(url.username, 'smartsite_test');
     assert.equal(url.pathname, '/smartsite_test');
-    const executable = (name: string) =>
-      join(pgBin, `${name}${process.platform === 'win32' ? '.exe' : ''}`);
-    assert.match(
-      execFileSync(executable('pg_dump'), ['--version'], { encoding: 'utf8', windowsHide: true }),
-      /PostgreSQL/,
-    );
     const isolated = createIsolatedTestDatabase({ canonical: true });
     const db = isolated.dataSource;
     const ownSchema = db.options.type === 'postgres' ? db.options.schema : undefined;
@@ -145,14 +153,28 @@ function recoveryScenario(main37 = false, linux = false) {
           return (migration as new () => { name: string }).prototype.constructor.name;
         })
         .filter((name) => !applied.has(name));
-      assert.deepEqual(missingRuntimeMigrations, MAIN37_MISSING_MAIN61_MIGRATIONS);
+      assert.deepEqual(
+        [...missingRuntimeMigrations].sort(),
+        [
+          ...MAIN37_MISSING_MAIN61_MIGRATIONS,
+          'Mf06TeamAuthorityHistory1792281600000',
+          'PrepareNotificationCompatibility1792010000000',
+          'CompleteNotificationCompatibility1792368000001',
+          'ZoneEntryPhysicalStorage1792454400000',
+        ].sort(),
+      );
     }
     await control.initialize();
     const schema = db.driver.schema;
     assert.ok(schema && /^isolated_test_[a-f0-9]{32}$/.test(schema));
     assert.equal((await db.query('SELECT current_schema() AS schema'))[0].schema, schema);
     assert.equal(
-      (await control.query("SELECT to_regclass('public.app_user') IS NULL AS absent"))[0].absent,
+      (
+        await control.query(
+          "SELECT to_regclass(format('%I.app_user',$1::text)) IS NOT NULL AND to_regclass(format('%I.app_user',$1::text)) IS DISTINCT FROM to_regclass('public.app_user') AS isolated",
+          [schema],
+        )
+      )[0].isolated,
       true,
     );
     const runtimeUrl = new URL(url);
@@ -374,9 +396,9 @@ function recoveryScenario(main37 = false, linux = false) {
       throw new Error('Actual main liveness/readiness-boundary deadline exceeded');
     }
     let first = await start(sourceMedia);
-    const login = async (password: string) => {
+    const login = async (password: string, loginName = username) => {
       const result = await (
-        await request('/auth/login', 200, { username, password, clientType: 'WEB' })
+        await request('/auth/login', 200, { username: loginName, password, clientType: 'WEB' })
       ).json();
       secrets.push(result.accessToken);
       return result.accessToken as string;
@@ -625,13 +647,17 @@ function recoveryScenario(main37 = false, linux = false) {
       assert.equal(original.latestRevision, 1);
       manual = { route, command, original: original.recordedDecision, safetyToken, cookie };
     }
-    const completed = await seedCompletedRecoveryAssessment(db, {
-      siteId: site.id,
-      zoneId: zone.id,
-      cameraId: camera.id,
-      regionId: region.id,
-      eventId: references[0]!.eventId,
-    });
+    const completed = await seedCompletedRecoveryAssessment(
+      db,
+      {
+        siteId: site.id,
+        zoneId: zone.id,
+        cameraId: camera.id,
+        regionId: region.id,
+        eventId: references[0]!.eventId,
+      },
+      main37,
+    );
     assert.ok(
       Number(
         (
@@ -775,10 +801,10 @@ function recoveryScenario(main37 = false, linux = false) {
       '-d',
       'smartsite_test',
     ];
-    execFileSync(
-      executable('pg_dump'),
+    pgTool(
+      'pg_dump',
       [...pgArgs, '--schema', schema, '--format=custom', '--file', dump, '--no-owner', '--no-acl'],
-      { env: pgEnv, windowsHide: true, timeout: 10_000 },
+      pgEnv,
     );
     const manifest = {
       schema,
@@ -838,8 +864,8 @@ function recoveryScenario(main37 = false, linux = false) {
     // pg_restore --schema selects contained objects but omits the SCHEMA TOC entry.
     // Provision only this exact, verified-absent owned fixture namespace first.
     await control.query(`CREATE SCHEMA "${schema}"`);
-    execFileSync(
-      executable('pg_restore'),
+    pgTool(
+      'pg_restore',
       [
         ...pgArgs,
         '--schema',
@@ -850,7 +876,7 @@ function recoveryScenario(main37 = false, linux = false) {
         '--no-acl',
         dump,
       ],
-      { env: pgEnv, windowsHide: true, timeout: 10_000 },
+      pgEnv,
     );
     await db.initialize();
     assert.deepEqual(
@@ -859,13 +885,22 @@ function recoveryScenario(main37 = false, linux = false) {
       'Every restored owned table row, constraint and index matches',
     );
     if (completed) {
-      assert.equal(before.contents.find((table) => table.name === 'mf06_assessment')?.count, 1);
-      assert.equal(
-        before.contents.find((table) => table.name === 'mf06_authority_artifact')?.count,
-        1,
-      );
+      if (!main37) {
+        const replay = await new Mf06AssessmentStore(db).replay(
+          completed.requestId,
+          completed.commandId,
+          site.id,
+        );
+        assert.equal(
+          replay?.assessmentId,
+          completed.assessmentId,
+          'Restored assessment retains a valid original command hash and archive',
+        );
+      }
+      assert.equal(before.contents.find((table) => table.name === storage.assessment)?.count, 1);
+      assert.equal(before.contents.find((table) => table.name === storage.artifact)?.count, 1);
       const [job] = await db.query(
-        'SELECT status,head_revision,lease_token,lease_expires_at FROM mf06_assessment_job WHERE request_id=$1',
+        `SELECT status,head_revision,lease_token,lease_expires_at FROM ${storage.job} WHERE request_id=$1`,
         [completed.requestId],
       );
       assert.deepEqual(job, {
@@ -876,22 +911,22 @@ function recoveryScenario(main37 = false, linux = false) {
       });
       await assert.rejects(
         db.query(
-          `INSERT INTO mf06_assessment
+          `INSERT INTO ${storage.assessment}
          (assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,
           outcome,reason_code,evaluator_version,provenance,authority_artifact_id,
           claim_head_revision,claim_lease_token,assessed_at)
          SELECT $1,request_id,$2,command_hash,site_id,event_id,binding_hash,outcome,
                 reason_code,evaluator_version,provenance,authority_artifact_id,
                 claim_head_revision,claim_lease_token,assessed_at
-         FROM mf06_assessment WHERE assessment_id=$3`,
+         FROM ${storage.assessment} WHERE assessment_id=$3`,
           [randomUUID(), randomUUID(), completed.assessmentId],
         ),
         (error: unknown) => (error as { code?: string }).code === '23514',
         'A completed historical assessment cannot be recreated by ordinary row INSERT',
       );
       for (const [table, key, id] of [
-        ['mf06_assessment', 'assessment_id', completed.assessmentId],
-        ['mf06_authority_artifact', 'artifact_id', completed.artifactId],
+        [storage.assessment, 'assessment_id', completed.assessmentId],
+        [storage.artifact, 'artifact_id', completed.artifactId],
       ]) {
         await assert.rejects(
           db.query(`UPDATE ${table} SET ${key}=${key} WHERE ${key}=$1`, [id]),
@@ -899,7 +934,7 @@ function recoveryScenario(main37 = false, linux = false) {
         );
       }
       await assert.rejects(
-        db.query('UPDATE mf06_assessment_job SET status=$2 WHERE request_id=$1', [
+        db.query(`UPDATE ${storage.job} SET status=$2 WHERE request_id=$1`, [
           completed.requestId,
           'PENDING',
         ]),
@@ -953,17 +988,28 @@ function recoveryScenario(main37 = false, linux = false) {
     }
     if (completed) {
       const route = `/sites/${site.id}/mf06-assessments/${completed.assessmentId}`;
-      // Stored synthetic history must remain hidden, never relabeled to make a read pass.
-      await request(route, 404, undefined, token);
-      const response = await request(`/sites/${site.id}/mf06-assessments`, 200, undefined, token);
-      const page = await response.json();
-      assert.deepEqual(page.items, []);
-      assert.equal(page.total, 0);
-      assert.equal(response.headers.get('cache-control'), 'private, no-store');
+      if (main37) {
+        // The frozen negative profile lacks current storage; never fall back to old names.
+        for (const path of [route, `/sites/${site.id}/mf06-assessments`]) {
+          const response = await request(path, 503, undefined, token);
+          const body = await response.json();
+          assert.equal(body.code, 'SERVICE_UNAVAILABLE');
+          assert.equal(JSON.stringify(body).includes('mf06_assessment'), false);
+          assert.equal('assessmentId' in body || 'items' in body, false);
+        }
+      } else {
+        // Stored synthetic history must remain hidden, never relabeled to make a read pass.
+        await request(route, 404, undefined, token);
+        const response = await request(`/sites/${site.id}/mf06-assessments`, 200, undefined, token);
+        const page = await response.json();
+        assert.deepEqual(page.items, []);
+        assert.equal(page.total, 0);
+        assert.equal(response.headers.get('cache-control'), 'private, no-store');
+      }
       await request(route, 401);
       await request(
         route.replace(`/sites/${site.id}/`, `/sites/${otherSite.id}/`),
-        404,
+        main37 ? 503 : 404,
         undefined,
         token,
       );
@@ -1007,7 +1053,8 @@ function recoveryScenario(main37 = false, linux = false) {
           linuxImage: linux ? linuxImage : null,
           profile: main37 ? 'PINNED_MAIN35_PLUS_0001_0004' : 'CANONICAL_RUNTIME_GRAPH',
           completedMf06HistoryPreserved: !!completed,
-          syntheticHistorySuppressed: !!completed,
+          syntheticHistorySuppressed: !!completed && !main37,
+          incompleteAssessmentStorageRefused: !!completed && main37,
           functionsTriggersMatched: true,
           columnTypesDefaultsAndFlagsMatched: true,
           restoredManualCommandReplayExact: !!manual,
@@ -1029,7 +1076,10 @@ function recoveryScenario(main37 = false, linux = false) {
 
 test(
   'quiesced owned PostgreSQL dump and every fixture evidence file restore exact records and private reads',
-  { timeout: 60_000, skip: pgBin ? false : 'Explicit PostgreSQL client binary directory required' },
+  {
+    timeout: 60_000,
+    skip: pgBin || pgContainer ? false : 'Explicit PostgreSQL test tools required',
+  },
   recoveryScenario(),
 );
 test(
@@ -1037,7 +1087,7 @@ test(
   {
     timeout: 60_000,
     skip:
-      pgBin && mainSnapshot && sourceRepository
+      (pgBin || pgContainer) && mainSnapshot && sourceRepository
         ? false
         : 'Explicit PostgreSQL clients and pinned MAIN migration snapshot/source required',
   },
@@ -1048,7 +1098,7 @@ test(
   {
     timeout: 180_000,
     skip:
-      pgBin && linuxImage
+      (pgBin || pgContainer) && linuxImage
         ? false
         : 'Explicit PostgreSQL clients and owned Linux image digest required',
   },

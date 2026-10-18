@@ -136,15 +136,15 @@ const invalidTriggers = [
   ],
   [
     'conditional command guard',
-    'mf06_authority_command',
+    'authorization_history_command',
     'trg_mf06_authority_command_insert',
-    'BEFORE INSERT ON mf06_authority_command FOR EACH ROW WHEN (false) EXECUTE FUNCTION mf06_authority_command_guard()',
+    'BEFORE INSERT ON authorization_history_command FOR EACH ROW WHEN (false) EXECUTE FUNCTION mf06_authority_command_guard()',
   ],
   [
     'AFTER witness guard',
-    'mf06_authority_commit_witness',
+    'authorization_history_commit_receipt',
     'trg_mf06_authority_witness_insert',
-    'AFTER INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION mf06_authority_witness_guard()',
+    'AFTER INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION mf06_authority_witness_guard()',
   ],
 ] as const;
 
@@ -199,14 +199,18 @@ test('actorless typed mutation rejects disabled installed capture without changi
 
 test('actorless typed mutation rejects a partial installation', async () => {
   const f = await fixture();
-  await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO hidden_capture_witness');
+  await db.query(
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO hidden_capture_witness',
+  );
   try {
     await assert.rejects(
       mutate(f, false),
       (e: { getStatus?: () => number }) => e.getStatus?.() === 503,
     );
   } finally {
-    await db.query('ALTER TABLE hidden_capture_witness RENAME TO mf06_authority_commit_witness');
+    await db.query(
+      'ALTER TABLE hidden_capture_witness RENAME TO authorization_history_commit_receipt',
+    );
   }
 });
 
@@ -238,13 +242,13 @@ test('valid actorless capture stays explicitly unattributed; it never invents an
   const f = await fixture();
   await mutate(f, false);
   const [fact] = await db.query(
-    "SELECT command_id,after_payload FROM mf06_authority_fact WHERE source_kind='ZONE_POLICY' AND source_id=$1 ORDER BY revision DESC LIMIT 1",
+    "SELECT command_id,after_payload FROM authorization_history_revision WHERE source_kind='ZONE_POLICY' AND source_id=$1 ORDER BY revision DESC LIMIT 1",
     [f.zone],
   );
   assert.equal(fact.command_id, null);
   assert.equal(fact.after_payload.restriction_policy, 'NONE');
   const [gap] = await db.query(
-    'SELECT reason FROM mf06_authority_gap WHERE source_id=$1 ORDER BY observed_at DESC LIMIT 1',
+    'SELECT reason FROM authorization_history_gap WHERE source_id=$1 ORDER BY observed_at DESC LIMIT 1',
     [f.zone],
   );
   assert.equal(gap.reason, 'UNATTRIBUTED_WRITE');
@@ -255,7 +259,7 @@ test('canonical installed triggers still permit witnessed commands and metadata 
   assert.equal((await read(f)).status, 'RECONSTRUCTED');
   await mutate(f);
   const [fact] = await db.query(
-    'SELECT f.command_id,c.actor_user_id,w.command_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+    'SELECT f.command_id,c.actor_user_id,w.command_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
     [f.zone],
   );
   assert.equal(fact.actor_user_id, f.actor);
@@ -293,20 +297,20 @@ test('valid initial Admin bootstrap records unattributed account/role facts, not
       'SyntheticAdmin123!',
     );
     const facts: { source_kind: string; command_id: string | null }[] = await source.query(
-      'SELECT source_kind,command_id FROM mf06_authority_fact ORDER BY source_kind',
+      'SELECT source_kind,command_id FROM authorization_history_revision ORDER BY source_kind',
     );
     assert.deepEqual(facts, [
       { source_kind: 'USER_ACCOUNT', command_id: null },
       { source_kind: 'USER_ROLE', command_id: null },
     ]);
     assert.equal(
-      (await source.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+      (await source.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
       0,
     );
     assert.equal(
       (
         await source.query(
-          "SELECT count(*)::int AS n FROM mf06_authority_gap WHERE reason='UNATTRIBUTED_WRITE'",
+          "SELECT count(*)::int AS n FROM authorization_history_gap WHERE reason='UNATTRIBUTED_WRITE'",
         )
       )[0].n,
       2,
@@ -396,11 +400,11 @@ test('concurrent initial Admin requests see the winning Admin after the invarian
       1,
     );
     assert.equal(
-      (await actual.query('SELECT count(*)::int AS n FROM mf06_authority_fact'))[0].n,
+      (await actual.query('SELECT count(*)::int AS n FROM authorization_history_revision'))[0].n,
       2,
     );
     assert.equal(
-      (await actual.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n,
+      (await actual.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0].n,
       0,
     );
   } finally {

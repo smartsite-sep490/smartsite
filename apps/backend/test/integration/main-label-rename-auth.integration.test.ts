@@ -467,12 +467,13 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
 
     // Measure baseline counts of authority tables (must not have any new records)
     const beforeCommands = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
     )[0].n as number;
-    const beforeFacts = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact'))[0]
-      .n as number;
+    const beforeFacts = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_revision')
+    )[0].n as number;
     const beforeWitnesses = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_commit_witness')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_commit_receipt')
     )[0].n as number;
 
     // 1. Site Rename with Unicode & surrounding whitespace
@@ -631,12 +632,13 @@ test('Label renames happy path trims Unicode, handles no-op, preserves invariant
 
     // 5. Assert ZERO authority records emitted for label-only renames
     const afterCommands = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
     )[0].n as number;
-    const afterFacts = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact'))[0]
-      .n as number;
+    const afterFacts = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_revision')
+    )[0].n as number;
     const afterWitnesses = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_commit_witness')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_commit_receipt')
     )[0].n as number;
 
     assert.equal(afterCommands, beforeCommands, 'Label renames must not emit authority commands');

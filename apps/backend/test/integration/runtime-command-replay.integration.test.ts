@@ -191,34 +191,37 @@ test(
     const create = (route: string, body: unknown, token = admin) =>
       request(route, 201, { method: 'POST', body, token });
     const site = await create('/sites', { code: adminName, name: 'Synthetic replay Site' });
-    const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
-      adminName,
-    ]);
-    await db.query(
-      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
-      [actorId, site.id],
-    );
+    const managerName = `replay-manager-${randomBytes(6).toString('hex')}`;
+    await create('/users', {
+      username: managerName,
+      displayName: 'Synthetic replay Site Manager',
+      temporaryPassword: reviewerInitial,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+    });
+    const managerToken = await login(managerName, reviewerInitial);
+    const createScoped = (route: string, body: unknown) =>
+      request(route, 201, { method: 'POST', body, token: managerToken });
+
     const reviewerName = `replay-so-${randomBytes(6).toString('hex')}`;
     const reviewer = await create('/users', {
       username: reviewerName,
       displayName: 'Synthetic replay Safety',
-      temporaryPassword: reviewerInitial,
+      temporaryPassword: reviewerChanged,
       roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: site.id }],
     });
-    let safety = await login(reviewerName, reviewerInitial);
-    await changePassword(safety, reviewerInitial, reviewerChanged);
-    safety = await login(reviewerName, reviewerChanged);
+    // Five fixture logins fit the real quota; password-change behavior has its own tests.
+    const safety = await login(reviewerName, reviewerChanged);
     const contractor = await create(`/sites/${site.id}/contractors`, {
       code: adminName,
       name: 'Synthetic replay Contractor',
     });
-    await create(`/contractors/${contractor.id}/participations`, {
+    await createScoped(`/contractors/${contractor.id}/participations`, {
       siteId: site.id,
       validFrom: '2020-01-01T00:00:00Z',
       validUntil: null,
     });
     const repName = `replay-rep-${randomBytes(6).toString('hex')}`;
-    await create(`/sites/${site.id}/contractors/${contractor.id}/representative-accounts`, {
+    await createScoped(`/sites/${site.id}/contractors/${contractor.id}/representative-accounts`, {
       username: repName,
       displayName: 'Synthetic replay Representative',
       temporaryPassword: initial,
@@ -233,19 +236,19 @@ test(
       },
       representative,
     );
-    const camera = await create(`/sites/${site.id}/cameras`, {
+    const camera = await createScoped(`/sites/${site.id}/cameras`, {
       code: 'REPLAY',
       externalId: adminName,
       name: 'Synthetic metadata Camera',
     });
-    const zone = await create(`/sites/${site.id}/zones`, {
+    const zone = await createScoped(`/sites/${site.id}/zones`, {
       code: 'REPLAY',
       name: 'Synthetic replay Zone',
       type: 'STANDARD',
       restrictionPolicy: 'NONE',
       requiredPpe: ['HARD_HAT'],
     });
-    const { region } = await create(`/sites/${site.id}/cameras/${camera.id}/regions`, {
+    const { region } = await createScoped(`/sites/${site.id}/cameras/${camera.id}/regions`, {
       zoneId: zone.id,
       expectedConfigurationVersion: 1,
       polygon: {

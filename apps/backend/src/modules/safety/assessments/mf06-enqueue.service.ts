@@ -58,7 +58,7 @@ export class Mf06EnqueueService {
     // 3. Replay existing INITIAL_OBSERVATION_ASSESSMENT/revision 1 requests before registry checks
     const existingRequests = await manager.query(
       `SELECT request_id
-       FROM mf06_assessment_request
+       FROM zone_entry_assessment_request
        WHERE event_id = $1
          AND requested_purpose = 'INITIAL_OBSERVATION_ASSESSMENT'
          AND request_revision = 1
@@ -198,7 +198,7 @@ export class Mf06EnqueueService {
 
       const candidateRequestId = randomUUID();
       const insertRequestSql = `
-        INSERT INTO mf06_assessment_request (
+        INSERT INTO zone_entry_assessment_request (
           request_id,
           event_id,
           payload_hash,
@@ -254,7 +254,7 @@ export class Mf06EnqueueService {
       } else {
         // Conflict on uq_mf06_request_binding: select existing request_id
         const selectRes = await manager.query(
-          `SELECT request_id FROM mf06_assessment_request
+          `SELECT request_id FROM zone_entry_assessment_request
            WHERE event_id = $1
              AND person_observation_index IS NOT DISTINCT FROM $2
              AND zone_observation_index = $3
@@ -278,7 +278,7 @@ export class Mf06EnqueueService {
       // Atomically insert PENDING job for newly created request
       if (newlyInserted) {
         const insertJobSql = `
-          INSERT INTO mf06_assessment_job (
+          INSERT INTO zone_entry_assessment_job (
             request_id,
             status,
             attempt_count,

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import {
   ContractorEntity,
   ContractorRepresentativeAssignmentEntity,
@@ -30,10 +30,13 @@ import { ShiftRequestReaderService } from '../../src/modules/workforce/schedulin
 import { ShiftSwapRequestEntity } from '../../src/database/entities/shift-swap-request.entity.js';
 import { ScheduleConfigurationService } from '../../src/modules/workforce/scheduling/schedule-configuration.service.js';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
+
 test('MF07 durable notifications: delivery, scope, transactions, history and reads', async (t) => {
-  await dataSource.initialize();
+  await isolated.initialize();
   t.after(async () => {
-    if (dataSource.isInitialized) await dataSource.destroy();
+    await isolated.dispose();
   });
   const notifications = new SchedulingNotificationService(dataSource);
   const workflow = new SchedulingWorkflowService(dataSource, notifications);

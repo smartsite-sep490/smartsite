@@ -1,3 +1,4 @@
+import { PRE_NAMING_AUTHORITY_RELATIONS } from './authority-storage-relations.js';
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
@@ -5,7 +6,7 @@ import { DataSource, QueryFailedError, type EntityManager } from 'typeorm';
 import { conflict, uuid } from './commands.js';
 import { PublicHttpException } from '../http/public-http-exception.js';
 import { withZoneAuthorityTransaction } from '../../modules/zones/zone-authority-transaction.js';
-import { MAIN_AUTHORITY_SOURCES } from './main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from './main-team-authority-sources.js';
 import { hasMainAuthorityCapture } from './main-authority-capture-preflight.js';
 
 /** Server-only actor claim; it is never accepted from a management DTO. */
@@ -45,20 +46,25 @@ type Operation =
   | 'CONTRACTOR_ZONE_REVOKE'
   | 'WORKER_ZONE_GRANT'
   | 'WORKER_ZONE_REVOKE'
+  | 'TEAM_CREATE'
+  | 'TEAM_ARCHIVE'
+  | 'TEAM_ASSIGN'
+  | 'TEAM_ZONE_GRANT'
+  | 'TEAM_ZONE_REVOKE'
   | 'CAMERA_CREATE'
   | 'CAMERA_STATUS_UPDATE'
   | 'REGION_CREATE'
   | 'REGION_POLYGON_UPDATE'
   | 'REGION_STATUS_UPDATE';
 const relations = [
-  'mf06_authority_source',
-  'mf06_authority_command',
-  'mf06_authority_epoch',
-  'mf06_authority_control',
-  'mf06_authority_head',
-  'mf06_authority_fact',
-  'mf06_authority_gap',
-  'mf06_authority_commit_witness',
+  'authorization_history_source',
+  'authorization_history_command',
+  'authorization_history_epoch',
+  'authorization_history_control',
+  'authorization_history_head',
+  'authorization_history_revision',
+  'authorization_history_gap',
+  'authorization_history_commit_receipt',
 ];
 function unavailable(): never {
   throw new PublicHttpException(503, {
@@ -146,12 +152,13 @@ export async function executeMainConfigurationCommand<T>(
       );
 
     const installed = await manager.query(
-      "SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname=ANY($1::text[]) AND c.relkind='r'",
-      [relations],
+      "SELECT count(*) FILTER(WHERE c.relname=ANY($1::text[]))::int AS n, count(*) FILTER(WHERE c.relname=ANY($2::text[]))::int AS legacy FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind='r'",
+      [relations, PRE_NAMING_AUTHORITY_RELATIONS],
     );
+    if (installed[0]?.legacy > 0) unavailable();
     if (installed[0]?.n === 0) return { value: await work(manager), journaled: false };
     if (installed[0]?.n !== relations.length) unavailable();
-    const captures =
+    let captures =
       operation === 'MAIN_AUTHORITY_BASELINE'
         ? MAIN_AUTHORITY_SOURCES.map(([, table]) => table)
         : operation === 'USER_CONTRACTOR_WORKER_ACCOUNT_CREATE'
@@ -207,6 +214,8 @@ export async function executeMainConfigurationCommand<T>(
                                               operation === 'ZONE_DENY_REVOKE'
                                             ? ['zone_access_grant']
                                             : ['camera', 'camera_observation_region', 'zone'];
+    if (operation.startsWith('TEAM_'))
+      captures = ['contractor_team', 'contractor_team_membership', 'team_zone_permission'];
     if (!(await hasMainAuthorityCapture(manager, captures))) unavailable();
     if (!context) return { value: await work(manager), journaled: false };
     const nested = await manager.query(
@@ -214,7 +223,7 @@ export async function executeMainConfigurationCommand<T>(
     );
     if (nested[0]?.value) conflict('Nested authority commands are not supported');
     await manager.query(
-      'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4)',
+      'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4)',
       [commandId, actorUserId, operation, requestHash],
     );
     await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [commandId]);
@@ -253,7 +262,7 @@ export async function executeMainConfigurationCommand<T>(
   if (result.journaled) {
     try {
       await source.query(
-        'INSERT INTO mf06_authority_commit_witness(command_id,transaction_id) SELECT command_id,transaction_id FROM mf06_authority_command WHERE command_id=$1',
+        'INSERT INTO authorization_history_commit_receipt(command_id,transaction_id) SELECT command_id,transaction_id FROM authorization_history_command WHERE command_id=$1',
         [commandId],
       );
     } catch {

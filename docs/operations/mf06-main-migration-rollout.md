@@ -1,5 +1,9 @@
 # Canonical MAIN/Safety migration graph
 
+Current local graph65, physical naming and notification compatibility are recorded in the [17/10 database handoff](../database/tuan-db-erd-handoff.md). Use its migration order and current test results; transaction `all` is required across the notification bridges. New migrations refuse unsafe downgrade and require verified DB/media recovery.
+
+Historical qualification below covers the pinned MAIN35/Safety39 checkpoint. The [Main-sync integration record](2026-10-16-tuan-main-sync-merge.md) records the earlier merged59 registry and populated56 Checklist upgrade refusal; it is not the current implementation result.
+
 The application/CLI registry is approved MAIN35 from `2e98619ac94be775ef43f4cb3076f00a59b88df1` plus reserved Safety slots0001–0004. All35 MAIN migration bodies are retained byte-for-byte. Seven missing baseline files were restored verbatim; no MF08, notifications, attendance or Workforce business service/UI was rewritten.
 
 `synchronize` and startup `migrationsRun` remain false. Merely building this source never upgrades the current website or a cloud database. A production migration needs the normal reviewed rollout, backup and owned-target gates; no script in this change authorizes cloud writes or runs on an unspecified schema.

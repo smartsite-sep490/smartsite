@@ -166,7 +166,7 @@ test(
     assert.deepEqual(await control('READY'), {
       type: 'READY',
       entrypoint: 'main.ts',
-      registeredMigrations: 61,
+      registeredMigrations: db.migrations.length,
       productionConfig: true,
     });
     const login = await request('/auth/login', 'POST', {
@@ -200,14 +200,27 @@ test(
     );
     assert.equal(siteResponse.status, 201);
     const site = await siteResponse.json();
-    // Main requires an exact-Site Manager for Zone writes; Admin alone is not enough.
-    const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
-      username,
-    ]);
-    await db.query(
-      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
-      [actorId, site.id],
+    const managerName = `drain-manager-${randomBytes(6).toString('hex')}`;
+    const managerResponse = await request(
+      '/users',
+      'POST',
+      {
+        username: managerName,
+        displayName: 'Synthetic drain Site Manager',
+        temporaryPassword: changed,
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: site.id }],
+      },
+      token,
     );
+    assert.equal(managerResponse.status, 201);
+    const managerLogin = await request('/auth/login', 'POST', {
+      username: managerName,
+      password: changed,
+      clientType: 'WEB',
+    });
+    assert.equal(managerLogin.status, 200);
+    token = (await managerLogin.json()).accessToken;
+    secrets.push(token);
     await held.connect();
     await held.startTransaction();
     await held.query('LOCK TABLE zone IN ACCESS EXCLUSIVE MODE');
@@ -239,7 +252,7 @@ test(
     }
     assert.ok(blockedPid, 'Actual admitted Zone transaction must reach the held SQL boundary');
     const [{ count: commandsBefore }] = await db.query(
-      "SELECT count(*)::int AS count FROM mf06_authority_command WHERE operation='ZONE_CREATE'",
+      "SELECT count(*)::int AS count FROM authorization_history_command WHERE operation='ZONE_CREATE'",
     );
     assert.equal(commandsBefore, 0, 'Other connections cannot see the uncommitted command');
     child.send('BEGIN_DRAIN');
@@ -296,7 +309,7 @@ test(
       'Runtime pool connection is closed after drain',
     );
     const rows = await db.query(
-      "SELECT z.id, c.command_id, f.source_id, w.transaction_id=c.transaction_id AND f.transaction_id=c.transaction_id AS witnessed FROM zone z JOIN mf06_authority_fact f ON f.source_id=z.id JOIN mf06_authority_command c ON c.command_id=f.command_id JOIN mf06_authority_commit_witness w ON w.command_id=c.command_id WHERE z.site_id=$1 AND z.code='ADMITTED' AND c.operation='ZONE_CREATE'",
+      "SELECT z.id, c.command_id, f.source_id, w.transaction_id=c.transaction_id AND f.transaction_id=c.transaction_id AS witnessed FROM zone z JOIN authorization_history_revision f ON f.source_id=z.id JOIN authorization_history_command c ON c.command_id=f.command_id JOIN authorization_history_commit_receipt w ON w.command_id=c.command_id WHERE z.site_id=$1 AND z.code='ADMITTED' AND c.operation='ZONE_CREATE'",
       [site.id],
     );
     assert.equal(rows.length, 1);

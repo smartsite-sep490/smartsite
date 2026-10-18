@@ -186,10 +186,10 @@ async function grantPair(f: Fixture) {
 }
 async function count(table: string, column: string, value: string) {
   const allowed = new Set([
-    'mf06_authority_command:command_id',
+    'authorization_history_command:command_id',
     'audit_log:site_id',
-    'mf06_authority_fact:command_id',
-    'mf06_zone_permission_command_result:command_id',
+    'authorization_history_revision:command_id',
+    'zone_permission_command_receipt:command_id',
   ]);
   assert.ok(allowed.has(`${table}:${column}`));
   return (await db.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${column}=$1`, [value]))[0]
@@ -215,7 +215,7 @@ test('Contractor grant commits permission, Site version, audit and transaction f
   assert.deepEqual(
     (
       await db.query(
-        'SELECT source_kind,f.transaction_id=c.transaction_id AS same_tx FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE command_id=$1 ORDER BY source_kind',
+        'SELECT source_kind,f.transaction_id=c.transaction_id AS same_tx FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE command_id=$1 ORDER BY source_kind',
         [input.commandId],
       )
     ).map((r: { source_kind: string; same_tx: boolean }) => [r.source_kind, r.same_tx]),
@@ -227,7 +227,7 @@ test('Contractor grant commits permission, Site version, audit and transaction f
   assert.equal(
     (
       await db.query(
-        'SELECT count(*)::int AS n FROM mf06_authority_commit_witness WHERE command_id=$1',
+        'SELECT count(*)::int AS n FROM authorization_history_commit_receipt WHERE command_id=$1',
         [input.commandId],
       )
     )[0].n,
@@ -406,7 +406,7 @@ for (const mutation of [
     await asRole(f, 'CONTRACTOR_REPRESENTATIVE');
     const input = workerInput(f, cp);
     await assert.rejects(f.service.grantWorker(input), status(409));
-    assert.equal(await count('mf06_authority_command', 'command_id', input.commandId), 0);
+    assert.equal(await count('authorization_history_command', 'command_id', input.commandId), 0);
   });
 }
 test('Worker grant rejects a permission from another participation', async () => {
@@ -467,7 +467,7 @@ test('unique interval collision returns conflict and rolls back the losing comma
   await f.service.grantContractor(first);
   const other = { ...first, requestId: randomUUID(), commandId: randomUUID() };
   await assert.rejects(f.service.grantContractor(other), status(409));
-  assert.equal(await count('mf06_authority_command', 'command_id', other.commandId), 0);
+  assert.equal(await count('authorization_history_command', 'command_id', other.commandId), 0);
   assert.equal(await count('audit_log', 'site_id', f.siteId), 1);
 });
 test('audit failure rolls back permission, Site increment, command and facts', async () => {
@@ -491,12 +491,9 @@ test('audit failure rolls back permission, Site increment, command and facts', a
       )[0].n,
       0,
     );
-    assert.equal(await count('mf06_authority_command', 'command_id', input.commandId), 0);
-    assert.equal(await count('mf06_authority_fact', 'command_id', input.commandId), 0);
-    assert.equal(
-      await count('mf06_zone_permission_command_result', 'command_id', input.commandId),
-      0,
-    );
+    assert.equal(await count('authorization_history_command', 'command_id', input.commandId), 0);
+    assert.equal(await count('authorization_history_revision', 'command_id', input.commandId), 0);
+    assert.equal(await count('zone_permission_command_receipt', 'command_id', input.commandId), 0);
     assert.equal(
       (await db.query('SELECT access_policy_version FROM site WHERE id=$1', [f.siteId]))[0]
         .access_policy_version,
@@ -512,14 +509,14 @@ test('postcommit witness failure safely retries same command without duplicating
   const f = await fixture(),
     input = contractorInput(f);
   await db.query(
-    `CREATE FUNCTION test_reject_permission_witness() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.command_id='${input.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic witness failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_reject_permission_witness BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_reject_permission_witness()`,
+    `CREATE FUNCTION test_reject_permission_witness() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.command_id='${input.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic witness failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_reject_permission_witness BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_reject_permission_witness()`,
   );
   try {
     await assert.rejects(f.service.grantContractor(input), status(503));
     assert.equal(await count('audit_log', 'site_id', f.siteId), 1);
   } finally {
     await db.query(
-      'DROP TRIGGER test_reject_permission_witness ON mf06_authority_commit_witness; DROP FUNCTION test_reject_permission_witness()',
+      'DROP TRIGGER test_reject_permission_witness ON authorization_history_commit_receipt; DROP FUNCTION test_reject_permission_witness()',
     );
   }
   assert.equal((await f.service.grantContractor(input)).replayed, true);
@@ -530,20 +527,18 @@ test('result receipts are immutable and forged or foreign-origin projections are
     input = contractorInput(f),
     r = await f.service.grantContractor(input);
   await assert.rejects(
-    db.query('UPDATE mf06_zone_permission_command_result SET result_hash=$2 WHERE command_id=$1', [
+    db.query('UPDATE zone_permission_command_receipt SET result_hash=$2 WHERE command_id=$1', [
       input.commandId,
       'a'.repeat(64),
     ]),
   );
   await assert.rejects(
-    db.query('DELETE FROM mf06_zone_permission_command_result WHERE command_id=$1', [
-      input.commandId,
-    ]),
+    db.query('DELETE FROM zone_permission_command_receipt WHERE command_id=$1', [input.commandId]),
   );
-  await assert.rejects(db.query('TRUNCATE mf06_zone_permission_command_result'));
+  await assert.rejects(db.query('TRUNCATE zone_permission_command_receipt'));
   await assert.rejects(
     db.query(
-      "INSERT INTO mf06_zone_permission_command_result(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,'contractor',$3,'')",
+      "INSERT INTO zone_permission_command_receipt(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,'contractor',$3,'')",
       [input.commandId, r.permission.id, r.permission],
     ),
   );
@@ -564,15 +559,15 @@ test('missing candidate result table fails closed and rolls back source writes',
   const f = await fixture(),
     input = contractorInput(f);
   await db.query(
-    'ALTER TABLE mf06_zone_permission_command_result RENAME TO test_hidden_permission_result',
+    'ALTER TABLE zone_permission_command_receipt RENAME TO test_hidden_permission_result',
   );
   try {
     await assert.rejects(f.service.grantContractor(input), status(503));
-    assert.equal(await count('mf06_authority_command', 'command_id', input.commandId), 0);
+    assert.equal(await count('authorization_history_command', 'command_id', input.commandId), 0);
     assert.equal(await count('audit_log', 'site_id', f.siteId), 0);
   } finally {
     await db.query(
-      'ALTER TABLE test_hidden_permission_result RENAME TO mf06_zone_permission_command_result',
+      'ALTER TABLE test_hidden_permission_result RENAME TO zone_permission_command_receipt',
     );
   }
 });
@@ -610,13 +605,13 @@ test('a current transaction cannot forge a scoped result for another Site or ope
     await r.startTransaction();
     const cmd = randomUUID();
     await r.query(
-      "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_CONTRACTOR_ZONE_GRANT',$3)",
+      "INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_CONTRACTOR_ZONE_GRANT',$3)",
       [cmd, f.actorUserId, 'b'.repeat(64)],
     );
     await r.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [cmd]);
     await assert.rejects(
       r.query(
-        "INSERT INTO mf06_zone_permission_command_result(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,'contractor',$3,'')",
+        "INSERT INTO zone_permission_command_receipt(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,'contractor',$3,'')",
         [cmd, cp.permission.id, { ...cp.permission, siteId: randomUUID() }],
       ),
       (e: unknown) => (e as { driverError?: { code?: string } }).driverError?.code === '23514',
@@ -625,13 +620,13 @@ test('a current transaction cannot forge a scoped result for another Site or ope
     await r.startTransaction();
     const wrongKindCommand = randomUUID();
     await r.query(
-      "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_WORKER_ZONE_GRANT',$3)",
+      "INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_WORKER_ZONE_GRANT',$3)",
       [wrongKindCommand, f.actorUserId, 'c'.repeat(64)],
     );
     await r.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [wrongKindCommand]);
     await assert.rejects(
       r.query(
-        "INSERT INTO mf06_zone_permission_command_result(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,'contractor',$3,'')",
+        "INSERT INTO zone_permission_command_receipt(command_id,source_id,kind,result_json,result_hash) VALUES($1,$2,'contractor',$3,'')",
         [wrongKindCommand, cp.permission.id, cp.permission],
       ),
       (e: unknown) => (e as { driverError?: { code?: string } }).driverError?.code === '23514',

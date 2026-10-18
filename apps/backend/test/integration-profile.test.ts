@@ -22,5 +22,7 @@ test('default integration profile uses the complete release graph, not the froze
   assert.deepEqual(source.options.entities, release.entities);
   assert.equal(source.options.synchronize, false);
   assert.equal(source.options.migrationsRun, false);
+  assert(source.options.type === 'postgres');
+  assert.match(String(source.options.schema), /^isolated_test_[a-f0-9]{32}$/);
   assert.equal(source.isInitialized, false);
 });

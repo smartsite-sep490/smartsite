@@ -29,7 +29,7 @@ export type Mf06AssessmentReasonCode =
  * Private immutable storage projection. Never a safe public DTO, identity
  * assertion, or permission grant. Candidate migration deployment is separate.
  */
-@Entity({ name: 'mf06_assessment' })
+@Entity({ name: 'zone_entry_assessment' })
 @Unique('mf06_assessment_request_id_key', ['requestId'])
 @Unique('mf06_assessment_command_id_key', ['commandId'])
 @Unique('mf06_assessment_authority_artifact_id_key', ['authorityArtifactId'])

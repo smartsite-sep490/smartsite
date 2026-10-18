@@ -1,6 +1,13 @@
 import type { EntityManager } from 'typeorm';
-import { MAIN_AUTHORITY_SOURCES } from './main-authority-sources.js';
-import { MAIN_AUTHORITY_FUNCTION_PROFILES } from './main-authority-function-profiles.js';
+import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from './main-team-authority-sources.js';
+import { MAIN_AUTHORITY_V2_FUNCTION_PROFILES } from './main-team-authority-function-profiles.js';
+import { ZONE_ENTRY_STORAGE_FUNCTIONS } from './zone-entry-storage-profile-v1.js';
+
+const MAIN_AUTHORITY_FUNCTION_PROFILES = MAIN_AUTHORITY_V2_FUNCTION_PROFILES.map((profile) => ({
+  ...profile,
+  body_sha256:
+    ZONE_ENTRY_STORAGE_FUNCTIONS.find((f) => f.name === profile.name)?.after ?? profile.body_sha256,
+}));
 
 /** Point-in-time canonical trigger/source/function preflight, not writer closure or cutover. */
 export async function hasMainAuthorityCapture(
@@ -26,8 +33,8 @@ export async function hasMainAuthorityCapture(
       UNION ALL SELECT table_name,'trg_mf06_truncate_'||table_name,
         'mf06_capture_main_authority',32,1,encode(convert_to(source_kind,'UTF8'),'hex')||'00' FROM sources
       UNION ALL VALUES
-        ('mf06_authority_command','trg_mf06_authority_command_insert','mf06_authority_command_guard',7,0,''),
-        ('mf06_authority_commit_witness','trg_mf06_authority_witness_insert','mf06_authority_witness_guard',7,0,'')
+        ('authorization_history_command','trg_mf06_authority_command_insert','mf06_authority_command_guard',7,0,''),
+        ('authorization_history_commit_receipt','trg_mf06_authority_witness_insert','mf06_authority_witness_guard',7,0,'')
     )
     SELECT current_setting('session_replication_role')='origin' AND
       -- Match every journal function, including helpers used by capture/baseline
@@ -54,7 +61,7 @@ export async function hasMainAuthorityCapture(
       NOT EXISTS (
         -- Capture reads this registry to construct before/after payloads. A valid
         -- trigger profile alone cannot prevent omitted authority or secret fields.
-        SELECT 1 FROM sources s LEFT JOIN mf06_authority_source r ON r.source_kind=s.source_kind
+        SELECT 1 FROM sources s LEFT JOIN authorization_history_source r ON r.source_kind=s.source_kind
         WHERE r.table_name IS DISTINCT FROM s.table_name OR r.fields IS DISTINCT FROM s.fields
           OR r.protocol_version IS DISTINCT FROM 'MAIN_ROW_JOURNAL_V1'
       ) AND

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, QueryFailedError, type EntityManager } from 'typeorm';
 import {
   command,
   conflict,
@@ -94,36 +94,48 @@ export class MainWorkerRosterService {
   ): Promise<WorkerEntity> {
     const siteId = uuid(siteValue).toLowerCase(),
       value = command(LinkWorkerAccountCommand, input);
-    try {
-      return await executeMainConfigurationCommand(
-        this.source,
-        context,
-        'WORKER_ACCOUNT_PREPARE',
-        { siteId, ...value },
-        async (manager) => {
-          // MAIN serializes account-first preparation on the active target account.
-          const user = await this.requireAccount(manager, siteId, value.userId, true);
-          await this.requireSite(manager, siteId);
-          const existing = await manager
-            .getRepository(WorkerEntity)
-            .findOneBy({ siteId, userId: user.id });
-          if (existing) {
-            if (!existing.isActive) conflict('The linked worker is inactive');
-            return existing;
-          }
-          return manager.getRepository(WorkerEntity).save({
-            id: randomUUID(),
-            siteId,
-            userId: user.id,
-            contractorId: null,
-            externalId: `ACC-${user.id}`,
-            displayName: user.displayName,
-            isActive: true,
-          });
-        },
-      );
-    } catch (error) {
-      knownUnique(error, ['uq_worker_site_user', 'uq_worker_site_external_id']);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await executeMainConfigurationCommand(
+          this.source,
+          context,
+          'WORKER_ACCOUNT_PREPARE',
+          { siteId, ...value },
+          async (manager) => {
+            // MAIN serializes account-first preparation on the active target account.
+            const user = await this.requireAccount(manager, siteId, value.userId, true);
+            await this.requireSite(manager, siteId);
+            const existing = await manager
+              .getRepository(WorkerEntity)
+              .findOneBy({ siteId, userId: user.id });
+            if (existing) {
+              if (!existing.isActive) conflict('The linked worker is inactive');
+              return existing;
+            }
+            return manager.getRepository(WorkerEntity).save({
+              id: randomUUID(),
+              siteId,
+              userId: user.id,
+              contractorId: null,
+              externalId: `ACC-${user.id}`,
+              displayName: user.displayName,
+              isActive: true,
+            });
+          },
+        );
+      } catch (error) {
+        // A concurrent insert can report a natural-key collision before SSI detects it.
+        if (
+          attempt === 0 &&
+          error instanceof QueryFailedError &&
+          (error.driverError as { code?: string }).code === '23505' &&
+          ['uq_worker_site_user', 'uq_worker_site_external_id'].includes(
+            (error.driverError as { constraint?: string }).constraint ?? '',
+          )
+        )
+          continue;
+        knownUnique(error, ['uq_worker_site_user', 'uq_worker_site_external_id']);
+      }
     }
   }
 

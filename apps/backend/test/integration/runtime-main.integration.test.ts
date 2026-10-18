@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { createServer } from 'node:net';
+import { connect, createServer, type Socket } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
@@ -20,6 +20,28 @@ test(
     const owned: { child?: ChildProcess; exit?: Promise<void> } = {};
     let logs = '';
     const secrets: string[] = [];
+    const databaseSockets = new Set<Socket>();
+    let databaseAvailable = true;
+    const databaseProxy = createServer((client) => {
+      if (!databaseAvailable) {
+        client.destroy();
+        return;
+      }
+      const upstream = connect({ host: '127.0.0.1', port: 5433 });
+      for (const socket of [client, upstream]) {
+        databaseSockets.add(socket);
+        socket.on('error', () => {
+          client.destroy();
+          upstream.destroy();
+        });
+        socket.on('close', () => {
+          databaseSockets.delete(socket);
+          client.destroy();
+          upstream.destroy();
+        });
+      }
+      client.pipe(upstream).pipe(client);
+    });
     t.after(async () => {
       const child = owned.child;
       const childExit = owned.exit;
@@ -35,6 +57,11 @@ test(
             throw new Error('Owned main did not exit');
           }),
         ]);
+      for (const socket of databaseSockets) socket.destroy();
+      if (databaseProxy.listening)
+        await new Promise<void>((resolve, reject) =>
+          databaseProxy.close((error) => (error ? reject(error) : resolve())),
+        );
       // Never drop the owned schema if the runtime has not actually exited.
       await isolated.dispose();
       assert.equal(
@@ -48,6 +75,14 @@ test(
     assert.ok(schema && /^isolated_test_[a-f0-9]{32}$/.test(schema));
     assert.equal((await db.query('SELECT current_schema() AS schema'))[0].schema, schema);
     databaseUrl.searchParams.set('options', `-c search_path=${schema}`);
+    const bootstrapDatabaseUrl = databaseUrl.toString();
+    await new Promise<void>((resolve, reject) => {
+      databaseProxy.once('error', reject);
+      databaseProxy.listen(0, '127.0.0.1', resolve);
+    });
+    const databaseAddress = databaseProxy.address();
+    assert.ok(databaseAddress && typeof databaseAddress !== 'string');
+    databaseUrl.port = String(databaseAddress.port);
     const addressServer = createServer();
     await new Promise<void>((resolve, reject) => {
       addressServer.once('error', reject);
@@ -83,6 +118,7 @@ test(
       initialPassword,
       changedPassword,
       databaseUrl.password,
+      bootstrapDatabaseUrl,
       env.DATABASE_URL,
       env.AUTH_JWT_SECRET,
       env.SMARTSITE_AI_SERVICE_TOKEN,
@@ -96,6 +132,7 @@ test(
         );
         const bootstrapEnv = {
           ...env,
+          DATABASE_URL: bootstrapDatabaseUrl,
           BOOTSTRAP_ADMIN_USERNAME: username,
           BOOTSTRAP_ADMIN_DISPLAY_NAME: 'Synthetic runtime Admin',
           BOOTSTRAP_ADMIN_PASSWORD: initialPassword,
@@ -186,6 +223,32 @@ test(
       },
     );
     await t.test(
+      'database connection outage returns sanitized503 and recovers on the same main process',
+      async () => {
+        databaseAvailable = false;
+        for (const socket of databaseSockets) socket.destroy();
+        try {
+          const result = await request('/health/ready', 503);
+          assert.equal(result.data.code, 'DATABASE_UNAVAILABLE');
+          assert.equal(result.data.message, 'Database unavailable');
+          await request('/health/live', 200);
+          assert.equal(child.exitCode, null);
+        } finally {
+          databaseAvailable = true;
+        }
+        let recovered = false;
+        for (let attempt = 0; attempt < 40 && !recovered; attempt++) {
+          try {
+            recovered = (await request('/health/ready', 200)).data.database === 'up';
+          } catch {
+            await delay(100);
+          }
+        }
+        assert.equal(recovered, true);
+        assert.equal(child.exitCode, null);
+      },
+    );
+    await t.test(
       'release migration history loss makes actual main unready without stopping liveness or recreating history',
       async () => {
         const [migration] = await db.query(
@@ -262,21 +325,32 @@ test(
           body: { code: username, name: 'Synthetic runtime Site' },
         });
         siteId = site.data.id;
-        const [{ id: actorId }] = await db.query('SELECT id FROM app_user WHERE username=$1', [
-          username,
-        ]);
-        await db.query(
-          "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES(gen_random_uuid(),$1,'SITE_MANAGER',$2)",
-          [actorId, siteId],
-        );
+        const managerName = `runtime-manager-${randomBytes(6).toString('hex')}`;
+        await request('/users', 201, {
+          method: 'POST',
+          token,
+          body: {
+            username: managerName,
+            displayName: 'Synthetic runtime Site Manager',
+            temporaryPassword: changedPassword,
+            roleAssignments: [{ role: 'SITE_MANAGER', siteId }],
+          },
+        });
+        const managerLogin = await request('/auth/login', 200, {
+          method: 'POST',
+          body: { username: managerName, password: changedPassword, clientType: 'WEB' },
+        });
+        const managerToken = managerLogin.data.accessToken as string;
+        secrets.push(managerToken);
         const camera = await request(`/sites/${siteId}/cameras`, 201, {
           method: 'POST',
-          token,
+          token: managerToken,
           body: { code: 'CAM', externalId: username, name: 'Synthetic metadata Camera' },
         });
+
         const zone = await request(`/sites/${siteId}/zones`, 201, {
           method: 'POST',
-          token,
+          token: managerToken,
           body: {
             code: 'ZONE',
             name: 'Synthetic Zone',
@@ -298,12 +372,12 @@ test(
             ],
           },
         };
-        const region = await request(route, 201, { method: 'POST', token, body });
+        const region = await request(route, 201, { method: 'POST', token: managerToken, body });
         assert.equal(region.data.region.zoneId, zone.data.id);
-        await request(route, 409, { method: 'POST', token, body });
+        await request(route, 409, { method: 'POST', token: managerToken, body });
         await request(`/sites/${siteId}/zones/${zone.data.id}`, 200, {
           method: 'PATCH',
-          token,
+          token: managerToken,
           body: { name: 'Renamed runtime Zone' },
         });
         const stored = await db.query('SELECT name FROM zone WHERE id=$1 AND site_id=$2', [

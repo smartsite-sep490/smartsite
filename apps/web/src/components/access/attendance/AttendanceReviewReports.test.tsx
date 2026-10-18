@@ -84,7 +84,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await i18n.changeLanguage('en');
 });
-function mount() {
+function mount(showRequests = true) {
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -94,10 +94,30 @@ function mount() {
         token="token"
         siteId="site"
         sessionScope="session"
+        showRequests={showRequests}
       />
     </QueryClientProvider>,
   );
 }
+
+it.each([
+  '/access?tab=attendance&subtab=requests',
+  '/access?tab=attendance#attendance-correction-form',
+])(
+  'keeps the Site Manager on timesheets without request or approval content for %s',
+  async (url) => {
+    window.history.replaceState({}, '', url);
+    mount(false);
+    await screen.findByRole('button', { name: 'View worker' });
+    expect(screen.getByRole('button', { name: 'Timesheet' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: /Requests & Approvals/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Correction requests/ })).toBeNull();
+    expect(screen.queryByText('Forgot checkout')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Approve correction' })).toBeNull();
+  },
+);
 
 it('exports CSV headers and statuses in the selected language while preserving worker data', async () => {
   const blobs: Blob[] = [];

@@ -1,5 +1,6 @@
 import { ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import type { ZoneAccessEffect } from './zone-authorization.interface.js';
+import { projectMainTeamPermissions } from './main-team-permission-projection.js';
 import {
   decodeStoredMainAuthorityArchive,
   parseMainAuthorityInstant,
@@ -111,7 +112,8 @@ export function projectMainArchivedPermissions(
     contractorPermissions = index('CONTRACTOR_PERMISSION'),
     participations = index('PARTICIPATION'),
     contractors = index('CONTRACTOR');
-  const allows: string[] = [];
+  const allows: string[] =
+    archive.format === 'MF06_MAIN_AUTHORITY_ARCHIVE_V2' ? projectMainTeamPermissions(archive) : [];
   for (const permission of rows.get('WORKER_PERMISSION') ?? []) {
     const assignment = assignments.get((permission.worker_assignment_id as string).toLowerCase());
     const cp = contractorPermissions.get(

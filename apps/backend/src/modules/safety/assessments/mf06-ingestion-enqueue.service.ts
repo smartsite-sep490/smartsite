@@ -58,7 +58,7 @@ export class Mf06IngestionEnqueueService {
     // Expired nonterminal work still occupies capacity until an explicit worker
     // transition. Limit the count read; do not purge history or partially accept an event.
     const [row] = await manager.query(
-      "SELECT count(*)::integer AS total FROM (SELECT request_id FROM mf06_assessment_job WHERE status IN ('PENDING','CLAIMED') LIMIT $1) outstanding",
+      "SELECT count(*)::integer AS total FROM (SELECT request_id FROM zone_entry_assessment_job WHERE status IN ('PENDING','CLAIMED') LIMIT $1) outstanding",
       [cap + 1],
     );
     if (!Number.isSafeInteger(row?.total) || row.total > cap) throw this.unavailable();

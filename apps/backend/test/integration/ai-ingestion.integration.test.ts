@@ -19,7 +19,7 @@ import {
   ZoneType,
   ZoneEntryDecisionEntity,
 } from '../../src/database/entities/index.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { ZoneAuthorizationService } from '../../src/modules/zones/zone-authorization.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
@@ -28,18 +28,16 @@ import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.servi
 import { isEventIdConflict } from '../../src/integrations/ai/typeorm-error.js';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 
+const isolated = createIsolatedTestDatabase({ canonical: true });
+const dataSource = isolated.dataSource;
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
   if (!dataSource.isInitialized) {
-    await dataSource.initialize();
+    await isolated.initialize();
   }
   return await fn(dataSource);
 }
 
-after(async () => {
-  if (dataSource.isInitialized) {
-    await dataSource.destroy();
-  }
-});
+after(() => isolated.dispose());
 
 function createSampleEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
