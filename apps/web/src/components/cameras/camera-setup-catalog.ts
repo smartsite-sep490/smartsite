@@ -2,8 +2,7 @@ import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 
 const en = {
   'cameraSetup.title': 'Camera setup',
-  'cameraSetup.intro':
-    'Register cameras and link observation areas. Open monitoring to view images.',
+  'cameraSetup.intro': 'Cameras and area PPE policies for this site.',
   'cameraSetup.monitor': 'Open monitoring',
   'cameraSetup.denied': 'You do not have setup access.',
   'cameraSetup.session': 'Sign in to manage configuration.',
@@ -51,7 +50,7 @@ const en = {
 };
 const vi: Record<keyof typeof en, string> = {
   'cameraSetup.title': 'Thiết lập camera',
-  'cameraSetup.intro': 'Đăng ký camera và liên kết vùng quan sát. Mở giám sát để xem hình ảnh.',
+  'cameraSetup.intro': 'Camera và chính sách PPE của công trường.',
   'cameraSetup.monitor': 'Mở giám sát',
   'cameraSetup.denied': 'Bạn không có quyền thiết lập.',
   'cameraSetup.session': 'Đăng nhập để quản lý cấu hình.',
