@@ -1,6 +1,5 @@
 import { beforeEach } from 'vitest';
-import i18n from './index';
-import { ensureCommonCatalogs } from './runtime';
+import i18n, { ensureCommonCatalogs } from './runtime';
 
 // Standalone feature tests enter through the same resource gate as lazy pages.
 await ensureCommonCatalogs();

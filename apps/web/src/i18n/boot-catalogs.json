@@ -38,10 +38,6 @@
     "common.sign_in_again": "Sign in again",
     "common.sign_out": "Sign out",
     "errors.unexpected": "Something went wrong. Please try again.",
-    "language.choose": "Choose language",
-    "language.current": "Current language: {{language}}",
-    "language.english": "English",
-    "language.vietnamese": "Vietnamese",
     "safety_alert_evidence_utils.your_session_is_no_longer_valid_sign_in_again": "Your session is no longer valid. Sign in again.",
     "shell.signOut": "Sign out",
     "workforce_view.could_not_load_user_profile": "Could not load user profile"
@@ -85,10 +81,6 @@
     "common.sign_in_again": "Đăng nhập lại",
     "common.sign_out": "Đăng xuất",
     "errors.unexpected": "Đã xảy ra lỗi. Vui lòng thử lại.",
-    "language.choose": "Chọn ngôn ngữ",
-    "language.current": "Ngôn ngữ hiện tại: {{language}}",
-    "language.english": "Tiếng Anh",
-    "language.vietnamese": "Tiếng Việt",
     "safety_alert_evidence_utils.your_session_is_no_longer_valid_sign_in_again": "Phiên đăng nhập không còn hợp lệ. Hãy đăng nhập lại.",
     "shell.signOut": "Đăng xuất",
     "workforce_view.could_not_load_user_profile": "Không thể tải hồ sơ người dùng"

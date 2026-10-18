@@ -1,5 +1,5 @@
 import React from 'react';
-import { translate as tr, uiLanguage } from './i18n';
+import { translate as tr, uiLanguage } from './i18n/runtime';
 
 export interface PageLoadingFallbackProps {
   label?: string;

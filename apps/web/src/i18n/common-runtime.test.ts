@@ -19,7 +19,7 @@ afterEach(() => {
 it('starts with boot strings only, then installs both complete canonical catalogs through the page gate', async () => {
   const runtime = await import('./runtime');
   const i18n = runtime.default;
-  expect(Object.keys(i18n.getResourceBundle('en', 'common'))).toHaveLength(45);
+  expect(Object.keys(i18n.getResourceBundle('en', 'common'))).toHaveLength(41);
   expect(i18n.exists('notifications.absent_message')).toBe(false);
   expect(runtime.translate('common.loading')).toBe(en['common.loading']);
   expect(document.title).toBe(en['app.documentTitle']);
@@ -32,7 +32,7 @@ it('starts with boot strings only, then installs both complete canonical catalog
     en['notifications.absent_message'],
   );
   const boot = (await import('./boot-catalogs.json')).default;
-  expect(Object.keys(boot.en)).toHaveLength(45);
+  expect(Object.keys(boot.en)).toHaveLength(41);
 });
 
 it('retains the latest selected language and Safety resources when common catalogs finish loading', async () => {

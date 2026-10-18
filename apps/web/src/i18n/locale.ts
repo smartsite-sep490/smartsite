@@ -12,9 +12,5 @@ export {
   type TranslationKey,
 } from './locale-context';
 
-export {
-  LocaleProvider,
-  LocaleSwitcher,
-  type LocaleProviderProps,
-  type LocaleSwitcherProps,
-} from './LocaleProvider';
+export { LocaleProvider, type LocaleProviderProps } from './LocaleProvider';
+export { LocaleSwitcher, type LocaleSwitcherProps } from './locale-switcher';

@@ -1,6 +1,6 @@
 import { lazyWithCommonCatalogs } from './i18n/lazy-common-page';
 import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
-import { translate as tr } from './i18n';
+import { translate as tr } from './i18n/runtime';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';

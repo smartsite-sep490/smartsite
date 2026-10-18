@@ -1,4 +1,4 @@
-import { translate as tr } from '../../i18n';
+import { translate as tr } from '../../i18n/runtime';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SmartSiteManagementClient, ApiError, type AccountResponse } from '@smartsite/api-client';

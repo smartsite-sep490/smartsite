@@ -6,7 +6,6 @@ import React, {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import {
   getSharedTranslator,
   isSupportedLocale,
@@ -67,20 +66,4 @@ export function LocaleProvider({
   );
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
-}
-
-export interface LocaleSwitcherProps {
-  className?: string;
-  dark?: boolean;
-}
-
-export function LocaleSwitcher({ className, dark }: LocaleSwitcherProps) {
-  if (!className) {
-    return <LanguageSwitcher dark={dark} />;
-  }
-  return (
-    <div className={className}>
-      <LanguageSwitcher dark={dark} />
-    </div>
-  );
 }
