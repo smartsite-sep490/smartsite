@@ -4,6 +4,10 @@ import { z } from 'zod';
 import { MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-authority-sources.js';
 import { hasMainAuthorityCapture } from '../../common/configuration/main-authority-capture-preflight.js';
 import {
+  baselineSourceProfile,
+  BASELINE_REGISTRY_HASH_VALID_SQL,
+} from './main-authority-baseline-profile.js';
+import {
   MAIN_AUTHORITY_ARCHIVE_FORMAT,
   parseMainAuthorityInstant,
   sealMainAuthorityArchive,
@@ -115,7 +119,7 @@ export class MainAuthorityCapturedStateReader {
         to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS archived_at,
         e.writer_manifest_hash,b.source_registry_hash,b.snapshot_hash,b.snapshot_json::text AS snapshot_text,b.row_count,
         b.hash_algorithm='POSTGRES_JSONB_TEXT_SHA256_V1' AND b.snapshot_hash=encode(sha256(convert_to(b.snapshot_json::text,'UTF8')),'hex') AS baseline_hash_valid,
-        b.source_registry_hash=(SELECT encode(sha256(convert_to(jsonb_agg(to_jsonb(s) ORDER BY source_kind COLLATE "C")::text,'UTF8')),'hex') FROM mf06_authority_source s) AS registry_hash_valid,
+        ${BASELINE_REGISTRY_HASH_VALID_SQL} AS registry_hash_valid,
         b.transaction_id=c.transaction_id AND c.operation='MAIN_AUTHORITY_BASELINE' AND b.captured_at=e.baseline_at AS origin_valid,
         COALESCE(w.transaction_id=c.transaction_id AND w.confirmed_at<=$2::timestamptz,false) AS witness_known,
         $2::timestamptz<b.captured_at AS before_baseline,$2::timestamptz>statement_timestamp() AS future
@@ -138,6 +142,8 @@ export class MainAuthorityCapturedStateReader {
       sourceRegistryHash: string;
       sources: Sources;
     };
+    if (baselineSourceProfile(base.sources, MAIN_AUTHORITY_SOURCES) !== 'V1')
+      return unavailable('SOURCE_REGISTRY_MISMATCH');
     const [roundtrip]: { exact: boolean }[] = await manager.query(
       'SELECT snapshot_json=$2::jsonb AS exact FROM mf06_authority_baseline WHERE epoch_id=$1',
       [scope.epochId, JSON.stringify(base)],

@@ -5,10 +5,13 @@
 Keep the website on retained Main66. Do not adopt the private named graph70
 as history-compatible yet. The four migrations execute successfully and preserve
 the sampled history bytes, but the candidate reader cannot reconstruct a
-previously readable V1 epoch. This is a reproduced compatibility failure, not
+previously readable V1 epoch in the original unpatched candidate. This is a reproduced compatibility failure, not
 data loss or a demonstrated incorrect access decision.
 
 ## Actual rehearsal
+
+The correction below is separately qualified; it has not replaced that original
+candidate or been applied to the website.
 
 Evidence root:
 `D:/Ky9-FPT/SmartSiteData/runs/rea-product-references-20261018-v1/configuration-source-current-20261019-v1/`.
@@ -48,6 +51,39 @@ implementation claim.
    Incompatibility must remain explicit and fail closed.
 4. Reconcile this with Tuấn's team writer migration before merging or registering
    either candidate; do not independently install two competing cutover systems.
+
+## Qualified reader correction
+
+The shared `main-authority-baseline-profile.ts` binds the registry hash to the
+immutable stored snapshot masks, then accepts only the exact frozen V1 masks or
+the explicitly installed current masks. Existing installed-registry/capture,
+snapshot/row hashes, scope, commit witnesses, gaps, revision chains and
+SERIALIZABLE READ ONLY requirements remain enforced. It does not grant coverage.
+Root's current V1 reader consumes this validation. The separate named-reader
+delta is in `mf06-named-reader-compatibility.patch`; `git apply --check` passed
+against the original private candidate, without applying it there. The helper
+must accompany the patch. This is not an automatic migration/source merge.
+
+Actual evidence under the same root:
+
+- `populated-main66-to70-red-v3/result.json`: the required historical read fails
+  before the correction, after the actual four-migration upgrade.
+- `baseline-profile-fix-v1`: five profile tests RED→GREEN, ten existing realPG
+  reader cases and the populated additive regression pass; full Backend types,
+  changed-file lint and formatting pass. Sixteen distinct source cases, not
+  sixteen migration/whole-flow acceptances.
+- `populated-main66-to70-green-v6/result.json`: original V1 observation remains
+  readable under V1 after upgrade and later witnessed team creation; the new
+  V2 epoch reconstructs that team creation with18 sources. A V1 epoch queried
+  across that team mutation returns `SOURCE_REGISTRY_MISMATCH`. Both protocols
+  retain identity/authority coverage false. Baseline bytes, six pre-upgrade fact
+  rows and baseline OID match. These are bounded synthetic assertions.
+- The qualified private source copy changes only its reader plus the shared
+  helper; original private source and all migration bytes remain untouched.
+  A fixture ESM packaging failure is preserved separately from the genuine RED.
+
+Writer-closure certification, a real cutover/coverage decision, trusted MF06
+WorkPort, independent peer review and complete release acceptance remain open.
 
 ## Limits
 
