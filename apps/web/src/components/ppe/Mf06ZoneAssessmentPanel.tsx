@@ -544,6 +544,22 @@ function Mf06RequestStatusList({
     return result;
   }, [token, siteId, isBaseError, isHardError, data]);
 
+  if (
+    selectedAssessmentTarget !== null &&
+    (isBaseError ||
+      isHardError ||
+      !items.some(
+        (item) =>
+          item.jobStatus === 'SUCCEEDED' &&
+          item.assessmentId === selectedAssessmentTarget.assessmentId &&
+          item.requestId === selectedAssessmentTarget.requestId &&
+          item.siteId === selectedAssessmentTarget.siteId &&
+          item.siteId === siteId,
+      ))
+  ) {
+    setSelectedAssessmentTarget(null);
+  }
+
   const handleRefresh = useCallback(() => {
     if (isHardError || isFetching) return;
     void refetch();

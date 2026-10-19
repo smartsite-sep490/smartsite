@@ -414,6 +414,21 @@ export function Mf06AssessmentHistory({
     return result;
   }, [token, siteId, isBaseError, isHardError, data]);
 
+  if (
+    selectedAssessmentTarget !== null &&
+    (isBaseError ||
+      isHardError ||
+      !items.some(
+        (item) =>
+          item.assessmentId === selectedAssessmentTarget.assessmentId &&
+          item.requestId === selectedAssessmentTarget.requestId &&
+          item.siteId === selectedAssessmentTarget.siteId &&
+          item.siteId === siteId,
+      ))
+  ) {
+    setSelectedAssessmentTarget(null);
+  }
+
   // State: No site or token selected
   if (!token || !siteId) {
     return (

@@ -737,5 +737,116 @@ describe('Mf06AssessmentHistory Component (B5)', () => {
         expect.objectContaining({ signal: expect.anything() }),
       );
     });
+
+    it.each([
+      { label: '401', next: () => Promise.reject(new ApiError('http', 'Unauthorized', 401)) },
+      { label: '403', next: () => Promise.reject(new ApiError('http', 'Forbidden', 403)) },
+      { label: '404', next: () => Promise.reject(new ApiError('http', 'Not found', 404)) },
+      { label: '503', next: () => Promise.reject(new ApiError('http', 'Unavailable', 503)) },
+      { label: 'removed-row', next: () => Promise.resolve(createPage([], 0, 0, 20)) },
+    ])(
+      'closes an open recorded assessment detail dialog when parent history refresh resolves with $label',
+      async ({ label, next }) => {
+        const assessment = createAssessment({
+          assessmentId: '11111111-1111-4111-8111-111111111111',
+          outcome: 'UNAVAILABLE',
+          reasonCode: 'IDENTITY_UNAVAILABLE',
+          provenance: 'UNAVAILABLE',
+        });
+        mockListMf06Assessments
+          .mockResolvedValueOnce(createPage([assessment]))
+          .mockImplementationOnce(next);
+        Object.assign(mockClient, {
+          getMf06Assessment: vi.fn().mockResolvedValue(assessment),
+        });
+
+        const { container, queries } = mount(() => (
+          <Mf06AssessmentHistory
+            token={TOKEN_1}
+            siteId={SITE_1}
+            credentialId={CREDENTIAL_1}
+            client={mockClient}
+          />
+        ));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'View assessment' }));
+        expect(await screen.findByRole('dialog', { name: 'Recorded assessment' })).toBeTruthy();
+        expect(
+          await screen.findByText('Historical Technical Assessment · Not Access Permission'),
+        ).toBeTruthy();
+
+        await act(async () => {
+          await queries.invalidateQueries({ queryKey: ['mf06-assessments'], refetchType: 'active' });
+        });
+
+        await waitFor(() => {
+          expect(mockListMf06Assessments).toHaveBeenCalledTimes(2);
+        });
+        if (label === '403') {
+          expect(
+            await screen.findByText('You do not have permission to view assessments for this site.'),
+          ).toBeTruthy();
+        }
+        await waitFor(() => {
+          expect(screen.queryByRole('dialog', { name: 'Recorded assessment' })).toBeNull();
+        });
+        expect(container.textContent).not.toContain(assessment.assessmentId);
+      },
+    );
+
+    it('preserves an open recorded assessment detail dialog while parent history refresh is pending, then closes when the row is removed', async () => {
+      const assessment = createAssessment({
+        assessmentId: '11111111-1111-4111-8111-111111111111',
+        outcome: 'UNAVAILABLE',
+        reasonCode: 'IDENTITY_UNAVAILABLE',
+        provenance: 'UNAVAILABLE',
+      });
+      let resolveRefresh!: (page: Mf06AssessmentPage) => void;
+      const pendingRefresh = new Promise<Mf06AssessmentPage>((resolve) => {
+        resolveRefresh = resolve;
+      });
+      mockListMf06Assessments
+        .mockResolvedValueOnce(createPage([assessment]))
+        .mockImplementationOnce(() => pendingRefresh);
+      Object.assign(mockClient, {
+        getMf06Assessment: vi.fn().mockResolvedValue(assessment),
+      });
+
+      const { container, queries } = mount(() => (
+        <Mf06AssessmentHistory
+          token={TOKEN_1}
+          siteId={SITE_1}
+          credentialId={CREDENTIAL_1}
+          client={mockClient}
+        />
+      ));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View assessment' }));
+      expect(await screen.findByRole('dialog', { name: 'Recorded assessment' })).toBeTruthy();
+      expect(
+        await screen.findByText('Historical Technical Assessment · Not Access Permission'),
+      ).toBeTruthy();
+
+      act(() => {
+        void queries.invalidateQueries({ queryKey: ['mf06-assessments'], refetchType: 'active' });
+      });
+
+      await waitFor(() => {
+        expect(mockListMf06Assessments).toHaveBeenCalledTimes(2);
+      });
+      expect(screen.getByRole('dialog', { name: 'Recorded assessment' })).toBeTruthy();
+      expect(
+        screen.getByText('Historical Technical Assessment · Not Access Permission'),
+      ).toBeTruthy();
+
+      await act(async () => {
+        resolveRefresh(createPage([], 0, 0, 20));
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Recorded assessment' })).toBeNull();
+      });
+      expect(container.textContent).not.toContain(assessment.assessmentId);
+    });
   });
 });

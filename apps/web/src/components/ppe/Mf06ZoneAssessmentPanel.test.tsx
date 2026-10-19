@@ -751,6 +751,141 @@ describe('Mf06ZoneAssessmentPanel (B5 Requests & Assessments)', () => {
     expect(screen.queryByText(/req-initial-settled/i)).toBeNull();
   });
 
+  it.each([
+    { label: '401', next: () => Promise.reject(new ApiError('http', 'Unauthorized', 401)) },
+    { label: '403', next: () => Promise.reject(new ApiError('http', 'Forbidden', 403)) },
+    { label: '404', next: () => Promise.reject(new ApiError('http', 'Not found', 404)) },
+    { label: '503', next: () => Promise.reject(new ApiError('http', 'Unavailable', 503)) },
+    { label: 'removed-row', next: () => Promise.resolve(createRequestPage([], 0, 0, 20)) },
+  ])(
+    'closes an open recorded assessment detail dialog when parent request refresh resolves with $label',
+    async ({ label, next }) => {
+      const request = createRequestStatus({
+        requestId: '22222222-2222-4222-8222-222222222222',
+        jobStatus: 'SUCCEEDED',
+        assessmentId: '11111111-1111-4111-8111-111111111111',
+      });
+      const record = {
+        assessmentId: request.assessmentId!,
+        requestId: request.requestId,
+        siteId: request.siteId,
+        eventId: request.eventId,
+        cameraId: request.cameraId,
+        zoneId: request.zoneId,
+        capturedAt: request.capturedAt,
+        assessedAt: '2026-10-12T10:00:03.000Z',
+        purpose: request.purpose,
+        outcome: 'UNAVAILABLE' as const,
+        reasonCode: 'IDENTITY_UNAVAILABLE' as const,
+        evaluatorVersion: 'SYNTHETIC_READ_V1',
+        provenance: 'UNAVAILABLE' as const,
+      };
+      mockListMf06RequestStatuses
+        .mockResolvedValueOnce(createRequestPage([request]))
+        .mockImplementationOnce(next);
+      Object.assign(mockClient, {
+        getMf06Assessment: vi.fn().mockResolvedValue(record),
+      });
+
+      const { container, queries } = mount(() => (
+        <Mf06ZoneAssessmentPanel
+          token={TOKEN_1}
+          siteId={SITE_1}
+          credentialId={CREDENTIAL_1}
+          client={mockClient}
+          initialTab="requests"
+        />
+      ));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View assessment' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Recorded assessment' });
+      expect(await within(dialog).findByText('Identity Unavailable')).toBeTruthy();
+
+      await act(async () => {
+        await queries.invalidateQueries({ queryKey: ['mf06-requests'], refetchType: 'active' });
+      });
+
+      await waitFor(() => {
+        expect(mockListMf06RequestStatuses).toHaveBeenCalledTimes(2);
+      });
+      if (label === '403') {
+        expect(
+          await screen.findByText('You do not have permission to view requests for this site.'),
+        ).toBeTruthy();
+      }
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Recorded assessment' })).toBeNull();
+      });
+      expect(container.textContent).not.toContain(request.assessmentId!);
+    },
+  );
+
+  it('preserves an open recorded assessment detail dialog while parent request refresh is pending, then closes when the row is removed', async () => {
+    const request = createRequestStatus({
+      requestId: '22222222-2222-4222-8222-222222222222',
+      jobStatus: 'SUCCEEDED',
+      assessmentId: '11111111-1111-4111-8111-111111111111',
+    });
+    const record = {
+      assessmentId: request.assessmentId!,
+      requestId: request.requestId,
+      siteId: request.siteId,
+      eventId: request.eventId,
+      cameraId: request.cameraId,
+      zoneId: request.zoneId,
+      capturedAt: request.capturedAt,
+      assessedAt: '2026-10-12T10:00:03.000Z',
+      purpose: request.purpose,
+      outcome: 'UNAVAILABLE' as const,
+      reasonCode: 'IDENTITY_UNAVAILABLE' as const,
+      evaluatorVersion: 'SYNTHETIC_READ_V1',
+      provenance: 'UNAVAILABLE' as const,
+    };
+    let resolveRefresh!: (page: Mf06RequestStatusPage) => void;
+    const pendingRefresh = new Promise<Mf06RequestStatusPage>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    mockListMf06RequestStatuses
+      .mockResolvedValueOnce(createRequestPage([request]))
+      .mockImplementationOnce(() => pendingRefresh);
+    Object.assign(mockClient, {
+      getMf06Assessment: vi.fn().mockResolvedValue(record),
+    });
+
+    const { container, queries } = mount(() => (
+      <Mf06ZoneAssessmentPanel
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+        initialTab="requests"
+      />
+    ));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View assessment' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recorded assessment' });
+    expect(await within(dialog).findByText('Identity Unavailable')).toBeTruthy();
+
+    act(() => {
+      void queries.invalidateQueries({ queryKey: ['mf06-requests'], refetchType: 'active' });
+    });
+
+    await waitFor(() => {
+      expect(mockListMf06RequestStatuses).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByRole('dialog', { name: 'Recorded assessment' })).toBeTruthy();
+    expect(within(dialog).getByText('Identity Unavailable')).toBeTruthy();
+
+    await act(async () => {
+      resolveRefresh(createRequestPage([], 0, 0, 20));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Recorded assessment' })).toBeNull();
+    });
+    expect(container.textContent).not.toContain(request.assessmentId!);
+  });
+
   it('generates unique useId-based IDs for tabs and panels across multiple instances', () => {
     mount(() => (
       <div>
