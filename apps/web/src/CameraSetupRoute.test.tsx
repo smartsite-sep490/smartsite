@@ -91,7 +91,10 @@ afterEach(() => {
 });
 it('opens a direct setup route with the Main verified session and a separate menu entry', async () => {
   mount('/camera-setup');
-  expect(await screen.findByRole('heading', { name: 'Setup for actor' })).toBeTruthy();
+  // Cold lazy imports can exceed Testing Library's default one-second wait on CI.
+  expect(
+    await screen.findByRole('heading', { name: 'Setup for actor' }, { timeout: 5000 }),
+  ).toBeTruthy();
   expect(screen.getByRole('button', { name: /Camera setup/i })).toBeTruthy();
 });
 it('navigates from monitoring to setup with encoded Site/camera IDs', async () => {

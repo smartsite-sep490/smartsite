@@ -157,7 +157,7 @@ describe('CameraSetupView workspace hierarchy & per-camera region binding', () =
       within(camerasSection).getByRole('button', { name: 'Configure PPE by Zone' }),
     ).toBeTruthy();
 
-    const helpSummary = screen.getByText('How to set up this site').closest('summary');
+    const helpSummary = screen.getByText('Setup guide').closest('summary');
     const helpDetails = helpSummary?.parentElement;
     if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
       throw new Error('Expected native details/summary for setup help.');
@@ -218,7 +218,7 @@ describe('CameraSetupView workspace hierarchy & per-camera region binding', () =
     mount();
     await screen.findByText(gateCamera.name);
 
-    const helpSummary = screen.getByText('How to set up this site').closest('summary');
+    const helpSummary = screen.getByText('Setup guide').closest('summary');
     const helpDetails = helpSummary?.parentElement;
     if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
       throw new Error('Expected native details/summary for setup help.');
@@ -231,7 +231,7 @@ describe('CameraSetupView workspace hierarchy & per-camera region binding', () =
 
     expect(helpDetails.isConnected).toBe(true);
     expect(helpDetails.open).toBe(true);
-    expect(screen.getByText('Cách thiết lập công trường').closest('summary')).toBe(helpSummary);
+    expect(screen.getByText('Hướng dẫn thiết lập').closest('summary')).toBe(helpSummary);
 
     const gateRow = screen.getByRole('heading', { name: gateCamera.name }).closest('li');
     if (!gateRow) {

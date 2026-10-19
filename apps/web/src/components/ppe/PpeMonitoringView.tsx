@@ -1140,6 +1140,11 @@ export function PpeMonitoringView({
     : viewMode === 'wall'
       ? (activeWallSnapshot?.status ?? (selectedCameraId ? 'CONNECTING' : 'UNAVAILABLE'))
       : scopedPreview.status;
+  const activeSourceKind = isAiWorkPaused
+    ? null
+    : viewMode === 'wall'
+      ? (activeWallSnapshot?.sourceKind ?? null)
+      : scopedPreview.sourceKind;
   const activeCapturedAt = preview?.frame.capturedAt ?? null;
   const displayedCapturedTime = useMemo(
     () => formatCapturedFrameTime(activeCapturedAt),
@@ -1380,9 +1385,9 @@ export function PpeMonitoringView({
               className={`w-2 h-2 rounded-full ${
                 isAiWorkPaused
                   ? 'bg-amber-500'
-                  : scopedPreview.status === 'LIVE' && preview
+                  : activeStatus === 'LIVE' && preview
                     ? 'bg-red-500 animate-pulse'
-                    : scopedPreview.status === 'REPLAY'
+                    : activeStatus === 'REPLAY'
                       ? 'bg-amber-500'
                       : 'bg-slate-400'
               }`}
@@ -1390,9 +1395,9 @@ export function PpeMonitoringView({
             <span className="font-semibold text-slate-800">
               {isAiWorkPaused
                 ? t('ppe.header.status.paused')
-                : scopedPreview.status === 'LIVE' && preview
+                : activeStatus === 'LIVE' && preview
                   ? t('ppe.header.status.live')
-                  : scopedPreview.status === 'REPLAY'
+                  : activeStatus === 'REPLAY'
                     ? t('ppe.header.status.replay')
                     : t('ppe.header.status.standby')}
             </span>
@@ -2481,15 +2486,14 @@ export function PpeMonitoringView({
                 className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border flex-shrink-0 whitespace-nowrap ${
                   !isAiWorkPaused &&
                   preview &&
-                  (scopedPreview.status === 'LIVE' || scopedPreview.status === 'REPLAY')
+                  (activeStatus === 'LIVE' || activeStatus === 'REPLAY')
                     ? 'bg-slate-100 text-slate-700 border-slate-300 font-mono tabular-nums'
                     : 'bg-amber-50 text-amber-800 border-amber-200'
                 }`}
               >
                 {isAiWorkPaused
                   ? t('ppe.badge.aiPaused')
-                  : preview &&
-                      (scopedPreview.status === 'LIVE' || scopedPreview.status === 'REPLAY')
+                  : preview && (activeStatus === 'LIVE' || activeStatus === 'REPLAY')
                     ? (testDetection?.eventId ?? t('ppe.card.noDetectionBadge'))
                     : t('ppe.card.evidenceUnavailableBadge')}
               </span>
@@ -2536,7 +2540,7 @@ export function PpeMonitoringView({
                       {t('ppe.card.fieldIdentity')}
                     </p>
                     <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
-                      {!preview || scopedPreview.status === 'UNAVAILABLE'
+                      {!preview || activeStatus === 'UNAVAILABLE'
                         ? t('ppe.card.identitySnapshotUnavailable')
                         : testDetection?.trackId !== null && testDetection?.trackId !== undefined
                           ? t('ppe.card.identityUnknown')
@@ -2548,7 +2552,7 @@ export function PpeMonitoringView({
                       {t('ppe.card.fieldTrackId')}
                     </p>
                     <p className="font-semibold text-slate-900 text-xs mt-0.5 tabular-nums truncate">
-                      {!preview || scopedPreview.status === 'UNAVAILABLE'
+                      {!preview || activeStatus === 'UNAVAILABLE'
                         ? '—'
                         : ppeDetections
                             .map((detection) =>
@@ -2578,9 +2582,7 @@ export function PpeMonitoringView({
                       {t('ppe.card.fieldDetected')}
                     </p>
                     <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono tabular-nums">
-                      {!preview || scopedPreview.status === 'UNAVAILABLE'
-                        ? '—'
-                        : displayedCapturedTime}
+                      {!preview || activeStatus === 'UNAVAILABLE' ? '—' : displayedCapturedTime}
                     </p>
                   </div>
                   <div>
@@ -2589,7 +2591,7 @@ export function PpeMonitoringView({
                     </p>
                     <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono tabular-nums">
                       {!preview ||
-                      scopedPreview.status === 'UNAVAILABLE' ||
+                      activeStatus === 'UNAVAILABLE' ||
                       testDetection?.confidence === null ||
                       testDetection?.confidence === undefined
                         ? '—'
@@ -2618,7 +2620,7 @@ export function PpeMonitoringView({
                     </div>
                   </details>
                   <div className="space-y-2">
-                    {!preview || scopedPreview.status === 'UNAVAILABLE' ? (
+                    {!preview || activeStatus === 'UNAVAILABLE' ? (
                       <div
                         data-testid="ai-snapshot-unavailable-msg"
                         className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center space-y-1"
@@ -2806,7 +2808,7 @@ export function PpeMonitoringView({
                         ) : (
                           <span>{t('ppe.result.helmetAndVestDetected')}</span>
                         )
-                      ) : !preview || scopedPreview.status === 'UNAVAILABLE' ? (
+                      ) : !preview || activeStatus === 'UNAVAILABLE' ? (
                         <span>{t('ppe.result.evidenceUnavailable')}</span>
                       ) : ppeDetections.length === 0 ? (
                         <span>{t('ppe.result.noObservations')}</span>
@@ -2815,7 +2817,7 @@ export function PpeMonitoringView({
                       )}
                     </div>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      {!preview || scopedPreview.status === 'UNAVAILABLE'
+                      {!preview || activeStatus === 'UNAVAILABLE'
                         ? effectiveStreamViewMode === 'live-raw'
                           ? t('ppe.result.descRawUnavailable')
                           : t('ppe.result.descSnapshotOffline')
@@ -2827,14 +2829,12 @@ export function PpeMonitoringView({
                             ? t('ppe.result.descMissing')
                             : ppeDetections.length === 0
                               ? isLive
-                                ? scopedPreview.status === 'REPLAY' ||
-                                  scopedPreview.sourceKind === 'REPLAY'
+                                ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
                                   ? t('ppe.result.descZeroDetectionsReplay')
                                   : t('ppe.result.descZeroDetectionsLive')
                                 : t('ppe.result.descSnapshotOffline')
                               : isLive
-                                ? scopedPreview.status === 'REPLAY' ||
-                                  scopedPreview.sourceKind === 'REPLAY'
+                                ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
                                   ? t('ppe.result.descStreamingReplay')
                                   : t('ppe.result.descStreamingLive')
                                 : t('ppe.result.descSnapshotOffline')}
@@ -3297,7 +3297,7 @@ export function PpeMonitoringView({
                   className={`w-2 h-2 rounded-full ${
                     isAiWorkPaused
                       ? 'bg-amber-500'
-                      : scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                      : activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
                         ? 'bg-amber-500'
                         : 'bg-emerald-500 animate-pulse'
                   }`}
@@ -3305,7 +3305,7 @@ export function PpeMonitoringView({
                 <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
                   {isAiWorkPaused
                     ? t('ppe.observations.pausedHeading')
-                    : scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                    : activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
                       ? t('ppe.observations.replayHeading')
                       : t('ppe.observations.liveHeading')}
                 </h3>
@@ -3317,7 +3317,7 @@ export function PpeMonitoringView({
                 <p className="mt-1 text-xs text-slate-500 max-w-2xl leading-relaxed">
                   {isAiWorkPaused
                     ? t('ppe.observations.pausedDesc')
-                    : scopedPreview.status === 'REPLAY' || scopedPreview.sourceKind === 'REPLAY'
+                    : activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
                       ? t('ppe.observations.replayDesc')
                       : t('ppe.observations.liveDesc')}
                 </p>

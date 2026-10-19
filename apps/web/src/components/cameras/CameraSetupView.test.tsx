@@ -101,10 +101,14 @@ it('does not let a callback from a closed dialog revoke a later dialog in the sa
 it('translates setup in place without replacing authorized camera metadata', async () => {
   mount();
   await screen.findByText(camera.name);
+  expect(screen.getByText('1 shown · 1 returned by the catalog')).toBeTruthy();
+  expect(screen.getByText('Setup guide')).toBeTruthy();
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('heading', { name: 'Thiết lập camera' })).toBeTruthy();
   expect(screen.getByText(camera.name)).toBeTruthy();
   expect(screen.getByText('Đã tắt trong cấu hình')).toBeTruthy();
+  expect(screen.getByText('Đang hiện 1 · danh mục trả về 1')).toBeTruthy();
+  expect(screen.getByText('Hướng dẫn thiết lập')).toBeTruthy();
 });
 it('returns to monitoring with only a validated Site/camera context', async () => {
   mount(admin, '/camera-setup?siteId=site-1&cameraId=cam-1');

@@ -116,7 +116,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
     await within(camerasSection).findByRole('heading', { name: activeCamera.name });
 
-    expect(screen.getByText('Cameras and area PPE policies for this site.')).toBeTruthy();
+    expect(screen.getByText('Site cameras and area PPE policies.')).toBeTruthy();
     expect(
       screen.queryByText(
         'Register cameras and link observation areas. Open monitoring to view images.',
@@ -130,9 +130,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     ).toBeTruthy();
     expect(within(camerasSection).getByRole('button', { name: 'Register camera' })).toBeTruthy();
 
-    const helpSummary = within(camerasSection)
-      .getByText('How to set up this site')
-      .closest('summary');
+    const helpSummary = within(camerasSection).getByText('Setup guide').closest('summary');
     const helpDetails = helpSummary?.parentElement;
     if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
       throw new Error('Expected native details/summary for setup help.');
@@ -142,13 +140,11 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(helpDetails.open).toBe(true);
 
     const guide = within(helpDetails).getByRole('list', { name: 'Setup steps' });
-    expect(
-      within(guide).getByText('The Site Manager creates areas and their PPE requirements.'),
-    ).toBeTruthy();
-    expect(within(guide).getByText('The Site Manager registers each camera.')).toBeTruthy();
+    expect(within(guide).getByText('Create site areas and PPE requirements.')).toBeTruthy();
+    expect(within(guide).getByText('Register each camera in configuration.')).toBeTruthy();
     expect(
       within(guide).getByText(
-        'The Site Manager links observation regions to areas. Source verification is separate.',
+        'Link observation regions to areas. Source verification is separate.',
       ),
     ).toBeTruthy();
     expect(within(helpDetails).queryByRole('button')).toBeNull();
@@ -174,7 +170,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 
     await act(async () => changeUiLanguage('vi'));
-    expect(screen.getByText('Camera và chính sách PPE của công trường.')).toBeTruthy();
+    expect(screen.getByText('Camera và PPE của công trường.')).toBeTruthy();
     expect(
       screen.queryByText('Đăng ký camera và liên kết vùng quan sát. Mở giám sát để xem hình ảnh.'),
     ).toBeNull();
@@ -189,16 +185,14 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
     await within(camerasSection).findByRole('heading', { name: activeCamera.name });
 
-    expect(screen.getByText('Cameras and area PPE policies for this site.')).toBeTruthy();
+    expect(screen.getByText('Site cameras and area PPE policies.')).toBeTruthy();
     expect(
       screen.queryByText(
         'Register cameras and link observation areas. Open monitoring to view images.',
       ),
     ).toBeNull();
 
-    const helpSummary = within(camerasSection)
-      .getByText('How to set up this site')
-      .closest('summary');
+    const helpSummary = within(camerasSection).getByText('Setup guide').closest('summary');
     const helpDetails = helpSummary?.parentElement;
     if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
       throw new Error('Expected native details/summary for setup help.');
@@ -218,7 +212,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 
     await act(async () => changeUiLanguage('vi'));
-    expect(screen.getByText('Camera và chính sách PPE của công trường.')).toBeTruthy();
+    expect(screen.getByText('Camera và PPE của công trường.')).toBeTruthy();
     expect(
       screen.queryByText('Đăng ký camera và liên kết vùng quan sát. Mở giám sát để xem hình ảnh.'),
     ).toBeNull();
@@ -230,7 +224,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     mountSetup(foreignManagerSession);
 
     const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
-    expect(screen.getByText('Cameras and area PPE policies for this site.')).toBeTruthy();
+    expect(screen.getByText('Site cameras and area PPE policies.')).toBeTruthy();
     expect(
       within(camerasSection).getByText(
         'The assigned Site Manager configures cameras and observation regions.',
@@ -240,9 +234,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
       screen.queryByText('The Site Manager defines PPE requirements for each area.'),
     ).toBeNull();
 
-    const helpSummary = within(camerasSection)
-      .getByText('How to set up this site')
-      .closest('summary');
+    const helpSummary = within(camerasSection).getByText('Setup guide').closest('summary');
     const helpDetails = helpSummary?.parentElement;
     if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
       throw new Error('Expected native details/summary for setup help.');
@@ -266,7 +258,7 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
 
     await act(async () => changeUiLanguage('vi'));
-    expect(screen.getByText('Camera và chính sách PPE của công trường.')).toBeTruthy();
+    expect(screen.getByText('Camera và PPE của công trường.')).toBeTruthy();
     expect(
       screen.getByText('Quản lý công trường được phân công thiết lập camera và vùng quan sát.'),
     ).toBeTruthy();

@@ -261,7 +261,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
   mountCatalog();
   await screen.findByText(activeCamera.name);
   expect(screen.getByRole('region', { name: 'Cameras' })).toBeTruthy();
-  const helpSummary = screen.getByText('How to set up this site').closest('summary');
+  const helpSummary = screen.getByText('Setup guide').closest('summary');
   const helpDetails = helpSummary?.parentElement;
   if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
     throw new Error('Expected native details/summary for setup help.');
@@ -278,7 +278,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
 
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('region', { name: 'Camera' })).toBeTruthy();
-  expect(screen.getByText('Cách thiết lập công trường').closest('summary')).toBe(helpSummary);
+  expect(screen.getByText('Hướng dẫn thiết lập').closest('summary')).toBe(helpSummary);
   expect(screen.getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Đăng ký camera' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cấu hình PPE theo khu vực' })).toBeTruthy();

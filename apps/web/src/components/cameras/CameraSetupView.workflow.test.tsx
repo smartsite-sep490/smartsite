@@ -123,9 +123,7 @@ it('makes the ordered setup workflow visible with one action per task and separa
   const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
   await within(camerasSection).findByRole('heading', { name: activeCamera.name });
 
-  const helpSummary = within(camerasSection)
-    .getByText('How to set up this site')
-    .closest('summary');
+  const helpSummary = within(camerasSection).getByText('Setup guide').closest('summary');
   const helpDetails = helpSummary?.parentElement;
   if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
     throw new Error('Expected native details/summary for setup help.');

@@ -2,7 +2,7 @@ import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 
 const en = {
   'cameraSetup.title': 'Camera setup',
-  'cameraSetup.intro': 'Cameras and area PPE policies for this site.',
+  'cameraSetup.intro': 'Site cameras and area PPE policies.',
   'cameraSetup.monitor': 'Open monitoring',
   'cameraSetup.monitorPpe': 'PPE monitoring',
   'cameraSetup.monitorZones': 'Restricted-zone monitoring',
@@ -42,17 +42,16 @@ const en = {
   'cameraSetup.viewZones': 'View area policies',
   'cameraSetup.adminHint': 'The assigned Site Manager configures cameras and observation regions.',
   'cameraSetup.managerHint': 'The Site Manager defines PPE requirements for each area.',
-  'cameraSetup.help': 'How to set up this site',
+  'cameraSetup.help': 'Setup guide',
   'cameraSetup.workflowTitle': 'Setup steps',
-  'cameraSetup.step1': 'The Site Manager creates areas and their PPE requirements.',
-  'cameraSetup.step2': 'The Site Manager registers each camera.',
-  'cameraSetup.step3':
-    'The Site Manager links observation regions to areas. Source verification is separate.',
+  'cameraSetup.step1': 'Create site areas and PPE requirements.',
+  'cameraSetup.step2': 'Register each camera in configuration.',
+  'cameraSetup.step3': 'Link observation regions to areas. Source verification is separate.',
   'cameraSetup.regionsAction': 'Link observation regions',
 };
 const vi: Record<keyof typeof en, string> = {
   'cameraSetup.title': 'Thiết lập camera',
-  'cameraSetup.intro': 'Camera và chính sách PPE của công trường.',
+  'cameraSetup.intro': 'Camera và PPE của công trường.',
   'cameraSetup.monitor': 'Mở giám sát',
   'cameraSetup.monitorPpe': 'Giám sát PPE',
   'cameraSetup.monitorZones': 'Giám sát vùng hạn chế',
@@ -93,12 +92,11 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.viewZones': 'Xem chính sách khu vực',
   'cameraSetup.adminHint': 'Quản lý công trường được phân công thiết lập camera và vùng quan sát.',
   'cameraSetup.managerHint': 'Quản lý công trường quy định PPE cho từng khu vực.',
-  'cameraSetup.help': 'Cách thiết lập công trường',
+  'cameraSetup.help': 'Hướng dẫn thiết lập',
   'cameraSetup.workflowTitle': 'Thứ tự thiết lập',
-  'cameraSetup.step1': 'Quản lý công trường tạo khu vực và yêu cầu PPE.',
-  'cameraSetup.step2': 'Quản lý công trường đăng ký từng camera.',
-  'cameraSetup.step3':
-    'Quản lý công trường gắn vùng quan sát với khu vực. Kiểm tra nguồn kết nối là bước riêng.',
+  'cameraSetup.step1': 'Tạo khu vực và quy định PPE bắt buộc.',
+  'cameraSetup.step2': 'Đăng ký từng camera vào cấu hình.',
+  'cameraSetup.step3': 'Gắn vùng quan sát với khu vực. Kiểm tra nguồn kết nối là bước riêng.',
   'cameraSetup.regionsAction': 'Gắn vùng quan sát',
 };
 registerFeatureCatalog({ en, vi });

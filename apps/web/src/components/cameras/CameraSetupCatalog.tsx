@@ -42,11 +42,11 @@ export function CameraSetupCatalog({
     <div>
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
+          <div className="min-w-0 space-y-1">
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">
               {t('cameraSetup.cameras')}
             </h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
+            <p className="max-w-xl text-xs leading-5 text-slate-500">
               {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
             </p>
           </div>
@@ -60,37 +60,36 @@ export function CameraSetupCatalog({
         {canReadCameras && (
           <>
             {cameras.isPending && (
-              <p role="status" className="mt-5 text-sm text-slate-500">
+              <p
+                role="status"
+                className="mt-4 rounded-xl border border-slate-200/70 bg-slate-50/60 px-4 py-3 text-sm text-slate-500"
+              >
                 {t('cameraSetup.loading')}
               </p>
             )}
             {cameraError}
-            <ul className="mt-5 space-y-3">
+            <ul className="mt-4 space-y-2.5">
               {rows.map((row) => {
                 const isEnabled = row.status === 'ACTIVE';
                 return (
                   <li
                     key={row.id}
-                    className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50/80"
+                    className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200/90 bg-slate-50/30 px-4 py-3.5 transition-colors hover:border-slate-300 hover:bg-slate-50/80 sm:flex-row sm:items-center"
                   >
-                    <div className="min-w-0 flex-1 space-y-2.5">
-                      <h3 className="break-words text-base font-semibold leading-snug text-slate-900">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <h3 className="break-words text-base font-semibold tracking-tight text-slate-900">
                         {row.name}
                       </h3>
-                      <dl className="grid gap-3 text-xs sm:grid-cols-2">
-                        <div className="min-w-0">
-                          <dt className="font-medium text-slate-500">
-                            {t('cameraSetup.codeLabel')}
-                          </dt>
-                          <dd className="mt-0.5 break-all font-mono text-xs text-slate-700">
+                      <dl className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                        <div className="min-w-0 inline-flex flex-wrap items-center gap-1.5">
+                          <dt className="text-slate-400">{t('cameraSetup.codeLabel')}</dt>
+                          <dd className="min-w-0 break-all rounded-md border border-slate-200/80 bg-white px-2 py-0.5 font-mono text-xs font-medium tabular-nums text-slate-700">
                             {row.code}
                           </dd>
                         </div>
-                        <div className="min-w-0">
-                          <dt className="font-medium text-slate-500">
-                            {t('cameraSetup.statusLabel')}
-                          </dt>
-                          <dd className="mt-1">
+                        <div className="inline-flex items-center gap-1.5">
+                          <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
+                          <dd>
                             <span
                               className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-medium break-words ${
                                 isEnabled
@@ -105,7 +104,7 @@ export function CameraSetupCatalog({
                       </dl>
                     </div>
                     {canManageCameras && (
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">
                         {isEnabled && (
                           <button
                             type="button"
@@ -130,12 +129,18 @@ export function CameraSetupCatalog({
               })}
             </ul>
             {cameras.settledEmpty && (
-              <p role="status" className="py-5 text-sm text-slate-500">
+              <p
+                role="status"
+                className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-6 text-center text-sm text-slate-500"
+              >
                 {t('cameraSetup.noCameras')}
               </p>
             )}
             {showLinkedCameraNotice && (
-              <p role="status" className="mt-4 text-sm text-slate-600">
+              <p
+                role="status"
+                className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"
+              >
                 {t(
                   cameras.hasNextPage
                     ? 'cameraSetup.linkedCameraMore'
@@ -143,27 +148,31 @@ export function CameraSetupCatalog({
                 )}
               </p>
             )}
-            {hasLoadedCameraPages && (
-              <p className="mt-4 text-xs text-slate-500">
-                {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
+            {!cameras.baseError && cameras.hasNextPage && rows.length === 0 && (
+              <p role="status" className="mt-3 text-sm text-slate-600">
+                {t('cameraSetup.partial')}
               </p>
             )}
-            {!cameras.baseError && cameras.hasNextPage && (
-              <>
-                {rows.length === 0 && (
-                  <p role="status" className="mt-3 text-sm">
-                    {t('cameraSetup.partial')}
+            {(hasLoadedCameraPages || (!cameras.baseError && cameras.hasNextPage)) && (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                {hasLoadedCameraPages ? (
+                  <p className="text-xs font-medium tabular-nums text-slate-500">
+                    {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
                   </p>
+                ) : (
+                  <span />
                 )}
-                <button
-                  type="button"
-                  className={`${button} mt-4`}
-                  disabled={cameras.isFetching}
-                  onClick={cameras.loadMore}
-                >
-                  {t('cameraSetup.camerasMore')}
-                </button>
-              </>
+                {!cameras.baseError && cameras.hasNextPage && (
+                  <button
+                    type="button"
+                    className={button}
+                    disabled={cameras.isFetching}
+                    onClick={cameras.loadMore}
+                  >
+                    {t('cameraSetup.camerasMore')}
+                  </button>
+                )}
+              </div>
             )}
           </>
         )}

@@ -136,7 +136,7 @@ describe('Zone task copy and workflow landmark alignment', () => {
     expect(screen.queryByRole('button', { name: 'Link observation regions' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Areas & PPE' })).toBeNull();
 
-    const helpSummary = screen.getByText('How to set up this site').closest('summary');
+    const helpSummary = screen.getByText('Setup guide').closest('summary');
     const helpDetails = helpSummary?.parentElement;
     if (!(helpDetails instanceof HTMLDetailsElement) || !helpSummary) {
       throw new Error('Expected native details/summary for setup help.');
@@ -153,7 +153,7 @@ describe('Zone task copy and workflow landmark alignment', () => {
       await i18n.changeLanguage('vi');
     });
     expect(helpDetails.open).toBe(true);
-    expect(screen.getByText('Cách thiết lập công trường').closest('summary')).toBe(helpSummary);
+    expect(screen.getByText('Hướng dẫn thiết lập').closest('summary')).toBe(helpSummary);
     expect(within(helpDetails).getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
   });
 });
