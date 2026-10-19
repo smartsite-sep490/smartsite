@@ -14,8 +14,8 @@ it('does not start queued resolver I/O after cancellation before its first micro
     leaseToken: '22222222-2222-4222-8222-222222222222',
     headRevision: 2,
     attemptCount: 1,
-    leaseExpiresAt: '2026-10-19T06:00:00.000Z',
-    deadlineAt: '2026-10-19T06:05:00.000Z',
+    leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+    deadlineAt: new Date(Date.now() + 600_000).toISOString(),
   };
   const worker = new Mf06AssessmentWorker(
     {

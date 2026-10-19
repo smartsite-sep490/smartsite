@@ -97,17 +97,26 @@ export class Mf06AssessmentWorker {
     const claim = await this.leases.claim(signal);
     if (!claim) return 'IDLE';
     if (signal.aborted) return this.leases.cancel(claim);
+    // Local time bounds resource use; final authorization still requires the database lease CAS.
+    const expiresAt = Math.min(Date.parse(claim.leaseExpiresAt), Date.parse(claim.deadlineAt));
+    const remaining = () => expiresAt - Date.now();
+    if (!Number.isFinite(expiresAt) || remaining() <= 0) return 'STALE';
     const timeout = new AbortController();
     const preparationSignal = AbortSignal.any([signal, timeout.signal]);
-    const timer = setTimeout(() => timeout.abort(), this.settings.resolverTimeoutMs);
+    const timer = setTimeout(
+      () => timeout.abort(),
+      Math.min(this.settings.resolverTimeoutMs, remaining()),
+    );
     let prepared: unknown;
     try {
-      prepared = await abortRace(
-        () => this.work.prepare(claim, preparationSignal),
-        preparationSignal,
-      );
+      prepared = await abortRace(() => {
+        if (remaining() <= 0) timeout.abort();
+        preparationSignal.throwIfAborted();
+        return this.work.prepare(claim, preparationSignal);
+      }, preparationSignal);
     } catch (error) {
       if (signal.aborted) return this.leases.cancel(claim);
+      if (remaining() <= 0) return 'STALE';
       if (timeout.signal.aborted) return this.leases.retry(claim, 'RESOLVER_TIMEOUT');
       if (error instanceof Mf06RetryableWorkError && error.code === 'RESOLVER_UNAVAILABLE')
         return this.leases.retry(claim, error.code);
@@ -117,9 +126,11 @@ export class Mf06AssessmentWorker {
     }
     for (let attempt = 0; attempt < this.settings.maxDatabaseAttempts; attempt++) {
       if (signal.aborted) return this.leases.cancel(claim);
+      if (remaining() <= 0) return 'STALE';
       try {
         const result = await this.db.transaction('SERIALIZABLE', async (manager) => {
           signal.throwIfAborted();
+          if (remaining() <= 0) return { state: 'STALE' as const, reason: 'LEASE_EXPIRED' };
           const value = await this.work.finalize(manager, claim, prepared, signal);
           signal.throwIfAborted();
           return value;

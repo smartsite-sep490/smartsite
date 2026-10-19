@@ -35,8 +35,8 @@ const sampleClaim: Mf06JobClaim = {
   leaseToken: '22222222-2222-4222-8222-222222222222',
   headRevision: 2,
   attemptCount: 1,
-  leaseExpiresAt: '2026-10-12T18:00:00.000Z',
-  deadlineAt: '2026-10-12T18:05:00.000Z',
+  leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+  deadlineAt: new Date(Date.now() + 600_000).toISOString(),
 };
 
 const defaultOptions: Mf06AssessmentWorkerOptions = {
