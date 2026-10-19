@@ -162,7 +162,10 @@ function abortRace<T>(operation: () => Promise<T>, signal: AbortSignal): Promise
     // Both handlers stay attached to ignored-signal I/O; late resolve/reject can
     // neither finalize a job nor produce an unhandled rejection through this race.
     Promise.resolve()
-      .then(operation)
+      .then(() => {
+        signal.throwIfAborted();
+        return operation();
+      })
       .then(
         (value) => finish(true, value),
         (error) => finish(false, error),
