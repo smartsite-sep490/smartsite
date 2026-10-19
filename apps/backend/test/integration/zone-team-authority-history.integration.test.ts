@@ -13,6 +13,8 @@ const actor = randomUUID(),
   team = randomUUID();
 const migration = new ZoneTeamAuthorityHistory1792886400000();
 let originalRegistry: unknown;
+let commandTable: 'mf06_authority_command' | 'authorization_history_command';
+let registryTable: 'mf06_authority_source' | 'authorization_history_source';
 async function migrate(direction: 'up' | 'down') {
   const runner = db.createQueryRunner();
   await runner.connect();
@@ -29,6 +31,15 @@ async function migrate(direction: 'up' | 'down') {
 }
 before(async () => {
   await database.initialize();
+  const namespaces: { name: string }[] = await db.query(`SELECT c.relname AS name FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind='r'
+    AND c.relname IN ('mf06_authority_command','authorization_history_command')`);
+  assert.equal(namespaces.length, 1, 'Exactly one qualified command namespace is required');
+  commandTable = namespaces[0]!.name as typeof commandTable;
+  registryTable =
+    commandTable === 'authorization_history_command'
+      ? 'authorization_history_source'
+      : 'mf06_authority_source';
   await db.query(
     "INSERT INTO app_user(id,username,display_name,password_hash,is_active,must_change_password) VALUES($1,$1::uuid::text,'Synthetic','unusable',true,false)",
     [actor],
@@ -41,14 +52,25 @@ before(async () => {
     "INSERT INTO contractor_team(id,site_id,contractor_id,name,normalized_name,created_by) VALUES($1,$2,$3,'Synthetic','synthetic',$4)",
     [team, site, contractor, actor],
   );
-  originalRegistry = await db.query('SELECT * FROM mf06_authority_source ORDER BY source_kind');
+  originalRegistry = await db.query(`SELECT * FROM ${registryTable} ORDER BY source_kind`);
   await migrate('up');
 });
 after(async () => {
   await database.dispose();
 });
 
-test('V2 capture is additive; revision-zero seed and empty down preserve V1 source registry', async () => {
+test('new journal references the qualified command table without reviving a legacy namespace', async () => {
+  const references: { target: string; same_target: boolean }[] = await db.query(
+    `SELECT parent.relname AS target,k.confrelid=to_regclass($1) AS same_target
+     FROM pg_constraint k JOIN pg_class parent ON parent.oid=k.confrelid
+     WHERE k.conrelid='zone_team_authority_revision'::regclass AND k.contype='f'`,
+    [commandTable],
+  );
+  assert.deepEqual(references, [{ target: commandTable, same_target: true }]);
+  assert.equal(await db.showMigrations(), false);
+});
+
+test('V2 capture is additive; revision-zero seed and empty down preserve the installed registry', async () => {
   const [head] = await db.query(
     "SELECT revision::text,after_payload FROM zone_team_authority_head WHERE source_kind='TEAM' AND source_id=$1",
     [team],
@@ -57,7 +79,7 @@ test('V2 capture is additive; revision-zero seed and empty down preserve V1 sour
   assert.equal(head.after_payload.is_active, true);
   assert.equal((await db.query('SELECT * FROM zone_team_authority_revision')).length, 0);
   assert.deepEqual(
-    await db.query('SELECT * FROM mf06_authority_source ORDER BY source_kind'),
+    await db.query(`SELECT * FROM ${registryTable} ORDER BY source_kind`),
     originalRegistry,
   );
   await migrate('down');
@@ -69,7 +91,7 @@ test('known same-transaction command captures immutable masked before/after and 
   const command = randomUUID();
   await db.transaction(async (manager) => {
     await manager.query(
-      "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'TEAM_ARCHIVE',$3)",
+      `INSERT INTO ${commandTable}(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'TEAM_ARCHIVE',$3)`,
       [command, actor, 'a'.repeat(64)],
     );
     await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [command]);
@@ -143,7 +165,7 @@ test('direct journal tamper and populated down are refused', async () => {
     await assert.rejects(db.query(sql));
   await assert.rejects(migrate('down'), /history must be preserved/);
   assert.deepEqual(
-    await db.query('SELECT * FROM mf06_authority_source ORDER BY source_kind'),
+    await db.query(`SELECT * FROM ${registryTable} ORDER BY source_kind`),
     originalRegistry,
   );
 });
@@ -151,7 +173,7 @@ test('direct journal tamper and populated down are refused', async () => {
 test('command from an earlier transaction cannot attribute a later team write', async () => {
   const command = randomUUID();
   await db.query(
-    "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'TEAM_ARCHIVE',$3)",
+    `INSERT INTO ${commandTable}(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'TEAM_ARCHIVE',$3)`,
     [command, actor, 'b'.repeat(64)],
   );
   await db.transaction(async (manager) => {
@@ -165,7 +187,7 @@ test('command from an earlier transaction cannot attribute a later team write', 
   assert.equal(fact.command_id, null);
 });
 
-test('new assignment Zone IDs are captured while the V1 registry stays unchanged', async () => {
+test('new assignment Zone IDs are captured while the installed registry stays unchanged', async () => {
   const worker = randomUUID(),
     zone = randomUUID(),
     assignment = randomUUID();
@@ -187,7 +209,7 @@ test('new assignment Zone IDs are captured while the V1 registry stays unchanged
   );
   assert.deepEqual(fact.after_payload.zone_ids, [zone]);
   assert.deepEqual(
-    await db.query('SELECT * FROM mf06_authority_source ORDER BY source_kind'),
+    await db.query(`SELECT * FROM ${registryTable} ORDER BY source_kind`),
     originalRegistry,
   );
 });

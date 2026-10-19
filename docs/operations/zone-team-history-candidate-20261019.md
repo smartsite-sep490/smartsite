@@ -58,3 +58,30 @@ ERD extension review, complete cutover/coverage and independent Backend review
 remain open before registration/application. This candidate is not production
 approved, does not activate an epoch, and starts no worker/model/camera.
 No current website schema/config/role, MF08,5434, cloud, push/merge/deploy change.
+
+## 19 October named-graph qualification
+
+The same ten integration cases now pass separately on Main66 and the actual
+private Tuán-named graph70, followed by explicit candidate `up` (not runtime
+migration registration). The added case checks the new revision FK targets the
+installed command table and that the selected release graph has no pending
+migrations. Tests discover exactly one of two closed, reviewed namespaces;
+mixed or missing names are rejected rather than silently falling back.
+
+The graph70 fixture imports the already compiled, unchanged private graph's
+`buildTypeOrmOptions` through a test-only module-resolution adapter. It does not
+rewrite SQL, mock PostgreSQL or copy production data. Graph count70 and the
+physical naming migration are asserted before initialization. Private inputs
+remain Main585cc263 / Rootbd9496f / Tuán daafc340; they are not merged source.
+
+Evidence: Q/team-archive-named70-v1/{named70-pg-v1.log,main66-pg-v1.log,
+qualified-graph-v1.json,independent-cleanup-v1.json}. A separate PostgreSQL query
+confirmed both owned schemas absent and preexisting namespace names unchanged.
+This is not an audit of every table byte. Targeted TypeScript compilation passes.
+
+Importantly, the private graph already contains Tuán's earlier team migration,
+which expands its installed registry. The capture tests preserve that installed
+registry, not a claim that graph70 still has the original15-source V1 registry.
+Existing logs retain the older test titles; source titles now make this explicit.
+Fresh graph70 coexistence is qualified; populated66→70 upgrades with preexisting
+baselines, V1 historical readability and complete V2 reconstruction remain open.
