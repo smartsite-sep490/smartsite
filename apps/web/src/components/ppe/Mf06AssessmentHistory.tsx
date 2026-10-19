@@ -453,11 +453,26 @@ export function Mf06AssessmentHistory({
               {t('mf06.history.heading')}
             </h2>
           </div>
-          {latestTotal !== undefined && !isBaseError && !isHardError && (
-            <span className="text-xs font-semibold tabular-nums px-2.5 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-              {t('mf06.history.total', { total: latestTotal })}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {!isHardError && !isBaseError && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isFetching) void refetch();
+                }}
+                disabled={isFetching}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                <IconClock className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+                {isFetching ? t('mf06.requests.refreshing') : t('mf06.requests.refresh')}
+              </button>
+            )}
+            {latestTotal !== undefined && !isBaseError && !isHardError && (
+              <span className="text-xs font-semibold tabular-nums px-2.5 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                {t('mf06.history.total', { total: latestTotal })}
+              </span>
+            )}
+          </div>
         </div>
         <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
           {t('mf06.history.disclaimer')}
@@ -465,7 +480,7 @@ export function Mf06AssessmentHistory({
       </div>
 
       {/* Initial Loading State */}
-      {isLoading && !effectiveError && (
+      {(isLoading || (isFetching && items.length === 0)) && !effectiveError && (
         <div
           role="status"
           aria-live="polite"
@@ -473,7 +488,7 @@ export function Mf06AssessmentHistory({
           className="flex items-center justify-center py-10 space-x-2 text-sm text-zinc-500 dark:text-zinc-400"
         >
           <IconClock className="w-5 h-5 animate-spin" />
-          <span>{t('mf06.history.loading')}</span>
+          <span>{isLoading ? t('mf06.history.loading') : t('mf06.requests.refreshing')}</span>
         </div>
       )}
 

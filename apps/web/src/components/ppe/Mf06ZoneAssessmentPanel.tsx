@@ -624,7 +624,7 @@ function Mf06RequestStatusList({
       </div>
 
       {/* Initial Loading */}
-      {isLoading && !effectiveError && (
+      {(isLoading || (isFetching && items.length === 0)) && !effectiveError && (
         <div
           role="status"
           aria-live="polite"
@@ -661,7 +661,11 @@ function Mf06RequestStatusList({
 
       {/* Settled Empty State */}
       {!isLoading && !effectiveError && items.length === 0 && !isFetching && (
-        <div role="status" className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        <div
+          role="status"
+          aria-live="polite"
+          className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400"
+        >
           <p className="font-medium">{t('mf06.requests.emptyTitle')}</p>
           <p className="text-xs mt-1 text-zinc-400">{t('mf06.requests.emptyDesc')}</p>
         </div>

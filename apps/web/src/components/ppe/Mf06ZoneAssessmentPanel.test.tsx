@@ -954,4 +954,51 @@ describe('Mf06ZoneAssessmentPanel (B5 Requests & Assessments)', () => {
     expect(assessmentsTab.getAttribute('aria-selected')).toBe('true');
     expect(document.activeElement).toBe(assessmentsTab);
   });
+
+  it('renders a busy status live region while refreshing settled empty requests instead of collapsing content', async () => {
+    let resolveRefresh!: (page: Mf06RequestStatusPage) => void;
+    const pendingRefresh = new Promise<Mf06RequestStatusPage>((resolve) => {
+      resolveRefresh = resolve;
+    });
+
+    mockListMf06RequestStatuses
+      .mockResolvedValueOnce(createRequestPage([], 0, 0, 20))
+      .mockImplementationOnce(() => pendingRefresh);
+
+    mount(() => (
+      <Mf06ZoneAssessmentPanel
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+        initialTab="requests"
+      />
+    ));
+
+    expect(await screen.findByText('No recorded assessment requests.')).toBeTruthy();
+    const settledEmptyStatus = screen.getByRole('status');
+    expect(settledEmptyStatus.getAttribute('aria-busy')).not.toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(mockListMf06RequestStatuses).toHaveBeenCalledTimes(2);
+    });
+
+    expect(screen.queryByText('No recorded assessment requests.')).toBeNull();
+    const refreshingStatus = screen.getByRole('status');
+    expect(refreshingStatus.getAttribute('aria-live')).toBe('polite');
+    expect(refreshingStatus.getAttribute('aria-busy')).toBe('true');
+    expect(within(refreshingStatus).getByText('Loading assessment requests...')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Refreshing...' }).hasAttribute('disabled')).toBe(
+      true,
+    );
+
+    await act(async () => {
+      resolveRefresh(createRequestPage([], 0, 0, 20));
+    });
+
+    expect(await screen.findByText('No recorded assessment requests.')).toBeTruthy();
+    expect(screen.getByRole('status').getAttribute('aria-busy')).not.toBe('true');
+  });
 });

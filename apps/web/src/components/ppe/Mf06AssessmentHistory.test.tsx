@@ -79,6 +79,88 @@ describe('Mf06AssessmentHistory Component (B5)', () => {
     } as unknown as SmartSiteManagementClient;
   });
 
+  it('manually refreshes recorded history without duplicate requests or clearing pending rows', async () => {
+    let resolveRefresh!: (page: Mf06AssessmentPage) => void;
+    mockListMf06Assessments.mockResolvedValueOnce(createPage()).mockImplementationOnce(
+      () =>
+        new Promise<Mf06AssessmentPage>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    mount(() => (
+      <Mf06AssessmentHistory
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+      />
+    ));
+    await screen.findByText('Allowed');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(mockListMf06Assessments).toHaveBeenCalledTimes(2));
+    const refreshing = screen.getByRole('button', { name: 'Refreshing...' });
+    expect((refreshing as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(refreshing);
+    expect(mockListMf06Assessments).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Allowed')).toBeTruthy();
+    await act(async () =>
+      resolveRefresh(
+        createPage([createAssessment({ outcome: 'DENIED', reasonCode: 'UNAUTHORIZED' })]),
+      ),
+    );
+    expect(await screen.findByText('Denied')).toBeTruthy();
+    expect(screen.queryByText('Allowed')).toBeNull();
+  });
+
+  it('announces refresh of settled empty history instead of leaving a blank content area', async () => {
+    let resolveRefresh!: (page: Mf06AssessmentPage) => void;
+    mockListMf06Assessments.mockResolvedValueOnce(createPage([], 0)).mockImplementationOnce(
+      () =>
+        new Promise<Mf06AssessmentPage>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    mount(() => (
+      <Mf06AssessmentHistory
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+      />
+    ));
+    await screen.findByText('No recorded assessment history.');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(mockListMf06Assessments).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('status').textContent).toContain('Refreshing...');
+    expect(screen.getByRole('status').getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByText('No recorded assessment history.')).toBeNull();
+    await act(async () => resolveRefresh(createPage([], 0)));
+    expect(await screen.findByText('No recorded assessment history.')).toBeTruthy();
+  });
+
+  it.each([401, 403, 404])('revokes manual history refresh after a %s response', async (status) => {
+    mockListMf06Assessments
+      .mockResolvedValueOnce(createPage())
+      .mockRejectedValueOnce(new ApiError('http', 'Unavailable', status));
+    const onUnauthorized = vi.fn();
+    mount(() => (
+      <Mf06AssessmentHistory
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+        onUnauthorized={onUnauthorized}
+      />
+    ));
+    await screen.findByText('Allowed');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await screen.findByRole('alert');
+    expect(screen.queryByText('Allowed')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+    expect(onUnauthorized).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+    expect(mockListMf06Assessments).toHaveBeenCalledTimes(2);
+  });
+
   it('renders unselected prompt when token or siteId is missing', () => {
     mount(() => (
       <Mf06AssessmentHistory
@@ -776,7 +858,10 @@ describe('Mf06AssessmentHistory Component (B5)', () => {
         ).toBeTruthy();
 
         await act(async () => {
-          await queries.invalidateQueries({ queryKey: ['mf06-assessments'], refetchType: 'active' });
+          await queries.invalidateQueries({
+            queryKey: ['mf06-assessments'],
+            refetchType: 'active',
+          });
         });
 
         await waitFor(() => {
@@ -784,7 +869,9 @@ describe('Mf06AssessmentHistory Component (B5)', () => {
         });
         if (label === '403') {
           expect(
-            await screen.findByText('You do not have permission to view assessments for this site.'),
+            await screen.findByText(
+              'You do not have permission to view assessments for this site.',
+            ),
           ).toBeTruthy();
         }
         await waitFor(() => {
