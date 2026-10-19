@@ -9,7 +9,7 @@ import {
 import { Mf06AssessmentHistory } from './Mf06AssessmentHistory';
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
-import { IconClock, IconShield, IconCheck, IconAlertTriangle } from '../icons';
+import { IconClock, IconShield, IconAlertTriangle } from '../icons';
 import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
 
 export interface Mf06ZoneAssessmentPanelProps {
@@ -705,11 +705,33 @@ function Mf06RequestStatusList({
                       </span>
                     </div>
 
-                    {request.attemptCount !== null && (
-                      <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
-                        {t('mf06.requests.attempts', { count: request.attemptCount })}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2.5 ml-auto">
+                      {request.attemptCount !== null && (
+                        <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
+                          {t('mf06.requests.attempts', { count: request.attemptCount })}
+                        </span>
+                      )}
+                      {request.jobStatus === 'SUCCEEDED' && request.assessmentId && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedAssessmentTarget({
+                              assessmentId: request.assessmentId!,
+                              requestId: request.requestId,
+                              siteId: request.siteId,
+                              eventId: request.eventId,
+                              cameraId: request.cameraId,
+                              zoneId: request.zoneId,
+                              capturedAt: request.capturedAt,
+                              purpose: request.purpose,
+                            })
+                          }
+                          className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition cursor-pointer shrink-0"
+                        >
+                          {t('mf06.history.viewAssessment')}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/60 rounded-lg p-3 border border-zinc-200/70 dark:border-zinc-800">
@@ -743,61 +765,53 @@ function Mf06RequestStatusList({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pt-0.5 text-[11px] text-zinc-600 dark:text-zinc-300 font-mono tabular-nums">
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.detail.field.requestId')}
-                      </span>{' '}
-                      <span>{request.requestId}</span>
-                    </div>
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.detail.field.eventId')}
-                      </span>{' '}
-                      <span>{request.eventId}</span>
-                    </div>
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.history.fieldCamera')}
-                      </span>{' '}
-                      <span>{request.cameraId}</span>
-                    </div>
-                    <div className="break-all">
-                      <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.history.fieldZone')}
-                      </span>{' '}
-                      <span>{request.zoneId}</span>
-                    </div>
-                  </div>
-
-                  {request.jobStatus === 'SUCCEEDED' && request.assessmentId && (
-                    <div className="rounded-lg border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/25 px-3 py-2 flex items-center justify-between gap-2.5 flex-wrap">
-                      <div className="text-xs text-emerald-700 dark:text-emerald-400 font-mono tabular-nums flex items-center gap-1.5 break-all">
-                        <IconCheck className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          {t('mf06.detail.field.assessmentId')} <span>{request.assessmentId}</span>
-                        </span>
+                  <div className="space-y-2 pt-0.5 text-[11px] text-zinc-600 dark:text-zinc-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 font-mono tabular-nums">
+                      <div className="break-all">
+                        <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
+                          {t('mf06.history.fieldCamera')}
+                        </span>{' '}
+                        <span>{request.cameraId}</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedAssessmentTarget({
-                            assessmentId: request.assessmentId!,
-                            requestId: request.requestId,
-                            siteId: request.siteId,
-                            eventId: request.eventId,
-                            cameraId: request.cameraId,
-                            zoneId: request.zoneId,
-                            capturedAt: request.capturedAt,
-                            purpose: request.purpose,
-                          })
-                        }
-                        className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition cursor-pointer shrink-0"
-                      >
-                        {t('mf06.history.viewAssessment')}
-                      </button>
+                      <div className="break-all">
+                        <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
+                          {t('mf06.history.fieldZone')}
+                        </span>{' '}
+                        <span>{request.zoneId}</span>
+                      </div>
                     </div>
-                  )}
+
+                    <details
+                      key={`${apiUrl}:${clientNonce}:${siteId}:${credentialId}:${tokenNonce}`}
+                      className="rounded-lg border border-zinc-200/70 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 px-3 py-2"
+                    >
+                      <summary className="cursor-pointer select-none font-sans text-xs font-medium text-zinc-600 dark:text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:focus-visible:outline-zinc-100">
+                        {t('mf06.history.technicalReferences')}
+                      </summary>
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 border-t border-zinc-200/60 dark:border-zinc-800 pt-2 font-mono tabular-nums">
+                        <div className="break-all">
+                          <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
+                            {t('mf06.detail.field.requestId')}
+                          </span>{' '}
+                          <span>{request.requestId}</span>
+                        </div>
+                        <div className="break-all">
+                          <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
+                            {t('mf06.detail.field.eventId')}
+                          </span>{' '}
+                          <span>{request.eventId}</span>
+                        </div>
+                        {request.jobStatus === 'SUCCEEDED' && request.assessmentId && (
+                          <div className="break-all sm:col-span-2">
+                            <span className="font-sans font-medium text-zinc-400 dark:text-zinc-500">
+                              {t('mf06.detail.field.assessmentId')}
+                            </span>{' '}
+                            <span>{request.assessmentId}</span>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  </div>
                 </li>
               );
             })}

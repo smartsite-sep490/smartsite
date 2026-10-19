@@ -2533,8 +2533,27 @@ export function PpeMonitoringView({
               </div>
             ) : (
               <>
-                {/* 2-Column Details Grid */}
-                <div className="rounded-xl bg-[#F8FAFC] border border-slate-200/70 p-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                {/* 1. Primary Scope & Identity Summary (Work Area & Identity always visible outside disclosure) */}
+                <div
+                  data-testid="ppe-primary-context"
+                  className="rounded-xl bg-[#F8FAFC] border border-slate-200/70 p-2.5 grid grid-cols-2 gap-x-3 gap-y-2"
+                >
+                  <div>
+                    <p className="text-[11px] font-medium text-slate-500">
+                      {t('ppe.card.fieldWorkArea')}
+                    </p>
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
+                      {activeCameraContext.workArea}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-slate-500">
+                      {t('ppe.card.fieldCamera')}
+                    </p>
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
+                      {activeCameraContext.camera}
+                    </p>
+                  </div>
                   <div>
                     <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldIdentity')}
@@ -2549,60 +2568,81 @@ export function PpeMonitoringView({
                   </div>
                   <div>
                     <p className="text-[11px] font-medium text-slate-500">
-                      {t('ppe.card.fieldTrackId')}
-                    </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 tabular-nums truncate">
-                      {!preview || activeStatus === 'UNAVAILABLE'
-                        ? '—'
-                        : ppeDetections
-                            .map((detection) =>
-                              t('ppe.trackLabel', { id: detection.trackId ?? '' }),
-                            )
-                            .join(', ') || '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-500">
-                      {t('ppe.card.fieldCamera')}
-                    </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
-                      {activeCameraContext.camera}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-500">
-                      {t('ppe.card.fieldWorkArea')}
-                    </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
-                      {activeCameraContext.workArea}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldDetected')}
                     </p>
                     <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono tabular-nums">
                       {!preview || activeStatus === 'UNAVAILABLE' ? '—' : displayedCapturedTime}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-500">
-                      {t('ppe.card.fieldConfidence')}
-                    </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono tabular-nums">
-                      {!preview ||
-                      activeStatus === 'UNAVAILABLE' ||
-                      testDetection?.confidence === null ||
-                      testDetection?.confidence === undefined
-                        ? '—'
-                        : `${Math.round(testDetection.confidence * 100)}%`}
-                    </p>
-                  </div>
                 </div>
 
-                {/* PPE Check List */}
-                <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                {/* 2. Promoted Result Verdict (Above PPE Check for immediate frame/episode visibility) */}
+                <div
+                  data-testid="ppe-result-verdict"
+                  className={`rounded-r-xl border-l-[3px] px-3 py-2 ${
+                    ppeResultState === 'CONFIRMED_MISSING'
+                      ? 'border-red-500 bg-red-50/50'
+                      : ppeResultState === 'COMPLIANT'
+                        ? 'border-emerald-500 bg-emerald-50/40'
+                        : 'border-slate-300 bg-slate-50/80'
+                  }`}
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5">
+                    {t('ppe.result.label')}
+                  </p>
+                  <div
+                    className={`flex items-center gap-1.5 text-xs font-bold mb-0.5 ${
+                      ppeResultState === 'CONFIRMED_MISSING'
+                        ? 'text-red-600'
+                        : ppeResultState === 'COMPLIANT'
+                          ? 'text-emerald-700'
+                          : 'text-slate-700'
+                    }`}
+                  >
+                    {ppeResultState === 'CONFIRMED_MISSING' ? (
+                      <span>{t('ppe.result.missingDetected')}</span>
+                    ) : ppeResultState === 'COMPLIANT' ? (
+                      hasExpandedReported ? (
+                        <span>{t('ppe.result.coreAndReportedDetected')}</span>
+                      ) : (
+                        <span>{t('ppe.result.helmetAndVestDetected')}</span>
+                      )
+                    ) : !preview || activeStatus === 'UNAVAILABLE' ? (
+                      <span>{t('ppe.result.evidenceUnavailable')}</span>
+                    ) : ppeDetections.length === 0 ? (
+                      <span>{t('ppe.result.noObservations')}</span>
+                    ) : (
+                      <span>{t('ppe.result.scanningSnapshot')}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {!preview || activeStatus === 'UNAVAILABLE'
+                      ? effectiveStreamViewMode === 'live-raw'
+                        ? t('ppe.result.descRawUnavailable')
+                        : t('ppe.result.descSnapshotOffline')
+                      : ppeResultState === 'COMPLIANT'
+                        ? hasExpandedReported
+                          ? t('ppe.result.descCompliantExpanded')
+                          : t('ppe.result.descCompliantCoreOnly')
+                        : ppeResultState === 'CONFIRMED_MISSING'
+                          ? t('ppe.result.descMissing')
+                          : ppeDetections.length === 0
+                            ? isLive
+                              ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
+                                ? t('ppe.result.descZeroDetectionsReplay')
+                                : t('ppe.result.descZeroDetectionsLive')
+                              : t('ppe.result.descSnapshotOffline')
+                            : isLive
+                              ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
+                                ? t('ppe.result.descStreamingReplay')
+                                : t('ppe.result.descStreamingLive')
+                              : t('ppe.result.descSnapshotOffline')}
+                  </p>
+                </div>
+
+                {/* 3. PPE Check List (Current Frame State + Explicit Confirmed Missing Episode) */}
+                <div data-testid="ppe-check-section">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                     <p className="text-xs font-bold text-slate-700 tracking-wide">
                       {t('ppe.check.heading')}
                     </p>
@@ -2610,15 +2650,6 @@ export function PpeMonitoringView({
                       {t('ppe.check.experimentalBadge')}
                     </span>
                   </div>
-                  <details className="mb-2.5 text-xs text-slate-500">
-                    <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
-                      {t('ppe.check.notesSummary')}
-                    </summary>
-                    <div className="mt-1.5 space-y-1 leading-relaxed">
-                      <p>{t('ppe.check.coreNote')}</p>
-                      <p>{t('ppe.check.experimentalNote')}</p>
-                    </div>
-                  </details>
                   <div className="space-y-2">
                     {!preview || activeStatus === 'UNAVAILABLE' ? (
                       <div
@@ -2628,11 +2659,16 @@ export function PpeMonitoringView({
                         <p className="text-xs font-semibold text-slate-700">
                           {t('ppe.check.unavailableTitle')}
                         </p>
-                        <p className="text-xs text-slate-500">
-                          {effectiveStreamViewMode === 'live-raw'
-                            ? t('ppe.check.unavailableRawDesc')
-                            : t('ppe.check.unavailableDefaultDesc')}
-                        </p>
+                        <details className="text-xs text-slate-500">
+                          <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
+                            {t('ppe.check.notesSummary')}
+                          </summary>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {effectiveStreamViewMode === 'live-raw'
+                              ? t('ppe.check.unavailableRawDesc')
+                              : t('ppe.check.unavailableDefaultDesc')}
+                          </p>
+                        </details>
                       </div>
                     ) : ppeDetections.length === 0 ? (
                       <p className="text-xs text-slate-500 italic py-1">
@@ -2732,21 +2768,26 @@ export function PpeMonitoringView({
                                                 {t('ppe.episodeWarning.title')}
                                               </span>
                                             </div>
-                                            <div className="text-[11px] text-slate-500 font-mono pl-5 break-words">
+                                            <div className="text-[11px] text-slate-600 font-mono pl-5 break-words">
                                               {t('ppe.episodeWarning.currentSnapshot', {
                                                 status: statusLabel,
                                               })}
                                             </div>
                                           </div>
-                                          <p className="text-[11px] text-slate-600 pl-5 leading-normal break-words">
-                                            {state === 'UNKNOWN'
-                                              ? t('ppe.episodeWarning.descUnknown')
-                                              : state === 'NOT_REPORTED'
-                                                ? t('ppe.episodeWarning.descNotReported')
-                                                : state === 'PRESENT'
-                                                  ? t('ppe.episodeWarning.descPresent')
-                                                  : t('ppe.episodeWarning.descDefault')}
-                                          </p>
+                                          <details className="pl-5 text-[11px] text-slate-500">
+                                            <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
+                                              {t('ppe.check.notesSummary')}
+                                            </summary>
+                                            <p className="mt-1 text-[11px] text-slate-600 leading-normal break-words">
+                                              {state === 'UNKNOWN'
+                                                ? t('ppe.episodeWarning.descUnknown')
+                                                : state === 'NOT_REPORTED'
+                                                  ? t('ppe.episodeWarning.descNotReported')
+                                                  : state === 'PRESENT'
+                                                    ? t('ppe.episodeWarning.descPresent')
+                                                    : t('ppe.episodeWarning.descDefault')}
+                                            </p>
+                                          </details>
                                         </div>
                                       )}
                                   </div>
@@ -2760,86 +2801,67 @@ export function PpeMonitoringView({
                   </div>
                 </div>
 
-                {/* Quick link indicator for Experimental detector objects */}
-                {modelObjects && (
-                  <div className="pt-1.5 border-t border-slate-200/80 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setIsDiagnosticsOpen(true)}
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
-                    >
-                      {modelObjects.detections.length > 0
-                        ? t('ppe.card.rawObjectsCountLink', {
-                            count: modelObjects.detections.length,
-                          })
-                        : t('ppe.card.viewDiagnosticsLink')}
-                    </button>
-                  </div>
-                )}
-
-                {/* Result Alert Box */}
-                <div className="pt-0.5">
-                  <div
-                    className={`border-l-[3px] pl-3 ${
-                      ppeResultState === 'CONFIRMED_MISSING'
-                        ? 'border-red-500'
-                        : ppeResultState === 'COMPLIANT'
-                          ? 'border-emerald-500'
-                          : 'border-slate-200'
-                    }`}
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5">
-                      {t('ppe.result.label')}
-                    </p>
-                    <div
-                      className={`flex items-center gap-1.5 text-xs font-bold mb-0.5 ${
-                        ppeResultState === 'CONFIRMED_MISSING'
-                          ? 'text-red-500'
-                          : ppeResultState === 'COMPLIANT'
-                            ? 'text-emerald-600'
-                            : 'text-slate-600'
-                      }`}
-                    >
-                      {ppeResultState === 'CONFIRMED_MISSING' ? (
-                        <span>{t('ppe.result.missingDetected')}</span>
-                      ) : ppeResultState === 'COMPLIANT' ? (
-                        hasExpandedReported ? (
-                          <span>{t('ppe.result.coreAndReportedDetected')}</span>
-                        ) : (
-                          <span>{t('ppe.result.helmetAndVestDetected')}</span>
-                        )
-                      ) : !preview || activeStatus === 'UNAVAILABLE' ? (
-                        <span>{t('ppe.result.evidenceUnavailable')}</span>
-                      ) : ppeDetections.length === 0 ? (
-                        <span>{t('ppe.result.noObservations')}</span>
-                      ) : (
-                        <span>{t('ppe.result.scanningSnapshot')}</span>
-                      )}
+                {/* 4. Subordinate Technical Metadata (Track ID & Detection Confidence) + Disclosure Notes */}
+                <div
+                  data-testid="ppe-subordinate-technical-meta"
+                  className="pt-2 border-t border-slate-200/80 space-y-2"
+                >
+                  <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 px-2.5 py-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                    <div>
+                      <p className="text-[10px] font-medium text-slate-500">
+                        {t('ppe.card.fieldTrackId')}
+                      </p>
+                      <p className="font-semibold text-slate-700 text-[11px] mt-0.5 tabular-nums truncate">
+                        {!preview || activeStatus === 'UNAVAILABLE'
+                          ? '—'
+                          : ppeDetections
+                              .map((detection) =>
+                                t('ppe.trackLabel', { id: detection.trackId ?? '' }),
+                              )
+                              .join(', ') || '—'}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      {!preview || activeStatus === 'UNAVAILABLE'
-                        ? effectiveStreamViewMode === 'live-raw'
-                          ? t('ppe.result.descRawUnavailable')
-                          : t('ppe.result.descSnapshotOffline')
-                        : ppeResultState === 'COMPLIANT'
-                          ? hasExpandedReported
-                            ? t('ppe.result.descCompliantExpanded')
-                            : t('ppe.result.descCompliantCoreOnly')
-                          : ppeResultState === 'CONFIRMED_MISSING'
-                            ? t('ppe.result.descMissing')
-                            : ppeDetections.length === 0
-                              ? isLive
-                                ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
-                                  ? t('ppe.result.descZeroDetectionsReplay')
-                                  : t('ppe.result.descZeroDetectionsLive')
-                                : t('ppe.result.descSnapshotOffline')
-                              : isLive
-                                ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
-                                  ? t('ppe.result.descStreamingReplay')
-                                  : t('ppe.result.descStreamingLive')
-                                : t('ppe.result.descSnapshotOffline')}
-                    </p>
+                    <div>
+                      <p className="text-[10px] font-medium text-slate-500">
+                        {t('ppe.card.fieldConfidence')}
+                      </p>
+                      <p className="font-semibold text-slate-700 text-[11px] mt-0.5 font-mono tabular-nums">
+                        {!preview ||
+                        activeStatus === 'UNAVAILABLE' ||
+                        testDetection?.confidence === null ||
+                        testDetection?.confidence === undefined
+                          ? '—'
+                          : `${Math.round(testDetection.confidence * 100)}%`}
+                      </p>
+                    </div>
                   </div>
+
+                  <details className="text-xs text-slate-500">
+                    <summary className="cursor-pointer font-medium text-slate-600 hover:text-slate-900 select-none">
+                      {t('ppe.check.notesSummary')}
+                    </summary>
+                    <div className="mt-1.5 space-y-1 leading-relaxed">
+                      <p>{t('ppe.check.coreNote')}</p>
+                      <p>{t('ppe.check.experimentalNote')}</p>
+                    </div>
+                  </details>
+
+                  {/* Quick link indicator for Experimental detector objects */}
+                  {modelObjects && (
+                    <div className="pt-1 border-t border-slate-200/60 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setIsDiagnosticsOpen(true)}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                      >
+                        {modelObjects.detections.length > 0
+                          ? t('ppe.card.rawObjectsCountLink', {
+                              count: modelObjects.detections.length,
+                            })
+                          : t('ppe.card.viewDiagnosticsLink')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

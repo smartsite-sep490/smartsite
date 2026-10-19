@@ -1001,4 +1001,99 @@ describe('Mf06ZoneAssessmentPanel (B5 Requests & Assessments)', () => {
     expect(await screen.findByText('No recorded assessment requests.')).toBeTruthy();
     expect(screen.getByRole('status').getAttribute('aria-busy')).not.toBe('true');
   });
+
+  it('collapses Request, Event, and Assessment UUIDs into Technical references while keeping Camera, Zone, and View assessment visible and resetting on same-request scope switch', async () => {
+    const sharedRequest = createRequestStatus({
+      requestId: '22222222-2222-4222-8222-222222222222',
+      siteId: SITE_1,
+      eventId: '44444444-4444-4444-8444-444444444444',
+      cameraId: '55555555-5555-4555-8555-555555555555',
+      zoneId: '66666666-6666-4666-8666-666666666666',
+      jobStatus: 'SUCCEEDED',
+      assessmentId: '11111111-1111-4111-8111-111111111111',
+    });
+    const record = {
+      assessmentId: sharedRequest.assessmentId!,
+      requestId: sharedRequest.requestId,
+      siteId: sharedRequest.siteId,
+      eventId: sharedRequest.eventId,
+      cameraId: sharedRequest.cameraId,
+      zoneId: sharedRequest.zoneId,
+      capturedAt: sharedRequest.capturedAt,
+      assessedAt: '2026-10-12T10:00:03.000Z',
+      purpose: sharedRequest.purpose,
+      outcome: 'UNAVAILABLE' as const,
+      reasonCode: 'IDENTITY_UNAVAILABLE' as const,
+      evaluatorVersion: 'SYNTHETIC_READ_V1',
+      provenance: 'UNAVAILABLE' as const,
+    };
+    const getAssessment = vi.fn().mockResolvedValue(record);
+    mockListMf06RequestStatuses.mockResolvedValue(createRequestPage([sharedRequest]));
+    Object.assign(mockClient, { getMf06Assessment: getAssessment });
+
+    const view = mount(() => (
+      <Mf06ZoneAssessmentPanel
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+        initialTab="requests"
+      />
+    ));
+
+    expect(await screen.findByText('Succeeded')).toBeTruthy();
+
+    const cameraValue = screen.getByText(sharedRequest.cameraId);
+    const zoneValue = screen.getByText(sharedRequest.zoneId);
+    const viewButton = screen.getByRole('button', { name: 'View assessment' });
+    expect(cameraValue.closest('details')).toBeNull();
+    expect(zoneValue.closest('details')).toBeNull();
+    expect(viewButton.closest('details')).toBeNull();
+
+    const summary = screen.getByText('Technical references');
+    const details = summary.closest('details');
+    expect(details).toBeTruthy();
+    expect(details?.open).toBe(false);
+    expect(within(details!).getByText(sharedRequest.requestId)).toBeTruthy();
+    expect(within(details!).getByText(sharedRequest.eventId)).toBeTruthy();
+    expect(within(details!).getByText(sharedRequest.assessmentId!)).toBeTruthy();
+
+    if (details) {
+      details.open = true;
+    }
+    expect(details?.open).toBe(true);
+    if (details) {
+      details.open = false;
+    }
+    expect(details?.open).toBe(false);
+    if (details) {
+      details.open = true;
+    }
+    expect(details?.open).toBe(true);
+
+    fireEvent.click(viewButton);
+    const dialog = await screen.findByRole('dialog', { name: 'Recorded assessment' });
+    expect(await within(dialog).findByText('Identity Unavailable')).toBeTruthy();
+
+    view.rerender(
+      <QueryClientProvider client={view.queries}>
+        <Mf06ZoneAssessmentPanel
+          token="token-test-2"
+          siteId={SITE_1}
+          credentialId={CREDENTIAL_1}
+          client={mockClient}
+          initialTab="requests"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockListMf06RequestStatuses).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('Succeeded')).toBeTruthy();
+    const nextDetails = screen.getByText('Technical references').closest('details');
+    expect(nextDetails).toBeTruthy();
+    expect(nextDetails).not.toBe(details);
+    expect(nextDetails?.open).toBe(false);
+  });
 });

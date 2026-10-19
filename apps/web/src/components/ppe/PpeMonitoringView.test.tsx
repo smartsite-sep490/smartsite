@@ -2126,4 +2126,65 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
       'Chưa xác định nghĩa là ảnh chụp hiện tại chưa đủ bằng chứng quan sát và không xóa đợt thiếu bảo hộ đã xác nhận.',
     );
   });
+
+  it('orders right-hand evidence card with primary Work Area context and Result verdict above PPE Check, while keeping Track ID and Detection Confidence subordinate', async () => {
+    state.preview = mockPreview({
+      ...mockDetection(7),
+      active: true,
+      alertState: 'CONFIRMED',
+      ppeStatus: {
+        HARD_HAT: 'UNKNOWN',
+        SAFETY_VEST: 'PRESENT',
+      },
+      confirmedMissingItems: ['HARD_HAT'],
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={adminSession} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Công trường Alpha/i });
+
+    const panel = screen.getByTestId('ai-detection-panel');
+    const primaryContext = screen.getByTestId('ppe-primary-context');
+    const resultVerdict = screen.getByTestId('ppe-result-verdict');
+    const ppeCheckSection = screen.getByTestId('ppe-check-section');
+    const subordinateMeta = screen.getByTestId('ppe-subordinate-technical-meta');
+
+    expect(panel.contains(primaryContext)).toBe(true);
+    expect(primaryContext.closest('details')).toBeNull();
+    expect(primaryContext.textContent).toContain('Work Area');
+    expect(primaryContext.textContent).toContain('Zone (CAM-01)');
+    expect(primaryContext.textContent).toContain('Unknown — not identified');
+    expect(primaryContext.textContent).not.toContain('Track ID');
+    expect(primaryContext.textContent).not.toContain('Detection Confidence');
+
+    // DOM hierarchy order: primaryContext -> resultVerdict -> ppeCheckSection -> subordinateMeta
+    expect(
+      Boolean(
+        primaryContext.compareDocumentPosition(resultVerdict) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        resultVerdict.compareDocumentPosition(ppeCheckSection) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        ppeCheckSection.compareDocumentPosition(subordinateMeta) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+
+    expect(subordinateMeta.textContent).toContain('Track ID');
+    expect(subordinateMeta.textContent).toContain('Track #7');
+    expect(subordinateMeta.textContent).toContain('Detection Confidence');
+    expect(subordinateMeta.textContent).toContain('88%');
+
+    const episodeWarning = screen.getByTestId('confirmed-episode-warning-7-HARD_HAT');
+    expect(episodeWarning.closest('details')).toBeNull();
+    expect(episodeWarning.querySelector('details')).not.toBeNull();
+  });
 });
