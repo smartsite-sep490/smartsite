@@ -67,6 +67,16 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_ROWS = 2048;
 const MAX_JSON_NODES = 100000;
 const MAX_DEPTH = 32;
+// Preserve the earlier Root V2 metadata order; never normalize stored bytes or widen V1.
+const rootV2MembershipFields = [
+  'id',
+  'team_id',
+  'worker_id',
+  'site_id',
+  'contractor_id',
+  'joined_at',
+  'left_at',
+];
 class ArchiveInputError extends Error {
   constructor(readonly reason: 'RESOURCE_LIMIT' | 'MALFORMED_ARCHIVE') {
     super(reason);
@@ -381,12 +391,17 @@ function validatePayload(
     rows = new Map<string, Record<string, unknown>[]>();
   for (const source of payload.sources) {
     const entry = registry.get(source.sourceKind);
+    const legacyV2Membership =
+      payload.version === MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT &&
+      source.sourceKind === 'TEAM_MEMBERSHIP' &&
+      source.fields.length === rootV2MembershipFields.length &&
+      source.fields.every((field, index) => field === rootV2MembershipFields[index]);
     if (
       !entry ||
       seenKinds.has(source.sourceKind) ||
       source.tableName !== entry.table ||
       source.fields.length !== entry.fields.length ||
-      source.fields.some((field, index) => field !== entry.fields[index])
+      (!legacyV2Membership && source.fields.some((field, index) => field !== entry.fields[index]))
     )
       return unavailable('SOURCE_REGISTRY_MISMATCH');
     seenKinds.add(source.sourceKind);

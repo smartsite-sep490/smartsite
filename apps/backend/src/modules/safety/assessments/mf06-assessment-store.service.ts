@@ -13,6 +13,7 @@ import {
   type MainAuthorityArchive,
   type MainAuthorityArchiveContext,
 } from '../../zones/main-authority-archive-codec.js';
+import { MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT } from '../../zones/main-team-authority-archive.js';
 
 export interface Mf06AssessmentAppendInput {
   claim: { requestId: string; leaseToken: string; headRevision: number };
@@ -98,7 +99,7 @@ const inputSchema = z.strictObject({
   cropSha256: hash.nullable(),
   authorityArtifact: z
     .strictObject({
-      format: z.literal(MAIN_AUTHORITY_ARCHIVE_FORMAT),
+      format: z.enum([MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT]),
       sha256: hash,
       payload: z.unknown(),
     })

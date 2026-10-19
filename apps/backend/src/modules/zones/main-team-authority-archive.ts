@@ -1,28 +1,12 @@
 import { z } from 'zod';
-import { MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../common/configuration/main-team-authority-sources.js';
 
 export const MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT = 'MF06_MAIN_AUTHORITY_ARCHIVE_V2';
 export const MAIN_TEAM_AUTHORITY_SOURCES: readonly (readonly [
   string,
   string,
   readonly string[],
-])[] = [
-  ...MAIN_AUTHORITY_SOURCES.map(
-    ([kind, table, fields]) =>
-      [kind, table, kind === 'ASSIGNMENT' ? [...fields, 'zone_ids'] : fields] as const,
-  ),
-  ['TEAM', 'contractor_team', ['id', 'site_id', 'contractor_id', 'is_active']],
-  [
-    'TEAM_MEMBERSHIP',
-    'contractor_team_membership',
-    ['id', 'team_id', 'worker_id', 'site_id', 'contractor_id', 'joined_at', 'left_at'],
-  ],
-  [
-    'TEAM_PERMISSION',
-    'team_zone_permission',
-    ['id', 'team_id', 'contractor_zone_permission_id', 'valid_from', 'valid_until', 'revoked_at'],
-  ],
-];
+])[] = MAIN_AUTHORITY_V2_SOURCES;
 
 export function teamAuthorityRowSchemas(validInstant: (value: string) => boolean) {
   const id = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
