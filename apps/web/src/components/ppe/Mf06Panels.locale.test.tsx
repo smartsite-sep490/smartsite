@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -119,6 +119,10 @@ function english() {
   if (!changeLocale) throw new Error('Locale setter missing');
   act(() => changeLocale?.('en'));
 }
+function vietnamese() {
+  if (!changeLocale) throw new Error('Locale setter missing');
+  act(() => changeLocale?.('vi'));
+}
 
 describe('MF06 request and history presentation locale', () => {
   it('switches the history labels and timestamps without refetching immutable records or converting unavailable identity to unauthorized', async () => {
@@ -227,4 +231,139 @@ describe('MF06 request and history presentation locale', () => {
       await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
     },
   );
+  it.each(['history', 'requests'] as const)(
+    'localizes manual %s Refresh/Refreshing and busy-empty status across locale switches without showing settled-empty copy while pending',
+    async (kind) => {
+      let resolveRefresh!: (value: ReturnType<typeof page<unknown>>) => void;
+      const list = vi
+        .fn()
+        .mockResolvedValueOnce(page([]))
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveRefresh = resolve;
+            }),
+        );
+      const otherList = vi.fn().mockResolvedValue(page([]));
+      mount(
+        (kind === 'history'
+          ? { listMf06Assessments: list, listMf06RequestStatuses: otherList }
+          : {
+              listMf06RequestStatuses: list,
+              listMf06Assessments: otherList,
+            }) as unknown as SmartSiteManagementClient,
+        kind,
+      );
+
+      const emptyVi =
+        kind === 'history'
+          ? 'Chưa có lịch sử đánh giá được lưu.'
+          : 'Chưa có yêu cầu đánh giá được lưu.';
+      const emptyEn =
+        kind === 'history' ? 'No recorded assessment history.' : 'No recorded assessment requests.';
+      const busyStatusVi = kind === 'history' ? 'Đang làm mới...' : 'Đang tải yêu cầu đánh giá...';
+      const busyStatusEn = kind === 'history' ? 'Refreshing...' : 'Loading assessment requests...';
+
+      await screen.findByText(emptyVi);
+      fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }));
+
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+      expect(
+        (screen.getByRole('button', { name: 'Đang làm mới...' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      const statusVi = screen.getByRole('status');
+      expect(statusVi.getAttribute('aria-busy')).toBe('true');
+      expect(within(statusVi).getByText(busyStatusVi)).toBeDefined();
+      expect(screen.queryByText(emptyVi)).toBeNull();
+
+      english();
+      expect(
+        (screen.getByRole('button', { name: 'Refreshing...' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      const statusEn = screen.getByRole('status');
+      expect(statusEn.getAttribute('aria-busy')).toBe('true');
+      expect(within(statusEn).getByText(busyStatusEn)).toBeDefined();
+      expect(screen.queryByText(emptyEn)).toBeNull();
+      expect(screen.queryByText(emptyVi)).toBeNull();
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(otherList).not.toHaveBeenCalled();
+
+      await act(async () => resolveRefresh(page([])));
+      await screen.findByText(emptyEn);
+      expect(screen.getByRole('status').getAttribute('aria-busy')).not.toBe('true');
+      expect((screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+    },
+  );
+  it('preserves open request Technical references disclosure and selected assessment across locale switches without extra API calls or enqueue', async () => {
+    const succeededRequest: Mf06RequestStatusResponse = {
+      ...request,
+      jobStatus: 'SUCCEEDED',
+      assessmentId: assessment.assessmentId,
+    };
+    const requests = vi.fn().mockResolvedValue(page([succeededRequest]));
+    const history = vi.fn().mockResolvedValue(page([]));
+    const getAssessment = vi.fn().mockResolvedValue(assessment);
+    mount(
+      {
+        listMf06RequestStatuses: requests,
+        listMf06Assessments: history,
+        getMf06Assessment: getAssessment,
+      } as unknown as SmartSiteManagementClient,
+      'requests',
+    );
+
+    const tab = await screen.findByRole('tab', { name: 'Yêu cầu' });
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    await screen.findByText('Hoàn tất');
+    expect(screen.getByText(succeededRequest.cameraId).closest('details')).toBeNull();
+    expect(screen.getByText(succeededRequest.zoneId).closest('details')).toBeNull();
+
+    const details = screen.getByText('Thông tin kỹ thuật').closest('details');
+    expect(details).toBeTruthy();
+    expect(details?.open).toBe(false);
+    expect(within(details!).getByText('Mã yêu cầu:')).toBeDefined();
+    expect(within(details!).getByText(succeededRequest.requestId)).toBeDefined();
+    expect(within(details!).getByText('Mã sự kiện:')).toBeDefined();
+    expect(within(details!).getByText(succeededRequest.eventId)).toBeDefined();
+    expect(within(details!).getByText('Mã đánh giá:')).toBeDefined();
+    expect(within(details!).getByText(assessment.assessmentId)).toBeDefined();
+
+    if (details) details.open = true;
+    expect(details?.open).toBe(true);
+
+    const viewButton = screen.getByRole('button', { name: 'Xem đánh giá' });
+    expect(viewButton.closest('details')).toBeNull();
+    fireEvent.click(viewButton);
+    const dialogVi = await screen.findByRole('dialog', { name: 'Đánh giá đã lưu' });
+    expect(await within(dialogVi).findByText('Chưa xác định được danh tính')).toBeDefined();
+
+    english();
+    expect(screen.getByRole('tab', { name: 'Requests', hidden: true })).toBe(tab);
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    await screen.findByText('Succeeded');
+    expect(screen.getByRole('button', { name: 'View assessment', hidden: true })).toBe(viewButton);
+    expect(viewButton.closest('details')).toBeNull();
+
+    const detailsEn = screen.getByText('Technical references').closest('details');
+    expect(detailsEn).toBe(details);
+    expect(detailsEn?.open).toBe(true);
+    expect(within(detailsEn!).getByText('Request ID:')).toBeDefined();
+    expect(within(detailsEn!).getByText('Event ID:')).toBeDefined();
+    expect(within(detailsEn!).getByText('Assessment ID:')).toBeDefined();
+
+    const dialogEn = screen.getByRole('dialog', { name: 'Recorded assessment' });
+    expect(within(dialogEn).getByText('Identity Unavailable')).toBeDefined();
+
+    vietnamese();
+    expect(screen.getByRole('tab', { name: 'Yêu cầu', hidden: true })).toBe(tab);
+    expect(screen.getByRole('button', { name: 'Xem đánh giá', hidden: true })).toBe(viewButton);
+    expect(screen.getByText('Thông tin kỹ thuật').closest('details')).toBe(details);
+    expect(details?.open).toBe(true);
+    expect(screen.getByRole('dialog', { name: 'Đánh giá đã lưu' })).toBe(dialogEn);
+    expect(requests).toHaveBeenCalledTimes(1);
+    expect(getAssessment).toHaveBeenCalledTimes(1);
+    expect(history).not.toHaveBeenCalled();
+  });
 });

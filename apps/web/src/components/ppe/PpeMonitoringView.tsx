@@ -38,6 +38,7 @@ import { CameraManagementDialog } from '../cameras/CameraManagementDialog';
 import { PpeDialog } from './PpeDialog';
 import { Mf05DemoControlPanel } from './Mf05DemoControlPanel';
 import { FourSourceWall, type ScopedWallSnapshot } from './FourSourceWall';
+import { PpeResultVerdict } from './PpeResultVerdict';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 
 function isAuthOrScopeError(err: unknown): boolean {
@@ -2577,68 +2578,16 @@ export function PpeMonitoringView({
                 </div>
 
                 {/* 2. Promoted Result Verdict (Above PPE Check for immediate frame/episode visibility) */}
-                <div
-                  data-testid="ppe-result-verdict"
-                  className={`rounded-r-xl border-l-[3px] px-3 py-2 ${
-                    ppeResultState === 'CONFIRMED_MISSING'
-                      ? 'border-red-500 bg-red-50/50'
-                      : ppeResultState === 'COMPLIANT'
-                        ? 'border-emerald-500 bg-emerald-50/40'
-                        : 'border-slate-300 bg-slate-50/80'
-                  }`}
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5">
-                    {t('ppe.result.label')}
-                  </p>
-                  <div
-                    className={`flex items-center gap-1.5 text-xs font-bold mb-0.5 ${
-                      ppeResultState === 'CONFIRMED_MISSING'
-                        ? 'text-red-600'
-                        : ppeResultState === 'COMPLIANT'
-                          ? 'text-emerald-700'
-                          : 'text-slate-700'
-                    }`}
-                  >
-                    {ppeResultState === 'CONFIRMED_MISSING' ? (
-                      <span>{t('ppe.result.missingDetected')}</span>
-                    ) : ppeResultState === 'COMPLIANT' ? (
-                      hasExpandedReported ? (
-                        <span>{t('ppe.result.coreAndReportedDetected')}</span>
-                      ) : (
-                        <span>{t('ppe.result.helmetAndVestDetected')}</span>
-                      )
-                    ) : !preview || activeStatus === 'UNAVAILABLE' ? (
-                      <span>{t('ppe.result.evidenceUnavailable')}</span>
-                    ) : ppeDetections.length === 0 ? (
-                      <span>{t('ppe.result.noObservations')}</span>
-                    ) : (
-                      <span>{t('ppe.result.scanningSnapshot')}</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {!preview || activeStatus === 'UNAVAILABLE'
-                      ? effectiveStreamViewMode === 'live-raw'
-                        ? t('ppe.result.descRawUnavailable')
-                        : t('ppe.result.descSnapshotOffline')
-                      : ppeResultState === 'COMPLIANT'
-                        ? hasExpandedReported
-                          ? t('ppe.result.descCompliantExpanded')
-                          : t('ppe.result.descCompliantCoreOnly')
-                        : ppeResultState === 'CONFIRMED_MISSING'
-                          ? t('ppe.result.descMissing')
-                          : ppeDetections.length === 0
-                            ? isLive
-                              ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
-                                ? t('ppe.result.descZeroDetectionsReplay')
-                                : t('ppe.result.descZeroDetectionsLive')
-                              : t('ppe.result.descSnapshotOffline')
-                            : isLive
-                              ? activeStatus === 'REPLAY' || activeSourceKind === 'REPLAY'
-                                ? t('ppe.result.descStreamingReplay')
-                                : t('ppe.result.descStreamingLive')
-                              : t('ppe.result.descSnapshotOffline')}
-                  </p>
-                </div>
+                <PpeResultVerdict
+                  ppeResultState={ppeResultState}
+                  hasExpandedReported={hasExpandedReported}
+                  hasPreview={Boolean(preview)}
+                  activeStatus={activeStatus}
+                  detectionsCount={ppeDetections.length}
+                  effectiveStreamViewMode={effectiveStreamViewMode}
+                  isLive={isLive}
+                  activeSourceKind={activeSourceKind}
+                />
 
                 {/* 3. PPE Check List (Current Frame State + Explicit Confirmed Missing Episode) */}
                 <div data-testid="ppe-check-section">
