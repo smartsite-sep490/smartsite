@@ -4,6 +4,12 @@ import { z } from 'zod';
 import { MAIN_AUTHORITY_SOURCES } from '../../common/configuration/main-authority-sources.js';
 import { CameraStatus, ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
+import {
+  MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_TEAM_AUTHORITY_SOURCES,
+  teamAuthorityRowSchemas,
+  teamAuthorityScopeMatches,
+} from './main-team-authority-archive.js';
 
 export const MAIN_AUTHORITY_ARCHIVE_FORMAT = 'MF06_MAIN_AUTHORITY_ARCHIVE_V1';
 export interface MainAuthorityArchiveContext {
@@ -14,7 +20,7 @@ export interface MainAuthorityArchiveContext {
   purpose: Mf06AssessmentPurpose;
 }
 export interface MainAuthorityArchivePayload {
-  version: typeof MAIN_AUTHORITY_ARCHIVE_FORMAT;
+  version: typeof MAIN_AUTHORITY_ARCHIVE_FORMAT | typeof MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT;
   context: MainAuthorityArchiveContext;
   archivedAt: string;
   baseline: {
@@ -32,7 +38,7 @@ export interface MainAuthorityArchivePayload {
   }[];
 }
 export interface MainAuthorityArchive {
-  format: typeof MAIN_AUTHORITY_ARCHIVE_FORMAT;
+  format: MainAuthorityArchivePayload['version'];
   sha256: string;
   payload: MainAuthorityArchivePayload;
 }
@@ -200,7 +206,7 @@ const sourceSchema = z.strictObject({
   rows: z.array(z.record(z.string(), z.unknown())),
 });
 const payloadSchema = z.strictObject({
-  version: z.literal(MAIN_AUTHORITY_ARCHIVE_FORMAT),
+  version: z.enum([MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT]),
   context: contextSchema,
   archivedAt: z.string().max(40),
   baseline: z.strictObject({
@@ -213,7 +219,7 @@ const payloadSchema = z.strictObject({
   sources: z.array(sourceSchema),
 });
 const range = { valid_from: instant, valid_until: instant.nullable() };
-const rowSchemas: Record<string, z.ZodType> = {
+const rowSchemas = {
   USER_ACCOUNT: z.strictObject({
     id,
     is_active: z.boolean(),
@@ -322,6 +328,11 @@ const rowSchemas: Record<string, z.ZodType> = {
     is_active: z.boolean(),
   }),
 };
+const teamRows: Record<string, z.ZodType> = {
+  ...rowSchemas,
+  ...teamAuthorityRowSchemas((value) => micros(value) !== null),
+  ASSIGNMENT: rowSchemas.ASSIGNMENT.extend({ zone_ids: z.array(id).max(MAX_ROWS) }),
+};
 const same = (a: unknown, b: unknown) =>
   typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
 const unavailable = (
@@ -355,15 +366,21 @@ function validatePayload(
   if (at < base) return unavailable('PRE_BASELINE');
   if (payload.sources.reduce((sum, source) => sum + source.rows.length, 0) > MAX_ROWS)
     return unavailable('RESOURCE_LIMIT');
-  if (payload.sources.length !== MAIN_AUTHORITY_SOURCES.length)
+  const sourceRegistry =
+    payload.version === MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT
+      ? MAIN_TEAM_AUTHORITY_SOURCES
+      : MAIN_AUTHORITY_SOURCES;
+  const schemas: Record<string, z.ZodType> =
+    payload.version === MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT ? teamRows : rowSchemas;
+  if (payload.sources.length !== sourceRegistry.length)
     return unavailable('SOURCE_REGISTRY_MISMATCH');
   const registry = new Map(
-    MAIN_AUTHORITY_SOURCES.map(([kind, table, fields]) => [kind, { table, fields }]),
+    sourceRegistry.map(([kind, table, fields]) => [kind, { table, fields }]),
   );
   const seenKinds = new Set<string>(),
     rows = new Map<string, Record<string, unknown>[]>();
   for (const source of payload.sources) {
-    const entry = registry.get(source.sourceKind as (typeof MAIN_AUTHORITY_SOURCES)[number][0]);
+    const entry = registry.get(source.sourceKind);
     if (
       !entry ||
       seenKinds.has(source.sourceKind) ||
@@ -375,7 +392,7 @@ function validatePayload(
     seenKinds.add(source.sourceKind);
     const seenIds = new Set<string>();
     for (const row of source.rows) {
-      if (!rowSchemas[source.sourceKind]?.safeParse(row).success)
+      if (!schemas[source.sourceKind]?.safeParse(row).success)
         return unavailable('MALFORMED_ARCHIVE');
       const key = (row.id as string).toLowerCase();
       if (seenIds.has(key)) return unavailable('MALFORMED_ARCHIVE');
@@ -387,6 +404,14 @@ function validatePayload(
       )
         return unavailable('INVALID_TIME');
     }
+    if (
+      source.sourceKind === 'TEAM_MEMBERSHIP' &&
+      source.rows.some(
+        (row) =>
+          row.left_at !== null && micros(row.left_at as string)! < micros(row.joined_at as string)!,
+      )
+    )
+      return unavailable('INVALID_TIME');
     rows.set(source.sourceKind, source.rows);
   }
   const site = (rows.get('SITE') ?? []).find((row) => same(row.id, target.data.siteId));
@@ -411,6 +436,8 @@ function validatePayload(
     if (!camera || !parentZone || !same(camera.site_id, parentZone.site_id))
       return unavailable('SOURCE_SCOPE_MISMATCH');
   }
+  if (payload.version === MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT && !teamAuthorityScopeMatches(rows))
+    return unavailable('SOURCE_SCOPE_MISMATCH');
   return payload;
 }
 function freeze<T>(value: T): T {
@@ -422,7 +449,7 @@ function freeze<T>(value: T): T {
 }
 function accepted(payload: MainAuthorityArchivePayload): MainAuthorityArchiveResult {
   const archive = freeze<MainAuthorityArchive>({
-    format: MAIN_AUTHORITY_ARCHIVE_FORMAT,
+    format: payload.version,
     sha256: computeCanonicalPayloadHash(payload),
     payload,
   });
@@ -447,7 +474,9 @@ export function sealMainAuthorityArchive(
       input &&
       typeof input === 'object' &&
       !Array.isArray(input) &&
-      input.version !== MAIN_AUTHORITY_ARCHIVE_FORMAT
+      !([MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT] as unknown[]).includes(
+        input.version,
+      )
     )
       return unavailable('UNSUPPORTED_VERSION');
     const parsed = validatePayload(input, expected);
@@ -464,10 +493,15 @@ export function decodeStoredMainAuthorityArchive(
     const input = safeInput(value);
     if (!input || typeof input !== 'object' || Array.isArray(input))
       return unavailable('MALFORMED_ARCHIVE');
-    if (input.format !== MAIN_AUTHORITY_ARCHIVE_FORMAT) return unavailable('UNSUPPORTED_VERSION');
+    if (
+      !([MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT] as unknown[]).includes(
+        input.format,
+      )
+    )
+      return unavailable('UNSUPPORTED_VERSION');
     const envelope = z
       .strictObject({
-        format: z.literal(MAIN_AUTHORITY_ARCHIVE_FORMAT),
+        format: z.enum([MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT]),
         sha256: digest,
         payload: z.unknown(),
       })
@@ -482,6 +516,13 @@ export function decodeStoredMainAuthorityArchive(
       computeCanonicalPayloadHash(envelope.data.payload) !== envelope.data.sha256
     )
       return unavailable('DIGEST_MISMATCH');
+    if (
+      envelope.data.payload &&
+      typeof envelope.data.payload === 'object' &&
+      'version' in envelope.data.payload &&
+      envelope.data.payload.version !== envelope.data.format
+    )
+      return unavailable('UNSUPPORTED_VERSION');
     const { sha256: expectedDigest, ...context } = wanted.data;
     void expectedDigest;
     const parsed = validatePayload(envelope.data.payload, context);

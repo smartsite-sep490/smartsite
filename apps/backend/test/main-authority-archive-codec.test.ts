@@ -245,10 +245,10 @@ test('4. format and version validation rejects unknown versions with UNSUPPORTED
         ),
     },
     {
-      name: 'payload newer version V2',
+      name: 'payload newer version V3',
       run: () =>
         sealMainAuthorityArchive(
-          { ...f.payload, version: 'MF06_MAIN_AUTHORITY_ARCHIVE_V2' },
+          { ...f.payload, version: 'MF06_MAIN_AUTHORITY_ARCHIVE_V3' },
           f.context,
         ),
     },

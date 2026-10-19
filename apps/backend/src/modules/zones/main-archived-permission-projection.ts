@@ -67,6 +67,8 @@ export function projectMainArchivedPermissions(
 ): MainArchivedPermissionProjectionResult {
   const decoded = decodeStoredMainAuthorityArchive(value, expected);
   if (decoded.status !== 'VALID') return unavailable(decoded.reason);
+  if (decoded.archive.format !== 'MF06_MAIN_AUTHORITY_ARCHIVE_V1')
+    return unavailable('UNSUPPORTED_VERSION');
   const { archive } = decoded,
     { context } = archive.payload;
   const rows = new Map(archive.payload.sources.map((s) => [s.sourceKind, s.rows]));
