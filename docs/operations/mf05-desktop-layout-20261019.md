@@ -46,3 +46,22 @@ Camera catalog heading/actions now use a grid, and the existing neutral Workflow
 Root reviewed Agy p8's public-reference report against current source and the official [Carbon table guidelines](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines) and [Fluent layout guidance](https://fluent2.microsoft.design/layout). The choice to soften repeated row buttons is our design inference, not a claimed universal Carbon prohibition. Stale-source recommendations, unmeasured height savings, live-like configuration badges and JS-AST-as-pixel-proof claims were rejected. REA CLI6.5.0 executes locally; the referenced AST receipts are historical, and the new public-document research/prototype is not a live clone or product acceptance.
 
 The updated layout passes51 Camera Setup cases across eight files, two-file lint and production bundle v4. Actual browser layout and screen-reader acceptance remain open. No current website or database rollout is included in these commits.
+
+## Inactive camera prerequisite guidance
+
+Agy p7 added one inline EN/VI instruction on an inactive camera row for the
+assigned Site Manager: enable it in Manage before linking observation regions.
+Active rows and read-only Admins do not receive that write instruction. Existing
+Manage callbacks and the inactive region-action restriction stay unchanged.
+Root reproduced the missing guidance (2FAIL/1PASS), reviewed the two-file diff,
+then verified54 affected cases/8files, TypeScript, three-file lint and production
+bundle v5. The Access-owned929.56kB ExcelJS warning remains deferred.
+The earlier REA report incorrectly located the catalog and claimed this key
+already existed; actual source required a new typed EN/VI key in the component
+catalog. This application is a design inference from Carbon's contextual
+configuration guidance, not proof that Carbon mandates this exact layout.
+
+Evidence: Q/agy-product-ux-20261019-v1/inactive-hint-*.log and
+web-bundle-proof-v5.json. This new candidate is built, not served; the current
+website still serves7cb8ff0. No camera-capture/model/runtime/role change was made
+by this UI slice. Browser/render/full acceptance remains open.

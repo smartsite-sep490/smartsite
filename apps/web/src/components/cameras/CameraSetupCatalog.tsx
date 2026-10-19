@@ -102,6 +102,11 @@ export function CameraSetupCatalog({
                           </dd>
                         </div>
                       </dl>
+                      {!isEnabled && canManageCameras && (
+                        <p className="text-xs leading-5 text-slate-500">
+                          {t('cameraSetup.inactiveHint')}
+                        </p>
+                      )}
                     </div>
                     {canManageCameras && (
                       <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">

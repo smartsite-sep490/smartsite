@@ -48,6 +48,7 @@ const en = {
   'cameraSetup.step2': 'Register each camera in configuration.',
   'cameraSetup.step3': 'Link observation regions to areas. Source verification is separate.',
   'cameraSetup.regionsAction': 'Link observation regions',
+  'cameraSetup.inactiveHint': 'Enable this camera in Manage before linking observation regions.',
 };
 const vi: Record<keyof typeof en, string> = {
   'cameraSetup.title': 'Thiết lập camera',
@@ -98,5 +99,6 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.step2': 'Đăng ký từng camera vào cấu hình.',
   'cameraSetup.step3': 'Gắn vùng quan sát với khu vực. Kiểm tra nguồn kết nối là bước riêng.',
   'cameraSetup.regionsAction': 'Gắn vùng quan sát',
+  'cameraSetup.inactiveHint': 'Bật camera này trong Quản lý trước khi gắn vùng quan sát.',
 };
 registerFeatureCatalog({ en, vi });

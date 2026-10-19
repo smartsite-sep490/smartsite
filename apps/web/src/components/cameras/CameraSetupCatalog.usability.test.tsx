@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useTranslation } from 'react-i18next';
@@ -153,6 +153,39 @@ it('grants register, zone PPE, and camera-specific manage actions only to the sc
   expect(screen.queryByRole('button', { name: `Manage ${activeCamera.name}` })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Link observation regions' })).toBeNull();
+});
+
+it.each([
+  ['en', 'Enable this camera in Manage before linking observation regions.'],
+  ['vi', 'Bật camera này trong Quản lý trước khi gắn vùng quan sát.'],
+] as const)(
+  'explains the inactive camera prerequisite in its own row in %s',
+  async (language, hint) => {
+    await act(async () => changeUiLanguage(language));
+    const { open } = mountCatalog();
+    const inactiveName = await screen.findByText(inactiveCamera.name);
+    const row = inactiveName.closest('li')!;
+    expect(within(row).getByText(hint)).toBeTruthy();
+    expect(
+      within(row).queryByRole('button', { name: /Link observation regions|Gắn vùng quan sát/ }),
+    ).toBeNull();
+    fireEvent.click(
+      within(row).getByRole('button', {
+        name: `${language === 'en' ? 'Manage' : 'Quản lý'} ${inactiveCamera.name}`,
+      }),
+    );
+    expect(open).toHaveBeenCalledWith('manage', inactiveCamera.id);
+    expect(screen.getByText(activeCamera.name).closest('li')!.textContent).not.toContain(hint);
+  },
+);
+
+it('does not suggest camera writes to read-only Admins', async () => {
+  mountCatalog({ user: adminUser });
+  await screen.findByText(inactiveCamera.name);
+  expect(
+    screen.queryByText('Enable this camera in Manage before linking observation regions.'),
+  ).toBeNull();
+  expect(screen.queryByRole('button', { name: `Manage ${inactiveCamera.name}` })).toBeNull();
 });
 
 it('renders ACTIVE and INACTIVE as configuration status without claiming live stream or AI connectivity', async () => {
