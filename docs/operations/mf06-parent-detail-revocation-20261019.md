@@ -26,3 +26,10 @@ Evidence lives under the private D-drive run
 `mf06-parent-navigation-red-v2.log`, `mf06-history-navigation-red-v1.log`,
 `mf06-parent-detail-affected-v1.log` and `web-mf06-parent-detail-v1.log`.
 Read the current release checkpoint before assuming this new build is served.
+
+Local application verified on19October: Web5797579 is now served with unchanged
+Backendbd91985 and Main66. All77 public artifact responses matched the qualified
+build byte-for-byte; scoped Manager/Admin login and both physical configuration
+image endpoints passed. The previous Node/four native processes exited0 and all
+92 application tables matched across the stop. These are local HTTP/artifact
+checks, not browser rendering or a trusted MF06 end-to-end assessment.
