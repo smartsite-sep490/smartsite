@@ -38,6 +38,14 @@ owner records. Use the new verifier; old camera-bound verifiers require dead
 sources and must not be treated as current. STOP retains the owned schema and
 captures final configuration. Export fresh state before any subsequent lifecycle.
 
+Source follow-up `2803798` changes the Store in the development checkout. The old
+source verifier therefore correctly refuses its full-source check. Current
+qualification uses the exact one-file transition and archived original in
+`../mf06-v2-storage-20261020-v1/verify-runtime-with-reviewed-source-transition.ps1`
+under the same evidence parent directory. All other original pins and live owner,
+listener, expiry and persistence checks remain enforced. The served Backend is
+still `bd91985`; the original release/receipt was not edited or restarted.
+
 ## Limits
 
 No browser-policy retry, screenshot, device/screen-reader test, model action,

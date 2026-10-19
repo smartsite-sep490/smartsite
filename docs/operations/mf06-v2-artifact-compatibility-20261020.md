@@ -12,6 +12,8 @@ V2 source masks reuse Tuấn's supplied `main-team-authority-sources.ts`. The co
 also recognizes the exact earlier Root V2 membership-field order without rewriting
 its payload or digest. This compatibility is limited to those two fixed V2 masks;
 it does not sort arbitrary fields or widen V1 validation.
+New writes use the shared Tuấn ordering; readable earlier metadata is not a claim
+that an unchanged V1-only database can persist V2.
 
 Tuấn's original `1792281600000-Mf06TeamAuthorityHistory.ts` already contains the
 database V2 guard. That file and its source inventory were copied byte-for-byte as
@@ -58,3 +60,13 @@ website continues serving its frozen prior Backend; these source changes are not
 rolled out. Named physical SQL paths, full writer/cutover coverage, original media,
 real Safety-purpose consent, the WorkPort and whole MF05/MF06 acceptance remain
 open. Browser policy was not retried; no push, merge, cloud change or deploy occurred.
+
+After source commit `2803798`, the original runtime source guard correctly rejects
+the changed Store source file. The exact old file was recovered from declared
+Backend commit `bd91985` and matches the release's pinned hash. The supplementary
+`verify-runtime-with-reviewed-source-transition.ps1` in the evidence root accepts
+only that one exact old/new source transition, verifies the archived original,
+and retains every other release/artifact/owner/expiry/health check. The immutable
+release and runtime Backend were not rewritten or restarted. Its executed proof
+is `runtime-preserved-with-source-transition.json`; this is source-review
+qualification, not deployment of the new Store.
