@@ -658,6 +658,8 @@ export const PPE_EN_CATALOG = {
     'Request a configuration image for the selected active camera before drawing or editing a region.',
   'regionSetup.reference.expiredHint':
     'The configuration reference image has expired. Request a fresh configuration image to continue.',
+  'regionSetup.reference.revisionChangedHint':
+    'Camera configuration changed (now v{version}). Request a fresh configuration image to continue.',
   'regionSetup.reference.candidateHeading': 'Review Candidate Reference Image',
   'regionSetup.reference.candidateDescription':
     'Inspect how your current draft points align on the new reference frame (v{version}) before replacing the active reference.',
@@ -1678,6 +1680,8 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
     'Hãy lấy ảnh cấu hình cho camera đang hoạt động đã chọn trước khi vẽ hoặc sửa vùng quan sát.',
   'regionSetup.reference.expiredHint':
     'Ảnh tham chiếu cấu hình đã hết hạn. Hãy lấy ảnh cấu hình mới để tiếp tục.',
+  'regionSetup.reference.revisionChangedHint':
+    'Cấu hình camera đã thay đổi (hiện là v{version}). Hãy lấy ảnh cấu hình mới để tiếp tục.',
   'regionSetup.reference.candidateHeading': 'Xem xét ảnh tham chiếu ứng viên mới',
   'regionSetup.reference.candidateDescription':
     'Kiểm tra vị trí các điểm nháp hiện tại trên khung hình tham chiếu mới (v{version}) trước khi thay thế ảnh tham chiếu đang dùng.',

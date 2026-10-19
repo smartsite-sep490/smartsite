@@ -1815,4 +1815,173 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).toBeDefined();
     expect(screen.getByRole('button', { name: /Vertex 1/i }).getAttribute('cx')).toBe('73.984');
   });
+
+  // --------------------------------------------------------------------------
+  // 22. POST-SAVE STALE CONFIG REVISION ON ZONE SWITCH: KEEP OLD REFERENCE UNMODIFIED,
+  //     KEEP DRAWING DISABLED, SHOW LOCALIZED FRESH-IMAGE HINT, RESTORE ON FRESH V4 REQUEST
+  // --------------------------------------------------------------------------
+  it('keeps old reference unmodified and drawing disabled with a visible localized fresh-image hint after save advances camera config 3->4 and Zone switches, then restores drawing after requesting a fresh v4 reference', async () => {
+    const user = userEvent.setup();
+    const initialRefV3 = mockConfigurationReference({ configurationVersion: 3 });
+    refState.reference = initialRefV3;
+    refState.requestImpl = async () => {
+      refState.reference = mockConfigurationReference({ configurationVersion: 4 });
+    };
+
+    const camV3: CameraResponse = {
+      ...mockCamerasList.items[0]!,
+      configurationVersion: 3,
+    };
+    const camV4: CameraResponse = {
+      ...camV3,
+      configurationVersion: 4,
+    };
+
+    const listCamerasSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listCameras')
+      .mockResolvedValueOnce({ items: [camV3], total: 1 })
+      .mockResolvedValue({ items: [camV4], total: 1 });
+    const getCameraSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
+      .mockResolvedValueOnce(camV3)
+      .mockResolvedValue(camV4);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockResolvedValueOnce({
+      region: {
+        id: 'reg-zone-1-saved',
+        cameraId: 'cam-1',
+        zoneId: 'zone-1',
+        polygon: {
+          coordinates: [
+            [0.1, 0.1],
+            [0.8, 0.1],
+            [0.8, 0.8],
+          ],
+        },
+        coordinateSpace: 'NORMALIZED_0_1',
+        version: 1,
+        isActive: true,
+        createdAt: '2026-10-07T12:00:00Z',
+      },
+      configurationVersion: 4,
+    });
+    const updatePolygonSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+      .mockResolvedValueOnce({
+        region: {
+          id: 'reg-zone-1-saved',
+          cameraId: 'cam-1',
+          zoneId: 'zone-1',
+          polygon: {
+            coordinates: [
+              [0.1156, 0.1],
+              [0.8, 0.1],
+              [0.8, 0.8],
+            ],
+          },
+          coordinateSpace: 'NORMALIZED_0_1',
+          version: 2,
+          isActive: true,
+          createdAt: '2026-10-07T12:00:00Z',
+        },
+        configurationVersion: 4,
+      });
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ZonePpeCameraRegionPanel
+          apiUrl="http://localhost:3000"
+          token="mock-token-xyz"
+          sessionScope="scope-01"
+          credentialId={1}
+          siteId="site-alpha"
+          initialCameraId="cam-1"
+          zones={mockZones}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
+    const svgCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
+    fireEvent.click(svgCanvas, { clientX: 64, clientY: 48 });
+    fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
+    fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
+
+    await user.click(screen.getByRole('button', { name: /Save Region/i }));
+    expect(await screen.findByText(/Saved region "reg-zone-1-saved" \(v1\)/i)).toBeDefined();
+    await waitFor(() => {
+      expect(listCamerasSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByText('Config v3')).toBeDefined();
+    expect(screen.queryByText('Config v4')).toBeNull();
+
+    // Continued editing of the just-saved region remains active and uses updated CAS (4) while image stays Config v3
+    expect(screen.getByText(/Editing Region reg-zone-1-saved \(v1\)/i)).toBeDefined();
+    const vertex1 = screen.getByRole('button', { name: /Vertex 1/i });
+    act(() => vertex1.focus());
+    fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
+    await user.click(screen.getByRole('button', { name: /Save Region/i }));
+    expect(await screen.findByText(/Saved region "reg-zone-1-saved" \(v2\)/i)).toBeDefined();
+    expect(getCameraSpy).toHaveBeenCalledTimes(2);
+    expect(updatePolygonSpy).toHaveBeenCalledWith(
+      'mock-token-xyz',
+      'site-alpha',
+      'cam-1',
+      'reg-zone-1-saved',
+      {
+        polygon: {
+          coordinates: [
+            [0.1156, 0.1],
+            [0.8, 0.1],
+            [0.8, 0.8],
+          ],
+        },
+        expectedConfigurationVersion: 4,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(screen.getByText('Config v3')).toBeDefined();
+    expect(screen.queryByText('Config v4')).toBeNull();
+
+    // Operator switches to second Zone on the same camera after save bumped camera config 3 -> 4
+    await user.selectOptions(screen.getByLabelText(/Select Zone/i), 'zone-2');
+
+    // Old hook reference must remain unmodified at v3 (never relabeled to v4 without a fresh server reference)
+    expect(refState.reference).toBe(initialRefV3);
+    expect(refState.reference?.configurationVersion).toBe(3);
+    expect(screen.getByText('Config v3')).toBeDefined();
+    expect(screen.queryByText('Config v4')).toBeNull();
+
+    // Drawing stays disabled while loaded reference (v3) lags camera configurationVersion (v4)
+    const startDrawingForZone2 = screen.getByRole('button', {
+      name: /Start Drawing Region/i,
+    }) as HTMLButtonElement;
+    expect(startDrawingForZone2.disabled).toBe(true);
+
+    // Visible localized hint explains that a fresh configuration image must be requested
+    expect(screen.getByText(/Request a (?:fresh )?configuration image/i)).toBeDefined();
+
+    // Operator explicitly requests a fresh v4 configuration image from the server
+    await user.click(screen.getByRole('button', { name: /Get configuration image/i }));
+    expect(refState.requestSpy).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ZonePpeCameraRegionPanel
+          apiUrl="http://localhost:3000"
+          token="mock-token-xyz"
+          sessionScope="scope-01"
+          credentialId={1}
+          siteId="site-alpha"
+          initialCameraId="cam-1"
+          zones={mockZones}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Config v4')).toBeDefined();
+    expect(screen.queryByText(/Request a (?:fresh )?configuration image/i)).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: /Start Drawing Region/i }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
 });

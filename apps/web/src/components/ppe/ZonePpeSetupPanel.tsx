@@ -19,6 +19,7 @@ export interface ZonePpeSetupPanelProps {
   canReadZones?: boolean;
   section?: 'all' | 'zones' | 'regions';
   initialCameraId?: string;
+  onSelectCamera?: (cameraId: string) => void;
   onClose: () => void;
   embedded?: boolean;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
@@ -78,6 +79,7 @@ function ZonePpeSetupPanelInternal({
   canReadZones = false,
   section = 'all',
   initialCameraId,
+  onSelectCamera,
   onClose,
   embedded = false,
   onDraftStateChange,
@@ -1204,6 +1206,7 @@ function ZonePpeSetupPanelInternal({
           {scopedZones.length > 0 ? (
             <ZonePpeCameraRegionPanel
               embedded={section === 'regions'}
+              onSelectCamera={onSelectCamera}
               onDraftStateChange={setRegionDraft}
               apiUrl={apiUrl}
               client={client}

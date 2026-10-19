@@ -201,6 +201,205 @@ describe('CameraSetupView -> ZonePpeSetupDialog -> ZonePpeCameraRegionPanel -> u
     return within(row).getByRole('button', { name: 'Link observation regions' });
   }
 
+  it.each([false, true])(
+    'returns to the camera selected inside Regions (later page: %s)',
+    async (laterPage) => {
+      const user = userEvent.setup();
+      if (laterPage) {
+        vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockResolvedValue(baseCamera);
+        vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(
+          async (_token, _site, page) => ({
+            items: page?.offset ? [baseCamera] : [secondActiveCamera],
+            total: 2,
+          }),
+        );
+      }
+      mountJourney({
+        ...managerSessionAlpha,
+        user: {
+          ...managerSessionAlpha.user,
+          roleAssignments: [
+            ...managerSessionAlpha.user.roleAssignments,
+            { role: 'SAFETY_OFFICER', siteId: SITE_A },
+          ],
+        },
+      });
+      await screen.findByRole('heading', { name: secondActiveCamera.name });
+      await user.click(getCameraRowRegionsButton(secondActiveCamera.name));
+      const dialog = await screen.findByRole('dialog');
+      const cameraSelect = await within(dialog).findByRole('combobox', { name: 'Select Camera' });
+      await waitFor(() => expect((cameraSelect as HTMLSelectElement).value).toBe(CAM_2));
+      if (laterPage) {
+        await user.click(within(dialog).getByRole('button', { name: 'Load more cameras' }));
+        await within(cameraSelect).findByRole('option', { name: new RegExp(baseCamera.name) });
+      }
+      await user.selectOptions(cameraSelect, CAM_1);
+      await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      for (const name of ['PPE monitoring', 'Restricted-zone monitoring']) {
+        const href = screen.getByRole('link', { name }).getAttribute('href');
+        const destination = new URL(href!, 'http://localhost');
+        await waitFor(() => {
+          const currentHref = screen.getByRole('link', { name }).getAttribute('href');
+          expect(new URL(currentHref!, 'http://localhost').searchParams.get('cameraId')).toBe(
+            CAM_1,
+          );
+        });
+        expect(destination.searchParams.get('siteId')).toBe(SITE_A);
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('aborts a later-page return-camera lookup on logout and ignores its late result', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(
+      async (_token, _site, page) => ({
+        items: page?.offset ? [baseCamera] : [secondActiveCamera],
+        total: 2,
+      }),
+    );
+    let resolveLate!: (camera: CameraResponse) => void;
+    let pendingSignal: AbortSignal | undefined;
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockImplementation(
+      (_token, _site, _camera, options) => {
+        pendingSignal = options?.signal;
+        return new Promise((resolve) => {
+          resolveLate = resolve;
+        });
+      },
+    );
+    const scopedSession: SharedSession = {
+      ...managerSessionAlpha,
+      user: {
+        ...managerSessionAlpha.user,
+        roleAssignments: [
+          ...managerSessionAlpha.user.roleAssignments,
+          { role: 'SAFETY_OFFICER', siteId: SITE_A },
+        ],
+      },
+    };
+    const { rerenderSession } = mountJourney(scopedSession);
+    await screen.findByRole('heading', { name: secondActiveCamera.name });
+    await user.click(getCameraRowRegionsButton(secondActiveCamera.name));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Load more cameras' }));
+    const select = within(dialog).getByRole('combobox', { name: 'Select Camera' });
+    await within(select).findByRole('option', { name: new RegExp(baseCamera.name) });
+    await user.selectOptions(select, CAM_1);
+    await waitFor(() => expect(pendingSignal?.aborted).toBe(false));
+    rerenderSession(null);
+    expect(pendingSignal?.aborted).toBe(true);
+    await act(async () => {
+      resolveLate(baseCamera);
+      await Promise.resolve();
+    });
+    rerenderSession({
+      ...scopedSession,
+      accessToken: 'rotated-token',
+      sessionScope: 'rotated-scope',
+    });
+    await screen.findByRole('heading', { name: secondActiveCamera.name });
+    for (const name of ['PPE monitoring', 'Restricted-zone monitoring']) {
+      const href = screen.getByRole('link', { name }).getAttribute('href');
+      expect(new URL(href!, 'http://localhost').searchParams.has('cameraId')).toBe(false);
+    }
+  });
+
+  it('drops an explicitly selected return camera when refreshed parent metadata deactivates it', async () => {
+    const user = userEvent.setup();
+    let active = true;
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(async () => ({
+      items: [{ ...baseCamera, status: active ? 'ACTIVE' : 'INACTIVE' }, secondActiveCamera],
+      total: 2,
+    }));
+    mountJourney({
+      ...managerSessionAlpha,
+      user: {
+        ...managerSessionAlpha.user,
+        roleAssignments: [
+          ...managerSessionAlpha.user.roleAssignments,
+          { role: 'SAFETY_OFFICER', siteId: SITE_A },
+        ],
+      },
+    });
+    await screen.findByRole('heading', { name: secondActiveCamera.name });
+    await user.click(getCameraRowRegionsButton(secondActiveCamera.name));
+    const dialog = await screen.findByRole('dialog');
+    const select = await within(dialog).findByRole('combobox', { name: 'Select Camera' });
+    await user.selectOptions(select, CAM_1);
+    await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+    active = false;
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['camera-setup'] });
+    });
+    for (const name of ['PPE monitoring', 'Restricted-zone monitoring']) {
+      await waitFor(() => {
+        const href = screen.getByRole('link', { name }).getAttribute('href');
+        expect(new URL(href!, 'http://localhost').searchParams.has('cameraId')).toBe(false);
+      });
+    }
+  });
+
+  it.each([401, 403, 404, 503, 'wrong-site', 'inactive'] as const)(
+    'does not return a stale camera after later-page lookup refuses %s',
+    async (failure) => {
+      const user = userEvent.setup();
+      const signOut = vi.fn();
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(
+        async (_token, _site, page) => ({
+          items: page?.offset ? [baseCamera] : [secondActiveCamera],
+          total: 2,
+        }),
+      );
+      const lookup = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
+        .mockImplementation(async () => {
+          if (typeof failure === 'number')
+            throw Object.assign(new Error('Synthetic refusal'), { status: failure });
+          return {
+            ...baseCamera,
+            ...(failure === 'wrong-site'
+              ? { siteId: 'other-site' }
+              : { status: 'INACTIVE' as const }),
+          };
+        });
+      mountJourney({
+        ...managerSessionAlpha,
+        onSignOut: signOut,
+        user: {
+          ...managerSessionAlpha.user,
+          roleAssignments: [
+            ...managerSessionAlpha.user.roleAssignments,
+            { role: 'SAFETY_OFFICER', siteId: SITE_A },
+          ],
+        },
+      });
+      await screen.findByRole('heading', { name: secondActiveCamera.name });
+      await user.click(getCameraRowRegionsButton(secondActiveCamera.name));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Load more cameras' }));
+      const select = within(dialog).getByRole('combobox', { name: 'Select Camera' });
+      await within(select).findByRole('option', { name: new RegExp(baseCamera.name) });
+      await user.selectOptions(select, CAM_1);
+      await waitFor(() => expect(lookup).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await lookup.mock.results[0]!.value.catch(() => undefined);
+      });
+      if (failure === 401) {
+        await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+        expect(screen.queryByRole('link', { name: 'PPE monitoring' })).toBeNull();
+      } else {
+        await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+        for (const name of ['PPE monitoring', 'Restricted-zone monitoring']) {
+          const href = screen.getByRole('link', { name }).getAttribute('href');
+          expect(new URL(href!, 'http://localhost').searchParams.has('cameraId')).toBe(false);
+        }
+        expect(signOut).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it('opens Regions for the selected active camera row without auto-requesting an image, then fetches and renders the typed configuration reference on explicit click with no preview/AI calls', async () => {
     const user = userEvent.setup();
     const configImageSpy = vi

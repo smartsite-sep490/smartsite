@@ -10,6 +10,7 @@ import type { CameraConfigurationReference } from './useCameraConfigurationRefer
 export interface CameraRegionReferenceStatusCardProps {
   reference: CameraConfigurationReference | null;
   isExpired: boolean;
+  expectedConfigurationVersion?: number | null;
   isLoading: boolean;
   error: ApiError | null;
   canRequest: boolean;
@@ -20,6 +21,7 @@ export interface CameraRegionReferenceStatusCardProps {
 export function CameraRegionReferenceStatusCard({
   reference,
   isExpired,
+  expectedConfigurationVersion,
   isLoading,
   error,
   canRequest,
@@ -28,6 +30,11 @@ export function CameraRegionReferenceStatusCard({
 }: CameraRegionReferenceStatusCardProps) {
   const { t } = useLocale();
   const errorMessage = getConfigurationReferenceErrorMessage(error, t);
+  const isRevisionMismatch = Boolean(
+    reference &&
+    typeof expectedConfigurationVersion === 'number' &&
+    reference.configurationVersion !== expectedConfigurationVersion,
+  );
 
   return (
     <div className="min-w-0 space-y-2.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs text-slate-700 shadow-xs">
@@ -108,6 +115,14 @@ export function CameraRegionReferenceStatusCard({
 
       {!isDrawingActive && reference && isExpired && (
         <p className="text-xs text-amber-800">{t('regionSetup.reference.expiredHint')}</p>
+      )}
+
+      {!isDrawingActive && reference && !isExpired && isRevisionMismatch && (
+        <p className="text-xs text-amber-800">
+          {t('regionSetup.reference.revisionChangedHint', {
+            version: expectedConfigurationVersion!,
+          })}
+        </p>
       )}
     </div>
   );

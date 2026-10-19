@@ -30,6 +30,7 @@ export interface ZonePpeCameraRegionPanelProps {
   siteId: string;
   initialCameraId?: string;
   zones: ZoneResponse[];
+  onSelectCamera?: (cameraId: string) => void;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
   onClose?: () => void;
 }
@@ -136,6 +137,7 @@ function ZonePpeCameraRegionPanelContent({
   siteId,
   initialCameraId,
   zones,
+  onSelectCamera,
   onDraftStateChange,
   onClose,
   internalNonce,
@@ -578,10 +580,6 @@ function ZonePpeCameraRegionPanelContent({
       }
       return {
         ...prev,
-        reference: {
-          ...prev.reference,
-          configurationVersion: data.configurationVersion,
-        },
         editingRegion: {
           id: data.region.id,
           version: data.region.version,
@@ -606,6 +604,9 @@ function ZonePpeCameraRegionPanelContent({
     setIsCandidateReviewOpen(false);
     setLastSavedDraft(null);
     setSavedRegionInfo(null);
+    if (visibleActiveCameras.some((camera) => camera.id === cameraId)) {
+      onSelectCamera?.(cameraId);
+    }
   };
 
   const statusCardReference =
@@ -818,6 +819,7 @@ function ZonePpeCameraRegionPanelContent({
         <CameraRegionReferenceStatusCard
           reference={statusCardReference}
           isExpired={isStatusCardReferenceExpired}
+          expectedConfigurationVersion={selectedCamera?.configurationVersion ?? null}
           isLoading={configReference.isLoading}
           error={configReference.error}
           canRequest={canRequestReference}
