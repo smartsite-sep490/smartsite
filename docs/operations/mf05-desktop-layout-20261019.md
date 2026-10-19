@@ -65,3 +65,18 @@ Evidence: Q/agy-product-ux-20261019-v1/inactive-hint-*.log and
 web-bundle-proof-v5.json. This new candidate is built, not served; the current
 website still serves7cb8ff0. No camera-capture/model/runtime/role change was made
 by this UI slice. Browser/render/full acceptance remains open.
+
+## Compact controls across MF05/MF06
+
+Agy p8 changed only scope/configuration grid alignment and the two Configuration
+section class strings in MF05; permission and fallback branches remain intact.
+Agy p7 made MF06 Safety Alerts navigation secondary and grouped its preview-modal
+footer on the right, with Dismiss first and the existing review action last.
+Callbacks, site/alert-type filters and disabled states remain unchanged. Both
+oversized legacy components have zero net line growth; no new UI abstraction.
+Root inspected both diffs:162 existing affected cases/10files, Web types, lint
+and formatting pass; bundlev6 builds. The first lint attempt exhausted512MiB;
+its failure is retained and the bounded1280MiB retry passed. These are scoped
+DOM/software checks, not visual or keyboard-device acceptance. No tests were
+added merely to assert CSS classes. Access-owned ExcelJS size warning and
+jsdom navigation/canvas limitations remain. This candidate is not served yet.

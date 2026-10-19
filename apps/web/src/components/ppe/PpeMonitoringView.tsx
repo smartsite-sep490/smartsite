@@ -1455,7 +1455,7 @@ export function PpeMonitoringView({
 
       {/* Monitoring Scope (Primary Selectors) & Secondary Configuration Actions */}
       <div
-        className={`grid grid-cols-1 gap-4 items-stretch min-w-0 w-full max-w-full ${
+        className={`grid grid-cols-1 gap-4 items-start min-w-0 w-full max-w-full ${
           onOpenSetup
             ? isGlobalAdmin || canOpenZonePpe || canRegisterCamera || canManageCamera
               ? 'lg:grid-cols-[minmax(0,1fr)_auto]'
@@ -1773,7 +1773,7 @@ export function PpeMonitoringView({
           (isGlobalAdmin || canOpenZonePpe || canRegisterCamera || canManageCamera) && (
             <section
               aria-label={t('ppe.layout.configuration')}
-              className="rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full"
+              className="rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-start self-start gap-2.5 min-w-0 w-full max-w-full"
             >
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -1800,7 +1800,7 @@ export function PpeMonitoringView({
             aria-label={t('ppe.layout.configuration')}
             className={
               canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
-                ? 'rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full'
+                ? 'rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-start self-start gap-2.5 min-w-0 w-full max-w-full'
                 : 'sr-only'
             }
           >

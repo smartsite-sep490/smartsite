@@ -1778,7 +1778,7 @@ export function RestrictedZoneView({
                     ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
                   })
                 }
-                className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+                className="self-start sm:self-auto px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
               >
                 {tr('ppe_monitoring_view.view_in_safety_alerts')}
               </button>
@@ -1808,7 +1808,7 @@ export function RestrictedZoneView({
                       ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
                     })
                   }
-                  className="px-2.5 py-1.5 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer shadow-xs"
                 >
                   {tr('ppe_monitoring_view.view_in_safety_alerts')}
                 </button>
@@ -1963,7 +1963,14 @@ export function RestrictedZoneView({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setSelectedIncident(null)}
+                className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+              >
+                {tr('common.dismiss_preview')}
+              </button>
               {onNavigate ? (
                 <button
                   type="button"
@@ -1974,7 +1981,7 @@ export function RestrictedZoneView({
                       ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
                     });
                   }}
-                  className="py-2 px-4 rounded-lg bg-[#DF2225] hover:bg-[#B8191C] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
+                  className="px-4 py-2 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
                 >
                   {tr('ppe_monitoring_view.review_in_safety_alerts')}
                 </button>
@@ -1982,18 +1989,11 @@ export function RestrictedZoneView({
                 <button
                   disabled
                   title={tr('ppe_monitoring_view.safety_alerts_navigation_not_configured')}
-                  className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
+                  className="px-4 py-2 rounded-lg bg-[#0F172A]/60 text-white text-xs font-semibold cursor-not-allowed shadow-xs transition-colors"
                 >
                   {tr('common.review_in_alerts')}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setSelectedIncident(null)}
-                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
-              >
-                {tr('common.dismiss_preview')}
-              </button>
             </div>
           </div>
         )}
