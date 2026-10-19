@@ -18,9 +18,9 @@ export function CameraSetupWorkflow({
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const showZonesAction = canWriteZones || canReadZones;
   return (
-    <div className="flex flex-col items-start gap-2.5 sm:items-end">
+    <div className="contents">
       {(canManageCameras || showZonesAction) && (
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
           {showZonesAction && (
             <button
               type="button"
@@ -41,7 +41,7 @@ export function CameraSetupWorkflow({
           )}
         </div>
       )}
-      <details className="group w-full text-xs text-slate-500 sm:w-auto sm:text-right">
+      <details className="group col-span-full w-full text-xs text-slate-500">
         <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-2 py-1 font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
           <span>{t('cameraSetup.help')}</span>
           <span

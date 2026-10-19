@@ -41,7 +41,7 @@ export function CameraSetupCatalog({
   return (
     <div>
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="grid grid-cols-1 items-start gap-x-4 gap-y-3 border-b border-slate-100 pb-4 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0 space-y-1">
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">
               {t('cameraSetup.cameras')}
@@ -108,7 +108,7 @@ export function CameraSetupCatalog({
                         {isEnabled && (
                           <button
                             type="button"
-                            className={CAMERA_BUTTON_STYLES.primary}
+                            className={button}
                             onClick={() => open('regions', row.id)}
                           >
                             {t('cameraSetup.regionsAction')}
@@ -116,7 +116,7 @@ export function CameraSetupCatalog({
                         )}
                         <button
                           type="button"
-                          className={`${button} shrink-0`}
+                          className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
                           aria-label={t('cameraSetup.manage', { name: row.name })}
                           onClick={() => open('manage', row.id)}
                         >

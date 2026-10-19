@@ -38,3 +38,11 @@ Wall tiles now expose named groups, and their real focus buttons retain the visi
 Root watched the new semantic test fail before the change. The first affected run exposed an obsolete generic-name keyboard selector; Root also corrected the proposed button label to retain the visible action for Label-in-Name. Final four-file run:34 passes, including Space selection while Retry is blocked. Web TypeScript, four changed-file lint and production bundle v3 pass. No active capture/model/DB change was required.
 
 Agy p5 performed a bounded read-only cross-review. Its extra note gave a wrong source line and a nonexistent TTL constant; Root independently verified the actual scope guard and literal five-second limits and rejected those inaccurate details. Repeated Camera prefixes in group labels and browser-specific focus rendering remain polish/visual-review items, not falsely claimed complete from DOM tests.
+
+## Follow-up: disclosure and action hierarchy
+
+Camera catalog heading/actions now use a grid, and the existing neutral Workflow wrapper uses `display:contents`. Its native setup guide spans the full header width below the title/action row. Per-camera region links use the existing secondary button style; Manage uses compact secondary, while Register remains the collection primary action. Only six presentation lines changed; handlers, permission gates, translation keys and disclosure behavior are retained.
+
+Root reviewed Agy p8's public-reference report against current source and the official [Carbon table guidelines](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines) and [Fluent layout guidance](https://fluent2.microsoft.design/layout). The choice to soften repeated row buttons is our design inference, not a claimed universal Carbon prohibition. Stale-source recommendations, unmeasured height savings, live-like configuration badges and JS-AST-as-pixel-proof claims were rejected. REA CLI6.5.0 executes locally; the referenced AST receipts are historical, and the new public-document research/prototype is not a live clone or product acceptance.
+
+The updated layout passes51 Camera Setup cases across eight files, two-file lint and production bundle v4. Actual browser layout and screen-reader acceptance remain open. No current website or database rollout is included in these commits.
