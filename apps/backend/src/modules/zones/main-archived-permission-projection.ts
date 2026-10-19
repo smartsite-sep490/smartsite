@@ -1,5 +1,6 @@
 import { ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import type { ZoneAccessEffect } from './zone-authorization.interface.js';
+import { MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT } from './main-team-authority-archive.js';
 import {
   decodeStoredMainAuthorityArchive,
   parseMainAuthorityInstant,
@@ -10,7 +11,7 @@ export type MainArchivedPermissionProjectionResult =
   | { status: 'UNAVAILABLE'; reason: string }
   | {
       status: 'PROJECTED';
-      projectionVersion: 'MAIN_ARCHIVED_ZONE_EFFECTS_V1';
+      projectionVersion: 'MAIN_ARCHIVED_ZONE_EFFECTS_V1' | 'MAIN_ARCHIVED_ZONE_EFFECTS_V2';
       sourceArchiveSha256: string;
       restrictionPolicy: ZoneRestrictionPolicy;
       effects: readonly ZoneAccessEffect[];
@@ -67,8 +68,6 @@ export function projectMainArchivedPermissions(
 ): MainArchivedPermissionProjectionResult {
   const decoded = decodeStoredMainAuthorityArchive(value, expected);
   if (decoded.status !== 'VALID') return unavailable(decoded.reason);
-  if (decoded.archive.format !== 'MF06_MAIN_AUTHORITY_ARCHIVE_V1')
-    return unavailable('UNSUPPORTED_VERSION');
   const { archive } = decoded,
     { context } = archive.payload;
   const rows = new Map(archive.payload.sources.map((s) => [s.sourceKind, s.rows]));
@@ -83,7 +82,10 @@ export function projectMainArchivedPermissions(
     if (denies.length) effects.push('DENY');
     return Object.freeze({
       status: 'PROJECTED',
-      projectionVersion: 'MAIN_ARCHIVED_ZONE_EFFECTS_V1',
+      projectionVersion:
+        archive.format === MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT
+          ? 'MAIN_ARCHIVED_ZONE_EFFECTS_V2'
+          : 'MAIN_ARCHIVED_ZONE_EFFECTS_V1',
       sourceArchiveSha256: archive.sha256,
       restrictionPolicy,
       effects: Object.freeze(effects),
@@ -154,6 +156,66 @@ export function projectMainArchivedPermissions(
       contained(wpTime, participationTime)
     )
       allows.push(permission.id as string);
+  }
+  if (archive.format === MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT) {
+    const teams = index('TEAM');
+    for (const permission of rows.get('TEAM_PERMISSION') ?? []) {
+      const team = teams.get((permission.team_id as string).toLowerCase());
+      const cp = contractorPermissions.get(
+        (permission.contractor_zone_permission_id as string).toLowerCase(),
+      );
+      const participation =
+        cp && participations.get((cp.site_contractor_id as string).toLowerCase());
+      const contractor =
+        participation && contractors.get((participation.contractor_id as string).toLowerCase());
+      if (
+        !team ||
+        !cp ||
+        !participation ||
+        !contractor ||
+        team.is_active !== true ||
+        participation.is_active !== true ||
+        contractor.is_active !== true ||
+        !same(team.site_id, context.siteId) ||
+        !same(team.contractor_id, worker.contractor_id) ||
+        !same(participation.site_id, team.site_id) ||
+        !same(participation.contractor_id, team.contractor_id) ||
+        !same(cp.zone_id, context.zoneId)
+      )
+        continue;
+      const member = (rows.get('TEAM_MEMBERSHIP') ?? []).some(
+        (row) =>
+          same(row.team_id, team.id) &&
+          same(row.site_id, team.site_id) &&
+          same(row.contractor_id, team.contractor_id) &&
+          same(row.worker_id, context.workerId) &&
+          parseMainAuthorityInstant(row.joined_at as string)! <= at &&
+          (row.left_at === null || at < parseMainAuthorityInstant(row.left_at as string)!),
+      );
+      const assignment = [...assignments.values()].some(
+        (row) =>
+          same(row.worker_id, context.workerId) &&
+          same(row.site_id, context.siteId) &&
+          same(row.site_contractor_id, participation.id) &&
+          row.status === 'APPROVED' &&
+          row.valid_until !== null &&
+          active(interval(row), at) &&
+          (row.zone_ids as string[]).some((zone) => same(zone, context.zoneId)),
+      );
+      const tpTime = interval(permission),
+        cpTime = interval(cp),
+        participationTime = interval(participation);
+      if (
+        member &&
+        assignment &&
+        active(tpTime, at) &&
+        active(cpTime, at) &&
+        active(participationTime, at) &&
+        contained(tpTime, cpTime) &&
+        contained(tpTime, participationTime)
+      )
+        allows.push(permission.id as string);
+    }
   }
   return result(allows, denies);
 }

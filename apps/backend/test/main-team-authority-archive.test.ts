@@ -8,78 +8,9 @@ import {
   decodeStoredMainAuthorityArchive,
 } from '../src/modules/zones/main-authority-archive-codec.js';
 import { archivedPermissionsFixture } from './support/main-archived-permissions.fixture.js';
-import { projectMainArchivedPermissions } from '../src/modules/zones/main-archived-permission-projection.js';
-
+import { teamArchiveFixture as fixture } from './support/main-team-authority.fixture.js';
 const V2 = 'MF06_MAIN_AUTHORITY_ARCHIVE_V2';
-function fixture() {
-  const base = archivedPermissionsFixture();
-  const team = randomUUID();
-  const sources: {
-    sourceKind: string;
-    tableName: string;
-    fields: readonly string[];
-    rows: Record<string, unknown>[];
-  }[] = structuredClone(base.payload.sources);
-  for (const source of sources) {
-    if (source.sourceKind === 'ASSIGNMENT') {
-      source.fields = [...source.fields, 'zone_ids'];
-      source.rows[0]!.zone_ids = [base.zone];
-    }
-    if (source.sourceKind === 'WORKER_PERMISSION') source.rows = [];
-  }
-  sources.push(
-    {
-      sourceKind: 'TEAM',
-      tableName: 'contractor_team',
-      fields: ['id', 'site_id', 'contractor_id', 'is_active'],
-      rows: [{ id: team, site_id: base.site, contractor_id: base.contractor, is_active: true }],
-    },
-    {
-      sourceKind: 'TEAM_MEMBERSHIP',
-      tableName: 'contractor_team_membership',
-      fields: ['id', 'team_id', 'worker_id', 'site_id', 'contractor_id', 'joined_at', 'left_at'],
-      rows: [
-        {
-          id: randomUUID(),
-          team_id: team,
-          worker_id: base.worker,
-          site_id: base.site,
-          contractor_id: base.contractor,
-          joined_at: '2026-10-11T00:00:00.000001Z',
-          left_at: null,
-        },
-      ],
-    },
-    {
-      sourceKind: 'TEAM_PERMISSION',
-      tableName: 'team_zone_permission',
-      fields: [
-        'id',
-        'team_id',
-        'contractor_zone_permission_id',
-        'valid_from',
-        'valid_until',
-        'revoked_at',
-      ],
-      rows: [
-        {
-          id: randomUUID(),
-          team_id: team,
-          contractor_zone_permission_id: base.cp,
-          valid_from: '2026-10-11T00:00:00.000001Z',
-          valid_until: '2026-10-12T00:00:00.000001Z',
-          revoked_at: null,
-        },
-      ],
-    },
-  );
-  const payload = { ...base.payload, version: V2, sources };
-  return {
-    ...base,
-    payload,
-    row: (kind: string) => sources.find((s) => s.sourceKind === kind)!.rows[0]!,
-  };
-}
+import { projectMainArchivedPermissions } from '../src/modules/zones/main-archived-permission-projection.js';
 
 test('V2 seals and decodes team-only evidence without asserting identity or coverage', () => {
   const f = fixture();
@@ -98,9 +29,10 @@ test('V2 seals and decodes team-only evidence without asserting identity or cove
     'VALID',
   );
   assert(Object.isFrozen(result.archive.payload.sources));
-  assert.deepEqual(
-    projectMainArchivedPermissions(result.archive, { ...f.context, sha256: result.archive.sha256 }),
-    { status: 'UNAVAILABLE', reason: 'UNSUPPORTED_VERSION' },
+  assert.equal(
+    projectMainArchivedPermissions(result.archive, { ...f.context, sha256: result.archive.sha256 })
+      .status,
+    'PROJECTED',
   );
 });
 
@@ -113,7 +45,7 @@ for (const [name, mutate, reason] of [
   [
     'wrong field mask',
     (f: ReturnType<typeof fixture>) => {
-      f.payload.sources.at(-1)!.fields = ['id'] as never;
+      f.payload.sources.at(-1)!.fields = ['id'];
     },
     'SOURCE_REGISTRY_MISMATCH',
   ],
