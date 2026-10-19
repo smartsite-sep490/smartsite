@@ -472,4 +472,54 @@ describe('FourSourceWall Site/Camera/Zone Context (P0)', () => {
     expect(finalStatus.getAttribute('aria-live')).toBe('polite');
     expect(finalStatus.querySelectorAll('[role="status"], [aria-live]').length).toBe(0);
   });
+
+  it('exposes each wall tile as a named group with a camera-specific aria-pressed focus button while preserving full-tile click and non-nested retry controls', async () => {
+    vi.spyOn(client, 'getCameraObservationZones').mockResolvedValue(makeZonesResponse());
+    const cam1 = makeCamera({ id: CAM_1_ID, code: 'CAM-07', name: 'Camera Cổng Phụ Bắc' });
+    const cam2 = makeCamera({ id: CAM_2_ID, code: 'CAM-08', name: 'Camera Tháp B2' });
+    const onSelectCamera = vi.fn();
+
+    render(
+      buildWallTree({
+        locale: 'en',
+        cameras: [cam1, cam2],
+        selectedCameraId: CAM_1_ID,
+        onSelectCamera,
+      }),
+    );
+
+    const tile1 = screen.getByRole('group', { name: 'Camera Camera Cổng Phụ Bắc (focused)' });
+    const tile2 = screen.getByRole('group', { name: 'Camera Camera Tháp B2 (available)' });
+    expect(tile1).toBe(screen.getByTestId(`wall-tile-${CAM_1_ID}`));
+    expect(tile2).toBe(screen.getByTestId(`wall-tile-${CAM_2_ID}`));
+    expect(tile1.getAttribute('role')).toBe('group');
+    expect(tile2.getAttribute('role')).toBe('group');
+    expect(tile1.getAttribute('tabIndex')).toBeNull();
+    expect(tile2.getAttribute('tabIndex')).toBeNull();
+
+    const focusBtn1 = within(tile1).getByRole('button', {
+      name: 'Selected: Camera Cổng Phụ Bắc',
+    });
+    const focusBtn2 = within(tile2).getByRole('button', {
+      name: 'Select camera: Camera Tháp B2',
+    });
+    expect(focusBtn1).toBe(screen.getByTestId(`focus-btn-${CAM_1_ID}`));
+    expect(focusBtn2).toBe(screen.getByTestId(`focus-btn-${CAM_2_ID}`));
+    expect(focusBtn1.getAttribute('aria-pressed')).toBe('true');
+    expect(focusBtn2.getAttribute('aria-pressed')).toBe('false');
+    expect(focusBtn1.textContent).toBe('Selected');
+    expect(focusBtn2.textContent).toBe('Select camera');
+
+    const retryBtn2 = within(tile2).getByRole('button', { name: 'Retry' });
+    expect(retryBtn2.closest('button')).toBe(retryBtn2);
+    expect(tile2.querySelectorAll('button button').length).toBe(0);
+
+    fireEvent.click(focusBtn2);
+    expect(onSelectCamera).toHaveBeenCalledTimes(1);
+    expect(onSelectCamera).toHaveBeenLastCalledWith(CAM_2_ID);
+
+    fireEvent.click(tile2);
+    expect(onSelectCamera).toHaveBeenCalledTimes(2);
+    expect(onSelectCamera).toHaveBeenLastCalledWith(CAM_2_ID);
+  });
 });

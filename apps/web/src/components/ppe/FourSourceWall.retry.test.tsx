@@ -134,7 +134,7 @@ describe('wall tile retry and keyboard recovery', () => {
   it('keeps the camera selection action usable with a keyboard while retry is blocked', async () => {
     state.errorStatus = 403;
     render(tile());
-    screen.getByRole('button', { name: 'Select camera' }).focus();
+    screen.getByRole('button', { name: 'Select camera: Camera One' }).focus();
     await userEvent.setup().keyboard(' ');
     expect(select).toHaveBeenCalledExactlyOnceWith('camera-one');
     expect(state.retry).not.toHaveBeenCalled();

@@ -30,3 +30,11 @@ Root reviewed actual Agy p7/p5 changes and executed the checks. Evidence directo
 REA 6.5.0 already exists in the approved D-only sandbox; no reinstall or global MCP change was needed. Agy p8 researches public references separately from source implementation. Fluent access proceeded; Axis requires a Herdr URL approval at the last observation. New REA execution, a completed comparison and the prototype are not yet accepted evidence.
 
 No local browser policy workaround or visual acceptance was performed. This code/bundle is not rolled out to the running website. Browser layout, keyboard/screen-reader evaluation and user acceptance remain open. The existing Access-owned ExcelJS large-chunk warning remains deferred. No AI training, model adoption, DB change, push, merge or deployment is part of this change.
+
+## Follow-up: named camera controls
+
+Wall tiles now expose named groups, and their real focus buttons retain the visible localized action plus the camera name, pressed state and a visible-focus style. The outer group is not a nested button or an extra keyboard stop. Pointer selection and independent Retry controls remain intact.
+
+Root watched the new semantic test fail before the change. The first affected run exposed an obsolete generic-name keyboard selector; Root also corrected the proposed button label to retain the visible action for Label-in-Name. Final four-file run:34 passes, including Space selection while Retry is blocked. Web TypeScript, four changed-file lint and production bundle v3 pass. No active capture/model/DB change was required.
+
+Agy p5 performed a bounded read-only cross-review. Its extra note gave a wrong source line and a nonexistent TTL constant; Root independently verified the actual scope guard and literal five-second limits and rejected those inaccurate details. Repeated Camera prefixes in group labels and browser-specific focus rendering remain polish/visual-review items, not falsely claimed complete from DOM tests.

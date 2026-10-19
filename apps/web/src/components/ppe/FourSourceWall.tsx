@@ -164,6 +164,7 @@ export function FourSourceWallTile({
 
   return (
     <div
+      role="group"
       data-testid={`wall-tile-${camera.id}`}
       aria-label={t(isSelected ? 'ppe.wall.tileAriaFocused' : 'ppe.wall.tileAriaAvailable', {
         camera: camera.name || camera.code,
@@ -328,11 +329,13 @@ export function FourSourceWallTile({
           <button
             type="button"
             data-testid={`focus-btn-${camera.id}`}
+            aria-label={`${t(isSelected ? 'ppe.overview.selectedAria' : 'ppe.overview.selectTitle')}: ${camera.name || camera.code}`}
+            aria-pressed={isSelected}
             onClick={(e) => {
               e.stopPropagation();
               onSelect(camera.id);
             }}
-            className={`px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors cursor-pointer ${
+            className={`px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
               isSelected ? 'bg-white text-[#111111]' : 'bg-white/20 text-white hover:bg-white/40'
             }`}
           >
