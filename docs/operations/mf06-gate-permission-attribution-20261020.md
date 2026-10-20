@@ -38,6 +38,23 @@ read-only. These are controller/service/database calls, not socket HTTP or a
 concurrent revocation race. The fixture clears an empty permission set; real gate
 hardware and complete grant/replacement journeys are not accepted by this check.
 
+## Additional persisted grant journey, 21 October
+
+A fourth case now creates a synthetic Contractor participation and APPROVED
+assignment, grants a gate and replaces it using the exact current permission ID.
+Both database rows remain: the first is revoked by the actor and the replacement
+stays active, with exact row/gate/assignment/creator references. Retrying a stale
+permission ID returns409 and preserves both rows, policy, audit and journal.
+The two permitted writes each have an attributed SITE revision and no new gap.
+
+The first run had three passes and one fixture failure: it incorrectly demanded
+microsecond expiry after the existing TypeORM `Date` writer. The corrected
+assertion checks the retained millisecond expiry; no production precision change
+is claimed. Agy p8 reviews this additional case; it identifies an existing
+first-match assignment-selection limitation that this attribution fix does not
+change. Same actor performs grant/revoke, so distinct-actor attribution remains
+unverified. This synthetic journey is not gate hardware or whole access acceptance.
+
 Evidence: `D:/Ky9-FPT/SmartSiteData/runs/rea-product-references-20261018-v1/configuration-source-current-20261019-v1/agy-backend-ai-20261020-v1/gate-permissions-*`.
 
 No retained website data, current runtime, model, camera worker or cloud state is

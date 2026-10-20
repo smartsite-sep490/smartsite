@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { SITE_GATES } from '@smartsite/contracts';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
@@ -212,4 +213,86 @@ test('Gate permissions set rejects normalized actor/context mismatch with 403 an
     (error: { getStatus?: () => number }) => error.getStatus?.() === 401,
   );
   assert.deepEqual(await siteState(f.siteId, f.actorId), before);
+});
+
+test('Attributed gate grants replace exact permissions and reject stale edits without revoking current grants', async () => {
+  const f = await fixture();
+  const contractor = randomUUID(),
+    participation = randomUUID(),
+    assignment = randomUUID();
+  await db.query(
+    "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
+    [contractor],
+  );
+  await db.query(
+    "INSERT INTO contractor_site_participation(id,contractor_id,site_id,valid_from,valid_until) VALUES($1,$2,$3,clock_timestamp()-interval '2 days',clock_timestamp()+interval '3 days')",
+    [participation, contractor, f.siteId],
+  );
+  await db.query('UPDATE worker SET contractor_id=$2 WHERE id=$1', [f.workerId, contractor]);
+  await db.query(
+    "INSERT INTO worker_site_zone_assignment(id,worker_id,site_id,site_contractor_id,zone_ids,status,valid_from,valid_until,requested_by_user_id) VALUES($1,$2,$3,$4,ARRAY[$5::uuid],'APPROVED',clock_timestamp()-interval '1 day',clock_timestamp()+interval '1 day',$6)",
+    [assignment, f.workerId, f.siteId, participation, randomUUID(), f.actorId],
+  );
+  const context = { actorUserId: f.actorId, reauthorize: async () => {} };
+  const gapCount = (await db.query('SELECT count(*)::int AS n FROM authorization_history_gap'))[0]
+    .n;
+  assert.ok(SITE_GATES.length >= 2);
+  const first = await f.service.set(
+    f.actor,
+    f.siteId,
+    f.workerId,
+    {
+      gateIds: [SITE_GATES[0]!.id],
+      expectedPermissionIds: [],
+    },
+    context,
+  );
+  assert.equal(first.items.length, 1);
+  const second = await f.service.set(
+    f.actor,
+    f.siteId,
+    f.workerId,
+    {
+      gateIds: [SITE_GATES[1]!.id],
+      expectedPermissionIds: [first.items[0]!.id],
+    },
+    context,
+  );
+  assert.equal(second.items.length, 1);
+  assert.equal(second.items[0]!.gateId, SITE_GATES[1]!.id);
+  const permissions = () =>
+    db.query(
+      "SELECT id,gate_id,worker_assignment_id,created_by_user_id,revoked_by_user_id,revoked_at IS NOT NULL AS revoked,valid_until=date_trunc('milliseconds',(SELECT valid_until FROM worker_site_zone_assignment WHERE id=$2)) AS legacy_expiry_precision FROM worker_gate_permission WHERE worker_id=$1 ORDER BY id",
+      [f.workerId, assignment],
+    );
+  const stored = await permissions();
+  assert.equal(stored.length, 2);
+  for (const row of stored) {
+    assert.equal(row.worker_assignment_id, assignment);
+    assert.equal(row.created_by_user_id, f.actorId);
+    assert.equal(row.legacy_expiry_precision, true);
+    assert.equal(row.revoked, row.id === first.items[0]!.id);
+    assert.equal(row.revoked_by_user_id, row.revoked ? f.actorId : null);
+    assert.equal(row.id, row.revoked ? first.items[0]!.id : second.items[0]!.id);
+    assert.equal(row.gate_id, row.revoked ? SITE_GATES[0]!.id : SITE_GATES[1]!.id);
+  }
+  const beforeStale = await siteState(f.siteId, f.actorId);
+  await assert.rejects(
+    f.service.set(
+      f.actor,
+      f.siteId,
+      f.workerId,
+      {
+        gateIds: [],
+        expectedPermissionIds: [first.items[0]!.id],
+      },
+      context,
+    ),
+    (error: { getStatus?: () => number }) => error.getStatus?.() === 409,
+  );
+  assert.deepEqual(await permissions(), stored);
+  assert.deepEqual(await siteState(f.siteId, f.actorId), beforeStale);
+  assert.equal(beforeStale.commands.length, 2);
+  assert.equal(beforeStale.revisions.length, 2);
+  assert.equal(beforeStale.gaps, gapCount);
 });
