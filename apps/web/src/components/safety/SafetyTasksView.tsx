@@ -6,7 +6,6 @@ import {
   hasRole,
   text,
   deadline,
-  photo,
   date,
   label,
   fieldClass,
@@ -58,6 +57,7 @@ export function SafetyTasksView(p: WorkflowProps) {
   useTranslation();
 
   const manager = hasRole(p, 'SITE_MANAGER');
+  const [resultFile, setResultFile] = useState<File>();
   const [selected, setSelected] = useState(''),
     [status, setStatus] = useState(''),
     [assignedTo, setAssignedTo] = useState(''),
@@ -68,6 +68,7 @@ export function SafetyTasksView(p: WorkflowProps) {
     setSelected(id);
     setMobileDetail(true);
     setEditor(undefined);
+    setResultFile(undefined);
   });
   const list = useQuery({
     queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'tasks', status, assignedTo, offset],
@@ -94,6 +95,7 @@ export function SafetyTasksView(p: WorkflowProps) {
   };
   const open = (next: Editor) => {
     mutation.reset();
+    setResultFile(undefined);
     setEditor(next);
   };
   const command = (
@@ -114,6 +116,17 @@ export function SafetyTasksView(p: WorkflowProps) {
   };
   const current = detail.data,
     mine = current?.assignedTo === p.user.id && hasRole(p, 'SAFETY_OFFICER');
+  const editorBlocked =
+    !!editor &&
+    editor !== 'create' &&
+    (!current ||
+      (editor === 'submit'
+        ? !mine || current.status !== 'IN_PROGRESS'
+        : editor === 'review'
+          ? !manager || current.status !== 'COMPLETED' || current.assignedTo === p.user.id
+          : !manager || ['VERIFIED', 'CANCELLED'].includes(current.status)));
+  const editorDisabled =
+    editorBlocked || (editor !== 'create' && (detail.isFetching || detail.isError));
   return (
     <div className="space-y-5">
       <div
@@ -377,12 +390,17 @@ export function SafetyTasksView(p: WorkflowProps) {
         <Dialog
           title={titles[editor]}
           pending={mutation.isPending}
-          onClose={() => setEditor(undefined)}
-          error={mutation.error}
+          onClose={() => {
+            setEditor(undefined);
+            setResultFile(undefined);
+          }}
+          error={mutation.error ?? (editor !== 'create' ? detail.error : undefined)}
           reload={reload}
         >
+          {editorBlocked && <p role="alert">{tr('safety_ux.action_no_longer_available')}</p>}
           <CommandForm
             pending={mutation.isPending}
+            disabled={editorDisabled}
             label={
               editor === 'create'
                 ? tr('common.create_task')
@@ -391,6 +409,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                   : titles[editor]
             }
             onSubmit={(form) => {
+              if (editorDisabled) return;
               if (editor === 'create') {
                 const input: Omit<CreateSafetyTaskCommand, 'commandId'> = {
                   kind: text(form, 'kind') as SafetyTaskKind,
@@ -421,7 +440,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                     expectedVersion: current.version,
                     resultDescription: text(form, 'resultDescription'),
                   } as SubmitSafetyResultCommand,
-                  photo(form),
+                  resultFile,
                 );
               else
                 command(
@@ -480,7 +499,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                 </details>
               </>
             )}
-            {editor === 'submit' && <ResultFields />}
+            {editor === 'submit' && <ResultFields onFileChange={setResultFile} />}
             {editor === 'review' && (
               <>
                 <label className="block text-sm font-semibold">
