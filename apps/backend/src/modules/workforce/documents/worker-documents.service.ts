@@ -24,6 +24,10 @@ import {
 } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
+import {
   WorkerComplianceProfileEntity,
   WorkerDocumentEntity,
   WorkerIdentityImageEntity,
@@ -547,92 +551,111 @@ export class WorkerDocumentsService {
     workerId: string,
     documentId: string,
     input: ReviewWorkerDocumentCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const value = command(ReviewWorkerDocumentDto, input);
-    return this.source.transaction(async (manager) => {
-      const worker = await this.access(manager, actor, siteId, workerId, 'review', true);
-      const repo = manager.getRepository(WorkerDocumentEntity);
-      const doc = await repo
-        .createQueryBuilder('d')
-        .addSelect('d.file')
-        .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId })
-        .getOne();
-      if (!doc) missing();
-      if (doc.status !== 'PENDING' || doc.version !== value.expectedVersion)
-        conflict('Document changed. Reload before reviewing.');
-      if (value.approve) {
-        const healthExpiry =
-          doc.kind === 'HEALTH_CERTIFICATE' ? healthCertificateExpiry(value.issuedOn) : null;
-        if (
-          doc.kind === 'HEALTH_CERTIFICATE' &&
-          value.expiresOn !== undefined &&
-          value.expiresOn !== healthExpiry
-        )
-          invalid('Health certificate expiry must be one year after the examination date.');
-        const expiresOn = doc.kind === 'HEALTH_CERTIFICATE' ? healthExpiry : value.expiresOn;
-        const profile = await manager
-          .getRepository(WorkerComplianceProfileEntity)
-          .findOneBy({ workerId });
-        if (
-          profile?.identityRequired &&
-          (await manager.getRepository(WorkerIdentityImageEntity).countBy({ workerId })) !== 2
-        )
-          conflict('Upload both citizen ID images before review');
-        if (
-          !isCalendarDate(value.issuedOn) ||
-          !isCalendarDate(expiresOn) ||
-          value.issuedOn > complianceDate() ||
-          expiresOn < complianceDate() ||
-          expiresOn < value.issuedOn
-        )
-          invalid('Confirm valid issue and expiry dates against the original document');
-        await repo
-          .createQueryBuilder()
-          .update()
-          .set({ status: 'SUPERSEDED', version: () => 'version + 1' })
-          .where('worker_id=:workerId AND kind=:kind AND status=:status', {
-            workerId,
+    siteId = uuid(siteId);
+    if (context && uuid(context.actorUserId).toLowerCase() !== uuid(actor.id).toLowerCase())
+      forbidden();
+    return executeMainConfigurationCommand(
+      this.source,
+      context,
+      'WORKER_DOCUMENT_REVIEW',
+      { siteId, workerId, documentId, ...value },
+      async (manager) => {
+        const worker = await this.access(manager, actor, siteId, workerId, 'review', true);
+        const repo = manager.getRepository(WorkerDocumentEntity);
+        const doc = await repo
+          .createQueryBuilder('d')
+          .addSelect('d.file')
+          .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId })
+          .getOne();
+        if (!doc) missing();
+        if (doc.status !== 'PENDING' || doc.version !== value.expectedVersion)
+          conflict('Document changed. Reload before reviewing.');
+        if (value.approve) {
+          const healthExpiry =
+            doc.kind === 'HEALTH_CERTIFICATE' ? healthCertificateExpiry(value.issuedOn) : null;
+          if (
+            doc.kind === 'HEALTH_CERTIFICATE' &&
+            value.expiresOn !== undefined &&
+            value.expiresOn !== healthExpiry
+          )
+            invalid('Health certificate expiry must be one year after the examination date.');
+          const expiresOn = doc.kind === 'HEALTH_CERTIFICATE' ? healthExpiry : value.expiresOn;
+          const profile = await manager
+            .getRepository(WorkerComplianceProfileEntity)
+            .findOneBy({ workerId });
+          if (
+            profile?.identityRequired &&
+            (await manager.getRepository(WorkerIdentityImageEntity).countBy({ workerId })) !== 2
+          )
+            conflict('Upload both citizen ID images before review');
+          if (
+            !isCalendarDate(value.issuedOn) ||
+            !isCalendarDate(expiresOn) ||
+            value.issuedOn > complianceDate() ||
+            expiresOn < complianceDate() ||
+            expiresOn < value.issuedOn
+          )
+            invalid('Confirm valid issue and expiry dates against the original document');
+          await repo
+            .createQueryBuilder()
+            .update()
+            .set({ status: 'SUPERSEDED', version: () => 'version + 1' })
+            .where('worker_id=:workerId AND kind=:kind AND status=:status', {
+              workerId,
+              kind: doc.kind,
+              status: 'APPROVED',
+            })
+            .execute();
+          doc.issuedOn = value.issuedOn;
+          doc.expiresOn = expiresOn;
+        }
+        doc.status = value.approve ? 'APPROVED' : 'REJECTED';
+        doc.reviewedAt = new Date();
+        doc.reviewedBy = actor.id;
+        doc.reviewNote = value.reviewNote;
+        doc.version += 1;
+        await repo.save(doc);
+        await this.notifications.record(
+          manager,
+          worker,
+          doc,
+          value.approve ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
+        );
+        await auditAccess(
+          manager,
+          actor.id,
+          worker.siteId,
+          'WORKER_DOCUMENT_REVIEWED',
+          'worker',
+          worker.id,
+          value.reviewNote,
+          {
+            documentId: doc.id,
             kind: doc.kind,
-            status: 'APPROVED',
-          })
-          .execute();
-        doc.issuedOn = value.issuedOn;
-        doc.expiresOn = expiresOn;
-      }
-      doc.status = value.approve ? 'APPROVED' : 'REJECTED';
-      doc.reviewedAt = new Date();
-      doc.reviewedBy = actor.id;
-      doc.reviewNote = value.reviewNote;
-      doc.version += 1;
-      await repo.save(doc);
-      await this.notifications.record(
-        manager,
-        worker,
-        doc,
-        value.approve ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
-      );
-      await auditAccess(
-        manager,
-        actor.id,
-        worker.siteId,
-        'WORKER_DOCUMENT_REVIEWED',
-        'worker',
-        worker.id,
-        value.reviewNote,
-        {
-          documentId: doc.id,
-          kind: doc.kind,
-          status: doc.status,
-          issuedOn: doc.issuedOn,
-          expiresOn: doc.expiresOn,
-        },
-      );
-      await manager.query(
-        'UPDATE site SET access_policy_version=access_policy_version+1 WHERE id=$1',
-        [siteId],
-      );
-      return response(doc);
-    });
+            status: doc.status,
+            issuedOn: doc.issuedOn,
+            expiresOn: doc.expiresOn,
+          },
+        );
+        await manager.query(
+          'UPDATE site SET access_policy_version=access_policy_version+1 WHERE id=$1',
+          [siteId],
+        );
+        return response(doc);
+      },
+      context
+        ? async (manager) => {
+            const roles = await manager.query(
+              "SELECT id FROM user_role_assignment WHERE user_id=$1 AND role='SAFETY_OFFICER' AND site_id=$2 FOR SHARE",
+              [actor.id, siteId],
+            );
+            if (!roles.length) forbidden();
+          }
+        : undefined,
+    );
   }
   async checkQuality(
     actor: WorkforceActor,
