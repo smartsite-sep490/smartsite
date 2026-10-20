@@ -14,6 +14,8 @@ import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
 import { configurationCommandContext } from '../../src/modules/auth/configuration-command-context.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
 import { MainAuthorityBaselineService } from '../../src/modules/zones/main-authority-baseline.service.js';
+import { MAIN_AUTHORITY_SOURCES } from '../../src/common/configuration/main-authority-sources.js';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 import type { MainConfigurationCommandContext } from '../../src/common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 
@@ -29,7 +31,7 @@ after(async () => {
   await database.dispose();
 });
 
-const EXACT_15_SOURCE_KINDS = [
+const EXACT_15_V1_SOURCE_KINDS = [
   'USER_ACCOUNT',
   'USER_ROLE',
   'SITE',
@@ -45,6 +47,27 @@ const EXACT_15_SOURCE_KINDS = [
   'ZONE_POLICY',
   'CAMERA',
   'REGION',
+] as const;
+
+const EXACT_18_SOURCE_KINDS = [
+  'USER_ACCOUNT',
+  'USER_ROLE',
+  'SITE',
+  'WORKER',
+  'CONTRACTOR',
+  'REPRESENTATIVE_GRANT',
+  'REPRESENTATIVE_ASSIGNMENT',
+  'PARTICIPATION',
+  'ASSIGNMENT',
+  'CONTRACTOR_PERMISSION',
+  'WORKER_PERMISSION',
+  'ZONE_GRANT',
+  'ZONE_POLICY',
+  'CAMERA',
+  'REGION',
+  'TEAM',
+  'TEAM_MEMBERSHIP',
+  'TEAM_PERMISSION',
 ] as const;
 
 const FORBIDDEN_FIELDS = [
@@ -79,6 +102,9 @@ interface FixtureData {
   zoneGrant: string;
   repGrant: string;
   repAssignment: string;
+  team: string;
+  teamMembership: string;
+  teamPermission: string;
   seedMicroTimestamp: string;
 }
 
@@ -102,6 +128,9 @@ async function fixture(): Promise<FixtureData> {
     zoneGrant: randomUUID(),
     repGrant: randomUUID(),
     repAssignment: randomUUID(),
+    team: randomUUID(),
+    teamMembership: randomUUID(),
+    teamPermission: randomUUID(),
     // Genuine Date with 6-microsecond precision for PostgreSQL text preservation test
     seedMicroTimestamp: '2026-10-12 00:00:00.000001+00',
   };
@@ -205,6 +234,24 @@ async function fixture(): Promise<FixtureData> {
     [f.zoneGrant, f.site, f.zone, f.worker, f.seedMicroTimestamp],
   );
 
+  // 16. TEAM (contractor_team)
+  await db.query(
+    "INSERT INTO contractor_team(id,site_id,contractor_id,name,normalized_name,description,is_active,version,created_by,created_at,updated_at) VALUES($1,$2,$3,'Synthetic Team',$1::uuid::text,'',true,1,$4,$5::timestamptz,$5::timestamptz)",
+    [f.team, f.site, f.contractor, f.admin, f.seedMicroTimestamp],
+  );
+
+  // 17. TEAM_MEMBERSHIP (contractor_team_membership)
+  await db.query(
+    "INSERT INTO contractor_team_membership(id,site_id,contractor_id,team_id,worker_id,joined_at,left_at,assigned_by,reason) VALUES($1,$2,$3,$4,$5,$6::timestamptz,NULL,$7,'Synthetic team assignment')",
+    [f.teamMembership, f.site, f.contractor, f.team, f.worker, f.seedMicroTimestamp, f.admin],
+  );
+
+  // 18. TEAM_PERMISSION (team_zone_permission)
+  await db.query(
+    "INSERT INTO team_zone_permission(id,team_id,contractor_zone_permission_id,valid_from,valid_until,granted_by,revoked_at,created_at) VALUES($1,$2,$3,$4::timestamptz,$4::timestamptz + interval '1 day',$5,NULL,$4::timestamptz)",
+    [f.teamPermission, f.team, f.contractorPermission, f.seedMicroTimestamp, f.admin],
+  );
+
   return f;
 }
 
@@ -265,21 +312,35 @@ function assertNoForbiddenFieldsInSnapshot(snapshot: Record<string, unknown>) {
 
 async function assertBaselineTableExistsInCurrentSchema() {
   const tableCheck = await db.query(
-    "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'mf06_authority_baseline'",
+    "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'authorization_history_baseline'",
   );
   assert.equal(
     tableCheck.length,
     1,
-    'mf06_authority_baseline table must exist in current_schema()',
+    'authorization_history_baseline table must exist in current_schema()',
   );
 }
 
 // -----------------------------------------------------------------------------
-// Case 1: Positive bound origin + witness / exact 15 kinds / current rows /
-//         source preserved / state STAGING / control NULL / no READY
+// Case 1: Positive bound origin + witness / exact 18 V2 kinds (with V1 15-kind
+//         profile preserved separately) / current rows / source preserved /
+//         state STAGING / control NULL / no READY
 // -----------------------------------------------------------------------------
 
-test('Baseline capture produces consistent immutable STAGING snapshot across 15 sources with bound command and witness', async () => {
+test('Baseline capture produces consistent immutable STAGING snapshot across 18 sources with bound command and witness', async () => {
+  // Explicit V1 vs V2 profile separation: V1 remains 15 sources for historical epochs,
+  // while fresh canonical70 capture registers and snapshots the 18-source V2 baseline.
+  assert.equal(MAIN_AUTHORITY_SOURCES.length, 15);
+  assert.deepEqual(
+    MAIN_AUTHORITY_SOURCES.map((s) => s[0]),
+    EXACT_15_V1_SOURCE_KINDS,
+  );
+  assert.equal(MAIN_AUTHORITY_V2_SOURCES.length, 18);
+  assert.deepEqual(
+    MAIN_AUTHORITY_V2_SOURCES.map((s) => s[0]),
+    EXACT_18_SOURCE_KINDS,
+  );
+
   const f = await fixture();
   const authCtx = await createAuthContext(f.adminUsername, f.adminPassword);
   const service = new MainAuthorityBaselineService(db);
@@ -305,7 +366,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
   assert.ok(record.rowCount > 0, 'Total rowCount must be greater than zero');
   assert.ok(typeof record.capturedAt === 'string', 'capturedAt must be a valid timestamp string');
 
-  // 2. Snapshot structure and exactly 15 source kinds
+  // 2. Snapshot structure and exactly 18 V2 source kinds
   const snapshot = record.snapshot as {
     version: string;
     epochId: string;
@@ -325,10 +386,10 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
   assert.equal(snapshot.capturedAt, record.capturedAt);
   assert.equal(snapshot.declaredWriterManifestHash, validManifestHash);
   assert.equal(snapshot.sourceRegistryHash, record.sourceRegistryHash);
-  assert.equal(snapshot.sources.length, 15, 'Snapshot must contain exactly 15 source kinds');
+  assert.equal(snapshot.sources.length, 18, 'Snapshot must contain exactly 18 V2 source kinds');
 
   const capturedKinds = snapshot.sources.map((s) => s.sourceKind);
-  for (const expectedKind of EXACT_15_SOURCE_KINDS) {
+  for (const expectedKind of EXACT_18_SOURCE_KINDS) {
     assert.ok(
       capturedKinds.includes(expectedKind),
       `Missing expected source kind: ${expectedKind}`,
@@ -386,11 +447,73 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
 
   const assignmentSource = snapshot.sources.find((s) => s.sourceKind === 'ASSIGNMENT');
   assert.ok(assignmentSource);
-  assert.ok(assignmentSource.rows.some((r) => r.id === f.assignment && r.worker_id === f.worker));
+  assert.ok(
+    assignmentSource.rows.some(
+      (r) =>
+        r.id === f.assignment &&
+        r.worker_id === f.worker &&
+        Array.isArray(r.zone_ids) &&
+        r.zone_ids.includes(f.zone),
+    ),
+  );
+
+  const teamSource = snapshot.sources.find((s) => s.sourceKind === 'TEAM');
+  assert.ok(teamSource);
+  assert.deepEqual(teamSource.fields, ['id', 'site_id', 'contractor_id', 'is_active']);
+  const seededTeamRow = teamSource.rows.find((r) => r.id === f.team);
+  assert.ok(seededTeamRow, 'Seeded team row must exist in TEAM snapshot');
+  assert.equal(seededTeamRow.site_id, f.site);
+  assert.equal(seededTeamRow.contractor_id, f.contractor);
+  assert.equal(seededTeamRow.is_active, true);
+  assert.equal('leader_worker_id' in seededTeamRow, false);
+  assert.equal('version' in seededTeamRow, false);
+
+  const teamMembershipSource = snapshot.sources.find((s) => s.sourceKind === 'TEAM_MEMBERSHIP');
+  assert.ok(teamMembershipSource);
+  assert.deepEqual(teamMembershipSource.fields, [
+    'id',
+    'site_id',
+    'contractor_id',
+    'team_id',
+    'worker_id',
+    'joined_at',
+    'left_at',
+  ]);
+  assert.ok(
+    teamMembershipSource.rows.some(
+      (r) =>
+        r.id === f.teamMembership &&
+        r.site_id === f.site &&
+        r.contractor_id === f.contractor &&
+        r.team_id === f.team &&
+        r.worker_id === f.worker &&
+        r.left_at === null,
+    ),
+  );
+
+  const teamPermissionSource = snapshot.sources.find((s) => s.sourceKind === 'TEAM_PERMISSION');
+  assert.ok(teamPermissionSource);
+  assert.deepEqual(teamPermissionSource.fields, [
+    'id',
+    'team_id',
+    'contractor_zone_permission_id',
+    'valid_from',
+    'valid_until',
+    'revoked_at',
+  ]);
+  assert.ok(
+    teamPermissionSource.rows.some(
+      (r) =>
+        r.id === f.teamPermission &&
+        r.team_id === f.team &&
+        r.contractor_zone_permission_id === f.contractorPermission &&
+        r.revoked_at === null,
+    ),
+  );
 
   // 5. Database invariants: epoch STAGING, baseline_at populated, control NULL, no READY
   const epochRows = await db.query(
-    'SELECT epoch_id, state, baseline_at FROM mf06_authority_epoch WHERE epoch_id = $1',
+    'SELECT epoch_id, state, baseline_at FROM authorization_history_epoch WHERE epoch_id = $1',
     [record.epochId],
   );
   assert.equal(epochRows.length, 1);
@@ -401,7 +524,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
   );
 
   const controlRows = await db.query(
-    'SELECT epoch_id FROM mf06_authority_control WHERE singleton = 1',
+    'SELECT epoch_id FROM authorization_history_control WHERE singleton = 1',
   );
   assert.equal(
     controlRows[0].epoch_id,
@@ -411,7 +534,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
 
   // 6. Command bound and commit witness verified (default operation name MAIN_AUTHORITY_BASELINE)
   const commandRows = await db.query(
-    'SELECT command_id, actor_user_id, operation FROM mf06_authority_command WHERE command_id = $1',
+    'SELECT command_id, actor_user_id, operation FROM authorization_history_command WHERE command_id = $1',
     [record.commandId],
   );
   assert.equal(commandRows.length, 1);
@@ -419,7 +542,7 @@ test('Baseline capture produces consistent immutable STAGING snapshot across 15 
   assert.equal(commandRows[0].operation, 'MAIN_AUTHORITY_BASELINE');
 
   const witnessRows = await db.query(
-    'SELECT command_id FROM mf06_authority_commit_witness WHERE command_id = $1',
+    'SELECT command_id FROM authorization_history_commit_receipt WHERE command_id = $1',
     [record.commandId],
   );
   assert.equal(witnessRows.length, 1, 'Commit witness must be recorded for baseline command');
@@ -452,7 +575,7 @@ test('Snapshot artifact remains immutable in database when source tables are sub
   await assertBaselineTableExistsInCurrentSchema();
 
   const baselineRows = await db.query(
-    'SELECT snapshot_hash, snapshot_json FROM mf06_authority_baseline WHERE epoch_id = $1',
+    'SELECT snapshot_hash, snapshot_json FROM authorization_history_baseline WHERE epoch_id = $1',
     [initialRecord.epochId],
   );
   assert.equal(baselineRows.length, 1);
@@ -494,8 +617,9 @@ test('Capture rejects invalid declaredWriterManifestHash formats with 400 Bad Re
   ];
 
   // Capture count before to verify no increment in shared schema
-  const beforeEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const beforeEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
 
   for (const invalid of invalidManifests) {
     await assert.rejects(
@@ -511,8 +635,9 @@ test('Capture rejects invalid declaredWriterManifestHash formats with 400 Bad Re
   }
 
   // Ensure zero epoch increments occurred
-  const afterEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const afterEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
   assert.equal(afterEpochs, beforeEpochs, 'Epoch count must not increase on validation failure');
 });
 
@@ -605,8 +730,9 @@ test('Interrupted source registry or disabled source capture fails closed with 5
   const service = new MainAuthorityBaselineService(db);
   const manifest = 'cafebebe01234567'.repeat(4);
 
-  const beforeEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const beforeEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
 
   // Temporarily disable one source trigger
   await db.query('ALTER TABLE app_user DISABLE TRIGGER trg_mf06_capture_app_user');
@@ -618,8 +744,9 @@ test('Interrupted source registry or disabled source capture fails closed with 5
     );
 
     // Verify zero orphan epochs were retained
-    const afterEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-      .n as number;
+    const afterEpochs = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+    )[0].n as number;
     assert.equal(afterEpochs, beforeEpochs, 'Epoch count must not increase on capture failure');
   } finally {
     await db.query('ALTER TABLE app_user ENABLE TRIGGER trg_mf06_capture_app_user');
@@ -635,23 +762,23 @@ test('Direct SQL mutation guards prevent raw UPDATE, DELETE, or TRUNCATE on base
 
   // Attempting raw UPDATE
   await assert.rejects(
-    async () => db.query("UPDATE mf06_authority_baseline SET snapshot_hash = 'tampered'"),
+    async () => db.query("UPDATE authorization_history_baseline SET snapshot_hash = 'tampered'"),
     /immutable/i,
-    'Direct UPDATE on mf06_authority_baseline must be blocked by immutable guard',
+    'Direct UPDATE on authorization_history_baseline must be blocked by immutable guard',
   );
 
   // Attempting raw DELETE
   await assert.rejects(
-    async () => db.query('DELETE FROM mf06_authority_baseline'),
+    async () => db.query('DELETE FROM authorization_history_baseline'),
     /immutable/i,
-    'Direct DELETE on mf06_authority_baseline must be blocked by immutable guard',
+    'Direct DELETE on authorization_history_baseline must be blocked by immutable guard',
   );
 
   // Attempting raw TRUNCATE
   await assert.rejects(
-    async () => db.query('TRUNCATE mf06_authority_baseline'),
+    async () => db.query('TRUNCATE authorization_history_baseline'),
     /immutable/i,
-    'Direct TRUNCATE on mf06_authority_baseline must be blocked by immutable guard',
+    'Direct TRUNCATE on authorization_history_baseline must be blocked by immutable guard',
   );
 });
 
@@ -680,7 +807,7 @@ test('Service signature and database default enforce DB-owned clock and source g
   );
 
   const epochRows = await db.query(
-    'SELECT baseline_at FROM mf06_authority_epoch WHERE epoch_id = $1',
+    'SELECT baseline_at FROM authorization_history_epoch WHERE epoch_id = $1',
     [record.epochId],
   );
   assert.equal(epochRows.length, 1);
@@ -705,13 +832,14 @@ test('Synthetic baseline insert trigger failure atomically rolls back authority 
 
   await assertBaselineTableExistsInCurrentSchema();
 
-  const beforeEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-    .n as number;
+  const beforeEpochs = (
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+  )[0].n as number;
   const beforeBaselines = (
-    await db.query('SELECT count(*)::int AS n FROM mf06_authority_baseline')
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_baseline')
   )[0].n as number;
   const beforeCommands = (
-    await db.query('SELECT count(*)::int AS n FROM mf06_authority_command')
+    await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
   )[0].n as number;
 
   // Install actual synthetic PostgreSQL BEFORE INSERT trigger to induce an in-transaction write failure
@@ -721,8 +849,8 @@ test('Synthetic baseline insert trigger failure atomically rolls back authority 
       RAISE EXCEPTION 'Synthetic baseline insert failure' USING ERRCODE = '23514';
     END;
     $$;
-    DROP TRIGGER IF EXISTS trg_test_fail_baseline ON mf06_authority_baseline;
-    CREATE TRIGGER trg_test_fail_baseline BEFORE INSERT ON mf06_authority_baseline
+    DROP TRIGGER IF EXISTS trg_test_fail_baseline ON authorization_history_baseline;
+    CREATE TRIGGER trg_test_fail_baseline BEFORE INSERT ON authorization_history_baseline
     FOR EACH ROW EXECUTE FUNCTION trg_test_fail_baseline_fn();
   `);
 
@@ -733,20 +861,23 @@ test('Synthetic baseline insert trigger failure atomically rolls back authority 
     );
 
     // Verify zero count difference across command, epoch, and baseline (full atomic rollback)
-    const afterEpochs = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0]
-      .n as number;
+    const afterEpochs = (
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch')
+    )[0].n as number;
     const afterBaselines = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_baseline')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_baseline')
     )[0].n as number;
     const afterCommands = (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_command')
+      await db.query('SELECT count(*)::int AS n FROM authorization_history_command')
     )[0].n as number;
 
     assert.equal(afterEpochs, beforeEpochs, 'Epoch must be rolled back on baseline insert failure');
     assert.equal(afterBaselines, beforeBaselines, 'Baseline must be rolled back on insert failure');
     assert.equal(afterCommands, beforeCommands, 'Command must be rolled back on insert failure');
   } finally {
-    await db.query('DROP TRIGGER IF EXISTS trg_test_fail_baseline ON mf06_authority_baseline');
+    await db.query(
+      'DROP TRIGGER IF EXISTS trg_test_fail_baseline ON authorization_history_baseline',
+    );
     await db.query('DROP FUNCTION IF EXISTS trg_test_fail_baseline_fn()');
   }
 });
@@ -765,7 +896,7 @@ test('Post-commit witness insertion failure retains committed STAGING baseline w
 
   const originalQuery = failingDb.query.bind(failingDb);
   failingDb.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {
-    if (sql.startsWith('INSERT INTO mf06_authority_commit_witness')) {
+    if (sql.startsWith('INSERT INTO authorization_history_commit_receipt')) {
       throw new Error('Synthetic post-commit witness insertion failure');
     }
     return originalQuery(sql, params, runner);
@@ -785,9 +916,10 @@ test('Post-commit witness insertion failure retains committed STAGING baseline w
       'witnessConfirmed must be false on witness failure',
     );
 
-    const epochRows = await db.query('SELECT state FROM mf06_authority_epoch WHERE epoch_id = $1', [
-      record.epochId,
-    ]);
+    const epochRows = await db.query(
+      'SELECT state FROM authorization_history_epoch WHERE epoch_id = $1',
+      [record.epochId],
+    );
     assert.equal(epochRows.length, 1);
     assert.equal(epochRows[0].state, 'STAGING', 'Committed baseline epoch must remain intact');
   } catch (err) {

@@ -40,10 +40,10 @@ async function fixture() {
 async function journalCounts() {
   return (
     await db.query(`SELECT
-    (SELECT count(*)::int FROM mf06_authority_command) AS commands,
-    (SELECT count(*)::int FROM mf06_authority_fact) AS facts,
-    (SELECT count(*)::int FROM mf06_authority_gap) AS gaps,
-    (SELECT count(*)::int FROM mf06_authority_commit_witness) AS witnesses`)
+    (SELECT count(*)::int FROM authorization_history_command) AS commands,
+    (SELECT count(*)::int FROM authorization_history_revision) AS facts,
+    (SELECT count(*)::int FROM authorization_history_gap) AS gaps,
+    (SELECT count(*)::int FROM authorization_history_commit_receipt) AS witnesses`)
   )[0];
 }
 
@@ -92,20 +92,20 @@ for (const [label, kind, table, fields] of invalidMasks) {
   test(`rejects ${label} before authenticated or actorless writes and journal changes`, async () => {
     const f = await fixture();
     const [original] = await db.query(
-      'SELECT fields FROM mf06_authority_source WHERE source_kind=$1',
+      'SELECT fields FROM authorization_history_source WHERE source_kind=$1',
       [kind],
     );
     // Simulate an already-damaged catalog only in this test-owned schema. The
     // canonical source trigger remains installed/enabled throughout the calls.
     await db.query(
-      'ALTER TABLE mf06_authority_source DISABLE TRIGGER trg_mf06_authority_source_immutable',
+      'ALTER TABLE authorization_history_source DISABLE TRIGGER trg_mf06_authority_source_immutable',
     );
-    await db.query('UPDATE mf06_authority_source SET fields=$1 WHERE source_kind=$2', [
+    await db.query('UPDATE authorization_history_source SET fields=$1 WHERE source_kind=$2', [
       [...fields],
       kind,
     ]);
     await db.query(
-      'ALTER TABLE mf06_authority_source ENABLE TRIGGER trg_mf06_authority_source_immutable',
+      'ALTER TABLE authorization_history_source ENABLE TRIGGER trg_mf06_authority_source_immutable',
     );
     try {
       const beforeCounts = await journalCounts();
@@ -147,14 +147,14 @@ for (const [label, kind, table, fields] of invalidMasks) {
       );
     } finally {
       await db.query(
-        'ALTER TABLE mf06_authority_source DISABLE TRIGGER trg_mf06_authority_source_immutable',
+        'ALTER TABLE authorization_history_source DISABLE TRIGGER trg_mf06_authority_source_immutable',
       );
-      await db.query('UPDATE mf06_authority_source SET fields=$1 WHERE source_kind=$2', [
+      await db.query('UPDATE authorization_history_source SET fields=$1 WHERE source_kind=$2', [
         original.fields,
         kind,
       ]);
       await db.query(
-        'ALTER TABLE mf06_authority_source ENABLE TRIGGER trg_mf06_authority_source_immutable',
+        'ALTER TABLE authorization_history_source ENABLE TRIGGER trg_mf06_authority_source_immutable',
       );
     }
   });
@@ -162,6 +162,10 @@ for (const [label, kind, table, fields] of invalidMasks) {
 
 test('canonical all-source and selected-source masks accept a real typed permission change', async () => {
   const f = await fixture();
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM authorization_history_source'))[0].n,
+    18,
+  );
   assert.equal(await hasMainAuthorityCapture(db.manager), true);
   assert.equal(await hasMainAuthorityCapture(db.manager, ['zone']), true);
   const beforeCounts = await journalCounts();

@@ -90,6 +90,8 @@ function policy(result: Result, zone: string) {
   assert.equal(result.status, 'RECONSTRUCTED');
   assert.equal(result.authorityCoverageEstablished, false);
   assert.equal(result.identityEstablished, false);
+  assert.equal(result.archive!.format, 'MF06_MAIN_AUTHORITY_ARCHIVE_V2');
+  assert.equal(result.archive!.payload.sources.length, 18);
   return result
     .archive!.payload.sources.find((s) => s.sourceKind === 'ZONE_POLICY')!
     .rows.find((r) => r.id === zone)!.restriction_policy;
@@ -110,12 +112,13 @@ test('reconstructs canonical MAIN baseline after witness without READY or identi
   const result = await read(f.input(await now()));
   assert.equal(policy(result, f.zone), 'AUTHORIZATION_REQUIRED');
   assert.equal(
-    (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0].epoch_id,
+    (await db.query('SELECT epoch_id FROM authorization_history_control WHERE singleton=1'))[0]
+      .epoch_id,
     null,
   );
   assert.equal(
     (
-      await db.query('SELECT state FROM mf06_authority_epoch WHERE epoch_id=$1', [
+      await db.query('SELECT state FROM authorization_history_epoch WHERE epoch_id=$1', [
         f.baseline.epochId,
       ])
     )[0].state,
@@ -133,7 +136,7 @@ test('does not round the observed/witness uncertainty boundary through JS Date',
   const f = await fixture();
   await change(f);
   const [fact] = await db.query(
-    `SELECT to_char(f.observed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS observed,to_char(w.confirmed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS confirmed FROM mf06_authority_fact f JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY f.revision DESC LIMIT 1`,
+    `SELECT to_char(f.observed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS observed,to_char(w.confirmed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS confirmed FROM authorization_history_revision f JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY f.revision DESC LIMIT 1`,
     [f.zone],
   );
   assert.equal((await read(f.input(fact.observed))).reason, 'COMMIT_TIME_UNCERTAIN');
@@ -151,7 +154,7 @@ test('attributed committed row without a post-commit witness is unavailable', as
   await db.transaction('SERIALIZABLE', async (manager) => {
     const command = randomUUID();
     await manager.query(
-      "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'ZONE_POLICY_UPDATE',$3)",
+      "INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'ZONE_POLICY_UPDATE',$3)",
       [command, f.actor, 'b'.repeat(64)],
     );
     await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [command]);
