@@ -1,6 +1,8 @@
 import type { DataSource, EntityManager } from 'typeorm';
 import { MAIN_AUTHORITY_V2_SOURCES } from '../../common/configuration/main-team-authority-sources.js';
 
+export class MainAuthoritySnapshotUnavailable extends Error {}
+
 /** Own the transaction so source writers drain before its first data snapshot. */
 export async function readMainAuthoritySnapshot<T>(
   source: DataSource,
@@ -14,7 +16,7 @@ export async function readMainAuthoritySnapshot<T>(
     schema.startsWith('pg_') ||
     schema === 'information_schema'
   )
-    throw new Error('Selected authority schema required');
+    throw new MainAuthoritySnapshotUnavailable('Selected authority schema required');
   const quote = (identifier: string) => '"' + identifier.replaceAll('"', '""') + '"';
   return source.transaction('SERIALIZABLE', async (manager) => {
     await manager.query("SET LOCAL lock_timeout='1500ms'");
@@ -27,10 +29,12 @@ export async function readMainAuthoritySnapshot<T>(
     // Frozen capture profiles use the schema-only path; reject pooled temp namespaces
     // instead of changing that profile or allowing implicit temporary-table shadowing.
     const [temporary] = await manager.query('SELECT pg_catalog.pg_my_temp_schema()<>0 AS present');
-    if (temporary?.present !== false) throw new Error('Temporary authority namespace unavailable');
+    if (temporary?.present !== false)
+      throw new MainAuthoritySnapshotUnavailable('Temporary authority namespace unavailable');
     await manager.query("SELECT set_config('search_path',quote_ident($1),true)", [schema]);
     const [selected] = await manager.query('SELECT current_schema()=$1::text AS valid', [schema]);
-    if (selected?.valid !== true) throw new Error('Selected authority schema unavailable');
+    if (selected?.valid !== true)
+      throw new MainAuthoritySnapshotUnavailable('Selected authority schema unavailable');
     return operation(manager);
   });
 }

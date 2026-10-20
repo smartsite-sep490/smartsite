@@ -52,7 +52,7 @@ export async function hasMainAuthorityCapture(
         OR EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE n.nspname=current_schema() AND c.relname='authorization_history_control' AND t.tgname='trg_mf06_authority_control_update')
         OR EXISTS(SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
-          WHERE n.nspname=current_schema() AND c.relname='authorization_history_epoch' AND a.attname='activated_at' AND NOT a.attisdropped) AS cutover
+          WHERE n.nspname=current_schema() AND c.relname='authorization_history_epoch' AND a.attname IN ('activated_at','gapped_at') AND NOT a.attisdropped) AS cutover
     ),
     functions AS (
       SELECT * FROM jsonb_to_recordset($2::jsonb) AS f(name text,arguments text,return_type text,
@@ -81,12 +81,12 @@ export async function hasMainAuthorityCapture(
       ) cutover_triggers WHERE (SELECT cutover FROM capability)
     )
     SELECT current_setting('session_replication_role')='origin' AND
-      (NOT (SELECT cutover FROM capability) OR EXISTS(
-        SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+      (NOT (SELECT cutover FROM capability) OR (
+        SELECT count(*) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname=current_schema() AND c.relname='authorization_history_epoch'
-          AND a.attname='activated_at' AND NOT a.attisdropped AND a.atttypid='timestamptz'::regtype
+          AND a.attname IN ('activated_at','gapped_at') AND NOT a.attisdropped AND a.atttypid='timestamptz'::regtype
           AND NOT a.attnotnull AND a.attgenerated='' AND a.attidentity=''
-          AND NOT EXISTS(SELECT 1 FROM pg_attrdef d WHERE d.adrelid=c.oid AND d.adnum=a.attnum))) AND
+          AND NOT EXISTS(SELECT 1 FROM pg_attrdef d WHERE d.adrelid=c.oid AND d.adnum=a.attnum))=2) AND
       -- Match every journal function, including helpers used by capture/baseline
       -- and response guards. Same-name overloads cannot silently change dispatch.
       (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace

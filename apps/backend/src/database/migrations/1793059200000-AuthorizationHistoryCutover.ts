@@ -50,12 +50,12 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
         END LOOP;
         IF (SELECT count(*) FROM authorization_history_source)<>18
           OR (SELECT count(*) FROM authorization_history_control WHERE singleton=1 AND epoch_id IS NULL)<>1
-          OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state='READY') THEN
+          OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state IN ('READY','GAPPED')) THEN
           RAISE EXCEPTION 'Predecessor control/source/epoch state does not match pre-cutover canonical70' USING ERRCODE='23514';
         END IF;
         IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='authorization_history_epoch'::regclass
-          AND attname='activated_at' AND NOT attisdropped) THEN
-          RAISE EXCEPTION 'Unexpected predecessor activation column' USING ERRCODE='23514';
+          AND attname IN ('activated_at','gapped_at') AND NOT attisdropped) THEN
+          RAISE EXCEPTION 'Unexpected predecessor activation or gap column' USING ERRCODE='23514';
         END IF;
         IF EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
           WHERE n.nspname=owned_schema AND p.proname='mf06_authority_control_guard')
@@ -90,9 +90,25 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
       END $precheck$;
     `);
 
-    await runner.query(`ALTER TABLE authorization_history_epoch ADD COLUMN activated_at timestamptz,
-      ADD CONSTRAINT chk_authorization_history_activation_time CHECK(activated_at IS NULL OR
-        (baseline_at IS NOT NULL AND activated_at>=baseline_at))`);
+    await runner.query(`ALTER TABLE authorization_history_epoch
+      ADD COLUMN activated_at timestamptz,
+      ADD COLUMN gapped_at timestamptz,
+      ADD CONSTRAINT chk_authorization_history_activation_time CHECK(
+        (activated_at IS NULL OR (baseline_at IS NOT NULL AND activated_at>=baseline_at))
+        AND (gapped_at IS NULL OR (
+          gapped_at>=started_at
+          AND (baseline_at IS NULL OR gapped_at>=baseline_at)
+          AND (activated_at IS NULL OR gapped_at>=activated_at)
+        ))
+        AND (state<>'GAPPED' OR gapped_at IS NOT NULL)
+        AND (state NOT IN ('STAGING','READY') OR gapped_at IS NULL)
+        AND (closed_at IS NULL OR (
+          closed_at>=started_at
+          AND (baseline_at IS NULL OR closed_at>=baseline_at)
+          AND (activated_at IS NULL OR closed_at>=activated_at)
+          AND (gapped_at IS NULL OR closed_at>=gapped_at)
+        ))
+      )`);
     await runner.query(
       `CREATE OR REPLACE FUNCTION mf06_authority_epoch_guard() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path TO ${schemaPath} AS $fn$${CUTOVER_EPOCH_GUARD_BODY}$fn$`,
     );
@@ -148,8 +164,8 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
         END IF;
         LOCK TABLE authorization_history_control, authorization_history_epoch, authorization_history_baseline IN ACCESS EXCLUSIVE MODE;
         IF EXISTS(SELECT 1 FROM authorization_history_control WHERE epoch_id IS NOT NULL)
-          OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state IN ('READY','CLOSED') OR activated_at IS NOT NULL) THEN
-          RAISE EXCEPTION 'Cannot roll back controlled authority cutover after epoch adoption or retirement' USING ERRCODE='23514';
+          OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state IN ('READY','GAPPED','CLOSED') OR activated_at IS NOT NULL OR gapped_at IS NOT NULL) THEN
+          RAISE EXCEPTION 'Cannot roll back controlled authority cutover after epoch adoption, gap, or retirement' USING ERRCODE='23514';
         END IF;
         IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
           WHERE n.nspname=owned_schema AND p.proname='mf06_authority_epoch_guard'
@@ -173,7 +189,7 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
       `CREATE OR REPLACE FUNCTION mf06_authority_epoch_guard() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER AS $fn$${PREDECESSOR_EPOCH_GUARD_BODY}$fn$`,
     );
     await runner.query(
-      'ALTER TABLE authorization_history_epoch DROP CONSTRAINT chk_authorization_history_activation_time, DROP COLUMN activated_at',
+      'ALTER TABLE authorization_history_epoch DROP CONSTRAINT chk_authorization_history_activation_time, DROP COLUMN activated_at, DROP COLUMN gapped_at',
     );
     await runner.query(`
       DO $restorecheck$
@@ -184,7 +200,9 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
             AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex') IN ('${epochBeforeLf}','${epochBeforeCrlf}'))
           OR EXISTS(SELECT 1 FROM pg_proc WHERE pronamespace=current_schema()::regnamespace AND proname='mf06_authority_control_guard')
           OR EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
-            WHERE c.relnamespace=current_schema()::regnamespace AND t.tgname='trg_mf06_authority_control_update') THEN
+            WHERE c.relnamespace=current_schema()::regnamespace AND t.tgname='trg_mf06_authority_control_update')
+          OR EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='authorization_history_epoch'::regclass
+            AND attname IN ('activated_at','gapped_at') AND NOT attisdropped) THEN
           RAISE EXCEPTION 'Restored predecessor mf06_authority_epoch_guard profile mismatch' USING ERRCODE='23514';
         END IF;
       END $restorecheck$;

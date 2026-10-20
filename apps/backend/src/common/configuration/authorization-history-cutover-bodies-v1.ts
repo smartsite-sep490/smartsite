@@ -33,13 +33,15 @@ export const CUTOVER_EPOCH_GUARD_BODY = `
         expected_reg_hash text;
       BEGIN
         IF TG_OP='INSERT' THEN
-          IF NEW.state<>'STAGING' OR NEW.baseline_at IS NOT NULL OR NEW.closed_at IS NOT NULL OR NEW.activated_at IS NOT NULL THEN
+          IF NEW.state<>'STAGING' OR NEW.baseline_at IS NOT NULL OR NEW.closed_at IS NOT NULL
+            OR NEW.activated_at IS NOT NULL OR NEW.gapped_at IS NOT NULL THEN
             RAISE EXCEPTION 'Controlled authority cutover requires STAGING epoch insert' USING ERRCODE='23514';
           END IF;
           NEW.started_at:=clock_timestamp();
         ELSE
           IF pg_trigger_depth()=2 AND OLD.state='STAGING' AND NEW.state='STAGING'
             AND OLD.baseline_at IS NULL AND NEW.baseline_at IS NOT NULL
+            AND OLD.activated_at IS NULL AND OLD.gapped_at IS NULL
             AND (to_jsonb(NEW)-'baseline_at') IS NOT DISTINCT FROM (to_jsonb(OLD)-'baseline_at')
             AND EXISTS(SELECT 1 FROM authorization_history_baseline b WHERE b.epoch_id=NEW.epoch_id
               AND b.captured_at=NEW.baseline_at AND b.transaction_id=pg_current_xact_id()) THEN
@@ -47,6 +49,7 @@ export const CUTOVER_EPOCH_GUARD_BODY = `
           END IF;
           IF pg_trigger_depth()=2 AND OLD.state='STAGING' AND NEW.state='READY'
             AND OLD.baseline_at IS NOT NULL AND OLD.closed_at IS NULL
+            AND OLD.activated_at IS NULL AND OLD.gapped_at IS NULL
             AND NEW.writer_manifest_hash ~ '^[0-9a-f]{64}$'
             AND (to_jsonb(NEW)-'state') IS NOT DISTINCT FROM (to_jsonb(OLD)-'state')
             AND COALESCE(current_setting('smartsite.mf06_cutover_epoch',true),'')=NEW.epoch_id::text
@@ -97,6 +100,9 @@ export const CUTOVER_EPOCH_GUARD_BODY = `
             OR NEW.state NOT IN ('GAPPED','CLOSED') OR OLD.state='CLOSED' THEN
             RAISE EXCEPTION 'Authority epoch provenance cannot be rewritten or promoted' USING ERRCODE='23514';
           END IF;
+          IF NEW.state='GAPPED' AND OLD.gapped_at IS NULL THEN
+            NEW.gapped_at:=clock_timestamp();
+          END IF;
           NEW.closed_at:=CASE WHEN NEW.state='CLOSED' THEN clock_timestamp() ELSE NULL END;
         END IF;
         RETURN NEW;
@@ -142,6 +148,7 @@ export const CUTOVER_CONTROL_GUARD_BODY = `
         END IF;
         SELECT * INTO ep FROM authorization_history_epoch WHERE epoch_id=NEW.epoch_id FOR UPDATE;
         IF NOT FOUND OR ep.state<>'STAGING' OR ep.baseline_at IS NULL OR ep.closed_at IS NOT NULL
+          OR ep.activated_at IS NOT NULL OR ep.gapped_at IS NOT NULL
           OR ep.writer_manifest_hash !~ '^[0-9a-f]{64}$' THEN
           RAISE EXCEPTION 'Controlled authority cutover target epoch must be a baselined STAGING epoch' USING ERRCODE='23514';
         END IF;

@@ -77,6 +77,10 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/auth/auth.service.ts',
   'modules/zones/main-authority-cutover.service.ts',
   'modules/zones/main-authority-cutover-release.ts',
+  'modules/zones/main-authority-read-snapshot.ts',
+  'modules/zones/main-authority-captured-state.reader.ts',
+  'modules/zones/main-authority-archive-codec.ts',
+  'modules/zones/main-qualified-authority.reader.ts',
 ].map((path) => `apps/backend/src/${path}`);
 
 export const MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES = MAIN_AUTHORITY_CUTOVER_RELEASE_FILES.map(
