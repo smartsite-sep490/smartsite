@@ -154,6 +154,8 @@ test('malformed backend invocation also fails closed despite matching transport 
     { trackId: NaN },
     { capturedAt: 'yesterday' },
     { requestRevision: 0 },
+    { frameSha256: 'c'.repeat(64) + '\n' },
+    { bindingDigest: 'a'.repeat(64) + '\n' },
   ]) {
     const malformed = { ...input, ...changed } as SafetyFaceInvocation;
     assert.deepEqual(
@@ -166,12 +168,13 @@ test('malformed backend invocation also fails closed despite matching transport 
 test('default resolver is unavailable and honors abort without any network dependency', async () => {
   const adapter = new UnavailableSafetyIdentityResolver();
   const controller = new AbortController();
-  assert.deepEqual(await adapter.resolve(input, controller.signal), {
+  const request = { invocation: input, cropBytes: Buffer.alloc(0), candidates: [] };
+  assert.deepEqual(await adapter.resolve(request, controller.signal), {
     state: 'UNAVAILABLE',
     reason: 'SERVICE_DISABLED',
   });
   controller.abort();
-  assert.deepEqual(await adapter.resolve(input, controller.signal), {
+  assert.deepEqual(await adapter.resolve(request, controller.signal), {
     state: 'UNAVAILABLE',
     reason: 'ABORTED',
   });

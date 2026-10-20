@@ -47,9 +47,20 @@ export type SafetyFaceResponseInspection =
       provenance: 'SYNTHETIC_TEST' | 'TRUSTED_SERVICE';
     };
 
+export interface SafetyFaceCandidateTemplate {
+  readonly profileReferenceHash: string;
+  readonly profileRevision: string;
+  readonly encryptedTemplate: string;
+}
+export interface SafetyFaceResolveInput {
+  readonly invocation: SafetyFaceInvocation;
+  readonly cropBytes: Buffer;
+  readonly candidates: readonly SafetyFaceCandidateTemplate[];
+}
+
 export interface SafetyIdentityResolverPort {
   /** Transport data must pass inspectSafetyFaceResponse before any metadata lookup. */
-  resolve(input: SafetyFaceInvocation, signal: AbortSignal): Promise<unknown>;
+  resolve(input: SafetyFaceResolveInput, signal: AbortSignal): Promise<unknown>;
 }
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
@@ -143,7 +154,7 @@ export function inspectSafetyFaceResponse(
 /** No configuration, HTTP, model, Gate or camera fallback. */
 export class UnavailableSafetyIdentityResolver implements SafetyIdentityResolverPort {
   async resolve(
-    _input: SafetyFaceInvocation,
+    _input: SafetyFaceResolveInput,
     signal: AbortSignal,
   ): Promise<SafetyFaceResponseInspection> {
     return { state: 'UNAVAILABLE', reason: signal.aborted ? 'ABORTED' : 'SERVICE_DISABLED' };
