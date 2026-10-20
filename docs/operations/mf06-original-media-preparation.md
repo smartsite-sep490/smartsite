@@ -2,6 +2,25 @@
 
 This is private Backend source, not a registered runtime worker or a live Face integration.
 
+`prepareMf06FaceMedia` now composes claim-context snapshotting, the bounded media
+reader and the existing Face invocation binder outside database locks. Its result
+includes the actual crop bytes and correlated invocation, explicitly remaining
+`BOUND_UNATTESTED`. Missing context/media, digest mismatches and cancellation yield
+`UNAVAILABLE`; no resolver, identity decision or authority lookup runs here.
+
+Four focused composition cases use synthetic JPEGs and actual stored-binding
+inspection. A nonexistent directory in a rejection fixture proves unavailable
+output, not an instrumented count of filesystem calls. Early rejection is also
+visible in the implementation; no hard I/O cancellation claim follows.
+
+The preparation result is private, caller-owned data, not a durable authorization
+capability. Before activation, finalization must also compare its frame digest to
+the immutable event's v1.2 FRAME reference. Rebinding crop metadata alone cannot
+prove that event-to-byte connection; focused regression tests are being prepared.
+Scalar invocation validation remains in the existing binder, and the required
+AbortSignal comes from the worker's controller. No new duplicate validator or
+deep-freeze layer was added; finalization already copies and rechecks its input.
+
 ## Implemented boundary
 
 - `selectMf06FrameReference` validates the local observation v1.2 candidate and
