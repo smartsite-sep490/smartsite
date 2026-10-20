@@ -75,6 +75,28 @@ afterEach(() => {
   cache.clear();
   vi.restoreAllMocks();
 });
+it('completed documents start collapsed instead of using a test-only expanded layout', async () => {
+  const profile = await client.workerCompliance('token', 'site', 'worker');
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...profile,
+    documents: [{ ...doc, status: 'APPROVED' }],
+  });
+  mount(true);
+  await screen.findByRole('heading', { name: /Synthetic Worker/ });
+  expect(screen.queryByText(doc.originalName)).toBeNull();
+});
+it('opens pending documents and respects a manual collapse after refresh', async () => {
+  mount(true);
+  await screen.findByText(doc.originalName);
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: new RegExp(tr('documents.SAFETY_CARD')) }));
+  expect(screen.queryByText(doc.originalName)).toBeNull();
+  const calls = vi.mocked(client.workerCompliance).mock.calls.length;
+  await cache.invalidateQueries();
+  expect(vi.mocked(client.workerCompliance).mock.calls.length).toBeGreaterThan(calls);
+  expect(screen.queryByText(doc.originalName)).toBeNull();
+});
 it('shows the citizen ID warning to Safety without blocking explicit approval', async () => {
   const profile = await client.workerCompliance('token', 'site', 'worker');
   vi.mocked(client.workerCompliance).mockResolvedValue({

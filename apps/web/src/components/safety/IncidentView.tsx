@@ -222,6 +222,25 @@ export function IncidentView(p: IncidentViewProps) {
   };
   const current = detail.data,
     action = current?.actions.find((a) => a.id === editor?.actionId);
+  const editorBlocked =
+    !!editor &&
+    (editor.op === 'submit'
+      ? !representative ||
+        !action ||
+        !!action.supersededAt ||
+        action.assignedTo !== p.user.id ||
+        action.status !== 'IN_PROGRESS'
+      : editor.op === 'review'
+        ? !safety ||
+          !action ||
+          !!action.supersededAt ||
+          !action.submissions.some(
+            (s) =>
+              s.id === editor.submissionId && s.status === 'PENDING' && s.submittedBy !== p.user.id,
+          )
+        : false);
+  const editorDisabled =
+    editorBlocked || (editor?.op !== 'create' && (detail.isFetching || detail.isError));
   useEffect(() => {
     if (p.initialActionId && current)
       document
@@ -615,11 +634,13 @@ export function IncidentView(p: IncidentViewProps) {
             setResultFile(undefined);
             p.onSourceConsumed?.();
           }}
-          error={mutation.error}
+          error={mutation.error ?? (editor.op !== 'create' ? detail.error : undefined)}
           reload={reload}
         >
+          {editorBlocked && <p role="alert">{tr('safety_ux.action_no_longer_available')}</p>}
           <CommandForm
             pending={mutation.isPending}
+            disabled={editorDisabled}
             label={
               editor.op === 'create'
                 ? tr('common.create_incident')
@@ -628,6 +649,7 @@ export function IncidentView(p: IncidentViewProps) {
                   : titles[editor.op]
             }
             onSubmit={(form) => {
+              if (editorDisabled) return;
               if (editor.op === 'create') {
                 const input: Omit<CreateIncidentCommand, 'commandId'> = {
                   title: text(form, 'title'),
