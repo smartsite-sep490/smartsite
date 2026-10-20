@@ -170,6 +170,8 @@ it('switches a filled checklist assignment both ways without changing scope, val
   fireEvent.change(screen.getByLabelText('Phiếu kiểm tra gợi ý'), {
     target: { value: 'ELECTRICAL' },
   });
+  fireEvent.click(screen.getByRole('button', { name: 'Áp dụng mẫu' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Thay tiêu chí' }));
   expect((screen.getByLabelText('Tiêu chí 1') as HTMLTextAreaElement).value).toBe(
     'Đã hoàn thành phổ biến an toàn cho công việc này',
   );
@@ -197,6 +199,7 @@ it('retains report answers, authored notes and evidence while localizing labels 
     </>,
   );
   fireEvent.change(screen.getByLabelText('Result: Safety overview'), { target: { value: 'PASS' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
   fireEvent.change(screen.getByLabelText('Notes: Safety overview'), {
     target: { value: 'Checklist report recorded\n<>&' },
   });

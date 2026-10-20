@@ -84,7 +84,8 @@ export function ResultFields({ onFileChange }: { onFileChange?: (file?: File) =>
               const form = new FormData();
               const next = e.currentTarget.files?.[0];
               if (!next) return;
-              if (next) form.set('file', next);
+              if (!next.size) throw new Error(tr('safety_ux.empty_file'));
+              form.set('file', next);
               const accepted = photo(form);
               setFile(accepted);
               onFileChange?.(accepted);
@@ -131,10 +132,10 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
   const message =
     error instanceof ApiError
       ? error.status === 403
-          ? tr('safety_workflow_ui.this_account_does_not_have_access')
-          : error.status === 503 || error.status === 404
-            ? tr('safety_workflow_ui.evidence_or_service_unavailable')
-            : error.message
+        ? tr('safety_workflow_ui.this_account_does_not_have_access')
+        : error.status === 503 || error.status === 404
+          ? tr('safety_workflow_ui.evidence_or_service_unavailable')
+          : error.message
       : error instanceof Error
         ? error.message
         : tr('common.request_failed');
@@ -142,11 +143,7 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
     <div className="space-y-3 rounded-lg border border-red-200 bg-[var(--semantic-red-bg)] p-3 text-sm text-[var(--semantic-red-text)]">
       <p role="alert">
         {localizedError(message)}
-        {conflict && (
-          <span className="block mt-1">
-            {tr('safety_workflow_ui.data_changed_reload_and_review_the_current_version_before_submitting_again')}
-          </span>
-        )}
+        {conflict && <span className="block mt-1">{tr('safety_ux.conflict_guidance')}</span>}
       </p>
       {retry && (
         <button className={buttonClass} type="button" onClick={retry}>
@@ -277,18 +274,19 @@ export function Assignee({
   value,
   onChange,
   contractorId,
+  autoSelectSingle = false,
 }: {
   p: WorkflowProps;
   role: 'SAFETY_OFFICER' | 'CONTRACTOR_REPRESENTATIVE';
   value?: string;
   onChange?: (value: string) => void;
   contractorId?: string;
+  autoSelectSingle?: boolean;
 }) {
   useTranslation();
 
   const [offset, setOffset] = useState(0);
   const [choice, setChoice] = useState({ id: '', name: '' });
-  const selected = onChange ? (value ?? '') : choice.id;
   const query = useQuery({
     queryKey: [
       'safety-workflow',
@@ -310,6 +308,12 @@ export function Assignee({
       ),
     retry: false,
   });
+  const selected = onChange
+    ? (value ?? '')
+    : choice.id ||
+      (autoSelectSingle && !query.isError && query.data?.total === 1
+        ? (query.data.items[0]?.id ?? '')
+        : '');
   return (
     <div>
       <label className="block text-sm font-semibold">
@@ -594,11 +598,13 @@ export function CommandForm({
   onSubmit,
   pending,
   label: caption,
+  disabled = false,
 }: {
   children: ReactNode;
   onSubmit: (form: FormData) => void;
   pending: boolean;
   label: string;
+  disabled?: boolean;
 }) {
   useTranslation();
 
@@ -615,7 +621,7 @@ export function CommandForm({
         }
       }}
     >
-      <fieldset className="space-y-4" disabled={pending}>
+      <fieldset className="space-y-4" disabled={pending || disabled}>
         {children}
         <div className="border-t border-[var(--border)] pt-4">
           <button className={primaryClass} type="submit">
