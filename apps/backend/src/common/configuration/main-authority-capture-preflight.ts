@@ -1,4 +1,5 @@
 import type { EntityManager } from 'typeorm';
+import { AUTHORIZATION_HISTORY_CUTOVER_FUNCTIONS } from './authorization-history-cutover-bodies-v1.js';
 import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from './main-team-authority-sources.js';
 import { MAIN_AUTHORITY_V2_FUNCTION_PROFILES } from './main-team-authority-function-profiles.js';
 import { ZONE_ENTRY_STORAGE_FUNCTIONS } from './zone-entry-storage-profile-v1.js';
@@ -8,6 +9,30 @@ const MAIN_AUTHORITY_FUNCTION_PROFILES = MAIN_AUTHORITY_V2_FUNCTION_PROFILES.map
   body_sha256:
     ZONE_ENTRY_STORAGE_FUNCTIONS.find((f) => f.name === profile.name)?.after ?? profile.body_sha256,
 }));
+
+const CUTOVER_FUNCTION_PROFILES = [
+  ...MAIN_AUTHORITY_FUNCTION_PROFILES.map((profile) =>
+    profile.name === 'mf06_authority_epoch_guard'
+      ? {
+          ...profile,
+          search_path: true,
+          owned_path: true,
+          body_sha256: AUTHORIZATION_HISTORY_CUTOVER_FUNCTIONS.mf06_authority_epoch_guard.after,
+        }
+      : profile,
+  ),
+  {
+    name: 'mf06_authority_control_guard',
+    arguments: '',
+    return_type: 'trigger',
+    language: 'plpgsql',
+    volatility: 'v',
+    search_path: true,
+    owned_path: true,
+    utc: false,
+    body_sha256: AUTHORIZATION_HISTORY_CUTOVER_FUNCTIONS.mf06_authority_control_guard.after,
+  },
+];
 
 /** Point-in-time canonical trigger/source/function preflight, not writer closure or cutover. */
 export async function hasMainAuthorityCapture(
@@ -21,9 +46,16 @@ export async function hasMainAuthorityCapture(
     WITH sources AS (
       SELECT * FROM jsonb_to_recordset($1::jsonb) AS s(table_name text,source_kind text,fields text[])
     ),
+    capability AS (
+      SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname=current_schema() AND p.proname='mf06_authority_control_guard')
+        OR EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname=current_schema() AND c.relname='authorization_history_control' AND t.tgname='trg_mf06_authority_control_update') AS cutover
+    ),
     functions AS (
       SELECT * FROM jsonb_to_recordset($2::jsonb) AS f(name text,arguments text,return_type text,
-        language text,volatility text,search_path boolean,utc boolean,body_sha256 text[])
+        language text,volatility text,search_path boolean,owned_path boolean,utc boolean,body_sha256 text[],cutover boolean)
+      WHERE f.cutover=(SELECT cutover FROM capability)
     ),
     expected AS (
       -- pg_trigger event bits: ROW=1, BEFORE=2, INSERT=4, DELETE=8, UPDATE=16, TRUNCATE=32.
@@ -35,6 +67,16 @@ export async function hasMainAuthorityCapture(
       UNION ALL VALUES
         ('authorization_history_command','trg_mf06_authority_command_insert','mf06_authority_command_guard',7,0,''),
         ('authorization_history_commit_receipt','trg_mf06_authority_witness_insert','mf06_authority_witness_guard',7,0,'')
+      UNION ALL SELECT * FROM (VALUES
+        ('authorization_history_control','trg_mf06_authority_control_update','mf06_authority_control_guard',17,0,''),
+        ('authorization_history_control','trg_mf06_authority_control_delete','mf06_authority_immutable',11,0,''),
+        ('authorization_history_control','trg_mf06_authority_control_truncate','mf06_authority_immutable',34,0,''),
+        ('authorization_history_epoch','trg_mf06_authority_epoch_guard','mf06_authority_epoch_guard',23,0,''),
+        ('authorization_history_epoch','trg_mf06_authority_epoch_delete','mf06_authority_immutable',11,0,''),
+        ('authorization_history_epoch','trg_mf06_authority_epoch_truncate','mf06_authority_immutable',34,0,''),
+        ('authorization_history_baseline','trg_mf06_baseline_insert','mf06_authority_baseline_capture',7,0,''),
+        ('authorization_history_baseline','trg_mf06_baseline_link','mf06_authority_baseline_link',5,0,'')
+      ) cutover_triggers WHERE (SELECT cutover FROM capability)
     )
     SELECT current_setting('session_replication_role')='origin' AND
       -- Match every journal function, including helpers used by capture/baseline
@@ -53,7 +95,8 @@ export async function hasMainAuthorityCapture(
           AND p.proargmodes IS NULL AND p.proallargtypes IS NULL
           AND p.pronargdefaults=0 AND p.proargdefaults IS NULL
           AND COALESCE(p.proconfig,ARRAY[]::text[])=
-            (CASE WHEN f.search_path THEN ARRAY['search_path='||current_setting('search_path')]
+            (CASE WHEN f.owned_path THEN ARRAY['search_path='||format('%I, pg_catalog, pg_temp',current_schema())]
+              WHEN f.search_path THEN ARRAY['search_path='||current_setting('search_path')]
               ELSE ARRAY[]::text[] END ||
              CASE WHEN f.utc THEN ARRAY['TimeZone=UTC'] ELSE ARRAY[]::text[] END)
           AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')=ANY(f.body_sha256))
@@ -81,7 +124,10 @@ export async function hasMainAuthorityCapture(
       JSON.stringify(
         sources.map(([source_kind, table_name, fields]) => ({ source_kind, table_name, fields })),
       ),
-      JSON.stringify(MAIN_AUTHORITY_FUNCTION_PROFILES),
+      JSON.stringify([
+        ...MAIN_AUTHORITY_FUNCTION_PROFILES.map((profile) => ({ ...profile, cutover: false })),
+        ...CUTOVER_FUNCTION_PROFILES.map((profile) => ({ ...profile, cutover: true })),
+      ]),
     ],
   );
   return result?.valid === true;

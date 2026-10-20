@@ -52,3 +52,45 @@ original-session service with expected-pointer CAS and positive/denied/concurren
 journeys. The migration remains unregistered and outside canonical source. No
 retained website/cloud schema, runtime, model, Worker identity or live authority
 epoch has been activated by this qualification. Task1 and the whole goal stay open.
+
+## Source guard capability qualified after the external candidate
+
+The statements above describe the earlier external probe. The unregistered
+forward migration and frozen predecessor/guard bodies are now in source.
+Capture preflight selects one exact old or new profile in one catalog query;
+partial/mixed installation cannot become a compatible profile. Ordinary
+STAGING baseline capture remains supported.
+
+The source regression exposed a real clean-boundary defect: a source INSERT
+after baseline capture was journaled with the old/null epoch and still allowed
+adoption. Both guards now reject any current-transaction revision/gap as well
+as target-epoch facts. READY promotion runs from the AFTER control trigger and
+independently verifies the installed pointer, command, active global Admin,
+baseline/hash/registry and held source locks. Retiring a GAPPED epoch does not
+remove its immutable gap/revision rows; CLOSED denotes retirement, not a repair
+of historical coverage. Existing reader gap checks must remain mandatory.
+
+Actual `executeMainConfigurationCommand` now qualifies positive synthetic
+adoption, postcommit receipt and forced callback rollback, rather than only
+raw SQL mechanics. Nine focused PostgreSQL cases pass in one final run;
+TypeScript and five-file lint exit zero. The owned schema is independently
+absent afterward; prior namespace names are unchanged, not a byte audit.
+
+Evidence: `authority-control-red-v2-proof.json` (4 pass/2 fail; the second
+failure was synthetic Admin setup gapping the prior epoch),
+`authority-control-red-v3-proof.json` (7 pass/1 fail: missing rollback schema
+precheck), and `authority-control-green-v3-proof.json` (9 pass/0 fail) in the
+evidence directory above. Both failures and the fixture correction are retained.
+
+Agy p5 independently reviewed the selector and found the missing rollback
+schema assertion; Root reproduced and repaired it. P7 supplied command-test
+examples, reviewed against the executed Root tests; its out-of-source import
+paths and repeated Admin setup are not adopted blindly. P8's prior review
+prompted the current-transaction boundary, pointer binding and rollback profile
+checks. Review claims are not full acceptance.
+
+Remaining Task1 work: original-session orchestration with qualified release/
+writer manifest and expected-pointer CAS, migration inventory coordination,
+concurrent writer and remaining rejection journeys. The manifest used here is
+explicitly synthetic. No migration registration, website/runtime activation,
+production READY/coverage certificate, model operation, push or merge occurred.
