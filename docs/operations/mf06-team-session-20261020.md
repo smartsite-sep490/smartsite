@@ -42,9 +42,11 @@ acceptance. Existing broad Team suites were compiled, not executed against their
 default-schema test DataSource. No retained website/schema, AI worker or model is
 changed. No push, merge or deployment is performed.
 
-Agy p7 reviewed the pre-change gap; p5 was requested to review the saved repair.
+Agy p7 reviewed the pre-change gap; p5 reviewed the saved repair and its limits.
 Root independently checked source and executed qualification. No blanket agent
-acceptance is adopted. The older oversized service receives a bounded exception
+acceptance is adopted. P5's reference to `access_audit_event` is incorrect: the
+existing entity maps to `audit_log`; these tests do not assert that audit row.
+The older oversized service receives a bounded exception
 for this security repair: owner Root; extract transaction-context handling only
 when a later responsibility change justifies it, rather than reorganizing the
 whole Team workflow here.
