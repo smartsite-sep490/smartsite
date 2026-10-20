@@ -110,12 +110,12 @@ export class MainParticipationCommandService {
       );
       if (context[0]?.value) conflict('Nested authority commands are not supported');
       const inserted = await manager.query(
-        "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_PARTICIPATION_CREATE',$3) ON CONFLICT(command_id) DO NOTHING RETURNING command_id",
+        "INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_PARTICIPATION_CREATE',$3) ON CONFLICT(command_id) DO NOTHING RETURNING command_id",
         [commandId, value.actorUserId, requestHash],
       );
       if (!inserted.length) {
         const previous = await manager.query(
-          'SELECT actor_user_id,operation,request_hash FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT actor_user_id,operation,request_hash FROM authorization_history_command WHERE command_id=$1',
           [commandId],
         );
         if (
@@ -130,7 +130,7 @@ export class MainParticipationCommandService {
       await manager.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [commandId]);
       const sourceId = await this.createSource(manager, value);
       await manager.query(
-        "INSERT INTO mf06_participation_command_result(command_id,source_id,result_json,result_hash) VALUES($1,$2,mf06_participation_response($2),'')",
+        "INSERT INTO contractor_participation_command_receipt(command_id,source_id,result_json,result_hash) VALUES($1,$2,mf06_participation_response($2),'')",
         [commandId, sourceId],
       );
       const participation = await this.result(manager, value);
@@ -146,7 +146,7 @@ export class MainParticipationCommandService {
     });
     try {
       await this.source.query(
-        'INSERT INTO mf06_authority_commit_witness(command_id,transaction_id) SELECT command_id,transaction_id FROM mf06_authority_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM mf06_authority_commit_witness w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
+        'INSERT INTO authorization_history_commit_receipt(command_id,transaction_id) SELECT command_id,transaction_id FROM authorization_history_command c WHERE command_id=$1 AND NOT EXISTS(SELECT 1 FROM authorization_history_commit_receipt w WHERE w.command_id=c.command_id) ON CONFLICT(command_id) DO NOTHING',
         [commandId],
       );
     } catch {
@@ -205,7 +205,7 @@ export class MainParticipationCommandService {
     value: Command,
   ): Promise<MainParticipationCommandResult['participation']> {
     const rows = await manager.query(
-      "SELECT source_id,result_json,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM mf06_participation_command_result WHERE command_id=$1",
+      "SELECT source_id,result_json,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM contractor_participation_command_receipt WHERE command_id=$1",
       [value.commandId],
     );
     const parsed = participationSchema.safeParse(rows[0]?.result_json);

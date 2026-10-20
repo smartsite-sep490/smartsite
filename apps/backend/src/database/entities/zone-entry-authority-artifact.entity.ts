@@ -14,7 +14,7 @@ import { ZoneEntryAssessmentRequestEntity } from './zone-entry-assessment-reques
  * Private projection, not a public DTO or validator. The store/codec validates
  * canonical content; database guards enforce their narrower storage boundary.
  */
-@Entity({ name: 'mf06_authority_artifact' })
+@Entity({ name: 'zone_entry_authority_artifact' })
 @Unique('mf06_authority_artifact_artifact_id_request_id_key', ['artifactId', 'requestId'])
 @ForeignKey(() => ZoneEntryAssessmentRequestEntity, ['requestId'], ['requestId'], {
   name: 'mf06_authority_artifact_request_id_fkey',

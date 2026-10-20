@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import type { DataSource } from 'typeorm';
 import {
   AiObservationEventEntity,
@@ -60,9 +61,10 @@ export async function storeVersionFixture(db: DataSource, version: 'V1' | 'V2') 
     ],
     evidence: [],
   };
+  const payloadHash = computeCanonicalPayloadHash(raw);
   await db.getRepository(AiObservationEventEntity).insert({
     eventId,
-    payloadHash: 'a'.repeat(64),
+    payloadHash,
     cameraExternalId: cameraId,
     resolvedCameraId: cameraId,
     streamSessionId: session,
@@ -75,17 +77,17 @@ export async function storeVersionFixture(db: DataSource, version: 'V1' | 'V2') 
   assert(subject.zoneEligible);
   const insert = async (table: string, row: Record<string, unknown>) => {
     const columns = Object.keys(row);
-    assert(['mf06_assessment_request', 'mf06_assessment_job'].includes(table));
+    assert(['zone_entry_assessment_request', 'zone_entry_assessment_job'].includes(table));
     assert(columns.every((column) => /^[a-z_]+$/.test(column)));
     await db.query(
       `INSERT INTO ${table}(${columns.join(',')}) VALUES(${columns.map((_, i) => '$' + (i + 1)).join(',')})`,
       Object.values(row),
     );
   };
-  await insert('mf06_assessment_request', {
+  await insert('zone_entry_assessment_request', {
     request_id: requestId,
     event_id: eventId,
-    payload_hash: 'a'.repeat(64),
+    payload_hash: payloadHash,
     person_observation_index: subject.personObservationIndex,
     zone_observation_index: 1,
     subject_binding_status: subject.subjectBindingStatus,
@@ -102,7 +104,7 @@ export async function storeVersionFixture(db: DataSource, version: 'V1' | 'V2') 
     request_revision: 1,
     binding_hash: 'b'.repeat(64),
   });
-  await insert('mf06_assessment_job', {
+  await insert('zone_entry_assessment_job', {
     request_id: requestId,
     status: 'CLAIMED',
     attempt_count: 1,

@@ -15,10 +15,12 @@ before(async () => {
   assert.match(db.options.schema ?? '', /^isolated_test_[a-f0-9]{32}$/);
   console.info('Owned archive-version test schema:', db.options.schema);
   await isolated.initialize();
-  assert.equal(db.migrations.length, 66);
-  assert(
-    !db.migrations.some((migration) => migration.name === 'Mf06TeamAuthorityHistory1792281600000'),
+  assert.equal(db.migrations.length, 70);
+  const migrationNames = db.migrations.map(
+    (migration) => migration.name ?? migration.constructor.name,
   );
+  assert(migrationNames.includes('Mf06TeamAuthorityHistory1792281600000'));
+  assert(migrationNames.includes('ZoneEntryPhysicalStorage1792454400000'));
 });
 after(() => isolated.dispose());
 
@@ -35,7 +37,7 @@ async function roundTrip(version: 'V1' | 'V2') {
   const replay = await store.finalize(fixture.input);
   assert.equal(replay.state, 'REPLAY');
   const [head] = await db.query(
-    'SELECT status,lease_token FROM mf06_assessment_job WHERE request_id=$1',
+    'SELECT status,lease_token FROM zone_entry_assessment_job WHERE request_id=$1',
     [fixture.requestId],
   );
   assert.deepEqual(head, { status: 'SUCCEEDED', lease_token: null });
@@ -48,34 +50,31 @@ async function guard() {
   assert(row);
   return row;
 }
-const migrate = (up: boolean) =>
+const rollback = () =>
   db.transaction(async (manager) => {
     assert(manager.queryRunner);
     const migration = new Mf06TeamAuthorityHistory1792281600000();
-    if (up) await migration.up(manager.queryRunner);
-    else await migration.down(manager.queryRunner);
+    await migration.down(manager.queryRunner);
   });
 
-test('V1 round-trips before migration through the actual store and lease CAS', () =>
-  roundTrip('V1'));
-test('original team migration preserves populated V1 bytes and guard OID', async () => {
+test('V1 round-trips on canonical70 through the actual store and lease CAS', () => roundTrip('V1'));
+test('canonical70 already-installed guard and forward-only rollback preserve populated V1 bytes and guard OID', async () => {
   const before = await guard();
+  assert.match(before.body, /MF06_MAIN_AUTHORITY_ARCHIVE_V1/);
+  assert.match(before.body, /MF06_MAIN_AUTHORITY_ARCHIVE_V2/);
+  assert.match(before.body, /zone_entry_assessment_request/);
+  assert.doesNotMatch(before.body, /mf06_assessment_request/);
   const bodies = () =>
     db.query(
-      'SELECT artifact_id,body::text,body_hash,sha256,stored_at::text FROM mf06_authority_artifact ORDER BY artifact_id',
+      'SELECT artifact_id,body::text,body_hash,sha256,stored_at::text FROM zone_entry_authority_artifact ORDER BY artifact_id',
     );
   const original = await bodies();
   assert.equal(original.length, 1);
-  await migrate(true);
-  assert.equal((await guard()).oid, before.oid);
-  assert.notEqual((await guard()).body, before.body);
-  assert.deepEqual(await bodies(), original);
-  await assert.rejects(() => migrate(false), /forward recovery/);
-  assert.equal((await guard()).oid, before.oid);
+  await assert.rejects(() => rollback(), /forward recovery/);
+  assert.deepEqual(await guard(), before);
   assert.deepEqual(await bodies(), original);
 });
-test('V2 round-trips after migration through the actual store and lease CAS', () =>
-  roundTrip('V2'));
+test('V2 round-trips on canonical70 through the actual store and lease CAS', () => roundTrip('V2'));
 
 test('database rejects malformed V2 envelope, scope, masks and row budget before attachment', async () => {
   const fixture = await storeVersionFixture(db, 'V2');
@@ -117,7 +116,7 @@ test('database rejects malformed V2 envelope, scope, masks and row budget before
       await assert.rejects(
         () =>
           runner.query(
-            'INSERT INTO mf06_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)',
+            'INSERT INTO zone_entry_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)',
             [randomUUID(), fixture.requestId, fixture.archive.sha256, JSON.stringify(body)],
           ),
         (error: unknown) =>
@@ -134,13 +133,14 @@ test('database rejects malformed V2 envelope, scope, masks and row budget before
 test('rollback refuses stored V2 without changing guard or immutable history', async () => {
   const before = await guard();
   const bodies = await db.query(
-    'SELECT artifact_id,body::text,body_hash FROM mf06_authority_artifact ORDER BY artifact_id',
+    'SELECT artifact_id,body::text,body_hash FROM zone_entry_authority_artifact ORDER BY artifact_id',
   );
-  await assert.rejects(() => migrate(false), /forward recovery/);
+  assert.equal(bodies.length, 2);
+  await assert.rejects(() => rollback(), /forward recovery/);
   assert.deepEqual(await guard(), before);
   assert.deepEqual(
     await db.query(
-      'SELECT artifact_id,body::text,body_hash FROM mf06_authority_artifact ORDER BY artifact_id',
+      'SELECT artifact_id,body::text,body_hash FROM zone_entry_authority_artifact ORDER BY artifact_id',
     ),
     bodies,
   );
@@ -148,13 +148,13 @@ test('rollback refuses stored V2 without changing guard or immutable history', a
 test('stored V2 remains immutable against update, delete and truncate', async () => {
   const bodies = () =>
     db.query(
-      'SELECT artifact_id,body::text,body_hash FROM mf06_authority_artifact ORDER BY artifact_id',
+      'SELECT artifact_id,body::text,body_hash FROM zone_entry_authority_artifact ORDER BY artifact_id',
     );
   const before = await bodies();
   for (const statement of [
-    "UPDATE mf06_authority_artifact SET body=body||'{\"extra\":true}'::jsonb WHERE body->>'format'='MF06_MAIN_AUTHORITY_ARCHIVE_V2'",
-    "DELETE FROM mf06_authority_artifact WHERE body->>'format'='MF06_MAIN_AUTHORITY_ARCHIVE_V2'",
-    'TRUNCATE mf06_authority_artifact,mf06_assessment',
+    "UPDATE zone_entry_authority_artifact SET body=body||'{\"extra\":true}'::jsonb WHERE body->>'format'='MF06_MAIN_AUTHORITY_ARCHIVE_V2'",
+    "DELETE FROM zone_entry_authority_artifact WHERE body->>'format'='MF06_MAIN_AUTHORITY_ARCHIVE_V2'",
+    'TRUNCATE zone_entry_authority_artifact,zone_entry_assessment',
   ]) {
     await assert.rejects(
       () => db.query(statement),

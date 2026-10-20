@@ -46,11 +46,11 @@ export class MainAuthorityBaselineService {
         { epochId, declaredWriterManifestHash },
         async (manager) => {
           await manager.query(
-            'INSERT INTO mf06_authority_epoch(epoch_id,writer_manifest_hash) VALUES($1,$2)',
+            'INSERT INTO authorization_history_epoch(epoch_id,writer_manifest_hash) VALUES($1,$2)',
             [epochId, declaredWriterManifestHash],
           );
           await manager.query(
-            `INSERT INTO mf06_authority_baseline(epoch_id,command_id)
+            `INSERT INTO authorization_history_baseline(epoch_id,command_id)
             VALUES($1,current_setting('smartsite.mf06_command_id')::uuid)`,
             [epochId],
           );
@@ -87,9 +87,9 @@ export class MainAuthorityBaselineService {
           e.writer_manifest_hash,b.source_registry_hash,b.snapshot_hash,b.row_count,e.state,
           b.snapshot_json::text AS snapshot_text,
           COALESCE(w.transaction_id=c.transaction_id,false) AS witnessed
-          FROM mf06_authority_baseline b JOIN mf06_authority_epoch e USING(epoch_id)
-          JOIN mf06_authority_command c USING(command_id)
-          LEFT JOIN mf06_authority_commit_witness w USING(command_id)
+          FROM authorization_history_baseline b JOIN authorization_history_epoch e USING(epoch_id)
+          JOIN authorization_history_command c USING(command_id)
+          LEFT JOIN authorization_history_commit_receipt w USING(command_id)
           WHERE b.epoch_id=$1 AND c.actor_user_id=$2 AND b.transaction_id=c.transaction_id`,
           [epochId, actorUserId],
         );
@@ -98,7 +98,7 @@ export class MainAuthorityBaselineService {
         const snapshot = JSON.parse(row.snapshot_text) as Record<string, unknown>;
         // A JSON number outside JS precision must never return a mismatched hash/body.
         const exact: { value: boolean }[] = await manager.query(
-          'SELECT snapshot_json=$1::jsonb AS value FROM mf06_authority_baseline WHERE epoch_id=$2',
+          'SELECT snapshot_json=$1::jsonb AS value FROM authorization_history_baseline WHERE epoch_id=$2',
           [JSON.stringify(snapshot), epochId],
         );
         if (exact[0]?.value !== true) return unavailable();

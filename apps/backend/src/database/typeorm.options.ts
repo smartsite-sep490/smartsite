@@ -1,3 +1,7 @@
+import { PrepareNotificationCompatibility1792010000000 } from './migrations/1792010000000-PrepareNotificationCompatibility.js';
+import { Mf06TeamAuthorityHistory1792281600000 } from './migrations/1792281600000-Mf06TeamAuthorityHistory.js';
+import { CompleteNotificationCompatibility1792368000001 } from './migrations/1792368000001-CompleteNotificationCompatibility.js';
+import { ZoneEntryPhysicalStorage1792454400000 } from './migrations/1792454400000-ZoneEntryPhysicalStorage.js';
 import { WorkerQrShortCodes1792454400000 } from './migrations/1792454400000-WorkerQrShortCodes.js';
 import { WorkerDocumentIdentityChecks1792627200000 } from './migrations/1792627200000-WorkerDocumentIdentityChecks.js';
 import { WorkerDocumentSubmittedExpiry1792713600000 } from './migrations/1792713600000-WorkerDocumentSubmittedExpiry.js';
@@ -166,6 +170,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       WorkerDocumentIdentityChecks1792627200000,
       WorkerDocumentSubmittedExpiry1792713600000,
       WorkerHealthIssueDate1792800000000,
+      PrepareNotificationCompatibility1792010000000,
+      Mf06TeamAuthorityHistory1792281600000,
+      CompleteNotificationCompatibility1792368000001,
+      ZoneEntryPhysicalStorage1792454400000,
     ],
     logging: false,
     extra: {

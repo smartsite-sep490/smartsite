@@ -12,6 +12,11 @@ import {
 } from './main-team-authority-archive.js';
 
 export const MAIN_AUTHORITY_ARCHIVE_FORMAT = 'MF06_MAIN_AUTHORITY_ARCHIVE_V1';
+export const MAIN_AUTHORITY_ARCHIVE_FORMAT_V2 = MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT;
+export const MAIN_AUTHORITY_ARCHIVE_FORMATS = [
+  MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
+] as const;
 export interface MainAuthorityArchiveContext {
   siteId: string;
   zoneId: string;

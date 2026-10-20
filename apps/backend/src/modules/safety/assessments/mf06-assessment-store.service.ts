@@ -8,12 +8,11 @@ import type {
   Mf06AssessmentProvenance,
 } from '../../../database/entities/zone-entry-assessment.entity.js';
 import {
-  MAIN_AUTHORITY_ARCHIVE_FORMAT,
+  MAIN_AUTHORITY_ARCHIVE_FORMATS,
   decodeStoredMainAuthorityArchive,
   type MainAuthorityArchive,
   type MainAuthorityArchiveContext,
 } from '../../zones/main-authority-archive-codec.js';
-import { MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT } from '../../zones/main-team-authority-archive.js';
 
 export interface Mf06AssessmentAppendInput {
   claim: { requestId: string; leaseToken: string; headRevision: number };
@@ -99,7 +98,7 @@ const inputSchema = z.strictObject({
   cropSha256: hash.nullable(),
   authorityArtifact: z
     .strictObject({
-      format: z.enum([MAIN_AUTHORITY_ARCHIVE_FORMAT, MAIN_TEAM_AUTHORITY_ARCHIVE_FORMAT]),
+      format: z.enum(MAIN_AUTHORITY_ARCHIVE_FORMATS),
       sha256: hash,
       payload: z.unknown(),
     })
@@ -215,9 +214,9 @@ const assessmentSelect = `SELECT a.*, r.camera_id,r.zone_id,r.requested_purpose,
   ${timestamp('r.captured_at')} AS captured_at, ${timestamp('a.assessed_at')} AS assessed_at,
   art.body AS artifact_body,art.sha256 AS artifact_sha256,
   (art.body_hash=encode(sha256(convert_to(art.body::text,'UTF8')),'hex')) AS artifact_body_intact
-  FROM mf06_assessment a JOIN mf06_assessment_request r ON r.request_id=a.request_id
+  FROM zone_entry_assessment a JOIN zone_entry_assessment_request r ON r.request_id=a.request_id
     AND r.site_id=a.site_id AND r.event_id=a.event_id AND r.binding_hash=a.binding_hash
-  LEFT JOIN mf06_authority_artifact art ON art.artifact_id=a.authority_artifact_id AND art.request_id=a.request_id`;
+  LEFT JOIN zone_entry_authority_artifact art ON art.artifact_id=a.authority_artifact_id AND art.request_id=a.request_id`;
 function mapRecord(row: Row): Mf06RecordedAssessment | null {
   let authorityArtifact: MainAuthorityArchive | null = null;
   if (row.authority_artifact_id !== null) {
@@ -367,7 +366,7 @@ export class Mf06AssessmentStore {
   ): Promise<Mf06AssessmentStoreResult> {
     const requests = (await manager.query(
       `SELECT r.*,${timestamp('r.captured_at')} AS captured_at
-      FROM mf06_assessment_request r WHERE request_id=$1 AND site_id=$2 FOR SHARE`,
+      FROM zone_entry_assessment_request r WHERE request_id=$1 AND site_id=$2 FOR SHARE`,
       [input.claim.requestId, input.siteId],
     )) as Row[];
     const request = requests[0];
@@ -391,7 +390,7 @@ export class Mf06AssessmentStore {
     }
     const heads = (await manager.query(
       `SELECT *,clock_timestamp()<lease_expires_at AND clock_timestamp()<deadline_at AS timely
-      FROM mf06_assessment_job WHERE request_id=$1 FOR UPDATE`,
+      FROM zone_entry_assessment_job WHERE request_id=$1 FOR UPDATE`,
       [input.claim.requestId],
     )) as Row[];
     const head = heads[0];
@@ -417,7 +416,7 @@ export class Mf06AssessmentStore {
         return { state: 'UNAVAILABLE', reason: 'ARCHIVE_REQUEST_BINDING_INVALID' };
       artifactId = randomUUID();
       await manager.query(
-        'INSERT INTO mf06_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)',
+        'INSERT INTO zone_entry_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)',
         [
           artifactId,
           input.claim.requestId,
@@ -427,7 +426,7 @@ export class Mf06AssessmentStore {
       );
     }
     await manager.query(
-      `INSERT INTO mf06_assessment(assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,
+      `INSERT INTO zone_entry_assessment(assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,
       outcome,reason_code,evaluator_version,provenance,worker_id,profile_revision,frame_sha256,crop_sha256,authority_artifact_id,claim_head_revision,claim_lease_token)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [

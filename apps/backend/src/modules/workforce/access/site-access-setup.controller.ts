@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import { SiteAccessSetupQueryService } from '../site-access-setup-query.service.js';
+import { MainZonePermissionCommandService } from '../../zones/main-zone-permission-command.service.js';
 import {
   SiteAccessSetupService,
   GrantContractorZoneCommand,
@@ -20,6 +21,7 @@ export class SiteAccessSetupController {
     private readonly setup: SiteAccessSetupService,
     private readonly auth: UserAuthGuard,
     private readonly queries: SiteAccessSetupQueryService,
+    private readonly permissions: MainZonePermissionCommandService,
   ) {}
   @Post('contractor-zone-permissions/dates') contractorDates(
     @Req() req: AuthenticatedRequest,
@@ -41,8 +43,7 @@ export class SiteAccessSetupController {
     @Param('siteId') siteId: string,
     @Body() input: GrantContractorZoneCommand,
   ) {
-    return this.setup.grantContractor(
-      req.user!,
+    return this.permissions.publicGrantContractor(
       siteId,
       input,
       configurationCommandContext(req, this.auth),
@@ -53,8 +54,7 @@ export class SiteAccessSetupController {
     @Param('siteId') siteId: string,
     @Body() input: GrantWorkerZoneCommand,
   ) {
-    return this.setup.grantWorker(
-      req.user!,
+    return this.permissions.publicGrantWorker(
       siteId,
       input,
       configurationCommandContext(req, this.auth),
@@ -65,8 +65,7 @@ export class SiteAccessSetupController {
     @Param('siteId') siteId: string,
     @Param('id') id: string,
   ) {
-    return this.setup.revoke(
-      req.user!,
+    return this.permissions.publicRevoke(
       siteId,
       id,
       'contractor',
@@ -78,8 +77,7 @@ export class SiteAccessSetupController {
     @Param('siteId') siteId: string,
     @Param('id') id: string,
   ) {
-    return this.setup.revoke(
-      req.user!,
+    return this.permissions.publicRevoke(
       siteId,
       id,
       'worker',
