@@ -248,6 +248,7 @@ export function Mf06AssessmentHistory({
       return nextOffset;
     },
     enabled: isQueryEnabled,
+    refetchOnMount: 'always',
     refetchInterval: false,
     refetchOnWindowFocus: false,
     retry: false,
