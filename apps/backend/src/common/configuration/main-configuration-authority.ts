@@ -38,6 +38,7 @@ type Operation =
   | 'WORKER_ACCOUNT_LINK'
   | 'WORKER_PROFILE_UPDATE'
   | 'WORKER_DOCUMENT_REVIEW'
+  | 'WORKER_GATE_PERMISSIONS_SET'
   | 'CONTRACTOR_WORKER_CREATE'
   | 'ASSIGNMENT_REQUEST'
   | 'ASSIGNMENT_SAFETY_REVIEW'
@@ -207,7 +208,8 @@ export async function executeMainConfigurationCommand<T>(
                                         operation === 'ASSIGNMENT_REVOKE'
                                       ? ['worker_site_zone_assignment', 'site']
                                       : operation === 'SITE_CREATE' ||
-                                          operation === 'WORKER_DOCUMENT_REVIEW'
+                                          operation === 'WORKER_DOCUMENT_REVIEW' ||
+                                          operation === 'WORKER_GATE_PERMISSIONS_SET'
                                         ? ['site']
                                         : operation === 'ZONE_CREATE' ||
                                             operation === 'ZONE_POLICY_UPDATE'

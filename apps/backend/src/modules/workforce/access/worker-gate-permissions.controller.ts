@@ -2,6 +2,7 @@ import { Body, Controller, Get, Logger, Param, Put, Req, UseGuards } from '@nest
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import {
   SetGatePermissionsCommand,
   WorkerGatePermissionsService,
@@ -13,7 +14,10 @@ import {
 @Controller('sites/:siteId/workers/:workerId/gate-permissions')
 export class WorkerGatePermissionsController {
   private readonly logger = new Logger(WorkerGatePermissionsController.name);
-  constructor(private readonly permissions: WorkerGatePermissionsService) {}
+  constructor(
+    private readonly permissions: WorkerGatePermissionsService,
+    private readonly auth: UserAuthGuard,
+  ) {}
   @Get()
   list(
     @Req() request: AuthenticatedRequest,
@@ -29,7 +33,13 @@ export class WorkerGatePermissionsController {
     @Param('workerId') workerId: string,
     @Body() input: SetGatePermissionsCommand,
   ) {
-    const result = await this.permissions.set(request.user!, siteId, workerId, input);
+    const result = await this.permissions.set(
+      request.user!,
+      siteId,
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       action: 'worker.gate-permissions.set',
       actorId: request.user!.id,
