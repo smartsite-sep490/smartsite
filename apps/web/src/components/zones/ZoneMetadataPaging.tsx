@@ -22,11 +22,16 @@ export function ZoneMetadataPaging({
   const { t } = useLocale();
   const nextError = query.isError && query.retainOnError;
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[#6B6B6B]">
+    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-600">
       {query.isPending ? (
-        <span role="status">{t(`zonePaging.${kind}.loading`)}</span>
+        <span
+          role="status"
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+        >
+          {t(`zonePaging.${kind}.loading`)}
+        </span>
       ) : query.data ? (
-        <span>
+        <span className="inline-flex items-center rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700">
           {t(`zonePaging.${kind}.loadedCount`, {
             loaded: query.data.items.length,
             total: query.data.total,
@@ -35,7 +40,10 @@ export function ZoneMetadataPaging({
       ) : null}
       {query.isError ? (
         <>
-          <span role="alert">
+          <span
+            role="alert"
+            className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700"
+          >
             {nextError ? t(`zonePaging.${kind}.errorMore`) : t(`zonePaging.${kind}.errorInitial`)}
           </span>
           <button
@@ -45,7 +53,7 @@ export function ZoneMetadataPaging({
               if (nextError) void query.fetchNextPage({ cancelRefetch: false });
               else void query.refetch();
             }}
-            className="rounded border px-2 py-1 disabled:opacity-50"
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-50"
           >
             {nextError ? t(`zonePaging.${kind}.retryMore`) : t(`zonePaging.${kind}.retryInitial`)}
           </button>
@@ -57,7 +65,7 @@ export function ZoneMetadataPaging({
           onClick={() => {
             void query.fetchNextPage({ cancelRefetch: false });
           }}
-          className="rounded border px-2 py-1 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-50"
         >
           {query.isFetchingNextPage
             ? t(`zonePaging.${kind}.loadingMore`)
