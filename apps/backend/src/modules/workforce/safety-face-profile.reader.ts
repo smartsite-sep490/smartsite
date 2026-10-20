@@ -1,5 +1,6 @@
 import type { EntityManager } from 'typeorm';
 import { z } from 'zod';
+import { getSafetyFaceTables } from './safety-face-query-scope.js';
 
 export interface SafetyFaceProfileReference {
   profileReferenceHash: string;
@@ -32,6 +33,9 @@ export class SafetyFaceProfileMetadataReader {
       (lockForFinalization && !manager.queryRunner?.isTransactionActive)
     )
       return unavailable;
+    const tables = getSafetyFaceTables(manager?.connection?.driver);
+    if (!tables) return unavailable;
+    const { profileTable, workerTable, consentTable, revocationTable } = tables;
     try {
       const rows: {
         workerId: string;
@@ -43,9 +47,9 @@ export class SafetyFaceProfileMetadataReader {
         `
         SELECT w.id AS "workerId", w.site_id AS "siteId", p.id AS "profileId",
           p.safety_revision AS "profileRevision", c.id AS "consentId"
-        FROM face_profile p JOIN worker w ON w.id=p.worker_id
-        JOIN safety_face_consent c ON c.profile_id=p.id AND c.profile_revision=p.safety_revision
-          AND c.id=(SELECT latest.id FROM safety_face_consent latest
+        FROM ${profileTable} p JOIN ${workerTable} w ON w.id=p.worker_id
+        JOIN ${consentTable} c ON c.profile_id=p.id AND c.profile_revision=p.safety_revision
+          AND c.id=(SELECT latest.id FROM ${consentTable} latest
             WHERE latest.profile_id=p.id AND latest.profile_revision=p.safety_revision
               AND latest.purpose='SAFETY_MF06'
             ORDER BY latest.consented_at DESC,latest.recorded_at DESC,latest.id DESC LIMIT 1)
@@ -55,7 +59,7 @@ export class SafetyFaceProfileMetadataReader {
           AND p.consent_method='SUPERVISED_WORKER_CONFIRMATION' AND p.consented_at <= statement_timestamp()
           AND c.purpose='SAFETY_MF06' AND c.consent_method='SUPERVISED_WORKER_CONFIRMATION'
           AND c.consented_at <= statement_timestamp() AND c.recorded_at <= statement_timestamp()
-          AND NOT EXISTS (SELECT 1 FROM safety_face_consent_revocation r WHERE r.consent_id=c.id)
+          AND NOT EXISTS (SELECT 1 FROM ${revocationTable} r WHERE r.consent_id=c.id)
         LIMIT 1
         ${lockForFinalization ? 'FOR UPDATE OF p,w,c' : ''}
       `,
