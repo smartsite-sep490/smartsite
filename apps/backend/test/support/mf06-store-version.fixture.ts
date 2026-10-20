@@ -17,7 +17,11 @@ import { MAIN_AUTHORITY_SOURCES } from '../../src/common/configuration/main-auth
 import { MAIN_TEAM_AUTHORITY_SOURCES } from '../../src/modules/zones/main-team-authority-archive.js';
 import type { Mf06AssessmentAppendInput } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 
-export async function storeVersionFixture(db: DataSource, version: 'V1' | 'V2') {
+export async function storeVersionFixture(
+  db: DataSource,
+  version: 'V1' | 'V2',
+  eventVersion: '1.0.0' | '1.2.0' = '1.0.0',
+) {
   const siteId = randomUUID(),
     cameraId = randomUUID(),
     zoneId = randomUUID();
@@ -46,7 +50,7 @@ export async function storeVersionFixture(db: DataSource, version: 'V1' | 'V2') 
   });
   const raw = {
     eventId,
-    schemaVersion: '1.0.0',
+    schemaVersion: eventVersion,
     cameraExternalId: cameraId,
     streamSessionId: session,
     capturedAt: captured,
@@ -59,7 +63,16 @@ export async function storeVersionFixture(db: DataSource, version: 'V1' | 'V2') 
       },
       { type: 'ZONE_ENTRY', trackId: 7, regionId: randomUUID(), geometryVersion: 3 },
     ],
-    evidence: [],
+    evidence:
+      eventVersion === '1.2.0'
+        ? [
+            {
+              kind: 'FRAME',
+              uri: `local://evidence/${session}/7/${eventId}.jpg`,
+              sha256: 'a'.repeat(64),
+            },
+          ]
+        : [],
   };
   const payloadHash = computeCanonicalPayloadHash(raw);
   await db.getRepository(AiObservationEventEntity).insert({

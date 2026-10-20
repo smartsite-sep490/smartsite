@@ -6,6 +6,7 @@ import { ZoneEntryAssessmentRequestEntity } from '../../../database/entities/zon
 import type { ObservationSubjectRef } from '../identity/observation-identity.types.js';
 import type { Mf06JobClaim } from './mf06-job-lease.service.js';
 import { inspectMf06StoredBinding, type Mf06CapturedRequest } from './mf06-request-context.js';
+import { selectMf06FrameReference, type Mf06FrameReference } from './mf06-frame-reference.js';
 
 export type Mf06ClaimContextUnavailableReason =
   | 'INVALID_CLAIM'
@@ -27,6 +28,7 @@ export type Mf06ClaimContextLookup =
       contextDigest: string;
       claimContextDigest: string;
       subject: ObservationSubjectRef | null;
+      frameReference: Mf06FrameReference | null;
     }>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -315,6 +317,7 @@ export class Mf06ClaimContextReader {
         contextDigest: inspected.contextDigest,
       });
 
+      const frameReference = selectMf06FrameReference(event.rawPayload, inspected.request);
       const stillActiveBeforeReturn = await verifyActiveJobHead();
       if (signal?.aborted) return unavailable('ABORTED');
       if (!stillActiveBeforeReturn) {
@@ -329,6 +332,7 @@ export class Mf06ClaimContextReader {
         contextDigest: inspected.contextDigest,
         claimContextDigest,
         subject: inspected.subject,
+        frameReference,
       });
     });
   }

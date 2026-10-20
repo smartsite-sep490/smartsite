@@ -15,7 +15,7 @@ before(() => isolated.initialize());
 after(() => isolated.dispose());
 
 test('real PG canonical70 claim context binds active job, rejects wrong token/revision without mutation, and resists pg_temp shadow', async () => {
-  const { input, requestId } = await storeVersionFixture(db, 'V2');
+  const { input, requestId } = await storeVersionFixture(db, 'V2', '1.2.0');
   const [jobRow] = (await db.query(
     'SELECT status, attempt_count, head_revision, lease_token, lease_expires_at, deadline_at FROM zone_entry_assessment_job WHERE request_id = $1',
     [requestId],
@@ -46,6 +46,9 @@ test('real PG canonical70 claim context binds active job, rejects wrong token/re
   assert.equal(matched.request.siteId, input.siteId);
   assert.equal(matched.request.requestId, requestId);
   assert.equal(matched.subject?.trackId, 7);
+  assert.equal(matched.frameReference?.sequenceNumber, 7);
+  assert.equal(matched.frameReference?.sha256, 'a'.repeat(64));
+  assert.equal(matched.frameReference?.payloadHash, matched.request.payloadHash);
   assert.match(matched.contextDigest, /^[0-9a-f]{64}$/);
   assert.match(matched.claimContextDigest, /^[0-9a-f]{64}$/);
   assert.equal('workerId' in matched, false);

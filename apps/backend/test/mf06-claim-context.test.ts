@@ -219,6 +219,7 @@ test('matches active CLAIMED job in REPEATABLE READ READ ONLY snapshot and deriv
   assert.equal(result.claim.requestId, REQUEST_ID);
   assert.equal(result.claim.leaseToken, LEASE_TOKEN);
   assert.equal(result.subject?.trackId, 42);
+  assert.equal(result.frameReference, null);
   assert.match(result.contextDigest, /^[0-9a-f]{64}$/);
   assert.match(result.claimContextDigest, /^[0-9a-f]{64}$/);
   assert.equal(Object.isFrozen(result), true);
@@ -241,6 +242,37 @@ test('matches active CLAIMED job in REPEATABLE READ READ ONLY snapshot and deriv
     `repo:event:${EVENT_ID}`,
     `sql:job:${REQUEST_ID}:#1`,
   ]);
+});
+
+test('projects frozen frameReference when stored v1.2 event has a single matching local FRAME URI and digest', async () => {
+  const { event, request, claim } = makeFixture();
+  const frameUri = `local://evidence/${STREAM_SESSION_ID}/7/${EVENT_ID}.jpg`;
+  const frameSha256 = 'a'.repeat(64);
+  const rawPayload = {
+    ...(event.rawPayload as Record<string, unknown>),
+    schemaVersion: '1.2.0',
+    evidence: [{ kind: 'FRAME', uri: frameUri, sha256: frameSha256 }],
+  };
+  const payloadHash = computeCanonicalPayloadHash(rawPayload);
+  const v12Event: AiObservationEventEntity = { ...event, rawPayload, payloadHash };
+  const v12Request: ZoneEntryAssessmentRequestEntity = { ...request, payloadHash };
+  const { db } = makeFakeDataSource({ event: v12Event, request: v12Request });
+
+  const result = await new Mf06ClaimContextReader(db).readForClaim(claim);
+  assert.equal(result.status, 'MATCHED');
+  if (result.status !== 'MATCHED') return;
+
+  assert.deepEqual(result.frameReference, {
+    eventId: EVENT_ID,
+    streamSessionId: STREAM_SESSION_ID,
+    sequenceNumber: 7,
+    uri: frameUri,
+    sha256: frameSha256,
+    payloadHash,
+    frameDimensions: { width: 1920, height: 1080 },
+  });
+  assert.equal(Object.isFrozen(result.frameReference), true);
+  assert.equal(Object.isFrozen(result.frameReference?.frameDimensions), true);
 });
 
 test('rejects malformed claims, caller-injected siteId/trackId, and getter properties before opening transaction', async () => {
