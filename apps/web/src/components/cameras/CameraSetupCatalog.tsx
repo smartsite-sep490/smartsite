@@ -5,7 +5,7 @@ import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import type { ZonePpeCapabilities } from '../ppe/zone-ppe-scope';
 import type { useSetupCatalog } from './useSetupCatalog';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
-import { CameraSetupWorkflow, type CameraSetupOpenKind } from './CameraSetupWorkflow';
+import { CameraSetupWorkflow, type CameraSetupOpenHandler } from './CameraSetupWorkflow';
 
 export function CameraSetupCatalog({
   capabilities,
@@ -24,7 +24,7 @@ export function CameraSetupCatalog({
   rows: CameraResponse[];
   requestedCameraId?: string | null;
   cameraError: ReactNode;
-  open: (kind: CameraSetupOpenKind, cameraId?: string) => void;
+  open: CameraSetupOpenHandler;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
@@ -139,7 +139,7 @@ export function CameraSetupCatalog({
                               type="button"
                               className={button}
                               aria-describedby={nameId}
-                              onClick={() => open('regions', row.id)}
+                              onClick={(event) => open('regions', row.id, event.currentTarget)}
                             >
                               {t('cameraSetup.regionsAction')}
                             </button>
@@ -149,7 +149,7 @@ export function CameraSetupCatalog({
                             className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
                             aria-label={t('cameraSetup.manage', { name: row.name })}
                             aria-describedby={!isEnabled ? hintId : undefined}
-                            onClick={() => open('manage', row.id)}
+                            onClick={(event) => open('manage', row.id, event.currentTarget)}
                           >
                             {t('cameraSetup.manageAction')}
                           </button>

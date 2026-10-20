@@ -13,6 +13,7 @@ import { CameraManagementDialog } from './CameraManagementDialog';
 import { setupErrorStatus, useSetupCatalog } from './useSetupCatalog';
 import './camera-setup-catalog';
 import { CameraSetupCatalog } from './CameraSetupCatalog';
+import type { CameraSetupOpenHandler, CameraSetupOpenKind } from './CameraSetupWorkflow';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 
 const button = CAMERA_BUTTON_STYLES.secondary;
@@ -49,7 +50,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   const cache = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [dialog, setDialog] = useState<{
-    kind: 'register' | 'manage' | 'zones' | 'regions';
+    kind: CameraSetupOpenKind;
     siteId: string;
     cameraId?: string;
   } | null>(null);
@@ -194,7 +195,20 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       (role.role === 'ADMIN' && role.siteId === null) ||
       (role.role === 'SAFETY_OFFICER' && role.siteId === site?.id),
   );
-  const activeDialog = !revoked && site?.id === dialog?.siteId ? dialog : null;
+  const activeDialog =
+    dialog &&
+    !revoked &&
+    site?.id === dialog?.siteId &&
+    (dialog.kind === 'register'
+      ? canManageCameras
+      : dialog.kind === 'manage'
+        ? Boolean(selectedCamera && canManageCameras)
+        : dialog.kind === 'regions'
+          ? canManageCameras
+          : canReadZones || capabilities.canManageZones)
+      ? dialog
+      : null;
+  if (dialog && !activeDialog) setDialog(null);
   if (!revoked && (sites.status === 401 || cameras.status === 401 || selectedCameraStatus === 401))
     setRevoked(true);
   useEffect(() => {
@@ -229,10 +243,13 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     nextParams.set('cameraId', cameraId);
     setParams(nextParams, { replace: true });
   };
-  const open = (kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => {
+  const open: CameraSetupOpenHandler = (kind, cameraId, trigger) => {
     if (!site) return;
     if (kind === 'regions') {
       syncActiveRegionCameraParam(cameraId, false);
+    }
+    if (trigger?.isConnected && !trigger.disabled && document.activeElement !== trigger) {
+      trigger.focus();
     }
     setDialog({ kind, siteId: site.id, cameraId });
   };
@@ -363,6 +380,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       </section>
       {site && (
         <CameraSetupCatalog
+          key={site.id}
           capabilities={capabilities}
           canReadZones={canReadZones}
           canReadCameras={canReadCameras}
@@ -395,28 +413,24 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           }}
         />
       )}
-      {site &&
-        (activeDialog?.kind === 'zones' || activeDialog?.kind === 'regions') &&
-        (activeDialog.kind === 'regions'
-          ? canManageCameras
-          : canReadZones || capabilities.canManageZones) && (
-          <ZonePpeSetupDialog
-            key={`${activeDialog.kind}:${activeDialog.cameraId ?? ''}`}
-            {...common}
-            section={activeDialog.kind === 'regions' ? 'regions' : 'zones'}
-            initialCameraId={activeDialog.kind === 'regions' ? activeDialog.cameraId : undefined}
-            onSelectCamera={
-              activeDialog.kind === 'regions'
-                ? (cameraId) => {
-                    if (isCurrentDialog()) syncActiveRegionCameraParam(cameraId, true);
-                  }
-                : undefined
-            }
-            canReadZones={canReadZones}
-            canManageZones={capabilities.canManageZones}
-            canManageRegions={canManageCameras}
-          />
-        )}
+      {site && (activeDialog?.kind === 'zones' || activeDialog?.kind === 'regions') && (
+        <ZonePpeSetupDialog
+          key={`${activeDialog.kind}:${activeDialog.cameraId ?? ''}`}
+          {...common}
+          section={activeDialog.kind === 'regions' ? 'regions' : 'zones'}
+          initialCameraId={activeDialog.kind === 'regions' ? activeDialog.cameraId : undefined}
+          onSelectCamera={
+            activeDialog.kind === 'regions'
+              ? (cameraId) => {
+                  if (isCurrentDialog()) syncActiveRegionCameraParam(cameraId, true);
+                }
+              : undefined
+          }
+          canReadZones={canReadZones}
+          canManageZones={capabilities.canManageZones}
+          canManageRegions={canManageCameras}
+        />
+      )}
     </div>
   );
 }

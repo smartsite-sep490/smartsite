@@ -3,6 +3,11 @@ import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 
 export type CameraSetupOpenKind = 'register' | 'manage' | 'zones' | 'regions';
+export type CameraSetupOpenHandler = (
+  kind: CameraSetupOpenKind,
+  cameraId?: string,
+  trigger?: HTMLButtonElement | null,
+) => void;
 
 export function CameraSetupWorkflow({
   canWriteZones,
@@ -13,7 +18,7 @@ export function CameraSetupWorkflow({
   canWriteZones: boolean;
   canReadZones: boolean;
   canManageCameras: boolean;
-  open: (kind: CameraSetupOpenKind, cameraId?: string) => void;
+  open: CameraSetupOpenHandler;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const showZonesAction = canWriteZones || canReadZones;
@@ -25,7 +30,7 @@ export function CameraSetupWorkflow({
             <button
               type="button"
               className={CAMERA_BUTTON_STYLES.secondary}
-              onClick={() => open('zones')}
+              onClick={(event) => open('zones', undefined, event.currentTarget)}
             >
               {t(canWriteZones ? 'cameraSetup.zones' : 'cameraSetup.viewZones')}
             </button>
@@ -34,7 +39,7 @@ export function CameraSetupWorkflow({
             <button
               type="button"
               className={CAMERA_BUTTON_STYLES.primary}
-              onClick={() => open('register')}
+              onClick={(event) => open('register', undefined, event.currentTarget)}
             >
               {t('cameraSetup.register')}
             </button>

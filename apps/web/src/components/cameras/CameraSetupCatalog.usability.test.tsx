@@ -55,7 +55,11 @@ type HarnessProps = {
   user?: RoleUser | null;
   siteId?: string;
   load: (offset: number, signal: AbortSignal) => Promise<Page<CameraResponse>>;
-  open: (kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => void;
+  open: (
+    kind: 'register' | 'manage' | 'zones' | 'regions',
+    cameraId?: string,
+    trigger?: HTMLButtonElement | null,
+  ) => void;
 };
 
 function CatalogHarness({ user = managerUser, siteId = SITE_ID, load, open }: HarnessProps) {
@@ -101,7 +105,13 @@ function mountCatalog(options?: Partial<Pick<HarnessProps, 'user' | 'siteId' | '
   const load =
     options?.load ?? vi.fn().mockResolvedValue({ items: [activeCamera, inactiveCamera], total: 2 });
   const open =
-    vi.fn<(kind: 'register' | 'manage' | 'zones' | 'regions', cameraId?: string) => void>();
+    vi.fn<
+      (
+        kind: 'register' | 'manage' | 'zones' | 'regions',
+        cameraId?: string,
+        trigger?: HTMLButtonElement | null,
+      ) => void
+    >();
   const view = render(
     <QueryClientProvider client={client}>
       <CatalogHarness {...options} load={load} open={open} />
@@ -169,12 +179,11 @@ it.each([
     expect(
       within(row).queryByRole('button', { name: /Link observation regions|Gắn vùng quan sát/ }),
     ).toBeNull();
-    fireEvent.click(
-      within(row).getByRole('button', {
-        name: `${language === 'en' ? 'Manage' : 'Quản lý'} ${inactiveCamera.name}`,
-      }),
-    );
-    expect(open).toHaveBeenCalledWith('manage', inactiveCamera.id);
+    const inactiveManageButton = within(row).getByRole('button', {
+      name: `${language === 'en' ? 'Manage' : 'Quản lý'} ${inactiveCamera.name}`,
+    });
+    fireEvent.click(inactiveManageButton);
+    expect(open).toHaveBeenCalledWith('manage', inactiveCamera.id, inactiveManageButton);
     expect(screen.getByText(activeCamera.name).closest('li')!.textContent).not.toContain(hint);
   },
 );
@@ -277,17 +286,19 @@ it('preserves long synthetic camera name and code text and invokes manage callba
   const longManageButton = screen.getByRole('button', { name: `Manage ${longCamera.name}` });
   expect(longManageButton.textContent).toBe('Manage');
   fireEvent.click(longManageButton);
-  expect(open).toHaveBeenLastCalledWith('manage', 'cam-exact-long-id-001');
+  expect(open).toHaveBeenLastCalledWith('manage', 'cam-exact-long-id-001', longManageButton);
 
   const secondManageButton = screen.getByRole('button', { name: `Manage ${secondCamera.name}` });
   expect(secondManageButton.textContent).toBe('Manage');
   fireEvent.click(secondManageButton);
-  expect(open).toHaveBeenLastCalledWith('manage', 'cam-exact-second-id-002');
+  expect(open).toHaveBeenLastCalledWith('manage', 'cam-exact-second-id-002', secondManageButton);
 
-  fireEvent.click(screen.getByRole('button', { name: 'Register camera' }));
-  expect(open).toHaveBeenLastCalledWith('register');
-  fireEvent.click(screen.getByRole('button', { name: 'Configure PPE by Zone' }));
-  expect(open).toHaveBeenLastCalledWith('zones');
+  const registerButton = screen.getByRole('button', { name: 'Register camera' });
+  fireEvent.click(registerButton);
+  expect(open).toHaveBeenLastCalledWith('register', undefined, registerButton);
+  const zonesButton = screen.getByRole('button', { name: 'Configure PPE by Zone' });
+  fireEvent.click(zonesButton);
+  expect(open).toHaveBeenLastCalledWith('zones', undefined, zonesButton);
 });
 
 it('translates EN and VI catalog labels, metadata fields, configuration statuses, counts, and accessible manage actions in place', async () => {
