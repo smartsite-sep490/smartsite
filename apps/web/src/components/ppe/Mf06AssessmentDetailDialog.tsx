@@ -456,11 +456,12 @@ export function Mf06AssessmentDetailDialog({
           </p>
         </div>
 
-        {/* Loading State */}
-        {isLoading && !effectiveError && (
+        {/* Loading or Transient Retry State */}
+        {(isLoading || (isFetching && !record && !isHardError)) && (
           <div
             role="status"
             aria-live="polite"
+            aria-busy="true"
             className="flex items-center justify-center py-8 space-x-2 text-sm text-zinc-500 dark:text-zinc-400"
           >
             <IconClock className="w-5 h-5 animate-spin" />
@@ -483,7 +484,7 @@ export function Mf06AssessmentDetailDialog({
                 type="button"
                 onClick={handleManualRetry}
                 disabled={isFetching}
-                className="px-3 py-1.5 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 transition cursor-pointer disabled:opacity-50"
+                className="px-3 py-1.5 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 dark:focus-visible:outline-rose-300 transition cursor-pointer disabled:opacity-50"
               >
                 {t('mf06.detail.retry')}
               </button>
@@ -562,43 +563,47 @@ export function Mf06AssessmentDetailDialog({
               </div>
             </div>
 
-            {/* Identifiers & Provenance (NO private fields/tokens/URIs) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-[11px] font-mono tabular-nums text-zinc-700 dark:text-zinc-300 bg-zinc-50/70 dark:bg-zinc-900/40 px-3.5 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800">
-              <div className="flex flex-col gap-0.5 break-all">
-                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {t('mf06.detail.field.assessmentId')}
-                </span>{' '}
-                <span>{record.assessmentId}</span>
+            {/* Identifiers & Provenance (Primary Spatial Context followed by Technical References) */}
+            <div className="space-y-2.5 text-[11px] font-mono tabular-nums text-zinc-700 dark:text-zinc-300 bg-zinc-50/70 dark:bg-zinc-900/40 px-3.5 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                <div className="flex flex-col gap-0.5 break-all">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {t('mf06.detail.field.cameraId')}
+                  </span>{' '}
+                  <span>{record.cameraId}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 break-all">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {t('mf06.detail.field.zoneId')}
+                  </span>{' '}
+                  <span>{record.zoneId}</span>
+                </div>
               </div>
-              <div className="flex flex-col gap-0.5 break-all">
-                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {t('mf06.detail.field.requestId')}
-                </span>{' '}
-                <span>{record.requestId}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 break-all">
-                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {t('mf06.detail.field.eventId')}
-                </span>{' '}
-                <span>{record.eventId}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 break-all">
-                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {t('mf06.detail.field.cameraId')}
-                </span>{' '}
-                <span>{record.cameraId}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 break-all">
-                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {t('mf06.detail.field.zoneId')}
-                </span>{' '}
-                <span>{record.zoneId}</span>
-              </div>
-              <div className="flex flex-col gap-0.5 break-all">
-                <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                  {t('mf06.detail.field.provenance')}
-                </span>{' '}
-                <span>{record.provenance}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 border-t border-zinc-200/70 dark:border-zinc-800 pt-2.5">
+                <div className="flex flex-col gap-0.5 break-all">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {t('mf06.detail.field.assessmentId')}
+                  </span>{' '}
+                  <span>{record.assessmentId}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 break-all">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {t('mf06.detail.field.requestId')}
+                  </span>{' '}
+                  <span>{record.requestId}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 break-all">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {t('mf06.detail.field.eventId')}
+                  </span>{' '}
+                  <span>{record.eventId}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 break-all">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    {t('mf06.detail.field.provenance')}
+                  </span>{' '}
+                  <span>{record.provenance}</span>
+                </div>
               </div>
             </div>
           </div>

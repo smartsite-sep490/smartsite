@@ -8,7 +8,7 @@ import {
 } from '@smartsite/api-client';
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import { Mf06AssessmentReferences } from './Mf06AssessmentReferences';
-import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
+import { areUuidsEqual, type AssessmentTargetContext } from './mf06AssessmentDetailBinding';
 import { IconClock, IconShield, IconCheck, IconX, IconAlertTriangle } from '../icons';
 import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
 
@@ -228,6 +228,9 @@ export function Mf06AssessmentHistory({
       if (!token || !siteId) {
         throw new Error('Authentication token and site scope required.');
       }
+      if (activeHardError) {
+        throw activeHardError.error;
+      }
       const offset = typeof pageParam === 'number' ? pageParam : 0;
       // Let the settled error reach the observer before revoking this cache.
       // Canceling this same request inside its catch would erase its 401/403/404.
@@ -404,6 +407,7 @@ export function Mf06AssessmentHistory({
     for (const page of data.pages) {
       if (!page?.items) continue;
       for (const item of page.items) {
+        if (!areUuidsEqual(item.siteId, siteId)) continue;
         const key = item.assessmentId.toLowerCase();
         if (!seen.has(key)) {
           seen.add(key);
@@ -420,10 +424,10 @@ export function Mf06AssessmentHistory({
       isHardError ||
       !items.some(
         (item) =>
-          item.assessmentId === selectedAssessmentTarget.assessmentId &&
-          item.requestId === selectedAssessmentTarget.requestId &&
-          item.siteId === selectedAssessmentTarget.siteId &&
-          item.siteId === siteId,
+          areUuidsEqual(item.assessmentId, selectedAssessmentTarget.assessmentId) &&
+          areUuidsEqual(item.requestId, selectedAssessmentTarget.requestId) &&
+          areUuidsEqual(item.siteId, selectedAssessmentTarget.siteId) &&
+          areUuidsEqual(item.siteId, siteId ?? ''),
       ))
   ) {
     setSelectedAssessmentTarget(null);
@@ -461,7 +465,7 @@ export function Mf06AssessmentHistory({
                   if (!isFetching) void refetch();
                 }}
                 disabled={isFetching}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 dark:focus-visible:outline-zinc-100"
               >
                 <IconClock className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
                 {isFetching ? t('mf06.requests.refreshing') : t('mf06.requests.refresh')}
@@ -479,8 +483,8 @@ export function Mf06AssessmentHistory({
         </p>
       </div>
 
-      {/* Initial Loading State */}
-      {(isLoading || (isFetching && items.length === 0)) && !effectiveError && (
+      {/* Initial Loading or Busy-Empty Refresh/Retry State */}
+      {(isLoading || (isFetching && items.length === 0 && !isHardError)) && (
         <div
           role="status"
           aria-live="polite"
@@ -505,9 +509,11 @@ export function Mf06AssessmentHistory({
           {!isHardError && (
             <button
               type="button"
-              onClick={() => refetch()}
+              onClick={() => {
+                if (!isHardError && !isFetching) void refetch();
+              }}
               disabled={isFetching}
-              className="text-xs px-3 py-1.5 rounded-md font-medium bg-rose-600 text-white hover:bg-rose-700 transition disabled:opacity-50"
+              className="text-xs px-3 py-1.5 rounded-md font-medium bg-rose-600 text-white hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 dark:focus-visible:outline-rose-300 transition disabled:opacity-50"
             >
               {t('mf06.detail.retry')}
             </button>
@@ -516,106 +522,118 @@ export function Mf06AssessmentHistory({
       )}
 
       {/* Settled Empty State */}
-      {!isLoading && !effectiveError && items.length === 0 && !isFetching && (
-        <div role="status" className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          <p className="font-medium">{t('mf06.history.emptyTitle')}</p>
-          <p className="text-xs mt-1 text-zinc-400">{t('mf06.history.emptyDesc')}</p>
-        </div>
-      )}
+      {!isLoading &&
+        !effectiveError &&
+        items.length === 0 &&
+        !isFetching &&
+        !hasNextPage &&
+        !isNextPageError && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="py-10 text-center text-sm text-zinc-500 dark:text-zinc-400"
+          >
+            <p className="font-medium">{t('mf06.history.emptyTitle')}</p>
+            <p className="text-xs mt-1 text-zinc-400">{t('mf06.history.emptyDesc')}</p>
+          </div>
+        )}
 
-      {/* Assessment Records List */}
-      {items.length > 0 && (
+      {/* Assessment Records List & Pagination Controls */}
+      {(items.length > 0 || (hasNextPage && !isBaseError) || isNextPageError) && (
         <div className="space-y-3.5">
-          <ul role="list" className="space-y-3.5">
-            {items.map((assessment) => {
-              const outcomeMeta = OUTCOME_CONFIG[assessment.outcome] ?? OUTCOME_CONFIG.UNAVAILABLE;
-              const OutcomeIcon = outcomeMeta.icon;
-              const outcomeLabel = t(outcomeMeta.labelKey);
-              const reasonKey = REASON_CODE_KEYS[assessment.reasonCode];
-              const reasonLabel = reasonKey ? t(reasonKey) : assessment.reasonCode;
-              const purposeKey = PURPOSE_KEYS[assessment.purpose];
-              const purposeLabel = purposeKey ? t(purposeKey) : assessment.purpose;
+          {items.length > 0 && (
+            <ul role="list" aria-busy={isFetching} className="space-y-3.5">
+              {items.map((assessment) => {
+                const outcomeMeta =
+                  OUTCOME_CONFIG[assessment.outcome] ?? OUTCOME_CONFIG.UNAVAILABLE;
+                const OutcomeIcon = outcomeMeta.icon;
+                const outcomeLabel = t(outcomeMeta.labelKey);
+                const reasonKey = REASON_CODE_KEYS[assessment.reasonCode];
+                const reasonLabel = reasonKey ? t(reasonKey) : assessment.reasonCode;
+                const purposeKey = PURPOSE_KEYS[assessment.purpose];
+                const purposeLabel = purposeKey ? t(purposeKey) : assessment.purpose;
 
-              return (
-                <li
-                  key={assessment.assessmentId}
-                  className="rounded-xl border border-zinc-200/90 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-800/25 p-4 space-y-3 transition hover:border-zinc-300 dark:hover:border-zinc-700"
-                >
-                  {/* Status & Outcome Badges + Right-Aligned Version & Action */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-zinc-200/70 dark:border-zinc-800">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
-                      >
-                        <OutcomeIcon className="w-3.5 h-3.5 shrink-0" />
-                        {outcomeLabel}
-                      </span>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-200/75 dark:bg-zinc-700/60 text-zinc-800 dark:text-zinc-200">
-                        {reasonLabel}
-                      </span>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                        {purposeLabel}
-                      </span>
+                return (
+                  <li
+                    key={assessment.assessmentId}
+                    className="rounded-xl border border-zinc-200/90 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-800/25 p-4 space-y-3 transition hover:border-zinc-300 dark:hover:border-zinc-700"
+                  >
+                    {/* Status & Outcome Badges + Right-Aligned Version & Action */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-zinc-200/70 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
+                        >
+                          <OutcomeIcon className="w-3.5 h-3.5 shrink-0" />
+                          {outcomeLabel}
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-200/75 dark:bg-zinc-700/60 text-zinc-800 dark:text-zinc-200">
+                          {reasonLabel}
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                          {purposeLabel}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2.5 ml-auto">
+                        <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
+                          v{assessment.evaluatorVersion}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedAssessmentTarget({
+                              assessmentId: assessment.assessmentId,
+                              siteId: assessment.siteId,
+                              requestId: assessment.requestId,
+                              eventId: assessment.eventId,
+                              cameraId: assessment.cameraId,
+                              zoneId: assessment.zoneId,
+                              capturedAt: assessment.capturedAt,
+                              purpose: assessment.purpose,
+                              outcome: assessment.outcome,
+                              reasonCode: assessment.reasonCode,
+                              evaluatorVersion: assessment.evaluatorVersion,
+                              provenance: assessment.provenance,
+                              assessedAt: assessment.assessedAt,
+                            })
+                          }
+                          className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition cursor-pointer shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 dark:focus-visible:outline-emerald-300"
+                        >
+                          {t('mf06.history.viewAssessment')}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2.5 ml-auto">
-                      <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
-                        v{assessment.evaluatorVersion}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedAssessmentTarget({
-                            assessmentId: assessment.assessmentId,
-                            siteId: assessment.siteId,
-                            requestId: assessment.requestId,
-                            eventId: assessment.eventId,
-                            cameraId: assessment.cameraId,
-                            zoneId: assessment.zoneId,
-                            capturedAt: assessment.capturedAt,
-                            purpose: assessment.purpose,
-                            outcome: assessment.outcome,
-                            reasonCode: assessment.reasonCode,
-                            evaluatorVersion: assessment.evaluatorVersion,
-                            provenance: assessment.provenance,
-                            assessedAt: assessment.assessedAt,
-                          })
-                        }
-                        className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition cursor-pointer shrink-0"
-                      >
-                        {t('mf06.history.viewAssessment')}
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Historical Timestamps */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/60 rounded-lg p-3 border border-zinc-200/70 dark:border-zinc-800">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.detail.field.captured')}
-                      </span>{' '}
-                      <time dateTime={assessment.capturedAt} className="font-mono tabular-nums">
-                        {formatTimestamp(assessment.capturedAt, locale)}
-                      </time>
+                    {/* Historical Timestamps */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/60 rounded-lg p-3 border border-zinc-200/70 dark:border-zinc-800">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                          {t('mf06.detail.field.captured')}
+                        </span>{' '}
+                        <time dateTime={assessment.capturedAt} className="font-mono tabular-nums">
+                          {formatTimestamp(assessment.capturedAt, locale)}
+                        </time>
+                      </div>
+                      <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
+                        <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                          {t('mf06.detail.field.assessed')}
+                        </span>{' '}
+                        <time dateTime={assessment.assessedAt} className="font-mono tabular-nums">
+                          {formatTimestamp(assessment.assessedAt, locale)}
+                        </time>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-0.5 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-800 sm:pl-3">
-                      <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                        {t('mf06.detail.field.assessed')}
-                      </span>{' '}
-                      <time dateTime={assessment.assessedAt} className="font-mono tabular-nums">
-                        {formatTimestamp(assessment.assessedAt, locale)}
-                      </time>
-                    </div>
-                  </div>
 
-                  {/* Scoped Technical References with accessible full wrapping */}
-                  <Mf06AssessmentReferences
-                    key={`${apiUrl}:${clientNonce}:${siteId}:${credentialId}:${tokenNonce}`}
-                    assessment={assessment}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+                    {/* Scoped Technical References with accessible full wrapping */}
+                    <Mf06AssessmentReferences
+                      key={`${apiUrl}:${clientNonce}:${siteId}:${credentialId}:${tokenNonce}`}
+                      assessment={assessment}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
           {/* Transient Next Page Error */}
           {isNextPageError && (
@@ -626,9 +644,13 @@ export function Mf06AssessmentHistory({
               <span>{t('mf06.history.nextPageError')}</span>
               <button
                 type="button"
-                onClick={() => fetchNextPage({ cancelRefetch: false })}
+                onClick={() => {
+                  if (!isHardError && !isFetching && !isFetchingNextPage) {
+                    void fetchNextPage({ cancelRefetch: false });
+                  }
+                }}
                 disabled={isFetching || isFetchingNextPage}
-                className="px-3 py-1 bg-rose-600 text-white rounded text-xs font-medium hover:bg-rose-700 transition disabled:opacity-50"
+                className="px-3 py-1 bg-rose-600 text-white rounded text-xs font-medium hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 dark:focus-visible:outline-rose-300 transition disabled:opacity-50"
               >
                 {t('mf06.history.retryNextPage')}
               </button>
@@ -636,13 +658,17 @@ export function Mf06AssessmentHistory({
           )}
 
           {/* Explicit 20-row Load More */}
-          {hasNextPage && !isNextPageError && (
+          {hasNextPage && !isNextPageError && !isBaseError && (
             <div className="flex justify-center pt-2">
               <button
                 type="button"
-                onClick={() => fetchNextPage({ cancelRefetch: false })}
+                onClick={() => {
+                  if (!isHardError && !isFetching && !isFetchingNextPage) {
+                    void fetchNextPage({ cancelRefetch: false });
+                  }
+                }}
                 disabled={isFetching || isFetchingNextPage}
-                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-semibold rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:focus-visible:outline-zinc-100 transition disabled:opacity-50"
               >
                 {isFetchingNextPage ? t('mf06.history.loadingMore') : t('mf06.history.loadMore')}
               </button>
