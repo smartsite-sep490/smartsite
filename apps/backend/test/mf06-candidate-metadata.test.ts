@@ -1007,3 +1007,96 @@ test('oversized crops and malformed request identifiers are rejected before quer
   assert.equal(queries, 0);
   assert.equal(profiles, 0);
 });
+
+function rebindFixtureAsV12(
+  f: SyntheticFixture,
+  cropFrameSha256: string,
+  storedFrameSha256: string,
+) {
+  const rawPayload = {
+    ...(f.event.rawPayload as Record<string, unknown>),
+    schemaVersion: '1.2.0',
+    evidence: [
+      {
+        kind: 'FRAME',
+        uri: `local://evidence/${f.streamSessionId}/1/${f.eventId}.jpg`,
+        sha256: storedFrameSha256,
+      },
+    ],
+  };
+  const payloadHash = computeCanonicalPayloadHash(rawPayload);
+  const event = { ...f.event, rawPayload, payloadHash } as AiObservationEventEntity;
+  const request = { ...f.request, payloadHash } as ZoneEntryAssessmentRequestEntity;
+  const storedInspection = inspectMf06StoredBinding(request, event);
+  assert.equal(storedInspection.status, 'MATCHED');
+  const stored = storedInspection as Extract<Mf06StoredBindingInspection, { status: 'MATCHED' }>;
+
+  const cropBytes =
+    cropFrameSha256 === storedFrameSha256
+      ? f.crop.bytes
+      : Buffer.from('foreign-crop-jpeg-bytes-content-for-test-bounded-444');
+  const crop: SafetySubjectCrop = {
+    ...f.crop,
+    bytes: cropBytes,
+    cropSha256: createHash('sha256').update(cropBytes).digest('hex'),
+    frameSha256: cropFrameSha256,
+    subject: stored.subject!,
+  };
+  const bound = bindMf06FaceInvocation(stored, crop, f.invocationId, f.modelVersion);
+  assert.equal(bound.state, 'BOUND_UNATTESTED');
+  const prepared = bound as Extract<Mf06FaceBinding, { state: 'BOUND_UNATTESTED' }>;
+  const response = { ...f.response, ...prepared.invocation };
+  return { request, event, stored, crop, prepared, response };
+}
+
+test('v1.2 stored event with matching bound FRAME sha256 permits existing candidate metadata path', async () => {
+  const f = createSyntheticFixture();
+  const v12 = rebindFixtureAsV12(f, 'f'.repeat(64), 'f'.repeat(64));
+  let profileCalls = 0;
+  const manager = createFakeManager({ request: v12.request, event: v12.event });
+  const service = new Mf06CandidateMetadataService(
+    createFakeProfileReader(f.profileLookup, () => {
+      profileCalls++;
+    }),
+    'SYNTHETIC_TEST',
+  );
+
+  const result = await service.revalidate(
+    manager,
+    f.siteId,
+    f.requestId,
+    v12.prepared,
+    v12.crop,
+    v12.response,
+  );
+  assert.equal(result.state, 'ELIGIBLE_PROFILE_METADATA');
+  if (result.state !== 'ELIGIBLE_PROFILE_METADATA') return;
+  assert.equal(result.workerId, f.workerId.toLowerCase());
+  assert.equal(result.bindingDigest, v12.prepared.invocation.bindingDigest);
+  assert.equal(result.contextDigest, v12.stored.contextDigest);
+  assert.equal(profileCalls, 1);
+});
+
+test('rehashed foreign crop/frame with rebound invocation but SHA different from stored v1.2 FRAME is rejected as INVALID_BINDING before profile reader', async () => {
+  const f = createSyntheticFixture();
+  const v12Mismatch = rebindFixtureAsV12(f, 'a'.repeat(64), 'f'.repeat(64));
+  let profileCalls = 0;
+  const manager = createFakeManager({ request: v12Mismatch.request, event: v12Mismatch.event });
+  const service = new Mf06CandidateMetadataService(
+    createFakeProfileReader(f.profileLookup, () => {
+      profileCalls++;
+    }),
+    'SYNTHETIC_TEST',
+  );
+
+  const result = await service.revalidate(
+    manager,
+    f.siteId,
+    f.requestId,
+    v12Mismatch.prepared,
+    v12Mismatch.crop,
+    v12Mismatch.response,
+  );
+  assert.deepEqual(result, { state: 'UNAVAILABLE', reason: 'INVALID_BINDING' });
+  assert.equal(profileCalls, 0);
+});

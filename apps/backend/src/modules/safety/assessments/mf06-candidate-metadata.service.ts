@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { bindMf06FaceInvocation, type Mf06FaceBinding } from './mf06-face-binding.js';
 import { inspectMf06StoredBinding } from './mf06-request-context.js';
+import { selectMf06FrameReference } from './mf06-frame-reference.js';
 import {
   inspectSafetyFaceResponse,
   isSafetyFaceInvocation,
@@ -141,6 +142,11 @@ export class Mf06CandidateMetadataService {
     if (!event) return unavailable('INVALID_BINDING');
     const stored = inspectMf06StoredBinding(request, event);
     if (stored.status !== 'MATCHED') return unavailable('INVALID_BINDING');
+    const raw = event.rawPayload;
+    if (raw && typeof raw === 'object' && 'schemaVersion' in raw && raw.schemaVersion === '1.2.0') {
+      const frame = selectMf06FrameReference(raw, stored.request);
+      if (!frame || frame.sha256 !== savedCrop.frameSha256) return unavailable('INVALID_BINDING');
+    }
     const rebound = bindMf06FaceInvocation(
       stored,
       savedCrop,

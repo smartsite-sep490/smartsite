@@ -14,12 +14,19 @@ output, not an instrumented count of filesystem calls. Early rejection is also
 visible in the implementation; no hard I/O cancellation claim follows.
 
 The preparation result is private, caller-owned data, not a durable authorization
-capability. Before activation, finalization must also compare its frame digest to
-the immutable event's v1.2 FRAME reference. Rebinding crop metadata alone cannot
-prove that event-to-byte connection; focused regression tests are being prepared.
+capability. Candidate metadata finalization now compares its frame digest to the
+immutable event's v1.2 FRAME reference before any profile lookup. Rebinding crop
+metadata alone cannot prove that event-to-byte connection. Root observed the
+foreign-frame regression fail, then verified both new cases and two legacy cases
+pass after the six-line source fix. Legacy diagnostic behavior is preserved;
+actual worker activation still requires the explicit v1.2 media gate.
 Scalar invocation validation remains in the existing binder, and the required
 AbortSignal comes from the worker's controller. No new duplicate validator or
 deep-freeze layer was added; finalization already copies and rechecks its input.
+
+The existing candidate metadata test file already exceeded the test LOC target.
+This scoped exception adds two regression cases and one local fixture helper;
+extracting the unrelated historical test corpus is deferred to avoid broad churn.
 
 ## Implemented boundary
 
