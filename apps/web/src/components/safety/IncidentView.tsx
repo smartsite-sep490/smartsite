@@ -7,7 +7,6 @@ import {
   text,
   ids,
   deadline,
-  photo,
   date,
   label,
   fieldClass,
@@ -126,6 +125,7 @@ export function IncidentView(p: IncidentViewProps) {
   );
   const safety = hasRole(p, 'SAFETY_OFFICER'),
     representative = hasRole(p, 'CONTRACTOR_REPRESENTATIVE');
+  const [resultFile, setResultFile] = useState<File>();
   const [selected, setSelected] = useState(p.initialIncidentId ?? ''),
     [status, setStatus] = useState(''),
     [assignedTo, setAssignedTo] = useState(''),
@@ -146,6 +146,7 @@ export function IncidentView(p: IncidentViewProps) {
     setSelected(id);
     setMobileDetail(true);
     setEditor(undefined);
+    setResultFile(undefined);
     p.onSourceConsumed?.();
   });
   const list = useQuery({
@@ -182,6 +183,7 @@ export function IncidentView(p: IncidentViewProps) {
   };
   const open = (next: Editor) => {
     mutation.reset();
+    setResultFile(undefined);
     setEditor(next);
   };
   const command = (
@@ -610,6 +612,7 @@ export function IncidentView(p: IncidentViewProps) {
           pending={mutation.isPending}
           onClose={() => {
             setEditor(undefined);
+            setResultFile(undefined);
             p.onSourceConsumed?.();
           }}
           error={mutation.error}
@@ -695,7 +698,7 @@ export function IncidentView(p: IncidentViewProps) {
                     resultDescription: text(form, 'resultDescription'),
                   } as SubmitSafetyResultCommand,
                   action.id,
-                  photo(form),
+                  resultFile,
                 );
               else if (action && editor.op === 'review')
                 command(
@@ -814,7 +817,7 @@ export function IncidentView(p: IncidentViewProps) {
                 <p className="text-sm text-[var(--text-secondary)]">{closeHint}</p>
               </>
             )}
-            {editor.op === 'submit' && <ResultFields />}
+            {editor.op === 'submit' && <ResultFields onFileChange={setResultFile} />}
             {editor.op === 'review' && (
               <>
                 <p className="text-sm">

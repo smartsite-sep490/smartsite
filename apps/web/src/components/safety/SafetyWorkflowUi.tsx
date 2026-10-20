@@ -57,7 +57,7 @@ export function Field({
     </label>
   );
 }
-export function ResultFields() {
+export function ResultFields({ onFileChange }: { onFileChange?: (file?: File) => void } = {}) {
   useTranslation();
 
   const input = useRef<HTMLInputElement>(null);
@@ -83,12 +83,14 @@ export function ResultFields() {
             try {
               const form = new FormData();
               const next = e.currentTarget.files?.[0];
+              if (!next) return;
               if (next) form.set('file', next);
-              setFile(photo(form));
+              const accepted = photo(form);
+              setFile(accepted);
+              onFileChange?.(accepted);
               setError(undefined);
             } catch (error) {
               e.currentTarget.value = '';
-              setFile(undefined);
               setError(error);
             }
           }}
@@ -110,6 +112,7 @@ export function ResultFields() {
             onClick={() => {
               if (input.current) input.current.value = '';
               setFile(undefined);
+              onFileChange?.(undefined);
               setError(undefined);
             }}
           >
@@ -127,11 +130,7 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
   const conflict = error instanceof ApiError && error.status === 409;
   const message =
     error instanceof ApiError
-      ? conflict
-        ? tr(
-            'safety_workflow_ui.data_changed_reload_and_review_the_current_version_before_submitting_again',
-          )
-        : error.status === 403
+      ? error.status === 403
           ? tr('safety_workflow_ui.this_account_does_not_have_access')
           : error.status === 503 || error.status === 404
             ? tr('safety_workflow_ui.evidence_or_service_unavailable')
@@ -141,7 +140,14 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
         : tr('common.request_failed');
   return (
     <div className="space-y-3 rounded-lg border border-red-200 bg-[var(--semantic-red-bg)] p-3 text-sm text-[var(--semantic-red-text)]">
-      <p role="alert">{localizedError(message)}</p>
+      <p role="alert">
+        {localizedError(message)}
+        {conflict && (
+          <span className="block mt-1">
+            {tr('safety_workflow_ui.data_changed_reload_and_review_the_current_version_before_submitting_again')}
+          </span>
+        )}
+      </p>
       {retry && (
         <button className={buttonClass} type="button" onClick={retry}>
           {conflict ? tr('common.reload_data') : tr('common.retry')}
@@ -214,10 +220,12 @@ export function Dialog({
       ref={ref}
       aria-labelledby={id}
       onCancel={(e) => {
+        if (e.target !== e.currentTarget) return;
         e.preventDefault();
         if (!pending) onClose();
       }}
       onKeyDown={(e) => {
+        if (e.defaultPrevented) return;
         if (e.key === 'Tab') {
           const controls = Array.from(
             e.currentTarget.querySelectorAll<HTMLElement>(

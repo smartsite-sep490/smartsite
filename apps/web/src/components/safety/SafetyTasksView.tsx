@@ -6,7 +6,6 @@ import {
   hasRole,
   text,
   deadline,
-  photo,
   date,
   label,
   fieldClass,
@@ -58,6 +57,7 @@ export function SafetyTasksView(p: WorkflowProps) {
   useTranslation();
 
   const manager = hasRole(p, 'SITE_MANAGER');
+  const [resultFile, setResultFile] = useState<File>();
   const [selected, setSelected] = useState(''),
     [status, setStatus] = useState(''),
     [assignedTo, setAssignedTo] = useState(''),
@@ -68,6 +68,7 @@ export function SafetyTasksView(p: WorkflowProps) {
     setSelected(id);
     setMobileDetail(true);
     setEditor(undefined);
+    setResultFile(undefined);
   });
   const list = useQuery({
     queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'tasks', status, assignedTo, offset],
@@ -94,6 +95,7 @@ export function SafetyTasksView(p: WorkflowProps) {
   };
   const open = (next: Editor) => {
     mutation.reset();
+    setResultFile(undefined);
     setEditor(next);
   };
   const command = (
@@ -377,7 +379,7 @@ export function SafetyTasksView(p: WorkflowProps) {
         <Dialog
           title={titles[editor]}
           pending={mutation.isPending}
-          onClose={() => setEditor(undefined)}
+          onClose={() => { setEditor(undefined); setResultFile(undefined); }}
           error={mutation.error}
           reload={reload}
         >
@@ -421,7 +423,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                     expectedVersion: current.version,
                     resultDescription: text(form, 'resultDescription'),
                   } as SubmitSafetyResultCommand,
-                  photo(form),
+                  resultFile,
                 );
               else
                 command(
@@ -480,7 +482,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                 </details>
               </>
             )}
-            {editor === 'submit' && <ResultFields />}
+            {editor === 'submit' && <ResultFields onFileChange={setResultFile} />}
             {editor === 'review' && (
               <>
                 <label className="block text-sm font-semibold">
