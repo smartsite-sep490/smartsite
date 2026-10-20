@@ -94,3 +94,46 @@ writer manifest and expected-pointer CAS, migration inventory coordination,
 concurrent writer and remaining rejection journeys. The manifest used here is
 explicitly synthetic. No migration registration, website/runtime activation,
 production READY/coverage certificate, model operation, push or merge occurred.
+
+## Internal activation service and reviewed release boundary
+
+`MainAuthorityCutoverService` now binds the original authenticated WEB request to
+the existing reauthorization helper and current global Admin in the SERIALIZABLE
+baseline command. The original expected pointer stays fixed across full-transaction
+retries; the singleton row lock and conditional update permit one concurrent
+winner and return409 for the stale caller. No public route/provider is registered.
+
+Activation requires an operator-configured raw SHA pin for a reviewed release
+artifact. The bounded validator checks source files, the actually loaded compiled
+runtime files, the writer inventory and live registry/profile. A reconciliation
+with `completeWriterClosureEstablished:false` is refused. That check revalidates
+a trusted out-of-band review; it cannot itself prove the reviewer found every
+writer. Release bytes and configuration must be immutable during activation.
+The current160/37 reconciliation is still unqualified; no operational manifest
+has been manufactured. Synthetic provenance is allowed only through validated
+test environment configuration and remains explicitly labeled on receipts.
+
+The postcommit result says COMMITTED with a separate witness flag; missing receipt
+does not fabricate rollback. Logout during readback denies the response but keeps
+the committed epoch, and a subsequent revoked-token retry remains401. Database
+resource/availability errors are mapped before commit/readback to413/503.
+
+Root executed14 focused PostgreSQL cases in the final run, narrow TypeScript and
+three-file lint exit0. Evidence: `authority-cutover-service-green-v4-proof.json`.
+The first run4PASS/5FAIL is retained: actual TypeORM UPDATE RETURNING driver tuples
+were incorrectly treated as rows; the conditional UPDATE now uses a SELECT CTE.
+The role-revocation fixture retains a legitimate unrelated scoped role so it tests
+403 current-Admin rejection rather than zero-role account authentication401.
+Agy p7 saved the bounded fix/tests; Root independently read and ran them.
+
+P5's whole-snapshot JS roundtrip proposal is not adopted in this command: no
+snapshot is parsed or returned through JavaScript here, and the historical reader
+already independently rejects unrepresentable snapshots. Hex/time receipts do
+not certify that every future archive can be reconstructed. The accepted error
+mapping and readback role-lock suggestions are implemented. Fourteen tests and
+the earlier nine guard tests are separate runs, not23 unique end-to-end journeys.
+
+Task1 still needs coordinated migration registration, an actual qualified
+operational writer/release manifest and source-writer boundary qualification.
+Task2 historical qualification and Task3 real WorkPort/runtime remain open.
+No retained website/database/model/cloud activation, push, merge or deployment.
