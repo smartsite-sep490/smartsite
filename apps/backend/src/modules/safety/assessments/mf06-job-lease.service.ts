@@ -46,6 +46,7 @@ export class Mf06JobLeaseService {
 
   async claim(signal?: AbortSignal): Promise<Mf06JobClaim | null> {
     if (signal?.aborted) return null;
+    const table = this.jobTable();
     const aborted = new Error('MF06_CLAIM_ABORTED');
     const checkAbort = () => {
       if (signal?.aborted) throw aborted;
@@ -53,10 +54,10 @@ export class Mf06JobLeaseService {
     try {
       return await this.db.transaction('READ COMMITTED', async (manager) => {
         checkAbort();
-        await this.expireInTransaction(manager);
+        await this.expireInTransaction(manager, table);
         checkAbort();
         const [head] = (await manager.query(
-          `SELECT * FROM zone_entry_assessment_job
+          `SELECT * FROM ${table}
           WHERE attempt_count < $1 AND head_revision < 2147483646
             AND deadline_at > clock_timestamp()
             AND ((status='PENDING' AND next_attempt_at<=clock_timestamp())
@@ -74,7 +75,7 @@ export class Mf06JobLeaseService {
         );
         const token = randomUUID();
         const changed = (await manager.query(
-          `WITH changed AS (UPDATE zone_entry_assessment_job SET status='CLAIMED',
+          `WITH changed AS (UPDATE ${table} SET status='CLAIMED',
           attempt_count=attempt_count+1,head_revision=head_revision+1,
           lease_token=$2,lease_expires_at=$3,updated_at=$4
           WHERE request_id=$1 AND head_revision=$5 AND attempt_count < $6
@@ -120,7 +121,18 @@ export class Mf06JobLeaseService {
     return this.transition(claim, 'CANCELLED', 'ABORTED') as Promise<'CANCELLED' | 'STALE'>;
   }
   async expire(): Promise<number> {
-    return this.db.transaction('READ COMMITTED', (manager) => this.expireInTransaction(manager));
+    const table = this.jobTable();
+    return this.db.transaction('READ COMMITTED', (manager) =>
+      this.expireInTransaction(manager, table),
+    );
+  }
+
+  private jobTable(): string {
+    const schema = this.db.driver?.schema;
+    if (typeof schema !== 'string' || !schema || schema.includes('\0'))
+      throw new Error('MF06_SCHEMA_UNAVAILABLE');
+    // A pooled session's pg_temp table must never shadow the selected queue.
+    return `"${schema.replaceAll('"', '""')}"."zone_entry_assessment_job"`;
   }
 
   private async now(manager: EntityManager): Promise<Date> {
@@ -130,11 +142,11 @@ export class Mf06JobLeaseService {
     return row.now;
   }
 
-  private async expireInTransaction(manager: EntityManager): Promise<number> {
+  private async expireInTransaction(manager: EntityManager, table: string): Promise<number> {
     // Only due terminalization candidates. A valid in-flight lease is not stolen
     // merely because its last allowed attempt is currently being processed.
     const heads = (await manager.query(
-      `SELECT * FROM zone_entry_assessment_job
+      `SELECT * FROM ${table}
       WHERE status IN ('PENDING','CLAIMED') AND head_revision < 2147483647
         AND (deadline_at<=clock_timestamp() OR
           ((attempt_count >= $1 OR head_revision >= 2147483646)
@@ -152,7 +164,7 @@ export class Mf06JobLeaseService {
             ? 'HEAD_REVISION_EXHAUSTED'
             : 'ATTEMPTS_EXHAUSTED';
       await manager.query(
-        `UPDATE zone_entry_assessment_job SET status='FAILED',
+        `UPDATE ${table} SET status='FAILED',
         head_revision=head_revision+1,lease_token=NULL,lease_expires_at=NULL,
         last_error_code=$2,updated_at=$3 WHERE request_id=$1`,
         [head.request_id, reason, now],
@@ -178,12 +190,12 @@ export class Mf06JobLeaseService {
     // Snapshot caller identifiers before waiting for row ownership.
     const requestId = value.requestId.toLowerCase(),
       token = value.leaseToken.toLowerCase(),
-      revision = value.headRevision;
+      revision = value.headRevision,
+      table = this.jobTable();
     return this.db.transaction('READ COMMITTED', async (manager) => {
-      const [head] = (await manager.query(
-        'SELECT * FROM zone_entry_assessment_job WHERE request_id=$1 FOR UPDATE',
-        [requestId],
-      )) as JobRow[];
+      const [head] = (await manager.query(`SELECT * FROM ${table} WHERE request_id=$1 FOR UPDATE`, [
+        requestId,
+      ])) as JobRow[];
       const now = await this.now(manager);
       if (
         !head ||
@@ -206,7 +218,7 @@ export class Mf06JobLeaseService {
       }
       const changed = (await manager.query(
         `WITH stamp AS (SELECT clock_timestamp() AS now), changed AS (
-        UPDATE zone_entry_assessment_job SET
+        UPDATE ${table} SET
         status=CASE WHEN $2::varchar='PENDING' AND stamp.now+make_interval(secs=>$4)>=deadline_at THEN 'FAILED' ELSE $2::varchar END,
         head_revision=head_revision+1,lease_token=NULL,lease_expires_at=NULL,
         last_error_code=CASE WHEN $2::varchar='PENDING' AND stamp.now+make_interval(secs=>$4)>=deadline_at THEN 'DEADLINE_EXCEEDED' ELSE $3 END,
