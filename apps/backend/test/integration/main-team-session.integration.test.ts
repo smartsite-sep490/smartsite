@@ -3,10 +3,18 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ContractorTeamsService } from '../../src/modules/workforce/teams/contractor-teams.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../src/database/entities/index.js';
+import { AuthService, type AuthenticatedRequest } from '../../src/modules/auth/auth.service.js';
+import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
+import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
+import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
+import { hashPassword } from '../../src/modules/auth/password.js';
+import { ContractorTeamsController } from '../../src/modules/workforce/teams/contractor-teams.controller.js';
+import { createTestConfig } from '../support/config.js';
 
 const owned = createIsolatedTestDatabase();
 const db = owned.dataSource;
@@ -15,6 +23,101 @@ before(async () => {
   await owned.initialize();
 });
 after(() => owned.dispose());
+
+test('Team controller rejects an actually logged-out bearer after its early guard without Team/audit/history changes', async () => {
+  const f = await fixture();
+  const password = 'Synthetic-Team-Session-123!';
+  await db.query('UPDATE app_user SET password_hash=$2 WHERE id=$1', [
+    f.actorId,
+    await hashPassword(password),
+  ]);
+  const auth = new AuthService(db, new AuthTokenService(new JwtService(), createTestConfig()));
+  const guard = new UserAuthGuard(auth);
+  const controller = new ContractorTeamsController(f.service, guard);
+  const login = await auth.login(f.actorId, password, AuthClientType.WEB);
+  const request: AuthenticatedRequest = {
+    headers: { authorization: `Bearer ${login.accessToken}` },
+  };
+  await guard.authenticateRequest(request);
+  const teamId = randomUUID();
+  await controller.create(request, f.siteId, f.contractorId, {
+    requestId: teamId,
+    name: 'Before logout',
+    description: '',
+  });
+  await controller.update(request, f.siteId, f.contractorId, teamId, {
+    expectedVersion: 1,
+    name: 'Valid rename',
+    description: '',
+  });
+  const audits = await db.query(
+    'SELECT action FROM audit_log WHERE site_id=$1 AND actor_account_id=$2 ORDER BY action',
+    [f.siteId, f.actorId],
+  );
+  assert.deepEqual(
+    audits.map((row: { action: string }) => row.action),
+    ['CONTRACTOR_TEAM_CREATED', 'CONTRACTOR_TEAM_UPDATED'],
+  );
+  const before = {
+    teams: await db.query(
+      'SELECT id,name,version FROM contractor_team WHERE site_id=$1 ORDER BY id',
+      [f.siteId],
+    ),
+    audits,
+    history: await db.query(
+      'SELECT command_id,operation FROM authorization_history_command WHERE actor_user_id=$1 ORDER BY command_id',
+      [f.actorId],
+    ),
+  };
+  assert.equal(before.history.length, 1, 'Name-only update must not invent authority history');
+  // The request deliberately retains the valid early-guard user and original bearer.
+  await auth.logout(login.refreshToken, AuthClientType.WEB);
+  assert.equal(
+    (
+      await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM auth_session WHERE id=$1', [
+        request.sessionId,
+      ])
+    )[0].revoked,
+    true,
+  );
+  const unauthorized = (error: { getStatus?: () => number }) => error.getStatus?.() === 401;
+  await assert.rejects(
+    controller.create(request, f.siteId, f.contractorId, {
+      requestId: randomUUID(),
+      name: 'After logout',
+      description: '',
+    }),
+    unauthorized,
+  );
+  await assert.rejects(
+    controller.update(request, f.siteId, f.contractorId, teamId, {
+      expectedVersion: 2,
+      name: 'Forbidden rename',
+      description: '',
+    }),
+    unauthorized,
+  );
+  assert.deepEqual(
+    await db.query('SELECT id,name,version FROM contractor_team WHERE site_id=$1 ORDER BY id', [
+      f.siteId,
+    ]),
+    before.teams,
+  );
+  assert.deepEqual(
+    await db.query(
+      'SELECT action FROM audit_log WHERE site_id=$1 AND actor_account_id=$2 ORDER BY action',
+      [f.siteId, f.actorId],
+    ),
+    before.audits,
+  );
+  assert.deepEqual(
+    await db.query(
+      'SELECT command_id,operation FROM authorization_history_command WHERE actor_user_id=$1 ORDER BY command_id',
+      [f.actorId],
+    ),
+    before.history,
+  );
+});
 
 async function fixture() {
   const actorId = randomUUID(),

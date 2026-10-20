@@ -36,8 +36,15 @@ Artifacts are under
 
 ## Limits and review
 
-The session tests inject rejection into the transactional callback. They do not
-claim a real token logout/expiry race over HTTP, a browser check or whole-flow
+The initial session tests inject rejection into the transactional callback.
+A subsequent sixth PostgreSQL case uses actual AuthService login/logout,
+AuthTokenService/JWT, UserAuthGuard and ContractorTeamsController. Valid create
+and rename produce two `audit_log` rows and only one authority command. After
+WEB logout revokes the session, the same request retains its early-guard actor
+but create and rename both reject401; Team, audit and history remain unchanged.
+All six cases pass on a file-owned canonical70 schema, independently confirmed
+absent afterward. This is a controller invocation with real authentication and
+database behavior, not a socket-level concurrent race, browser or whole-flow
 acceptance. Existing broad Team suites were compiled, not executed against their
 default-schema test DataSource. No retained website/schema, AI worker or model is
 changed. No push, merge or deployment is performed.
@@ -45,7 +52,7 @@ changed. No push, merge or deployment is performed.
 Agy p7 reviewed the pre-change gap; p5 reviewed the saved repair and its limits.
 Root independently checked source and executed qualification. No blanket agent
 acceptance is adopted. P5's reference to `access_audit_event` is incorrect: the
-existing entity maps to `audit_log`; these tests do not assert that audit row.
+existing entity maps to `audit_log`; the new actual-token case now asserts it.
 The older oversized service receives a bounded exception
 for this security repair: owner Root; extract transaction-context handling only
 when a later responsibility change justifies it, rather than reorganizing the
