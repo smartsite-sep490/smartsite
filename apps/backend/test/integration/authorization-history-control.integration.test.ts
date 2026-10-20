@@ -216,6 +216,10 @@ test('Unused cutover rollback restores the exact predecessor and rolls back with
       ).length,
       0,
     );
+    await runner.query(
+      'ALTER TABLE authorization_history_epoch ADD COLUMN activated_at timestamptz',
+    );
+    assert.equal(await hasMainAuthorityCapture(runner.manager), false);
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();
@@ -232,6 +236,18 @@ test('Cutover rollback refuses schema drift before accessing relations', async (
       new AuthorizationHistoryCutover1793059200000().down(runner),
       /Explicit owned schema required/,
     );
+  } finally {
+    if (runner.isTransactionActive) await runner.rollbackTransaction();
+    await runner.release();
+  }
+});
+
+test('Installed guard profile without its activation column is unavailable', async () => {
+  const runner = db.createQueryRunner();
+  try {
+    await runner.startTransaction();
+    await runner.query('ALTER TABLE authorization_history_epoch DROP COLUMN activated_at');
+    assert.equal(await hasMainAuthorityCapture(runner.manager), false);
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();
@@ -306,4 +322,64 @@ test('Controlled command commits a READY epoch with a witness; a failed replacem
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();
   }
+});
+
+test('Only controlled READY transition creates immutable activation provenance; closing STAGING does not', async () => {
+  const [current] = await db.query(`SELECT e.epoch_id,e.activated_at IS NOT NULL AS activated,
+    e.activated_at>=e.baseline_at AS after_baseline FROM authorization_history_control c
+    JOIN authorization_history_epoch e USING(epoch_id) WHERE c.singleton=1`);
+  assert.equal(current.activated, true);
+  assert.equal(current.after_baseline, true);
+  const marker = await db.query(
+    'SELECT activated_at::text AS value FROM authorization_history_epoch WHERE epoch_id=$1',
+    [current.epoch_id],
+  );
+  await assert.rejects(
+    db.query(
+      'UPDATE authorization_history_epoch SET activated_at=clock_timestamp() WHERE epoch_id=$1',
+      [current.epoch_id],
+    ),
+    refused,
+  );
+  await db.query("UPDATE authorization_history_epoch SET state='GAPPED' WHERE epoch_id=$1", [
+    current.epoch_id,
+  ]);
+  assert.deepEqual(
+    await db.query(
+      'SELECT activated_at::text AS value FROM authorization_history_epoch WHERE epoch_id=$1',
+      [current.epoch_id],
+    ),
+    marker,
+  );
+  await db.query("UPDATE authorization_history_epoch SET state='CLOSED' WHERE epoch_id=$1", [
+    current.epoch_id,
+  ]);
+  assert.deepEqual(
+    await db.query(
+      'SELECT activated_at::text AS value FROM authorization_history_epoch WHERE epoch_id=$1',
+      [current.epoch_id],
+    ),
+    marker,
+  );
+  const staging = randomUUID();
+  await db.query(
+    'INSERT INTO authorization_history_epoch(epoch_id,writer_manifest_hash) VALUES($1,$2)',
+    [staging, 'b'.repeat(64)],
+  );
+  await db.query("UPDATE authorization_history_epoch SET state='CLOSED' WHERE epoch_id=$1", [
+    staging,
+  ]);
+  assert.deepEqual(
+    await db.query('SELECT activated_at FROM authorization_history_epoch WHERE epoch_id=$1', [
+      staging,
+    ]),
+    [{ activated_at: null }],
+  );
+  await assert.rejects(
+    db.query(
+      'INSERT INTO authorization_history_epoch(epoch_id,writer_manifest_hash,activated_at) VALUES($1,$2,clock_timestamp())',
+      [randomUUID(), 'b'.repeat(64)],
+    ),
+    refused,
+  );
 });

@@ -33,7 +33,7 @@ export const CUTOVER_EPOCH_GUARD_BODY = `
         expected_reg_hash text;
       BEGIN
         IF TG_OP='INSERT' THEN
-          IF NEW.state<>'STAGING' OR NEW.baseline_at IS NOT NULL OR NEW.closed_at IS NOT NULL THEN
+          IF NEW.state<>'STAGING' OR NEW.baseline_at IS NOT NULL OR NEW.closed_at IS NOT NULL OR NEW.activated_at IS NOT NULL THEN
             RAISE EXCEPTION 'Controlled authority cutover requires STAGING epoch insert' USING ERRCODE='23514';
           END IF;
           NEW.started_at:=clock_timestamp();
@@ -90,6 +90,7 @@ export const CUTOVER_EPOCH_GUARD_BODY = `
               OR EXISTS(SELECT 1 FROM authorization_history_revision r WHERE r.epoch_id=NEW.epoch_id OR r.transaction_id=pg_current_xact_id()) THEN
               RAISE EXCEPTION 'Controlled authority cutover baseline provenance verification failed' USING ERRCODE='23514';
             END IF;
+            NEW.activated_at:=clock_timestamp();
             RETURN NEW;
           END IF;
           IF (to_jsonb(NEW)-'state'-'closed_at') IS DISTINCT FROM (to_jsonb(OLD)-'state'-'closed_at')

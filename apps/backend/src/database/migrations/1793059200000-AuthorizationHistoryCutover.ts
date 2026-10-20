@@ -53,6 +53,10 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
           OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state='READY') THEN
           RAISE EXCEPTION 'Predecessor control/source/epoch state does not match pre-cutover canonical70' USING ERRCODE='23514';
         END IF;
+        IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='authorization_history_epoch'::regclass
+          AND attname='activated_at' AND NOT attisdropped) THEN
+          RAISE EXCEPTION 'Unexpected predecessor activation column' USING ERRCODE='23514';
+        END IF;
         IF EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
           WHERE n.nspname=owned_schema AND p.proname='mf06_authority_control_guard')
           OR EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -86,6 +90,9 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
       END $precheck$;
     `);
 
+    await runner.query(`ALTER TABLE authorization_history_epoch ADD COLUMN activated_at timestamptz,
+      ADD CONSTRAINT chk_authorization_history_activation_time CHECK(activated_at IS NULL OR
+        (baseline_at IS NOT NULL AND activated_at>=baseline_at))`);
     await runner.query(
       `CREATE OR REPLACE FUNCTION mf06_authority_epoch_guard() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path TO ${schemaPath} AS $fn$${CUTOVER_EPOCH_GUARD_BODY}$fn$`,
     );
@@ -141,7 +148,7 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
         END IF;
         LOCK TABLE authorization_history_control, authorization_history_epoch, authorization_history_baseline IN ACCESS EXCLUSIVE MODE;
         IF EXISTS(SELECT 1 FROM authorization_history_control WHERE epoch_id IS NOT NULL)
-          OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state IN ('READY','CLOSED')) THEN
+          OR EXISTS(SELECT 1 FROM authorization_history_epoch WHERE state IN ('READY','CLOSED') OR activated_at IS NOT NULL) THEN
           RAISE EXCEPTION 'Cannot roll back controlled authority cutover after epoch adoption or retirement' USING ERRCODE='23514';
         END IF;
         IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -164,6 +171,9 @@ export class AuthorizationHistoryCutover1793059200000 implements MigrationInterf
     await runner.query('DROP FUNCTION mf06_authority_control_guard()');
     await runner.query(
       `CREATE OR REPLACE FUNCTION mf06_authority_epoch_guard() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER AS $fn$${PREDECESSOR_EPOCH_GUARD_BODY}$fn$`,
+    );
+    await runner.query(
+      'ALTER TABLE authorization_history_epoch DROP CONSTRAINT chk_authorization_history_activation_time, DROP COLUMN activated_at',
     );
     await runner.query(`
       DO $restorecheck$
