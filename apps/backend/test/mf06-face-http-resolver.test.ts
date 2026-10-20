@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { HttpSafetyIdentityResolver } from '../src/modules/safety/assessments/mf06-face-http-resolver.js';
+import { Mf06RetryableWorkError } from '../src/modules/safety/assessments/mf06-assessment-worker.service.js';
 import {
   inspectSafetyFaceResponse,
   type SafetyFaceInvocation,
@@ -10,6 +11,48 @@ import {
 const BASE_URL = 'https://ai-identity.internal:8443';
 const SERVICE_TOKEN = 'synthetic-ai-service-bearer-token-2026';
 const FERNET_TEMPLATE = 'g' + 'A'.repeat(139);
+
+test('correlated temporary Face outage reaches the existing worker retry policy', async () => {
+  const invocation = makeInvocation();
+  const resolver = new HttpSafetyIdentityResolver(BASE_URL, SERVICE_TOKEN, async () =>
+    jsonResponse({
+      ...invocation,
+      state: 'UNAVAILABLE',
+      provenance: 'TRUSTED_SERVICE',
+      reason: 'SERVICE_UNAVAILABLE',
+    }),
+  );
+  await assert.rejects(
+    resolver.resolve(
+      { invocation, cropBytes: VALID_JPEG_BYTES, candidates: [makeCandidate(1)] },
+      new AbortController().signal,
+    ),
+    (error: unknown) =>
+      error instanceof Mf06RetryableWorkError && error.code === 'RESOLVER_UNAVAILABLE',
+  );
+});
+
+test('wrong-correlation outage and genuine NO_MATCH never become retry requests', async () => {
+  const invocation = makeInvocation();
+  for (const [wire, reason] of [
+    [
+      { ...invocation, bindingDigest: 'f'.repeat(64), reason: 'SERVICE_UNAVAILABLE' },
+      'CORRELATION_MISMATCH',
+    ],
+    [{ ...invocation, reason: 'NO_MATCH' }, 'IDENTITY_UNAVAILABLE'],
+  ] as const) {
+    const resolver = new HttpSafetyIdentityResolver(BASE_URL, SERVICE_TOKEN, async () =>
+      jsonResponse({ ...wire, state: 'UNAVAILABLE', provenance: 'TRUSTED_SERVICE' }),
+    );
+    assert.deepEqual(
+      await resolver.resolve(
+        { invocation, cropBytes: VALID_JPEG_BYTES, candidates: [makeCandidate(1)] },
+        new AbortController().signal,
+      ),
+      { state: 'UNAVAILABLE', reason },
+    );
+  }
+});
 
 const VALID_JPEG_BYTES = Buffer.from([
   0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
@@ -292,13 +335,15 @@ test('4. correlation mismatch, untrusted provenance, or service-reported UNAVAIL
   });
 });
 
-test('5. HTTP errors, wrong content-type, oversized >32768B response, or invalid UTF-8 fail closed', async () => {
+test('5. permanent HTTP errors, wrong content-type, oversized >32768B response, or invalid UTF-8 fail closed', async () => {
   const invocation = makeInvocation();
   const candidates = [makeCandidate(1)];
   const signal = new AbortController().signal;
 
   const responses: (() => Response)[] = [
-    () => jsonResponse({ state: 'UNAVAILABLE' }, { status: 503 }),
+    ...[400, 401, 403, 404].map(
+      (status) => () => jsonResponse({ state: 'UNAVAILABLE' }, { status }),
+    ),
     () =>
       new Response(JSON.stringify({ state: 'UNAVAILABLE' }), {
         status: 200,
@@ -326,6 +371,59 @@ test('5. HTTP errors, wrong content-type, oversized >32768B response, or invalid
     )) as { state: string; reason: string };
     assert.deepEqual(result, { state: 'UNAVAILABLE', reason: 'INVALID_RESPONSE' });
   }
+});
+
+test('temporary HTTP failures and connection failures request bounded worker retry without reading error bodies', async () => {
+  const invocation = makeInvocation();
+  const input = { invocation, cropBytes: VALID_JPEG_BYTES, candidates: [makeCandidate(1)] };
+  for (const status of [408, 429, 500, 502, 503, 504]) {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const resolver = new HttpSafetyIdentityResolver(
+      BASE_URL,
+      SERVICE_TOKEN,
+      async () => new Response(body, { status }),
+    );
+    await assert.rejects(
+      resolver.resolve(input, new AbortController().signal),
+      Mf06RetryableWorkError,
+    );
+    assert.equal(cancelled, true);
+  }
+  const offline = new HttpSafetyIdentityResolver(BASE_URL, SERVICE_TOKEN, async () => {
+    throw new TypeError('synthetic connection failure');
+  });
+  await assert.rejects(
+    offline.resolve(input, new AbortController().signal),
+    Mf06RetryableWorkError,
+  );
+});
+
+test('internal Face transport deadline requests retry while caller cancellation still wins', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const input = {
+    invocation: makeInvocation(),
+    cropBytes: VALID_JPEG_BYTES,
+    candidates: [makeCandidate(1)],
+  };
+  const resolver = new HttpSafetyIdentityResolver(
+    BASE_URL,
+    SERVICE_TOKEN,
+    async () => new Promise<Response>(() => {}),
+  );
+  const pending = resolver.resolve(input, new AbortController().signal);
+  const checked = assert.rejects(pending, Mf06RetryableWorkError);
+  t.mock.timers.tick(8000);
+  await checked;
+  const controller = new AbortController();
+  const cancelled = resolver.resolve(input, controller.signal);
+  controller.abort();
+  t.mock.timers.tick(8000);
+  assert.deepEqual(await cancelled, { state: 'UNAVAILABLE', reason: 'ABORTED' });
 });
 
 test('6. pre-aborted signal and mid-stream body cancellation return ABORTED and cancel stream', async () => {

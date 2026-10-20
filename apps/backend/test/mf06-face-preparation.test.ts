@@ -10,6 +10,7 @@ import sharp from 'sharp';
 import { AiObservationEventEntity } from '../src/database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../src/database/entities/enums.js';
 import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
+import { Mf06RetryableWorkError } from '../src/modules/safety/assessments/mf06-assessment-worker.service.js';
 import type { Mf06ClaimContextLookup } from '../src/modules/safety/assessments/mf06-claim-context.reader.js';
 import { Mf06FacePreparation } from '../src/modules/safety/assessments/mf06-face-preparation.js';
 import { readMf06SubjectMedia } from '../src/modules/safety/assessments/mf06-frame-media.reader.js';
@@ -526,4 +527,50 @@ test('3. pre-abort, mid-await abort, correlation mismatch, unlisted candidate, o
     assert.deepEqual(Object.keys(rejected), ['state', 'reason']);
   }
   assert.equal(getterCalls, 0);
+});
+
+test('4. resolver Mf06RetryableWorkError is rethrown when signal stays active, while mid-resolver abort wins as UNAVAILABLE/ABORTED', async (t) => {
+  const root = await makeDTempDir(t);
+  const frame = await makeSyntheticJpeg(40, 20, '#308040');
+  await writeFile(join(root, flatFileName()), frame.bytes);
+
+  const context = makeMatchedV13Context(frame.sha256);
+  const candidates = [makeCandidate(1)] as const;
+  const retryableError = new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
+  let shouldAbortInResolver = false;
+  const controller = new AbortController();
+
+  const preparation = new Mf06FacePreparation(
+    {
+      async readForClaim() {
+        return context;
+      },
+    },
+    {
+      async readForSafety() {
+        return { status: 'AVAILABLE', candidates };
+      },
+    },
+    {
+      async resolve(input) {
+        assert.equal(input.invocation.frameSha256, frame.sha256);
+        assert.equal(input.candidates.length, 1);
+        if (shouldAbortInResolver) controller.abort();
+        throw retryableError;
+      },
+    },
+    root,
+    MODEL_VERSION,
+  );
+
+  await assert.rejects(
+    preparation.prepare(CLAIM, new AbortController().signal),
+    (error: unknown) => error === retryableError,
+  );
+
+  shouldAbortInResolver = true;
+  assert.deepEqual(await preparation.prepare(CLAIM, controller.signal), {
+    state: 'UNAVAILABLE',
+    reason: 'ABORTED',
+  });
 });

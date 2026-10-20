@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Mf06RetryableWorkError } from './mf06-assessment-worker.service.js';
 import type { SafetyFaceCandidateReader } from '../../workforce/safety-face-candidate.reader.js';
 import type {
   Mf06ClaimContextLookup,
@@ -88,7 +89,8 @@ export class Mf06FacePreparation {
       )
         return unavailable('IDENTITY_UNAVAILABLE');
       return { state: 'PREPARED_UNATTESTED', context, media, response };
-    } catch {
+    } catch (error) {
+      if (!signal.aborted && error instanceof Mf06RetryableWorkError) throw error;
       return unavailable(signal.aborted ? 'ABORTED' : 'PREPARATION_FAILED');
     }
   }

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { fetchBoundedJson } from '../../../common/http/fetch-bounded-json.js';
 import { snapshotMf06Json } from './mf06-json-snapshot.js';
+import { Mf06RetryableWorkError } from './mf06-assessment-worker.service.js';
 import {
   inspectSafetyFaceResponse,
   isSafetyFaceInvocation,
@@ -55,6 +56,7 @@ export class HttpSafetyIdentityResolver implements SafetyIdentityResolverPort {
   async resolve(input: SafetyFaceResolveInput, signal: AbortSignal): Promise<unknown> {
     if (signal.aborted) return unavailable('ABORTED');
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
     try {
       if (
         !this.endpoint ||
@@ -105,9 +107,24 @@ export class HttpSafetyIdentityResolver implements SafetyIdentityResolverPort {
       });
       if (Buffer.byteLength(body) > 3 * 1024 * 1024) return unavailable('INVALID_RESPONSE');
       const timeout = new AbortController();
-      timer = setTimeout(() => timeout.abort(), 8000);
+      timer = setTimeout(() => {
+        timedOut = true;
+        timeout.abort();
+      }, 8000);
       const response = await fetchBoundedJson(
-        this.fetcher,
+        async (url, init) => {
+          let reply: Response;
+          try {
+            reply = await this.fetcher(url, init);
+          } catch {
+            throw new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
+          }
+          if ([408, 429, 500, 502, 503, 504].includes(reply.status)) {
+            void reply.body?.cancel().catch(() => {});
+            throw new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
+          }
+          return reply;
+        },
         this.endpoint,
         {
           method: 'POST',
@@ -125,7 +142,15 @@ export class HttpSafetyIdentityResolver implements SafetyIdentityResolverPort {
       );
       if (signal.aborted) return unavailable('ABORTED');
       const inspected = inspectSafetyFaceResponse(invocation, response, 'TRUSTED_SERVICE');
-      if (inspected.state !== 'CANDIDATE_REFERENCE') return inspected;
+      if (inspected.state !== 'CANDIDATE_REFERENCE') {
+        // Only a validated, correlated service outage can request a worker retry.
+        if (
+          inspected.reason === 'IDENTITY_UNAVAILABLE' &&
+          (response as { reason: unknown }).reason === 'SERVICE_UNAVAILABLE'
+        )
+          throw new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
+        return inspected;
+      }
       if (
         !candidates.some(
           (c) =>
@@ -135,7 +160,9 @@ export class HttpSafetyIdentityResolver implements SafetyIdentityResolverPort {
       )
         return unavailable('INVALID_RESPONSE');
       return response;
-    } catch {
+    } catch (error) {
+      if (!signal.aborted && timedOut) throw new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
+      if (!signal.aborted && error instanceof Mf06RetryableWorkError) throw error;
       return unavailable(signal.aborted ? 'ABORTED' : 'INVALID_RESPONSE');
     } finally {
       if (timer) clearTimeout(timer);
