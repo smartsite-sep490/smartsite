@@ -37,7 +37,11 @@ import { PublicHttpException } from '../../../common/http/public-http-exception.
 import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
 import { auditAccess } from '../shared/access-audit.js';
-import { executeMainConfigurationCommand } from '../../../common/configuration/main-configuration-authority.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
 import {
   ContractorTeamQueryDto,
   ContractorTeamWorkersQueryDto,
@@ -134,6 +138,7 @@ export class ContractorTeamsService {
     teamValue: string,
     input: GrantTeamZoneDto,
     replacePermissionValue?: string,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue),
       contractorId = uuid(contractorValue),
@@ -270,6 +275,7 @@ export class ContractorTeamsService {
         );
         return { id: value.requestId };
       },
+      context,
     ).catch((error) => knownUnique(error, ['pk_team_zone_permission', 'uq_team_single_zone']));
   }
   async revokeZone(
@@ -278,6 +284,7 @@ export class ContractorTeamsService {
     contractorValue: string,
     teamValue: string,
     permissionValue: string,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue),
       contractorId = uuid(contractorValue),
@@ -316,6 +323,7 @@ export class ContractorTeamsService {
         }
         return { id };
       },
+      context,
     );
   }
   constructor(private readonly source: DataSource) {}
@@ -326,10 +334,11 @@ export class ContractorTeamsService {
     operation: Parameters<typeof executeMainConfigurationCommand>[2],
     request: object,
     work: (manager: EntityManager) => Promise<T>,
+    context?: MainConfigurationCommandContext,
   ): Promise<T> {
     return executeMainConfigurationCommand(
       this.source,
-      { actorUserId: actor.id },
+      this.commandContext(actor, context),
       operation,
       request,
       work,
@@ -337,6 +346,14 @@ export class ContractorTeamsService {
         await this.scope(manager, actor, siteId, contractorId);
       },
     );
+  }
+  private commandContext(
+    actor: AuthenticatedUser,
+    context?: MainConfigurationCommandContext,
+  ): MainConfigurationCommandContext {
+    if (context && uuid(context.actorUserId).toLowerCase() !== uuid(actor.id).toLowerCase())
+      this.forbidden();
+    return context ?? { actorUserId: actor.id };
   }
   private forbidden(): never {
     throw new PublicHttpException(403, {
@@ -582,6 +599,7 @@ export class ContractorTeamsService {
     siteValue: string,
     contractorValue: string,
     input: CreateContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
@@ -633,6 +651,7 @@ export class ContractorTeamsService {
           );
           return this.view(m, team);
         },
+        context,
       );
     } catch (error) {
       knownUnique(error, ['uq_team_active_name']);
@@ -644,44 +663,52 @@ export class ContractorTeamsService {
     contractorValue: string,
     idValue: string,
     input: UpdateContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
       id = uuid(idValue).toLowerCase(),
       value = command(UpdateContractorTeamDto, input);
     try {
-      return await this.source.transaction(async (m) => {
-        await this.scope(m, actor, siteId, contractorId);
-        const team = await m
-          .getRepository(ContractorTeamEntity)
-          .findOne({ where: { id, siteId, contractorId }, lock: { mode: 'pessimistic_write' } });
-        if (!team) missing();
-        if (!team.isActive) conflict('Archived team cannot be edited');
-        if (
-          team.version === value.expectedVersion + 1 &&
-          team.name === value.name &&
-          team.description === value.description
-        )
+      return await executeMainMetadataMutation(
+        this.source,
+        this.commandContext(actor, context),
+        async (m) => {
+          const team = await m
+            .getRepository(ContractorTeamEntity)
+            .findOne({ where: { id, siteId, contractorId }, lock: { mode: 'pessimistic_write' } });
+          if (!team) missing();
+          if (!team.isActive) conflict('Archived team cannot be edited');
+          if (
+            team.version === value.expectedVersion + 1 &&
+            team.name === value.name &&
+            team.description === value.description
+          )
+            return this.view(m, team);
+          if (team.version !== value.expectedVersion)
+            conflict('Team changed; reload before editing');
+          const oldName = team.name;
+          team.name = value.name;
+          team.normalizedName = value.name.normalize('NFKC').toLowerCase();
+          team.description = value.description;
+          team.version++;
+          await m.getRepository(ContractorTeamEntity).save(team);
+          await auditAccess(
+            m,
+            actor.id,
+            siteId,
+            'CONTRACTOR_TEAM_UPDATED',
+            'contractor_team',
+            id,
+            null,
+            { oldName, name: team.name, version: team.version },
+          );
           return this.view(m, team);
-        if (team.version !== value.expectedVersion) conflict('Team changed; reload before editing');
-        const oldName = team.name;
-        team.name = value.name;
-        team.normalizedName = value.name.normalize('NFKC').toLowerCase();
-        team.description = value.description;
-        team.version++;
-        await m.getRepository(ContractorTeamEntity).save(team);
-        await auditAccess(
-          m,
-          actor.id,
-          siteId,
-          'CONTRACTOR_TEAM_UPDATED',
-          'contractor_team',
-          id,
-          null,
-          { oldName, name: team.name, version: team.version },
-        );
-        return this.view(m, team);
-      });
+        },
+        async (m) => {
+          await this.scope(m, actor, siteId, contractorId);
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_team_active_name']);
     }
@@ -692,6 +719,7 @@ export class ContractorTeamsService {
     contractorValue: string,
     idValue: string,
     input: ArchiveContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
@@ -739,6 +767,7 @@ export class ContractorTeamsService {
         );
         return this.view(m, team);
       },
+      context,
     );
   }
   async assign(
@@ -747,6 +776,7 @@ export class ContractorTeamsService {
     contractorValue: string,
     workerValue: string,
     input: AssignContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ): Promise<ContractorTeamWorkerResponse> {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
@@ -872,6 +902,7 @@ export class ContractorTeamsService {
           );
           return result(membership, target ?? null);
         },
+        context,
       );
     } catch (error) {
       knownUnique(error, ['pk_team_membership_id', 'uq_team_worker_active']);
