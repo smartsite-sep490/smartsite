@@ -1,5 +1,6 @@
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { snapshotMf06Json } from './mf06-json-snapshot.js';
+import { validateMf06ObservationEvent } from './mf06-observation-event.js';
 
 export interface Mf06ExpectedFrameEvent {
   readonly eventId: string;
@@ -38,13 +39,13 @@ export function selectMf06FrameReference(
     const exp = asRecord(snapshotMf06Json(expected));
     const saved = snapshotMf06Json(raw);
     const rec = asRecord(saved);
-    if (!exp || !rec || rec.schemaVersion !== '1.2.0') return null;
+    if (!exp || !rec || !['1.2.0', '1.3.0'].includes(rec.schemaVersion as string)) return null;
 
     const { eventId: expEventId, streamSessionId: expSessionId, payloadHash } = exp;
     if (!isUuid(expEventId) || !isUuid(expSessionId) || !isSha256(payloadHash)) return null;
 
     if (
-      !validateObservationEvent(saved).isValid ||
+      !validateMf06ObservationEvent(saved).isValid ||
       computeCanonicalPayloadHash(saved) !== payloadHash
     ) {
       return null;

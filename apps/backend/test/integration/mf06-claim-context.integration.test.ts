@@ -10,12 +10,16 @@ import { storeVersionFixture } from '../support/mf06-store-version.fixture.js';
 const isolated = createIsolatedTestDatabase();
 const db = isolated.dataSource;
 const reader = new Mf06ClaimContextReader(db);
+db.setOptions({ extra: { ...db.options.extra, max: 1 } });
 
 before(() => isolated.initialize());
 after(() => isolated.dispose());
 
-test('real PG canonical70 claim context binds active job, rejects wrong token/revision without mutation, and resists pg_temp shadow', async () => {
-  const { input, requestId } = await storeVersionFixture(db, 'V2', '1.2.0');
+test('real PG canonical70 v1.3 claim context binds active job, rejects wrong token/revision without mutation, and resists pg_temp shadow', async (t) => {
+  const schema = db.driver.schema;
+  assert.match(schema ?? '', /^isolated_test_[0-9a-f]{32}$/);
+  t.diagnostic(`ownedMf06V13Schema=${schema}`);
+  const { input, requestId } = await storeVersionFixture(db, 'V2', '1.3.0');
   const [jobRow] = (await db.query(
     'SELECT status, attempt_count, head_revision, lease_token, lease_expires_at, deadline_at FROM zone_entry_assessment_job WHERE request_id = $1',
     [requestId],

@@ -1012,10 +1012,11 @@ function rebindFixtureAsV12(
   f: SyntheticFixture,
   cropFrameSha256: string,
   storedFrameSha256: string,
+  version: '1.2.0' | '1.3.0' = '1.2.0',
 ) {
   const rawPayload = {
     ...(f.event.rawPayload as Record<string, unknown>),
-    schemaVersion: '1.2.0',
+    schemaVersion: version,
     evidence: [
       {
         kind: 'FRAME',
@@ -1096,6 +1097,58 @@ test('rehashed foreign crop/frame with rebound invocation but SHA different from
     v12Mismatch.prepared,
     v12Mismatch.crop,
     v12Mismatch.response,
+  );
+  assert.deepEqual(result, { state: 'UNAVAILABLE', reason: 'INVALID_BINDING' });
+  assert.equal(profileCalls, 0);
+});
+
+test('v1.3 stored FRAME permits matched metadata', async () => {
+  const f = createSyntheticFixture();
+  const v13 = rebindFixtureAsV12(f, 'f'.repeat(64), 'f'.repeat(64), '1.3.0');
+  let profileCalls = 0;
+  const manager = createFakeManager({ request: v13.request, event: v13.event });
+  const service = new Mf06CandidateMetadataService(
+    createFakeProfileReader(f.profileLookup, () => {
+      profileCalls++;
+    }),
+    'SYNTHETIC_TEST',
+  );
+
+  const result = await service.revalidate(
+    manager,
+    f.siteId,
+    f.requestId,
+    v13.prepared,
+    v13.crop,
+    v13.response,
+  );
+  assert.equal(result.state, 'ELIGIBLE_PROFILE_METADATA');
+  if (result.state !== 'ELIGIBLE_PROFILE_METADATA') return;
+  assert.equal(result.workerId, f.workerId.toLowerCase());
+  assert.equal(result.bindingDigest, v13.prepared.invocation.bindingDigest);
+  assert.equal(result.contextDigest, v13.stored.contextDigest);
+  assert.equal(profileCalls, 1);
+});
+
+test('v1.3 foreign rebound frame is refused before profile lookup', async () => {
+  const f = createSyntheticFixture();
+  const v13Mismatch = rebindFixtureAsV12(f, 'a'.repeat(64), 'f'.repeat(64), '1.3.0');
+  let profileCalls = 0;
+  const manager = createFakeManager({ request: v13Mismatch.request, event: v13Mismatch.event });
+  const service = new Mf06CandidateMetadataService(
+    createFakeProfileReader(f.profileLookup, () => {
+      profileCalls++;
+    }),
+    'SYNTHETIC_TEST',
+  );
+
+  const result = await service.revalidate(
+    manager,
+    f.siteId,
+    f.requestId,
+    v13Mismatch.prepared,
+    v13Mismatch.crop,
+    v13Mismatch.response,
   );
   assert.deepEqual(result, { state: 'UNAVAILABLE', reason: 'INVALID_BINDING' });
   assert.equal(profileCalls, 0);

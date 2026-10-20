@@ -4,7 +4,7 @@ import { ZoneEntryAssessmentRequestEntity } from '../../../database/entities/zon
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import type { ObservationSubjectRef } from '../identity/observation-identity.types.js';
-import { reviewRawEventIsConsistent } from '../identity/observation-identity-event.js';
+import { readConsistentMf06RawEvent } from './mf06-observation-event.js';
 import { selectZoneEntrySubject } from '../identity/observation-identity-subject.js';
 
 /** Internal immutable projection. It is not a public DTO or an approved resolver wire contract. */
@@ -89,13 +89,9 @@ export function inspectMf06StoredBinding(
     )
   )
     return invalid;
-  try {
-    if (!reviewRawEventIsConsistent(event)) return invalid;
-  } catch {
-    // Corrupt in-memory JSON must fail closed, never produce a partially matched context.
-    return invalid;
-  }
-  const selected = selectZoneEntrySubject(event.rawPayload, request.zoneObservationIndex);
+  const raw = readConsistentMf06RawEvent(event);
+  if (!raw) return invalid;
+  const selected = selectZoneEntrySubject(raw, request.zoneObservationIndex);
   if (
     !selected.zoneEligible ||
     selected.trackId !== request.trackId ||
@@ -126,7 +122,7 @@ export function inspectMf06StoredBinding(
     storedBindingHash: request.bindingHash,
     requestedAt: request.requestedAt.toISOString(),
   });
-  const rawCapturedAt = (event.rawPayload as { capturedAt: string }).capturedAt;
+  const rawCapturedAt = raw.capturedAt as string;
   const subject: ObservationSubjectRef | null =
     selected.subjectBindingStatus === 'BOUND'
       ? Object.freeze({
