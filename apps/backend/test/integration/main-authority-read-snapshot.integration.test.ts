@@ -2,9 +2,11 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
+import { DataSource } from 'typeorm';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { readMainAuthoritySnapshot } from '../../src/modules/zones/main-authority-read-snapshot.js';
 import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
+import { hasMainAuthorityCapture } from '../../src/common/configuration/main-authority-capture-preflight.js';
 
 const owned = createIsolatedTestDatabase();
 const db = owned.dataSource;
@@ -14,6 +16,31 @@ before(async () => {
   await owned.initialize();
 });
 after(() => owned.dispose());
+
+test('fenced read preserves the installed capture function search-path profile', async () => {
+  assert.equal(await db.transaction((manager) => hasMainAuthorityCapture(manager)), true);
+  await readMainAuthoritySnapshot(db, async (manager) => {
+    assert.equal(await hasMainAuthorityCapture(manager), true);
+  });
+});
+
+test('pooled temporary namespace cannot shadow authority tables', async () => {
+  const pooled = new DataSource({ ...db.options, extra: { ...db.options.extra, max: 1 } });
+  await pooled.initialize();
+  try {
+    await pooled.query('CREATE TEMP TABLE site(id uuid,name text)');
+    let called = false;
+    await assert.rejects(
+      readMainAuthoritySnapshot(pooled, async () => {
+        called = true;
+      }),
+      /Temporary authority namespace unavailable/,
+    );
+    assert.equal(called, false);
+  } finally {
+    await pooled.destroy();
+  }
+});
 
 test('read-only SERIALIZABLE snapshot drains an actual pre-event source writer', async () => {
   const writer = db.createQueryRunner(),

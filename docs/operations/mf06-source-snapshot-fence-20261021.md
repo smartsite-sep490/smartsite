@@ -8,7 +8,7 @@ reconstructor still returns coverage=false; it is not an operational qualifier.
 `readMainAuthoritySnapshot` owns a fresh SERIALIZABLE transaction. Before any SELECT,
 it acquires SHARE locks on all18 frozen V2 source tables in the selected driver
 schema, with a1500ms lock timeout and5s statement timeout. It then switches READ ONLY,
-sets the qualified search path with pg_temp last, validates the selected schema,
+rejects any pooled temporary namespace, sets the schema-only search path, validates the selected schema,
 and invokes the callback. Failure rolls back; there is no unfenced fallback.
 This short lock excludes concurrent configuration writes while reconstruction runs.
 
@@ -17,10 +17,12 @@ This short lock excludes concurrent configuration writes while reconstruction ru
 - `authority-snapshot-fence-proof-v1.json`: dedicated5433 synthetic table reproduced
   the stale snapshot; the lock-before-snapshot variant waited for the writer and
   saw its committed value after switching READ ONLY.
-- `main-authority-read-snapshot.integration.test.ts`: two actual canonical70-schema
+- `main-authority-read-snapshot.integration.test.ts`: final four actual canonical70-schema
   cases passed. An actual pending Site insert blocks the reader; all18 source
   locks, SERIALIZABLE/READ ONLY, committed row visibility and write refusal are
-  checked. Callback failure releases locks for a subsequent writer.
+  checked. Callback failure releases locks for a subsequent writer. The installed
+  function path profile remains valid and a pooled temporary table cannot shadow
+  authority metadata or reach the callback.
 - Narrow TypeScript and two-file ESLint exit0. Initial test-only DataSourceOptions
   schema-union compile failure is retained, then fixed by the existing typed cast.
 - Owned schemas independently absent and prior namespace names unchanged after
@@ -43,3 +45,10 @@ Peer review: P8 independently identified the same source-writer race. Its propos
 pg_locks test alone cannot prove lock-before-first-snapshot ordering; the owned
 transaction wrapper supplies that ordering. Do not weaken the reconstructor's
 READ ONLY contract or treat possession of a lock as operational coverage.
+
+P8's subsequent profile finding was reproduced (1FAIL/2PASS): appending pg_temp to
+the caller path mismatched frozen SET search_path FROM CURRENT function metadata.
+The fix preserves the schema-only profile and refuses a pooled temp namespace
+before any unqualified metadata query. Final4PASS/3.05s, compile/lint exit0; earlier
+2PASS and the actual regression failure remain retained. The low-level reader is
+still unqualified and returns coverage=false; this change does not promote it.

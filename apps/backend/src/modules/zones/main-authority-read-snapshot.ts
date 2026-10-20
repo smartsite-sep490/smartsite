@@ -7,7 +7,13 @@ export async function readMainAuthoritySnapshot<T>(
   operation: (manager: EntityManager) => Promise<T>,
 ): Promise<T> {
   const schema = source.driver.schema;
-  if (typeof schema !== 'string' || !schema || schema.includes('\0'))
+  if (
+    typeof schema !== 'string' ||
+    !schema ||
+    schema.includes('\0') ||
+    schema.startsWith('pg_') ||
+    schema === 'information_schema'
+  )
     throw new Error('Selected authority schema required');
   const quote = (identifier: string) => '"' + identifier.replaceAll('"', '""') + '"';
   return source.transaction('SERIALIZABLE', async (manager) => {
@@ -18,9 +24,11 @@ export async function readMainAuthoritySnapshot<T>(
       `LOCK TABLE ${MAIN_AUTHORITY_V2_SOURCES.map(([, table]) => `${quote(schema)}.${quote(table)}`).join(',')} IN SHARE MODE`,
     );
     await manager.query('SET TRANSACTION READ ONLY');
-    await manager.query("SELECT set_config('search_path',quote_ident($1)||', pg_temp',true)", [
-      schema,
-    ]);
+    // Frozen capture profiles use the schema-only path; reject pooled temp namespaces
+    // instead of changing that profile or allowing implicit temporary-table shadowing.
+    const [temporary] = await manager.query('SELECT pg_catalog.pg_my_temp_schema()<>0 AS present');
+    if (temporary?.present !== false) throw new Error('Temporary authority namespace unavailable');
+    await manager.query("SELECT set_config('search_path',quote_ident($1),true)", [schema]);
     const [selected] = await manager.query('SELECT current_schema()=$1::text AS valid', [schema]);
     if (selected?.valid !== true) throw new Error('Selected authority schema unavailable');
     return operation(manager);
