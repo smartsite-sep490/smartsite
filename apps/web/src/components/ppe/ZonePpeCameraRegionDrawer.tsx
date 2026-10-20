@@ -65,6 +65,16 @@ function invalidateRegionMutationQueries(
   for (const queryKey of keys) {
     queryClient.invalidateQueries({ queryKey });
   }
+  queryClient.invalidateQueries({
+    predicate: ({ queryKey }) =>
+      queryKey[0] === 'camera-setup' &&
+      queryKey[1] === apiUrl &&
+      queryKey[2] === sessionScope &&
+      queryKey[4] === internalNonce &&
+      queryKey[6] === siteId &&
+      (queryKey[7] === 'cameras' ||
+        (queryKey[7] === 'selected-camera' && queryKey[8] === selectedCamera.id)),
+  });
 }
 
 const drawerClientKeys = new WeakMap<SmartSiteManagementClient, number>();

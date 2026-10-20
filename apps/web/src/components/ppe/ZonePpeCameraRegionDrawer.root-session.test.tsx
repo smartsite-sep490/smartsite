@@ -115,6 +115,7 @@ function mount() {
   );
   const view = render(content(client));
   return {
+    cache,
     session,
     saved,
     revoked,
@@ -249,3 +250,82 @@ it('suppresses an old write result when its owning client is replaced', async ()
   expect(saved).not.toHaveBeenCalled();
   expect(revoked).not.toHaveBeenCalled();
 });
+
+it.each([200, 409])(
+  'invalidates current-scoped camera-setup cameras and selected-camera queries on %i write result',
+  async (status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) =>
+        init.method === 'GET'
+          ? Response.json(camera)
+          : status === 200
+            ? Response.json({
+                configurationVersion: 2,
+                region: { id: 'region', cameraId: 'camera', zoneId: 'zone' },
+              })
+            : Response.json({}, { status: 409 }),
+      ),
+    );
+    const { cache, saved } = mount();
+    const api = 'https://api.example.test';
+    const roles = [{ role: 'SITE_MANAGER', siteId: 'site' }];
+    const currentKeys = [
+      ['camera-setup', api, 'fixture-session', 'user', 1, roles, 'site', 'cameras'],
+      [
+        'camera-setup',
+        api,
+        'fixture-session',
+        'user',
+        1,
+        roles,
+        'site',
+        'selected-camera',
+        'camera',
+      ],
+    ] as const;
+    const foreignKeys = [
+      ['camera-setup', api, 'fixture-session', 'user', 1, roles, 'sites'],
+      [
+        'camera-setup',
+        'https://other.example.test',
+        'fixture-session',
+        'user',
+        1,
+        roles,
+        'site',
+        'cameras',
+      ],
+      ['camera-setup', api, 'other-session', 'user', 1, roles, 'site', 'cameras'],
+      ['camera-setup', api, 'fixture-session', 'user', 2, roles, 'site', 'cameras'],
+      ['camera-setup', api, 'fixture-session', 'user', 1, roles, 'other-site', 'cameras'],
+      [
+        'camera-setup',
+        api,
+        'fixture-session',
+        'user',
+        1,
+        roles,
+        'site',
+        'selected-camera',
+        'other-camera',
+      ],
+    ] as const;
+    cache.setQueryData(currentKeys[0], [camera]);
+    cache.setQueryData(currentKeys[1], { ...camera, configurationVersion: 1 });
+    for (const key of foreignKeys) cache.setQueryData(key, [camera]);
+
+    submit();
+    if (status === 200) {
+      await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    } else {
+      expect(await screen.findByRole('alert')).not.toBeNull();
+    }
+    for (const key of currentKeys) {
+      expect(cache.getQueryState(key)?.isInvalidated).toBe(true);
+    }
+    for (const key of foreignKeys) {
+      expect(cache.getQueryState(key)?.isInvalidated).toBe(false);
+    }
+  },
+);

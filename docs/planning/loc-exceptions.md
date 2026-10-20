@@ -282,3 +282,13 @@ shrinks by extracting its references into a separate small component. Before
 unrelated catalog growth, move the cohesive MF06 catalog through the existing
 feature registration pattern with parity/load-order coverage. This scoped
 exception does not raise general LOC limits or prove browser/AT acceptance.
+
+## Region mutation camera catalog invalidation, 20 October
+
+Root permits `apps/web/src/components/ppe/ZonePpeCameraRegionDrawer.tsx`
+320→330 physical lines to keep the existing mutation invalidation responsibility
+in one helper. The ten-line predicate adds scoped Camera Setup invalidation;
+extracting it solely for this fix would scatter the cache-key contract. No new
+mutation or authorization policy is introduced. The related test remains below
+400 lines. Extract a cohesive cache-key utility before further cross-page cache
+features; this exception does not increase the normal source-size target.
