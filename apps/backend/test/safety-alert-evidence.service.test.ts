@@ -16,6 +16,7 @@ import { CameraEntity } from '../src/database/entities/camera.entity.js';
 import { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
 
 const jpeg = Buffer.from([0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9]);
+const jpegSha256 = createHash('sha256').update(jpeg).digest('hex');
 
 function config(root?: string) {
   return new ConfigService<BackendEnvironment, true>(
@@ -115,6 +116,8 @@ function identityFrameFixture(
     cameraSiteId?: string;
     storedCameraExternalId?: string;
     conflictingSiteMapping?: boolean;
+    schemaVersion?: '1.0.0' | '1.3.0';
+    declaredSha?: string;
   },
 ) {
   const siteId = randomUUID();
@@ -123,9 +126,12 @@ function identityFrameFixture(
   const sessionId = randomUUID();
   const cameraId = randomUUID();
   const uriSessionId = overrides?.uriSessionId ?? sessionId;
+  const schemaVersion = overrides?.schemaVersion ?? '1.0.0';
+  const declaredSha =
+    overrides?.declaredSha ?? (schemaVersion === '1.3.0' ? jpegSha256 : undefined);
   const rawPayload = {
     eventId,
-    schemaVersion: '1.0.0',
+    schemaVersion,
     cameraExternalId: 'CAM-01',
     streamSessionId: sessionId,
     capturedAt: '2026-10-01T00:00:00.000Z',
@@ -147,6 +153,7 @@ function identityFrameFixture(
       {
         kind: overrides?.kind ?? 'FRAME',
         uri: `local://evidence/${uriSessionId}/9/${eventId}.jpg`,
+        ...(declaredSha === undefined ? {} : { sha256: declaredSha }),
       },
     ],
   };
@@ -479,4 +486,107 @@ test('evidence content rejects a configured root reached through a symlink or ju
     ).read(siteId, alertId, eventId, '0'),
     isPublicError('NOT_FOUND'),
   );
+});
+
+test('identity review v1.3 serves matching FRAME and rejects wrong declared or modified body SHA with 409 CONFLICT', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-v13-frame-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const validV13 = identityFrameFixture(root, { schemaVersion: '1.3.0' });
+  await writeFile(join(root, validV13.fileName), jpeg);
+  const content = await validV13.service.readFrameForIdentityReview(
+    validV13.siteId,
+    validV13.alertId,
+    validV13.eventId,
+    '0',
+    validV13.payloadHash,
+  );
+  assert.deepEqual(content.bytes, jpeg);
+  assert.equal(content.sha256, jpegSha256);
+
+  const changedBytes = Buffer.from([0xff, 0xd8, 0x03, 0x04, 0xff, 0xd9]);
+  await writeFile(join(root, validV13.fileName), changedBytes);
+  await assert.rejects(
+    validV13.service.readFrameForIdentityReview(
+      validV13.siteId,
+      validV13.alertId,
+      validV13.eventId,
+      '0',
+      validV13.payloadHash,
+    ),
+    isPublicError('CONFLICT'),
+  );
+
+  const wrongDeclaredSha = identityFrameFixture(root, {
+    schemaVersion: '1.3.0',
+    declaredSha: 'a'.repeat(64),
+  });
+  await writeFile(join(root, wrongDeclaredSha.fileName), jpeg);
+  await assert.rejects(
+    wrongDeclaredSha.service.readFrameForIdentityReview(
+      wrongDeclaredSha.siteId,
+      wrongDeclaredSha.alertId,
+      wrongDeclaredSha.eventId,
+      '0',
+      wrongDeclaredSha.payloadHash,
+    ),
+    isPublicError('CONFLICT'),
+  );
+});
+
+test('identity review v1.3 rejects raw/persisted scope or header contradictions and non-FRAME or cross-session items', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-v13-regressions-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  for (const overrides of [
+    { schemaVersion: '1.3.0' as const, storedHash: 'a'.repeat(64) },
+    { schemaVersion: '1.3.0' as const, storedSessionId: randomUUID() },
+    { schemaVersion: '1.3.0' as const, conflictingSiteMapping: true },
+    { schemaVersion: '1.3.0' as const, storedCameraExternalId: 'OTHER-CAMERA' },
+  ]) {
+    const value = identityFrameFixture(root, overrides);
+    await writeFile(join(root, value.fileName), jpeg);
+    await assert.rejects(
+      value.service.readFrameForIdentityReview(
+        value.siteId,
+        value.alertId,
+        value.eventId,
+        '0',
+        value.payloadHash,
+      ),
+      isPublicError('CONFLICT'),
+    );
+  }
+
+  const validV13 = identityFrameFixture(root, { schemaVersion: '1.3.0' });
+  await writeFile(join(root, validV13.fileName), jpeg);
+  await assert.rejects(
+    validV13.service.readFrameForIdentityReview(
+      validV13.siteId,
+      validV13.alertId,
+      validV13.eventId,
+      '0',
+      'b'.repeat(64),
+    ),
+    isPublicError('CONFLICT'),
+  );
+
+  for (const overrides of [
+    { schemaVersion: '1.3.0' as const, kind: 'CROP' },
+    { schemaVersion: '1.3.0' as const, kind: 'SNAPSHOT' },
+    { schemaVersion: '1.3.0' as const, uriSessionId: randomUUID() },
+  ]) {
+    const value = identityFrameFixture(root, overrides);
+    await writeFile(join(root, value.fileName), jpeg);
+    await assert.rejects(
+      value.service.readFrameForIdentityReview(
+        value.siteId,
+        value.alertId,
+        value.eventId,
+        '0',
+        value.payloadHash,
+      ),
+      isPublicError('NOT_FOUND'),
+    );
+  }
 });

@@ -1,5 +1,9 @@
 # MF06 explicit v1.3 stored-event and frame reading
 
+Update20October: the owner subsequently approved the two MF08 reader exceptions
+and v1.3 FRAME SHA parity in `mf08-v13-evidence-compatibility.md`. The historical
+unchanged-MF08 checks below describe the earlier local2c75b4f milestone only.
+
 This private source supports reading a separately admitted immutable v1.3 event.
 It does not enable ingestion, a producer, a registered worker or an identity model.
 Canonical Main publication/provenance remains a separate pending step.

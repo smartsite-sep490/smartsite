@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
 import { AiObservationEventEntity } from '../src/database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../src/database/entities/enums.js';
 import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
@@ -114,10 +114,11 @@ function makeV13Fixture(
   return { rawPayload, payloadHash, request, event };
 }
 
-test('1. consistent v1.3 PERSON + ZONE_ENTRY + MASK(PRESENT) matches MF06 stored binding and selects FRAME while shared MF08 validator still rejects v1.3', () => {
+test('1. consistent v1.3 event matches MF06 and approved MF08 readers while the default contract validator stays unchanged', () => {
   const { rawPayload, payloadHash, request, event } = makeV13Fixture();
 
-  assert.equal(reviewRawEventIsConsistent(event), false);
+  assert.equal(reviewRawEventIsConsistent(event), true);
+  assert.equal(validateObservationEvent(event.rawPayload).isValid, false);
 
   const inspected = inspectMf06StoredBinding(request, event);
   assert.equal(inspected.status, 'MATCHED');
