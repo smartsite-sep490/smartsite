@@ -81,6 +81,14 @@ const validateExpandedObservationEventSchema: CompiledSchemaValidator = ajv.comp
 const validateV12ObservationEventSchema: CompiledSchemaValidator = ajv.compile(
   JSON.parse(readFileSync(v12ObservationEventSchemaPath, 'utf8')) as unknown,
 );
+const validateEightFamilySchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(
+    readFileSync(
+      new URL('../../schemas/v1.3/technical-observation-event.json', import.meta.url),
+      'utf8',
+    ),
+  ) as unknown,
+);
 const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
   cameraRegionConfigurationSchema,
 );
@@ -148,6 +156,13 @@ export function validateObservationEvent(data: unknown): ValidationResult {
     isValid: issues.length === 0,
     issues,
   };
+}
+
+/** Explicit eight-family candidate only; existing consumers retain their version admission. */
+export function validateEightFamilyObservationEvent(data: unknown): ValidationResult {
+  const issues = schemaValidationIssues(validateEightFamilySchema, data);
+  issues.push(...validateGeometries(data));
+  return { isValid: issues.length === 0, issues };
 }
 
 export function validateCameraRegionConfiguration(data: unknown): ValidationResult {

@@ -1,5 +1,10 @@
 # Contract Backend–AI
 
+Candidate v1.3 adds the explicit `validateEightFamilyObservationEvent` entrypoint
+for eight PPE families with evidence digests. Existing consumers do not opt in.
+See `../docs/operations/eight-family-observation-contract.md` for the positive-only
+Harness/Hook limits and open producer/model/full-flow acceptance gates.
+
 Thư mục này giữ contract chuẩn giữa `smartsite-ai` và SmartSite Backend.
 
 Observation envelope `1.1.0` bổ sung `GLOVES`, `BOOTS`, `GOGGLES` tại
