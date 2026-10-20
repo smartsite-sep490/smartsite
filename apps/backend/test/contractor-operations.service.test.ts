@@ -51,6 +51,16 @@ function dataSourceFor(
     onTransaction?: (isolation: string) => void;
   },
 ): DataSource {
+  // Legacy-only domain fixtures have no journal; keep catalog probes out of domain query counts.
+  const transactionManager = options
+    ? manager
+    : ({
+        ...manager,
+        query: async (sql: string, params: unknown[] = []) => {
+          if (sql.includes('FROM pg_class c JOIN pg_namespace')) return [];
+          return manager.query(sql, params);
+        },
+      } as EntityManager);
   return {
     manager: {
       query: async (sql: string) => {
@@ -65,7 +75,7 @@ function dataSourceFor(
       const isolation = typeof isolationOrWork === 'string' ? isolationOrWork : 'DEFAULT';
       const work = typeof isolationOrWork === 'function' ? isolationOrWork : maybeWork!;
       options?.onTransaction?.(isolation);
-      return work(manager);
+      return work(transactionManager);
     },
     getRepository: (target: unknown) => manager.getRepository(target as never),
     query: async (sql: string, params: unknown[] = []) => {
@@ -1044,7 +1054,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4)'
+        'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4)'
       ) {
         observedTags.push('journal:command_insert');
         const [commandId, actor_user_id, operation, request_hash] = params as [
@@ -1058,7 +1068,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id'
+        'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4) ON CONFLICT(command_id) DO NOTHING RETURNING command_id'
       ) {
         observedTags.push('journal:command_insert');
         const [commandId, actor_user_id, operation, request_hash] = params as [
@@ -1073,7 +1083,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        'SELECT request_hash,operation,actor_user_id FROM mf06_authority_command WHERE command_id=$1'
+        'SELECT request_hash,operation,actor_user_id FROM authorization_history_command WHERE command_id=$1'
       ) {
         observedTags.push('journal:command_lookup');
         const existing = recordedCommands.get(params[0] as string);
@@ -1278,7 +1288,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        "INSERT INTO mf06_assignment_command_result(command_id,source_id,contractor_id,result_json,result_hash) SELECT $1,a.id,p.contractor_id,mf06_assignment_response(a.id),'' FROM worker_site_zone_assignment a LEFT JOIN contractor_site_participation p ON p.id=a.site_contractor_id WHERE a.id=$2"
+        "INSERT INTO worker_assignment_command_receipt(command_id,source_id,contractor_id,result_json,result_hash) SELECT $1,a.id,p.contractor_id,mf06_assignment_response(a.id),'' FROM worker_site_zone_assignment a LEFT JOIN contractor_site_participation p ON p.id=a.site_contractor_id WHERE a.id=$2"
       ) {
         observedTags.push('journal:command_result_insert');
         const commandId = params[0] as string;
@@ -1290,7 +1300,7 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        "SELECT result_json,contractor_id,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM mf06_assignment_command_result WHERE command_id=$1"
+        "SELECT result_json,contractor_id,result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS hash_valid FROM worker_assignment_command_receipt WHERE command_id=$1"
       ) {
         observedTags.push('journal:command_result_read');
         const stored = commandResults.get(params[0] as string);
@@ -1332,12 +1342,18 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       observedTags.push(`tx:${isolation}`);
     },
     onSourceQuery: async (sql, params) => {
-      if (sql === 'SELECT site_id FROM worker_site_zone_assignment WHERE id=$1') {
+      if (
+        sql.startsWith('SELECT site_id FROM worker_site_zone_assignment WHERE id=$1 AND EXISTS')
+      ) {
         observedTags.push('scope:lookup_assignment_site');
         if (params[0] !== assignmentState.id) return [];
         return [{ site_id: assignmentState.siteId }];
       }
-      if (sql.startsWith('INSERT INTO mf06_authority_commit_witness(command_id,transaction_id)')) {
+      if (
+        sql.startsWith(
+          'INSERT INTO authorization_history_commit_receipt(command_id,transaction_id)',
+        )
+      ) {
         observedTags.push('journal:commit_witness');
         witnesses.push(params[0] as string);
         return [];

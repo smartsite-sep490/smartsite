@@ -130,7 +130,7 @@ export class MainAssignmentCommandService {
   async publicSafetyReview(assignmentId: string, context: MainConfigurationCommandContext) {
     return this.executePublic(
       'SAFETY_REVIEW',
-      await this.publicScope(assignmentId, context),
+      await this.publicScope(assignmentId, context, 'SAFETY_OFFICER'),
       context,
     );
   }
@@ -142,7 +142,7 @@ export class MainAssignmentCommandService {
     const p = command(SiteManagerDecisionCommand, input);
     return this.executePublic(
       'DECISION',
-      { ...(await this.publicScope(assignmentId, context)), ...p },
+      { ...(await this.publicScope(assignmentId, context, 'SITE_MANAGER')), ...p },
       context,
     );
   }
@@ -154,7 +154,7 @@ export class MainAssignmentCommandService {
     const p = command(RevokeWorkerAssignmentCommand, input);
     return this.executePublic(
       'REVOKE',
-      { ...(await this.publicScope(assignmentId, context)), ...p },
+      { ...(await this.publicScope(assignmentId, context, 'SITE_MANAGER')), ...p },
       context,
     );
   }
@@ -164,17 +164,25 @@ export class MainAssignmentCommandService {
     if (!Number.isFinite(new Date(value).getTime())) invalid('Invalid assignment time');
     return /[Tt ].*(?:[Zz]|[+-]\d{2}:?\d{2})$/.test(value) ? value : new Date(value).toISOString();
   }
-  private async publicScope(assignmentId: string, context: MainConfigurationCommandContext) {
+  private async publicScope(
+    assignmentId: string,
+    context: MainConfigurationCommandContext,
+    role: 'SAFETY_OFFICER' | 'SITE_MANAGER',
+  ) {
     const id = uuid(assignmentId).toLowerCase();
+    const actorUserId = uuid(context.actorUserId).toLowerCase();
     const rows = await this.source.query(
-      'SELECT site_id FROM worker_site_zone_assignment WHERE id=$1',
-      [id],
+      `SELECT site_id FROM worker_site_zone_assignment WHERE id=$1 AND EXISTS (
+        SELECT 1 FROM user_role_assignment r JOIN app_user u ON u.id=r.user_id
+        WHERE u.id=$2 AND u.is_active AND NOT u.must_change_password
+          AND r.role=$3 AND r.site_id=worker_site_zone_assignment.site_id)`,
+      [id, actorUserId, role],
     );
     if (!rows.length) missing();
     return {
       assignmentId: id,
       siteId: rows[0].site_id as string,
-      actorUserId: uuid(context.actorUserId).toLowerCase(),
+      actorUserId,
     };
   }
   private async executePublic(

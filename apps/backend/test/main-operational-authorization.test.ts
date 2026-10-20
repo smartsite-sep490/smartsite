@@ -107,7 +107,9 @@ function fixture(
   } as unknown as EntityManager;
   const source = {
     query: async (sql: string) => {
-      assert.equal(sql, 'SELECT site_id FROM worker_site_zone_assignment WHERE id=$1');
+      assert(
+        sql.startsWith('SELECT site_id FROM worker_site_zone_assignment WHERE id=$1 AND EXISTS'),
+      );
       return [{ site_id: site }];
     },
     transaction: async (_isolation: string, work: (m: EntityManager) => Promise<unknown>) =>
