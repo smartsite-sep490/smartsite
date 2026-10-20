@@ -574,3 +574,70 @@ test('4. resolver Mf06RetryableWorkError is rethrown when signal stays active, w
     reason: 'ABORTED',
   });
 });
+
+test('5. identical Face inputs retain invocation and binding across lease retries, while model, candidate or media changes create a new invocation', async (t) => {
+  const root = await makeDTempDir(t);
+  let frame = await makeSyntheticJpeg(40, 20, '#308040');
+  await writeFile(join(root, flatFileName()), frame.bytes);
+  let candidates = [makeCandidate(1), makeCandidate(2)];
+  async function invoke(claim = CLAIM, modelVersion = MODEL_VERSION) {
+    const context = makeMatchedV13Context(frame.sha256);
+    const preparation = new Mf06FacePreparation(
+      {
+        async readForClaim() {
+          return {
+            ...context,
+            claim,
+            claimContextDigest: sha256(Buffer.from(JSON.stringify(claim))),
+          };
+        },
+      },
+      {
+        async readForSafety() {
+          return { status: 'AVAILABLE', candidates };
+        },
+      },
+      {
+        async resolve(input) {
+          return {
+            ...input.invocation,
+            state: 'CANDIDATE',
+            provenance: 'TRUSTED_SERVICE',
+            profileReferenceHash: input.candidates[0]!.profileReferenceHash,
+            profileRevision: input.candidates[0]!.profileRevision,
+          };
+        },
+      },
+      root,
+      modelVersion,
+    );
+    const result = await preparation.prepare(claim, new AbortController().signal);
+    assert.equal(result.state, 'PREPARED_UNATTESTED');
+    if (result.state !== 'PREPARED_UNATTESTED') throw new Error('Expected actual prepared media');
+    return result.media.invocation;
+  }
+  const first = await invoke();
+  const repeated = await invoke();
+  assert.equal(repeated.invocationId, first.invocationId);
+  assert.equal(repeated.bindingDigest, first.bindingDigest);
+  const reclaimed = await invoke({
+    ...CLAIM,
+    leaseToken: '99999999-9999-4999-8999-999999999999',
+    headRevision: 4,
+    attemptCount: 2,
+  });
+  assert.equal(reclaimed.invocationId, first.invocationId);
+  assert.equal(reclaimed.bindingDigest, first.bindingDigest);
+  const changedModel = await invoke(CLAIM, 'arcface-r100-v2');
+  assert.notEqual(changedModel.invocationId, first.invocationId);
+  candidates = [makeCandidate(2), makeCandidate(1)];
+  assert.notEqual((await invoke()).invocationId, first.invocationId);
+  candidates = [makeCandidate(1), { ...makeCandidate(2), encryptedTemplate: 'B'.repeat(128) }];
+  assert.notEqual((await invoke()).invocationId, first.invocationId);
+  candidates = [makeCandidate(1), makeCandidate(2)];
+  frame = await makeSyntheticJpeg(40, 20, '#804030');
+  await writeFile(join(root, flatFileName()), frame.bytes);
+  const changedMedia = await invoke();
+  assert.notEqual(changedMedia.invocationId, first.invocationId);
+  assert.notEqual(changedMedia.cropSha256, first.cropSha256);
+});

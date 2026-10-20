@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { Mf06RetryableWorkError } from './mf06-assessment-worker.service.js';
+import { bindMf06FaceInvocation } from './mf06-face-binding.js';
 import type { SafetyFaceCandidateReader } from '../../workforce/safety-face-candidate.reader.js';
 import type {
   Mf06ClaimContextLookup,
@@ -48,10 +49,10 @@ export class Mf06FacePreparation {
       ) as Mf06ClaimContextLookup;
       if (signal.aborted) return unavailable('ABORTED');
       if (context.status !== 'MATCHED') return unavailable('CONTEXT_UNAVAILABLE');
-      const media = await prepareMf06FaceMedia(
+      let media = await prepareMf06FaceMedia(
         context,
         this.evidenceRoot,
-        randomUUID(),
+        context.request.requestId,
         this.modelVersion,
         signal,
       );
@@ -67,6 +68,22 @@ export class Mf06FacePreparation {
         lookup.candidates.length > 32
       )
         return unavailable('CANDIDATES_UNAVAILABLE');
+      const invocationBytes = Buffer.from(
+        computeCanonicalPayloadHash({
+          algorithm: 'MF06_FACE_INVOCATION_V1',
+          invocation: media.invocation,
+          candidates: lookup.candidates,
+        }).slice(0, 32),
+        'hex',
+      );
+      // UUIDv8 identifies identical resolver input across leases; full binding SHA remains mandatory.
+      invocationBytes[6] = (invocationBytes[6]! & 0x0f) | 0x80;
+      invocationBytes[8] = (invocationBytes[8]! & 0x3f) | 0x80;
+      const hex = invocationBytes.toString('hex');
+      const invocationId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      const rebound = bindMf06FaceInvocation(context, media.crop, invocationId, this.modelVersion);
+      if (rebound.state !== 'BOUND_UNATTESTED') return unavailable('MEDIA_UNAVAILABLE');
+      media = { ...rebound, crop: media.crop };
       const response = snapshotMf06Json(
         await this.resolver.resolve(
           {
