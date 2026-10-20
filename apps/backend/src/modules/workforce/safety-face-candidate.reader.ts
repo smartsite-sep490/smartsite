@@ -127,6 +127,7 @@ export class SafetyFaceCandidateReader {
 
         if (signal.aborted) return unavailable('ABORTED');
         if (!Array.isArray(rows)) return unavailable('READ_UNAVAILABLE');
+        // shortcut: refuse over 32 profiles; require a reviewed complete-corpus protocol for larger Sites.
         if (rows.length > 32) return unavailable('CANDIDATE_LIMIT');
 
         let snapshotted: unknown[];
