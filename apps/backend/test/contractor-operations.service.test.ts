@@ -1158,20 +1158,23 @@ function coordinatorHarnessFor(options: CoordinatorHarnessOptions = {}) {
       }
       if (
         sql ===
-        'SELECT id,($3::timestamptz<=valid_until OR valid_until IS NULL) AS contained FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2 AND is_active LIMIT 1 FOR SHARE'
+        'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2 AND is_active AND valid_from<=$3::timestamptz AND (valid_until IS NULL OR valid_until>=$4::timestamptz) ORDER BY valid_from,id LIMIT 1 FOR SHARE'
       ) {
         observedTags.push('check:participation_end_for_share');
-        const until = new Date(params[2] as string).getTime();
-        const first = participations.find(
-          (row) => row.contractorId === params[0] && row.siteId === params[1] && row.isActive,
-        );
-        if (!first) return [];
-        return [
-          {
-            id: first.id,
-            contained: first.validUntil === null || until <= first.validUntil.getTime(),
-          },
-        ];
+        const from = new Date(params[2] as string).getTime();
+        const until = new Date(params[3] as string).getTime();
+        return participations
+          .filter(
+            (row) =>
+              row.contractorId === params[0] &&
+              row.siteId === params[1] &&
+              row.isActive &&
+              row.validFrom.getTime() <= from &&
+              (row.validUntil === null || until <= row.validUntil.getTime()),
+          )
+          .sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime() || a.id.localeCompare(b.id))
+          .slice(0, 1)
+          .map((row) => ({ id: row.id }));
       }
       if (sql === 'SELECT id FROM zone WHERE site_id=$1 AND id=ANY($2::uuid[]) FOR SHARE') {
         observedTags.push('check:zone_for_share');

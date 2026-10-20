@@ -389,15 +389,11 @@ export class MainAssignmentCommandService {
       [worker.contractor_id, value.siteId, value.validFrom],
     );
     if (!eligible.length) forbidden();
-    // Retain main's separate active-participation lookup, including its lack of ordering.
-    // Request creates a PENDING assignment; approval rechecks the stored participation anchor.
-    const participations: { id: string; contained: boolean }[] = await manager.query(
-      'SELECT id,($3::timestamptz<=valid_until OR valid_until IS NULL) AS contained FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2 AND is_active LIMIT 1 FOR SHARE',
-      [worker.contractor_id, value.siteId, value.validUntil],
+    const participations: { id: string }[] = await manager.query(
+      'SELECT id FROM contractor_site_participation WHERE contractor_id=$1 AND site_id=$2 AND is_active AND valid_from<=$3::timestamptz AND (valid_until IS NULL OR valid_until>=$4::timestamptz) ORDER BY valid_from,id LIMIT 1 FOR SHARE',
+      [worker.contractor_id, value.siteId, value.validFrom, value.validUntil],
     );
     if (!participations.length)
-      conflict('Assignment must fit the Contractor participation interval');
-    if (!participations[0]!.contained)
       conflict('Assignment must fit the Contractor participation interval');
     const zones = await manager.query(
       'SELECT id FROM zone WHERE site_id=$1 AND id=ANY($2::uuid[]) FOR SHARE',
