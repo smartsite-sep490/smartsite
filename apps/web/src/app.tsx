@@ -351,8 +351,13 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               path="/zones"
               element={
                 <RestrictedZoneView
+                  key={location.search}
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
+                  initialSelection={{
+                    siteId: new URLSearchParams(location.search).get('siteId') ?? undefined,
+                    cameraId: new URLSearchParams(location.search).get('cameraId') ?? undefined,
+                  }}
                   onOpenSetup={openCameraSetup}
                   onNavigate={(tab, context) => onNavigate(tab, context)}
                 />

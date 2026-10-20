@@ -225,10 +225,18 @@ vi.mock('./features/auth/LoginScreen', () => ({
 }));
 
 vi.mock('./components/zones/RestrictedZoneView', () => ({
-  RestrictedZoneView: ({ sharedSession }: { sharedSession?: unknown }) => (
+  RestrictedZoneView: ({
+    sharedSession,
+    initialSelection,
+  }: {
+    sharedSession?: unknown;
+    initialSelection?: { siteId?: string; cameraId?: string };
+  }) => (
     <div data-testid="route-view" data-route="zones">
       <div>Restricted Zones</div>
       <span data-testid="zone-shared-session">{sharedSession ? 'PRESENT' : 'ABSENT'}</span>
+      <span data-testid="zone-initial-site-id">{initialSelection?.siteId ?? ''}</span>
+      <span data-testid="zone-initial-camera-id">{initialSelection?.cameraId ?? ''}</span>
     </div>
   ),
 }));
@@ -980,5 +988,19 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.getByTestId('initial-action-id').textContent).toBe('act-7');
     expect(screen.getByTestId('alert-shared-session').textContent).toBe('PRESENT');
     deepLinkRender.unmount();
+
+    const zoneLinkRender = render(
+      <MemoryRouter initialEntries={['/zones?siteId=site-9&cameraId=cam-42']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Restricted Zones')).toBeDefined();
+    expect(screen.getByTestId('zone-initial-site-id').textContent).toBe('site-9');
+    expect(screen.getByTestId('zone-initial-camera-id').textContent).toBe('cam-42');
+    expect(screen.getByTestId('zone-shared-session').textContent).toBe('PRESENT');
+    zoneLinkRender.unmount();
   });
 });

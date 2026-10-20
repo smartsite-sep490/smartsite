@@ -78,6 +78,7 @@ export interface RestrictedZoneViewProps {
   authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
   onSignOut?: () => void;
   apiUrl?: string;
+  initialSelection?: { siteId?: string; cameraId?: string };
   onOpenSetup?: (context?: { siteId: string; cameraId?: string }) => void;
   onNavigate?: (
     tab: 'incidents',
@@ -95,6 +96,7 @@ const allocateMetadataCredential = () => ++nextMetadataCredential;
 
 export function RestrictedZoneView({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  initialSelection,
   onOpenSetup,
   onNavigate,
   sharedSession: providedSharedSession,
@@ -126,8 +128,8 @@ export function RestrictedZoneView({
   const expiredScopeRef = useRef<string | null>(null);
   const [rejectedCredential, setRejectedCredential] = useState<number | null>(null);
 
-  const [requestedSiteId, setRequestedSiteId] = useState('');
-  const [requestedCameraId, setRequestedCameraId] = useState('');
+  const [requestedSiteId, setRequestedSiteId] = useState(initialSelection?.siteId ?? '');
+  const [requestedCameraId, setRequestedCameraId] = useState(initialSelection?.cameraId ?? '');
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [isDraftMode, setIsDraftMode] = useState(false);
   const [staleDraftInfo, setStaleDraftInfo] = useState<{ version: number } | null>(null);
@@ -212,6 +214,10 @@ export function RestrictedZoneView({
     metadataIdentity.apiUrl !== apiUrl ||
     metadataIdentity.roleScopeKey !== roleScopeKey
   ) {
+    if (metadataIdentity.token || metadataIdentity.userId || metadataIdentity.apiUrl !== apiUrl) {
+      setRequestedSiteId('');
+      setRequestedCameraId('');
+    }
     metadataCredential = allocateMetadataCredential();
     setMetadataIdentity({
       token: apiToken,
@@ -413,9 +419,15 @@ export function RestrictedZoneView({
     return items.filter((site) => assignedSiteIds.has(site.id));
   }, [sites.data?.items, assignedSiteIds]);
 
+  const holdLinkedSite = Boolean(
+    initialSelection?.siteId && initialSelection.siteId === requestedSiteId,
+  );
+
   const selectedSiteId = availableSites.some((site) => site.id === requestedSiteId)
     ? requestedSiteId
-    : (availableSites[0]?.id ?? '');
+    : holdLinkedSite
+      ? ''
+      : (availableSites[0]?.id ?? '');
 
   const cameras = useZoneMetadataPages({
     queryKey: [
@@ -438,15 +450,24 @@ export function RestrictedZoneView({
       canViewZone && apiToken.length > 0 && sessionScope.length > 0 && selectedSiteId.length > 0,
   });
 
-  const selectedCameraId = cameras.data?.items.some(
-    (cam) => cam.id === requestedCameraId && cam.siteId === selectedSiteId,
-  )
+  const scopedCameras = useMemo(
+    () => (cameras.data?.items ?? []).filter((cam) => cam.siteId === selectedSiteId),
+    [cameras.data?.items, selectedSiteId],
+  );
+
+  const holdLinkedCamera = Boolean(
+    initialSelection?.cameraId && initialSelection.cameraId === requestedCameraId,
+  );
+
+  const selectedCameraId = scopedCameras.some((cam) => cam.id === requestedCameraId)
     ? requestedCameraId
-    : (cameras.data?.items.find((cam) => cam.siteId === selectedSiteId)?.id ?? '');
+    : holdLinkedCamera
+      ? ''
+      : (scopedCameras[0]?.id ?? '');
 
   const selectedCamera = useMemo(
-    () => cameras.data?.items.find((c) => c.id === selectedCameraId && c.siteId === selectedSiteId),
-    [cameras.data?.items, selectedCameraId, selectedSiteId],
+    () => scopedCameras.find((c) => c.id === selectedCameraId),
+    [scopedCameras, selectedCameraId],
   );
 
   const scopedPreview = useScopedCameraPreview({
@@ -857,19 +878,30 @@ export function RestrictedZoneView({
   }
 
   if (isShared && !canViewZone) {
+    const managerSiteIds = Array.from(
+      new Set(
+        effectiveUser?.roleAssignments
+          .filter(
+            (assignment) =>
+              assignment.role === 'SITE_MANAGER' &&
+              typeof assignment.siteId === 'string' &&
+              assignment.siteId.trim().length > 0,
+          )
+          .map((assignment) => assignment.siteId!.trim()) ?? [],
+      ),
+    );
     const canHandoffToCameraSetup =
       Boolean(onOpenSetup) &&
       rejectedCredential !== metadataCredential &&
       Boolean(effectiveUser) &&
       !effectiveUser?.mustChangePassword &&
-      Boolean(
-        effectiveUser?.roleAssignments.some(
-          (assignment) =>
-            assignment.role === 'SITE_MANAGER' &&
-            typeof assignment.siteId === 'string' &&
-            assignment.siteId.trim().length > 0,
-        ),
-      );
+      managerSiteIds.length > 0;
+    const handoffSiteId =
+      initialSelection?.siteId && managerSiteIds.includes(initialSelection.siteId)
+        ? initialSelection.siteId
+        : managerSiteIds.length === 1
+          ? managerSiteIds[0]
+          : undefined;
 
     return (
       <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">
@@ -887,7 +919,16 @@ export function RestrictedZoneView({
             <div className="mt-5">
               <button
                 type="button"
-                onClick={() => onOpenSetup()}
+                onClick={() =>
+                  handoffSiteId
+                    ? onOpenSetup({
+                        siteId: handoffSiteId,
+                        ...(initialSelection?.siteId === handoffSiteId && initialSelection.cameraId
+                          ? { cameraId: initialSelection.cameraId }
+                          : {}),
+                      })
+                    : onOpenSetup()
+                }
                 className="rounded-lg border border-[#EAEAEA] bg-white px-4 py-2 text-xs font-bold text-[#2F3437] hover:bg-[#F5F5F5] transition-colors shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
               >
                 {tr('cameraSetup.title', { ns: 'safety' })}
@@ -1035,9 +1076,7 @@ export function RestrictedZoneView({
                 </div>
                 <p className="text-[11px] text-[#6B6B6B]">
                   {isGlobalAdmin
-                    ? tr(
-                        'restricted_zone_view.global_admin_role_verified_polygons_saved_here_synchronize_directly_with_backend_c',
-                      )
+                    ? t('restrictedZone.scope.readOnlyValue')
                     : t('restrictedZone.session.safetyOfficerDesc')}
                 </p>
               </div>
@@ -1078,6 +1117,9 @@ export function RestrictedZoneView({
                 disabled={sites.isPending || !availableSites.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
+                {!selectedSiteId && availableSites.length > 0 && (
+                  <option value="">{tr('cameraSetup.chooseSite', { ns: 'safety' })}</option>
+                )}
                 {availableSites.map((site) => (
                   <option key={site.id} value={site.id}>
                     {site.code} · {site.name}
@@ -1108,19 +1150,31 @@ export function RestrictedZoneView({
                   clearTransientFeedback();
                   setRequestedCameraId(cameraId);
                 }}
-                disabled={cameras.isPending || !cameras.data?.items.length}
+                disabled={cameras.isPending || !scopedCameras.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
-                {cameras.data?.items
-                  .filter((camera) => camera.siteId === selectedSiteId)
-                  .map((camera) => (
-                    <option key={camera.id} value={camera.id}>
-                      {camera.code} · {camera.name} (v{camera.configurationVersion})
-                    </option>
-                  ))}
+                {!selectedCameraId && scopedCameras.length > 0 && (
+                  <option value="">{tr('cameraSetup.chooseCamera', { ns: 'safety' })}</option>
+                )}
+                {scopedCameras.map((camera) => (
+                  <option key={camera.id} value={camera.id}>
+                    {camera.code} · {camera.name} (v{camera.configurationVersion})
+                  </option>
+                ))}
               </select>
               <ZoneMetadataPaging query={cameras} kind="cameras" />
             </div>
+
+            {((holdLinkedSite && !selectedSiteId && !sites.isPending && !sites.error) ||
+              (holdLinkedCamera &&
+                selectedSiteId &&
+                !selectedCameraId &&
+                !cameras.isPending &&
+                !cameras.error)) && (
+              <p role="status" className="sm:col-span-2 text-xs text-slate-600">
+                {tr('cameraSetup.linkedSelection', { ns: 'safety' })}
+              </p>
+            )}
 
             <div className="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
               {canOpenSetup && selectedSiteId && (
