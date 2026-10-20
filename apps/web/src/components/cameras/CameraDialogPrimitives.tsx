@@ -167,6 +167,7 @@ export function CameraActivationSection({
   confirmContainerRef,
 }: CameraActivationSectionProps) {
   const { t } = useLocale();
+  const confirmationPromptId = useId();
   const isActive = status === 'ACTIVE';
   const internalTriggerRef = useRef<HTMLButtonElement>(null);
   const internalConfirmContainerRef = useRef<HTMLDivElement>(null);
@@ -222,7 +223,10 @@ export function CameraActivationSection({
           ref={resolvedConfirmContainerRef}
           className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5"
         >
-          <p className="text-xs font-medium leading-relaxed text-amber-950 break-words">
+          <p
+            id={confirmationPromptId}
+            className="text-xs font-medium leading-relaxed text-amber-950 break-words"
+          >
             {isActive
               ? t('cameraSetup.manage.confirmDeactivatePrompt')
               : t('cameraSetup.manage.confirmActivatePrompt')}
@@ -231,6 +235,7 @@ export function CameraActivationSection({
             <button
               ref={cancelConfirmRef}
               type="button"
+              aria-describedby={confirmationPromptId}
               disabled={disabled}
               onClick={() => {
                 shouldRestoreTriggerFocusRef.current = true;
@@ -242,6 +247,7 @@ export function CameraActivationSection({
             </button>
             <button
               type="button"
+              aria-describedby={confirmationPromptId}
               disabled={disabled}
               onClick={onConfirmStatus}
               className={`inline-flex items-center justify-center rounded-xl px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${

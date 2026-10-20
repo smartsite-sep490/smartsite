@@ -290,3 +290,36 @@ it('moves focus to an enabled dialog dismissal control instead of document.body 
   expect(document.activeElement).not.toBe(document.body);
   expect(document.activeElement).toBe(cancelButton);
 });
+
+it.each([
+  {
+    status: 'ACTIVE' as const,
+    triggerLabel: 'Deactivate camera',
+    confirmLabel: 'Confirm deactivation',
+    question:
+      'Confirm deactivation? This advances camera and active region revisions. Monitoring will be inactive.',
+  },
+  {
+    status: 'INACTIVE' as const,
+    triggerLabel: 'Activate camera',
+    confirmLabel: 'Confirm activation',
+    question: 'Confirm activation? This advances camera and active region revisions.',
+  },
+])(
+  'links Cancel and $confirmLabel buttons to the rendered confirmation question via aria-describedby when $status',
+  ({ status, triggerLabel, confirmLabel, question }) => {
+    mount({ camera: { ...baseCamera, status } });
+    fireEvent.click(screen.getByRole('button', { name: triggerLabel }));
+
+    const confirmButton = screen.getByRole('button', { name: confirmLabel });
+    const cancelConfirm = within(confirmButton.parentElement!).getByRole('button', {
+      name: 'Cancel',
+    });
+    const prompt = screen.getByText(question);
+
+    expect(confirmButton.parentElement?.previousElementSibling).toBe(prompt);
+    expect(prompt.id).toBeTruthy();
+    expect(cancelConfirm.getAttribute('aria-describedby')).toBe(prompt.id);
+    expect(confirmButton.getAttribute('aria-describedby')).toBe(prompt.id);
+  },
+);
