@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
@@ -27,6 +27,7 @@ export function CameraSetupCatalog({
   open: (kind: CameraSetupOpenKind, cameraId?: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const catalogId = useId();
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
   const canWriteZones = capabilities.canManageZones || canManageCameras;
   const hasLoadedCameraPages = Boolean(cameras.data?.pages.length) && !cameras.baseError;
@@ -34,7 +35,15 @@ export function CameraSetupCatalog({
     requestedCameraId &&
     !rows.some((row) => row.id === requestedCameraId) &&
     hasLoadedCameraPages &&
+    !cameras.error &&
     !cameras.isFetching,
+  );
+  const showPartialPageNotice = Boolean(
+    !cameras.error &&
+    !cameras.isFetching &&
+    cameras.hasNextPage &&
+    rows.length === 0 &&
+    !showLinkedCameraNotice,
   );
   const button = CAMERA_BUTTON_STYLES.secondary;
   const primarySurface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs';
@@ -68,71 +77,89 @@ export function CameraSetupCatalog({
               </p>
             )}
             {cameraError}
-            <ul className="mt-4 space-y-2.5">
-              {rows.map((row) => {
-                const isEnabled = row.status === 'ACTIVE';
-                return (
-                  <li
-                    key={row.id}
-                    className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200/90 bg-slate-50/30 px-4 py-3.5 transition-colors hover:border-slate-300 hover:bg-slate-50/80 sm:flex-row sm:items-center"
-                  >
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <h3 className="break-words text-base font-semibold tracking-tight text-slate-900">
-                        {row.name}
-                      </h3>
-                      <dl className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-                        <div className="min-w-0 inline-flex flex-wrap items-center gap-1.5">
-                          <dt className="text-slate-400">{t('cameraSetup.codeLabel')}</dt>
-                          <dd className="min-w-0 break-all rounded-md border border-slate-200/80 bg-white px-2 py-0.5 font-mono text-xs font-medium tabular-nums text-slate-700">
-                            {row.code}
-                          </dd>
-                        </div>
-                        <div className="inline-flex items-center gap-1.5">
-                          <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
-                          <dd>
-                            <span
-                              className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-medium break-words ${
-                                isEnabled
-                                  ? 'border-slate-300 bg-white text-slate-800'
-                                  : 'border-slate-200 bg-slate-100 text-slate-600'
-                              }`}
+            {rows.length > 0 && (
+              <ul className="mt-4 space-y-2.5">
+                {rows.map((row) => {
+                  const isEnabled = row.status === 'ACTIVE';
+                  const isRequestedCamera = Boolean(
+                    requestedCameraId && row.id === requestedCameraId,
+                  );
+                  const nameId = `${catalogId}-camera-name-${row.id}`;
+                  const hintId = `${catalogId}-inactive-hint-${row.id}`;
+                  return (
+                    <li
+                      key={row.id}
+                      aria-labelledby={nameId}
+                      aria-current={isRequestedCamera ? 'true' : undefined}
+                      className={`flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 transition-colors sm:flex-row sm:items-center ${
+                        isRequestedCamera
+                          ? 'border-slate-900 bg-slate-100/70 ring-1 ring-slate-900/10'
+                          : 'border-slate-200/90 bg-slate-50/30 hover:border-slate-300 hover:bg-slate-50/80'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <h3
+                          id={nameId}
+                          className="break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900"
+                        >
+                          {row.name}
+                        </h3>
+                        <dl className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                          <div className="min-w-0 inline-flex flex-wrap items-center gap-1.5">
+                            <dt className="text-slate-400">{t('cameraSetup.codeLabel')}</dt>
+                            <dd className="min-w-0 break-all rounded-md border border-slate-200/80 bg-white px-2 py-0.5 font-mono text-xs font-medium tabular-nums text-slate-700">
+                              {row.code}
+                            </dd>
+                          </div>
+                          <div className="inline-flex items-center gap-1.5">
+                            <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
+                            <dd>
+                              <span
+                                className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-medium break-words ${
+                                  isEnabled
+                                    ? 'border-slate-300 bg-white text-slate-800'
+                                    : 'border-slate-200 bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
+                              </span>
+                            </dd>
+                          </div>
+                        </dl>
+                        {!isEnabled && canManageCameras && (
+                          <p id={hintId} className="text-xs leading-5 text-slate-500">
+                            {t('cameraSetup.inactiveHint')}
+                          </p>
+                        )}
+                      </div>
+                      {canManageCameras && (
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">
+                          {isEnabled && (
+                            <button
+                              type="button"
+                              className={button}
+                              aria-describedby={nameId}
+                              onClick={() => open('regions', row.id)}
                             >
-                              {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
-                            </span>
-                          </dd>
-                        </div>
-                      </dl>
-                      {!isEnabled && canManageCameras && (
-                        <p className="text-xs leading-5 text-slate-500">
-                          {t('cameraSetup.inactiveHint')}
-                        </p>
-                      )}
-                    </div>
-                    {canManageCameras && (
-                      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">
-                        {isEnabled && (
+                              {t('cameraSetup.regionsAction')}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            className={button}
-                            onClick={() => open('regions', row.id)}
+                            className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
+                            aria-label={t('cameraSetup.manage', { name: row.name })}
+                            aria-describedby={!isEnabled ? hintId : undefined}
+                            onClick={() => open('manage', row.id)}
                           >
-                            {t('cameraSetup.regionsAction')}
+                            {t('cameraSetup.manageAction')}
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
-                          aria-label={t('cameraSetup.manage', { name: row.name })}
-                          onClick={() => open('manage', row.id)}
-                        >
-                          {t('cameraSetup.manageAction')}
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             {cameras.settledEmpty && (
               <p
                 role="status"
@@ -153,14 +180,15 @@ export function CameraSetupCatalog({
                 )}
               </p>
             )}
-            {!cameras.baseError && cameras.hasNextPage && rows.length === 0 && (
+            {showPartialPageNotice && (
               <p role="status" className="mt-3 text-sm text-slate-600">
                 {t('cameraSetup.partial')}
               </p>
             )}
-            {(hasLoadedCameraPages || (!cameras.baseError && cameras.hasNextPage)) && (
+            {((hasLoadedCameraPages && !cameras.settledEmpty) ||
+              (!cameras.baseError && cameras.hasNextPage)) && (
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                {hasLoadedCameraPages ? (
+                {hasLoadedCameraPages && !cameras.settledEmpty ? (
                   <p className="text-xs font-medium tabular-nums text-slate-500">
                     {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
                   </p>

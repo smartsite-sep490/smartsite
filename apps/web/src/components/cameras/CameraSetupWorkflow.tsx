@@ -55,19 +55,19 @@ export function CameraSetupWorkflow({
           aria-label={t('cameraSetup.workflowTitle')}
           className="mt-2 grid gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-2.5 text-left text-xs leading-5 text-slate-600 sm:grid-cols-3"
         >
-          <li className="rounded-lg border border-slate-200/60 bg-white px-2.5 py-2">
+          <li className="min-w-0 break-words rounded-lg border border-slate-200/60 bg-white px-2.5 py-2">
             <span className="mr-1.5 font-mono text-[11px] font-semibold tabular-nums text-slate-400">
               01
             </span>
             {t('cameraSetup.step1')}
           </li>
-          <li className="rounded-lg border border-slate-200/60 bg-white px-2.5 py-2">
+          <li className="min-w-0 break-words rounded-lg border border-slate-200/60 bg-white px-2.5 py-2">
             <span className="mr-1.5 font-mono text-[11px] font-semibold tabular-nums text-slate-400">
               02
             </span>
             {t('cameraSetup.step2')}
           </li>
-          <li className="rounded-lg border border-slate-200/60 bg-white px-2.5 py-2">
+          <li className="min-w-0 break-words rounded-lg border border-slate-200/60 bg-white px-2.5 py-2">
             <span className="mr-1.5 font-mono text-[11px] font-semibold tabular-nums text-slate-400">
               03
             </span>
