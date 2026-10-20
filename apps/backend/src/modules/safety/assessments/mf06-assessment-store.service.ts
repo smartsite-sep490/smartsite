@@ -163,13 +163,13 @@ function commandHash(input: Mf06AssessmentAppendInput): string {
 const timestamp = (column: string) =>
   `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 // Fixed SQL identifiers only. One statement reads original request and immutable artifact together.
-const assessmentSelect = `SELECT a.*, r.camera_id,r.zone_id,r.requested_purpose,
+const assessmentSelect = (schema: string) => `SELECT a.*, r.camera_id,r.zone_id,r.requested_purpose,
   ${timestamp('r.captured_at')} AS captured_at, ${timestamp('a.assessed_at')} AS assessed_at,
   art.body AS artifact_body,art.sha256 AS artifact_sha256,
   (art.body_hash=encode(sha256(convert_to(art.body::text,'UTF8')),'hex')) AS artifact_body_intact
-  FROM zone_entry_assessment a JOIN zone_entry_assessment_request r ON r.request_id=a.request_id
+  FROM ${schema}.zone_entry_assessment a JOIN ${schema}.zone_entry_assessment_request r ON r.request_id=a.request_id
     AND r.site_id=a.site_id AND r.event_id=a.event_id AND r.binding_hash=a.binding_hash
-  LEFT JOIN zone_entry_authority_artifact art ON art.artifact_id=a.authority_artifact_id AND art.request_id=a.request_id`;
+  LEFT JOIN ${schema}.zone_entry_authority_artifact art ON art.artifact_id=a.authority_artifact_id AND art.request_id=a.request_id`;
 function mapRecord(row: Row): Mf06RecordedAssessment | null {
   let authorityArtifact: MainAuthorityArchive | null = null;
   if (row.authority_artifact_id !== null) {
@@ -242,6 +242,19 @@ function errorCode(error: unknown): string | null {
 export class Mf06AssessmentStore {
   constructor(private readonly db: DataSource) {}
 
+  private schema(): string {
+    const schema = this.db.driver?.schema;
+    if (
+      typeof schema !== 'string' ||
+      !schema ||
+      schema.includes('\0') ||
+      Buffer.byteLength(schema, 'utf8') > 63 ||
+      /^(pg_|information_schema$)/i.test(schema)
+    )
+      throw new Error('MF06_SCHEMA_UNAVAILABLE');
+    return `"${schema.replaceAll('"', '""')}"`;
+  }
+
   /** Private validated record read on the caller's scoped snapshot, never a public entity. */
   async readRecordedInTransaction(
     manager: EntityManager,
@@ -256,7 +269,7 @@ export class Mf06AssessmentStore {
     )
       return null;
     const rows = (await manager.query(
-      `${assessmentSelect} WHERE a.site_id=$1 AND a.assessment_id=$2 AND a.provenance<>'SYNTHETIC_TEST'`,
+      `${assessmentSelect(this.schema())} WHERE a.site_id=$1 AND a.assessment_id=$2 AND a.provenance<>'SYNTHETIC_TEST'`,
       [siteId.toLowerCase(), assessmentId.toLowerCase()],
     )) as Row[];
     return rows[0] ? mapRecord(rows[0]) : null;
@@ -317,9 +330,13 @@ export class Mf06AssessmentStore {
     input: Mf06AssessmentAppendInput,
     digest: string,
   ): Promise<Mf06AssessmentStoreResult> {
+    // Deferred triggers run at COMMIT: retain the owned path until transaction end.
+    await manager.query("SELECT set_config('search_path',$1,true)", [
+      `${this.schema()},pg_catalog,pg_temp`,
+    ]);
     const requests = (await manager.query(
       `SELECT r.*,${timestamp('r.captured_at')} AS captured_at
-      FROM zone_entry_assessment_request r WHERE request_id=$1 AND site_id=$2 FOR SHARE`,
+      FROM ${this.schema()}.zone_entry_assessment_request r WHERE request_id=$1 AND site_id=$2 FOR SHARE`,
       [input.claim.requestId, input.siteId],
     )) as Row[];
     const request = requests[0];
@@ -327,7 +344,7 @@ export class Mf06AssessmentStore {
     if (request.binding_hash !== input.bindingHash)
       return { state: 'STALE', reason: 'BINDING_HASH_MISMATCH' };
     const existing = (await manager.query(
-      `${assessmentSelect} WHERE a.request_id=$1 AND a.site_id=$2`,
+      `${assessmentSelect(this.schema())} WHERE a.request_id=$1 AND a.site_id=$2`,
       [input.claim.requestId, input.siteId],
     )) as Row[];
     const previous = existing[0];
@@ -343,7 +360,7 @@ export class Mf06AssessmentStore {
     }
     const heads = (await manager.query(
       `SELECT *,clock_timestamp()<lease_expires_at AND clock_timestamp()<deadline_at AS timely
-      FROM zone_entry_assessment_job WHERE request_id=$1 FOR UPDATE`,
+      FROM ${this.schema()}.zone_entry_assessment_job WHERE request_id=$1 FOR UPDATE`,
       [input.claim.requestId],
     )) as Row[];
     const head = heads[0];
@@ -369,7 +386,7 @@ export class Mf06AssessmentStore {
         return { state: 'UNAVAILABLE', reason: 'ARCHIVE_REQUEST_BINDING_INVALID' };
       artifactId = randomUUID();
       await manager.query(
-        'INSERT INTO zone_entry_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)',
+        `INSERT INTO ${this.schema()}.zone_entry_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)`,
         [
           artifactId,
           input.claim.requestId,
@@ -379,7 +396,7 @@ export class Mf06AssessmentStore {
       );
     }
     await manager.query(
-      `INSERT INTO zone_entry_assessment(assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,
+      `INSERT INTO ${this.schema()}.zone_entry_assessment(assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,
       outcome,reason_code,evaluator_version,provenance,worker_id,profile_revision,frame_sha256,crop_sha256,authority_artifact_id,claim_head_revision,claim_lease_token)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [
@@ -404,7 +421,7 @@ export class Mf06AssessmentStore {
       ],
     );
     const rows = (await manager.query(
-      `${assessmentSelect} WHERE a.request_id=$1 AND a.site_id=$2`,
+      `${assessmentSelect(this.schema())} WHERE a.request_id=$1 AND a.site_id=$2`,
       [input.claim.requestId, input.siteId],
     )) as Row[];
     const assessment = rows[0] && mapRecord(rows[0]);
@@ -423,7 +440,7 @@ export class Mf06AssessmentStore {
     )
       return null;
     const rows = (await this.db.query(
-      `${assessmentSelect} WHERE a.request_id=$1 AND a.command_id=$2 AND a.site_id=$3`,
+      `${assessmentSelect(this.schema())} WHERE a.request_id=$1 AND a.command_id=$2 AND a.site_id=$3`,
       [requestId, commandId, siteId],
     )) as Row[];
     return rows[0] ? mapRecord(rows[0]) : null;

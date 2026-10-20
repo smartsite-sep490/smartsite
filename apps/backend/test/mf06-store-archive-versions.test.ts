@@ -51,9 +51,10 @@ function input(version: 'V1' | 'V2' | 'V2_NAMED'): Mf06AssessmentAppendInput {
   };
 }
 
-function harness() {
+function harness(schema: unknown = 'isolated_test_synthetic') {
   let transactionCount = 0;
   const db = {
+    driver: { schema },
     transaction: async (isolation: string, work: (manager: unknown) => Promise<unknown>) => {
       assert.equal(isolation, 'SERIALIZABLE');
       transactionCount++;
@@ -63,6 +64,11 @@ function harness() {
   } as unknown as DataSource;
   return { store: new Mf06AssessmentStore(db), count: () => transactionCount };
 }
+
+test('Store refuses missing, system and malformed schema instead of using a pooled search_path', async () => {
+  for (const schema of ['', null, 'pg_temp', 'information_schema', 'bad\0schema'])
+    await assert.rejects(harness(schema).store.finalize(input('V2')), /MF06_SCHEMA_UNAVAILABLE/);
+});
 
 for (const version of ['V1', 'V2', 'V2_NAMED'] as const) {
   test(`valid ${version} reaches the original scoped request lookup without asserting authority`, async () => {
