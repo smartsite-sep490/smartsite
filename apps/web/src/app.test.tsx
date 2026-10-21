@@ -3,7 +3,7 @@ import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './app';
 import type { RoleAssignmentResponse } from '@smartsite/contracts/management';
@@ -74,12 +74,24 @@ vi.mock('./components/zones/RestrictedZoneView', () => ({
 }));
 
 vi.mock('./components/alerts/SafetyAlertsView', () => ({
-  SafetyAlertsView: ({ initialType }: { initialType?: string }) => {
+  SafetyAlertsView: ({
+    initialType,
+    initialSiteId,
+    initialAlertId,
+  }: {
+    initialType?: string;
+    initialSiteId?: string;
+    initialAlertId?: string;
+  }) => {
     const [type] = React.useState(initialType ?? 'ALL');
+    const [site] = React.useState(initialSiteId ?? '');
+    const [alert] = React.useState(initialAlertId ?? '');
     return (
       <div>
         <h2>Safety Alerts Queue</h2>
         <span data-testid="initial-type">{type}</span>
+        <span data-testid="initial-site">{site}</span>
+        <span data-testid="initial-alert">{alert}</span>
       </div>
     );
   },
@@ -137,6 +149,44 @@ describe('App Navigation and Context Lifecycle', () => {
     cleanup();
     queryClient.clear();
     vi.restoreAllMocks();
+  });
+
+  it('opens a PPE notification URL at its exact Site and alert after reload', () => {
+    accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-ppe' }];
+    render(
+      <MemoryRouter initialEntries={['/incidents?siteId=site-ppe&alertId=alert-ppe&tab=alerts']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('initial-site').textContent).toBe('site-ppe');
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-ppe');
+  });
+
+  it('opens another PPE notification on the same route instead of retaining the first alert', async () => {
+    accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-ppe' }];
+    function NextNotification() {
+      const navigate = useNavigate();
+      return (
+        <button
+          onClick={() => navigate('/incidents?siteId=site-ppe&alertId=alert-second&tab=alerts')}
+        >
+          Next notification
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={['/incidents?siteId=site-ppe&alertId=alert-first&tab=alerts']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+          <NextNotification />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-first');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Next notification' }));
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-second');
   });
 
   it.each([

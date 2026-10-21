@@ -1,4 +1,10 @@
 {
+  "notifications.PPE_ALERT_CREATED": "Cảnh báo PPE cần xem xét",
+  "ppeNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Vui lòng xem xét bằng chứng.",
+  "ppeNotifications.noZone": "Chưa xác định Zone",
+  "ppeNotifications.PPE_HARD_HAT_MISSING": "Dấu hiệu thiếu mũ bảo hộ",
+  "ppeNotifications.PPE_SAFETY_VEST_MISSING": "Dấu hiệu thiếu áo phản quang",
+  "ppeNotifications.targetUnavailable": "Công trường của cảnh báo này không khả dụng hoặc bạn không còn quyền truy cập. Chọn công trường được phân quyền để tiếp tục.",
   "workerAccounts.title": "Tài khoản công nhân",
   "workerAccounts.create": "Tạo tài khoản Worker",
   "workerAccounts.close": "Đóng biểu mẫu",

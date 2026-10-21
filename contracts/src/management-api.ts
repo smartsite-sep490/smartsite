@@ -445,6 +445,22 @@ export interface SafetyNotificationTarget {
   actionId: string;
   tab: 'incidents';
 }
+export type PpeAlertNotificationEvent = 'PPE_ALERT_CREATED';
+
+export interface SafetyAlertNotificationTarget {
+  siteId: string;
+  alertId: string;
+  tab: 'alerts';
+}
+
+export interface PpeAlertNotificationMetadata {
+  cameraId: string;
+  cameraName: string;
+  zoneId: string | null;
+  zoneName: string | null;
+  candidateSubtype: 'PPE_HARD_HAT_MISSING' | 'PPE_SAFETY_VEST_MISSING';
+}
+
 export interface UserNotificationResponse {
   id: string;
   event:
@@ -453,6 +469,7 @@ export interface UserNotificationResponse {
     | ScheduleAssignmentNotificationEvent
     | import('./safety-checklist-api.js').ChecklistNotificationEvent
     | 'SAFETY_HANDOVER'
+    | PpeAlertNotificationEvent
     | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
   siteName: string;
@@ -461,6 +478,7 @@ export interface UserNotificationResponse {
   workDate?: string;
   fromShiftName?: string;
   toShiftName?: string;
+  safetyAlert?: PpeAlertNotificationMetadata;
   createdAt: string;
   readAt: string | null;
   target:
@@ -468,6 +486,7 @@ export interface UserNotificationResponse {
     | SchedulingNotificationTarget
     | { siteId: string; checklistId: string; tab: 'checklists' }
     | SafetyNotificationTarget
+    | SafetyAlertNotificationTarget
     | { siteId: string; workDate: string; tab: 'schedule' }
     | { siteId: string; dayId: string; tab: 'attendance' };
 }
