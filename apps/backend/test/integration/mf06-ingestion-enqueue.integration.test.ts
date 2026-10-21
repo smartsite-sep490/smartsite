@@ -36,6 +36,7 @@ import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.servi
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import { Mf06IngestionEnqueueService } from '../../src/modules/safety/assessments/mf06-ingestion-enqueue.service.js';
 
@@ -215,7 +216,9 @@ function buildIngestionService(options: {
 }) {
   const contextResolver = options.contextResolver ?? new ObservationContextResolverService();
   const candidateEvaluator = new AlertCandidateEvaluator();
-  const groupingService = options.groupingService ?? new DurableGroupingService(options.config);
+  const groupingService =
+    options.groupingService ??
+    new DurableGroupingService(options.config, new SchedulingNotificationService(options.db));
   const zoneAuth = new ZoneEntryAuthorizationService();
   const enqueueService =
     options.enqueueService ?? new Mf06IngestionEnqueueService(options.db, options.config);
@@ -700,7 +703,10 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
       }
     }
 
-    const failingGrouping = new ThrowingGroupingService(config);
+    const failingGrouping = new ThrowingGroupingService(
+      config,
+      new SchedulingNotificationService(db),
+    );
     let enqueuedCount = 0;
     class RecordingEnqueue extends Mf06IngestionEnqueueService {
       override async enqueueFresh(manager: EntityManager, event: AiObservationEventEntity) {

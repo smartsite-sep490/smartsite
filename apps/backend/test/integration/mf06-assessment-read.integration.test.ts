@@ -1,3 +1,4 @@
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -297,7 +298,7 @@ async function seedAssessment(
     db,
     new ObservationContextResolverService(),
     new AlertCandidateEvaluator(),
-    new DurableGroupingService(config),
+    new DurableGroupingService(config, new SchedulingNotificationService(db)),
     config,
     undefined,
     undefined,

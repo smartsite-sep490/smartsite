@@ -32,6 +32,7 @@ import type { MainConfigurationCommandContext } from '../../src/common/configura
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { MainWorkerRosterService } from '../../src/modules/workforce/main-worker-roster.service.js';
 import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
@@ -375,7 +376,10 @@ test('evaluates event-time Zone entry authorization from two-tier and Team permi
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(),
-      new DurableGroupingService(createTestConfig({ ALERT_COOLDOWN_SECONDS: '60' })),
+      new DurableGroupingService(
+        createTestConfig({ ALERT_COOLDOWN_SECONDS: '60' }),
+        new SchedulingNotificationService(source),
+      ),
       createTestConfig(),
       () => ingestionClock,
       service,

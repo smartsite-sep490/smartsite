@@ -59,9 +59,23 @@ were corrected in test tooling; they do not represent successful source tests.
 
 ## Remaining integration boundary
 
-Local `DurableGroupingService` and all MF08 pages remain untouched. The Main
-caller/deep-link conflicts still need coordinated integration before claiming
-event ingestion → persisted alert → inbox → permitted detail/browser completion.
+The owner separately approved the Main `DurableGroupingService` bridge and its
+constructor fixtures on 21 October. New persisted PPE alerts now call the inbox
+writer in the same transaction; existing grouped episodes return without another
+notification. Ten existing caller test files use the required dependency, including
+the failure-injection subclass. The incident workflow fixture now seeds a real
+synthetic camera instead of a nonexistent UUID; schema-qualified catalog guards stay.
+
+One actual-source PostgreSQL journey passes across all five kinds, Site isolation,
+duplicate events, grouped episodes, PERSON-only abstention, unsupported MASK rejection,
+insert failure rollback and recovery retry. Its old-source negative control fails
+with zero inbox items instead of five. Twenty-one affected ingestion unit cases pass;
+all changed caller files typecheck and lint. No unchanged full suite was rerun.
+The candidate v1.3 validator remains separate; this journey uses admitted v1.2.
+
+MF08 pages remain untouched. Deep-link conflicts still need coordinated integration
+before claiming event ingestion → persisted alert → inbox → permitted detail/browser completion.
+This source change has not been rolled into the frozen website or cloud database.
 Synthetic fixtures and provider-level tests do not prove live AI quality or UAT.
 
 The existing scheduling notification service is now 812 lines, above the review trigger.

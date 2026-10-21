@@ -24,6 +24,7 @@ import { ObservationContextResolverService } from '../../src/modules/zones/obser
 import { ZoneAuthorizationService } from '../../src/modules/zones/zone-authorization.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { isEventIdConflict } from '../../src/integrations/ai/typeorm-error.js';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
@@ -104,7 +105,7 @@ test('conflicting identity candidates preserve raw evidence without selecting a 
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(),
-      new DurableGroupingService(createTestConfig()),
+      new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(source)),
       createTestConfig(),
     );
     const identities = [
@@ -231,6 +232,7 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(source),
     );
     const service = new AiIngestionService(
       source,
@@ -327,7 +329,10 @@ test('AiIngestionService: retry with same eventId but changed payload returns pu
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService(createTestConfig());
+    const groupingService = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(source),
+    );
     const service = new AiIngestionService(
       source,
       contextResolver,
@@ -418,7 +423,10 @@ test('AiIngestionService: other named unique violation is not classified as dupl
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService(createTestConfig());
+    const groupingService = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(source),
+    );
 
     // Force an unrelated unique violation inside the transaction
     const failingService = new AiIngestionService(
@@ -503,6 +511,7 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(source),
     );
     const service = new AiIngestionService(
       source,
@@ -592,7 +601,10 @@ test('AiIngestionService: unknown camera persists raw event with null resolvedCa
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService(createTestConfig());
+    const groupingService = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(source),
+    );
     const service = new AiIngestionService(
       source,
       contextResolver,
@@ -672,7 +684,7 @@ test('AiIngestionService: inactive camera preserves raw PPE event without creati
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-      new DurableGroupingService(createTestConfig()),
+      new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(source)),
       createTestConfig(),
     );
     const eventId = randomUUID();
@@ -769,6 +781,7 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(source),
     );
     const service = new AiIngestionService(
       source,
@@ -833,6 +846,7 @@ test('AiIngestionService: zero or duplicate PERSON on track retains alerts with 
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(source),
     );
     const service = new AiIngestionService(
       source,

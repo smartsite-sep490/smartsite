@@ -30,6 +30,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   AiObservationEventEntity,
   UserNotificationEntity,
+  CameraEntity,
   UserEntity,
   UserRole,
   UserRoleAssignmentEntity,
@@ -371,8 +372,17 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
   ).resource;
   assert.equal(closed.status, 'CLOSED');
   assert.equal(closed.actions[0]?.status, 'CLOSED');
+  const groupingCameraId = randomUUID();
+  await dataSource.getRepository(CameraEntity).save({
+    id: groupingCameraId,
+    siteId: site,
+    externalId: groupingCameraId,
+    code: groupingCameraId,
+    name: 'Synthetic grouping camera',
+  });
   const grouping = new DurableGroupingService(
     new ConfigService(validateEnvironment({ NODE_ENV: 'test' })),
+    new SchedulingNotificationService(dataSource),
   );
   const observed = await dataSource.transaction((manager) =>
     grouping.groupCandidate(
@@ -382,7 +392,7 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
         alertType: 'PPE_VIOLATION',
         candidateSubtype: 'PPE_HARD_HAT_MISSING',
         groupingKey: f.alert.groupingKey,
-        cameraId: randomUUID(),
+        cameraId: groupingCameraId,
         streamSessionId: randomUUID(),
         trackId: 1,
         details: {},
@@ -392,6 +402,7 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
   );
   assert.notEqual(observed.id, f.alert.id);
   assert.equal(observed.status, AlertStatus.PENDING_REVIEW);
+  await dataSource.getRepository(CameraEntity).delete(groupingCameraId);
   const reopened = (
     await service.incidentCommand(site, id, ids.safety!, 'reopen', {
       commandId: randomUUID(),
@@ -817,7 +828,7 @@ test('MF08 migration reverses and re-applies inside an isolated PostgreSQL trans
     const handovers = new SafetyHandoverNotifications1791590400000();
     await runner.query('TRUNCATE safety_checklist_assignment CASCADE');
     await runner.query(
-      "DELETE FROM user_notification WHERE request_type IN ('SAFETY','CHECKLIST','SCHEDULE','ATTENDANCE')",
+      "DELETE FROM user_notification WHERE request_type IN ('SAFETY','CHECKLIST','SCHEDULE','ATTENDANCE','SAFETY_ALERT')",
     );
     const checklists = new SafetyChecklists1792195200000();
     await checklists.down(runner);
