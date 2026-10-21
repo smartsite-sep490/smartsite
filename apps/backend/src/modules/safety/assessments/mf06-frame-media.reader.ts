@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -14,6 +15,12 @@ import { snapshotMf06Json } from './mf06-json-snapshot.js';
 const LIMITS = { maxFrameBytes: 1_048_576, maxFramePixels: 16_000_000, maxCropBytes: 1_048_576 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASH = /^[0-9a-f]{64}$/;
+
+export interface Mf06VerifiedFrameMedia {
+  readonly bytes: Buffer;
+  readonly fileName: string;
+  readonly sha256: string;
+}
 
 async function readBoundedFrame(
   root: string,
@@ -81,6 +88,67 @@ async function readBoundedFrame(
   }
 }
 
+/** Reads and verifies a full JPEG frame against an event-committed Mf06FrameReference. */
+export async function readMf06FrameMedia(
+  root: string,
+  reference: Mf06FrameReference,
+  signal?: AbortSignal,
+): Promise<Mf06VerifiedFrameMedia | null> {
+  try {
+    if (signal?.aborted || !isAbsolute(root)) return null;
+    const ref = snapshotMf06Json(reference) as Mf06FrameReference;
+    if (
+      ![ref.uri, ref.sha256, ref.eventId, ref.streamSessionId, ref.payloadHash].every(
+        (value) => typeof value === 'string',
+      )
+    )
+      return null;
+    if (
+      !UUID.test(ref.eventId) ||
+      !UUID.test(ref.streamSessionId) ||
+      !HASH.test(ref.sha256) ||
+      !HASH.test(ref.payloadHash) ||
+      !Number.isSafeInteger(ref.sequenceNumber) ||
+      ref.sequenceNumber < 0
+    )
+      return null;
+    const { width, height } = ref.frameDimensions;
+    if (
+      ![width, height].every((v) => Number.isSafeInteger(v) && v > 0) ||
+      width * height > LIMITS.maxFramePixels
+    )
+      return null;
+    const session = ref.streamSessionId.toLowerCase(),
+      event = ref.eventId.toLowerCase();
+    if (ref.uri.toLowerCase() !== `local://evidence/${session}/${ref.sequenceNumber}/${event}.jpg`)
+      return null;
+    const fileName = `${session}_${ref.sequenceNumber}_${event}.jpg`;
+    const bytes = await readBoundedFrame(root, fileName, signal);
+    signal?.throwIfAborted();
+    if (
+      !bytes ||
+      bytes[0] !== 0xff ||
+      bytes[1] !== 0xd8 ||
+      bytes[bytes.length - 2] !== 0xff ||
+      bytes[bytes.length - 1] !== 0xd9 ||
+      createHash('sha256').update(bytes).digest('hex') !== ref.sha256
+    )
+      return null;
+    const metadata = await sharp(bytes, { limitInputPixels: LIMITS.maxFramePixels }).metadata();
+    signal?.throwIfAborted();
+    if (
+      metadata.format !== 'jpeg' ||
+      metadata.width !== width ||
+      metadata.height !== height ||
+      (metadata.orientation ?? 1) !== 1
+    )
+      return null;
+    return Object.freeze({ bytes, fileName, sha256: ref.sha256 });
+  } catch {
+    return null;
+  }
+}
+
 /** Receives a claim-bound reference; checksum/crop equality is not Worker identity or authority. */
 export async function readMf06SubjectMedia(
   root: string,
@@ -115,33 +183,12 @@ export async function readMf06SubjectMedia(
     )
       return null;
     const { width, height } = ref.frameDimensions;
-    if (
-      ![width, height].every((v) => Number.isSafeInteger(v) && v > 0) ||
-      width * height > LIMITS.maxFramePixels
-    )
-      return null;
-    const session = ref.streamSessionId.toLowerCase(),
-      event = ref.eventId.toLowerCase();
-    if (ref.uri.toLowerCase() !== `local://evidence/${session}/${ref.sequenceNumber}/${event}.jpg`)
-      return null;
-    const bytes = await readBoundedFrame(
-      root,
-      `${session}_${ref.sequenceNumber}_${event}.jpg`,
-      signal,
-    );
+    const frame = await readMf06FrameMedia(root, ref, signal);
     signal?.throwIfAborted();
-    if (
-      !bytes ||
-      bytes[0] !== 0xff ||
-      bytes[1] !== 0xd8 ||
-      bytes[bytes.length - 2] !== 0xff ||
-      bytes[bytes.length - 1] !== 0xd9 ||
-      createHash('sha256').update(bytes).digest('hex') !== ref.sha256
-    )
-      return null;
+    if (!frame) return null;
     // shortcut: Sharp decode cannot be preempted here; isolate it before requiring a hard cancellation deadline.
     const crop = await cropSafetySubjectFrame(
-      { bytes, sha256: ref.sha256, width, height },
+      { bytes: frame.bytes, sha256: frame.sha256, width, height },
       selected,
       LIMITS,
     );

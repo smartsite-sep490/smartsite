@@ -1,8 +1,18 @@
-import { Controller, Get, Header, Param, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  Req,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiTags,
   ApiOkResponse,
+  ApiProduces,
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
   ApiServiceUnavailableResponse,
@@ -154,5 +164,42 @@ export class Mf06AssessmentsController {
     await this.auth.authenticateRequest(request);
     assertSafetySiteAccess(request.user, scope, 'GET');
     return result;
+  }
+
+  @Get(':assessmentId/frame')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @ApiProduces('image/jpeg')
+  @ApiParam({ name: 'assessmentId', type: String, format: 'uuid' })
+  @ApiQuery({ name: 'requestId', required: true, schema: { type: 'string', format: 'uuid' } })
+  @ApiQuery({ name: 'eventId', required: true, schema: { type: 'string', format: 'uuid' } })
+  @ApiOkResponse({
+    description: 'Observation frame bound to this recorded assessment; not identity proof.',
+    content: { 'image/jpeg': { schema: { type: 'string', format: 'binary' } } },
+  })
+  async getFrame(
+    @Param('siteId') siteId: string,
+    @Param('assessmentId') assessmentId: string,
+    @Query() query: Record<string, unknown>,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (
+      Object.keys(query).length !== 2 ||
+      !Object.hasOwn(query, 'requestId') ||
+      !Object.hasOwn(query, 'eventId')
+    )
+      invalid('Invalid assessment frame query');
+    const scope = uuid(siteId).toLowerCase();
+    const result = await this.query.readFrame(scope, uuid(assessmentId).toLowerCase(), {
+      requestId: uuid(query.requestId as string).toLowerCase(),
+      eventId: uuid(query.eventId as string).toLowerCase(),
+    });
+    await this.auth.authenticateRequest(request);
+    assertSafetySiteAccess(request.user, scope, 'GET');
+    return new StreamableFile(result.bytes, {
+      type: 'image/jpeg',
+      disposition: `inline; filename="${result.fileName}"`,
+      length: result.bytes.length,
+    });
   }
 }
