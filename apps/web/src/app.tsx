@@ -367,7 +367,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               path="/incidents"
               element={
                 <SafetyAlertsView
-                  key={`${currentUser.id}:${JSON.stringify(alertsContext ?? {})}`}
+                  key={`${currentUser.id}:${JSON.stringify(alertsContext ?? {})}${incidentLink.has('alertId') ? location.search : ''}`}
                   apiUrl={apiUrl}
                   sharedSession={sharedSession}
                   authenticatedSession={{ accessToken, user: currentUser }}
@@ -381,9 +381,9 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                       ? (incidentLink.get('workerId') ?? undefined)
                       : undefined
                   }
-                  initialAlertId={alertsContext?.alertId}
-                  initialStatus={alertsContext?.status}
-                  initialType={alertsContext?.alertType}
+                  initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+                  initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+                  initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
                 />
               }
             />

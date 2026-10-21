@@ -3,7 +3,7 @@ import React from 'react';
 import { render, screen, cleanup, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { ApiError, getBackendHealth } from '@smartsite/api-client';
 import i18n from './i18n';
@@ -245,24 +245,29 @@ vi.mock('./components/alerts/SafetyAlertsView', () => ({
   SafetyAlertsView: ({
     initialType,
     initialSiteId,
+    initialAlertId,
     initialIncidentId,
     initialActionId,
     sharedSession,
   }: {
     initialType?: string;
     initialSiteId?: string;
+    initialAlertId?: string;
     initialIncidentId?: string;
     initialActionId?: string;
     sharedSession?: { accessToken: string; sessionScope: string; user: { displayName: string } };
   }) => {
     const [type] = React.useState(initialType ?? 'ALL');
     const [capturedSiteId] = React.useState(initialSiteId ?? '');
+    const [alert] = React.useState(initialAlertId ?? '');
     return (
       <div data-testid="route-view" data-route="incidents">
         <h2>Safety Alerts Queue</h2>
         <span data-testid="initial-type">{type}</span>
         <span data-testid="initial-site-id">{initialSiteId ?? ''}</span>
         <span data-testid="captured-site-id">{capturedSiteId}</span>
+        <span data-testid="initial-site">{capturedSiteId}</span>
+        <span data-testid="initial-alert">{alert}</span>
         <span data-testid="initial-incident-id">{initialIncidentId ?? ''}</span>
         <span data-testid="initial-action-id">{initialActionId ?? ''}</span>
         <span data-testid="alert-shared-session">{sharedSession ? 'PRESENT' : 'ABSENT'}</span>
@@ -1002,5 +1007,46 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.getByTestId('zone-initial-camera-id').textContent).toBe('cam-42');
     expect(screen.getByTestId('zone-shared-session').textContent).toBe('PRESENT');
     zoneLinkRender.unmount();
+  });
+
+  it('opens a PPE notification URL at its exact Site and alert after reload', async () => {
+    accountState.data!.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-ppe' }];
+    render(
+      <MemoryRouter initialEntries={['/incidents?siteId=site-ppe&alertId=alert-ppe&tab=alerts']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Safety Alerts Queue' })).toBeDefined();
+    expect(screen.getByTestId('initial-site').textContent).toBe('site-ppe');
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-ppe');
+  });
+
+  it('opens another PPE notification on the same route instead of retaining the first alert', async () => {
+    accountState.data!.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-ppe' }];
+    function NextNotification() {
+      const navigate = useNavigate();
+      return (
+        <button
+          onClick={() => navigate('/incidents?siteId=site-ppe&alertId=alert-second&tab=alerts')}
+        >
+          Next notification
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={['/incidents?siteId=site-ppe&alertId=alert-first&tab=alerts']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+          <NextNotification />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Safety Alerts Queue' })).toBeDefined();
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-first');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Next notification' }));
+    expect(await screen.findByRole('heading', { name: 'Safety Alerts Queue' })).toBeDefined();
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-second');
   });
 });
