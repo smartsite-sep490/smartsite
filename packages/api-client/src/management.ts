@@ -3812,6 +3812,21 @@ export class SmartSiteManagementClient {
     );
   }
 
+  getMf06AssessmentFrame(
+    token: string,
+    siteId: string,
+    assessmentId: string,
+    requestId: string,
+    eventId: string,
+    requestOptions?: RequestOptions,
+  ): Promise<Blob> {
+    const path = this.listPath(
+      `/sites/${pathId(siteId)}/mf06-assessments/${pathId(assessmentId)}/frame`,
+      { requestId, eventId },
+    );
+    return this.requestBlob(path, token, requestOptions);
+  }
+
   listMf06RequestStatuses(
     token: string,
     siteId: string,
