@@ -95,6 +95,18 @@ runtime/identity or whole-flow acceptance.
 
 ## Next critical path
 
+Original raw timestamps may contain finer precision than the immutable request's
+millisecond timestamp. `main-authority-capture-time.ts` preserves up to nine decimal
+digits using integer arithmetic. After qualified revalidation in the same fenced
+transaction, the bridge accepts only the same millisecond with no intervening
+static validity boundary, journal revision, gap, epoch close or future timestamp.
+It never rewrites the archive or independently establishes coverage/identity.
+An ambiguous interval remains unavailable. Actual owned-PostgreSQL checks:2PASS
+after2RED for the missing capability; parser/static-boundary/SQL-result unit
+checks:2PASS. Proof:capture-time-green-v1-proof.json and capture-time-unit-green-v1.log.
+Unit flag checks do not prove real concurrent revision/gap races. The concrete
+WorkPort must bind this helper to the original hashed raw event before appending.
+
 Implement the concrete MF06 WorkPort and its actual lifecycle/DI registration only
 with valid configuration. Preserve lease/CAS, stable invocation, timeout/drain,
 original event/media bindings, consent/profile recheck and trusted identity boundaries.
