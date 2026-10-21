@@ -56,4 +56,28 @@ Evidence root:
 Still required: reviewed balanced glove/bare/hidden-hand controls, independent
 scene/ancestry qualification, justified frozen training protocol and lifecycle,
 all-family retention, actual wearer/video/camera/Backend/Web evaluation. Prior
-rejected checkpoints remain rejected. No trainer, model load or deployment ran.
+rejected checkpoints remain rejected. No trainer, model load or deployment ran
+for the quarantine operation above.
+
+## Follow-up: two new public source CPU diagnostics
+
+Root subsequently acquired and viewed original source images
+091217-N-0807W-062 and060616-N-9712C-009. Publisher metadata and original bytes
+are retained in `ai-industrial-controls-two-source-20261021-v1` under the evidence
+root above. Agy's original cmd wrapper never started Python; Root verified and
+stopped only that childless wrapper, then executed the bounded acquisition
+directly:two images acquired, no failures. This was not a training submission.
+
+Root then loaded the pinned experimental80b checkpoint for a CPU-only diagnostic:
+two threads,832pixels, confidence0.25, IoU0.7,15-class map verified. Actual exit0.
+Neither image produced Gloves or NO-Gloves detections. Root's original-pixel
+proposals are visible bare hands in the first and work gloves in the second.
+These observations expose development misses; they are not human ground truth,
+wearer accuracy, capacity or independent qualification measurements.
+
+Proof: `ai-two-source-cpu-diagnostic-20261021-v1/{protocol.json,result.json,root-quality-review-v1.json}`.
+The sources have now been used for development; do not relabel them untouched
+qualification holdouts. Exact SHA absence from parentv4 and the17-source proposal
+does not prove whole-lineage/scene independence. Hidden-hand balance, reviewed
+annotation boxes and the independent qualification protocol remain open.
+No training, new weights, threshold change or product application performed.
