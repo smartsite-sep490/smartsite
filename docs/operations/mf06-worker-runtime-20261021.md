@@ -1,8 +1,9 @@
 # MF06 worker runtime
 
 Status: registered in SafetyModule,configuration and lifecycle checked locally.
-Enabled PostgreSQL runtime journey and operational release qualification remain
-open. This source is not applied to the current frozen website.
+The enabled PostgreSQL runtime journey is now checked with a synthetic reviewed
+release. Operational release qualification remains open. This source is not
+applied to the frozen website.
 
 ## Runtime behavior
 
@@ -58,3 +59,18 @@ Evidence:
 Logs:`mf06-runtime-first-v1.log`,`mf06-runtime-green-v2.log`,
 `mf06-runtime-green-v3.log`,`mf06-runtime-pins-green-v4.log`,
 `mf06-runtime-nest-green-v5.log`,`mf06-runtime-abort-green-v6.log`.
+
+## Enabled real PostgreSQL journey
+
+`runtime-pg-green-v2-proof.json` and its log record one coherent test with three
+synthetic queued requests. The actual lifecycle claims PENDING rows itself and
+records NONE/ALLOWED,PROHIBITED/DENIED and AUTH_REQUIRED/IDENTITY_UNAVAILABLE,
+then verifies immutable replay and drains before schema disposal. No injected
+worker,Face model,HTTP resolver or external identity runs in this journey.
+The owned schema is independently absent and prior namespace names unchanged.
+
+The first execution failed before test initialization with ECONNREFUSED:the old
+PostgreSQL and website owners were absent. Root verified the exact executable,
+existing data directory and stopped status,then restarted only the5433 test
+cluster without reset. New postmaster89608,birth15:40:34.904842VN. No prior
+graceful exit/cause is proved. This does not restore the disappeared website.
