@@ -132,3 +132,12 @@ to facade detections is established,no labels changed and no new train justified
 Proof:`ai-next-two-source-cpu-diagnostic-20261021-v1/result.json`,
 `large-person-source-candidates.json`,`root-diagnostic-review-v1.json`.
 This supersedes only the preceding no-inference statement for those two photos.
+
+P8's subsequent full-label review found a separate concern:images186 and195 each
+have two overlapping Person targets on one visible foreground person. Root read
+both label files and confirmed the visible subjects. This refines the area-only
+ruling;large box area is still plausible,but duplicate targets need technical
+curation. Root chose no replacement coordinates or silent label changes. Future
+quarantine must use a new immutable revision. No causal explanation for facade
+detections or new training eligibility is established. See
+`root-duplicate-person-review-v2.json` and P8's retained visual review.
