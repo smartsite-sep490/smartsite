@@ -36,6 +36,7 @@ import { Mf06AssessmentQueryService } from './assessments/mf06-assessment-query.
 import { Mf06AssessmentsController } from './assessments/mf06-assessments.controller.js';
 import { Mf06RequestStatusQueryService } from './assessments/mf06-request-status-query.service.js';
 import { Mf06RequestStatusesController } from './assessments/mf06-request-statuses.controller.js';
+import { Mf06AssessmentWorkerRuntime } from './assessments/mf06-assessment-worker-runtime.service.js';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { Mf06RequestStatusesController } from './assessments/mf06-request-status
     Mf06IngestionEnqueueService,
     Mf06AssessmentQueryService,
     Mf06RequestStatusQueryService,
+    Mf06AssessmentWorkerRuntime,
     DurableGroupingService,
     SafetyAlertQueryService,
     SafetyAlertReviewService,

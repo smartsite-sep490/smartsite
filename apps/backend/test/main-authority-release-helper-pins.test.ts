@@ -153,6 +153,15 @@ test('valid synthetic cutover release fixture with all direct authority helper p
   });
 });
 
+test('cancelled release verification rejects before inspecting any artifact', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error('TEST_VERIFICATION_CANCELLED'));
+  await assert.rejects(
+    verifyMainAuthorityCutoverRelease(baseConfig, 'test', controller.signal),
+    /TEST_VERIFICATION_CANCELLED/,
+  );
+});
+
 for (const helperSourcePath of DIRECT_AUTHORITY_HELPER_SOURCE_FILES) {
   test(`dropping helper source pin ${helperSourcePath} is rejected as incomplete cutover release pins`, async () => {
     const configWithoutHelperSource = await writeRepinnedConfig({

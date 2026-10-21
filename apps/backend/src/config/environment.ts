@@ -6,6 +6,7 @@ import {
   PASSWORD_MIN_LENGTH,
   PASSWORD_POLICY_MESSAGE,
 } from '../common/configuration/password-policy.js';
+import { mf06EnvironmentFields, refineMf06Environment } from './mf06-worker-environment.js';
 
 const LOCAL_DATABASE_URL = 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite';
 const LOCAL_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
@@ -252,23 +253,7 @@ export const backendEnvironmentSchema = z
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
-    MF06_ENQUEUE_ENABLED: z
-      .enum(['false', 'true'])
-      .default('false')
-      .transform((value) => value === 'true'),
-    MF06_ASSESSMENT_READ_ENABLED: z
-      .enum(['false', 'true'])
-      .default('false')
-      .transform((value) => value === 'true'),
-    MF06_ENQUEUE_MAX_OUTSTANDING: z
-      .string()
-      .regex(/^\d+$/, 'must be an integer between 1 and 10000')
-      .transform(Number)
-      .refine(
-        (value) => Number.isSafeInteger(value) && value >= 1 && value <= 10000,
-        'must be an integer between 1 and 10000',
-      )
-      .optional(),
+    ...mf06EnvironmentFields,
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'], {
         error: 'must be fatal, error, warn, info, debug, trace, or silent',
@@ -349,13 +334,7 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
-    if (config.MF06_ENQUEUE_ENABLED && config.MF06_ENQUEUE_MAX_OUTSTANDING === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['MF06_ENQUEUE_MAX_OUTSTANDING'],
-        message: 'must be explicitly set when MF06 enqueue is enabled',
-      });
-    }
+    refineMf06Environment(config, context, LOCAL_SERVICE_TOKEN);
     if (Boolean(config.RESEND_API_KEY) !== Boolean(config.RESEND_FROM_EMAIL)) {
       context.addIssue({
         code: 'custom',

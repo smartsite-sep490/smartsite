@@ -84,6 +84,21 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/zones/main-authority-baseline-profile.ts',
   'modules/zones/main-team-authority-archive.ts',
   'modules/zones/main-qualified-authority.reader.ts',
+  'modules/zones/main-authority-capture-time.ts',
+  'modules/zones/main-archived-permission-projection.ts',
+  'config/environment.ts',
+  'config/mf06-worker-environment.ts',
+  'modules/safety/safety.module.ts',
+  'modules/safety/assessments/mf06-assessment-worker-runtime.service.ts',
+  'modules/safety/assessments/mf06-assessment-worker.service.ts',
+  'modules/safety/assessments/mf06-job-lease.service.ts',
+  'modules/safety/assessments/mf06-zone-entry-assessment-work.port.ts',
+  'modules/safety/assessments/mf06-work-preparation.ts',
+  'modules/safety/assessments/mf06-assessment-store.service.ts',
+  'modules/safety/assessments/mf06-claim-context.reader.ts',
+  'modules/safety/assessments/mf06-face-preparation.ts',
+  'modules/safety/assessments/mf06-face-http-resolver.ts',
+  'modules/safety/assessments/mf06-candidate-metadata.service.ts',
 ].map((path) => `apps/backend/src/${path}`);
 
 export const MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES = MAIN_AUTHORITY_CUTOVER_RELEASE_FILES.map(
@@ -94,7 +109,9 @@ export const MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES = MAIN_AUTHORITY_CUTOVER_RELEA
 export async function verifyMainAuthorityCutoverRelease(
   config: MainAuthorityCutoverReleaseConfig,
   environment: BackendEnvironment['NODE_ENV'],
+  signal?: AbortSignal,
 ) {
+  signal?.throwIfAborted();
   if (
     !digest.safeParse(config.reviewedManifestSha256).success ||
     !/^[0-9a-f]{40}$/.test(config.releaseCommit) ||
@@ -102,7 +119,7 @@ export async function verifyMainAuthorityCutoverRelease(
     !isAbsolute(config.manifestPath)
   )
     throw new Error('Invalid trusted cutover release configuration');
-  const bytes = await boundedRead(config.manifestPath);
+  const bytes = await boundedRead(config.manifestPath, signal);
   if (sha256(bytes) !== config.reviewedManifestSha256)
     throw new Error('Cutover review pin mismatch');
   const manifest = manifestSchema.parse(JSON.parse(bytes.toString('utf8')));
@@ -115,6 +132,7 @@ export async function verifyMainAuthorityCutoverRelease(
     MAIN_AUTHORITY_CUTOVER_RELEASE_FILES.some((path) => !files.has(path))
   )
     throw new Error('Incomplete cutover release pins');
+  signal?.throwIfAborted();
   const root = await realpath(config.releaseRoot);
   const runtimeRoot = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), '../..'));
   const runtimeFiles = new Map(manifest.runtimeFiles.map((file) => [file.path, file.sha256]));
@@ -129,11 +147,12 @@ export async function verifyMainAuthorityCutoverRelease(
     [runtimeRoot, runtimeFiles],
   ] as const) {
     for (const [path, expected] of pins) {
+      signal?.throwIfAborted();
       const actualPath = await realpath(resolve(base, path));
       const within = relative(base, actualPath);
       if (!within || within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within))
         throw new Error('Cutover release pin escapes its root');
-      const actual = await boundedRead(actualPath);
+      const actual = await boundedRead(actualPath, signal);
       total += actual.length;
       if (total > 16 * 1024 * 1024 || sha256(actual) !== expected)
         throw new Error('Cutover release bytes mismatch or exceed budget');
@@ -161,11 +180,14 @@ export async function verifyMainAuthorityCutoverRelease(
   });
 }
 
-async function boundedRead(path: string): Promise<Buffer> {
+async function boundedRead(path: string, signal?: AbortSignal): Promise<Buffer> {
+  signal?.throwIfAborted();
   const info = await stat(path);
+  signal?.throwIfAborted();
   if (!info.isFile() || info.size > 2 * 1024 * 1024)
     throw new Error('Invalid cutover artifact size');
-  const bytes = await readFile(path);
+  const bytes = await readFile(path, { signal });
+  signal?.throwIfAborted();
   if (bytes.length > 2 * 1024 * 1024) throw new Error('Invalid cutover artifact size');
   return bytes;
 }
