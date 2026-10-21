@@ -76,12 +76,22 @@ configuration-source-current-20261019-v1/agy-backend-ai-20261020-v1.
   P7 final review's fence-error mapping concern was fixed. Its first-read lock-order
   warning remains an explicit Task3 integration requirement, not blanket acceptance.
 
-The integration test file intentionally keeps one synthetic release/history journey
-and the atomic rollback helpers together. Reviewed exception:707lines after the
-pending-epoch race regression (700-line review threshold;400-line target exceeded).
-No formatting compression or security cases were removed to meet a count. Owner:
-Root, reviewed for this coherent history journey; extract shared fixture setup when
-the WorkPort tests introduce another consumer. The reader is under300lines.
+Event-time selection now uses the unique qualified historical epoch containing the
+capture time, never the current control pointer. Actual PostgreSQL follow-up:12PASS,
+including a closed historical epoch, invalid/pre-baseline times and wrong Site.
+Proof:qualified-authority-green-v8; owned schema absent and prior namespace names
+unchanged. These synthetic mechanics do not establish operational writer closure.
+
+Shared synthetic release setup now lives in test/support/qualified-authority-fixture.ts
+(149lines); the integration journey is654lines. This retires the earlier707-line
+exception without removing its history/security cases. The reader is300lines.
+
+A genuine authority/database re-preparation error now returns the job for a new
+lease and fresh preparation, rather than replaying a stale prepared handle through
+SQL retries. Existing PostgreSQL serialization/deadlock retry behavior remains.
+Four affected worker unit files:31PASS; two new behavioral cases were first RED.
+Proof:mf06-authority-reprepare-affected-v3-proof.json. These are unit checks, not
+runtime/identity or whole-flow acceptance.
 
 ## Next critical path
 

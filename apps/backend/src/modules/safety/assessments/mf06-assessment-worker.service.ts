@@ -21,7 +21,7 @@ export interface Mf06WorkerOptions {
 }
 export type Mf06WorkerResult = 'IDLE' | 'COMPLETED' | 'RETRY' | 'STALE' | 'FAILED' | 'CANCELLED';
 export class Mf06RetryableWorkError extends Error {
-  constructor(readonly code: 'RESOLVER_UNAVAILABLE') {
+  constructor(readonly code: 'RESOLVER_UNAVAILABLE' | 'DATABASE_UNAVAILABLE') {
     super(code);
   }
 }
@@ -118,7 +118,7 @@ export class Mf06AssessmentWorker {
       if (signal.aborted) return this.leases.cancel(claim);
       if (remaining() <= 0) return 'STALE';
       if (timeout.signal.aborted) return this.leases.retry(claim, 'RESOLVER_TIMEOUT');
-      if (error instanceof Mf06RetryableWorkError && error.code === 'RESOLVER_UNAVAILABLE')
+      if (error instanceof Mf06RetryableWorkError)
         return this.leases.retry(claim, error.code);
       return this.leases.fail(claim, 'PROCESSING_FAILED');
     } finally {
@@ -141,6 +141,8 @@ export class Mf06AssessmentWorker {
         return this.leases.fail(claim, 'INVALID_CONTEXT');
       } catch (error) {
         if (signal.aborted) return this.leases.cancel(claim);
+        // A stale prepared authority snapshot needs a new lease/preparation, not a SQL retry.
+        if (error instanceof Mf06RetryableWorkError) return this.leases.retry(claim, error.code);
         const failure = error as { code?: unknown; driverError?: { code?: unknown } };
         const code = failure?.driverError?.code ?? failure?.code;
         if (code === '40001' || code === '40P01') {

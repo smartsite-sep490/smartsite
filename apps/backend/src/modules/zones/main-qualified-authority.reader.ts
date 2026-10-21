@@ -6,7 +6,9 @@ import { MAIN_AUTHORITY_V2_SOURCES } from '../../common/configuration/main-team-
 import {
   decodeStoredMainAuthorityArchive,
   MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
+  parseMainAuthorityInstant,
   type MainAuthorityArchive,
+  type MainAuthorityArchiveContext,
 } from './main-authority-archive-codec.js';
 import { baselineSourceProfile } from './main-authority-baseline-profile.js';
 import {
@@ -97,47 +99,82 @@ export class MainQualifiedAuthorityReader {
       () => null,
     );
     if (!release) return unavailable('RELEASE_UNAVAILABLE');
+    return readMainAuthoritySnapshot(this.source, (manager) =>
+      this.prepareInSnapshot(manager, input, release),
+    ).catch((error: unknown) => this.mapDatabaseError(error, false));
+  }
+
+  /** The event time selects history; the current control pointer is never a fallback. */
+  async prepareForEvent(
+    context: MainAuthorityArchiveContext,
+  ): Promise<MainQualifiedAuthorityResult> {
+    if (
+      typeof context?.capturedAt !== 'string' ||
+      parseMainAuthorityInstant(context.capturedAt) === null
+    )
+      return unavailable('INVALID_CAPTURE_TIME');
+    const release = await verifyMainAuthorityCutoverRelease(this.release, this.environment).catch(
+      () => null,
+    );
+    if (!release) return unavailable('RELEASE_UNAVAILABLE');
     return readMainAuthoritySnapshot(this.source, async (manager) => {
-      const reconstructed = await this.reader.read(manager, input);
-      if (reconstructed.status !== 'RECONSTRUCTED') return unavailable(reconstructed.reason);
-      const { archive } = reconstructed;
-      if (!currentV2Archive(archive)) return unavailable('SOURCE_REGISTRY_MISMATCH');
-      const row = await this.qualifyEpoch(manager, input.epochId, input.capturedAt);
-      if ('status' in row) return row;
-      const base = archive.payload.baseline;
-      if (
-        row.writer_manifest_hash !== release.manifestSha256 ||
-        row.source_registry_hash !== release.sourceRegistryHash ||
-        base.epochId !== row.epoch_id ||
-        base.declaredWriterManifestHash !== release.manifestSha256 ||
-        base.sourceRegistryHash !== release.sourceRegistryHash ||
-        row.snapshot_hash !== base.snapshotHash ||
-        row.captured_at !== base.capturedAt
-      )
-        return unavailable('CUTOVER_MANIFEST_MISMATCH');
-      const prepared: MainQualifiedAuthorityPrepared = Object.freeze({
-        status: 'QUALIFIED',
-        archive,
-        epochId: row.epoch_id,
-        epochState: row.state as 'READY' | 'GAPPED' | 'CLOSED',
-        activatedAt: row.activated_at!,
-        gappedAt: row.gapped_at,
-        closedAt: row.closed_at,
-        witnessConfirmedAt: row.witness_confirmed_at!,
-        manifestSha256: release.manifestSha256,
-        releaseCommit: release.releaseCommit,
-        sourceRegistryHash: release.sourceRegistryHash,
-        provenance: release.provenance,
-        operationalAuthorityCoverageEstablished: release.provenance === 'OPERATIONAL_REVIEWED',
-        syntheticCutoverMechanicsVerified: true,
-        identityEstablished: false,
-      });
-      this.attestations.set(prepared, row.revision_state_hash);
-      return prepared;
+      if (!(await hasMainAuthorityCapture(manager))) return unavailable('CAPTURE_UNAVAILABLE');
+      const epochs: { epoch_id: string }[] = await manager.query(
+        `SELECT epoch_id FROM authorization_history_epoch
+         WHERE writer_manifest_hash=$2 AND activated_at<=$1::timestamptz
+           AND (closed_at IS NULL OR $1::timestamptz<closed_at)
+         ORDER BY activated_at DESC,epoch_id LIMIT 2`,
+        [context.capturedAt, release.manifestSha256],
+      );
+      if (epochs.length !== 1) return unavailable('EPOCH_WINDOW_UNQUALIFIED');
+      return this.prepareInSnapshot(manager, { ...context, epochId: epochs[0]!.epoch_id }, release);
     }).catch((error: unknown) => this.mapDatabaseError(error, false));
   }
 
-  /** Caller's writable SERIALIZABLE TX must acquire the early 18-table SHARE lock fence before its first SELECT. */
+  private async prepareInSnapshot(
+    manager: EntityManager,
+    input: MainCapturedStateInput,
+    release: Awaited<ReturnType<typeof verifyMainAuthorityCutoverRelease>>,
+  ): Promise<MainQualifiedAuthorityResult> {
+    const reconstructed = await this.reader.read(manager, input);
+    if (reconstructed.status !== 'RECONSTRUCTED') return unavailable(reconstructed.reason);
+    const { archive } = reconstructed;
+    if (!currentV2Archive(archive)) return unavailable('SOURCE_REGISTRY_MISMATCH');
+    const row = await this.qualifyEpoch(manager, input.epochId, input.capturedAt);
+    if ('status' in row) return row;
+    const base = archive.payload.baseline;
+    if (
+      row.writer_manifest_hash !== release.manifestSha256 ||
+      row.source_registry_hash !== release.sourceRegistryHash ||
+      base.epochId !== row.epoch_id ||
+      base.declaredWriterManifestHash !== release.manifestSha256 ||
+      base.sourceRegistryHash !== release.sourceRegistryHash ||
+      row.snapshot_hash !== base.snapshotHash ||
+      row.captured_at !== base.capturedAt
+    )
+      return unavailable('CUTOVER_MANIFEST_MISMATCH');
+    const prepared: MainQualifiedAuthorityPrepared = Object.freeze({
+      status: 'QUALIFIED',
+      archive,
+      epochId: row.epoch_id,
+      epochState: row.state as 'READY' | 'GAPPED' | 'CLOSED',
+      activatedAt: row.activated_at!,
+      gappedAt: row.gapped_at,
+      closedAt: row.closed_at,
+      witnessConfirmedAt: row.witness_confirmed_at!,
+      manifestSha256: release.manifestSha256,
+      releaseCommit: release.releaseCommit,
+      sourceRegistryHash: release.sourceRegistryHash,
+      provenance: release.provenance,
+      operationalAuthorityCoverageEstablished: release.provenance === 'OPERATIONAL_REVIEWED',
+      syntheticCutoverMechanicsVerified: true,
+      identityEstablished: false,
+    });
+    this.attestations.set(prepared, row.revision_state_hash);
+    return prepared;
+  }
+
+  /** Caller's writable SERIALIZABLE TX must acquire the ordered20-table fence before its first SELECT. */
   async revalidate(
     manager: EntityManager,
     input: MainCapturedStateInput,

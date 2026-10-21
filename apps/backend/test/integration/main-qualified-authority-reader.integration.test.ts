@@ -1,20 +1,13 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { JwtService } from '@nestjs/jwt';
 import { DataSource, type EntityManager } from 'typeorm';
-import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { createQualifiedAuthorityFixture } from '../support/qualified-authority-fixture.js';
 import { createTestConfig } from '../support/config.js';
-import { AuthService, type AuthenticatedRequest } from '../../src/modules/auth/auth.service.js';
-import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
-import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
-import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
-import { hashPassword } from '../../src/modules/auth/password.js';
-import { AuthorizationHistoryCutover1793059200000 } from '../../src/database/migrations/1793059200000-AuthorizationHistoryCutover.js';
+import type { AuthenticatedRequest } from '../../src/modules/auth/auth.service.js';
 import { hasMainAuthorityCapture } from '../../src/common/configuration/main-authority-capture-preflight.js';
 import {
   MAIN_AUTHORITY_SNAPSHOT_TABLES,
@@ -24,25 +17,21 @@ import { executeMainConfigurationCommand } from '../../src/common/configuration/
 import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 import { MainAuthorityBaselineService } from '../../src/modules/zones/main-authority-baseline.service.js';
 import { MainAuthorityCutoverService } from '../../src/modules/zones/main-authority-cutover.service.js';
-import {
-  MAIN_AUTHORITY_CUTOVER_RELEASE_FILES,
-  MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES,
-  type MainAuthorityCutoverReleaseConfig,
-} from '../../src/modules/zones/main-authority-cutover-release.js';
+import { type MainAuthorityCutoverReleaseConfig } from '../../src/modules/zones/main-authority-cutover-release.js';
 import type { MainCapturedStateInput } from '../../src/modules/zones/main-authority-captured-state.reader.js';
+import type { MainAuthorityArchiveContext } from '../../src/modules/zones/main-authority-archive-codec.js';
 import {
   MainQualifiedAuthorityReader,
   type MainQualifiedAuthorityPrepared,
 } from '../../src/modules/zones/main-qualified-authority.reader.js';
 
-const owned = createIsolatedTestDatabase(),
-  db = owned.dataSource,
-  schema = (db.options as { schema: string }).schema;
+let fixture: Awaited<ReturnType<typeof createQualifiedAuthorityFixture>>,
+  db: DataSource,
+  schema: string;
 const sha256 = (body: Buffer | string) => createHash('sha256').update(body).digest('hex');
 const quote = (id: string) => '"' + id.replaceAll('"', '""') + '"';
 
-let guard: UserAuthGuard,
-  request: AuthenticatedRequest,
+let request: AuthenticatedRequest,
   config: MainAuthorityCutoverReleaseConfig,
   cutover: MainAuthorityCutoverService,
   reader: MainQualifiedAuthorityReader,
@@ -79,7 +68,7 @@ function makeInput(
   };
 }
 
-/** Simulates the future WorkPort writable SERIALIZABLE TX with early 18-table SHARE locks and schema-only path. */
+/** Simulates the future WorkPort writable SERIALIZABLE TX with early 20-table SHARE locks and schema-only path. */
 async function withWritableSnapshotFence<T>(
   operation: (manager: EntityManager) => Promise<T>,
   tables: readonly string[] = MAIN_AUTHORITY_SNAPSHOT_TABLES,
@@ -127,107 +116,23 @@ async function mutateHistoryWithRestoredGuards(
 }
 
 before(async () => {
-  console.log(`ownedQualifiedAuthorityReaderSchema=${schema}`);
-  await owned.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    await new AuthorizationHistoryCutover1793059200000().up(runner);
-    await runner.commitTransaction();
-  } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    await runner.release();
-  }
-  actor = randomUUID();
-  subject = randomUUID();
-  siteId = randomUUID();
-  zoneId = randomUUID();
-  const password = 'Synthetic-Qualified-Reader-123!';
-  await db.query(
-    "INSERT INTO site(id,code,name) VALUES($1,'SYNTHETIC-READER-SITE','Synthetic Reader Site')",
-    [siteId],
-  );
-  await db.query(
-    "INSERT INTO zone(id,site_id,code,name,type,restriction_policy,required_ppe) VALUES($1,$2,$1::uuid::text,'Synthetic Reader Zone','RESTRICTED','AUTHORIZATION_REQUIRED','{}')",
-    [zoneId, siteId],
-  );
-  await db.query(
-    "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic Admin',$2,false)",
-    [actor, await hashPassword(password)],
-  );
-  await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL),($3,$2,'SAFETY_OFFICER',$4)",
-    [randomUUID(), actor, randomUUID(), siteId],
-  );
-  await db.query(
-    "INSERT INTO app_user(id,username,display_name,password_hash,must_change_password) VALUES($1,$1::uuid::text,'Synthetic history subject','synthetic-unusable-hash',false)",
-    [subject],
-  );
-  const auth = new AuthService(db, new AuthTokenService(new JwtService(), createTestConfig()));
-  guard = new UserAuthGuard(auth);
-  const login = await auth.login(actor, password, AuthClientType.WEB);
-  request = { headers: { authorization: `Bearer ${login.accessToken}` } };
-  await guard.authenticateRequest(request);
-
-  fixturePath = await mkdtemp('D:/Ky9-FPT/SmartSiteData/runs/qualified-reader-synthetic-');
-  const sourceRoot = process.env.CUTOVER_TEST_SOURCE_ROOT;
-  assert(sourceRoot, 'Explicit current source root is required');
-  const files = [];
-  for (const path of MAIN_AUTHORITY_CUTOVER_RELEASE_FILES) {
-    const target = resolve(fixturePath, path);
-    await mkdir(dirname(target), { recursive: true });
-    await copyFile(resolve(sourceRoot, path), target);
-    files.push({ path, sha256: sha256(await readFile(target)) });
-  }
-  const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../src');
-  const runtimeFiles = [];
-  for (const path of MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES) {
-    runtimeFiles.push({ path, sha256: sha256(await readFile(resolve(runtimeRoot, path))) });
-  }
-  const [registry] = await db.query(
-    `SELECT encode(sha256(convert_to(jsonb_agg(to_jsonb(s) ORDER BY s.source_kind COLLATE "C")::text,'UTF8')),'hex') AS hash FROM authorization_history_source s`,
-  );
-  manifest = {
-    version: 'MF06_REVIEWED_CUTOVER_RELEASE_V1',
-    releaseCommit: 'a'.repeat(40),
-    captureProfile: 'NAMED_V2_CONTROLLED_CUTOVER_V1',
-    provenance: 'SYNTHETIC_TEST',
-    sourceRegistryHash: registry.hash,
-    files,
-    runtimeFiles,
-    writerReview: {
-      protocol: 'PINNED_AUTHORITY_SOURCE_REVIEW_RECONCILIATION_V1',
-      sourceIndexSha256: 'b'.repeat(64),
-      methods: 1,
-      files: 1,
-      exactQuotesAndSourcePinsVerified: true,
-      missingOrDuplicateMethods: false,
-      completeWriterClosureEstablished: true,
-      rows: [
-        {
-          file: 'modules/auth/auth.service.ts',
-          method: 'syntheticFixtureOnly',
-          fileSha256: files.find((file) => file.path.endsWith('/auth.service.ts'))!.sha256,
-          methodBodySha256: 'c'.repeat(64),
-          classification: 'MASKED_COMMAND',
-        },
-      ],
-    },
-  };
-  const manifestPath = join(fixturePath, 'SYNTHETIC-NOT-OPERATIONAL-manifest.json');
-  const bytes = JSON.stringify(manifest);
-  await writeFile(manifestPath, bytes, { flag: 'wx' });
-  config = {
-    manifestPath,
-    reviewedManifestSha256: sha256(bytes),
-    releaseRoot: fixturePath,
-    releaseCommit: 'a'.repeat(40),
-  };
-  cutover = new MainAuthorityCutoverService(db, guard, config, createTestConfig());
-  reader = new MainQualifiedAuthorityReader(db, config, createTestConfig());
+  fixture = await createQualifiedAuthorityFixture();
+  ({
+    db,
+    schema,
+    request,
+    config,
+    cutover,
+    reader,
+    fixturePath,
+    actor,
+    subject,
+    siteId,
+    zoneId,
+    manifest,
+  } = fixture);
 });
-
-after(() => owned.dispose());
+after(() => fixture?.dispose());
 
 test('Synthetic valid prepared proof qualifies READY epoch with explicit non-operational provenance and revalidates in writable fenced TX', async () => {
   const activated = await cutover.activate(request, null);
@@ -704,4 +609,46 @@ test('pending epoch gap transition drains before the authority snapshot', async 
     await writer.release();
     await observer.release();
   }
+});
+
+test('worker selects the reviewed event-time epoch instead of the current pointer', async () => {
+  const auto = reader as unknown as {
+    prepareForEvent?: (
+      context: MainAuthorityArchiveContext,
+    ) => ReturnType<MainQualifiedAuthorityReader['prepare']>;
+  };
+  assert.equal(typeof auto.prepareForEvent, 'function', 'Worker needs event-time epoch selection');
+  const prepare = (context: MainAuthorityArchiveContext) =>
+    auto.prepareForEvent!.call(reader, context);
+  const [{ epoch_id: previous }] = await db.query(
+    'SELECT epoch_id FROM authorization_history_control',
+  );
+  const activated = await cutover.activate(request, previous);
+  const context: MainAuthorityArchiveContext = {
+    siteId,
+    zoneId,
+    workerId: null,
+    capturedAt: await pgNowUtc(),
+    purpose: 'INITIAL_OBSERVATION_ASSESSMENT',
+  };
+  const first = await prepare(context);
+  assert.equal(first.status, 'QUALIFIED');
+  assert.equal(first.epochId, activated.epochId);
+  await cutover.activate(request, activated.epochId);
+  const historical = await prepare(context);
+  assert.equal(historical.status, 'QUALIFIED');
+  assert.equal(historical.epochId, activated.epochId);
+  assert.equal(historical.epochState, 'CLOSED');
+  assert.deepEqual(await prepare({ ...context, capturedAt: '2000-01-01T00:00:00.000Z' }), {
+    status: 'UNAVAILABLE',
+    reason: 'EPOCH_WINDOW_UNQUALIFIED',
+  });
+  assert.deepEqual(await prepare({ ...context, capturedAt: 'invalid' }), {
+    status: 'UNAVAILABLE',
+    reason: 'INVALID_CAPTURE_TIME',
+  });
+  assert.deepEqual(await prepare({ ...context, siteId: randomUUID() }), {
+    status: 'UNAVAILABLE',
+    reason: 'SOURCE_SCOPE_MISMATCH',
+  });
 });
