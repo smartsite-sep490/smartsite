@@ -352,7 +352,8 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
       screen.getByText(/Technical PPE detections are rendered from recorded video replay stream/i),
     ).not.toBeNull();
 
-    // Confirmed-missing detection legitimately displays missing PPE result
+    // Confirmed-missing detection legitimately displays missing PPE result in on-demand Evidence dialog
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
     expect(screen.getByText('MISSING PPE DETECTED')).not.toBeNull();
     expect(screen.getByText('Missing PPE observed in snapshot.')).not.toBeNull();
   });
@@ -373,6 +374,8 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
         <PpeMonitoringView />
       </QueryClientProvider>,
     );
+
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
 
     // Result description uses recorded video replay wording rather than live streaming
     expect(
@@ -408,6 +411,8 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
       </QueryClientProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+
     expect(screen.getByText('PPE CHECK')).not.toBeNull();
     expect(
       screen.getByText(
@@ -441,6 +446,8 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
       </QueryClientProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+
     expect(screen.getByText('Helmet · Detected')).not.toBeNull();
     expect(screen.getByText('Safety Vest · Detected')).not.toBeNull();
     expect(screen.getByText('Gloves · Detected')).not.toBeNull();
@@ -465,6 +472,8 @@ describe('PpeMonitoringView Navigation & Bounded Review Integration', () => {
         <PpeMonitoringView />
       </QueryClientProvider>,
     );
+
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
 
     expect(screen.getByText('Helmet · Unknown')).not.toBeNull();
     expect(screen.getByText('Safety Vest · Detected')).not.toBeNull();
@@ -1019,6 +1028,8 @@ describe('PpeMonitoringView 401 Session Expiration & Factual Source Labels', () 
       </QueryClientProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+
     expect(screen.getByText('EXPERIMENTAL (5 ITEMS)')).not.toBeNull();
     expect(
       screen.getByText(
@@ -1530,7 +1541,8 @@ describe('PpeMonitoringView Live Raw Video vs AI Evidence Presentation Mode', ()
       screen.getByText('Recorded raw MP4 · Source-independent playback (not synced to AI)'),
     ).not.toBeNull();
 
-    // AI panel header displays unanalyzed badge
+    // AI panel header displays unanalyzed badge when opened
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
     expect(screen.getByTestId('recorded-feed-unanalyzed-badge').textContent).toBe(
       'RECORDED RAW · NOT SYNCED TO AI',
     );
@@ -1667,6 +1679,7 @@ describe('PpeMonitoringView Live Raw Video vs AI Evidence Presentation Mode', ()
     expect(screen.getByTestId('raw-camera-media-canvas')).not.toBeNull();
 
     // AI panel explicitly indicates AI snapshot evidence is unavailable separately
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
     expect(screen.getByTestId('raw-feed-unanalyzed-badge').textContent).toBe('RAW VIEW UNANALYZED');
     expect(screen.getByTestId('ai-evidence-badge').textContent).toBe('AI EVIDENCE UNAVAILABLE');
     expect(screen.getByTestId('ai-snapshot-unavailable-msg')).not.toBeNull();
@@ -2000,7 +2013,9 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
 
     // Visible captions retranslate to Vietnamese
     expect(screen.getByRole('button', { name: /Lưu PPE khu vực/i })).not.toBeNull();
-    expect(screen.getByText('KIỂM TRA BẢO HỘ (PPE)')).not.toBeNull();
+    expect(screen.getByTestId('open-evidence-details-btn').textContent).toContain(
+      'Bằng chứng & Chi tiết',
+    );
 
     // Selected Site, Camera, open dialog, and unsaved draft state are preserved
     expect((screen.getByLabelText('Công trường') as HTMLSelectElement).value).toBe('site-beta');
@@ -2024,12 +2039,17 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
       siteId: 'site-beta',
     });
 
+    // Open Evidence dialog in Vietnamese, verify heading, then switch back to English
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+    expect(screen.getByText('KIỂM TRA BẢO HỘ (PPE)')).not.toBeNull();
+
     // Switch back to English and verify English captions restore with selections intact
     await act(async () => {
       await i18n.changeLanguage('en');
     });
 
     expect(screen.getByText('PPE CHECK')).not.toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect((screen.getByRole('combobox', { name: 'Site' }) as HTMLSelectElement).value).toBe(
       'site-beta',
     );
@@ -2097,6 +2117,8 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
       </QueryClientProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+
     // In English: current frame is Unknown, while confirmed episode warning is shown separately
     expect(screen.getByText('Helmet · Unknown')).not.toBeNull();
     expect(screen.queryByText('Helmet · Missing · confirmed')).toBeNull();
@@ -2146,6 +2168,7 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
     );
 
     await screen.findByRole('option', { name: /Công trường Alpha/i });
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
 
     const panel = screen.getByTestId('ai-detection-panel');
     const primaryContext = screen.getByTestId('ppe-primary-context');
@@ -2156,7 +2179,8 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
     expect(panel.contains(primaryContext)).toBe(true);
     expect(primaryContext.closest('details')).toBeNull();
     expect(primaryContext.textContent).toContain('Work Area');
-    expect(primaryContext.textContent).toContain('Zone (CAM-01)');
+    expect(primaryContext.textContent).toContain('SITE-A · Công trường Alpha');
+    expect(primaryContext.textContent).toContain('CAM-01 · Camera 01');
     expect(primaryContext.textContent).toContain('Unknown — not identified');
     expect(primaryContext.textContent).not.toContain('Track ID');
     expect(primaryContext.textContent).not.toContain('Detection Confidence');

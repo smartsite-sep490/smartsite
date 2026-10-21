@@ -30,6 +30,7 @@ import {
   IconShield,
   IconEye,
   IconCamera,
+  IconMaximize,
 } from '../icons';
 import { ZonePpeSetupDialog } from './ZonePpeSetupDialog';
 import { deriveZonePpeCapabilities } from './zone-ppe-scope';
@@ -295,7 +296,8 @@ export function PpeMonitoringView({
   initialSelection,
 }: PpeMonitoringViewProps = {}) {
   const auth = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const isVi = locale === 'vi';
   const diagnosticsContentId = useId();
   const queryClient = useQueryClient();
   const isControlled = sharedSession !== undefined;
@@ -353,6 +355,14 @@ export function PpeMonitoringView({
   >(null);
   const [registrationFeedback, setRegistrationFeedback] = useState<string | null>(null);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
+  const singleViewportRef = useRef<HTMLDivElement | null>(null);
+  const ownsFullscreenRef = useRef(false);
+  const pendingFullscreenRef = useRef(false);
+  const fullscreenGenerationRef = useRef(0);
+  const isMountedRef = useRef(true);
   const [requestedSiteId, setSelectedSiteId] = useState<string>(initialSelection?.siteId ?? '');
   const [requestedCameraId, setSelectedCameraId] = useState<string>(
     initialSelection?.cameraId ?? '',
@@ -380,6 +390,9 @@ export function PpeMonitoringView({
     setIsZonePpeOpen(false);
     setIsRegisterCameraOpen(false);
     setIsManageCameraOpen(false);
+    setIsEvidenceOpen(false);
+    setIsBrowserFullscreen(false);
+    setFullscreenError(null);
     setRejectedRegistrationCredential(null);
     setRegistrationFeedback(null);
     setApplyingCameraScope(null);
@@ -614,6 +627,15 @@ export function PpeMonitoringView({
   if (isSitesBaseError && isManageCameraOpen) {
     setIsManageCameraOpen(false);
   }
+  if (isSitesBaseError && isEvidenceOpen) {
+    setIsEvidenceOpen(false);
+  }
+  if (isSitesBaseError && isBrowserFullscreen) {
+    setIsBrowserFullscreen(false);
+  }
+  if (isSitesBaseError && fullscreenError) {
+    setFullscreenError(null);
+  }
   if (isSitesBaseError && registrationFeedback) {
     setRegistrationFeedback(null);
   }
@@ -687,6 +709,9 @@ export function PpeMonitoringView({
     setIsZonePpeOpen(false);
     setIsRegisterCameraOpen(false);
     setIsManageCameraOpen(false);
+    setIsEvidenceOpen(false);
+    setIsBrowserFullscreen(false);
+    setFullscreenError(null);
     setRegistrationFeedback(null);
     setWallTileSnapshots({});
     setCameraDisplayPresets({});
@@ -1330,6 +1355,186 @@ export function PpeMonitoringView({
     });
   }, [ppeEvents, activeFilterWorker, ppeFilter]);
 
+  const fullscreenScopeKey = `${currentScopeToken}:${selectedSiteId}:${selectedCameraId}:${isSitesBaseError ? 'err' : 'ok'}:${!isControlled || sharedSession !== null ? 'active' : 'null'}`;
+  const activeFullscreenScopeRef = useRef(fullscreenScopeKey);
+
+  const exitBrowserFullscreenIfActive = useCallback(async () => {
+    fullscreenGenerationRef.current += 1;
+    if (typeof document === 'undefined') return;
+    const activeEl = document.fullscreenElement;
+    // Never exit fullscreen owned by an unrelated element
+    if (activeEl && activeEl !== singleViewportRef.current) {
+      ownsFullscreenRef.current = false;
+      pendingFullscreenRef.current = false;
+      if (isMountedRef.current) {
+        setIsBrowserFullscreen(false);
+      }
+      return;
+    }
+    const isOwnActive =
+      Boolean(singleViewportRef.current && activeEl === singleViewportRef.current) ||
+      (!activeEl && ownsFullscreenRef.current);
+    ownsFullscreenRef.current = false;
+    pendingFullscreenRef.current = false;
+    if (isMountedRef.current) {
+      setIsBrowserFullscreen(false);
+    }
+    if (isOwnActive && typeof document.exitFullscreen === 'function') {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Ignore exit errors
+      }
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const prevKey = activeFullscreenScopeRef.current;
+    activeFullscreenScopeRef.current = fullscreenScopeKey;
+    if (prevKey !== fullscreenScopeKey) {
+      fullscreenGenerationRef.current += 1;
+      if (
+        ownsFullscreenRef.current ||
+        pendingFullscreenRef.current ||
+        (typeof document !== 'undefined' &&
+          singleViewportRef.current &&
+          document.fullscreenElement === singleViewportRef.current)
+      ) {
+        void exitBrowserFullscreenIfActive();
+      }
+    }
+  }, [fullscreenScopeKey, exitBrowserFullscreenIfActive]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    const viewport = singleViewportRef.current;
+    return () => {
+      isMountedRef.current = false;
+      fullscreenGenerationRef.current += 1;
+      const activeEl = typeof document !== 'undefined' ? document.fullscreenElement : null;
+      const isOwnActive = Boolean(viewport && activeEl === viewport);
+      ownsFullscreenRef.current = false;
+      pendingFullscreenRef.current = false;
+      if (
+        isOwnActive &&
+        typeof document !== 'undefined' &&
+        typeof document.exitFullscreen === 'function'
+      ) {
+        void document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleFullscreenChange = () => {
+      if (!isMountedRef.current) return;
+      const activeEl = document.fullscreenElement;
+      const isOwn = Boolean(
+        activeEl && singleViewportRef.current && activeEl === singleViewportRef.current,
+      );
+      ownsFullscreenRef.current = isOwn;
+      pendingFullscreenRef.current = false;
+      setIsBrowserFullscreen(isOwn);
+      if (isOwn) {
+        setFullscreenError(null);
+      }
+    };
+    const handleFullscreenError = (event: Event) => {
+      if (!isMountedRef.current) return;
+      const isOwnTarget = Boolean(
+        singleViewportRef.current && event.target === singleViewportRef.current,
+      );
+      if (!isOwnTarget) return;
+      pendingFullscreenRef.current = false;
+      ownsFullscreenRef.current = false;
+      setIsBrowserFullscreen(false);
+      setFullscreenError(
+        isVi
+          ? 'Trình duyệt từ chối chế độ toàn màn hình. Đang giữ chế độ khung nhìn phóng to.'
+          : 'Browser fullscreen is unavailable or blocked. Keeping enlarged camera view.',
+      );
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('fullscreenerror', handleFullscreenError);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('fullscreenerror', handleFullscreenError);
+    };
+  }, [isVi]);
+
+  const toggleBrowserFullscreen = useCallback(async () => {
+    setFullscreenError(null);
+    if (typeof document === 'undefined') return;
+    const target = singleViewportRef.current;
+    const activeEl = document.fullscreenElement;
+    const isOwnActive =
+      Boolean(target && activeEl === target) || (!activeEl && ownsFullscreenRef.current);
+    if (isOwnActive) {
+      await exitBrowserFullscreenIfActive();
+      return;
+    }
+    if (!target || typeof target.requestFullscreen !== 'function') {
+      setFullscreenError(
+        isVi
+          ? 'Trình duyệt hiện tại không hỗ trợ API Toàn màn hình. Đang giữ khung nhìn phóng to.'
+          : 'Browser Fullscreen API is not supported in this environment. Using enlarged viewport.',
+      );
+      return;
+    }
+    const requestGen = ++fullscreenGenerationRef.current;
+    const requestScopeKey = activeFullscreenScopeRef.current;
+    pendingFullscreenRef.current = true;
+    try {
+      await target.requestFullscreen();
+      if (
+        !isMountedRef.current ||
+        fullscreenGenerationRef.current !== requestGen ||
+        activeFullscreenScopeRef.current !== requestScopeKey
+      ) {
+        if (
+          typeof document.exitFullscreen === 'function' &&
+          document.fullscreenElement === target &&
+          (!isMountedRef.current || singleViewportRef.current !== target)
+        ) {
+          void document.exitFullscreen().catch(() => {});
+        }
+        return;
+      }
+      pendingFullscreenRef.current = false;
+      ownsFullscreenRef.current = true;
+      setIsBrowserFullscreen(true);
+    } catch {
+      if (
+        !isMountedRef.current ||
+        fullscreenGenerationRef.current !== requestGen ||
+        activeFullscreenScopeRef.current !== requestScopeKey
+      ) {
+        return;
+      }
+      pendingFullscreenRef.current = false;
+      ownsFullscreenRef.current = false;
+      setIsBrowserFullscreen(false);
+      setFullscreenError(
+        isVi
+          ? 'Không thể bật chế độ toàn màn hình của trình duyệt. Đang giữ khung nhìn phóng to.'
+          : 'Could not enter browser fullscreen. Using enlarged camera viewport.',
+      );
+    }
+  }, [exitBrowserFullscreenIfActive, isVi]);
+
+  const handleEnlargeCamera = useCallback((cameraId: string) => {
+    setSelectedCameraId(cameraId);
+    setViewMode('single');
+    setFullscreenError(null);
+  }, []);
+
+  const handleReturnToWall = useCallback(() => {
+    void exitBrowserFullscreenIfActive();
+    setFullscreenError(null);
+    setViewMode('wall');
+  }, [exitBrowserFullscreenIfActive]);
+
   const openReviewFromDetection = () => {
     if (!testDetection) return;
     const statusKey: TranslationKey = isConfirmedPpeDetection(testDetection)
@@ -1362,6 +1567,7 @@ export function PpeMonitoringView({
       status: t(statusKey),
       time: displayedCapturedTime,
     };
+    setIsEvidenceOpen(false);
     setSelectedReview({
       item,
       scope: {
@@ -1890,7 +2096,7 @@ export function PpeMonitoringView({
         )}
       </div>
 
-      {/* Viewing Controls Bar: View Mode Switcher, Quick Camera Strip & Polling Cadence */}
+      {/* Viewing Controls Bar: View Mode Switcher, Quick Camera Strip, Polling Cadence & On-Demand Evidence Trigger */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-xs min-w-0 w-full max-w-full">
         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
           {/* View Mode Switcher: Single Focus vs 4-Source Wall */}
@@ -1916,7 +2122,7 @@ export function PpeMonitoringView({
             <button
               type="button"
               data-testid="toggle-view-wall"
-              onClick={() => setViewMode('wall')}
+              onClick={handleReturnToWall}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
                 viewMode === 'wall'
                   ? 'bg-white text-slate-900 shadow-xs'
@@ -1928,6 +2134,18 @@ export function PpeMonitoringView({
               <span>{t('ppe.viewMode.wall')}</span>
             </button>
           </div>
+
+          {viewMode === 'single' && (
+            <button
+              type="button"
+              data-testid="back-to-grid-btn"
+              onClick={handleReturnToWall}
+              className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600"
+            >
+              <IconGrid className="w-3.5 h-3.5" />
+              <span>{isVi ? 'Quay lại lưới' : 'Back to grid'}</span>
+            </button>
+          )}
 
           {/* Inline quick camera chips in Single Focus mode */}
           {visibleAuthorizedCameras.length > 0 && viewMode === 'single' && (
@@ -1973,27 +2191,61 @@ export function PpeMonitoringView({
           )}
         </div>
 
-        {!isAiWorkPaused && viewMode === 'wall' && (
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2.5 py-1 flex-shrink-0 min-w-0">
-            <span className="text-[11px] font-mono text-slate-600 tabular-nums truncate">
-              {t('ppe.cadence.wall')}
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+          {!isAiWorkPaused && viewMode === 'wall' && (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2.5 py-1 flex-shrink-0 min-w-0">
+              <span className="text-[11px] font-mono text-slate-600 tabular-nums truncate">
+                {t('ppe.cadence.wall')}
+              </span>
+              {previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE') && (
+                <span
+                  className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
+                  title={t('ppe.cadence.pollingWallTitle')}
+                />
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            data-testid="open-evidence-details-btn"
+            aria-haspopup="dialog"
+            aria-expanded={isEvidenceOpen}
+            onClick={() => setIsEvidenceOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          >
+            <IconShield className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+            <span>{isVi ? 'Bằng chứng & Chi tiết' : 'Evidence & Details'}</span>
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-mono tabular-nums border ${
+                !isAiWorkPaused && preview && (activeStatus === 'LIVE' || activeStatus === 'REPLAY')
+                  ? 'bg-slate-100 text-slate-700 border-slate-300'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              {isAiWorkPaused
+                ? t('ppe.badge.aiPaused')
+                : preview && (activeStatus === 'LIVE' || activeStatus === 'REPLAY')
+                  ? (testDetection?.eventId ?? t('ppe.card.noDetectionBadge'))
+                  : t('ppe.card.evidenceUnavailableBadge')}
             </span>
-            {previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE') && (
-              <span
-                className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
-                title={t('ppe.cadence.pollingWallTitle')}
-              />
-            )}
-          </div>
-        )}
+          </button>
+
+          {(!isControlled || sharedSession !== null) && !isEvidenceOpen && (
+            <button
+              type="button"
+              onClick={openReviewFromDetection}
+              disabled={!testDetection}
+              className="px-3 py-2 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+            >
+              {t('ppe.action.reviewAlert')}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Main Interactive Viewport: Camera Video Feed (Single Focus or 4-Source Wall) + Right Card (360px) */}
-      <div
-        data-testid="ppe-monitoring-layout"
-        className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-stretch"
-      >
-        {/* Left: Camera Feed Viewport OR 4-Source Wall */}
+      {/* Main Interactive Viewport: Full-Width Camera Surveillance (Single Enlarged View or 4-Source Wall) */}
+      <div data-testid="ppe-monitoring-layout" className="grid grid-cols-1 gap-4 items-start">
         {viewMode === 'wall' ? (
           <div className="flex flex-col gap-2.5 min-w-0 w-full" data-testid="wall-view-container">
             <FourSourceWall
@@ -2007,6 +2259,11 @@ export function PpeMonitoringView({
               siteName={selectedSite?.name}
               selectedCameraId={selectedCameraId}
               onSelectCamera={(camId) => setSelectedCameraId(camId)}
+              onEnlargeCamera={handleEnlargeCamera}
+              onOpenEvidence={(camId) => {
+                setSelectedCameraId(camId);
+                setIsEvidenceOpen(true);
+              }}
               cameras={
                 previewCamerasQuery.data?.items.filter((camera) => camera.status === 'ACTIVE') ?? []
               }
@@ -2029,15 +2286,22 @@ export function PpeMonitoringView({
             />
           </div>
         ) : (
-          <div className="relative bg-[#0F141C] rounded-2xl border border-slate-800 overflow-hidden w-full min-w-0 aspect-video xl:aspect-auto xl:h-[540px] flex flex-col justify-between select-none shadow-sm">
+          <div
+            ref={singleViewportRef}
+            data-testid="single-camera-viewport"
+            className={`relative bg-[#0F141C] rounded-2xl border border-slate-800 overflow-hidden w-full min-w-0 ${
+              isBrowserFullscreen
+                ? 'w-full h-full rounded-none border-0'
+                : 'aspect-video max-h-[72vh] min-h-[320px]'
+            } flex flex-col justify-between select-none shadow-sm`}
+          >
             <div className="absolute inset-0">
               {isAiWorkPaused ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[#0F141C] px-5 py-16 text-center text-white">
-                  <IconCamera className="h-8 w-8 text-slate-400" />
-                  <h2 className="text-sm font-semibold">{t('ppe.viewport.pausedTitle')}</h2>
-                  <p className="max-w-sm text-xs leading-relaxed text-slate-300">
-                    {t('ppe.viewport.pausedDesc')}
-                  </p>
+                <div className="absolute inset-0 flex items-center justify-center bg-[#0F141C] p-6 text-center text-white">
+                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80">
+                    <IconCamera className="h-5 w-5 text-amber-400 shrink-0" />
+                    <h2 className="text-sm font-semibold">{t('ppe.viewport.pausedTitle')}</h2>
+                  </div>
                 </div>
               ) : isApplying ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0F141C] text-white/80 p-6 text-center space-y-2">
@@ -2281,37 +2545,123 @@ export function PpeMonitoringView({
                 )}
             </div>
 
-            {/* Top Camera Metadata */}
-            <div className="relative z-10 px-4 py-3 flex items-start justify-between text-white pointer-events-none">
-              <div className="flex flex-col gap-0.5 max-w-[70%] sm:max-w-[75%] min-w-0 pr-2">
+            {/* Top Camera Metadata: Concise Camera Name + Status & Enlarge/Fullscreen Controls */}
+            <div
+              data-testid="single-viewport-header"
+              className="relative z-10 px-4 py-2.5 bg-slate-950/75 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-white"
+            >
+              <div className="flex flex-wrap items-center gap-2 min-w-0 pr-2">
                 <span
-                  title={activeCameraContext.camera}
+                  title={`${activeCameraContext.camera} · ${activeCameraContext.workArea}`}
                   className="font-bold text-sm tracking-wide text-white truncate"
                 >
                   {activeCameraContext.camera}
                 </span>
-                <span
-                  title={activeCameraContext.workArea}
-                  className="text-white/80 font-medium text-xs tracking-wider uppercase truncate"
+
+                <details
+                  data-testid="single-viewport-details"
+                  className="text-xs text-white/80 pointer-events-auto"
                 >
-                  {activeCameraContext.workArea}
-                </span>
+                  <summary className="inline-flex items-center cursor-pointer font-semibold text-xs text-white/90 hover:text-white select-none px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
+                    {isVi ? 'Chi tiết' : 'Details'}
+                  </summary>
+                  <div className="mt-1.5 rounded-lg bg-slate-900/95 border border-white/15 px-3 py-2 text-xs text-white/85 space-y-1 shadow-md">
+                    <p>
+                      <span className="text-white/60">{t('ppe.card.fieldWorkArea')}:</span>{' '}
+                      <span className="font-semibold">{activeCameraContext.workArea}</span>
+                    </p>
+                    {selectedSite && (
+                      <p>
+                        <span className="text-white/60">{t('ppe.scope.siteLabel')}:</span>{' '}
+                        <span className="font-mono">
+                          {selectedSite.code} · {selectedSite.name}
+                        </span>
+                      </p>
+                    )}
+                    {selectedCamera && (
+                      <p>
+                        <span className="text-white/60">ID:</span>{' '}
+                        <span className="font-mono">
+                          {selectedCamera.code} · {selectedCamera.id}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                </details>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
                 <span
                   data-testid="factual-source-label"
-                  className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${displayedSourceBadgeClass}`}
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase border ${displayedSourceBadgeClass}`}
                 >
                   {t('ppe.viewport.sourceBadge', { source: displayedSourceLabel })}
                 </span>
-                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-black/60 flex-shrink-0">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/60 flex-shrink-0">
                   <span className={`w-1.5 h-1.5 rounded-full ${displayedDotClass}`} />
-                  <span className="font-mono text-[10px] font-semibold text-white tracking-wider tabular-nums">
+                  <span className="font-mono text-xs font-semibold text-white tracking-wider tabular-nums">
                     {displayedStatusText}
                   </span>
                 </div>
+
+                <button
+                  type="button"
+                  data-testid="single-viewport-back-to-grid-btn"
+                  onClick={handleReturnToWall}
+                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <IconGrid className="w-3.5 h-3.5" />
+                  <span>{isVi ? 'Quay lại lưới' : 'Back to grid'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="toggle-fullscreen-btn"
+                  aria-pressed={isBrowserFullscreen}
+                  onClick={() => void toggleBrowserFullscreen()}
+                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <IconMaximize className="w-3.5 h-3.5" />
+                  <span>
+                    {isBrowserFullscreen
+                      ? isVi
+                        ? 'Thoát toàn màn hình'
+                        : 'Exit fullscreen'
+                      : isVi
+                        ? 'Toàn màn hình'
+                        : 'Fullscreen'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="viewport-evidence-details-btn"
+                  onClick={() => setIsEvidenceOpen(true)}
+                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <IconShield className="w-3.5 h-3.5" />
+                  <span>{isVi ? 'Bằng chứng' : 'Evidence'}</span>
+                </button>
               </div>
             </div>
+
+            {fullscreenError && (
+              <div
+                data-testid="fullscreen-error-notice"
+                role="status"
+                aria-live="polite"
+                className="relative z-10 px-4 py-1.5 bg-slate-900/95 border-b border-white/10 text-amber-200 text-xs flex items-center justify-between gap-2"
+              >
+                <span>{fullscreenError}</span>
+                <button
+                  type="button"
+                  onClick={() => setFullscreenError(null)}
+                  className="text-[11px] font-semibold text-white/80 hover:text-white cursor-pointer"
+                >
+                  {t('ppe.admin.dismiss')}
+                </button>
+              </div>
+            )}
 
             {/* Error Banner if error present while active viewport content is displayed */}
             {(effectiveStreamViewMode === 'live-raw'
@@ -2448,15 +2798,19 @@ export function PpeMonitoringView({
             </div>
           </div>
         )}
+      </div>
 
-        {/* Right: AI Detection & PPE Check Card (360px, height-aligned with viewport on desktop) */}
+      {/* On-Demand Evidence & Details Dialog (House PpeDialog with Escape/Close/Focus-Return) */}
+      <PpeDialog
+        open={isEvidenceOpen}
+        onClose={() => setIsEvidenceOpen(false)}
+        title={t('ppe.card.headerTitle')}
+        description={`${activeCameraContext.camera} · ${activeCameraContext.workArea}`}
+        wide
+      >
         <div
           data-testid="ai-detection-panel"
-          className={`bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-col min-h-0 min-w-0 overflow-hidden ${
-            viewMode === 'single'
-              ? 'h-[540px] xl:h-[540px]'
-              : 'h-[540px] xl:h-auto xl:min-h-[540px] xl:[contain:size]'
-          }`}
+          className="bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col min-h-0 min-w-0 overflow-hidden"
         >
           <div className="flex-1 p-4 space-y-3.5 overflow-y-auto min-h-0">
             {/* Header: flex-wrap prevents RAW VIEW UNANALYZED badge from truncating to RA... */}
@@ -2830,7 +3184,7 @@ export function PpeMonitoringView({
             </div>
           )}
         </div>
-      </div>
+      </PpeDialog>
 
       {canOpenZonePpe && isZonePpeOpen && selectedSiteId && (
         <ZonePpeSetupDialog

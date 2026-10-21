@@ -272,6 +272,11 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       </QueryClientProvider>,
     );
     try {
+      await waitFor(() =>
+        expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe('cam-1'),
+      );
+      const openEvidenceBtn = await screen.findByTestId('open-evidence-details-btn');
+      fireEvent.click(openEvidenceBtn);
       const panel = await screen.findByTestId('ai-detection-panel');
       expect(within(panel).queryByText('Track ID')).toBeNull();
       expect(within(panel).queryByText('Identity')).toBeNull();
@@ -1074,5 +1079,381 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     expect(eyeFaceBtnSiteBeta.getAttribute('aria-pressed')).toBe('true');
     const heightBtnSiteBeta = screen.getByTestId('preset-btn-HEIGHT');
     expect(heightBtnSiteBeta.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('renders concise tile headers, native Details disclosure containing Observation Zones, and single-line paused badge when AI work is paused', async () => {
+    vi.stubEnv('VITE_AI_WORK_PAUSED', 'true');
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+      const tile1 = await screen.findByTestId('wall-tile-cam-1');
+
+      // Concise camera display name and single-line paused state inside tile
+      expect(within(tile1).getByTestId('wall-source-badge-cam-1').textContent).toContain('PAUSED');
+      const pausedNode = within(tile1).getByTestId('wall-paused-cam-1');
+      expect(pausedNode.textContent).toContain('Camera preview paused');
+      expect(pausedNode.textContent).not.toContain('Zone and region configuration remains active');
+
+      // Long Site/Zone/ID metadata lives inside native <details> disclosure
+      const details = within(tile1).getByTestId('wall-tile-details-cam-1');
+      expect(details.tagName.toLowerCase()).toBe('details');
+      expect(within(details).getByTestId('wall-zones-cam-1')).not.toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('enlarges a camera from its wall tile via Enlarge camera button and returns to 4-Source Wall via Back to grid controls', async () => {
+    cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
+    cameraStatuses.set('cam-1', 'LIVE');
+    cameraPreviews.set('cam-2', createDecodedPreview(createMockFrame('CAM-02')));
+    cameraStatuses.set('cam-2', 'LIVE');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+    await screen.findByTestId('four-source-wall-grid');
+
+    // Click Enlarge camera on cam-2 tile
+    const enlargeCam2Btn = screen.getByTestId('enlarge-camera-btn-cam-2');
+    fireEvent.click(enlargeCam2Btn);
+
+    // Switches to enlarged single-camera viewport focused on cam-2
+    const singleViewport = await screen.findByTestId('single-camera-viewport');
+    expect(singleViewport).not.toBeNull();
+    expect(screen.queryByTestId('four-source-wall-grid')).toBeNull();
+    expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe(
+      'cam-2',
+    );
+    expect(within(singleViewport).getByTestId('single-viewport-details')).not.toBeNull();
+
+    // Return to grid via viewport Back to grid button
+    fireEvent.click(screen.getByTestId('single-viewport-back-to-grid-btn'));
+    expect(await screen.findByTestId('four-source-wall-grid')).not.toBeNull();
+    expect(screen.getByTestId('focused-badge-cam-2')).not.toBeNull();
+
+    // Enlarge again and return via top toolbar Back to grid button
+    fireEvent.click(screen.getByTestId('enlarge-camera-btn-cam-1'));
+    expect(await screen.findByTestId('single-camera-viewport')).not.toBeNull();
+    fireEvent.click(screen.getByTestId('back-to-grid-btn'));
+    expect(await screen.findByTestId('four-source-wall-grid')).not.toBeNull();
+    expect(screen.getByTestId('focused-badge-cam-1')).not.toBeNull();
+  });
+
+  it('toggles browser fullscreen when supported and surfaces a safe fallback notice when fullscreen is unsupported or rejected', async () => {
+    cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
+    cameraStatuses.set('cam-1', 'LIVE');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe(
+        'cam-1',
+      ),
+    );
+    const viewport = await screen.findByTestId('single-camera-viewport');
+    const fullscreenBtn = screen.getByTestId('toggle-fullscreen-btn');
+
+    // 1. Unsupported environment (JSDOM default has no requestFullscreen on element)
+    const origRequest = viewport.requestFullscreen;
+    // @ts-expect-error testing missing fullscreen API
+    viewport.requestFullscreen = undefined;
+    fireEvent.click(fullscreenBtn);
+    const errorNotice = await screen.findByTestId('fullscreen-error-notice');
+    expect(errorNotice.textContent).toContain('Browser Fullscreen API is not supported');
+
+    // 2. Supported requestFullscreen & exitFullscreen
+    const reqMock = vi.fn().mockResolvedValue(undefined);
+    const exitMock = vi.fn().mockResolvedValue(undefined);
+    viewport.requestFullscreen = reqMock;
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      writable: true,
+      value: exitMock,
+    });
+
+    fireEvent.click(fullscreenBtn);
+    await waitFor(() => expect(reqMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fullscreenBtn.getAttribute('aria-pressed')).toBe('true'));
+    expect(screen.queryByTestId('fullscreen-error-notice')).toBeNull();
+
+    fireEvent.click(fullscreenBtn);
+    await waitFor(() => expect(exitMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fullscreenBtn.getAttribute('aria-pressed')).toBe('false'));
+
+    // 3. Unrelated fullscreen element/events must not be exited or trigger error notice
+    const unrelatedDiv = document.createElement('div');
+    document.body.appendChild(unrelatedDiv);
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: unrelatedDiv,
+    });
+    unrelatedDiv.dispatchEvent(new Event('fullscreenerror', { bubbles: true }));
+    expect(screen.queryByTestId('fullscreen-error-notice')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('back-to-grid-btn'));
+    expect(exitMock).toHaveBeenCalledTimes(1); // Not called again for unrelated element
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
+    unrelatedDiv.remove();
+    viewport.requestFullscreen = origRequest;
+  });
+
+  it('keeps Evidence & Details off the permanent wall grid and opens/closes on-demand PpeDialog via toolbar or tile Evidence triggers with Escape', async () => {
+    cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
+    cameraStatuses.set('cam-1', 'LIVE');
+    cameraPreviews.set('cam-2', createDecodedPreview(createMockFrame('CAM-02')));
+    cameraStatuses.set('cam-2', 'LIVE');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+    await screen.findByTestId('four-source-wall-grid');
+
+    // By default, ai-detection-panel is not occupying a permanent column
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
+
+    // Clicking tile Evidence button on cam-2 selects cam-2 and opens Evidence dialog
+    const tileEvidenceBtn2 = screen.getByTestId('tile-evidence-btn-cam-2');
+    fireEvent.click(tileEvidenceBtn2);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).not.toBeNull();
+    expect(within(dialog).getByTestId('ai-detection-panel')).not.toBeNull();
+    expect(within(dialog).getByTestId('ppe-primary-context').textContent).toContain('Camera 02');
+
+    // Pressing Escape closes the Evidence dialog
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('ai-detection-panel')).toBeNull());
+  });
+  it('closes open Evidence dialog immediately when Site selection changes', async () => {
+    const mockSitesListMultiple: Page<SiteResponse> = {
+      items: [
+        {
+          id: 'site-alpha',
+          code: 'SITE-A',
+          name: 'Công trường Alpha',
+          createdAt: '2026-09-30T00:00:00Z',
+        },
+        {
+          id: 'site-beta',
+          code: 'SITE-B',
+          name: 'Công trường Beta',
+          createdAt: '2026-09-30T00:00:00Z',
+        },
+      ],
+      total: 2,
+    };
+
+    const mockCamerasBeta: Page<CameraResponse> = {
+      items: [
+        {
+          id: 'cam-beta-1',
+          siteId: 'site-beta',
+          externalId: 'CAM-B01',
+          code: 'CAM-B01',
+          name: 'Camera Beta 01',
+          status: 'ACTIVE',
+          configurationVersion: 1,
+          createdAt: '2026-09-30T00:00:00Z',
+        },
+      ],
+      total: 1,
+    };
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(
+      mockSitesListMultiple,
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockImplementation(
+      async (_token, siteId) => (siteId === 'site-beta' ? mockCamerasBeta : mockCamerasList4),
+    );
+
+    cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
+    cameraStatuses.set('cam-1', 'LIVE');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+    await screen.findByTestId('wall-tile-cam-1');
+
+    fireEvent.click(screen.getByTestId('tile-evidence-btn-cam-1'));
+    expect(await screen.findByTestId('ai-detection-panel')).not.toBeNull();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Site', hidden: true }), {
+      target: { value: 'site-beta' },
+    });
+
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(await screen.findByTestId('wall-tile-cam-beta-1')).not.toBeNull();
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
+  });
+
+  it('ignores late requestFullscreen resolution after view return or scope change without restoring fullscreen state or exiting an unrelated active element', async () => {
+    cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
+    cameraStatuses.set('cam-1', 'LIVE');
+
+    let resolveFirstReq!: () => void;
+    let resolveSecondReq!: () => void;
+    const reqMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveFirstReq = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSecondReq = resolve;
+          }),
+      );
+    const exitMock = vi.fn().mockResolvedValue(undefined);
+
+    const origRequestFullscreen = HTMLElement.prototype.requestFullscreen;
+    const origExitFullscreen = document.exitFullscreen;
+    const unrelatedEl = document.createElement('div');
+    document.body.appendChild(unrelatedEl);
+
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      writable: true,
+      value: reqMock,
+    });
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      writable: true,
+      value: exitMock,
+    });
+
+    try {
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByTestId('single-camera-viewport');
+      fireEvent.click(screen.getByTestId('toggle-fullscreen-btn'));
+      expect(reqMock).toHaveBeenCalledTimes(1);
+
+      // Unrelated element owns document.fullscreenElement while request #1 is pending
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: unrelatedEl,
+      });
+
+      // Return to wall view, then re-enlarge cam-1 before request #1 resolves
+      fireEvent.click(screen.getByTestId('single-viewport-back-to-grid-btn'));
+      await screen.findByTestId('four-source-wall-grid');
+      fireEvent.click(screen.getByTestId('enlarge-camera-btn-cam-1'));
+      await screen.findByTestId('single-camera-viewport');
+
+      resolveFirstReq();
+      await Promise.resolve();
+
+      expect(screen.getByTestId('toggle-fullscreen-btn').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+      expect(exitMock).not.toHaveBeenCalled();
+
+      // Start request #2, then rotate session scope before request #2 resolves
+      fireEvent.click(screen.getByTestId('toggle-fullscreen-btn'));
+      expect(reqMock).toHaveBeenCalledTimes(2);
+
+      const rotatedSession: SharedSession = {
+        ...testSharedSession,
+        accessToken: 'rotated-token-2',
+        sessionScope: 'rotated-scope-2',
+      };
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={rotatedSession} />
+        </QueryClientProvider>,
+      );
+
+      resolveSecondReq();
+      await Promise.resolve();
+
+      expect(screen.getByTestId('toggle-fullscreen-btn').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+      expect(exitMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: null,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+        configurable: true,
+        writable: true,
+        value: origRequestFullscreen,
+      });
+      Object.defineProperty(document, 'exitFullscreen', {
+        configurable: true,
+        writable: true,
+        value: origExitFullscreen,
+      });
+      unrelatedEl.remove();
+    }
+  });
+
+  it('keeps the newer fullscreen request active after an older request rejects', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe(
+        'cam-1',
+      ),
+    );
+    const viewport = screen.getByTestId('single-camera-viewport');
+    let rejectOld!: (error: Error) => void;
+    const first = new Promise<void>((_resolve, reject) => {
+      rejectOld = reject;
+    });
+    viewport.requestFullscreen = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce(undefined);
+    const button = screen.getByTestId('toggle-fullscreen-btn');
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-pressed')).toBe('true'));
+    rejectOld(new Error('Old request rejected'));
+    await Promise.resolve();
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByTestId('fullscreen-error-notice')).toBeNull();
   });
 });
