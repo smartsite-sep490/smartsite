@@ -296,8 +296,7 @@ export function PpeMonitoringView({
   initialSelection,
 }: PpeMonitoringViewProps = {}) {
   const auth = useAuth();
-  const { t, locale } = useLocale();
-  const isVi = locale === 'vi';
+  const { t } = useLocale();
   const diagnosticsContentId = useId();
   const queryClient = useQueryClient();
   const isControlled = sharedSession !== undefined;
@@ -359,9 +358,11 @@ export function PpeMonitoringView({
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const singleViewportRef = useRef<HTMLDivElement | null>(null);
+  const wallViewportRef = useRef<HTMLDivElement | null>(null);
   const ownsFullscreenRef = useRef(false);
   const pendingFullscreenRef = useRef(false);
   const fullscreenGenerationRef = useRef(0);
+  const suppressFullscreenRef = useRef(false);
   const isMountedRef = useRef(true);
   const [requestedSiteId, setSelectedSiteId] = useState<string>(initialSelection?.siteId ?? '');
   const [requestedCameraId, setSelectedCameraId] = useState<string>(
@@ -1355,15 +1356,22 @@ export function PpeMonitoringView({
     });
   }, [ppeEvents, activeFilterWorker, ppeFilter]);
 
-  const fullscreenScopeKey = `${currentScopeToken}:${selectedSiteId}:${selectedCameraId}:${isSitesBaseError ? 'err' : 'ok'}:${!isControlled || sharedSession !== null ? 'active' : 'null'}`;
+  const fullscreenViewScope = viewMode === 'wall' ? 'wall' : `single:${selectedCameraId}`;
+  const fullscreenScopeKey = `${currentScopeToken}:${selectedSiteId}:${fullscreenViewScope}:${isSitesBaseError ? 'err' : 'ok'}:${isCamerasBaseError ? 'cam-err' : 'cam-ok'}:${canViewSiteCameras ? 'cam-access' : 'no-cam-access'}:${!isControlled || sharedSession !== null ? 'active' : 'null'}`;
   const activeFullscreenScopeRef = useRef(fullscreenScopeKey);
 
   const exitBrowserFullscreenIfActive = useCallback(async () => {
+    suppressFullscreenRef.current = true;
     fullscreenGenerationRef.current += 1;
     if (typeof document === 'undefined') return;
     const activeEl = document.fullscreenElement;
+    const isOwnElement = Boolean(
+      activeEl &&
+      ((singleViewportRef.current && activeEl === singleViewportRef.current) ||
+        (wallViewportRef.current && activeEl === wallViewportRef.current)),
+    );
     // Never exit fullscreen owned by an unrelated element
-    if (activeEl && activeEl !== singleViewportRef.current) {
+    if (activeEl && !isOwnElement) {
       ownsFullscreenRef.current = false;
       pendingFullscreenRef.current = false;
       if (isMountedRef.current) {
@@ -1371,9 +1379,7 @@ export function PpeMonitoringView({
       }
       return;
     }
-    const isOwnActive =
-      Boolean(singleViewportRef.current && activeEl === singleViewportRef.current) ||
-      (!activeEl && ownsFullscreenRef.current);
+    const isOwnActive = isOwnElement || (!activeEl && ownsFullscreenRef.current);
     ownsFullscreenRef.current = false;
     pendingFullscreenRef.current = false;
     if (isMountedRef.current) {
@@ -1392,14 +1398,15 @@ export function PpeMonitoringView({
     const prevKey = activeFullscreenScopeRef.current;
     activeFullscreenScopeRef.current = fullscreenScopeKey;
     if (prevKey !== fullscreenScopeKey) {
+      setFullscreenError(null);
       fullscreenGenerationRef.current += 1;
-      if (
-        ownsFullscreenRef.current ||
-        pendingFullscreenRef.current ||
-        (typeof document !== 'undefined' &&
-          singleViewportRef.current &&
-          document.fullscreenElement === singleViewportRef.current)
-      ) {
+      const activeEl = typeof document !== 'undefined' ? document.fullscreenElement : null;
+      const isOwnElement = Boolean(
+        activeEl &&
+        ((singleViewportRef.current && activeEl === singleViewportRef.current) ||
+          (wallViewportRef.current && activeEl === wallViewportRef.current)),
+      );
+      if (ownsFullscreenRef.current || pendingFullscreenRef.current || isOwnElement) {
         void exitBrowserFullscreenIfActive();
       }
     }
@@ -1407,7 +1414,7 @@ export function PpeMonitoringView({
 
   useEffect(() => {
     isMountedRef.current = true;
-    const viewport = singleViewportRef.current;
+    const viewport = viewMode === 'wall' ? wallViewportRef.current : singleViewportRef.current;
     return () => {
       isMountedRef.current = false;
       fullscreenGenerationRef.current += 1;
@@ -1431,8 +1438,19 @@ export function PpeMonitoringView({
       if (!isMountedRef.current) return;
       const activeEl = document.fullscreenElement;
       const isOwn = Boolean(
-        activeEl && singleViewportRef.current && activeEl === singleViewportRef.current,
+        activeEl &&
+        ((singleViewportRef.current && activeEl === singleViewportRef.current) ||
+          (wallViewportRef.current && activeEl === wallViewportRef.current)),
       );
+      if (isOwn && suppressFullscreenRef.current) {
+        ownsFullscreenRef.current = false;
+        pendingFullscreenRef.current = false;
+        setIsBrowserFullscreen(false);
+        if (typeof document.exitFullscreen === 'function') {
+          void document.exitFullscreen().catch(() => {});
+        }
+        return;
+      }
       ownsFullscreenRef.current = isOwn;
       pendingFullscreenRef.current = false;
       setIsBrowserFullscreen(isOwn);
@@ -1443,17 +1461,14 @@ export function PpeMonitoringView({
     const handleFullscreenError = (event: Event) => {
       if (!isMountedRef.current) return;
       const isOwnTarget = Boolean(
-        singleViewportRef.current && event.target === singleViewportRef.current,
+        (singleViewportRef.current && event.target === singleViewportRef.current) ||
+        (wallViewportRef.current && event.target === wallViewportRef.current),
       );
       if (!isOwnTarget) return;
       pendingFullscreenRef.current = false;
       ownsFullscreenRef.current = false;
       setIsBrowserFullscreen(false);
-      setFullscreenError(
-        isVi
-          ? 'Trình duyệt từ chối chế độ toàn màn hình. Đang giữ chế độ khung nhìn phóng to.'
-          : 'Browser fullscreen is unavailable or blocked. Keeping enlarged camera view.',
-      );
+      setFullscreenError(t('ppe.fullscreen.errorBlocked'));
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('fullscreenerror', handleFullscreenError);
@@ -1461,12 +1476,12 @@ export function PpeMonitoringView({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('fullscreenerror', handleFullscreenError);
     };
-  }, [isVi]);
+  }, [t]);
 
   const toggleBrowserFullscreen = useCallback(async () => {
     setFullscreenError(null);
     if (typeof document === 'undefined') return;
-    const target = singleViewportRef.current;
+    const target = viewMode === 'wall' ? wallViewportRef.current : singleViewportRef.current;
     const activeEl = document.fullscreenElement;
     const isOwnActive =
       Boolean(target && activeEl === target) || (!activeEl && ownsFullscreenRef.current);
@@ -1475,13 +1490,10 @@ export function PpeMonitoringView({
       return;
     }
     if (!target || typeof target.requestFullscreen !== 'function') {
-      setFullscreenError(
-        isVi
-          ? 'Trình duyệt hiện tại không hỗ trợ API Toàn màn hình. Đang giữ khung nhìn phóng to.'
-          : 'Browser Fullscreen API is not supported in this environment. Using enlarged viewport.',
-      );
+      setFullscreenError(t('ppe.fullscreen.errorUnsupported'));
       return;
     }
+    suppressFullscreenRef.current = false;
     const requestGen = ++fullscreenGenerationRef.current;
     const requestScopeKey = activeFullscreenScopeRef.current;
     pendingFullscreenRef.current = true;
@@ -1492,10 +1504,12 @@ export function PpeMonitoringView({
         fullscreenGenerationRef.current !== requestGen ||
         activeFullscreenScopeRef.current !== requestScopeKey
       ) {
+        const currentTarget =
+          wallViewportRef.current === target ? wallViewportRef.current : singleViewportRef.current;
         if (
           typeof document.exitFullscreen === 'function' &&
           document.fullscreenElement === target &&
-          (!isMountedRef.current || singleViewportRef.current !== target)
+          (!isMountedRef.current || currentTarget !== target || suppressFullscreenRef.current)
         ) {
           void document.exitFullscreen().catch(() => {});
         }
@@ -1515,20 +1529,36 @@ export function PpeMonitoringView({
       pendingFullscreenRef.current = false;
       ownsFullscreenRef.current = false;
       setIsBrowserFullscreen(false);
-      setFullscreenError(
-        isVi
-          ? 'Không thể bật chế độ toàn màn hình của trình duyệt. Đang giữ khung nhìn phóng to.'
-          : 'Could not enter browser fullscreen. Using enlarged camera viewport.',
-      );
+      setFullscreenError(t('ppe.fullscreen.errorFailed'));
     }
-  }, [exitBrowserFullscreenIfActive, isVi]);
+  }, [exitBrowserFullscreenIfActive, t, viewMode]);
 
-  const handleEnlargeCamera = useCallback((cameraId: string) => {
-    setSelectedCameraId(cameraId);
-    setViewMode('single');
-    setFullscreenError(null);
-  }, []);
+  const handleEnlargeCamera = useCallback(
+    (cameraId: string) => {
+      void exitBrowserFullscreenIfActive();
+      setSelectedCameraId(cameraId);
+      setViewMode('single');
+      setFullscreenError(null);
+    },
+    [exitBrowserFullscreenIfActive],
+  );
 
+  const openEvidenceDetails = useCallback(() => {
+    if (!document.fullscreenElement && !pendingFullscreenRef.current) {
+      setIsEvidenceOpen(true);
+      return;
+    }
+    const scope = activeFullscreenScopeRef.current;
+    // The body portal is visible only after native fullscreen has exited.
+    void exitBrowserFullscreenIfActive().then(() => {
+      if (!isMountedRef.current || activeFullscreenScopeRef.current !== scope) return;
+      if (document.fullscreenElement) {
+        setFullscreenError(t('ppe.fullscreen.errorFailed'));
+        return;
+      }
+      setIsEvidenceOpen(true);
+    });
+  }, [exitBrowserFullscreenIfActive, t]);
   const handleReturnToWall = useCallback(() => {
     void exitBrowserFullscreenIfActive();
     setFullscreenError(null);
@@ -2108,7 +2138,11 @@ export function PpeMonitoringView({
             <button
               type="button"
               data-testid="toggle-view-single"
-              onClick={() => setViewMode('single')}
+              onClick={() => {
+                void exitBrowserFullscreenIfActive();
+                setFullscreenError(null);
+                setViewMode('single');
+              }}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
                 viewMode === 'single'
                   ? 'bg-white text-slate-900 shadow-xs'
@@ -2143,7 +2177,7 @@ export function PpeMonitoringView({
               className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600"
             >
               <IconGrid className="w-3.5 h-3.5" />
-              <span>{isVi ? 'Quay lại lưới' : 'Back to grid'}</span>
+              <span>{t('ppe.toolbar.backToGridBtn')}</span>
             </button>
           )}
 
@@ -2206,29 +2240,31 @@ export function PpeMonitoringView({
             </div>
           )}
 
+          {viewMode === 'wall' && (
+            <button
+              type="button"
+              data-testid="wall-fullscreen-btn"
+              aria-pressed={isBrowserFullscreen}
+              onClick={() => void toggleBrowserFullscreen()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            >
+              <IconMaximize className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+              <span>
+                {t(isBrowserFullscreen ? 'ppe.fullscreen.exitBtn' : 'ppe.fullscreen.enterBtn')}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             data-testid="open-evidence-details-btn"
             aria-haspopup="dialog"
             aria-expanded={isEvidenceOpen}
-            onClick={() => setIsEvidenceOpen(true)}
+            onClick={openEvidenceDetails}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
           >
             <IconShield className="w-3.5 h-3.5 text-slate-700 shrink-0" />
-            <span>{isVi ? 'Bằng chứng & Chi tiết' : 'Evidence & Details'}</span>
-            <span
-              className={`px-2 py-0.5 rounded text-xs font-mono tabular-nums border ${
-                !isAiWorkPaused && preview && (activeStatus === 'LIVE' || activeStatus === 'REPLAY')
-                  ? 'bg-slate-100 text-slate-700 border-slate-300'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
-              }`}
-            >
-              {isAiWorkPaused
-                ? t('ppe.badge.aiPaused')
-                : preview && (activeStatus === 'LIVE' || activeStatus === 'REPLAY')
-                  ? (testDetection?.eventId ?? t('ppe.card.noDetectionBadge'))
-                  : t('ppe.card.evidenceUnavailableBadge')}
-            </span>
+            <span>{t('ppe.toolbar.evidenceDetailsBtn')}</span>
           </button>
 
           {(!isControlled || sharedSession !== null) && !isEvidenceOpen && (
@@ -2247,7 +2283,49 @@ export function PpeMonitoringView({
       {/* Main Interactive Viewport: Full-Width Camera Surveillance (Single Enlarged View or 4-Source Wall) */}
       <div data-testid="ppe-monitoring-layout" className="grid grid-cols-1 gap-4 items-start">
         {viewMode === 'wall' ? (
-          <div className="flex flex-col gap-2.5 min-w-0 w-full" data-testid="wall-view-container">
+          <div
+            ref={wallViewportRef}
+            className={`flex flex-col gap-2.5 min-w-0 w-full ${
+              isBrowserFullscreen ? 'bg-[#0F141C] p-4 h-full overflow-y-auto' : ''
+            }`}
+            data-testid="wall-view-container"
+          >
+            {isBrowserFullscreen && (
+              <div
+                data-testid="wall-fullscreen-header"
+                className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-slate-950/90 border border-white/15 text-white"
+              >
+                <span className="text-xs font-bold tracking-wide truncate">
+                  {t('ppe.viewMode.wall')}
+                </span>
+                <button
+                  type="button"
+                  data-testid="wall-exit-fullscreen-btn"
+                  onClick={() => void exitBrowserFullscreenIfActive()}
+                  className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <IconMaximize className="w-3.5 h-3.5" />
+                  <span>{t('ppe.fullscreen.exitBtn')}</span>
+                </button>
+              </div>
+            )}
+            {fullscreenError && (
+              <div
+                data-testid="fullscreen-error-notice"
+                role="status"
+                aria-live="polite"
+                className="px-4 py-2 rounded-xl bg-slate-900/95 border border-slate-700 text-amber-200 text-xs flex items-center justify-between gap-2"
+              >
+                <span>{fullscreenError}</span>
+                <button
+                  type="button"
+                  onClick={() => setFullscreenError(null)}
+                  className="text-[11px] font-semibold text-white/80 hover:text-white cursor-pointer"
+                >
+                  {t('ppe.admin.dismiss')}
+                </button>
+              </div>
+            )}
             <FourSourceWall
               apiUrl={apiUrl}
               client={client}
@@ -2262,7 +2340,7 @@ export function PpeMonitoringView({
               onEnlargeCamera={handleEnlargeCamera}
               onOpenEvidence={(camId) => {
                 setSelectedCameraId(camId);
-                setIsEvidenceOpen(true);
+                openEvidenceDetails();
               }}
               cameras={
                 previewCamerasQuery.data?.items.filter((camera) => camera.status === 'ACTIVE') ?? []
@@ -2563,7 +2641,7 @@ export function PpeMonitoringView({
                   className="text-xs text-white/80 pointer-events-auto"
                 >
                   <summary className="inline-flex items-center cursor-pointer font-semibold text-xs text-white/90 hover:text-white select-none px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
-                    {isVi ? 'Chi tiết' : 'Details'}
+                    {t('ppe.common.details')}
                   </summary>
                   <div className="mt-1.5 rounded-lg bg-slate-900/95 border border-white/15 px-3 py-2 text-xs text-white/85 space-y-1 shadow-md">
                     <p>
@@ -2611,7 +2689,7 @@ export function PpeMonitoringView({
                   className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   <IconGrid className="w-3.5 h-3.5" />
-                  <span>{isVi ? 'Quay lại lưới' : 'Back to grid'}</span>
+                  <span>{t('ppe.toolbar.backToGridBtn')}</span>
                 </button>
 
                 <button
@@ -2623,24 +2701,18 @@ export function PpeMonitoringView({
                 >
                   <IconMaximize className="w-3.5 h-3.5" />
                   <span>
-                    {isBrowserFullscreen
-                      ? isVi
-                        ? 'Thoát toàn màn hình'
-                        : 'Exit fullscreen'
-                      : isVi
-                        ? 'Toàn màn hình'
-                        : 'Fullscreen'}
+                    {t(isBrowserFullscreen ? 'ppe.fullscreen.exitBtn' : 'ppe.fullscreen.enterBtn')}
                   </span>
                 </button>
 
                 <button
                   type="button"
                   data-testid="viewport-evidence-details-btn"
-                  onClick={() => setIsEvidenceOpen(true)}
+                  onClick={openEvidenceDetails}
                   className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   <IconShield className="w-3.5 h-3.5" />
-                  <span>{isVi ? 'Bằng chứng' : 'Evidence'}</span>
+                  <span>{t('ppe.common.evidence')}</span>
                 </button>
               </div>
             </div>

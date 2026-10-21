@@ -273,7 +273,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     );
     try {
       await waitFor(() =>
-        expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe('cam-1'),
+        expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe(
+          'cam-1',
+        ),
       );
       const openEvidenceBtn = await screen.findByTestId('open-evidence-details-btn');
       fireEvent.click(openEvidenceBtn);
@@ -670,10 +672,11 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     const tile1 = await screen.findByTestId('wall-tile-cam-1');
     const scoped1 = within(tile1);
 
-    // Strictly 'No Person detections', never 'No workers in frame' or '0 workers'
+    // Strictly 'No Person detections' in overlay only (no duplicate footer text), never 'No workers in frame' or '0 workers'
     expect(
       scoped1.getByText(/No Person detections · Zero detections do not certify safety clearance/i),
     ).not.toBeNull();
+    expect(scoped1.queryByText(/^No Person detections$/i)).toBeNull();
     expect(scoped1.queryByText(/No workers in frame/i)).toBeNull();
     expect(scoped1.queryByText(/0 workers/i)).toBeNull();
     expect(scoped1.queryByText(/worker\(s\)/i)).toBeNull();
@@ -1455,5 +1458,161 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     await Promise.resolve();
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByTestId('fullscreen-error-notice')).toBeNull();
+  });
+
+  it('supports full-wall native fullscreen and exit, preserves wall fullscreen when selecting another tile, exits on camera enlarge, and keeps global Evidence button free of raw UUID/status badges', async () => {
+    cameraPreviews.set('cam-1', createDecodedPreview(createMockFrame('CAM-01')));
+    cameraStatuses.set('cam-1', 'LIVE');
+    cameraPreviews.set('cam-2', createDecodedPreview(createMockFrame('CAM-02')));
+    cameraStatuses.set('cam-2', 'LIVE');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+    const wallContainer = await screen.findByTestId('wall-view-container');
+
+    // Global Evidence & Details button is simplified without raw UUID or status badge text
+    const openEvidenceBtn = screen.getByTestId('open-evidence-details-btn');
+    expect(openEvidenceBtn.textContent?.trim()).toBe('Evidence & Details');
+    expect(openEvidenceBtn.textContent).not.toContain('evt-test-12');
+    expect(openEvidenceBtn.textContent).not.toContain('AI EVIDENCE UNAVAILABLE');
+    expect(openEvidenceBtn.textContent).not.toContain('NO-DETECTION');
+
+    const reqMock = vi.fn().mockImplementation(async () => {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: wallContainer,
+      });
+    });
+    const exitMock = vi.fn().mockImplementation(async () => {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: null,
+      });
+    });
+    const origRequest = wallContainer.requestFullscreen;
+    const origExit = document.exitFullscreen;
+    wallContainer.requestFullscreen = reqMock;
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      writable: true,
+      value: exitMock,
+    });
+
+    try {
+      const wallFullscreenBtn = screen.getByTestId('wall-fullscreen-btn');
+      expect(wallFullscreenBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Enter full-wall fullscreen
+      fireEvent.click(wallFullscreenBtn);
+      await waitFor(() => expect(reqMock).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(wallFullscreenBtn.getAttribute('aria-pressed')).toBe('true'));
+      expect(screen.getByTestId('wall-exit-fullscreen-btn')).not.toBeNull();
+
+      // Selecting another tile in the same authorized Site keeps wall fullscreen active
+      fireEvent.click(screen.getByTestId('focus-btn-cam-2'));
+      expect(screen.getByTestId('focused-badge-cam-2')).not.toBeNull();
+      expect(wallFullscreenBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(exitMock).not.toHaveBeenCalled();
+
+      // Exit fullscreen via the in-wall Exit fullscreen button
+      fireEvent.click(screen.getByTestId('wall-exit-fullscreen-btn'));
+      await waitFor(() => expect(exitMock).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(wallFullscreenBtn.getAttribute('aria-pressed')).toBe('false'));
+      expect(screen.queryByTestId('wall-exit-fullscreen-btn')).toBeNull();
+
+      // Re-enter full-wall fullscreen, then enlarge cam-2 -> exits wall fullscreen safely
+      fireEvent.click(wallFullscreenBtn);
+      await waitFor(() => expect(reqMock).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(wallFullscreenBtn.getAttribute('aria-pressed')).toBe('true'));
+
+      // A body-portaled evidence dialog must leave wall fullscreen first.
+      fireEvent.click(screen.getByTestId('tile-evidence-btn-cam-2'));
+      await screen.findByRole('dialog');
+      await waitFor(() => expect(exitMock).toHaveBeenCalledTimes(2));
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+      fireEvent.click(wallFullscreenBtn);
+      await waitFor(() => expect(reqMock).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(wallFullscreenBtn.getAttribute('aria-pressed')).toBe('true'));
+      fireEvent.click(screen.getByTestId('enlarge-camera-btn-cam-2'));
+      await screen.findByTestId('single-camera-viewport');
+      await waitFor(() => expect(exitMock).toHaveBeenCalledTimes(3));
+      expect(screen.getByTestId('toggle-fullscreen-btn').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+    } finally {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: null,
+      });
+      wallContainer.requestFullscreen = origRequest;
+      Object.defineProperty(document, 'exitFullscreen', {
+        configurable: true,
+        writable: true,
+        value: origExit,
+      });
+    }
+  });
+  it('exits a late wall fullscreen activation after evidence opened while its request was pending', async () => {
+    const originalElement = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    const originalExit = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
+    let resolveRequest!: () => void;
+    const exit = vi.fn(async () => {
+      Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+    });
+    try {
+      Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+      Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exit });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+      const wall = await screen.findByTestId('wall-view-container');
+      wall.requestFullscreen = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveRequest = resolve;
+          }),
+      );
+      fireEvent.click(screen.getByTestId('wall-fullscreen-btn'));
+      fireEvent.click(await screen.findByTestId('tile-evidence-btn-cam-1'));
+      await screen.findByRole('dialog');
+      Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: wall });
+      resolveRequest();
+      await waitFor(() => expect(exit).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole('dialog')).not.toBeNull();
+      expect(screen.getByTestId('wall-fullscreen-btn').getAttribute('aria-pressed')).toBe('false');
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      wall.requestFullscreen = vi.fn(async () => {
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: wall });
+      });
+      fireEvent.click(screen.getByTestId('wall-fullscreen-btn'));
+      await waitFor(() =>
+        expect(screen.getByTestId('wall-fullscreen-btn').getAttribute('aria-pressed')).toBe('true'),
+      );
+      vi.mocked(SmartSiteManagementClient.prototype.listPreviewCameras).mockRejectedValue(
+        new Error('Camera metadata unavailable'),
+      );
+      await queryClient.invalidateQueries();
+      await waitFor(() => expect(exit).toHaveBeenCalledTimes(2));
+      expect(screen.getByTestId('wall-fullscreen-btn').getAttribute('aria-pressed')).toBe('false');
+    } finally {
+      if (originalElement) Object.defineProperty(document, 'fullscreenElement', originalElement);
+      else Reflect.deleteProperty(document, 'fullscreenElement');
+      if (originalExit) Object.defineProperty(document, 'exitFullscreen', originalExit);
+      else Reflect.deleteProperty(document, 'exitFullscreen');
+    }
   });
 });

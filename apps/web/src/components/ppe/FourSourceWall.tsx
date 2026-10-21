@@ -76,8 +76,7 @@ export function FourSourceWallTile({
   onPreviewUpdate,
   onTileUnmount,
 }: FourSourceWallTileProps) {
-  const { t, locale } = useLocale();
-  const isVi = locale === 'vi';
+  const { t } = useLocale();
 
   const scopedPreview = useScopedCameraPreview({
     apiUrl,
@@ -318,14 +317,11 @@ export function FourSourceWallTile({
       <div className="relative z-10 px-3 py-2 bg-black/60 flex flex-col gap-2 text-white text-xs">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2 text-white/80 pointer-events-auto">
-            {!isAiWorkPaused &&
-              (detectionsCount > 0 ? (
-                <span className="text-emerald-300 font-semibold text-xs">
-                  {t('ppe.wall.personDetectionsCount', { count: detectionsCount })}
-                </span>
-              ) : (
-                <span className="text-white/60 text-xs">{t('ppe.wall.noPersonDetections')}</span>
-              ))}
+            {!isAiWorkPaused && detectionsCount > 0 && (
+              <span className="text-emerald-300 font-semibold text-xs">
+                {t('ppe.wall.personDetectionsCount', { count: detectionsCount })}
+              </span>
+            )}
 
             <details
               data-testid={`wall-tile-details-${camera.id}`}
@@ -333,7 +329,7 @@ export function FourSourceWallTile({
               className="text-xs text-white/80"
             >
               <summary className="inline-flex items-center cursor-pointer font-semibold text-xs text-white/90 hover:text-white select-none px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
-                {isVi ? 'Chi tiết' : 'Details'}
+                {t('ppe.common.details')}
               </summary>
               <div className="mt-2 pt-2 border-t border-white/15 space-y-1.5">
                 <CameraObservationZones
@@ -390,7 +386,7 @@ export function FourSourceWallTile({
                 className="px-3 py-2 rounded-lg text-xs font-semibold bg-white/20 text-white hover:bg-white/40 transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <IconMaximize className="w-3.5 h-3.5" />
-                <span>{isVi ? 'Phóng to camera' : 'Enlarge camera'}</span>
+                <span>{t('ppe.wall.enlargeCameraBtn')}</span>
               </button>
             )}
 
@@ -405,7 +401,7 @@ export function FourSourceWallTile({
                 className="px-3 py-2 rounded-lg text-xs font-semibold bg-white/20 text-white hover:bg-white/40 transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <IconShield className="w-3.5 h-3.5" />
-                <span>{isVi ? 'Bằng chứng' : 'Evidence'}</span>
+                <span>{t('ppe.common.evidence')}</span>
               </button>
             )}
           </div>

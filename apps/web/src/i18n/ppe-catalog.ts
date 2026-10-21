@@ -861,6 +861,19 @@ export const PPE_EN_CATALOG = {
   'ppe.wall.unassignedSlotTitle': 'Slot {slot} · Unassigned',
   'ppe.wall.unassignedSlotDesc':
     'No authorized camera source assigned. The system does not fabricate simulated feeds.',
+  'ppe.wall.enlargeCameraBtn': 'Enlarge camera',
+  'ppe.common.details': 'Details',
+  'ppe.common.evidence': 'Evidence',
+  'ppe.toolbar.evidenceDetailsBtn': 'Evidence & Details',
+  'ppe.toolbar.backToGridBtn': 'Back to grid',
+  'ppe.fullscreen.enterBtn': 'Fullscreen',
+  'ppe.fullscreen.exitBtn': 'Exit fullscreen',
+  'ppe.fullscreen.errorBlocked':
+    'Browser fullscreen is unavailable or blocked. Keeping enlarged camera view.',
+  'ppe.fullscreen.errorUnsupported':
+    'Browser Fullscreen API is not supported in this environment. Using enlarged viewport.',
+  'ppe.fullscreen.errorFailed':
+    'Could not enter browser fullscreen. Using enlarged camera viewport.',
 
   'mf05Demo.mutationError.400':
     'Invalid region request or malformed configuration parameters (400).',
@@ -1892,6 +1905,19 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'ppe.wall.unassignedSlotTitle': 'Kênh {slot} · Chưa chỉ định',
   'ppe.wall.unassignedSlotDesc':
     'Chưa có nguồn camera được phân quyền. Hệ thống không tạo nguồn mô phỏng.',
+  'ppe.wall.enlargeCameraBtn': 'Phóng to camera',
+  'ppe.common.details': 'Chi tiết',
+  'ppe.common.evidence': 'Bằng chứng',
+  'ppe.toolbar.evidenceDetailsBtn': 'Bằng chứng & Chi tiết',
+  'ppe.toolbar.backToGridBtn': 'Quay lại lưới',
+  'ppe.fullscreen.enterBtn': 'Toàn màn hình',
+  'ppe.fullscreen.exitBtn': 'Thoát toàn màn hình',
+  'ppe.fullscreen.errorBlocked':
+    'Trình duyệt từ chối chế độ toàn màn hình. Đang giữ chế độ khung nhìn phóng to.',
+  'ppe.fullscreen.errorUnsupported':
+    'Trình duyệt hiện tại không hỗ trợ API Toàn màn hình. Đang giữ khung nhìn phóng to.',
+  'ppe.fullscreen.errorFailed':
+    'Không thể bật chế độ toàn màn hình của trình duyệt. Đang giữ khung nhìn phóng to.',
 
   'mf05Demo.mutationError.400':
     'Yêu cầu vùng không hợp lệ hoặc tham số cấu hình sai định dạng (400).',
