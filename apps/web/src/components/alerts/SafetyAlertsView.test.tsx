@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
 import type {
   LoginResponse,
   SiteResponse,
@@ -185,6 +185,135 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     expect(screen.queryByRole('option', { name: /Contractor-only Site/ })).toBeNull();
     expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('site-alpha');
     expect(alerts.mock.calls.every((call) => call[1] === 'site-alpha')).toBe(true);
+  });
+
+  it('shows an unavailable target instead of falling back to another Site for an alert link', async () => {
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    const alerts = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+      .mockResolvedValue({ items: [], total: 0 });
+    const detail = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+      .mockResolvedValue(mockAlertDetail);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={mockSafetyOfficerLoginResponse}
+          initialSiteId="site-unauthorized"
+          initialAlertId="alert-unauthorized"
+        />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole('alert')).textContent).toContain('no longer have access');
+    expect(alerts).not.toHaveBeenCalled();
+    expect(detail).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('');
+  });
+
+  it.each([401, 403, 404])(
+    'unmounts cached alert details and evicts sensitive child data after a %s refresh',
+    async (status) => {
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+        items: [mockAlert],
+        total: 1,
+      });
+      const detail = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+        .mockResolvedValue({
+          ...mockAlertDetail,
+          id: 'sensitive-target',
+          detections: [],
+          detectionsTotal: 0,
+        });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://local"
+            authenticatedSession={mockSafetyOfficerLoginResponse}
+            initialSiteId="site-alpha"
+            initialAlertId="sensitive-target"
+          />
+        </QueryClientProvider>,
+      );
+      await screen.findByText(/Alert sensitive-target · Revision 1/);
+      const key = queryClient.getQueryCache().findAll({ queryKey: ['safety-alert'] })[0]!.queryKey;
+      const evidenceKey = [
+        'safety-alert-evidence',
+        'http://local',
+        key[2],
+        'site-alpha',
+        'sensitive-target',
+        'event',
+        0,
+      ];
+      queryClient.setQueryData(
+        evidenceKey,
+        new Blob(['synthetic-sensitive-frame'], { type: 'image/jpeg' }),
+      );
+      detail.mockRejectedValue(new ApiError('http', 'Access unavailable', status));
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh detail' }));
+      await screen.findByRole('alert');
+      expect(screen.queryByText(/Alert sensitive-target · Revision 1/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Confirm violation' })).toBeNull();
+      await waitFor(() => expect(queryClient.getQueryData(evidenceKey)).toBeUndefined());
+    },
+  );
+
+  it('opens the exact alert when Site and alert change together without choosing the first list result', async () => {
+    const session = {
+      ...mockSafetyOfficerLoginResponse,
+      user: {
+        ...mockSafetyOfficerLoginResponse.user,
+        roleAssignments: ['site-alpha', 'site-beta'].map((siteId) => ({
+          role: 'SAFETY_OFFICER' as const,
+          siteId,
+        })),
+      },
+    };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        ...mockSitesList.items,
+        { ...mockSitesList.items[0]!, id: 'site-beta', code: 'B', name: 'Site Beta' },
+      ],
+      total: 2,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+      items: [mockAlert],
+      total: 1,
+    });
+    const detail = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+      .mockImplementation(async (_token, siteId, id) => ({
+        ...mockAlertDetail,
+        siteId,
+        id,
+        detections: [],
+        detectionsTotal: 0,
+      }));
+    const tree = (siteId: string, alertId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={session}
+          initialSiteId={siteId}
+          initialAlertId={alertId}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(tree('site-alpha', 'target-a'));
+    await screen.findByText(/Alert target-a · Revision 1/);
+    expect(
+      screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+    ).not.toContain('hidden');
+    view.rerender(tree('site-beta', 'target-b'));
+    expect(await screen.findByText(/Alert target-b · Revision 1/)).not.toBeNull();
+    expect(
+      screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+    ).not.toContain('hidden');
+    expect(screen.queryByText(/Alert target-a · Revision 1/)).toBeNull();
+    expect(detail.mock.calls.at(-1)?.slice(1, 3)).toEqual(['site-beta', 'target-b']);
   });
 
   it.each([false, true])(

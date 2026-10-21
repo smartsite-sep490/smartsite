@@ -4,6 +4,40 @@ import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('notification API client', () => {
+  it('preserves the persisted PPE alert target and safe display metadata from the personal inbox', async () => {
+    const item = {
+      id: 'notice-ppe',
+      event: 'PPE_ALERT_CREATED',
+      siteId: 'site-ppe',
+      siteName: 'Synthetic site',
+      title: 'PPE alert requires review',
+      message: 'Review the PPE observation.',
+      createdAt: '2026-10-21T00:00:00Z',
+      readAt: null,
+      target: { siteId: 'site-ppe', alertId: 'persisted-alert', tab: 'alerts' },
+      safetyAlert: {
+        cameraId: 'camera-ppe',
+        cameraName: 'Camera Alpha',
+        zoneId: null,
+        zoneName: null,
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ items: [item], total: 1, unreadCount: 1 }), {
+            status: 200,
+          }),
+      ),
+    );
+    const result = await new SmartSiteManagementClient(
+      'https://api.example.test',
+    ).listNotifications('synthetic-token');
+    expect(result.items[0]).toEqual(item);
+    expect(result.unreadCount).toBe(1);
+  });
   it('deletes read notifications through the authenticated bodyless personal endpoint', async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ deleted: 3 }), { status: 200 }),

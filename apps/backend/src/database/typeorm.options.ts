@@ -1,3 +1,4 @@
+import { PpeAlertNotifications1792886400000 } from './migrations/1792886400000-PpeAlertNotifications.js';
 import { WorkerQrShortCodes1792454400000 } from './migrations/1792454400000-WorkerQrShortCodes.js';
 import { WorkerDocumentIdentityChecks1792627200000 } from './migrations/1792627200000-WorkerDocumentIdentityChecks.js';
 import { WorkerDocumentSubmittedExpiry1792713600000 } from './migrations/1792713600000-WorkerDocumentSubmittedExpiry.js';
@@ -77,6 +78,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      PpeAlertNotifications1792886400000,
       WorkerHealthIssueDate1792800000000,
       WorkerDocumentSubmittedExpiry1792713600000,
       WorkerDocumentIdentityChecks1792627200000,

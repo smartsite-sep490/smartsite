@@ -1,4 +1,10 @@
 {
+  "notifications.PPE_ALERT_CREATED": "PPE alert requires review",
+  "ppeNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Review the evidence.",
+  "ppeNotifications.noZone": "Unspecified Zone",
+  "ppeNotifications.PPE_HARD_HAT_MISSING": "Possible missing hard hat",
+  "ppeNotifications.PPE_SAFETY_VEST_MISSING": "Possible missing safety vest",
+  "ppeNotifications.targetUnavailable": "This alert's site is unavailable or you no longer have access. Select an authorized site to continue.",
   "workerAccounts.title": "Worker accounts",
   "workerAccounts.create": "Create Worker account",
   "workerAccounts.close": "Close form",

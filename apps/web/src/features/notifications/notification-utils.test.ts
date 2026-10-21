@@ -12,6 +12,37 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it('opens the persisted PPE alert in its Site rather than the scheduling workspace', () => {
+    const item = {
+      target: { siteId: 'site-ppe', alertId: 'alert-ppe', tab: 'alerts' },
+    } as unknown as UserNotificationResponse;
+    expect(notificationHref(item)).toBe('/incidents?siteId=site-ppe&alertId=alert-ppe&tab=alerts');
+  });
+
+  it('translates PPE metadata without translating camera or Zone names', async () => {
+    const item = {
+      event: 'PPE_ALERT_CREATED',
+      title: 'PPE alert requires review',
+      message: 'Review the PPE observation.',
+      safetyAlert: {
+        cameraId: 'cam',
+        cameraName: 'Camera Nguyễn An',
+        zoneId: 'zone',
+        zoneName: 'Zone Nguyễn An',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+      },
+    } as unknown as UserNotificationResponse;
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationTitle(item)).toBe('Cảnh báo PPE cần xem xét');
+    const vietnamese = formatNotificationDisplayMessage(item);
+    expect(vietnamese).toContain('Camera Nguyễn An');
+    expect(vietnamese).toContain('Zone Nguyễn An');
+    expect(vietnamese).toContain('mũ bảo hộ');
+    await i18n.changeLanguage('en');
+    expect(formatNotificationTitle(item)).toBe('PPE alert requires review');
+    expect(formatNotificationDisplayMessage(item)).toContain('hard hat');
+  });
+
   it.each(['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const)(
     'translates %s notification text without changing authored values',
     async (kind) => {

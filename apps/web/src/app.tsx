@@ -176,7 +176,11 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           element={
             profile.data ? (
               <SafetyAlertsView
-                key={profile.data.id + JSON.stringify(alertsContext ?? {})}
+                key={
+                  profile.data.id +
+                  JSON.stringify(alertsContext ?? {}) +
+                  (incidentLink.has('alertId') ? location.search : '')
+                }
                 authenticatedSession={{ accessToken, user: profile.data }}
                 onSignOut={() => logout.mutate()}
                 apiUrl={apiUrl}
@@ -188,9 +192,9 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                     ? (incidentLink.get('workerId') ?? undefined)
                     : undefined
                 }
-                initialAlertId={alertsContext?.alertId}
-                initialStatus={alertsContext?.status}
-                initialType={alertsContext?.alertType}
+                initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+                initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+                initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
               />
             ) : profile.isError ? (
               <div role="alert">
